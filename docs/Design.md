@@ -447,10 +447,12 @@ of choices, a field marked wide, errors, a command's confirmation and the
 actions take the row. A group of checkboxes reads across. A command's form is
 this grid too: `.form` is the one form layout.
 
-**Every form a page is about is drawn one way.** A record's form and a
-command's are one card spanning its column (`.form-card`) holding one partial,
+**Every form a page is about is drawn one way.** A page that is a record's
+form or a command's is the frame `form_page.html`: one card spanning its
+column (`.form-card`) holding one partial,
 `partials/_form.html` (its token, errors, fields and closing row; `fields`
-names a template for fields beyond the form's own loop, `bar=True` pins the
+names a template for fields beyond the form's own loop, `method="get"` makes
+it a query with no write token, `bar=True` pins the
 closing row to the screen's foot once the form has changed, drawn in its place
 from the first draw so nothing moves), the form's errors above
 the fields (`partials/_form_errors.html`), each field with its help under it
@@ -459,9 +461,11 @@ the fields (`partials/_form_errors.html`), each field with its help under it
 saving does where the page has one. A field's help is its command's meaning
 (`records.described`), so the form and the command page say the same; a form
 writes its own only for what it alone asks. The view supplies the verb and
-the way back, never the template.
+the way back, never the template, and a record's form page is the frame with
+nothing of its own (`form_fields`, `form_note` from the view).
 *Gate:* `hq/platform/core/tests/test_form_actions.py`, which reads every form
-template.
+template, and `test_form_page.py`, which holds every routed create and edit
+view to the frame and the card to it alone.
 
 A form whose fields stand one to a row of a table (a group chosen for each
 record, a verdict for each request) is the same partial with `table_body`
@@ -672,8 +676,12 @@ section's body or a head's aside, never in a fold's summary: a button inside
 the summary is a control nested in the toggle, whose role a screen reader
 loses. Host-only, as the dialog it opens is.
 
-**One filter bar.** `.filter-bar`: a search field, selects, Apply, and Clear
-when anything is set. No chip walls.
+**One filter bar.** `{% filter_bar filtered=... clear=... %}`: the page's
+search field and selects, one Filter (or the bar's own `verb=`), Clear
+filters back to `clear` when anything is set, and the count of what shows
+(`{% summary %}`) at the row's end. A list's table toolbar is the same bar.
+No chip walls.
+*Gate:* `test_hand_drawn.py` refuses `.filter-bar` written by hand.
 
 **Values read as what they are.** `|readout` puts identifiers (keys, hosts,
 paths, ports) in `<code>` and leaves counts, words and phrases as text.
@@ -910,8 +918,14 @@ has one: "Last read 3 hours ago", and "out of date" beside it past the line
 **A frame is filled.** A frame across the page is filled by what it holds,
 or narrowed to it.
 
-Facts are `.kv`: each label beside its value, as many pairs to a row as the
-width holds, never a two-column table stretched to the page.
+A list of facts (`{% facts %}`) is as wide as its longest pair, so its card
+shares a row with the sections beside it rather than crossing the page with
+its values ending a third of the way in. A record page's facts are a
+`{% card %}` that opens its `.section-flow`, beside its notes and related
+records. *Gate:* `lists across an empty frame` in the layout survey.
+
+A row of a record list (`.list-rows`) reads as one line: its meta follows its
+name a gap after, never at the row's far side across an empty middle.
 
 A pair whose value is a list of names (`.address-list`, or a `.code-list` of
 two or more) takes a row of its own. So it never wraps beside another pair and

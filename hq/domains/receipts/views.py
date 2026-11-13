@@ -210,18 +210,22 @@ class ReceiptMatchView(ReceiptPage, TemplateView):
         return redirect(receipt.get_absolute_url())
 
 
+# The fields its form page draws beyond the form's own loop.
+FORM_PAGE = {"form_fields": "receipts/_receipt_fields.html"}
+
+
 class ReceiptFormPage(CommandFormPage, ReceiptPage):
     """A receipt's form, said as the upload command's page says it."""
 
     creates = UPLOAD
     listed_route = "receipts:list"
+    extra_context = FORM_PAGE
 
 
 class ReceiptCreateView(ReceiptFormPage, CreateView):
     page_title = "New receipt"
     model = Receipt
     form_class = ReceiptUploadForm
-    template_name = "receipts/receipt_form.html"
 
     @override
     def get_initial(self):
@@ -249,7 +253,6 @@ class ReceiptUpdateView(ReceiptFormPage, UpdateView):
     page_title = "Edit receipt"
     model = Receipt
     form_class = ReceiptUploadForm
-    template_name = "receipts/receipt_form.html"
 
     @override
     def form_valid(self, form):

@@ -27,13 +27,14 @@
     </div>
   </div>
 
+  {% comment %}The settings and the grants share a row.{% endcomment %}
+  <div class="section-flow">
   {% section "Settings" %}{% if tailnet.settings %}
-    <dl class="kv">
+    {% facts %}
       {% for setting in tailnet.settings %}
-        <dt>{{ setting.label|breakable }}</dt>
-        <dd>{% if setting.addresses %}{% include "control_plane/_policy_names.html" with names=setting.addresses %}{% else %}{{ setting.value|breakable }}{% endif %}{% if setting.problem_url %} {% status "Problem" tone="attention" href=setting.problem_url %}{% endif %}</dd>
+        {% fact setting.label %}{% if setting.addresses %}{% include "control_plane/_policy_names.html" with names=setting.addresses %}{% else %}{{ setting.value|breakable }}{% endif %}{% if setting.problem_url %} {% status "Problem" tone="attention" href=setting.problem_url %}{% endif %}{% endfact %}
       {% endfor %}
-    </dl>
+    {% endfacts %}
   {% endif %}{% endsection %}
 
   {% section "Grants" count=tailnet.grants|length %}
@@ -55,6 +56,7 @@
   {% endif %}
   {% empty %}No grants.
   {% endsection %}
+  </div>
 
   {% section "Groups and tags" count=tailnet.group_rows %}
   {% if tailnet.group_rows %}

@@ -292,7 +292,7 @@
                     "value": "nginx-proxy-manager"
                   }
                 ],
-                "explanation": "A tag can later name a different build, so the next pull or recreate may run one nobody chose. Pin it by digest in its compose file and recreate it.",
+                "explanation": "A tag can later name a different build. Pin it by digest.",
                 "id": "claim:727c884d159f86c2",
                 "investigations": [
                   {
@@ -744,7 +744,7 @@
             "insights": [
               {
                 "concern": false,
-                "detail": "All fully wired.",
+                "detail": "All set up.",
                 "label": "Services",
                 "notice": false,
                 "url": "/infrastructure/services/",
@@ -1350,7 +1350,7 @@
               },
               {
                 "action": "Open certificate",
-                "detail": "Expires Feb\u00a08\u00a0\u00b7 24 days. Renewal opens at 30 days; renew it or check why renewal did not run.",
+                "detail": "Expires Feb\u00a08\u00a0\u00b7 24 days. Renewal has not run; renew it.",
                 "label": "wildcard-example-com expires in 24 days",
                 "since": "",
                 "source": "Estate",
@@ -1359,7 +1359,7 @@
               },
               {
                 "action": "",
-                "detail": "A tag can later name a different build, so the next pull or recreate may run one nobody chose. Pin it by digest in its compose file and recreate it.",
+                "detail": "A tag can later name a different build. Pin it by digest.",
                 "label": "nginx-proxy-manager on docker-host-01 runs jc21/nginx-proxy-manager:2.12.1 by tag alone",
                 "since": "",
                 "source": "Infrastructure",
@@ -3194,7 +3194,7 @@
               }
             ],
             "schema_version": 3,
-            "schemas": "Each list's query_schema, its filters' types and choices, and its paging, the most limit may ask for, are describe_resources with name set to its resource."
+            "schemas": "Each list's query_schema, filters, paging and largest limit are in describe_resources with name set to its resource."
           },
           "ok": true
         },
@@ -7919,7 +7919,7 @@
             "$ref": "#/components/schemas/ContainerRow/properties/compose_project"
           },
           "image": {
-            "description": "What it runs: the reference, registry, repository, tag, digest and image id, whether it is pinned by digest, when it was built, and its source.",
+            "description": "What it runs: reference, registry, repository, tag, digest, image id, whether pinned by digest, build time and source.",
             "type": "object"
           },
           "machine": {
@@ -7929,7 +7929,7 @@
             "$ref": "#/components/schemas/ContainerRow/properties/name"
           },
           "posture": {
-            "description": "How it measures against the container standard: how many checks it meets of those measured, each check's state, why each unmet one matters and its fix, and what is off by design.",
+            "description": "How it meets the container standard: checks met, each check's state, each unmet one's reason and fix, and what is off by design.",
             "type": "object"
           },
           "project": {
@@ -7981,7 +7981,7 @@
             "$ref": "#/components/schemas/ContainerRow/properties/status"
           },
           "supply_chain": {
-            "description": "Where its image comes from: its source, provenance, packages, SBOM, attestations, known vulnerabilities and when they were read, and how it measures against the supply chain standard.",
+            "description": "Where its image comes from: source, provenance, packages, SBOM, attestations, known vulnerabilities and when read, and how it meets the supply chain standard.",
             "type": "object"
           },
           "url": {
@@ -12323,7 +12323,7 @@
         "description": "One managed record, what HQ derives from it, and the operations run on it.",
         "properties": {
           "derived": {
-            "description": "What HQ makes of the record: its health, what may be done to it and why not, its machines and services, what HQ expects beside what is live, a certificate's expiry and use, the changes waiting for approval, and what uses it.",
+            "description": "What HQ makes of the record: health, allowed actions, machines and services, expected beside live, certificate expiry, pending approvals, and what uses it.",
             "type": "object"
           },
           "operations": {
@@ -16609,7 +16609,7 @@
         "type": "object"
       },
       "SyncStats": {
-        "description": "How the sync went: how many docs it created, updated and skipped, the links naming a record HQ does not hold, and the orphans found or pruned where asked.",
+        "description": "Docs created, updated and skipped, links to records HQ does not hold, and orphans found or pruned.",
         "type": "object"
       },
       "TagPart": {
@@ -17218,7 +17218,7 @@
           },
           "reason": {
             "default": "",
-            "description": "The reason on its current condition, verbatim, saying whether a read of the live system wrote it or applying HQ's copy did, which no read has confirmed since.",
+            "description": "The reason on its current condition, verbatim: set by a live read, or by applying HQ's copy and not yet confirmed.",
             "type": "string"
           },
           "status": {
@@ -24671,7 +24671,7 @@
     },
     "/api/v2/resources/containers/": {
       "get": {
-        "description": "Every running container: what it runs and whether that is current and safe, how it is run and the memory and CPU it uses beside its limits, and its posture against the container standard.",
+        "description": "Every running container: its image and whether it is current and safe, its runtime, memory and CPU, and its posture.",
         "operationId": "listContainersV2",
         "parameters": [
           {
@@ -25628,7 +25628,7 @@
     },
     "/api/v2/resources/hq/": {
       "get": {
-        "description": "HQ itself: the release it runs and whether its branch is ahead, the machine and container it runs in, its background jobs, what it can read and its open problems.",
+        "description": "HQ itself: its release and whether its branch is ahead, its machine and container, background jobs, what it reads, open problems.",
         "operationId": "listHqV2",
         "parameters": [
           {
@@ -27149,7 +27149,7 @@
     },
     "/api/v2/resources/tailnet/": {
       "get": {
-        "description": "The tailnet policy: settings, grants, shell rules, groups and tags with their machines, services, app connectors, tests, problems, and what could not be read.",
+        "description": "The tailnet policy: settings, grants, shell rules, groups, tags and their machines, services, app connectors, tests, problems and read failures.",
         "operationId": "listTailnetV2",
         "parameters": [
           {
@@ -27232,7 +27232,7 @@
     },
     "/api/v2/resources/upgrades/": {
       "get": {
-        "description": "Every running container something newer is published for: the target by digest, what it fixes, its data and how it would be verified, every reason it cannot go ahead yet, and the steps an upgrade would take. Read-only.",
+        "description": "Every running container with a newer release: the target by digest, what it fixes, its data and verification, what blocks it, and its steps. Read-only.",
         "operationId": "listUpgradesV2",
         "parameters": [
           {

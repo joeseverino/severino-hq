@@ -40,9 +40,9 @@ _UNBROKEN = 24
 _INNER_SEAM = re.compile(r"\w(?:/|:+|\.)\w")
 _WORDS = re.compile(r"(\s+)")
 # A figure in a phrase: an amount, a time, an address of digits ("$12.00",
-# "9:29", "172.18.0.2"), or a range of two ("10.5–12.5"). Nothing in one is a
-# place a line breaks.
-_FIGURE = re.compile(r"\W*\d+(?:[.:,]\d+)*(?:–\d+(?:[.:,]\d+)*)?\W*")
+# "9:29", "172.18.0.2"), a range of two ("10.5–12.5"), or a rate ("10:36/mi").
+# Nothing in one is a place a line breaks.
+_FIGURE = re.compile(r"\W*\d+(?:[.:,]\d+)*(?:–\d+(?:[.:,]\d+)*)?(?:/[^\W\d_]+)?\W*")
 # Where a browser may break a hyphenated part: after each inner hyphen.
 _AFTER_HYPHEN = re.compile(r"(?<=[^-\s]-)")
 # A piece of a name shorter than this, alone on a line ("1" under
@@ -217,10 +217,7 @@ def breakable(value, mark=""):
     # it, and a seam inside a tag would break the tag.
     if hasattr(value, "__html__"):
         return conditional_escape(value) + conditional_escape(mark)
-    drawn = _marked(_words(value), mark)
-    # A dot ``labels.dotted`` joined parts with is drawn as {% dot %} draws it,
-    # hidden from a reader.
-    return mark_safe("".join(drawn).replace(DOT, DOT_MARKUP))  # noqa: S308 - each word is escaped as it is drawn
+    return mark_safe("".join(_marked(_line(value), mark)))  # noqa: S308 - each word is escaped as it is drawn
 
 
 def _marked(drawn: list[str], mark: str) -> list[str]:
@@ -230,16 +227,50 @@ def _marked(drawn: list[str], mark: str) -> list[str]:
 
     if not mark:
         return drawn
-    last = drawn[-1]
-    at = _CLOSING.search(last).start()
     # Hidden from the accessibility tree: in a link it would be heard as part
     # of the link's name. ``data-mark`` is what a link draws in its place,
     # clear of its underline (base.css).
     shown = conditional_escape(mark)
-    return [
-        *drawn[:-1],
-        f'{last[:at]}<span class="mark" data-mark="{shown}" aria-hidden="true">{shown}</span>{last[at:]}',
-    ]
+    return _inside_last(drawn, f'<span class="mark" data-mark="{shown}" aria-hidden="true">{shown}</span>')
+
+
+def _inside_last(drawn: list[str], markup: str) -> list[str]:
+    """``markup`` written after the last word's last letter, inside its
+    innermost box."""
+
+    last = drawn[-1]
+    at = _CLOSING.search(last).start()
+    return [*drawn[:-1], f"{last[:at]}{markup}{last[at:]}"]
+
+
+# A word a value ends on that a name before it holds: one word of letters,
+# perhaps with its sentence's mark ("TXT", "pulled").
+_TAIL = re.compile(r"\w*[^\W\d_]\w*[.,;:!?]?")
+
+
+def _line(value, *, sole: bool | None = None) -> list[str]:
+    """``value``'s words as ``breakable`` draws them, held so that no line they
+    wrap onto starts with a stray: a dot ``labels.dotted`` joined parts with
+    stays on the line of the part before it, and a word a value ends on
+    after a name stays on the name's last line. Each is held inside the box before it, since a box as wide as
+    its line leaves what follows no room there; a word a name holds stays
+    outside the parts of it a cell cuts."""
+
+    parts = str(value).split(DOT)
+    alone = (len(parts) == 1 and not _WORDS.search(parts[0])) if sole is None else sole
+    drawn: list[str] = []
+    for at, part in enumerate(parts):
+        words = _words(part, sole=alone)
+        if len(words) >= 3 and 'class="token"' in words[-3] and _TAIL.fullmatch(words[-1]) and words[-2] == " ":
+            # In the token's own box, after the parts a cell cuts.
+            name = words[-3].removesuffix("</span>")
+            words = [*words[:-3], f"{name}\xa0{words[-1]}</span>"]
+        if at < len(parts) - 1:
+            # The dot as {% dot %} draws it, hidden from a reader, and the
+            # space after it outside the box, where the line may break.
+            words = [*_inside_last(words, DOT_MARKUP.rstrip()), " "] if part else [DOT_MARKUP]
+        drawn.extend(words)
+    return drawn
 
 
 def _words(value, *, sole: bool | None = None) -> list[str]:
@@ -282,7 +313,7 @@ def code_spans(value):
     for index, piece in enumerate(pieces):
         if not index % 2:
             # A word of a sentence, never a name standing alone.
-            drawn.append("".join(_words(piece, sole=False)))
+            drawn.append("".join(_line(piece, sole=False)))
             continue
         # The punctuation after the span goes inside it, so it never starts a
         # line alone; the span's words are a sentence's too.

@@ -74,7 +74,7 @@ def services(zone) -> ZoneInsight | None:
         return ZoneInsight(
             label="Services",
             value="None",
-            detail="HQ has nothing set up behind any name in this domain.",
+            detail="No name here is set up.",
             links=(("Served by", serving),) if serving else (),
             note=overlays,
         )
@@ -86,7 +86,7 @@ def services(zone) -> ZoneInsight | None:
         detail = ended(f"Handled at {', '.join(handlers)}") if handlers else "Nothing answers there."
     else:
         value = counted(len(members), "service")
-        detail = f"{len(unhealthy)} missing something behind it." if unhealthy else "All fully wired."
+        detail = f"{len(unhealthy)} incomplete." if unhealthy else "All set up."
     # A count, with the list one click beneath it: the number opens onto the
     # whole list, and ``url`` reaches a page that does the same job.
     return ZoneInsight(

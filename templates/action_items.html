@@ -1,6 +1,7 @@
 {% extends "page.html" %}
 {% block page %}
-<search><form class="filter-bar" method="get">
+{% url 'action_items' as every_item %}
+{% filter_bar filtered=action_filtered clear=every_item %}
   <input type="search" name="q" value="{{ action_query }}" placeholder="Filter what needs you" aria-label="Filter what needs you">
   <select name="status" aria-label="Urgency">
     <option value="">Any urgency</option>
@@ -12,9 +13,7 @@
     {% for source_id, source_label in action_sources %}<option value="{{ source_id }}"{% if action_source == source_id %} selected{% endif %}>{{ source_label }}</option>{% endfor %}
   </select>
   {% if action_about %}<input type="hidden" name="about" value="{{ action_about }}">{% endif %}
-  <button class="btn" type="submit">Filter</button>
-  {% if action_query or action_status or action_source or action_about %}<a class="btn ghost" href="{% url 'action_items' %}">Clear filters</a>{% endif %}
-</form></search>
+{% endfilter_bar %}
 
 {% comment %}
 What waits on the reader, under the domain that raised it. An item is open

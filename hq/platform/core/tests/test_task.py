@@ -82,6 +82,15 @@ class PagesTests(SimpleTestCase):
         self.assertEqual(task.estate_path("estate/audit"), "/audit/")
         self.assertEqual(task.estate_path("estate"), "/")
 
+    def test_a_page_of_any_kind_keeps_its_query(self):
+        # A path copied from the address bar may come without its leading slash.
+        containers = reverse("control_plane:containers")
+        asked = ["control_plane:containers?q=hq", f"{containers.strip('/')}/?q=docker", f"{containers}?q=x"]
+
+        self.assertEqual(
+            task.pages(asked, self.EVERY), [f"{containers}?q=hq", f"{containers}?q=docker", f"{containers}?q=x"]
+        )
+
     def test_a_page_known_by_name_is_named_as_nearest_where_it_is_one(self):
         with self.assertRaisesMessage(PageRefused, "\n  dense/services (a page by name)"):
             task.pages(["dense/service"], self.EVERY, ["dense/services"])

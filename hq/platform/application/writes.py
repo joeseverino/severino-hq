@@ -259,8 +259,11 @@ class RecordFormMixin(PostedOnce, WriteMessages):
     ``application.records.save_form``, so noun, permission and target come
     from the domain's declaration. ``created_message`` and ``updated_message``
     may reword the announcement. Its help, its verb and its way back come
-    from the declaration too, so it reads as the command's page does.
+    from the declaration too, so it reads as the command's page does, and
+    its page is the form page frame.
     """
+
+    template_name = "form_page.html"
 
     def get_form(self, form_class: Any = None) -> Any:
         form = super().get_form(form_class)
@@ -302,8 +305,9 @@ class CommandFormPage:
     """A record's form whose create goes through a named command (``creates``)
     rather than its domain's declaration: its help is that command's, and it
     closes with its words, or Save changes, and Cancel (``listed_route`` for a
-    new one)."""
+    new one), on the form page frame."""
 
+    template_name = "form_page.html"
     creates = ""
     listed_route = ""
 

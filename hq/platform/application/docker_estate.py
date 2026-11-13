@@ -318,10 +318,7 @@ def images_unpinned(estate: Any) -> tuple[dict[str, Any], ...]:
                     "subject": node.id,
                     "title": f"{container} on {node.label} runs {reference} by tag alone",
                     "severity": "attention",
-                    "explanation": (
-                        "A tag can later name a different build, so the next pull or recreate may run "
-                        "one nobody chose. Pin it by digest in its compose file and recreate it."
-                    ),
+                    "explanation": "A tag can later name a different build. Pin it by digest.",
                     "part": container,
                     "evidence": (
                         ("Container", container),

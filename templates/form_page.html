@@ -1,0 +1,21 @@
+{% extends "page.html" %}
+{% comment %}
+A page that is one form, a record's or a command's: its card, and in it the
+form (partials/_form.html) closing with the view's `form_verb` and
+`cancel_url`. A page whose fields are more than the form's own loop names the
+template that draws them as `form_fields`, and `form_note` says what saving
+does, both from the view (`extra_context`), so a record's form page is this
+frame and nothing of its own. The host's command page and a resource's form,
+whose fields are derived per command or provider, draw their own `form` in
+the card, and the command page its result `before` it; neither block is
+public. The card alone is `form_page.html#form_card`, as the component
+catalog draws it.
+{% endcomment %}
+{% block page %}
+{% block before %}{% endblock %}
+{% partialdef form_card inline %}
+{% card css="form-card" %}
+{% block form %}{% include "partials/_form.html" with fields=form_fields verb=form_verb cancel_url=cancel_url note=form_note %}{% endblock %}
+{% endcard %}
+{% endpartialdef %}
+{% endblock %}

@@ -92,11 +92,7 @@ class ReportsView(PageMixin, TemplateView):
                     counted(expenses_count, "expense"),
                     detail_url=expenses_url if expenses_count else "",
                 ),
-                Kpi(
-                    f"Deductible (est.) {year}",
-                    money(expense_summary["deductible"] or zero),
-                    "Estimate, not tax advice",
-                ),
+                Kpi(f"Deductible (est.) {year}", money(expense_summary["deductible"] or zero)),
                 Kpi(
                     f"Assets purchased {year}",
                     asset_summary["n"] or 0,

@@ -11,28 +11,29 @@
   {% endif %}
 </div>
 
+<div class="section-flow">
 {% section "Message" %}
-  <dl class="kv">
-    <dt>Name</dt><dd>{{ submission.name|breakable }}</dd>
-    <dt>Email</dt><dd><a href="{{ reply_href }}">{{ submission.email|breakable }}</a></dd>
-  </dl>
+  {% facts %}
+    {% fact "Name" value=submission.name %}
+    {% fact "Email" %}<a href="{{ reply_href }}">{{ submission.email|breakable }}</a>{% endfact %}
+  {% endfacts %}
   <p>{{ submission.message|breakable|linebreaksbr }}</p>
 {% aside %}{% status submission.status|default:"unread" tone=submission.status|default:"unread" %}{% if submission.pending %} {% waiting as waits %}{% status waits tone="attention" %}{% endif %}
 {% endsection %}
 
 {% section "Delivery" %}
-  <dl class="kv">
-    <dt>Number</dt><dd>#{{ submission.id|breakable }}</dd>
-    <dt>Bot check</dt><dd>{{ submission.turnstile|or_empty }}</dd>
-    <dt>Sent</dt><dd>{{ submission.created_at|when }}</dd>
-    <dt>Updated</dt><dd>{{ submission.updated_at|when }}</dd>
-    <dt>IP address</dt><dd>{{ submission.ip_address|or_empty }}</dd>
-    <dt>Browser</dt><dd>{{ submission.browser|or_empty }}</dd>
-    <dt>Device</dt><dd>{{ submission.device|or_empty }}</dd>
-    <dt>Country</dt><dd>{{ submission.country|or_empty }}</dd>
-    {% if submission.source_url %}<dt>Sent from</dt><dd>{% entity submission.source_url|outside label=submission.source_url %}</dd>{% endif %}
-    <dt>User agent</dt><dd class="muted">{{ submission.user_agent|or_empty }}</dd>
-  </dl>
+  {% facts %}
+    {% fact "Number" %}#{{ submission.id|breakable }}{% endfact %}
+    {% fact "Bot check" %}{{ submission.turnstile|or_empty }}{% endfact %}
+    {% fact "Sent" %}{{ submission.created_at|when }}{% endfact %}
+    {% fact "Updated" %}{{ submission.updated_at|when }}{% endfact %}
+    {% fact "IP address" %}{{ submission.ip_address|or_empty }}{% endfact %}
+    {% fact "Browser" %}{{ submission.browser|or_empty }}{% endfact %}
+    {% fact "Device" %}{{ submission.device|or_empty }}{% endfact %}
+    {% fact "Country" %}{{ submission.country|or_empty }}{% endfact %}
+    {% if submission.source_url %}{% fact "Sent from" %}{% entity submission.source_url|outside label=submission.source_url %}{% endfact %}{% endif %}
+    {% fact "User agent" %}<span class="muted">{{ submission.user_agent|or_empty }}</span>{% endfact %}
+  {% endfacts %}
 {% endsection %}
 
 {% section "Your notes" %}
@@ -45,4 +46,5 @@
     </div>
   </form>
 {% endsection %}
+</div>
 {% endblock %}

@@ -239,7 +239,7 @@ func TestCPanelPlanRefusesUnservedNames(t *testing.T) {
 	h.command.outcomes["ssh sites"] = fakeOutcome{Stdout: `{"sites":{"a.example":["www.a.example"],"b.example":null}}`}
 	consumer := TLSConsumer{Kind: "cpanel", Name: "host", ConnectionRef: "cpanel", VerifyDomains: []string{"WWW.a.example", "b.example"}, InstallDomains: []string{"a.example"}}
 	_, err := h.r.cpanelSitesFor(t.Context(), consumer)
-	want := "host would be checked at b.example but installs only on a.example; add those names to the target's install list, or leave it empty to install on every site that serves a checked name"
+	want := "host would be checked at b.example but installs only on a.example; add them to the target's install list, or leave it empty"
 	if err == nil || err.Error() != want {
 		t.Fatalf("plan: %v", err)
 	}

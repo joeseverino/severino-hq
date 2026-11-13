@@ -4,7 +4,7 @@ is its own statement, so nothing above the list restates it: a met check's
 sentence is its tooltip, and how to enforce the standard is in the docs the
 heading links to. An unread check says what would read it.
 {% endcomment %}
-{% section posture.advanced|yesno:"Advanced HQ Posture enabled,HQ's standard" id="posture" %}
+{% section posture.advanced|yesno:"Advanced HQ Posture,HQ's standard" id="posture" %}
   <ol class="step-list posture-checks">
     {% for standing in posture.standings %}
       <li class="tone-{{ standing.state }}"{% if standing.met %} title="{{ standing.check.holds }}"{% endif %}>

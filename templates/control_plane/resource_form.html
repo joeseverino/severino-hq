@@ -1,10 +1,9 @@
-{% extends "page.html" %}
-{% block page %}
+{% extends "form_page.html" %}
+{% block form %}
 {% comment %}
 Every field below is generated from the provider's pydantic model, and that same
 model validates the submission. Nothing here knows what kind of resource this is.
 {% endcomment %}
-{% card css="form-card" %}
 <form method="post" class="form" data-submit-busy data-submit-label="Working…">
   {% write_token %}
   {% if not resource %}<input type="hidden" name="kind" value="{{ kind }}">{% endif %}
@@ -73,5 +72,4 @@ model validates the submission. Nothing here knows what kind of resource this is
   {% endcomment %}
   {% include "partials/_form_actions.html" with verb=form_verb cancel_url=cancel_url note=apply_note only %}
 </form>
-{% endcard %}
 {% endblock %}

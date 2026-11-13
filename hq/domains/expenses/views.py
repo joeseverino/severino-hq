@@ -137,10 +137,14 @@ class ExpenseDetailView(PageMixin, DetailView):
         )
 
 
+# What saving the expense's form does, said under it.
+FORM_PAGE = {"form_note": "Deductible estimate = cost × business use. Updated when you save."}
+
+
 class ExpenseCreateView(ExpensePage, ReferencePickerMixin, RecordFormMixin, CreateView):
     page_title = "New expense"
     form_class = ExpenseForm
-    template_name = "expenses/expense_form.html"
+    extra_context = FORM_PAGE
     created_message = "Expense saved: {target}"
 
     @override
@@ -158,7 +162,7 @@ class ExpenseUpdateView(ExpensePage, ReferencePickerMixin, RecordFormMixin, Upda
     page_title = "Edit expense"
     model = Expense
     form_class = ExpenseForm
-    template_name = "expenses/expense_form.html"
+    extra_context = FORM_PAGE
     updated_message = "Expense saved: {target}"
 
 

@@ -498,7 +498,7 @@ class PageTests(TestCase):
         response = self.client.get(reverse("control_plane:machine", args=["example-box"]))
 
         self.assertEqual(response.context["standings"]["kuma"].latest, "2")
-        self.assertContains(response, "2 available")
+        self.assertIn("2 available", text(response))
         self.assertContains(response, "1 known")
 
     def test_a_container_running_an_image_by_id_stays_listed_and_says_why(self):

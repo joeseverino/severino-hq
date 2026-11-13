@@ -1,6 +1,6 @@
 {% load nav_tags %}
 <div class="lookup-grid">
-  {% section "Name lookup" lede="Every public record for a name." %}
+  {% section "Name lookup" %}
     <form method="get" class="lookup-form">
       <input type="hidden" name="tab" value="dns">
       <div class="field compact">
@@ -45,7 +45,7 @@
     {% endwith %}
   {% endsection %}
 
-  {% section "Address lookup" lede="The name for an address, and who owns it." %}
+  {% section "Address lookup" %}
     <form method="get" class="lookup-form">
       <input type="hidden" name="tab" value="dns">
       <div class="field compact">

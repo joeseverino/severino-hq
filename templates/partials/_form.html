@@ -20,10 +20,12 @@ file when the form does. `verb`, `cancel_url`, `note`, `choices` and
 of the screen once something has changed, for a long form. `next` is the
 page to come back to once it is saved. A form answered in place (`in_place`)
 is sent to the region it stands in and says how it went in its closing row,
-whose Cancel is answered there too.
+whose Cancel is answered there too. A form that asks rather than writes (a
+lookup) is `method="get"`: it carries no write token, since sending it twice
+changes nothing, and it never takes a file.
 {% endcomment %}
-<form method="post"{% if action %} action="{{ action }}"{% endif %}{% if form.is_multipart %} enctype="multipart/form-data"{% endif %}{% if not table_body %} class="form"{% endif %}{% if in_place %} data-fragment-target="" data-fragment-busy="Working…"{% else %} data-submit-busy data-submit-label="Working…"{% endif %}>
-  {% write_token %}
+<form{% if method == "get" %} method="get"{% else %} method="post"{% endif %}{% if action %} action="{{ action }}"{% endif %}{% if form.is_multipart and method != "get" %} enctype="multipart/form-data"{% endif %}{% if not table_body %} class="form"{% endif %}{% if in_place %} data-fragment-target="" data-fragment-busy="Working…"{% else %} data-submit-busy data-submit-label="Working…"{% endif %}>
+  {% if method != "get" %}{% write_token %}{% endif %}
   {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
   {% include "partials/_form_errors.html" %}
   {% if table_body %}{% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}{% include table_body %}{% elif fields %}{% include fields %}{% else %}{{ form }}{% endif %}

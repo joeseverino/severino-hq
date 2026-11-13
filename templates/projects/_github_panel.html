@@ -60,7 +60,7 @@ reading; nothing here calls GitHub.
           <div><dt>Changes to {{ repo.default_branch|breakable }}</dt><dd class="muted">GitHub does not offer branch rules for this repository's plan.</dd></div>
         {% endif %}
         {% if environment %}
-          <div><dt>Deploy rules</dt><dd>{% if environment.reviewers %}Deploys need approval from {{ environment.reviewers|join:", "|breakable }}{% else %}Deploys need no approval{% endif %}{% if environment.wait_minutes %} and wait {{ environment.wait_minutes|counted:"minute" }}{% endif %}. {% if environment.branches == "any" %}From any branch.{% elif environment.branches == "protected" %}Only from protected branches.{% else %}Only from chosen branches.{% endif %}</dd></div>
+          <div><dt>Deploy rules</dt><dd>{% if environment.reviewers %}Approval from {{ environment.reviewers|join:", "|breakable }}{% else %}No approval{% endif %}{% if environment.wait_minutes %}, then a {{ environment.wait_minutes|counted:"minute" }} wait{% endif %}{% if environment.branches == "protected" %}, protected branches only{% elif environment.branches != "any" %}, chosen branches only{% endif %}</dd></div>
         {% endif %}
         {% for runner in repo.runners %}
           <div><dt>Runner</dt><dd>{% entity "machine"|entity_of:runner.name %}{% dot %}{{ runner.status|breakable:"," }}{% if runner.busy %} running a job{% else %} idle{% endif %}</dd></div>

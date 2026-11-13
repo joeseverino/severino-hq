@@ -304,7 +304,6 @@
 /* The margin parts a chip from the next; the last has none to part, so it takes the whole of its line, and a value in it is cut only past its cell's edge. */
 .tag:last-child { margin-inline-end: 0; }
 
-.search-page-form input[type=search] { flex-basis: 420px; }
 .discovery-list { list-style: none; margin: 0; padding: 0; }
 .discovery-list li { border-top: 1px solid var(--line); }
 .discovery-list li:first-child { border-top: 0; }

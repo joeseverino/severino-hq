@@ -93,8 +93,6 @@ AUTHORITY_LABELS = {
     "missing": "Permission missing",
     "none": "HQ reads nothing through it",
 }
-# The same line for a connection whose every ability needs no key.
-KEYLESS_LABEL = EVIDENCE_LABELS["not_applicable"]
 # Authority the row shows only when it is expanded: true of the connection,
 # and nothing to act on.
 QUIET_AUTHORITY = frozenset({"whole_account"})
@@ -224,18 +222,13 @@ class ConnectionView:
     authority: str = "none"
 
     @property
-    def authority_label(self) -> str:
-        if self.abilities and all(state.evidence == "not_applicable" for state in self.abilities):
-            return KEYLESS_LABEL
-        return AUTHORITY_LABELS[self.authority]
-
-    @property
     def state_line(self) -> str:
         """The one line under the state word, or "" when the word says it all.
 
         Since when for a state that has an age, the missing permissions for a
         credential that lacks them, and otherwise what HQ knows about the
-        credential's permissions.
+        credential's permissions. A connection that needs no key has none to
+        know about, and its name cell already says so.
         """
 
         observed = self.instance.observed_at
@@ -248,10 +241,11 @@ class ConnectionView:
         if self.lifecycle == Lifecycle.UNAUTHORIZED:
             missing = tuple(dict.fromkeys(scope for state in self.abilities for scope in state.missing_scopes))
             return f"Needs {', '.join(missing)}" if missing else ""
-        label = self.authority_label
-        if self.lifecycle == Lifecycle.CONFIGURED and (label != KEYLESS_LABEL and self.authority != "none"):
+        if self.abilities and all(state.evidence == "not_applicable" for state in self.abilities):
+            return ""
+        if self.lifecycle == Lifecycle.CONFIGURED and self.authority != "none":
             return Lifecycle.UNPROBED.label
-        return label
+        return AUTHORITY_LABELS[self.authority]
 
     @property
     def state_line_quiet(self) -> bool:

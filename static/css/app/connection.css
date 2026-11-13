@@ -117,7 +117,7 @@
 /* ── Reachability answer ───────────────────────────────────────── */
 
 .verdict { display: flex; align-items: baseline; gap: var(--space-4); margin: var(--space-7) 0 var(--space-2); }
-.modal .filter-bar { margin-bottom: var(--space-2); align-items: center; }
+.modal .filter-bar { margin-bottom: var(--space-2); }
 .modal .filter-bar .control-label { margin: 0 var(--space-1) 0 0; }
 
 /* A long value the model puts no ceiling on: a policy document, a compose

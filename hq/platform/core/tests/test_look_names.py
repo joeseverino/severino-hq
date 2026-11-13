@@ -1,6 +1,7 @@
 """dev:look reaches a record's page of the estate it draws, by the route that
 takes the record or by a template the page draws, a component catalog entry
-as the catalog gate draws it, and the page a named POST's refusal answers; a
+as the catalog gate draws it, reading the catalog for no other name, and the
+page a named POST's refusal answers; a
 name it refuses is answered with names it takes, one a line, each as it is
 typed; a rule it
 refuses that is a check of the survey is answered with the gate test that
@@ -63,6 +64,29 @@ class CatalogNamesTests(SimpleTestCase):
         self.assertTrue(notices)
         self.assertEqual(_named("part/notice"), notices)
         self.assertEqual(_named("table"), [name for name in CATALOG if name.startswith("table/")])
+
+    def test_a_look_that_names_no_entry_never_reads_the_catalog(self):
+        # A base whose constructors this tree's catalog does not fit fails as the catalog is imported.
+        class Unimportable:
+            def __getattr__(self, name):
+                raise AssertionError(f"the catalog was read for {name}")
+
+        names = ["estate/projects", "connections", "post:project-create-blank", "search/?q=docker"]
+        with mock.patch.object(look, "catalog", Unimportable()):
+            pages = _named(*names)
+            self.assertEqual(len(pages), len(names))
+            self.assertEqual(look.catalog_pages(pages), {})
+
+    def test_no_other_page_takes_an_entry_s_name(self):
+        # The catalog is read only for a name no other page is, so a page by that name would shadow the entry.
+        from hq.platform.core.tests import task
+        from hq.platform.core.tests.browser.catalog import CATALOG
+        from hq.platform.core.tests.look_posts import post_names
+
+        named = [*look._named(), *post_names()]
+        for name in {*CATALOG, *(name.split("/")[0] for name in CATALOG)}:
+            with self.subTest(name=name), self.assertRaises(task.PageRefused):
+                task.pages([name], [], named)
 
     def test_an_entry_that_is_none_is_refused_with_the_nearest(self):
         with self.assertRaises(AssertionError) as refused:

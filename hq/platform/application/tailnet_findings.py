@@ -301,8 +301,7 @@ RULES: tuple[FindingRule, ...] = (
         "neutral",
         _grant_reaches_only_loopback,
         operator_action=(
-            "In the Tailscale admin console, remove the port from the grant, "
-            "and move it to the deny list of the policy test that accepts it."
+            "In Tailscale's admin console, remove the port from the grant and deny it in the test that accepts it."
         ),
         no_help_reason="HQ cannot edit the tailnet policy in Tailscale's admin console.",
     ),

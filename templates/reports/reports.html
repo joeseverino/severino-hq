@@ -1,13 +1,12 @@
 {% extends "page.html" %}
 {% block page %}
-<search><form method="get" class="filter-bar">
+{% filter_bar %}
   <select name="year" aria-label="Year" data-submit-on-change>
     {% for y in available_years %}
       <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>
     {% endfor %}
   </select>
-  <button class="btn" type="submit">Filter</button>
-</form></search>
+{% endfilter_bar %}
 
 {% include "partials/_kpi_grid.html" with items=figures only %}
 
@@ -42,11 +41,11 @@ A year with no expenses is said by the count above; its breakdowns do not draw.
 {% endif %}
 
 {% comment %}
-Small readings pair up: each is a few lines, and a card of its own would be
-mostly empty card. A reading with nothing in it is not drawn.
+Small readings and the exports share rows: each is a few lines, and a card
+across the page would be mostly empty card. A reading with nothing in it is
+not drawn.
 {% endcomment %}
-{% if status_groups or assets_by_category or docs_needing_review %}
-<div class="two-col">
+<div class="section-flow">
   {% if status_groups %}
   {% section "By status" %}
     <ul class="list-rows">
@@ -76,21 +75,17 @@ mostly empty card. A reading with nothing in it is not drawn.
     </ul>
   {% endsection %}
   {% endif %}
-</div>
-{% endif %}
 
-{% comment %}
-Each export once, by what it holds, its files beside it: a list on a card,
-not a wall of buttons.
-{% endcomment %}
-{% section "Exports" lede="Without secrets, sensitive documents' text or receipt files." %}
-  <dl class="kv">
-    <dt>Expenses</dt><dd class="dot-list"><span><a href="{% url 'reports:expenses_csv' %}?year={{ year }}">{{ year|breakable }} CSV</a></span><span><a href="{% url 'reports:expenses_csv' %}">All years CSV</a></span></dd>
-    <dt>Assets</dt><dd class="dot-list"><span><a href="{% url 'reports:assets_csv' %}?year={{ year }}">{{ year|breakable }} CSV</a></span><span><a href="{% url 'reports:assets_csv' %}">All years CSV</a></span></dd>
-    <dt>Year summary</dt><dd class="dot-list"><span><a href="{% url 'reports:year_summary_json' %}?year={{ year }}">{{ year|breakable }} JSON</a></span><span><a href="{% url 'reports:year_summary_md' %}?year={{ year }}">{{ year|breakable }} Markdown</a></span></dd>
-    <dt>Writeups and pages</dt><dd><span><a href="{% url 'reports:content_csv' %}">CSV</a></span></dd>
-    <dt>Projects</dt><dd><span><a href="{% url 'reports:projects_csv' %}">CSV</a></span></dd>
-    <dt>Documents</dt><dd><span><a href="{% url 'reports:documentation_csv' %}">CSV</a></span></dd>
-  </dl>
-{% endsection %}
+  {% comment %}Each export once, by what it holds, its files beside it: a list on a card, not a wall of buttons.{% endcomment %}
+  {% section "Exports" lede="Leaves out secrets, sensitive text and receipts." %}
+    {% facts %}
+      {% fact "Expenses" %}<ul class="dot-list"><li><a href="{% url 'reports:expenses_csv' %}?year={{ year }}">{{ year|breakable }} CSV</a></li><li><a href="{% url 'reports:expenses_csv' %}">All years CSV</a></li></ul>{% endfact %}
+      {% fact "Assets" %}<ul class="dot-list"><li><a href="{% url 'reports:assets_csv' %}?year={{ year }}">{{ year|breakable }} CSV</a></li><li><a href="{% url 'reports:assets_csv' %}">All years CSV</a></li></ul>{% endfact %}
+      {% fact "Year summary" %}<ul class="dot-list"><li><a href="{% url 'reports:year_summary_json' %}?year={{ year }}">{{ year|breakable }} JSON</a></li><li><a href="{% url 'reports:year_summary_md' %}?year={{ year }}">{{ year|breakable }} Markdown</a></li></ul>{% endfact %}
+      {% fact "Writeups and pages" %}<a href="{% url 'reports:content_csv' %}">CSV</a>{% endfact %}
+      {% fact "Projects" %}<a href="{% url 'reports:projects_csv' %}">CSV</a>{% endfact %}
+      {% fact "Documents" %}<a href="{% url 'reports:documentation_csv' %}">CSV</a>{% endfact %}
+    {% endfacts %}
+  {% endsection %}
+</div>
 {% endblock %}

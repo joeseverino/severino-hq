@@ -469,17 +469,19 @@
 }
 .list-rows li:last-child { border-bottom: 0; }
 .list-rows li:first-child { padding-top: var(--space-2); }
-/* The name and its line keep a column of their own before the meta beside
-   them: a meta too wide to leave it drops under them instead. */
-.list-rows .row-main { display: flex; align-items: center; gap: var(--space-4); min-width: 0; flex: 1 1 8rem; flex-wrap: wrap; }
+/* The name and its line come first and the meta follows them a gap after,
+   so the two read together however wide the row is: each grows only as far
+   as what it holds (`max-width: max-content`), and a meta too wide to stay
+   beside them drops under them instead. */
+.list-rows .row-main { display: flex; align-items: center; gap: var(--space-4); min-width: 0; flex: 1 1 8rem; max-width: max-content; flex-wrap: wrap; }
 .list-rows .row-main > a { min-width: 0; overflow-wrap: anywhere; }
 /* The title keeps the line its marker is on. Wrapping places a flex item by
    its full content width, so a long name would drop below its dot; a modest
    basis keeps them together and the name wraps inside itself instead. */
-.list-rows .row-main > :is(a, strong) { flex: 1 1 12rem; min-width: 0; overflow-wrap: anywhere; }
-.list-rows .row-meta { color: var(--muted); font-size: var(--text-xs); margin-left: auto; white-space: nowrap; }
+.list-rows .row-main > :is(a, strong) { flex: 1 1 12rem; max-width: max-content; min-width: 0; overflow-wrap: anywhere; }
+.list-rows .row-meta { color: var(--muted); font-size: var(--text-xs); white-space: nowrap; }
 /* A row's actions end its line, after the meta or, with none, in its place. */
-.list-rows .row-main + .row-actions { margin-left: auto; }
+.list-rows .row-actions { margin-left: auto; }
 .list-rows a strong { color: var(--ink); font-weight: 600; }
 .list-rows a:hover strong { color: var(--accent); }
 

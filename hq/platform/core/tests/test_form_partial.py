@@ -55,6 +55,20 @@ class FormPartialTests(SimpleTestCase):
         self.assertEqual(drawn.attrs["action"], "/example/upload/")
         self.assertEqual(drawn.attrs["enctype"], "multipart/form-data")
 
+    def test_a_form_that_asks_sends_its_fields_as_a_query_with_no_write_token(self):
+        html = render_to_string(
+            FORM, {"form": ExampleUpload(), "verb": "Look up", "action": "/example/lookup/", "method": "get"}
+        )
+
+        (drawn,) = elements(html, "form")
+        self.assertEqual((drawn.attrs["method"], drawn.attrs["action"]), ("get", "/example/lookup/"))
+        self.assertNotIn("enctype", drawn.attrs)
+        self.assertNotIn(RETRY_KEY_FIELD, html)
+        (row,) = with_class(html, "form-actions")
+        self.assertIn(drawn, row.ancestors)
+        (button,) = elements(html, "button")
+        self.assertEqual(button.words, "Look up")
+
     def test_a_page_draws_its_own_fields_inside_it(self):
         html = render_to_string(
             FORM,

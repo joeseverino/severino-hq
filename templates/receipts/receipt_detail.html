@@ -1,13 +1,15 @@
 {% extends "page.html" %}
 {% block page %}
-<dl class="kv">
-  <dt>Date</dt><dd>{{ receipt.date|when }}</dd>
-  <dt>Amount</dt><dd>{{ receipt.amount|money }}</dd>
-  {% if receipt.file_type %}<dt>File type</dt><dd>{{ receipt.file_type|breakable }}</dd>{% endif %}
-  {% if receipt.size_bytes %}<dt>Size</dt><dd>{{ receipt.size_bytes|bytes }}</dd>{% endif %}
-  {% if receipt.related_expense %}<dt>Expense</dt><dd class="prose">{% entity "expense"|entity_of:receipt.related_expense.pk label=receipt.related_expense.label %} <span class="muted">{{ receipt.related_expense.date|when:"day" }}</span></dd>{% endif %}
-  {% if receipt.related_asset %}<dt>Asset</dt><dd>{% entity "asset"|entity_of:receipt.related_asset.slug label=receipt.related_asset.item_name %}</dd>{% endif %}
-</dl>
+<div class="section-flow">
+{% card label="Receipt" %}{% facts %}
+  {% fact "Date" %}{{ receipt.date|when }}{% endfact %}
+  {% fact "Amount" %}{{ receipt.amount|money }}{% endfact %}
+  {% if receipt.file_type %}{% fact "File type" value=receipt.file_type %}{% endif %}
+  {% if receipt.size_bytes %}{% fact "Size" %}{{ receipt.size_bytes|bytes }}{% endfact %}{% endif %}
+  {% if receipt.related_expense %}{% fact "Expense" %}<span class="prose">{% entity "expense"|entity_of:receipt.related_expense.pk label=receipt.related_expense.label %} <span class="muted">{{ receipt.related_expense.date|when:"day" }}</span></span>{% endfact %}{% endif %}
+  {% if receipt.related_asset %}{% fact "Asset" %}{% entity "asset"|entity_of:receipt.related_asset.slug label=receipt.related_asset.item_name %}{% endfact %}{% endif %}
+{% endfacts %}{% endcard %}
 
 {% if receipt.notes %}{% section "Notes" %}<p>{{ receipt.notes|breakable|linebreaksbr }}</p>{% endsection %}{% endif %}
+</div>
 {% endblock %}

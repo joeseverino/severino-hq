@@ -297,7 +297,7 @@ def _scope(inputs) -> CheckOutcome:
     if not any(connection.instance.credential_model != "none" for connection in connections):
         return CheckOutcome(met=None, evidence="No connections yet", remedy="add a connection", remedy_url=_setup_url())
     if any(connection.instance.credential_model == UNKNOWN_CREDENTIAL for connection in connections):
-        return CheckOutcome(met=None, evidence="A connection's credential is of a type HQ does not model")
+        return CheckOutcome(met=None, evidence="Unknown credential type")
     return _scoped_where_offered(connections, scoped)
 
 

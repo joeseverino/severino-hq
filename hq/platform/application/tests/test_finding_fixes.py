@@ -83,7 +83,7 @@ class PolicyAmendmentTests(TestCase):
         )
 
     def test_a_group_named_elsewhere_is_refused(self):
-        with self.assertRaisesRegex(PolicyError, "also named outside its rules"):
+        with self.assertRaisesRegex(PolicyError, "also named outside the rules"):
             policy_without_empty_groups(document(tagOwners={"tag:server": ["group:empty"]}))
 
     def test_a_prefix_of_another_name_is_not_a_reference(self):

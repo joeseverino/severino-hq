@@ -63,6 +63,12 @@ PLANTS = {
         _TABLE.format('<span style="display: block; inline-size: 3ch; word-break: break-all">Example</span>')
     ),
     "words broken in text": Plant('<p style="inline-size: 3ch; word-break: break-all">Example</p>'),
+    # A name as wide as its line, the dot after it held to it by a no-break
+    # space outside its box, which opens the next line.
+    "lines opening on a stray": Plant(
+        '<p style="inline-size: 12ch"><span style="display: inline-block; inline-size: 100%">example-name</span>'
+        "&nbsp;· Example</p>"
+    ),
     # A host name drawn on two lines of a cell, in a table with nothing to let go.
     "broken identifiers": Plant(
         _TABLE.format(
@@ -265,6 +271,12 @@ PLANTS = {
         '<span class="code-list"><code>example-one</code><code>example-two</code><code>example-three</code></span>'
         "</dd><dt>Other</dt><dd>Example</dd></dl>"
     ),
+    # A card of a few facts across the page, a section beside it in the
+    # page's column rather than sharing its row.
+    "lists across an empty frame": Plant(
+        '{% card label="Example" %}{% facts %}{% fact "Example" value="One" %}{% endfacts %}{% endcard %}'
+        '{% section "Example" %}<p>Example</p>{% endsection %}'
+    ),
     # A folded section whose steps sit bare on the page, closed as most are.
     "bare folds": Plant(
         '<details class="section-fold"><summary><h2>Example</h2></summary><p>Example step</p></details>'
@@ -315,6 +327,13 @@ PLANTS = {
 # differs from, so a check that finds everything is caught as surely as one
 # that finds nothing.
 PASSES = {
+    # The dot held inside the name's box, a count's noun held to its figure,
+    # and a run of parts whose dot before a part that opens a row is clipped.
+    "lines opening on a stray": Plant(
+        '<p style="inline-size: 12ch"><span style="display: inline-block; inline-size: 100%">example-name&nbsp;·</span>'
+        ' Example</p><p style="inline-size: 6ch">Example 12&nbsp;days</p>'
+        '<ul class="dot-list" style="inline-size: 12ch"><li>Example one</li><li>Example two</li></ul>'
+    ),
     # Three short facts of a band, together at its start however wide it is.
     "facts together": Plant(
         '{% facts layout="band" %}{% fact "Example rules" value=0 %}{% fact "Example held" value=2 %}'
@@ -324,6 +343,11 @@ PASSES = {
     "frames span their column": Plant(
         '<div class="card">Example</div><div style="display: flex; gap: 1rem">'
         '<div class="card">Example</div><div class="card">Example</div></div>'
+    ),
+    # The same card and section sharing a row in the flow.
+    "lists across an empty frame": Plant(
+        '<div class="section-flow">{% card label="Example" %}{% facts %}{% fact "Example" value="One" %}'
+        '{% endfacts %}{% endcard %}{% section "Example" %}<p>Example</p>{% endsection %}</div>'
     ),
     "titles at the head's start": Plant(
         '{% section "Example" %}<p>Example</p>{% aside %}<a href="#">Example</a>{% endsection %}'

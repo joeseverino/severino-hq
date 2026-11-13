@@ -765,18 +765,6 @@ class ReportTests(SimpleTestCase):
         self.assertIn("example-ref: (not measured)", look_report.beside("example-ref", "a", None))
 
 
-@tag("source")
-class BandTests(SimpleTestCase):
-    def test_a_tall_page_is_cut_into_window_sized_bands_that_cover_it_once(self):
-        bands = look._bands(2000, 900)
-        self.assertEqual(bands, [(0, 900), (900, 900), (1800, 200)])
-        self.assertEqual(sum(height for _, height in bands), 2000)
-
-    def test_a_page_the_window_holds_is_not_cut(self):
-        self.assertEqual(look._bands(900, 900), [])
-        self.assertEqual(look._bands(400, 900), [])
-
-
 class _Pages:
     """The look's walk over pages, with each look keeping what had been said
     by the time it began."""

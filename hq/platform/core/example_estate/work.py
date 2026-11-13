@@ -53,17 +53,15 @@ STARTERS = (
 # What each unit's file under deploy/systemd calls it, as systemd reports it:
 # a template's instance name stands for its %i.
 TITLES = {
-    "run-severino\\x2dhq\\x2dsecrets.mount": "Severino HQ credential tmpfs, kept out of swap",
+    "run-severino\\x2dhq\\x2dsecrets.mount": "Severino HQ credential tmpfs",
     "severino-hq-backup.service": "Create and verify a Severino HQ backup",
     "severino-hq-backup.timer": "Create a nightly verified Severino HQ backup",
     "severino-hq-controller.path": "Start the Severino HQ controller when HQ has queued work",
     "severino-hq-controller.service": "Severino HQ infrastructure controller",
     "severino-hq-controller.timer": "Run Severino HQ infrastructure controller",
-    "severino-hq-due.timer": "Do the scheduled work that is due, the host's and the extensions'",
+    "severino-hq-due.timer": "Run due Severino HQ work",
     "severino-hq-job@due.service": "Severino HQ scheduled work: due",
-    "severino-hq-script-drift.service": (
-        "Check that the host is its release: the root-owned tree, the units, the runner's sudo rules and nothing else"
-    ),
+    "severino-hq-script-drift.service": "Check the host matches its Severino HQ release",
     "severino-hq-script-drift.timer": "Daily check for stale root-owned Severino HQ scripts",
     "severino-hq-secrets.service": "Write Severino HQ secrets from 1Password Connect",
     "severino-hq-secrets.timer": "Periodically refresh Severino HQ secrets from 1Password",

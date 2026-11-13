@@ -9,6 +9,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any, override
 from unittest import mock
 
+from django import forms
 from django.template import Context, Template
 from django.template.loader import render_to_string
 from django.utils.html import escape
@@ -94,6 +95,19 @@ def _month_gone_by():
 
 
 _WEEK = date(2026, 1, 5)
+
+
+class _ExampleForm(forms.Form):
+    name = forms.CharField(label="Example name", help_text="An example of what the name is for.")
+    notes = forms.CharField(label="Example notes", required=False, widget=forms.Textarea)
+
+
+class _NoFields(forms.Form):
+    """A command that takes nothing."""
+
+
+class _ExampleLookup(forms.Form):
+    name = forms.CharField(label="Example hostname", required=False)
 
 
 def _readings(title, lede, *names, unit="min"):
@@ -618,6 +632,52 @@ CATALOG = {
         '<ul class="messages">{% for tone in tones %}<li>{% notice tone=tone %}An example {{ tone }} message.'
         "{% endnotice %}</li>{% endfor %}</ul>",
         {"tones": ("success", "info", "warning", "error")},
+    ),
+    # The form page's card (form_page.html) with fields and what saving does,
+    # one with no fields, which is its closing row alone, and a form that asks
+    # (partials/_form.html method="get"); a new option of either comes with an
+    # entry here (test_form_page).
+    "form/page": Entry(
+        '{% include "form_page.html#form_card" %}',
+        {
+            "form": _ExampleForm(),
+            "form_verb": "Add example",
+            "cancel_url": "#",
+            "form_note": "An example note on what saving does, long enough to wrap on a phone.",
+        },
+    ),
+    "form/page-fieldless": Entry(
+        '{% include "form_page.html#form_card" %}', {"form": _NoFields(), "form_verb": "Run example", "cancel_url": "#"}
+    ),
+    "form/lookup": Entry(
+        '{% section "Example lookup" %}{% include "partials/_form.html" with method="get" form=form verb="Look up" '
+        'cancel_url="" note="" choices="" choice_field="" bar="" %}{% endsection %}',
+        {"form": _ExampleLookup()},
+    ),
+    # The filter bar ({% filter_bar %}) narrowed, with its way back and its
+    # count; with one choice and nothing narrowed; and with labeled choices
+    # asking another page, its verb its own. A new option of the tag comes
+    # with an entry here (test_filter_tags).
+    "form/filter-bar": Entry(
+        '{% filter_bar filtered=True clear="#" %}'
+        '<input type="search" name="q" value="example" placeholder="Filter example records" '
+        'aria-label="Filter example records">'
+        '<select name="state" aria-label="Example state"><option value="">Any example state</option>'
+        '<option value="on" selected>Online</option></select>'
+        '<select name="kind" aria-label="Example kind"><option value="">All example kinds</option></select>'
+        "{% summary %}<strong>3 of 12 example records</strong>, 1 needs a look{% endfilter_bar %}"
+    ),
+    "form/filter-bar-one": Entry(
+        '{% filter_bar %}<select name="year" aria-label="Example year"><option>2026</option>'
+        "<option>2025</option></select>{% endfilter_bar %}"
+    ),
+    "form/filter-bar-labeled": Entry(
+        '{% filter_bar verb="Check" action="#" css="example" data_example="example" %}'
+        '<label class="control-label" for="example-from">From</label>'
+        '<select id="example-from" name="from"><option>example-host-01</option></select>'
+        '<label class="control-label" for="example-to">To</label>'
+        '<select id="example-to" name="to"><option>example-host-02</option></select>'
+        "{% endfilter_bar %}"
     ),
 }
 

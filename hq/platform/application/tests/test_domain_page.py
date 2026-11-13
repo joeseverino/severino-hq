@@ -77,11 +77,6 @@ class RecordsLedeTests(SimpleTestCase):
         self.assertEqual(_records_lede(many), "17 records, all managed by HQ")
         self.assertEqual(_records_lede(unmanaged), "2 records, none managed by HQ")
 
-    def test_the_count_says_how_many_are_folded_under_it(self):
-        zone = SimpleNamespace(managed=True, adoptable=(), managed_count=4, records=(), policy=(1, 2, 3))
-
-        self.assertEqual(_records_lede(zone), "4 records, all managed by HQ, 3 of them policy and verification records")
-
 
 class RecordTableTests(SimpleTestCase):
     def record(self, **fields):
@@ -130,7 +125,7 @@ class RecordTableTests(SimpleTestCase):
 
     def test_an_empty_half_says_where_the_records_are(self):
         self.assertIn("No records.", self.table())
-        self.assertIn("They are all below.", self.table(policy=(self.record(record_type="CAA"),)))
+        self.assertIn("No routing records.", self.table(policy=(self.record(record_type="CAA"),)))
 
     def test_policy_records_are_a_group_of_the_same_table_folded_away(self):
         html = self.table(self.record(), policy=(self.record(name="example.com", record_type="CAA"),))

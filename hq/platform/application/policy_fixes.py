@@ -98,8 +98,8 @@ def policy_without_empty_groups(document: str) -> tuple[str, str]:
         return "", ""
     if any(_referenced_outside_rules(parsed, group) for group in empty):
         raise PolicyError(
-            "A group the policy grants is also named outside its rules, such as by a tag owner, "
-            "an auto-approver or a test. Edit the policy by hand."
+            "A granted group is also named outside the rules, such as by a tag owner, auto-approver or test. "
+            "Edit the policy by hand."
         )
     parsed["groups"] = {name: members for name, members in (parsed.get("groups") or {}).items() if name not in empty}
     dropped = 0

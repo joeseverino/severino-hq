@@ -85,8 +85,7 @@ class GitHubDeliverySpec(ProviderModel):
 
 DEFINITION = ProviderSpec(
     KIND,
-    "Checks that production runs the latest approved commit of each plugin, "
-    "and reports it on the commit and its pull request.",
+    "Checks that production runs each plugin's latest approved commit, and reports it on its pull request.",
     GitHubDeliverySpec,
     actions={"reconcile": applies(automatic=True)},
     label="HQ deploys",

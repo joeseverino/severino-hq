@@ -34,6 +34,7 @@ FRAMES: dict[str, tuple[str, ...]] = {
     "page.html": ("page",),
     "list_page.html": ("summary", "row", "foot"),
     "confirm_page.html": ("consequences",),
+    "form_page.html": (),
 }
 
 FRAME_ABOUT = {
@@ -44,6 +45,11 @@ FRAME_ABOUT = {
         "filter changes, `foot` is its `<tfoot>`."
     ),
     "confirm_page.html": "A destructive action's confirmation: `consequences` says what will happen.",
+    "form_page.html": (
+        "A page that is one form, a record's: its card and `partials/_form.html`, closing with `form_verb` and "
+        "`cancel_url`; `form_fields` names a template for fields beyond the form's own loop and `form_note` says "
+        "what saving does, each from the view, so the page fills no block."
+    ),
 }
 
 # The shared partials, each with the one line the docs say about it.
@@ -82,6 +88,7 @@ TAGS = (
     "entity",
     "fact",
     "facts",
+    "filter_bar",
     "outside_link",
     "post_button",
     "reference",
@@ -268,7 +275,7 @@ HAND_DRAWN: dict[str, dict[str, str]] = {
     },
     "a filter bar": {
         "pattern": _class_word("filter-bar"),
-        "write": "partials/_filter_bar.html, the part to come",
+        "write": "{% filter_bar filtered=... clear=... %}controls{% summary %}count{% endfilter_bar %}",
     },
     "an icon": {
         "pattern": r'<svg\b[^>]*\baria-hidden="true"',
@@ -666,7 +673,7 @@ def markdown(templates: dict[str, Any]) -> str:
             f"`{block}`" + (f" (given {_code(shape['given'])})" if shape["given"] else "")
             for block, shape in frame["blocks"].items()
         )
-        lines.append(f"| `{name}` | {blocks} | {frame['about']} |")
+        lines.append(f"| `{name}` | {blocks or 'nothing'} | {frame['about']} |")
     lines += [
         "",
         "| Partial | Required | Optional | What it is |",

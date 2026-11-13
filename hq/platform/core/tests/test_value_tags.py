@@ -42,6 +42,30 @@ class BreakableTests(SimpleTestCase):
         self.assertEqual(links(html), [("Example Host Hosting", "/x/")])
         self.assertEqual(text(html), "Example Host · Hosting")
 
+    def test_a_dot_stays_on_the_line_of_the_name_before_it(self):
+        """A name as wide as its line leaves a dot after its box no room
+        there, so the dot is inside the box and the line breaks after it."""
+
+        html = str(breakable("wildcard-example-com\xa0· Dec 4"))
+        (name,) = with_class(html, "token")
+        self.assertTrue(name.text.rstrip().endswith("·"), html)
+        self.assertEqual(text(html), "wildcard-example-com · Dec 4")
+        self.assertIn('aria-hidden="true">·</span>', html)
+
+    def test_a_rate_is_one_figure(self):
+        html = str(breakable("faster than 10:36/mi"))
+        self.assertNotIn('class="token"', html)
+        self.assertEqual(text(html), "faster than 10:36/mi")
+
+    def test_a_word_a_value_ends_on_stays_on_the_last_line_of_the_name_before_it(self):
+        """Held in the name's own box, after the parts a cell cuts."""
+
+        html = str(breakable("_example-verification.example.com TXT"))
+        (name,) = with_class(html, "token")
+        self.assertTrue(name.text.endswith("com\xa0TXT"), html)
+        self.assertEqual(boxed(html), ["_example-verification."])
+        self.assertEqual(text(html), "_example-verification.example.com TXT")
+
     def test_an_address_is_whole_and_wraps_after_its_colon(self):
         self.assertEqual(pieces(breakable("10.0.0.10:8000")), ["10.0.0.10:", "8000"])
 

@@ -53,25 +53,15 @@ def _records_lede(zone) -> str:
     """Where this domain's records stand, as a clause beside the heading.
 
     Unmanaged records are not a backlog: a declared domain takes on its records
-    with it, so anything left is genuinely new, added at the provider since.
-    The count covers the folded policy records too, so it says how many of
-    them are there rather than leaving the table under it a different number.
+    with it, so anything left is new at the provider since, and the next read
+    takes it on.
     """
 
-    return _records_standing(zone) + (
-        f", {len(zone.policy)} of them policy and verification records" if zone.policy else ""
-    )
-
-
-def _records_standing(zone) -> str:
     if not zone.managed:
         return f"{counted(len(zone.records), 'record')}, none managed by HQ"
     if not zone.adoptable:
         return f"{counted(zone.managed_count, 'record')}, all managed by HQ"
-    # Only ever seen in the gap between a record appearing at the provider and
-    # the next sweep taking it on. Phrased as a statement of fact rather than
-    # as a backlog, because it is not work anyone has to do.
-    return f"{counted(zone.managed_count, 'record')} managed by HQ, {len(zone.adoptable)} new, added on the next read"
+    return f"{counted(zone.managed_count, 'record')} managed by HQ, {len(zone.adoptable)} new"
 
 
 def _page_relationships(zone, relationships):

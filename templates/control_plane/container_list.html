@@ -24,7 +24,7 @@ refresh does, daily and whenever a sweep finds a new image, and the band says wh
     {% fact "Pinned" icon="lock" tone=tally.pinned_tone %}
       {{ tally.pinned|breakable }} of {{ tally.running|breakable }}
     {% detail %}
-      <small>{% if tally.pinned == tally.running %}None change on a pull.{% else %}The rest run a tag, which can point at a different build on the next pull.{% endif %}</small>
+      <small>{% if tally.pinned == tally.running %}All by digest{% else %}The rest run by tag{% endif %}</small>
     {% endfact %}
   {% endfacts %}
 

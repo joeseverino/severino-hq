@@ -31,11 +31,12 @@ from django.test import Client
 from django.urls import Resolver404, resolve
 lazy from playwright.sync_api import Error as BrowserError
 
+from hq.platform.application import fragments
 from hq.platform.core import append_only, seeds
 from hq.platform.core.speculation import NOT_A_NAVIGATION
 from hq.platform.core.test_runner import stall_watch
 from hq.platform.core.tests import task
-from hq.platform.core.tests.browser import catalog, probes
+from hq.platform.core.tests.browser import probes
 from hq.platform.core.tests.browser.estate import ExampleEstateBrowserTests, estate_pages, navigation
 from hq.platform.core.tests.browser.gate import BrowserGate, add_css
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
@@ -52,7 +53,7 @@ from hq.platform.core.tests.browser.reference import (
     wait_for_reference,
 )
 from hq.platform.core.tests.browser.selectors import SELECTORS
-from hq.platform.core.tests.browser.shots import TALLEST, shoot_page
+from hq.platform.core.tests.browser.shots import TALLEST, extent_of, shoot_page
 from hq.platform.core.tests.browser.stress import ALL_PAGES, stress_pages
 from hq.platform.core.tests.browser.survey import AUDIT, palette_probes, survey_checks
 from hq.platform.core.tests.browser.widths import PHONE_SCREEN
@@ -71,6 +72,11 @@ from hq.platform.core.tests.task import PREFIX, Usage, estate_name, estate_path,
 from hq.platform.core.tests.test_browser_derived_fixtures import derived_pages
 lazy from hq.platform.core.example_estate import REQUEST
 lazy from hq.platform.core.example_estate.testing import as_production, sign_in
+
+# The catalog builds its entries from the shared parts' constructors as it is
+# imported, so a base whose constructors this tree's catalog does not fit still
+# looks at every other page: it is read only for a name nothing else is.
+lazy from hq.platform.core.tests.browser import catalog
 
 # Each run's shots go to a folder of their own under here, named for when the
 # run began, so a later run never overwrites what an earlier one printed: the
@@ -103,6 +109,8 @@ TREE_CHANGED = "the tree changed while dev:look ran; its shots and verdict mix t
 # Request headers the browser sends that are not the view's to read. The
 # answer goes back with its type alone, so it is never asked to be compressed.
 _TRANSPORT = frozenset({"host", "cookie", "content-length", "connection", "accept-encoding"})
+# The header a region asks for its page's part by, as a browser route names it.
+_REGION = fragments.HEADER.lower()
 
 # The links a page offers a reader to go to: same origin, a page rather than a
 # file, a dialog or a region answered in place, as speculation judges them.
@@ -662,26 +670,43 @@ def _families(asked: tuple[str, ...]) -> list[str]:
     return spelled
 
 
+def _named() -> list[str]:
+    """Every page dev:look knows by name but a catalog entry."""
+
+    return [*ALL_PAGES, *derived_pages(), *REFERENCE_PAGES]
+
+
 def catalog_pages(asked) -> dict[str, str]:
     """The catalog entries ``asked`` names, each drawn as the catalog's own
-    gate draws it, so a look and that gate never draw an entry apart."""
+    gate draws it, so a look and that gate never draw an entry apart. An
+    entry is the one name ``_pages`` hands on that is no other kind."""
 
-    if not set(asked) & set(catalog.CATALOG):
+    known = {*_named(), *post_names()}
+    entries = {name for name in asked if not is_estate(name) and name not in known}
+    if not entries:
         return {}
-    return {name: page for name, page in catalog.CatalogLayoutTests.render().items() if name in asked}
+    return {name: page for name, page in catalog.CatalogLayoutTests.render().items() if name in entries}
 
 
 def _pages(asked: tuple[str, ...]) -> list[str]:
     """The pages ``asked`` names, ``all`` and ``estate/all`` spelled out, an
-    estate page by its name; one dev:look cannot draw is refused."""
+    estate page by its name; one dev:look cannot draw is refused. The catalog
+    is read only for ``all`` or a name no other page is, so its refusal
+    offers its entries too."""
 
-    gate = [*ALL_PAGES, *derived_pages(), *REFERENCE_PAGES, *catalog.CATALOG, *post_names()]
+    named, posts = _named(), post_names()
     try:
         with EstatePages(_asked().text("seed")) as records:
-            found = task.pages(_families(asked), estate_pages(), gate, records)
+            found = None
+            if asked and "all" not in asked:
+                with suppress(task.PageRefused):
+                    found = task.pages(asked, estate_pages(), [*named, *posts], records)
+            if found is None:
+                named += catalog.CATALOG
+                found = task.pages(_families(asked), estate_pages(), [*named, *posts], records)
     except task.PageRefused as refused:
         raise AssertionError(str(refused)) from None
-    return [page if page in gate else estate_name(page) for page in found]
+    return [page if page in named or page in posts else estate_name(page) for page in found]
 
 
 class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
@@ -762,8 +787,10 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         if set(pages) & set(REFERENCE_PAGES):
             rendered |= render_reference()
         # Last: the stress estates are rolled back, the example estate is
-        # committed, and both sign in as the same owner.
-        served = any(is_estate(name) or is_post(name) for name in pages)
+        # committed, and both sign in as the same owner. A dialog fills itself
+        # from its region's own request, which only a server answers, so a
+        # dialog asked for on a page answered from memory is served too.
+        served = any(is_estate(name) or is_post(name) for name in pages) or bool(_listed("dialog"))
         cls.estate_client = cls.serve_estate() if served else None
         return rendered
 
@@ -813,10 +840,13 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
     def respond(self, route):
         request = route.request
         parts = urlsplit(request.url)
+        # A region of another page asks the server for that page's region,
+        # where a page in memory would answer it whole.
+        another_region = _REGION in request.headers and parts.path != urlsplit(self.page.url).path
         if (
             self.estate_client is None
             or parts.path.startswith(settings.STATIC_URL)
-            or (not self.on_estate and parts.path.strip("/") in self.pages)
+            or (not self.on_estate and parts.path.strip("/") in self.pages and not another_region)
         ):
             LayoutBrowserTests.respond(self, route)
             return
@@ -1248,9 +1278,8 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
     def screenshot(self, name, width, part="", shows="") -> list[Band]:
         """The whole page, or a ``part`` of it open that ``shows`` says, and,
         when it is taller than the window, the same cut into window-sized
-        bands beside it, so each can be read at once, each to ``TALLEST``
-        at most (``shoot_page``). Shot once its extent holds still; one
-        that never does is shot as it stands, with no bands, and the shot
+        bands beside it (``in_bands``). Shot once its extent holds still; one
+        that never does is shot and cut from one reading of it, and the shot
         says so. The part of the page each file holds: its bands, or the
         shot when it has none."""
 
@@ -1259,31 +1288,41 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             held = self.page.wait_for_function(_EXTENT_HELD, arg=shot.name, polling=_EXTENT_POLL)
             wide, tall = held.json_value()
         except BrowserError as moving:
-            cut = shoot_page(self.page, shot, animations="disabled")
-            said = f"its height never held still, so no bands ({str(moving).splitlines()[0]})"
-            self.shots.append((_shown(shot), ", ".join(filter(None, [shows, cut, said]))))
-            return [(shot.name, 0, TALLEST)]
-        cut = shoot_page(self.page, shot, extent=(wide, tall), animations="disabled")
-        shows = ", ".join(filter(None, [shows, cut]))
-        bands = _bands(min(tall, TALLEST), self.page.viewport_size["height"])
-        files = []
-        for number, band in enumerate(bands, start=1):
-            files.append((shot.with_name(f"{shot.stem}.band-{number:02}.png"), *band))
-            shoot_page(self.page, files[-1][0], extent=(wide, tall), band=band, animations="disabled")
-        self.shots.append((_shown(shot), _with(shows, len(bands))))
-        return [(path.name, top, height) for path, top, height in files] or [(shot.name, 0, min(tall, TALLEST))]
+            wide, tall = extent_of(self.page)
+            shows = ", ".join(filter(None, [shows, f"its height never held still ({str(moving).splitlines()[0]})"]))
+        return self.in_bands(shot, (wide, tall), shows)
+
+    def in_bands(self, shot, extent, shows) -> list[Band]:
+        """The page shot whole at ``shot`` and, when it is taller than the
+        window, cut into window-sized bands beside it, so each can be read at
+        once, each to ``TALLEST`` at most (``shoot_page``), all from the one
+        ``extent``. A page that moved past that extent ends its bands where
+        it went, and the shot says so. The part of the page each file holds."""
+
+        wide, tall = extent
+        cut = shoot_page(self.page, shot, extent=extent, animations="disabled")
+        said = [shows, cut]
+        files: list[Band] = []
+        for number, band in enumerate(_bands(min(tall, TALLEST), self.page.viewport_size["height"]), start=1):
+            path = shot.with_name(f"{shot.stem}.band-{number:02}.png")
+            try:
+                shoot_page(self.page, path, extent=(wide, tall), band=band, animations="disabled")
+            except BrowserError as moved:
+                said.append(f"its bands end at {band[0]} px, where it moved ({str(moved).splitlines()[0]})")
+                break
+            files.append((path.name, *band))
+        self.shots.append((_shown(shot), _with(", ".join(filter(None, said)), len(files))))
+        return files or [(shot.name, 0, min(tall, TALLEST))]
 
     def shoot_failure(self, name, width, said) -> list[str]:
         """``said`` as the finding, with the page as it stands kept beside the
-        screenshots (``.failed.png``) and its path printed."""
+        screenshots (``.failed.png``), in bands as any shot is, and its path printed."""
 
         path = _shot(name, width).with_suffix(".failed.png")
         try:
-            cut = shoot_page(self.page, path, animations="disabled")
+            self.in_bands(path, extent_of(self.page), "as it failed")
         except BrowserError as broke:
             print(f"{name} at {width}: {said}; no screenshot ({str(broke).splitlines()[0]})", flush=True)
-        else:
-            self.shots.append((_shown(path), ", ".join(filter(None, ["as it failed", cut]))))
         return [said]
 
     def beside_base(self, name, width, kind, said) -> str:

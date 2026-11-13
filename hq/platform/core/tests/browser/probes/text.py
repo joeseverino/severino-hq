@@ -126,6 +126,131 @@ BROKEN_WORDS_IN_TEXT = (
 }"""
 )
 
+# A line of running text that opens on a stray: a separator (a dot written in
+# the text, or one a part of a run draws before itself and nothing clips), a
+# line that holds only marks (an icon, an asterisk) apart from the words they
+# belong to, or one word alone that the line before cut from its number ("12"
+# above "days"). Each block's lines are read from what it lays out in them:
+# its own text, and each box set in its line whole (a link drawn as a block,
+# an icon) as one piece. A wrapping flex box's items are its lines, and an
+# item opening a row opens a line. Text kept from sight (`unseen`) is
+# not drawn.
+STRAYS_OPENING_A_LINE = (
+    "([unseen, identifier]) => {"
+    + DESCRIBE
+    + PAINTED_PART
+    + TEXT_SHOWN
+    + r"""
+  // A middle dot, a bullet, a bar, a slash, an en or an em dash.
+  const SEPARATOR = /^[·•|\/\u2013\u2014]/;
+  const MARKS_ONLY = /^[^\p{L}\p{N}]*$/u;
+  const range = document.createRange();
+  const inlineDisplay = (el) => ['inline', 'contents'].includes(getComputedStyle(el).display);
+  const blockOf = (el) => { while (el.parentElement && inlineDisplay(el)) el = el.parentElement; return el; };
+  const drawnRect = (el, rect) => rect && rect.width > 0.5 && painted(el, rect);
+  // A box set in its block's line whole: an inline block, an inline flex or
+  // grid box, or a replaced element (an icon, an image).
+  const atomic = (el) => {
+    const display = getComputedStyle(el).display;
+    return display.startsWith('inline-') || (display === 'inline' && el instanceof SVGSVGElement) || el.matches('img, svg, input, select, button');
+  };
+  // The separator a part draws before itself (`::before`), where its box
+  // lands: its own size from its margin before the part's first line.
+  const drawnSeparator = (el) => {
+    const style = getComputedStyle(el, '::before');
+    const content = style.content.match(/^"((?:[^"\\]|\\.)*)"/);
+    if (!content || !SEPARATOR.test(content[1].trim())) return null;
+    const first = [...el.getClientRects()].find((r) => r.width) || el.getBoundingClientRect();
+    const left = first.left + (parseFloat(style.marginLeft) || 0);
+    const width = parseFloat(style.width) || parseFloat(style.fontSize) / 2;
+    // Only its middle, the glyph a centered mark draws, counts as drawn.
+    const middle = left + width / 2;
+    const rect = {left: middle - 1, right: middle + 1, top: first.top, bottom: first.bottom, width: 2, height: first.height};
+    return painted(el, rect) ? content[1].trim() : null;
+  };
+  const pieces = new Map();
+  const add = (block, piece) => { if (!pieces.has(block)) pieces.set(block, []); pieces.get(block).push(piece); };
+  const main = document.querySelector('main');
+  const walk = (el) => {
+    for (const child of el.childNodes) {
+      if (child.nodeType === Node.TEXT_NODE) {
+        if (!child.data.trim() || !textShown(child)) continue;
+        const block = blockOf(child.parentElement);
+        for (let at = 0; at < child.length; at++) {
+          if (!child.data[at].trim()) { add(block, {ch: ' '}); continue; }
+          range.setStart(child, at);
+          range.setEnd(child, at + 1);
+          const rect = [...range.getClientRects()].find((r) => drawnRect(child.parentElement, r));
+          if (rect) add(block, {ch: child.data[at], rect, el: child.parentElement});
+        }
+      } else if (child.nodeType === Node.ELEMENT_NODE) {
+        if (child.matches(`${unseen}, script, style, template, pre`) || !child.checkVisibility({visibilityProperty: true})) continue;
+        const separator = drawnSeparator(child);
+        if (separator) add(blockOf(child), {ch: separator, rect: [...child.getClientRects()].find((r) => r.width), el: child});
+        if (!atomic(child)) { walk(child); continue; }
+        // Set in its parent's line whole: one piece, its words as its text,
+        // and a box with none (an icon, an image) as a mark.
+        const rect = child.getBoundingClientRect();
+        if (drawnRect(child, rect)) add(blockOf(child.parentElement), {ch: child.textContent.trim() || '▪', rect, el: child});
+        if (!child.matches('svg, img')) walk(child);
+      }
+    }
+  };
+  walk(main);
+  const found = [];
+  for (const [block, list] of pieces) {
+    // Lines in reading order: a piece that starts below the line so far
+    // starts the next one.
+    const lines = [];
+    let gap = false;
+    for (const piece of list) {
+      if (!piece.rect) { gap = true; continue; }
+      const line = lines.at(-1);
+      if (!line || piece.rect.top >= line.bottom - Math.min(piece.rect.height, line.bottom - line.top) / 2) {
+        lines.push({top: piece.rect.top, bottom: piece.rect.bottom, pieces: [piece], text: piece.ch});
+      } else {
+        line.bottom = Math.max(line.bottom, piece.rect.bottom);
+        line.text += (gap ? ' ' : '') + piece.ch;
+        line.pieces.push(piece);
+      }
+      gap = false;
+    }
+    if (lines.length < 2) continue;
+    const name = describe(block);
+    lines.forEach((line, index) => {
+      const text = line.text.trim();
+      const opening = line.pieces.find((piece) => piece.ch.trim());
+      if (index && SEPARATOR.test(text) && !opening.el.closest(identifier)) found.push(`${name} opens a line with "${text[0]}": "${text.slice(0, 30)}"`);
+      else if (MARKS_ONLY.test(text)) found.push(`${name} holds "${text.slice(0, 30)}" on a line of its own (▪ is an icon or an image)`);
+      else if (index && /^\p{L}+[.,;:]?$/u.test(text) && /\p{N}%?$/u.test(lines[index - 1].text.trim())) {
+        found.push(`${name} cuts "${text}" from its number "${lines[index - 1].text.trim().split(/\s/).at(-1).slice(-30)}"`);
+      }
+    });
+  }
+  // A wrapping flex box's rows: the item that opens one opens a line.
+  for (const box of main.querySelectorAll('*')) {
+    const style = getComputedStyle(box);
+    if (!/flex/.test(style.display) || style.flexWrap === 'nowrap' || style.flexDirection.startsWith('column') || !box.checkVisibility()) continue;
+    const items = [...box.children].filter((item) => item.checkVisibility() && !['absolute', 'fixed'].includes(getComputedStyle(item).position))
+      .map((item) => [item, item.getBoundingClientRect()]).filter(([, r]) => r.width && r.height);
+    const rows = [];
+    for (const [item, r] of items) {
+      const row = rows.find((one) => r.top < one.bottom && r.bottom > one.top);
+      if (row) { row.items.push([item, r]); row.bottom = Math.max(row.bottom, r.bottom); } else rows.push({top: r.top, bottom: r.bottom, items: [[item, r]]});
+    }
+    if (rows.length < 2) continue;
+    const start = style.direction === 'rtl' ? (r) => -r.right : (r) => r.left;
+    for (const row of rows.slice(1)) {
+      const [opening] = row.items.reduce((first, one) => (start(one[1]) < start(first[1]) ? one : first));
+      const first = (pieces.get(opening) || []).find((piece) => piece.rect);
+      const mark = drawnSeparator(opening) || (first && SEPARATOR.test(first.ch) && !first.el.closest(identifier) ? first.ch : null);
+      if (mark) found.push(`${describe(box)} opens a row with "${mark[0]}": "${opening.textContent.trim().slice(0, 30)}"`);
+    }
+  }
+  return [...new Set(found)];
+}"""
+)
+
 # Two lines of text drawn over each other, each as much of it as is painted.
 # A layer that floats over the page (`floating`: an open menu, a dialog) covers
 # the page's text on purpose, so a line is held only against lines in its own

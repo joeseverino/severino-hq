@@ -9,19 +9,20 @@
 
 /* ── Filter bar ─────────────────────────────────────────────────── */
 
+/* One bar for every query a page asks of what it lists (partials/_filter_bar.html), a list's table toolbar among them: the controls, the one button that sends them, Clear, and the count at the row's end. */
 .filter-bar {
-  display: flex; flex-wrap: wrap; gap: var(--space-4);
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4);
   padding: var(--surface-inset, var(--space-5));
-  margin-bottom: var(--space-8);
+  margin: 0 0 var(--space-6);
 }
 /* A wrapped bar is whole rows: controls grow to fill their row, the first (search or the one choice) takes most of it, words never grow. */
-:where(.filter-bar, .table-filters) > :where(:not(.control-label, .filter-bar-summary)) { flex: 1 1 auto; }
+.filter-bar > :where(:not(.control-label, .filter-bar-summary)) { flex: 1 1 auto; }
 .filter-bar > :first-child:not(.control-label) { flex: 1000 1 240px; min-width: 0; }
-/* The search asks for its whole placeholder, or what is typed in it (`field-sizing`), so the filters beside it wrap before it is cut. */
-.table-toolbar > .table-search { field-sizing: content; flex: 1000 1 auto; min-width: 0; }
+/* A search asks for its whole placeholder, or what is typed in it (`field-sizing`), so the controls beside it wrap before it is cut. */
+.filter-bar > input[type=search]:first-child { field-sizing: content; flex-basis: auto; }
 /* A select is as wide as its longest option unless told otherwise. */
 .filter-bar > select { max-width: 100%; min-width: 0; }
-.filter-bar > .btn, .table-filters > .btn { justify-content: center; }
+.filter-bar > .btn { justify-content: center; }
 /* A field and its button on one line: the field takes the room. */
 .field-row { display: flex; gap: var(--space-4); align-items: center; margin-top: var(--space-6); }
 .field-row > input { flex: 1; min-width: 0; }
@@ -175,9 +176,6 @@
 .data-table > tbody > tr.is-expanded > td :is(.cell-part, time) { display: inline-block; }
 .data-table input[type=checkbox] { inline-size: 16px; block-size: 16px; accent-color: var(--accent); }
 
-/* One row: the search takes the room the filters leave, one button applies both, Enter submits the same form. */
-.table-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); margin: 0 0 var(--space-6); padding: var(--surface-inset, var(--space-5)); }
-.table-filters { flex: 1 1 auto; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); }
 /* A filter is its button and the panel it opens in the top layer, placed against the button (its anchor, below): the scope keeps each panel to its own button. */
 .table-filter-menu { display: grid; anchor-scope: --filter; }
 /* A menu, a toggle and the sort are pressed by their labels, so they wear the Filter button's edge and stand at the control size; only the search wears a field's. The sort's select sits inside that box, so it takes no control height of its own. */

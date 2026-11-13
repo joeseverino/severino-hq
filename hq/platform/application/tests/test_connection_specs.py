@@ -557,6 +557,8 @@ class ConnectionWorkspaceTests(TestCase):
         response = self.page_for("none")
 
         self.assertContains(response, "No key needed")
+        # The row names it beside the connection, so its state line does not repeat it.
+        self.assertNotRegex(response.content.decode(), r'class="connection-authority[^"]*">\s*No key needed')
         self.assertNotContains(response, "Does not say where its secret is kept")
 
     def test_a_connection_with_a_key_must_say_where_it_is_kept(self):

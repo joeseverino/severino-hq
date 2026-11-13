@@ -72,7 +72,7 @@ value under its name (`record.summary`), so the two still read as two.
         {% partial record_row %}
       {% empty %}
         <tr><td colspan="6">
-          {% if policy %}{% include "partials/_empty_state.html" with message="None of this domain's records sends traffic anywhere. They are all below." %}{% else %}{% include "partials/_empty_state.html" with message="No records." %}{% endif %}
+          {% if policy %}{% include "partials/_empty_state.html" with message="No routing records." %}{% else %}{% include "partials/_empty_state.html" with message="No records." %}{% endif %}
         </td></tr>
       {% endfor %}
     </tbody>

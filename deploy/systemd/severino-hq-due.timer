@@ -1,5 +1,5 @@
 [Unit]
-Description=Do the scheduled work that is due, the host's and the extensions'
+Description=Run due Severino HQ work
 
 [Timer]
 OnBootSec=5min

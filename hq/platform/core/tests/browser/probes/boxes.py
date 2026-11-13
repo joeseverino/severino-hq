@@ -734,3 +734,58 @@ TITLES_OFF_THEIR_START = (
   return found;
 }"""
 )
+
+
+# A frame is filled by what it holds, or shares its row (Design, "A frame is
+# filled" and "Sibling sections flow"). A frame holding a list of facts
+# (``lists``, in a frame ``frames`` selects), as wide as two flow members
+# (``least`` rem) and next to a frame or a run of them, does not take a row
+# alone while all it draws below its head (``head``) ends short of half its
+# width. A frame with nothing beside it has nothing to share a row with.
+LISTS_ACROSS_AN_EMPTY_FRAME = (
+    "([lists, frames, head, least]) => {"
+    + DESCRIBE
+    + """
+  const words = (el) => {
+    const found = [];
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (!node.data.trim() || node.parentElement.closest(head)) continue;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      found.push(...[...range.getClientRects()].filter((r) => r.width > 0 && r.height > 0));
+    }
+    return found;
+  };
+  const overlaps = (a, b) => a.top < b.bottom - 1 && b.top < a.bottom - 1;
+  const rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
+  const found = [];
+  for (const list of document.querySelectorAll(lists)) {
+    if (!list.checkVisibility()) continue;
+    // The frame it is drawn in, and the one that stands in the page's flow:
+    // a section's body is a frame inside its section.
+    const inner = list.matches(frames) ? list : list.parentElement.closest(frames);
+    if (!inner || !inner.closest('main')) continue;
+    let frame = inner;
+    while (frame.parentElement?.matches(frames)) frame = frame.parentElement;
+    const r = box(frame);
+    if (r.width < least * rem) continue;
+    const siblings = [frame.previousElementSibling, frame.nextElementSibling]
+      .filter((el) => el && el.checkVisibility() && (el.matches(frames) || el.querySelector(frames)));
+    if (!siblings.length) continue;
+    const row = [...frame.parentElement.children].filter((el) => el !== frame && el.checkVisibility());
+    if (row.some((el) => overlaps(box(el), r))) continue;
+    const style = getComputedStyle(inner);
+    const at = box(inner);
+    const start = at.left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft);
+    const room = at.right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight) - start;
+    const drawn = words(inner);
+    if (!drawn.length) continue;
+    const reach = Math.max(...drawn.map((w) => w.right)) - start;
+    if (reach < room / 2) {
+      found.push(`${describe(frame)} takes a row of its own beside ${describe(siblings[0])}, and what it holds ends ${Math.round(reach)}px into its ${Math.round(room)}px`);
+    }
+  }
+  return [...new Set(found)];
+}"""
+)

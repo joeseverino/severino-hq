@@ -103,9 +103,12 @@ def _template_markup(source: str, classes: set[str], ids: set[str], text: list[s
         classes.update(re.sub(r"\{%.*?%\}|\{\{.*?\}\}", " ", value).split())
     ids.update(re.findall(r'\bid="([^"{}]+)"', source))
     ids.update(generated_ids(source))
-    # A card's class, id and data- attributes are its tag's options.
-    for options in re.findall(r"\{%\s*card\s([^%]*)%\}", source):
-        classes.update(("card", *" ".join(re.findall(r'\bcss="([^"]*)"', options)).split()))
+    # A card's or a filter bar's class, id and data- attributes are its
+    # tag's options.
+    for part, options in re.findall(r"\{%\s*(card|filter_bar)\s([^%]*)%\}", source):
+        classes.update(
+            ("card" if part == "card" else "filter-bar", *" ".join(re.findall(r'\bcss="([^"]*)"', options)).split())
+        )
         ids.update(re.findall(r'\bid="([^"{}]+)"', options))
         drawn = (name.replace("_", "-") for name in re.findall(r"\b(data_\w+)=", options))
         text.append(f"<div {' '.join(drawn)}>")

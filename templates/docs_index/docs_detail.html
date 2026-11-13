@@ -1,15 +1,17 @@
 {% extends "page.html" %}
 {% block page %}
-<dl class="kv">
-  {% if record.system_service %}<dt>System / service</dt><dd>{{ record.system_service|breakable }}</dd>{% endif %}
-  {% if record.obsidian_path %}<dt>Obsidian path</dt><dd><code>{{ record.obsidian_path|breakable }}</code></dd>{% endif %}
-  {% if record.github_path %}<dt>GitHub path</dt><dd><code>{{ record.github_path|breakable }}</code></dd>{% endif %}
-  {% if record.external_url %}<dt>External URL</dt><dd>{% entity record.external_url|outside label=record.external_url %}</dd>{% endif %}
-  <dt>Last reviewed</dt><dd>{% if record.last_reviewed %}{{ record.last_reviewed|when:"day" }}{% else %}Never{% endif %}</dd>
-  <dt>Safe for AI export</dt><dd>{% if record.is_safe_for_ai_export %}Yes (public or internal){% else %}<strong>No</strong> (sensitive or restricted){% endif %}</dd>
-</dl>
+<div class="section-flow">
+{% card label="Document" %}{% facts %}
+  {% if record.system_service %}{% fact "System / service" value=record.system_service %}{% endif %}
+  {% if record.obsidian_path %}{% fact "Obsidian path" %}<code>{{ record.obsidian_path|breakable }}</code>{% endfact %}{% endif %}
+  {% if record.github_path %}{% fact "GitHub path" %}<code>{{ record.github_path|breakable }}</code>{% endfact %}{% endif %}
+  {% if record.external_url %}{% fact "External URL" %}{% entity record.external_url|outside label=record.external_url %}{% endfact %}{% endif %}
+  {% fact "Last reviewed" %}{% if record.last_reviewed %}{{ record.last_reviewed|when:"day" }}{% else %}Never{% endif %}{% endfact %}
+  {% fact "Safe for AI export" %}{% if record.is_safe_for_ai_export %}Yes{% else %}<strong>No</strong>{% endif %}{% endfact %}
+{% endfacts %}{% endcard %}
 
 {% if record.notes %}{% section "Index notes" %}<p>{{ record.notes|breakable|linebreaksbr }}</p>{% endsection %}{% endif %}
 
-<div class="section-flow">{% include "partials/_related.html" with groups=related %}</div>
+{% include "partials/_related.html" with groups=related %}
+</div>
 {% endblock %}

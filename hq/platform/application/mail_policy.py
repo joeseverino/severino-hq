@@ -378,7 +378,7 @@ def _receiving(mx: tuple[Any, ...]) -> MailSection:
     null_mx = is_null_mx(mx)
     if null_mx:
         answer = "Nobody, on purpose"
-        detail = "A null MX says this domain takes no mail, so a sender is told at once instead of retrying for days."
+        detail = "A null MX tells senders at once that this domain takes no mail."
     elif mx:
         answer = ", ".join(sorted({r.content for r in mx}))
         detail = f"{counted(len(mx), 'mail server', 'mail servers')}, tried in priority order."

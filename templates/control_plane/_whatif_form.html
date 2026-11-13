@@ -6,7 +6,8 @@ Submits to the tailnet page rather than to itself, so the no-JavaScript path
 answer. Defaults come from whoever included it; on a machine's page both ends
 start as that machine, which is the question most often being asked.
 {% endcomment %}
-<form method="get" class="filter-bar" data-fragment-target="whatif-result" action="{% url 'control_plane:tailnet' %}">
+{% url 'control_plane:tailnet' as tailnet_url %}
+{% filter_bar verb="Check" action=tailnet_url data_fragment_target="whatif-result" %}
   <label class="control-label" for="whatif-source">From</label>
   <select id="whatif-source" name="source">
     {% for name in device_names %}
@@ -25,8 +26,7 @@ start as that machine, which is the question most often being asked.
       <option value="{{ port }}" {% if port|stringformat:"s" == asked.port %}selected{% endif %}>{{ port }}</option>
     {% endfor %}
   </select>
-  <button type="submit" class="btn primary">Check</button>
-</form>
+{% endfilter_bar %}
 
 {% include "control_plane/_whatif_result.html" %}
 <p class="muted">

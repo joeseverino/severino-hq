@@ -177,8 +177,8 @@ class TopologyNode:
     reason: Annotated[
         str,
         Describe(
-            "The reason on its current condition, verbatim, saying whether a read of the live system "
-            "wrote it or applying HQ's copy did, which no read has confirmed since."
+            "The reason on its current condition, verbatim: set by a live read, or by applying HQ's copy "
+            "and not yet confirmed."
         ),
     ] = ""
     # A disabled declaration is not a finding: nobody asked for it to be true.

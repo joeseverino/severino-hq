@@ -507,11 +507,7 @@ def _expiring(estate: Estate) -> tuple[Insight, ...]:
         days = max(expiry.days, 0)
         if expiry.managed:
             key = f"estate-certificate:{expiry.resource_key}"
-            body = (
-                f"Expires {ended(expiry.phrase)} Renewal opens at "
-                f"{counted(expiry.renewal_window_days, 'day')}; renew it or check why "
-                "renewal did not run."
-            )
+            body = f"Expires {ended(expiry.phrase)} Renewal has not run; renew it."
             action = "Open certificate"
             renew = remedy_link("certificate.renew", expiry.resource_key)
             offered: dict[str, Any] = (
@@ -521,16 +517,12 @@ def _expiring(estate: Estate) -> tuple[Insight, ...]:
             )
         else:
             key = f"estate-certificate:{expiry.source}:{expiry.subject}"
-            body = (
-                f"Expires {ended(expiry.phrase)} Its issuer renews it automatically and "
-                f"should have by now; check the {expiry.source.lower()} certificate "
-                "settings."
-            )
+            body = f"Expires {ended(expiry.phrase)} {expiry.source} renews it; check its settings."
             action = "Open"
             offered = {
                 "workflow": cannot_help(
                     key,
-                    f"{expiry.source} holds and renews it. HQ only reads it and cannot change its settings.",
+                    f"{expiry.source} renews it. HQ cannot change its settings.",
                 )
             }
         items.append(

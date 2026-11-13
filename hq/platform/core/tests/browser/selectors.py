@@ -218,6 +218,11 @@ SELECTORS = {
     "section_body": ".section-body",
     # A fact whose value is a list of names (partials' .code-list, .address-list).
     "fact_list": "main .kv > dd:has(> :is(.code-list, .address-list) > :nth-child(2))",
+    # A list of facts, label beside value (partials/_facts.html, and a `.kv`
+    # drawn by hand), and the frames one is drawn in: a card, a section, or a
+    # `.kv` that is its own frame.
+    "facts_list": ".kv, .facts-list",
+    "list_frame": ".card, .section, .kv:not(:is(.card, .section) .kv)",
     # What keeps its line wherever it is drawn: the count of planned days kept
     # beside a calendar's legend.
     "one_line": ".calendar-legend > .count",

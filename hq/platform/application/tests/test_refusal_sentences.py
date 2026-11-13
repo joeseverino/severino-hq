@@ -118,7 +118,7 @@ class PolicyAmendmentRefusalTests(RefusalCase):
         )
 
         self.assertEqual(error["code"], "precondition")
-        self.assertIn("A group the policy grants is also named outside its rules", error["message"])
+        self.assertIn("A granted group is also named outside the rules", error["message"])
         self.assertNotIn("group:example-empty", error["message"])
         self.assertNotIn("tagOwners", error["message"])
 

@@ -1,5 +1,5 @@
-{% extends "page.html" %}
-{% block page %}
+{% extends "form_page.html" %}
+{% block before %}
 {% comment %}
 A command is its title, what it will change (the lede), its fields and one
 button named for what it does. How it is built belongs to the API reference.
@@ -38,8 +38,9 @@ button named for what it does. How it is built belongs to the API reference.
   </div>
 {% endsection %}
 {% endif %}
+{% endblock %}
 
-{% card css="form-card" %}
+{% block form %}
   {% comment %}
   A command that changes a live system, stops or deletes says so once, in the
   confirmation beside its button.
@@ -116,5 +117,4 @@ button named for what it does. How it is built belongs to the API reference.
     {% for field in form.confirmation_fields %}{{ field.as_field_group }}{% endfor %}
     {% include "partials/_form_actions.html" with verb=command_label choices=switch.choices choice_field=switch.field cancel_url=cancel_url only %}
   </form>
-{% endcard %}
 {% endblock %}

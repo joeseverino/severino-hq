@@ -260,10 +260,7 @@ save_documentation = linked_saver(
 # What a sync of the vault's docs answers under every name it is published by.
 type SyncStats = Annotated[
     dict[str, Any],
-    Describe(
-        "How the sync went: how many docs it created, updated and skipped, the links naming a record "
-        "HQ does not hold, and the orphans found or pruned where asked."
-    ),
+    Describe("Docs created, updated and skipped, links to records HQ does not hold, and orphans found or pruned."),
 ]
 
 

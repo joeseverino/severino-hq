@@ -167,9 +167,8 @@ class ManagedResourceRecord(TypedDict):
     derived: Annotated[
         dict[str, Any],
         Describe(
-            "What HQ makes of the record: its health, what may be done to it and why not, its machines and "
-            "services, what HQ expects beside what is live, a certificate's expiry and use, the changes waiting "
-            "for approval, and what uses it."
+            "What HQ makes of the record: health, allowed actions, machines and services, expected beside live, "
+            "certificate expiry, pending approvals, and what uses it."
         ),
     ]
     operations: Annotated[list[OperationSummary], Describe("The latest operations that changed it, newest first.")]
@@ -540,8 +539,8 @@ class ContainerRecord(ContainerRow):
     image: Annotated[
         dict[str, Any],
         Describe(
-            "What it runs: the reference, registry, repository, tag, digest and image id, whether it is pinned "
-            "by digest, when it was built, and its source."
+            "What it runs: reference, registry, repository, tag, digest, image id, whether pinned by digest, "
+            "build time and source."
         ),
     ]
     standing: Annotated[
@@ -565,15 +564,15 @@ class ContainerRecord(ContainerRow):
     posture: Annotated[
         dict[str, Any],
         Describe(
-            "How it measures against the container standard: how many checks it meets of those measured, each "
-            "check's state, why each unmet one matters and its fix, and what is off by design."
+            "How it meets the container standard: checks met, each check's state, each unmet one's reason "
+            "and fix, and what is off by design."
         ),
     ]
     supply_chain: Annotated[
         dict[str, Any],
         Describe(
-            "Where its image comes from: its source, provenance, packages, SBOM, attestations, known "
-            "vulnerabilities and when they were read, and how it measures against the supply chain standard."
+            "Where its image comes from: source, provenance, packages, SBOM, attestations, known "
+            "vulnerabilities and when read, and how it meets the supply chain standard."
         ),
     ]
 

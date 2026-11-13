@@ -138,17 +138,21 @@ class AssetDetailView(PageMixin, DetailView):
         )
 
 
+# What saving the asset's form does, said under it.
+FORM_PAGE = {"form_note": "Deductible estimate = cost × business use. Updated when you save."}
+
+
 class AssetCreateView(AssetPage, ReferencePickerMixin, RecordFormMixin, CreateView):
     page_title = "New asset"
     form_class = AssetForm
-    template_name = "assets/asset_form.html"
+    extra_context = FORM_PAGE
 
 
 class AssetUpdateView(AssetPage, ReferencePickerMixin, RecordFormMixin, UpdateView):
     page_title = "Edit asset"
     model = Asset
     form_class = AssetForm
-    template_name = "assets/asset_form.html"
+    extra_context = FORM_PAGE
 
 
 class AssetDeleteView(AssetPage, RecordDeleteMixin, DeleteView):

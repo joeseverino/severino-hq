@@ -13,19 +13,5 @@ entries the tree holds now.
 BASELINED_RULES = frozenset({"Plain.Long", "Plain.Narrate"})
 
 BASELINE: dict[tuple[str, str], int] = {
-    ("controller/providers/tls.go", "Plain.Long"): 1,
-    ("hq/domains/control_plane/provider_adapters/cloudflare.py", "Plain.Long"): 1,
-    ("hq/domains/control_plane/provider_adapters/github.py", "Plain.Long"): 1,
-    ("hq/platform/application/container_standard.py", "Plain.Long"): 1,
-    ("hq/platform/application/contradiction_findings.py", "Plain.Long"): 1,
-    ("hq/platform/application/documentation.py", "Plain.Long"): 1,
-    ("hq/platform/application/github_findings.py", "Plain.Long"): 3,
-    ("hq/platform/application/mail_policy.py", "Plain.Long"): 1,
-    ("hq/platform/application/policy_fixes.py", "Plain.Long"): 1,
-    ("hq/platform/application/resource_records.py", "Plain.Long"): 4,
-    ("hq/platform/application/resources.py", "Plain.Long"): 5,
-    ("hq/platform/application/tailnet_findings.py", "Plain.Long"): 1,
-    ("hq/platform/application/topology_model.py", "Plain.Long"): 1,
     ("hq/platform/application/upgrades.py", "Plain.Long"): 1,
-    ("templates/control_plane/service_list.html", "Plain.Long"): 1,
 }

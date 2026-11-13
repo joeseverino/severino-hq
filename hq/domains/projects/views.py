@@ -297,14 +297,12 @@ class ProjectDetailView(PageMixin, DetailView):
 class ProjectCreateView(ProjectPage, RecordFormMixin, CreateView):
     page_title = "New project"
     form_class = ProjectForm
-    template_name = "projects/project_form.html"
 
 
 class ProjectUpdateView(ProjectPage, RecordFormMixin, UpdateView):
     page_title = "Edit project"
     model = Project
     form_class = ProjectForm
-    template_name = "projects/project_form.html"
 
 
 class ProjectDeleteView(ProjectPage, RecordDeleteMixin, DeleteView):

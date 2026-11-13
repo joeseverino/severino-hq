@@ -93,7 +93,7 @@ func (r *Registry) cpanelSitesFor(ctx context.Context, consumer TLSConsumer) ([]
 		}
 	}
 	if len(unserved) > 0 {
-		return nil, &ProviderError{Message: consumer.Name + " would be checked at " + strings.Join(unserved, ", ") + " but installs only on " + strings.Join(chosen, ", ") + "; add those names to the target's install list, or leave it empty to install on every site that serves a checked name"}
+		return nil, &ProviderError{Message: consumer.Name + " would be checked at " + strings.Join(unserved, ", ") + " but installs only on " + strings.Join(chosen, ", ") + "; add them to the target's install list, or leave it empty"}
 	}
 	if len(chosen) == 0 {
 		return nil, &ProviderError{Message: consumer.Name + " has no site to install on"}

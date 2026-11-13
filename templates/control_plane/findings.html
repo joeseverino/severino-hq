@@ -5,18 +5,16 @@
 The same filter bar every list uses. A chip per rule would spend a phone's
 first screen on chips before the first finding.
 {% endcomment %}
-<search><form class="filter-bar" method="get">
+{% url 'control_plane:findings' as every_finding %}
+{% filter_bar filtered=active_rule clear=every_finding %}
   <select name="rule" aria-label="Problem type">
     <option value="">All problems</option>
     {% for rule in finding_rules %}<option value="{{ rule.name }}"{% if active_rule.name == rule.name %} selected{% endif %}>{{ rule.title }}</option>{% endfor %}
   </select>
-  <button class="btn" type="submit">Filter</button>
-  {% if active_rule %}<a class="btn ghost" href="{% url 'control_plane:findings' %}">Clear filters</a>{% endif %}
   {% comment %}The count sits in the bar it filters, not in a second bar under it.{% endcomment %}
-  <p class="filter-bar-summary" role="status">
+{% summary %}
     <strong>{{ finding_entries|length|counted:"problem" }}</strong>{% if finding_entries|length == 1 %}{% if finding_counts.serious %}, urgent{% elif finding_counts.attention %}, needs attention{% endif %}{% else %}{% if finding_counts.serious %}, <strong>{{ finding_counts.serious|counted:"urgent,urgent" }}</strong>{% endif %}{% if finding_counts.attention %}, <strong>{{ finding_counts.attention|counted:"needs attention,need attention" }}</strong>{% endif %}{% endif %}
-  </p>
-</form></search>
+{% endfilter_bar %}
 {% endif %}
 
 {% comment %}The queue's own table, so a problem reads the same wherever it is drawn.{% endcomment %}

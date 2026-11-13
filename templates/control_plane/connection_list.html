@@ -106,8 +106,8 @@ part's heading shows only when there is more than one.
               {% endcomment %}
               <span class="connection-depends">
               {% with targets=connection.instance.targets dependencies=connection.instance.dependencies %}
-              {% if targets %}<span class="connection-depends-list">{% for link in targets %}{% if forloop.counter == 4 and forloop.length > 4 %}<span class="muted row-less">+{{ forloop.length|add:"-3"|breakable }}</span>{% endif %}<span{% if forloop.counter > 3 and forloop.length > 4 %} class="row-more"{% endif %}>{% if not forloop.first %}{% dot %}{% endif %}{% entity link|declared_link %}</span>{% endfor %}</span>{% endif %}
-              {% if dependencies %}<span class="connection-depends-list">{% if dependencies|length > 4 %}<span class="muted row-less">{{ dependencies|length|counted:"record" }}</span>{% endif %}{% for link in dependencies %}<span{% if forloop.length > 4 %} class="row-more"{% endif %}>{% if not forloop.first %}{% dot %}{% endif %}{% entity link|declared_link code=True %}</span>{% endfor %}</span>{% endif %}
+              {% if targets %}<ul class="dot-list">{% for link in targets %}{% if forloop.counter == 4 and forloop.length > 4 %}<li class="muted row-less">+{{ forloop.length|add:"-3"|breakable }}</li>{% endif %}<li{% if forloop.counter > 3 and forloop.length > 4 %} class="row-more"{% endif %}>{% entity link|declared_link %}</li>{% endfor %}</ul>{% endif %}
+              {% if dependencies %}<ul class="dot-list">{% if dependencies|length > 4 %}<li class="muted row-less">{{ dependencies|length|counted:"record" }}</li>{% endif %}{% for link in dependencies %}<li{% if forloop.length > 4 %} class="row-more"{% endif %}>{% entity link|declared_link code=True %}</li>{% endfor %}</ul>{% endif %}
               {% if not targets and not dependencies %}{% empty_value %}{% endif %}
               {% endwith %}
               </span>

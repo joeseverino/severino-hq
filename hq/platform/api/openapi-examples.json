@@ -262,7 +262,7 @@
                   "value": "nginx-proxy-manager"
                 }
               ],
-              "explanation": "A tag can later name a different build, so the next pull or recreate may run one nobody chose. Pin it by digest in its compose file and recreate it.",
+              "explanation": "A tag can later name a different build. Pin it by digest.",
               "id": "claim:727c884d159f86c2",
               "investigations": [
                 {
@@ -735,7 +735,7 @@
           "insights": [
             {
               "concern": false,
-              "detail": "All fully wired.",
+              "detail": "All set up.",
               "label": "Services",
               "notice": false,
               "url": "/infrastructure/services/",
@@ -1338,7 +1338,7 @@
             },
             {
               "action": "Open certificate",
-              "detail": "Expires Feb\u00a08\u00a0\u00b7 24 days. Renewal opens at 30 days; renew it or check why renewal did not run.",
+              "detail": "Expires Feb\u00a08\u00a0\u00b7 24 days. Renewal has not run; renew it.",
               "label": "wildcard-example-com expires in 24 days",
               "since": "",
               "source": "Estate",
@@ -1347,7 +1347,7 @@
             },
             {
               "action": "",
-              "detail": "A tag can later name a different build, so the next pull or recreate may run one nobody chose. Pin it by digest in its compose file and recreate it.",
+              "detail": "A tag can later name a different build. Pin it by digest.",
               "label": "nginx-proxy-manager on docker-host-01 runs jc21/nginx-proxy-manager:2.12.1 by tag alone",
               "since": "",
               "source": "Infrastructure",
@@ -3130,7 +3130,7 @@
             }
           ],
           "schema_version": 3,
-          "schemas": "Each list's query_schema, its filters' types and choices, and its paging, the most limit may ask for, are describe_resources with name set to its resource."
+          "schemas": "Each list's query_schema, filters, paging and largest limit are in describe_resources with name set to its resource."
         },
         "ok": true
       },

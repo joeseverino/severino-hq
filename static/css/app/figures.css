@@ -397,6 +397,14 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .ext-choice-label { overflow-wrap: anywhere; }
 .ext-choice-sub { font-size: var(--text-xs); text-align: end; }
 .icon { width: 1em; height: 1em; flex: none; }
+/* An icon a cell's value opens with hangs in an indent before the value's
+   lines, so a name the cell cuts at its line's width keeps the icon on its
+   line rather than leaving it on one of its own. */
+.kept-line:has(> .icon:first-child) {
+  --hang: 1.5em;
+  padding-inline-start: var(--hang); text-indent: calc(-1 * var(--hang));
+  & * { text-indent: 0; }
+}
 /* The bar's marks, drawn from the set at the size each control sets them
    (the menu's, the badge's and the search dialog's set by their own rules). */
 .nav-group-label > .icon { width: 9px; height: 6px; stroke: var(--muted); }

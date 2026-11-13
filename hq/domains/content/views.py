@@ -243,7 +243,6 @@ def noun_of(content_type: str) -> str:
 
 class ContentCreateView(ContentPage, RecordFormMixin, CreateView):
     form_class = ContentItemForm
-    template_name = "content/content_form.html"
 
     @cached_property
     def chosen_type(self) -> str:
@@ -271,7 +270,6 @@ class ContentCreateView(ContentPage, RecordFormMixin, CreateView):
 class ContentUpdateView(ContentPage, RecordFormMixin, UpdateView):
     model = ContentItem
     form_class = ContentItemForm
-    template_name = "content/content_form.html"
 
     @override
     def get_page_title(self):

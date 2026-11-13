@@ -2974,6 +2974,16 @@
           "confirm"
         ]
       },
+      "form_page.html": {
+        "about": "A page that is one form, a record's: its card and `partials/_form.html`, closing with `form_verb` and `cancel_url`; `form_fields` names a template for fields beyond the form's own loop and `form_note` says what saving does, each from the view, so the page fills no block.",
+        "blocks": {},
+        "reads": [
+          "cancel_url",
+          "form_fields",
+          "form_note",
+          "form_verb"
+        ]
+      },
       "list_page.html": {
         "about": "A `TableListMixin` list: toolbar, table, empty state and pagination. `row` is one row's cells, `summary` sits above the table and is redrawn with it when a search or filter changes, `foot` is its `<tfoot>`.",
         "blocks": {
@@ -3025,7 +3035,7 @@
       },
       "a filter bar": {
         "pattern": "\\bclass=\"(?:[^\"]*[\\s}])?(?:filter-bar)(?![\\w-])",
-        "write": "partials/_filter_bar.html, the part to come"
+        "write": "{% filter_bar filtered=... clear=... %}controls{% summary %}count{% endfilter_bar %}"
       },
       "a fold": {
         "pattern": "<details\\b",
@@ -3175,6 +3185,7 @@
           "action",
           "fields",
           "in_place",
+          "method",
           "next",
           "table_body"
         ],
@@ -3356,6 +3367,23 @@
           "layout="
         ],
         "parts": []
+      },
+      "filter_bar": {
+        "classes": [
+          "css"
+        ],
+        "parameters": [
+          "*",
+          "action=",
+          "clear=",
+          "css=",
+          "filtered=",
+          "verb=",
+          "**data"
+        ],
+        "parts": [
+          "summary"
+        ]
       },
       "outside_link": {
         "classes": [

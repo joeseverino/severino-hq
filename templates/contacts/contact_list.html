@@ -18,18 +18,16 @@
   {% endfor %}
 </div>
 
-<form class="filter-bar" method="get">
-  {% if selected_status %}<input type="hidden" name="status" value="{{ selected_status }}">{% endif %}
+{% filter_bar verb="Search" filtered=q clear=search_cleared %}
   <input type="search" name="q" value="{{ q }}" placeholder="Search name, email, or message…" aria-label="Search name, email, or message">
-  <button type="submit">Search</button>
-  {% if q %}<a class="btn" href="{% url 'contacts:list' %}{% if selected_status %}?status={{ selected_status }}{% endif %}">Clear search</a>{% endif %}
-</form>
+  {% if selected_status %}<input type="hidden" name="status" value="{{ selected_status }}">{% endif %}
+{% endfilter_bar %}
 
 {% comment %}With nothing received, one sentence says so; the tabs, the count and an empty table would say it three more times.{% endcomment %}
 {% if not total_count and not q %}
   {% include "partials/_empty_state.html" with message="No messages yet." only %}
 {% else %}
-<p class="muted">{{ submissions|length|counted:"message" }}{% if selected_status or q %} match{% endif %}.</p>
+{% if q %}<p class="muted">{{ submissions|length|counted:"message" }} match.</p>{% endif %}
 
 {% table_region "Messages" %}
 <table class="data-table">

@@ -264,13 +264,18 @@ def _no_record(address: str, records: Records) -> str:
 
 
 def _address(name: str) -> str | None:
-    """The estate address ``name`` names, or None for a name that is no route."""
+    """The estate address ``name`` names, its query kept as an address keeps
+    it, or None for a name that is no route: a route name (``search?q=hq``),
+    a path, its leading slash optional once it holds one (``search/?q=hq``),
+    or ``estate/<path>``."""
 
     if not (is_estate(name) or name.startswith("/")):
-        try:
-            return reverse(name)
-        except NoReverseMatch:
+        route, mark, query = name.partition("?")
+        with suppress(NoReverseMatch):
+            return reverse(route) + mark + query
+        if "/" not in route:
             return None
+        name = f"/{name}"
     address = estate_path(name if is_estate(name) else f"{ESTATE}{name}")
     try:
         resolve(urlsplit(address).path)

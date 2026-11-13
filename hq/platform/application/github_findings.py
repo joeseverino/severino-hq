@@ -36,8 +36,8 @@ STEPS = (
     ),
     OperatorStep(
         label=(
-            "Delete every key that is not HQ's. Then generate a new key, store it with mise run wire-github-app, "
-            "and delete the old one, so a token or key that leaked stops working."
+            "Delete every key that is not HQ's. Then rotate HQ's: generate a new key, store it with "
+            "mise run wire-github-app, and delete the old one."
         ),
         notes=("A token issued under the old key lasts up to an hour after the key is deleted.",),
     ),
@@ -72,10 +72,7 @@ def others_spent(estate: FindingEstate) -> tuple[Finding, ...]:
                     severity="attention",
                     explanation=(
                         f"The App's installation{on} answered {spent} requests {between} that HQ did not "
-                        "make, more than the deploy pipeline and the dependency update run take in an hour. It can "
-                        "mean the App's private key or a token issued under it leaked, or another program shares the "
-                        "App, such as a development copy of HQ or a script. GitHub keeps no record of reads, so this "
-                        "count is the only sign there is."
+                        "make. Its key or a token may have leaked, or another program shares the App."
                     ),
                     evidence=(
                         ("Requests", spent),
@@ -95,10 +92,7 @@ RULES: tuple[FindingRule, ...] = (
         "Something besides HQ spends its App's hourly allowance",
         "attention",
         others_spent,
-        operator_action=(
-            "Compare the App's private keys on GitHub with the one HQ holds, delete any that is not HQ's, "
-            "and rotate HQ's."
-        ),
+        operator_action=("Delete every App key on GitHub that is not HQ's, then rotate HQ's."),
         no_help_reason="HQ cannot see or delete the App's keys: GitHub lists them only on the App's settings page.",
     ),
 )
