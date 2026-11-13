@@ -184,6 +184,16 @@ class FastGateFixTests(GateTestCase):
         self.assertIn("lint:file --fix", words)
         self.assertNotIn("lint:check", words)
 
+    def test_a_fix_that_rewrites_a_change_back_to_head_is_named(self):
+        """Ruff writes `str()` back as `""`, which can leave the file as HEAD has it: no change is left to read."""
+
+        def run(command, **_):
+            (self.root / "changed.py").write_text("before\n")
+            return subprocess.CompletedProcess(command, 0)
+
+        with patch.object(fast_gate, "subprocess", SimpleNamespace(run=run)):
+            self.assertEqual(fast_gate.fix(("lint:toml",)), ["changed.py"])
+
     def test_no_selected_fix_mode_runs_nothing(self):
         with patch.object(fast_gate, "subprocess", SimpleNamespace(run=self.fail)):
             self.assertEqual(fast_gate.fix(("lint:check",)), [])

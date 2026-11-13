@@ -31,6 +31,7 @@ class _Surveyed:
         self.unanswered_pages = {}
         self.judged_at = dict.fromkeys(judged)
         self.tree = "example-tree"
+        self.tree_store, self.base_unfit = None, ""
 
     def __getattr__(self, name):
         # Any other method of the look's, bound to this stand-in.
@@ -54,7 +55,7 @@ class SurveyRecordTests(SimpleTestCase):
             gate = {"HQ_GATE_DETAIL": str(detail), "HQ_GATE_RERUN": str(again)}
             with (
                 mock.patch.object(look, "this_run", lambda: run),
-                mock.patch.object(look, "tree_of", lambda _root: "example-tree"),
+                mock.patch.object(look, "changed_since", lambda *_: []),
                 mock.patch.dict(os.environ, {**ASKED, **asked, **gate}, clear=True),
                 mock.patch("sys.stdout", new_callable=io.StringIO),
             ):

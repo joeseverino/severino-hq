@@ -1,0 +1,32 @@
+{
+ "uuid": "5f3958a0-64ea-4dbb-9765-9825ea225b2b",
+ "counter": 6,
+ "stdout": "\r\nPLAY RECAP *********************************************************************\r\n\u001b[0;32mlocalhost\u001b[0m                  : \u001b[0;32mok=1   \u001b[0m changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   ",
+ "start_line": 5,
+ "end_line": 9,
+ "runner_ident": "062433f0-964e-449d-8706-98de98c44f76",
+ "event": "playbook_on_stats",
+ "pid": 81422,
+ "created": "2026-11-12T17:01:26.974568+00:00",
+ "parent_uuid": "4f5f0809-4ab9-4c4f-921f-352e835e8f4d",
+ "event_data": {
+  "playbook": "play.yml",
+  "playbook_uuid": "4f5f0809-4ab9-4c4f-921f-352e835e8f4d",
+  "changed": {},
+  "dark": {},
+  "failures": {},
+  "ignored": {},
+  "ok": {
+   "localhost": 1
+  },
+  "processed": {
+   "localhost": 1
+  },
+  "rescued": {},
+  "skipped": {},
+  "artifact_data": {
+   "result": "/: 120.5 GB of 460.4 GB used (27%)"
+  },
+  "uuid": "5f3958a0-64ea-4dbb-9765-9825ea225b2b"
+ }
+}

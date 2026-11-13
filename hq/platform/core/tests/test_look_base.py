@@ -10,7 +10,7 @@ from unittest import mock
 
 from django.test import SimpleTestCase, override_settings, tag
 
-from . import look
+from . import look, look_report
 from .test_browser_look import ASKED, _git, _repository
 
 
@@ -68,7 +68,7 @@ class WorktreeTests(SimpleTestCase):
                 mock.patch.object(look, "_relay", relay),
                 mock.patch("sys.stdout", new_callable=io.StringIO),
             ):
-                self.assertEqual(look._look_at("HEAD", "survey", 0.0), ({}, {}, {}, []))
+                self.assertEqual(look.look_at("HEAD", "survey", 0.0), ({}, {}, {}, []))
             self.assertEqual(seen["catalog"], "base\n", "the base draws its own catalog")
             self.assertTrue(seen["fixtures"], "and its own fixtures")
             self.assertFalse(seen["new"], "and no test file only this tree has")
@@ -96,7 +96,7 @@ class WorktreeTests(SimpleTestCase):
                 mock.patch.object(look, "_relay", relay),
                 mock.patch("sys.stdout", new_callable=io.StringIO),
             ):
-                look._look_at("HEAD", "survey", 0.0)
+                look.look_at("HEAD", "survey", 0.0)
             self.assertEqual((run / look.BASE_OUT / "example-402.png").read_bytes(), b"base")
 
     def test_a_base_that_names_nothing_is_refused(self):
@@ -106,7 +106,62 @@ class WorktreeTests(SimpleTestCase):
                 mock.patch.dict(os.environ, ASKED, clear=True),
                 self.assertRaisesMessage(AssertionError, "--base example-missing"),
             ):
-                look._look_at("example-missing", "survey", 0.0)
+                look.look_at("example-missing", "survey", 0.0)
+
+    def test_a_base_whose_look_does_not_finish_is_unfit_saying_what_ended_it(self):
+        with tempfile.TemporaryDirectory() as folder, override_settings(BASE_DIR=folder):
+            checkout = _repository(Path(folder))
+
+            def relay(_command, sink, _ref, cwd, env):
+                sink.write("Traceback (most recent call last):\n")
+                sink.write("ModuleNotFoundError: No module named 'example_missing'\n")
+                sink.write("FAILED (errors=1)\n")
+
+            with (
+                mock.patch.dict(os.environ, ASKED, clear=True),
+                mock.patch.object(look, "LENS", ()),
+                mock.patch.object(look, "this_run", lambda: checkout / "var" / "look" / "example-run"),
+                mock.patch.object(look, "_relay", relay),
+                mock.patch("sys.stdout", new_callable=io.StringIO),
+                self.assertRaises(look.BaseUnfit) as unfit,
+            ):
+                look.look_at("HEAD", "survey", 0.0)
+            self.assertIn("No module named 'example_missing'", str(unfit.exception))
+
+
+@tag("source")
+class UnfitBaseTests(SimpleTestCase):
+    """A base the look cannot look at leaves a look without a base, said in
+    one line, rather than a run that fails before any page is drawn."""
+
+    def test_the_look_goes_on_without_a_base_it_cannot_look_at(self):
+        for kept in ("clock_at", "asked", "base", "base_unfit", "tree", "tree_store"):
+            self.addCleanup(lambda kept=kept: kept in vars(look.Look) and delattr(look.Look, kept))
+        unfit = look.BaseUnfit("its own example does not import there (ImportError: example)")
+        with (
+            tempfile.TemporaryDirectory() as folder,
+            override_settings(BASE_DIR=_repository(Path(folder))),
+            mock.patch.dict(
+                os.environ, {"usage_pages": "connections", "usage_seed": "showcase", "usage_base": "HEAD"}, clear=True
+            ),
+            mock.patch.object(look, "look_at", side_effect=unfit),
+            mock.patch.object(look.LayoutBrowserTests, "setUpClass"),
+            mock.patch("sys.stdout", new_callable=io.StringIO) as said,
+        ):
+            look.Look.setUpClass()
+            look.Look.doClassCleanups()
+        self.assertIsNone(look.Look.base, "judged without a base")
+        self.assertIn("ImportError: example", look.Look.base_unfit)
+        self.assertIn(look.Look.base_unfit, said.getvalue().splitlines())
+
+    def test_a_page_that_did_not_answer_at_the_base_is_left_to_the_run_that_asked(self):
+        found = {("estate/example-new", 402): ["answered 404, not looked at"], ("estate/example", 402): []}
+        with mock.patch("sys.stdout", new_callable=io.StringIO) as said:
+            drawn = look.drawn_at_base(found, {"estate/example-new": 404})
+        self.assertEqual(drawn, {("estate/example", 402): []})
+        self.assertIn(look.NOT_AT_BASE, said.getvalue())
+        # The run that asked then judges it alone, as a page the base predates.
+        self.assertEqual(look_report.drawn_only_here(drawn, found), ["estate/example-new"])
 
 
 class _AgainstABase:
@@ -123,6 +178,7 @@ class _AgainstABase:
         self.unanswered_pages = {}
         self.judged_at = {("part/example", 402): None, ("part/example-new", 402): None}
         self.tree = "example-tree"
+        self.tree_store, self.base_unfit = None, ""
 
     def tell_the_gate(self, *_args):
         pass
@@ -139,7 +195,7 @@ class DrawnOnlyHereTests(SimpleTestCase):
             tempfile.TemporaryDirectory() as folder,
             override_settings(BASE_DIR=_repository(Path(folder))),
             mock.patch.object(look, "this_run", lambda: Path(folder, "var", "look", "example-run")),
-            mock.patch.object(look, "tree_of", lambda _root: "example-tree"),
+            mock.patch.object(look, "changed_since", lambda *_: []),
             mock.patch.dict(os.environ, {**ASKED, "usage_base": "HEAD"}, clear=True),
             mock.patch("sys.stdout", new_callable=io.StringIO) as said,
         ):

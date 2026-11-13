@@ -350,6 +350,7 @@ depends = ["setup:lint-tools"]
 usage = '''
 arg "[base]" env="CHECK_BASE" help="The ref to diff against; default the nearest commit whose tree passed, then the branch HEAD lands on"
 flag "--list" help="Print the selected test modules and run nothing"
+flag "--whole" help="Run the whole suite and every quick gate, whatever changed: a pass records the tree and the map of the tests that ran each file"
 flag "--parallel <workers>" env="CHECK_PARALLEL" default="auto" help="Test workers per suite; 1 rules out an order or isolation failure"
 '''
 run = "uv run python -m tools.gate.fast"

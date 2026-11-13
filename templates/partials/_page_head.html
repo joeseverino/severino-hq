@@ -40,7 +40,7 @@ and what needs you; with no facts line, the aside stays on the title's line.
     {% endcomment %}
     {% with split=page.actions|head_actions %}
     <div class="page-actions">
-      {% for action in split.0 %}{% include "partials/_page_action.html" with extra="" %}{% endfor %}
+      {% for action in split.0 %}{% include "partials/_page_action.html" with extra="" heard=True %}{% endfor %}
       {% if split.1 %}
         <div class="overflow-menu" data-menu>
           <button type="button" popovertarget="page-actions-more" aria-label="More actions">{% include "partials/_icon.html" with name="more" %}</button>

@@ -1,5 +1,6 @@
 """What a job has to get right for anything to be trusted to it."""
 
+import re
 import threading
 from datetime import timedelta
 
@@ -8,7 +9,7 @@ from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.platform.application.tests.markup import text
+from hq.platform.application.tests.markup import text, with_class
 from hq.platform.core.models import AuditLog
 from hq_sdk.testing import plain
 
@@ -384,10 +385,22 @@ class JobListOrderTests(TestCase):
         order = [row.id for row in page.context["object_list"]]
         self.assertEqual(order[:3], [str(self.failed.pk), str(self.lost.pk), str(self.newest.pk)])
         self.assertGreater(order.index(str(self.recovered.pk)), 2)
-        # Each is counted under the state it reads in, so the count says what it counts.
-        self.assertIn("1 job failed and 1 stopped early on their last run", plain(page.content))
+        # Each is named under the state it reads in, and no count says it again.
         self.assertIn(f"{Job.State.FAILED.label}: Read the example", text(page.content))
         self.assertIn(f"{Job.State.LOST.label}: Index the example", text(page.content))
+        self.assertNotIn("1 job", plain(page.content))
+
+    def test_one_state_says_its_word_once(self):
+        """With only failures, the notice's title says Failed and its body
+        only the jobs, so the word is not said twice."""
+
+        Job.objects.filter(state=Job.State.LOST).delete()
+
+        (notice,) = with_class(self.client.get(reverse("jobs:list")).content, "notice-warning")
+
+        said = re.findall(rf"\b{Job.State.FAILED.label}\b", notice.words, re.IGNORECASE)
+        self.assertEqual(len(said), 1)
+        self.assertIn("Read the example", notice.words)
 
     def test_newest_first_is_still_one_choice_away(self):
         page = self.client.get(reverse("jobs:list"), {"sort": "-created_at"})

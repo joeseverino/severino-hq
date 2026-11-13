@@ -14,7 +14,14 @@ from pydantic import Field
 from hq.platform.application.automation_manifest import PLAYBOOK, PLAYBOOK_LONGEST, REVISION
 from hq.platform.application.ui import ended
 lazy from hq.platform.application.action_links import command_url
-lazy from hq.platform.application.automation_runs import RETRY_WORDS, capability_name, operation_registry, resource_key
+lazy from hq.platform.application.automation_runs import (
+    RETRY_WORDS,
+    access_words,
+    anywhere,
+    capability_name,
+    operation_registry,
+    resource_key,
+)
 lazy from hq.platform.application.labels import effect_label
 lazy from hq.platform.application.routes import reverse
 
@@ -56,9 +63,9 @@ def _readout(spec: dict[str, Any], _status: dict[str, Any]) -> tuple[tuple[str, 
         ("Reviewed commit", "", str(spec.get("revision", ""))),
         ("Playbook file", "", str(spec.get("playbook", ""))),
         ("Effect", "", effect_label(str(spec.get("effect", ""))) or str(spec.get("effect", ""))),
-        ("Privilege", "", str(spec.get("privilege", "")) or "None"),
+        ("Access", "", access_words(str(spec.get("privilege", "")))),
         ("Record types", "", ", ".join(spec.get("target_kinds", ()))),
-        ("Machines", "", ", ".join(spec.get("hosts", ())) or "Any"),
+        ("Machines", "", ", ".join(spec.get("hosts", ())) or anywhere(spec.get("target_kinds", ()))),
         ("Timeout", "", f"{spec.get('timeout_seconds', '')} seconds"),
         ("Retry", "", RETRY_WORDS.get(str(spec.get("retry", "")), str(spec.get("retry", "")))),
     )

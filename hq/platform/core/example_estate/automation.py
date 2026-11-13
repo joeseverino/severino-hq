@@ -109,7 +109,7 @@ PROCEDURES = (
         verification=["The report names the mount's size and use."],
         argument_spec={
             "short_description": "Report one mount",
-            "options": {"mount": {"type": "path", "default": "/", "description": "The mount point to report on."}},
+            "options": {"mount": {"type": "path", "default": "/"}},
         },
     ),
     _procedure(
@@ -339,10 +339,11 @@ def _events(host: str, events: tuple[tuple[str, str, str], ...]) -> list[dict[st
     return [{"host": host, "task": task, "outcome": outcome, "message": said} for task, outcome, said in events]
 
 
-# How the server's past runs ended, as their worker reported it.
+# How the server's past runs ended, as their worker reported it: a playbook
+# that states no result is said by its verification, which it just held.
 DONE = Ended(
     success=True,
-    message="Done on every machine.",
+    message="The cache reports no entries.",
     events=(("Read what it holds", "ok", ""), ("Empty it", "changed", "Emptied."), ("Check it is empty", "ok", "")),
 )
 FAILED = Ended(
@@ -350,8 +351,10 @@ FAILED = Ended(
     message="A task failed; nothing after it ran.",
     events=(("Read what it holds", "ok", ""), ("Empty it", "failed", "The service did not answer.")),
 )
-# How the read ended on the machine it last ran on.
-REPORTED = Ended(success=True, message="Reported the mount's use.", events=(("Read the mount's use", "ok", ""),))
+# How the read ended on the machine it last ran on: the result its playbook stated.
+REPORTED = Ended(
+    success=True, message="/: 120.5 GB of 460.4 GB used (27%)", events=(("Read the mount's use", "ok", ""),)
+)
 
 
 def procedures() -> list[OperationManifest]:

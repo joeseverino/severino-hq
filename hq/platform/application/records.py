@@ -27,8 +27,6 @@ from .ui import ended
 
 # What a person calls the target, by kind.
 _TARGET_NAMES = {"slug": "slug", "integer": "ID", "doc_id": "ID", "key": "key"}
-# The commands every record domain gets.
-_VERBS = frozenset({"create", "upsert", "update", "delete"})
 # What an update says of a field its caller leaves out (``record_saves.written``).
 KEPT = "A field left out keeps its value."
 # What opens every record's form, and so what its update is called: "Edit an asset".
@@ -146,18 +144,6 @@ def _as_field_declares(field: Any, declared: dict[str, Any]) -> dict[str, Any]:
     if field.get_internal_type() == "TextField":
         return {**declared, "format": "textarea"}
     return declared
-
-
-def says_only_its_title(spec: CapabilitySpec) -> bool:
-    """Whether a capability's summary is the one a record command is given
-    when its domain declares none: its title as a sentence ("Add a new
-    asset."), which a page under that title does not repeat."""
-
-    for records in host_records():
-        verb = spec.name.removeprefix(f"{records.noun}.")
-        if verb in _VERBS:
-            return not {said: summary for said, summary, _label in records.wording}.get(verb)
-    return False
 
 
 def display_noun(records: Records) -> str:

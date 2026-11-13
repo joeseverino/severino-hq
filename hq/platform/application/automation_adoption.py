@@ -69,9 +69,8 @@ from .record_errors import PolicyError, RecordNotFound
 from .security import Capability, Principal
 lazy from . import agent_registry
 lazy from .approval_review import SUMMARY
-lazy from .automation_runs import RETRY_WORDS
-lazy from .entity_links import kind_label
-lazy from .labels import effect_label, lower_first, plural
+lazy from .automation_runs import RETRY_WORDS, access_words, anywhere
+lazy from .labels import effect_label, lower_first
 lazy from .ui import ended
 
 ADOPT = "automation.source.adopt"
@@ -440,7 +439,7 @@ def _gains(before: AdoptedProcedure, after: AdoptedProcedure, named: str) -> lis
     if EFFECT_RANK[after.effect] > EFFECT_RANK[before.effect]:
         gained.append(ended(f"{named} now {_does(after.effect)}, where before it {_does(before.effect)}"))
     if after.privilege and after.privilege != before.privilege:
-        gained.append(ended(f"{named} gains the privilege {after.privilege}"))
+        gained.append(ended(f"{named} gains {access_words(after.privilege)}"))
     # A read's files too: a read held only by its declaration could be made to
     # read anything its login can by a change no person looked at.
     if after.files != before.files:
@@ -475,17 +474,9 @@ def _widens(
     return widens
 
 
-def anywhere(procedure: ProcedureTerms) -> str:
-    """Where a playbook that names no machine may run: "Any of your machines"."""
-
-    kinds = " or ".join(plural(lower_first(kind_label(kind))) for kind in procedure.target_kinds)
-    return f"Any of your {kinds}"
-
-
 def _summary(procedure: AdoptedProcedure) -> str:
-    where = ", ".join(procedure.hosts) if procedure.hosts else lower_first(anywhere(procedure))
-    privilege = f"with the privilege {procedure.privilege}" if procedure.privilege else "with no added privilege"
-    return ended(f"{effect_label(procedure.effect)}, on {where}, {privilege}")
+    where = ", ".join(procedure.hosts) or lower_first(anywhere(procedure.target_kinds))
+    return f"{effect_label(procedure.effect)}, on {where}, {lower_first(access_words(procedure.privilege))}"
 
 
 def _shown(procedure: AdoptedProcedure, named: str) -> dict[str, Any]:
@@ -498,8 +489,8 @@ def _shown(procedure: AdoptedProcedure, named: str) -> dict[str, Any]:
         SUMMARY: {"label": named, "value": _summary(procedure)},
         "title": procedure.title,
         "effect": effect_label(procedure.effect),
-        "runs_on": list(procedure.hosts) or anywhere(procedure),
-        "privilege": procedure.privilege or "None",
+        "runs_on": list(procedure.hosts) or anywhere(procedure.target_kinds),
+        "access": access_words(procedure.privilege),
         "timeout": f"{procedure.timeout_seconds} seconds",
         "retry": RETRY_WORDS[procedure.retry],
         "recovery": list(procedure.recovery),

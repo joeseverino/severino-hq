@@ -56,9 +56,8 @@ OUTCOME_TONES = {
 }
 # What a claimed run whose lease ran out says until the next claim ends it.
 LAPSED = "The run stopped reporting, so HQ can't tell whether it finished."
-# What a queued run says: it is past any approval, and waits only for the
-# worker, so it never reads as one waiting for a person.
-QUEUED = "Waiting for HQ's runner to start it."
+# The states of a run that has no outcome to say yet.
+_UNENDED = frozenset({OperationState.QUEUED, OperationState.CLAIMED})
 # A kind of work whose latest run ended so is one to look at.
 ENDED_BADLY = (JobState.FAILED, JobState.LOST)
 
@@ -449,7 +448,8 @@ def _run_row(operation: OperationRequest, seen: JobState, title: str, now: datet
         word=seen.label,
         # A run that finished and found a problem says so in its tone.
         tone=summary["tone"] if seen == JobState.SUCCEEDED else TONES[seen],
-        note=LAPSED if lapsed else QUEUED if operation.state == OperationState.QUEUED else summary["headline"],
+        # A run not yet ended says only its state, in the State column.
+        note=LAPSED if lapsed else "" if operation.state in _UNENDED else summary["headline"],
         by=summary["by"],
         created_at=operation.created_at,
         started=started,

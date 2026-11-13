@@ -3124,7 +3124,8 @@
       "partials/_ask.html": {
         "about": "A do-this-now control and how its work stands, from `hq_sdk.outbound.ask`.",
         "optional": [
-          "extra"
+          "extra",
+          "heard"
         ],
         "required": [
           "ask"
@@ -3498,7 +3499,8 @@
           "count=",
           "*",
           "folds=",
-          "href="
+          "href=",
+          "attention="
         ],
         "parts": []
       },

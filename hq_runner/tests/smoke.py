@@ -98,8 +98,8 @@ def _environment(root: Path) -> dict[str, str]:
 def _ansible_names() -> list[str]:
     """Where the worker's copies of Ansible's names differ from ansible-core's."""
 
-    from ansible.config.manager import ConfigManager  # type: ignore[import-not-found]  # ansible-core is the runner group's alone
-    from ansible.plugins.loader import get_all_plugin_loaders  # type: ignore[import-not-found]  # ansible-core is the runner group's alone
+    from ansible.config.manager import ConfigManager
+    from ansible.plugins.loader import get_all_plugin_loaders
 
     definitions = ConfigManager().get_configuration_definitions()
     searched = {

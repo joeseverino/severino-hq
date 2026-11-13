@@ -22,7 +22,7 @@ from collections.abc import Callable
 from contextlib import ExitStack, suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, override
+from typing import Any, NoReturn, override
 from unittest import mock
 from urllib.parse import urlsplit
 
@@ -156,8 +156,16 @@ _ERRORS = "the error check"
 # A probe's source, as a module of probes/ holds it: a function, its one
 # argument a selector or a list of them.
 _A_PROBE = re.compile(r"\s*(?:async\s*)?\(")
-# A run's verdict when a file changed while it ran.
-TREE_CHANGED = "the tree changed while dev:look ran; its shots and verdict mix two trees"
+# What a run says last when a file a page reads changed while it ran. Its
+# findings still stand as found, and the gate keeps a verdict whose tree
+# changed under it as no tree's (tools/gate/verdict.py), so it is said rather
+# than failed, and the reader decides from the files named whether to look again.
+TREE_CHANGED = (
+    "the tree changed while dev:look ran ({}): its shots and findings read the tree it began on, {},"
+    " up to each change, so they hold for neither tree, and no survey of either is kept as a pass"
+)
+# How many of the files that changed it names.
+_CHANGED_NAMED = 5
 
 # Request headers the browser sends that are not the view's to read. The
 # answer goes back with its type alone, so it is never asked to be compressed.
@@ -483,12 +491,10 @@ def _commit(ref: str) -> str:
     return said
 
 
-def tree_of(root: Path) -> str:
-    """The checkout at ``root`` as one git tree id: every file in it but those
-    git ignores, untracked ones too, so two checkouts that differ in any file
-    name different trees. It is written from an index and an object store of
-    its own, the checkout's objects read beside them, so the checkout's index
-    and objects are left as they were."""
+def _snapshot_env(root: Path, store: Path) -> dict[str, str]:
+    """The environment git writes a snapshot of ``root`` in: an index and an
+    object store in ``store``, the checkout's objects read beside them, so the
+    checkout's index and objects are left as they were."""
 
     objects = subprocess.run(
         ["git", "-C", str(root), "rev-parse", "--path-format=absolute", "--git-path", "objects"],
@@ -496,25 +502,52 @@ def tree_of(root: Path) -> str:
         text=True,
         check=True,
     ).stdout.strip()
-    with tempfile.TemporaryDirectory() as folder:
-        Path(folder, "objects").mkdir()
-        env = os.environ | {
-            "GIT_INDEX_FILE": str(Path(folder, "index")),
-            "GIT_OBJECT_DIRECTORY": str(Path(folder, "objects")),
-            "GIT_ALTERNATE_OBJECT_DIRECTORIES": objects,
-        }
-        subprocess.run(["git", "-C", str(root), "add", "--all"], env=env, capture_output=True, check=True)
-        written = subprocess.run(
-            ["git", "-C", str(root), "write-tree"], env=env, capture_output=True, text=True, check=True
-        )
-        return written.stdout.strip()
+    Path(store, "objects").mkdir(parents=True, exist_ok=True)
+    return os.environ | {
+        "GIT_INDEX_FILE": str(Path(store, "index")),
+        "GIT_OBJECT_DIRECTORY": str(Path(store, "objects")),
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES": objects,
+    }
 
 
-def changed_since(tree: str, root: Path) -> str:
-    """The run's refusal when the checkout at ``root`` is no longer ``tree``,
-    the one it began on: its pages were drawn from both."""
+def tree_of(root: Path, store: Path | None = None) -> str:
+    """The files a look can read in the checkout at ``root`` (`SURVEY_INPUTS`)
+    as one git tree id, untracked ones too and none git ignores, so two
+    checkouts that differ in any of them name different trees. It is written
+    into ``store``, kept for `changed_since` to read, or a folder of its own."""
 
-    return "" if tree_of(root) == tree else TREE_CHANGED
+    with ExitStack() as stack:
+        folder = store or Path(stack.enter_context(tempfile.TemporaryDirectory()))
+        env = _snapshot_env(root, folder)
+        git = ["git", "-C", str(root)]
+        subprocess.run([*git, "add", "--all", "--", *SURVEY_INPUTS], env=env, capture_output=True, check=True)
+        return subprocess.run([*git, "write-tree"], env=env, capture_output=True, text=True, check=True).stdout.strip()
+
+
+def changed_since(tree: str, root: Path, store: Path) -> list[str]:
+    """The files that differ between ``tree``, the one the run began on, kept in
+    ``store``, and the checkout at ``root`` now: none when it holds still."""
+
+    now = tree_of(root, store)
+    if now == tree:
+        return []
+    listed = subprocess.run(
+        ["git", "-C", str(root), "diff-tree", "-r", "-z", "--name-only", "--no-renames", tree, now],
+        env=_snapshot_env(root, store),
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    return [path for path in listed.split("\0") if path]
+
+
+def tree_changed(tree: str, changed: list[str]) -> str:
+    """What a run whose files ``changed`` under it says last, naming the tree it began on."""
+
+    named = ", ".join(changed[:_CHANGED_NAMED]) + (
+        f" and {len(changed) - _CHANGED_NAMED} more" if len(changed) > _CHANGED_NAMED else ""
+    )
+    return TREE_CHANGED.format(named, tree[:12])
 
 
 def _relay(command: list[str], sink, ref: str, **options) -> None:
@@ -538,7 +571,7 @@ def _relay(command: list[str], sink, ref: str, **options) -> None:
 # Run at a base, each module named on its stdin imported and every name it
 # imports read, so a lazy import of a name the base lacks, or a key its tables
 # lack (a selector a probe reads as it loads), fails here rather than mid-look;
-# each that fails is printed after `_UNIMPORTABLE`.
+# each that fails is printed after `_UNIMPORTABLE`, then the first line of why.
 _UNIMPORTABLE = "unimportable: "
 _IMPORTS = f"""
 import importlib, sys
@@ -547,53 +580,99 @@ for name in sys.stdin.read().split():
         module = importlib.import_module(name)
         for each in list(vars(module)):
             getattr(module, each)
-    except Exception:
-        print({_UNIMPORTABLE!r} + name, flush=True)
+    except Exception as error:
+        why = (str(error).splitlines() or [""])[0]
+        print({_UNIMPORTABLE!r} + name + " " + type(error).__name__ + ": " + why, flush=True)
 """
+
+
+class BaseUnfit(Exception):
+    """Why the base cannot be looked at with this tree's lens, so the look goes on without it."""
 
 
 def _module(path: str) -> str:
     return ".".join(Path(path).with_suffix("").parts).removesuffix(".__init__")
 
 
-def kept_own(tree: Path, commit: str, laid: list[str], python: list[str], env: dict[str, str]) -> list[str]:
-    """Each Python file of ``laid``, laid over the worktree ``tree`` of
-    ``commit``, that does not import there against the base's own code (a seed
-    constant the base lacks), put back as the base has it, until every one left
-    imports: the files put back. A file the base lacks stays. ``python`` is the
-    command that runs Python there with its settings."""
+def _unimportable(tree: Path, modules: list[str], python: list[str], env: dict[str, str]) -> dict[str, str]:
+    """Each of ``modules`` that does not import at ``tree``, with why."""
 
-    checked = [path for path in laid if path.endswith(".py") and task.git("ls-tree", commit, "--", path, root=tree)]
+    done = subprocess.run(
+        [*python, "-c", _IMPORTS],
+        input="\n".join(modules),
+        cwd=tree,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    said = (
+        line.removeprefix(_UNIMPORTABLE).partition(" ")
+        for line in done.stdout.splitlines()
+        if line.startswith(_UNIMPORTABLE)
+    )
+    failed = {name: why for name, _, why in said}
+    # Python that ends before it says (a module exits as it loads, the settings fail) fails them all.
+    if done.returncode and not failed:
+        failed = {name: (done.stderr.strip().splitlines() or ["Python ended early"])[-1] for name in modules}
+    return failed
+
+
+def _put_back(tree: Path, commit: str, paths: list[str]) -> None:
+    """Each of ``paths`` at ``tree`` as ``commit`` has it, or gone where it has none."""
+
+    held = [path for path in paths if task.git("ls-tree", commit, "--", path, root=tree)]
+    if held:
+        task.git("checkout", commit, "--", *held, root=tree)
+    for path in set(paths) - set(held):
+        (tree / path).unlink(missing_ok=True)
+
+
+def kept_own(
+    tree: Path,
+    commit: str,
+    laid: list[str],
+    python: list[str],
+    env: dict[str, str],
+    *,
+    taken: tuple[str, ...] = (),
+    loads: tuple[str, ...] = (__name__,),
+) -> list[str]:
+    """The files of this tree's lens laid over the worktree ``tree`` of
+    ``commit`` (``laid``, with ``taken`` those this tree took out) that the
+    base cannot run, each put back as the base has it, or taken out where the
+    base has none: the files put back. A Python file that does not import there
+    goes first, until every one left does; then, should the base's own modules
+    ``loads`` (its look, its survey and catalog with it) still not import, the
+    whole lens is the base's own. A base that cannot import those even so is
+    `BaseUnfit`. ``python`` is the command that runs Python there with its settings."""
+
+    checked = [path for path in laid if path.endswith(".py")]
     kept: list[str] = []
-    while checked:
-        done = subprocess.run(
-            [*python, "-c", _IMPORTS],
-            input="\n".join(map(_module, checked)),
-            cwd=tree,
-            env=env,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        failed = {
-            line.removeprefix(_UNIMPORTABLE) for line in done.stdout.splitlines() if line.startswith(_UNIMPORTABLE)
-        }
+    while checked and (failed := _unimportable(tree, list(map(_module, checked)), python, env)):
         back = [path for path in checked if _module(path) in failed]
-        if not back:
-            break
-        task.git("checkout", commit, "--", *back, root=tree)
+        _put_back(tree, commit, back)
         kept += back
         checked = [path for path in checked if path not in back]
+    # Only Python laid or taken out changes what imports there.
+    rest = [path for path in [*laid, *taken] if path not in kept]
+    if any(path.endswith(".py") for path in rest) and _unimportable(tree, list(loads), python, env):
+        _put_back(tree, commit, rest)
+        kept += rest
+        if failed := _unimportable(tree, list(loads), python, env):
+            name, why = next(iter(failed.items()))
+            raise BaseUnfit(f"its own {name} does not import there ({why})")
     return sorted(kept)
 
 
-def _look_at(ref: str, rule: str, clock_at: float) -> tuple[Found, Measured, Found, list[str]]:
+def look_at(ref: str, rule: str, clock_at: float) -> tuple[Found, Measured, Found, list[str]]:
     """What this run finds, measures and hears go wrong, looked for at ``ref``: the same
     task's run, in a worktree of it with only this checkout's lens (`LENS`) laid
     over it, so both are judged alike and the base draws with its own code. Its environment is this run's, but for a
     database of its own, this run's clock, and the CSS already read and the
     script's absolute path, since a relative path names this checkout, and
-    without ``--css``'s sheet."""
+    without ``--css``'s sheet. A ref that names no commit is refused; a base
+    whose look cannot run or does not finish is `BaseUnfit`, with why."""
 
     checkout = Path(settings.BASE_DIR).resolve()
     try:
@@ -602,35 +681,54 @@ def _look_at(ref: str, rule: str, clock_at: float) -> tuple[Found, Measured, Fou
         raise AssertionError(f"--base {ref}: {error}") from None
     lens = [path.relative_to(checkout).as_posix() for path in LENS]
     present, deleted = task.changed_tests(commit, checkout, functools.partial(_in_lens, lens))
-    with task.worktree(commit, checkout, lint_tools=True) as tree:
-        task.overlay(tree, present, deleted, checkout)
-        found, log = tree.parent / "found.json", tree.parent / "look.log"
-        # The kept test database is migrated for this checkout's code, so the base makes its own in its worktree.
-        left = {f"{PREFIX}base", "VIRTUAL_ENV", "SEVERINO_TEST_DATABASE_PATH"}
-        env = {name: value for name, value in os.environ.items() if name not in left}
-        env |= {
-            PREFIX + _FINDINGS: str(found),
-            PREFIX + _CLOCK: str(clock_at),
-            "SEVERINO_DATABASE_PATH": str(tree.parent / "look.sqlite3"),
-            f"{PREFIX}rule": rule,
-            # Drawn as its tree draws, so a sheet laid over this side reads as what it fixes and breaks.
-            f"{PREFIX}css": "",
-            PREFIX + _SHOTS: str(this_run() / BASE_OUT),
-        }
-        if script := _asked().text("eval"):
-            env[f"{PREFIX}eval"] = str(Path(settings.BASE_DIR, script).resolve())
-        shell = ["uv", "run", "--group", "browser", "python", "manage.py", "shell", "--no-imports", "-v", "0"]
-        if kept := kept_own(tree, commit, present, shell, env):
-            print(f"{ref}: {_its_own(kept)}", flush=True)
-        print(f"Looking at {ref} first, in {tree}", flush=True)
-        # The run there is watched by its own stall watch.
-        with log.open("w", encoding="utf-8") as sink, stall_watch.paused():
-            # The command this run was started with, run there by its own environment.
-            _relay(["uv", "run", "--group", "browser", "python", *sys.argv], sink, ref, cwd=tree, env=env)
-        if not found.is_file():
-            said = log.read_text(encoding="utf-8").splitlines()[-40:]
-            raise AssertionError(f"The look at {ref} did not finish:\n" + "\n".join(said))
-        return (*_read_found(found), kept)
+    # Making the worktree, its lint tools and its run are the base's to fail.
+    try:
+        with task.worktree(commit, checkout, lint_tools=True) as tree:
+            task.overlay(tree, present, deleted, checkout)
+            found, log = tree.parent / "found.json", tree.parent / "look.log"
+            # The kept test database is migrated for this checkout's code, so the base makes its own in its worktree.
+            left = {f"{PREFIX}base", "VIRTUAL_ENV", "SEVERINO_TEST_DATABASE_PATH"}
+            env = {name: value for name, value in os.environ.items() if name not in left}
+            env |= {
+                PREFIX + _FINDINGS: str(found),
+                PREFIX + _CLOCK: str(clock_at),
+                "SEVERINO_DATABASE_PATH": str(tree.parent / "look.sqlite3"),
+                f"{PREFIX}rule": rule,
+                # Drawn as its tree draws, so a sheet laid over this side reads as what it fixes and breaks.
+                f"{PREFIX}css": "",
+                PREFIX + _SHOTS: str(this_run() / BASE_OUT),
+            }
+            if script := _asked().text("eval"):
+                env[f"{PREFIX}eval"] = str(Path(settings.BASE_DIR, script).resolve())
+            shell = ["uv", "run", "--group", "browser", "python", "manage.py", "shell", "--no-imports", "-v", "0"]
+            if kept := kept_own(tree, commit, present, shell, env, taken=tuple(deleted)):
+                print(f"{ref}: {_its_own(kept)}", flush=True)
+            print(f"Looking at {ref} first, in {tree}", flush=True)
+            # The run there is watched by its own stall watch.
+            with log.open("w", encoding="utf-8") as sink, stall_watch.paused():
+                # The command this run was started with, run there by its own environment.
+                _relay(["uv", "run", "--group", "browser", "python", *sys.argv], sink, ref, cwd=tree, env=env)
+            if not found.is_file():
+                raise BaseUnfit(f"its look did not finish ({_why_it_ended(log.read_text(encoding='utf-8'))})")
+            return (*_read_found(found), kept)
+    except (task.RefError, RuntimeError, subprocess.CalledProcessError) as broke:
+        raise BaseUnfit(f"its worktree could not be set up ({(str(broke).splitlines() or [''])[0]})") from None
+
+
+# A line a Python traceback ends on, or a refusal a look prints: what ended a run.
+_ENDED = re.compile(r"^(?:[\w.]+(?:Error|Exception|Exit|Interrupt)\b.*|mise run dev:look: .*)$")
+
+
+def _why_it_ended(log: str) -> str:
+    """The last line in a look's ``log`` that says what ended it, or its last line."""
+
+    lines = [line.strip() for line in log.splitlines() if line.strip()]
+    return next((line for line in reversed(lines) if _ENDED.match(line)), lines[-1] if lines else "it said nothing")
+
+
+# What a look says of a base it could not look at, which it judges without:
+# every finding counts, as with no base asked.
+BASE_UNFIT = "--base {}: not looked at, as {}; judged without a base, so every finding counts"
 
 
 def _in_lens(lens: list[str], path: str) -> bool:
@@ -638,7 +736,7 @@ def _in_lens(lens: list[str], path: str) -> bool:
 
 
 def _its_own(kept: list[str]) -> str:
-    return f"drawn with its own {', '.join(kept)}, as this tree's does not import there"
+    return f"drawn with its own {', '.join(kept)}, or none where it has none, as this tree's do not run there"
 
 
 def _address(url: str) -> str:
@@ -827,15 +925,67 @@ def _pages(asked: tuple[str, ...], records: task.Records | None) -> list[str]:
             named += catalog.CATALOG
             found = task.pages(_families(asked), estate_pages(), [*named, *posts], records)
     except task.PageRefused as refused:
-        raise AssertionError(str(refused)) from None
+        raise AssertionError(f"{refused}\n{_rerun(refused.instead)}") from None
     # An estate page is found as its address, which no page known by name begins as.
     return [estate_name(page) if page.startswith("/") else page for page in found]
+
+
+@functools.cache
+def declared_flags() -> dict[str, dict]:
+    """dev:look's flags as mise parses its usage, by the name its variable has,
+    or none where mise cannot say: what a rerun leaves at its default."""
+
+    try:
+        done = subprocess.run(
+            ["mise", "-C", str(settings.BASE_DIR), "tasks", "info", "dev:look", "--json"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        flags = json.loads(done.stdout)["usage_spec"]["cmd"]["flags"]
+    except OSError, ValueError, KeyError, TypeError:
+        return {}
+    return {flag["name"].replace("-", "_"): flag for flag in flags}
+
+
+def _rerun(instead: dict[str, str]) -> str:
+    """The command that runs this look again with each refused name of
+    ``instead`` swapped for its nearest, or left out where it has none, its
+    flags as given; a look left with no page is pointed at what a page is."""
+
+    asked, declared = _asked(), declared_flags()
+    pages = [instead.get(name, name) for name in asked.repeated(_ASKED)]
+    if not (pages := [page for page in pages if page]):
+        return "No name asked is near a page; what a page is:\nmise run dev:look --help"
+    words = ["mise", "run", "dev:look"]
+    for name in declared or sorted(asked.values):
+        flag, value = declared.get(name, {}), asked.text(name)
+        if name in (_ASKED, _FINDINGS, _CLOCK, _SHOTS) or not value or [value] == flag.get("default"):
+            continue
+        dashed = f"--{name.replace('_', '-')}"
+        if "arg" in flag or (not flag and value not in ("true", "false")):
+            words += [dashed, value]
+        elif value == "true":
+            words.append(dashed)
+        else:
+            words.append(flag.get("negate") or f"--no-{name.replace('_', '-')}")
+    return f"To look at the nearest instead:\n{shlex.join([*words, *pages])}"
 
 
 # What a look at a base says of a page it does not have.
 NOT_AT_BASE = "not at this ref, so looked at only in the tree that asked"
 # What the look that asked says of those pages as it closes.
 DRAWN_ONLY_HERE = "not drawn at {}, so judged here alone"
+
+
+def drawn_at_base(found: Found, unanswered: dict[str, int | None]) -> Found:
+    """What a look at a base hands the run that asked: ``found`` less each page
+    that did not answer there (a record only that run's tree holds), said, so
+    that run judges it alone as it does a page the base predates."""
+
+    for name in unanswered:
+        print(f"{name}: {NOT_AT_BASE}", flush=True)
+    return {key: said for key, said in found.items() if key[0] not in unanswered}
 
 
 def _served(asked: tuple[str, ...], records: task.Records | None) -> list[str]:
@@ -945,8 +1095,15 @@ def refuse_early() -> None:
             " which loads the extension set mise.local.toml names"
         )
     if said:
-        print("mise run dev:look: " + "\n".join(said), file=sys.stderr)
-        sys.exit(64)
+        refuse("\n".join(said))
+
+
+def refuse(said: str) -> NoReturn:
+    """End the run on what it was asked, as a usage error: exit 64 with
+    ``said``, which a page's verdict never is."""
+
+    print(f"mise run dev:look: {said}", file=sys.stderr, flush=True)
+    sys.exit(64)
 
 
 class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
@@ -974,6 +1131,9 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
     base_errors: Found
     # The test files the base drew with its own copy of (`kept_own`).
     base_kept: list[str]
+    # Why a base asked for was not looked at (`BASE_UNFIT`), or "".
+    base_unfit = ""
+    tree_store: Path
     # The probe --probe names, its source, and the argument --arg gives it.
     probe = probe_source = ""
     probe_arg: object = None
@@ -986,12 +1146,19 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
     @classmethod
     @override
     def setUpClass(cls):
-        # The tree the run draws from, held to the end (`changed_since`).
-        cls.tree = tree_of(Path(settings.BASE_DIR))
+        # The tree the run draws from, held to the end (`changed_since`) in a store of its own.
+        store = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(store.cleanup)
+        cls.tree_store = Path(store.name)
+        cls.tree = tree_of(Path(settings.BASE_DIR), cls.tree_store)
         cls.clock_at = float(_asked().text(_CLOCK) or round(time.time()))
-        # What was asked is checked before the base is looked at, which takes a while.
-        with EstatePages(_asked().text("seed")) as records:
-            asked = _checked(records)
+        # What was asked is checked before the base is looked at, which takes a
+        # while, and a name refused ends the run as `refuse_early` does.
+        try:
+            with EstatePages(_asked().text("seed")) as records:
+                asked = _checked(records)
+        except AssertionError as refused:
+            cls.refuse(str(refused))
         cls.asked, cls.undrawn, cls.probe, cls.probe_source, cls.probe_arg = (
             asked.pages,
             asked.undrawn,
@@ -999,13 +1166,26 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             asked.probe_source,
             asked.probe_arg,
         )
-        rule = cls.rule_asked()
         # The base next, while nothing of this run's holds memory but Django.
-        ref = _asked().text("base")
-        cls.base, cls.base_measured, cls.base_errors, cls.base_kept = (
-            _look_at(ref, rule, cls.clock_at) if ref else (None, {}, {}, [])
-        )
+        cls.base, cls.base_measured, cls.base_errors, cls.base_kept, cls.base_unfit = None, {}, {}, [], ""
+        if ref := _asked().text("base"):
+            try:
+                cls.base, cls.base_measured, cls.base_errors, cls.base_kept = look_at(
+                    ref, cls.rule_asked(), cls.clock_at
+                )
+            except AssertionError as refused:
+                cls.refuse(str(refused))
+            except BaseUnfit as unfit:
+                cls.base_unfit = BASE_UNFIT.format(ref, unfit)
+                print(cls.base_unfit, flush=True)
         super().setUpClass()
+
+    @classmethod
+    def refuse(cls, said: str) -> NoReturn:
+        """`refuse`, once what the class holds is let go: an exit runs no class cleanup."""
+
+        cls.doClassCleanups()
+        refuse(said)
 
     @override
     def start(self, **options):
@@ -1190,7 +1370,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         self.measured: Measured = {}
         found = self.look_at_every_page(widths, rule)
         if into := _asked().text(_FINDINGS):
-            _write_found(Path(into), found, self.measured, self.errors)
+            _write_found(Path(into), drawn_at_base(found, self.unanswered_pages), self.measured, self.errors)
         if failed := self.close(rule, found):
             self.fail("\n".join(failed))
 
@@ -1203,10 +1383,12 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         ref = _asked().text("base")
         base_errors = self.base_errors if self.base is not None else None
         report, printed, errors_failed = closing(_ERRORS, self.errors, base_errors, ref)
-        failed = [printed[-1]] if errors_failed else []
+        # Each page's first error inline, or each new one against a base, then the verdict.
+        failed = [*(printed[:-1] or found_lines(self.errors)), printed[-1]] if errors_failed else []
         if rule:
             judged, said, rule_failed = closing(rule, found, self.base, ref)
             head = _commit("HEAD") + (f" against {ref} at {_commit(ref)}" if self.base is not None else "")
+            head += f"\n{self.base_unfit}" if self.base_unfit else ""
             kept = this_run() / REPORT
             kept.write_text(f"{head}\n{judged}\n{report}\n", encoding="utf-8")
             printed = [f"Page by page: {_shown(kept)}", *said, *printed]
@@ -1230,13 +1412,15 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         shots = f"Screenshots in {_shown(this_run())}/{base}"
         if not self.shooting:
             shots = f"Findings in {_shown(this_run())}/, no screenshots: --shots takes them"
-        # Last, as it voids every verdict before it.
-        changed = [moved] if (moved := changed_since(self.tree, Path(settings.BASE_DIR))) else []
-        print(*printed, *unanswered, shots, *changed, sep="\n", flush=True)
+        unfit = [self.base_unfit] if self.base_unfit else []
+        # Last, as it says which tree every line before it read.
+        moved = changed_since(self.tree, Path(settings.BASE_DIR), self.tree_store)
+        changed = [tree_changed(self.tree, moved)] if moved else []
+        print(*printed, *unanswered, *unfit, shots, *changed, sep="\n", flush=True)
         if rule:
             again = [*failed_pages(found), *(name for (name, _), heard in self.errors.items() if heard)]
             self.tell_the_gate(rule, said[-1], [*again, *self.unanswered_pages])
-        return failed + unanswered + changed
+        return failed + unanswered
 
     def tell_the_gate(self, rule, verdict, blamed):
         """What the rule judged, under its verdict, and the look that runs it
@@ -1248,7 +1432,9 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         asked = _asked()
         if not (into := os.environ.get(GATE_DETAIL)) or asked.text(_FINDINGS):
             return
-        given = {flag: asked.text(flag) for flag in DRAWN_WITH if asked.text(flag) not in ("", "false")}
+        # A base it could not look at drew nothing it judged.
+        held = [flag for flag in DRAWN_WITH if not (flag == "base" and self.base_unfit)]
+        given = {flag: asked.text(flag) for flag in held if asked.text(flag) not in ("", "false")}
         drawn = [
             f"--{flag.replace('_', '-')}" + ("" if value == "true" else f" {shlex.quote(value)}")
             for flag, value in given.items()

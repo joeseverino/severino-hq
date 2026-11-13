@@ -41,19 +41,26 @@ class ChangeTableTests(SimpleTestCase):
 
         self.assertEqual([cell.words for cell in elements(html, "td")], ["redacted", "redacted"])
 
-    def test_each_record_of_many_is_a_group_and_one_that_stays_starts_folded(self):
+    def test_each_record_that_changes_is_a_group_and_one_that_stays_is_only_named(self):
         from hq.platform.application.approval_review import grouped
 
         records = {"example.first": {"example_effect": "read"}, "example.second": {"example_effect": "read"}}
         moved = {**records, "example.first": {"example_effect": "change"}}
         html = _drawn(grouped({"records": records}, {"records": moved}, label="Would change"))
 
-        groups = {group.words.split()[0]: group for group in with_class(html, "row-group")}
-        self.assertEqual(set(groups), {"example.first", "example.second"})
-        self.assertNotIn("data-folds", groups["example.first"].attrs)
-        folded = groups["example.second"].attrs["id"]
-        self.assertTrue(select(html, "data-folded", folded), "the record that stays is still there to open")
-        self.assertFalse(select(html, "data-folded", groups["example.first"].attrs.get("id", "")))
+        groups = [group.words.split()[0] for group in with_class(html, "row-group")]
+        self.assertEqual(groups, ["example.first"])
+        self.assertFalse(select(html, "data-folds"), "nothing that changes is folded away")
+        (foot,) = with_class(html, "section-foot")
+        self.assertIn("example.second", foot.words)
+
+    def test_a_change_keeps_its_own_order(self):
+        rows = {f"example_{name}": name for name in ("zulu", "alpha", "mike")}
+        html = _drawn(compare({}, rows, label="Would be applied"))
+
+        self.assertTrue(_headings(html))
+        self.assertFalse(select(html, "data-sort-local"), "no heading offers to sort a change")
+        self.assertFalse(select(html, "aria-sort"))
 
     def test_a_record_that_comes_whole_is_headed_by_its_name_with_its_summary_its_one_row(self):
         from hq.platform.application.approval_review import grouped

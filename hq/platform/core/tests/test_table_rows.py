@@ -119,6 +119,12 @@ class TableRowTests(SimpleTestCase):
         self.assertEqual((link.words, link.attrs["href"]), ("Policy", "/example/policy/"))
         self.assertFalse(elements(_render('{% row_group "Policy" 2 %}'), "a"))
 
+    def test_a_group_a_reader_should_weigh_first_is_marked_for_attention(self):
+        (row,) = elements(_render('{% row_group "Policy" "gains access" attention=True %}'), "tr")
+        self.assertIn("data-attention", row.attrs)
+        (plain,) = elements(_render('{% row_group "Policy" 2 %}'), "tr")
+        self.assertNotIn("data-attention", plain.attrs)
+
     def test_a_row_toggle_starts_closed(self):
         # Drawn by hand in a table whose rows have no heading to keep a gutter.
         html = _render('<td class="row-gutter">a{% row_toggle %}</td>')

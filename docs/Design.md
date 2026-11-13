@@ -255,10 +255,13 @@ class of the page's:
   (`table_region ... compare=True`), or under Field and Value where nothing
   stood before. A redacted value is said only to have changed, and a document
   that would not parse is shown as its line diff. A comparison of many records
-  of one kind (a catalog's procedures, from `approval_review.grouped`) gives
-  each its `{% row_group %}`, counted, and one that does not change starts
-  folded, every field as it stands. An approval card and an audit event draw it
-  (*Gate:* `hand-drawn-change-table`).
+  of one kind (a catalog's playbooks, from `approval_review.grouped`) gives
+  each that changes its `{% row_group %}`, counted, and names the ones that
+  stay on one line under the table. A record a held request's warning names
+  is headed by the warning's words, marked for attention
+  (`row_group ... attention=True`), which
+  the card then does not repeat. The rows keep the change's own order. An
+  approval card and an audit event draw it (*Gate:* `hand-drawn-change-table`).
 - A row that asks to be read first (a message not yet read) says so in its
   `tr` with `{% row_state emphasized=True %}`: its cells are tinted and its
   links weigh more.
@@ -342,7 +345,8 @@ the same, drawn as a button, which the region keeps only where the table
 holds two rows to put in order, counted across its groups. A column of
 controls and a heading named for assistive technology alone have nothing to
 order, and `local_sort=False` keeps a table's own order, as a list page does
-with the one page of its server's order it holds. `tables.js` sorts the rows on the
+with the one page of its server's order it holds and a change table does with
+a change. `tables.js` sorts the rows on the
 page: ascending, descending, then as they came. Amounts, dates and lengths
 of time sort as what they are; a cell may say its own value with `data-sort`.
 Sections keep their own rows. No table is drawn by hand, an extension's
@@ -1519,8 +1523,15 @@ than their cadence (`hq/platform/application/freshness.py`).
 **Asked-for work is an ask.** A button that starts work which outlives the
 request is `partials/_ask.html`, from an `Ask`
 (`hq/platform/application/asks.py`). It stands where a `PageAction` does, in
-a page or panel head. Its note takes a line of its own under the row its
-button stands in, reserved before anything is said.
+a page or panel head. In a body or panel its note takes a line of its own
+under the row its button stands in, reserved before anything is said. In a
+page's head it takes no room: the head's reading line ("Last read …",
+`partials/_reading_age.html`) says it, over the words the server drew there,
+which keep their room. Under way that is "Refreshing…" for any work; a
+failure's sentence is cut to the line, whole in its title. The note is then
+heard and not seen, and once the work lands the head is drawn again, its line
+saying the new reading's age. A head with no reading line says it on the busy
+button alone.
 
 Pressing it posts; the request stores the ask and answers at once, and the
 control then says how the work stands.
@@ -1531,8 +1542,10 @@ control then says how the work stands.
 - While its own work is live the button is `aria-disabled`, not disabled: it
   keeps the focus the operator just gave it and ignores a second press.
 - When the work ends, the part of the page named by the ask's `refresh`
-  selector is fetched again and swapped in place. Without one the page loads
-  again, though not under somebody's hands and never twice running.
+  selector is fetched again and swapped in place; without one, the page's
+  content (`#content`, a region of its own). Only if that cannot be had does
+  the page load again, though not under somebody's hands and never twice
+  running; then it offers the reading as a link.
 - A failure is said in the note, where it was asked.
 
 In a table's row the note's line is as wide as the button, so there it says

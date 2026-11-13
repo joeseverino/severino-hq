@@ -23,6 +23,7 @@ from typing import Any
 from hq.platform.application.tests.tree import tagged
 from hq.platform.core.tests.task import RefError, Usage, changed_paths, git, names, usage
 from tests.mise_tasks import ROOT as TASKS_ROOT, body, mise_tasks, run_files, runs
+from tools.gate import testmap
 from tools.gate.verdict import Gate, Step, run
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -151,7 +152,8 @@ def fix(tasks: tuple[str, ...]) -> list[str]:
     words = [word for task in fixing for word in (":::", task, "--fix")][1:]
     subprocess.run(["mise", "run", "--continue-on-error", *words], cwd=ROOT, check=False, capture_output=True)
     after = dirty()
-    return sorted(path for path, digest in after.items() if before.get(path) != digest)
+    # A path in one alone was rewritten too: one the fix left as HEAD has it is no longer dirty.
+    return sorted(path for path in before.keys() | after.keys() if before.get(path) != after.get(path))
 
 
 def dirty() -> dict[str, str]:
@@ -231,13 +233,20 @@ def passed_ancestor(root: Path) -> tuple[str, int] | None:
     """(the nearest commit on HEAD's first-parent history whose tree passed,
     how many commits back), or None within PASSED_REACH."""
 
-    folder = passes(root)
+    return recorded_ancestor(passes(root), "", root)
+
+
+def recorded_ancestor(folder: Path, suffix: str, root: Path) -> tuple[str, int] | None:
+    """(the nearest commit on HEAD's first-parent history whose tree has a
+    file named by its hash and ``suffix`` in ``folder``, how many commits
+    back), or None within PASSED_REACH."""
+
     if not folder.is_dir():
         return None
     history = answered("log", "--first-parent", f"--max-count={PASSED_REACH}", "--format=%H %T", "HEAD", root=root)
     for back, line in enumerate(history):
         commit, _, tree = line.partition(" ")
-        if (folder / tree).is_file():
+        if (folder / f"{tree}{suffix}").is_file():
             return commit, back
     return None
 
@@ -415,18 +424,21 @@ def owner(path: str, apps: dict[str, str]) -> str | None:
     return None
 
 
-def affected(changed: list[str], deleted: list[str], files: list[Path]) -> tuple[set[str], set[str]]:
+def affected(
+    changed: list[str], deleted: list[str], files: list[Path], apart: frozenset[str] = frozenset()
+) -> tuple[set[str], set[str]]:
     """(modules reachable from the change through importers, apps it touches).
 
     A change in an app also selects the app's own tests and every test that
     imports any of the app: a test that drives its views through the client
-    imports its models, never its views.
+    imports its models, never its views. A path in ``apart`` touches no app:
+    the map names the tests that ran it, or it is a test module (``by_map``).
     """
 
     reverse = importers(files)
     apps = django_apps(files)
     paths = [*changed, *deleted]
-    touched = {label for path in paths if (label := owner(path, apps))}
+    touched = {label for path in paths if path not in apart and (label := owner(path, apps))}
     return app_reach(touched, apps, reverse) | import_reach(seeds(paths), reverse) | reading(paths, files), touched
 
 
@@ -553,6 +565,54 @@ def test_labels(files: list[Path], reached: set[str], touched: set[str]) -> tupl
     return sorted(picked), len(tests)
 
 
+def by_map(labels: list[str], files: list[Path]) -> list[str]:
+    """The selection read from the nearest map of the tests that ran each
+    file, when it is narrower than ``labels``, and ``labels`` otherwise; both
+    are sound, so the run takes the one with fewer modules.
+
+    The change is read from the map's tree, which passed the whole suite. A
+    Python file the map holds whose change stays inside function bodies
+    (``testmap.bodies_only``) selects the test modules that ran it there, and
+    no app; so does a test module, which no other test runs, only imports.
+    Every other path selects as without a map. A test module the recording
+    did not run (new since, or skipped there) selects by every rule."""
+
+    found = recorded_ancestor(maps(ROOT), ".json", ROOT)
+    if not found:
+        return labels
+    commit, back = found
+    tree = git("rev-parse", f"{commit}^{{tree}}", root=ROOT)[0]
+    the_map = testmap.load(maps(ROOT) / f"{tree}.json")
+    changed, deleted = changed_paths(commit, ROOT)
+    mapped = frozenset(path for path in changed if confined(path, commit, the_map))
+    tests = {module_name(p) for p in files if is_test(p)}
+    apart = mapped | {path for path in [*changed, *deleted] if is_test(Path(path))}
+    reached, touched = affected(changed, deleted, files, apart)
+    picked = set(test_labels(files, reached, touched)[0])
+    picked |= {module for path in mapped for module in the_map.tests_of(path)} & tests
+    if apart:
+        unran = set(test_labels(files, *affected(changed, deleted, files))[0]) - the_map.ran
+        picked |= unran
+    narrower = len(picked) < len(labels)
+    print(
+        f"[fast] the map of the tests that ran each file, {back} back: {len(mapped)} of the"
+        f" {len(changed) + len(deleted)} files changed since change only bodies it saw run;"
+        f" {len(picked)} test modules from it, {'taken' if narrower else 'not narrower'}"
+    )
+    return sorted(picked) if narrower else labels
+
+
+def confined(path: str, commit: str, the_map: testmap.TestMap) -> bool:
+    """Whether ``path`` is a Python file the map holds, changed since ``commit`` only inside function bodies."""
+
+    if not path.endswith(".py") or not the_map.tests_of(path):
+        return False
+    before = subprocess.run(["git", "cat-file", "blob", f"{commit}:{path}"], cwd=ROOT, capture_output=True, check=False)
+    if before.returncode:
+        return False
+    return testmap.bodies_only(before.stdout.decode(), (ROOT / path).read_text(encoding="utf-8"))
+
+
 def whole_suite(files: list[Path]) -> list[str]:
     """Every test module, which a wide change runs."""
 
@@ -653,13 +713,16 @@ def source_first(labels: list[str], files: list[Path]) -> tuple[list[str], list[
     return first, [label for label in labels if label not in first]
 
 
-def run_command(tasks: tuple[str, ...], source: list[str], labels: list[str], parallel: str) -> list[str]:
+def run_command(
+    tasks: tuple[str, ...], source: list[str], labels: list[str], parallel: str, *, record: bool = False
+) -> list[str]:
     """One run of mise for the quick gates and the tests, side by side, which
     runs every task to its end when one fails, so one run names every failure
     it reaches. A gate that takes the heavy lock itself (the shell gate) runs in
     it too, holding the run open until it has had its turn. A test both
     selected and tagged tree runs once, since Django's runner drops a repeated
-    test.
+    test. A recording run (``record``) measures the tests for the map of the tests
+    that ran each file (``record_map``).
 
     A task's own output setting outranks the config's but not ``--output``, so
     the summary is the environment's: the tests' task prints as it runs, its
@@ -667,7 +730,7 @@ def run_command(tasks: tuple[str, ...], source: list[str], labels: list[str], pa
 
     jobs = ["--jobs", "1"] if parallel == "1" else []
     gates = [word for task in tasks for word in (task, ":::")]
-    tests = [TESTS, "--parallel", parallel, *labels]
+    tests = [TESTS, "--parallel", parallel, *(["--map", str(ROOT / testmap.DATA)] if record else []), *labels]
     return [
         "env",
         f"{SOURCE}={' '.join(source)}",
@@ -682,7 +745,9 @@ def run_command(tasks: tuple[str, ...], source: list[str], labels: list[str], pa
     ]
 
 
-def gates_and_tests(tasks: tuple[str, ...], labels: list[str], files: list[Path], parallel: str) -> list[Step]:
+def gates_and_tests(
+    tasks: tuple[str, ...], labels: list[str], files: list[Path], parallel: str, *, record: bool = False
+) -> list[Step]:
     """The one run of the quick gates and the tests."""
 
     if tasks:
@@ -692,7 +757,7 @@ def gates_and_tests(tasks: tuple[str, ...], labels: list[str], files: list[Path]
     source, rest = source_first(labels, files)
     if source:
         print(f"[fast] first, the source checks that read the browser gate's modules: {' '.join(source)}")
-    return [step("quick gates and tests", run_command(tasks, source, rest, parallel))]
+    return [step("quick gates and tests", run_command(tasks, source, rest, parallel, record=record))]
 
 
 def step(label: str, cmd: list[str]) -> Step:
@@ -723,6 +788,12 @@ def passes(root: Path = ROOT) -> Path:
     return Path(common).joinpath(*PASSES)
 
 
+def maps(root: Path = ROOT) -> Path:
+    """Where the maps of the tests that ran each file are kept, beside the passed trees."""
+
+    return passes(root).parent / testmap.MAPS
+
+
 def tree_of(commit: str) -> str:
     return git("rev-parse", f"{commit}^{{tree}}")[0]
 
@@ -746,10 +817,52 @@ def record_pass(tree: str | None, base: str, *, whole: bool) -> None:
     print(f"[fast] tree {tree[:9]} {said}", flush=True)
 
 
+def record_map(tree: str | None) -> None:
+    """Keep the map a whole run measured as ``tree``'s, when the run passed on
+    a tree that held still, and say what it holds. The data goes once read:
+    the map holds what it says."""
+
+    data = ROOT / testmap.DATA
+    if not tree or not any(data.parent.glob(f"{data.name}.*")):
+        return
+    found = testmap.read(data, ROOT)
+    data.unlink(missing_ok=True)
+    testmap.save(maps(), tree, found)
+    held = f"{len(found.files)} files, {len(found.ran)} test modules"
+    print(f"[fast] the map of the tests that ran each file is kept for tree {tree[:9]}: {held}", flush=True)
+
+
+def selection(
+    changed: list[str], deleted: list[str], files: list[Path]
+) -> tuple[list[str], int, tuple[set[str], set[str]]]:
+    """(the test modules to run, how many there are, what the change reaches and the apps it touches),
+    from the base and from the nearest map, whichever selects fewer."""
+
+    reached, touched = affected(changed, deleted, files)
+    labels, total = test_labels(files, reached, touched)
+    if changed or deleted:
+        labels = by_map(labels, files)
+    return labels, total, (reached, touched)
+
+
+def judge(gate: Gate, steps: list[Step], base: str, *, whole: bool) -> int:
+    """Close the run on ``steps``: a pass records its tree, and a whole run's its map too."""
+
+    passed = all(s.ok for s in steps)
+    if passed:
+        judged = gate.judged()
+        record_pass(judged, base, whole=whole)
+        if whole:
+            record_map(judged)
+    gate.close(steps, " (full gate before push: `mise run check`)")
+    return 0 if passed else 1
+
+
 def main(asked: Usage) -> int:
     # The task's usage reads CHECK_BASE and CHECK_PARALLEL behind its own arguments.
     parallel = asked.text("parallel", "auto")
     list_only = asked.switch("list")
+    whole_asked = asked.switch("whole")
     # A run opens on where its verdict is kept; a listing keeps none.
     gate = None if list_only else Gate("fast")
     base, why = fast_base(asked.text("base") or None)
@@ -759,13 +872,13 @@ def main(asked: Usage) -> int:
         changed, deleted = fixed_first(gate, selected, base, (changed, deleted))
     walking = walk_for_tree() if changed or deleted else None
     files = python_files()
-    reached, touched = affected(changed, deleted, files)
-    labels, total = test_labels(files, reached, touched)
+    labels, total, (reached, touched) = selection(changed, deleted, files)
     counts = f"{len(changed)} changed, {len(deleted)} deleted, {len(labels)}/{total} test modules"
     print(f"[fast] base {base[:9]}, {why}: {counts}")
     every_test = len(labels) == total > 0
-    if gate and not every_test and len(labels) > WIDE * total:
-        print("[fast] wide change: the whole suite and every quick gate run, so a pass records this tree")
+    if gate and not every_test and (whole_asked or len(labels) > WIDE * total):
+        said = "asked for" if whole_asked else "wide change"
+        print(f"[fast] {said}: the whole suite and every quick gate run, so a pass records this tree and its map")
         labels, every_test = whole_suite(files), True
 
     if changed or deleted:
@@ -777,15 +890,12 @@ def main(asked: Usage) -> int:
 
     whole = (*quick_gates(), *group_tests().values())
     tasks = whole if every_test else (*selected, *group_tasks(files, reached, touched))
-    steps = gates_and_tests(tasks, labels, files, parallel)
+    whole_run = every_test and set(tasks) == set(whole)
+    steps = gates_and_tests(tasks, labels, files, parallel, record=whole_run)
     if touches_shared_ui([*changed, *deleted]):
         steps.extend(extension_suites(parallel))
     steps.append(step("patch integrity", ["git", "diff", "--check", base]))
-    passed = all(s.ok for s in steps)
-    if passed:
-        record_pass(gate.judged(), base, whole=every_test and set(tasks) == set(whole))
-    gate.close(steps, " (full gate before push: `mise run check`)")
-    return 0 if passed else 1
+    return judge(gate, steps, base, whole=whole_run)
 
 
 if __name__ == "__main__":

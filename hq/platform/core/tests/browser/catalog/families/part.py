@@ -285,7 +285,7 @@ def _approval(state, **decided):
             "tone": "attention" if pending else "",
             "asked": Asked("example-agent", "wants to adopt the playbooks of ", "a commit", " from your repository"),
             "preview": compare({}, _CHANGED_AFTER, label="Would change"),
-            "warnings": ("Example run gains the privilege example.cache_admin.",) if pending else (),
+            "warnings": ("Example run gains sudo, as the example.cache_admin profile allows.",) if pending else (),
             "resource_url": "/example/",
             "resource_label": "Playbooks",
         }
@@ -1577,10 +1577,10 @@ ENTRIES = {
             )
         },
     ),
-    # Many records of one kind, as a catalog's procedures: what belongs to
+    # Many records of one kind, as a catalog's playbooks: what belongs to
     # none, one that moves, one that is new (said by its summary, its fields
-    # folded), one that stays and so starts folded, and a document that would
-    # not parse, said as a line diff.
+    # folded), one that stays and so is only named under the table, and a
+    # document that would not parse, said as a line diff.
     "part/change-table-many": Entry(
         "{% change_table preview %}",
         {
@@ -1595,7 +1595,7 @@ ENTRIES = {
                             "example.third": {
                                 SUMMARY: {
                                     "label": "An example record",
-                                    "value": "Changes an example thing on any of your example machines.",
+                                    "value": "Changes an example thing, on any example machine, no sudo",
                                 },
                                 **_CHANGED_AFTER,
                             },

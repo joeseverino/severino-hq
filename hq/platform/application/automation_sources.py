@@ -77,9 +77,8 @@ SHORT_REVISION = 12
 # so a scan nobody has taken by then, with the worker busy with nothing else,
 # waits on a worker that is not coming.
 CLAIM_EXPECTED = timedelta(minutes=2)
-# What a queued scan says it waits on, as it waits, and what to do once the
-# worker has not come.
-WORKER_BUSY = "Waiting for HQ's playbook worker, busy with work it took {ago}"
+# What a queued scan says it waits on, and what to do once the worker has
+# not come.
 WORKER_DUE = "Waiting for HQ's playbook worker."
 WORKER_SEEN = "it last took work {ago}"
 WORKER_NEVER = "it has never taken work here"
@@ -295,8 +294,8 @@ def scan_standing(operation_id: str) -> Standing | None:
 
 def _stands(scan: OperationRequest) -> Standing:
     """How a scan stands, a queued one saying what it waits on: the
-    automation worker, when that last took any work, and what to do once it
-    has not come."""
+    automation worker, and once it has not come, when that last took any work
+    and what to do. A worker busy with other work is coming."""
 
     standing = asks.operation_standing(scan)
     if standing.state != asks.QUEUED:
@@ -305,14 +304,8 @@ def _stands(scan: OperationRequest) -> Standing:
         action__in=(models.OperationRequest.Action.SCAN, models.OperationRequest.Action.RUN)
     )
     now = timezone.now()
-    busy = (
-        worked.filter(state=models.OperationRequest.State.CLAIMED, lease_expires_at__gt=now)
-        .order_by("claimed_at")
-        .values_list("claimed_at", flat=True)
-        .first()
-    )
-    if busy is not None:
-        return replace(standing, note=ended(WORKER_BUSY.format(ago=ago(busy))))
+    if worked.filter(state=models.OperationRequest.State.CLAIMED, lease_expires_at__gt=now).exists():
+        return replace(standing, note=WORKER_DUE)
     last = worked.exclude(claimed_at=None).order_by("-claimed_at").values_list("claimed_at", flat=True).first()
     seen = WORKER_SEEN.format(ago=ago(last)) if last else WORKER_NEVER
     late = now - scan.created_at > CLAIM_EXPECTED

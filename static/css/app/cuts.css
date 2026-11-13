@@ -13,6 +13,18 @@
 
 @layer components {
 /* Page furniture: a label, a name or a note held to its line. */
+/* A head is one short line, and stays so: what one of its controls says is
+   said over the head's reading line (ask.js, partials/_ask.html), in the room the words the
+   server drew there keep, hidden and not removed, and cut to their width,
+   whole in its title. A failure says its sentence in the danger tone. */
+.page-head [data-reading-age][data-ask-said] { position: relative; color: transparent; }
+.page-head [data-reading-age][data-ask-said] * { visibility: hidden; }
+.page-head [data-reading-age][data-ask-said]::after {
+  content: attr(data-ask-said); position: absolute; inset: 0; line-height: normal;
+  color: var(--muted); visibility: visible;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.page-head [data-reading-age][data-ask-state="failed"]::after { color: var(--danger); }
 /* A page's note ends the head's first line (page.css), and a script fills it
    once the page is drawn. It stands in a slot as wide as its unseen struts
    (_visit_refresh.html), each a sentence HQ writes word for word with the

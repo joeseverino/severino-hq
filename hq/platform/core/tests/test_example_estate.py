@@ -209,12 +209,11 @@ class ExampleEstateTests(TestCase):
         shown = approval_review.review(held)
         groups = {group.label: group for group in shown["preview"].groups}
 
-        self.assertTrue(shown["warnings"], "a widening is said before anything is approved")
+        said = (*shown["warnings"], *(group.warning for group in groups.values() if group.warning))
+        self.assertTrue(said, "a widening is said before anything is approved")
         self.assertEqual(set(groups), {procedure["title"] for procedure in automation.PROCEDURES + automation.WIDENED})
         self.assertTrue(any(group.changed for group in groups.values()))
-        self.assertTrue(
-            any(not group.changed for group in groups.values()), "a procedure that stays is shown as it stands"
-        )
+        self.assertTrue(shown["preview"].unchanged, "a playbook that stays is named")
 
     def test_each_held_request_s_card_links_the_record_it_acts_on_by_name(self):
         client = Client()

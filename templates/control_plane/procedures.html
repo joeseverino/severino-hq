@@ -8,8 +8,8 @@ decide on unless it is the one adopted, `review_held`, whether a card below
 holds its adoption, `adopt`, the Adopt command's link for a reader who may
 adopt it, `review_said` and `adopted_said`, each commit in a line, and
 `adopted`, the catalog's rows, drawn when `shows_adopted`. On a commit's own
-page (`own_page`) only that commit is drawn, and its lede says why a refused
-one has nothing to do. Every name on it is the catalog's or a scan's.
+page (`own_page`) only that commit is drawn. Every name on it is the
+catalog's or a scan's.
 
 It reads in the order a person decides in: what runs now, the newest commit
 read and whether it can be adopted, then what waits for a person.
@@ -26,7 +26,7 @@ the deployment.
             {% table_heading "Playbook" local_sort=True %}
             {% table_heading "Effect" local_sort=True %}
             {% table_heading "Runs on" "identifier" drop=1 local_sort=True %}
-            {% table_heading "Privilege" "identifier" drop=2 local_sort=True %}
+            {% table_heading "Access" drop=2 local_sort=True %}
           </tr>
         </thead>
         <tbody>
@@ -35,7 +35,7 @@ the deployment.
             <td><a href="{{ row.url }}">{{ row.procedure.title|breakable }}</a></td>
             <td>{{ row.effect|breakable }}</td>
             <td>{% for host in row.procedure.hosts %}{% entity "machine"|entity_of:host %}{% if not forloop.last %}<br>{% endif %}{% empty %}{{ row.anywhere|breakable }}{% endfor %}</td>
-            <td>{% if row.procedure.privilege %}<code>{{ row.procedure.privilege|breakable }}</code>{% else %}None{% endif %}</td>
+            <td>{{ row.access|breakable }}</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -51,14 +51,12 @@ the deployment.
   {% if review.refused %}
     {% notice tone="error" %}
       <ul>{% for reason in review.refused %}<li>{{ reason|breakable }}</li>{% endfor %}</ul>
-      {% if not own_page %}<p>Fix these in your repository.{% if shows_adopted and adopted %} HQ keeps running the adopted playbooks.{% endif %}</p>{% endif %}
     {% title %}HQ can't adopt this commit{% endnotice %}
   {% elif review_held %}
     <p>Its adoption waits for approval.</p>
   {% elif review.preview %}
     {% if review.widens %}
       {% notice tone="warning" title="More access" %}
-        <p>Adopting this commit gives its playbooks more access:</p>
         <ul>{% for widening in review.widens %}<li>{{ widening|breakable }}</li>{% endfor %}</ul>
       {% endnotice %}
     {% endif %}

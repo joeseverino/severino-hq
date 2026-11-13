@@ -1,3 +1,3 @@
 {% comment %}
 <!-- ast-grep-ignore: hand-drawn-row-group --> the row group tag's own row
-{% endcomment %}<tr class="row-group"{% if folds %} id="{{ folds }}" data-folds{% endif %}><th class="row-gutter" scope="rowgroup">{% if folds %}{% include "partials/_row_fold.html" with label=label only %}{% endif %}{% if href %}<a href="{{ href }}">{{ label|breakable }}</a>{% else %}{{ label|breakable }}{% endif %}{% if count is not None %} <span class="count">{{ count|breakable }}</span>{% endif %}</th></tr>
+{% endcomment %}<tr class="row-group"{% if attention %} data-attention{% endif %}{% if folds %} id="{{ folds }}" data-folds{% endif %}><th class="row-gutter" scope="rowgroup">{% if folds %}{% include "partials/_row_fold.html" with label=label only %}{% endif %}{% if href %}<a href="{{ href }}">{{ label|breakable }}</a>{% else %}{{ label|breakable }}{% endif %}{% if count is not None %} <span class="count">{{ count|breakable }}</span>{% endif %}</th></tr>

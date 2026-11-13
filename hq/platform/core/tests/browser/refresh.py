@@ -1,13 +1,16 @@
-"""A refresh that lands moves nothing on the page it lands on.
+"""A refresh that lands moves nothing on the page it lands on, nor while it is under way.
 
 A page about one thing asks for its readings once it is showing, and swaps
 what it read into the page in place (partials/_visit_refresh.html): every part
 of the content but the ask, through fragment.js. Nothing moves once a page is
 drawn (CLAUDE.md, "Frontend quality bar"), so what the swap brings may say
-more or less than what was drawn, and every box stays where it stood. WebKit
+more or less than what was drawn, and every box stays where it stood. A
+Refresh pressed in a page's head is the same: what it says while under way
+takes no room (static/js/ask.js), and its result is drawn in place. WebKit
 keeps no layout-shift record, so the boxes are read before and after.
 """
 
+import json
 from typing import override
 from unittest import mock
 from urllib.parse import urlsplit
@@ -15,12 +18,14 @@ from urllib.parse import urlsplit
 from django.db import transaction
 from django.test import Client
 
+from hq.platform.core.tests.browser.estate import ExampleEstateGate
 from hq.platform.core.tests.browser.gate import BrowserGate, answered
 from hq.platform.core.tests.browser.probes.settle import FONTS_READY, SETTLE
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import ORIGIN
 from hq.platform.core.tests.browser.widths import viewport
 lazy from hq.platform.application import glance
+lazy from hq.platform.application.asks import DONE, QUEUED, Standing
 lazy from hq.platform.core import seeds
 lazy from hq.platform.core.example_estate import REQUEST
 lazy from hq.platform.core.example_estate.testing import as_production, sign_in
@@ -114,3 +119,97 @@ class RefreshLandingBrowserTests(BrowserGate):
                 self.settle()
 
                 self.assertEqual(self.page.evaluate(BOXES, BOXES_ARGS), drawn)
+
+
+# Where a pressed ask is followed. The press is answered as asks.answer
+# answers a script, under way with a sentence longer than a head has room
+# for; this address then answers that it is done.
+_FOLLOWED = "/probe-ask-status/"
+# Set before the press, so a page loaded again is told apart.
+_MARK = "() => { window.probeDrawn = true; }"
+_STILL_DRAWN = "() => window.probeDrawn === true"
+_BUSY = "() => !!document.querySelector('[data-ask][aria-busy=\"true\"]')"
+_IDLE = "() => !document.querySelector('[data-ask][aria-busy=\"true\"]')"
+# The work's end is polled for at the pace ask.js keeps, well inside this.
+_LANDS_WITHIN_MS = 30_000
+
+
+def _head_asks(pages):
+    """The estate's pages whose head holds an ask, read from what the server drew."""
+
+    found = []
+    for (path, part), body in pages.items():
+        head = str(body).partition('<header class="page-head">')[2].partition("</header>")[0]
+        if not part and "data-ask-button" in head:
+            found.append(path)
+    return found
+
+
+class PressedRefreshBrowserTests(ExampleEstateGate):
+    """Every page of the example estate with an ask in its head, pressed
+    where a reader finds it, beside the title or in the head's menu: while
+    the work is under way and once it lands nothing on the page has moved,
+    and what it read is drawn in place, never offered as a link."""
+
+    # Where the ask pressed posts, which this answers as HQ would.
+    pressed = ""
+
+    @override
+    def start(self, **options):
+        super().start(**options)
+        # What the page asked to have drawn again since the press.
+        self.redrawn = []
+
+    @override
+    def answer(self, route):
+        request = route.request
+        path = urlsplit(request.url).path
+        if request.method == "POST" and path == self.pressed:
+            waiting = Standing(QUEUED, "Waiting for HQ's playbook worker to take it, then reading it again.")
+            body = json.dumps({**waiting.as_json(), "status": _FOLLOWED})
+            route.fulfill(status=202, content_type="application/json", body=body)
+            return
+        if path == _FOLLOWED:
+            route.fulfill(content_type="application/json", body=json.dumps(Standing(DONE, "Read.").as_json()))
+            return
+        if self.pressed and request.headers.get("x-requested-with"):
+            self.redrawn.append(path)
+        super().answer(route)
+
+    def press(self):
+        """The head's ask, pressed beside the title, or in the head's menu
+        where the head keeps it there."""
+
+        beside = self.page.locator(SELECTORS["head_ask_button"]).first
+        if beside.count() and beside.is_visible():
+            pressing = beside
+        else:
+            self.page.locator(f"{SELECTORS['head_menu']} > button").first.click()
+            pressing = self.page.locator(f"{SELECTORS['head_menu_panel']} [data-ask-button]").first
+        self.pressed = urlsplit(pressing.get_attribute("formaction") or "").path
+        self.page.evaluate(_MARK)
+        pressing.click()
+
+    def test_pressing_a_heads_ask_moves_nothing_and_draws_the_reading_in_place(self):
+        pages = _head_asks(self.pages)
+        self.assertGreater(len(pages), 1, "the estate drew almost no head with an ask")
+        for path in pages:
+            for width in LANDS_AT:
+                with self.subTest(page=path, width=width):
+                    self.pressed, self.redrawn = "", []
+                    self.visit(path, width)
+                    self.page.evaluate(SETTLE)
+                    drawn = self.page.evaluate(BOXES, BOXES_ARGS)
+                    self.press()
+                    self.page.wait_for_function(_BUSY)
+                    self.settle()
+                    self.assertEqual(self.page.evaluate(BOXES, BOXES_ARGS), drawn, "moved while under way")
+
+                    self.page.wait_for_function(_IDLE, timeout=_LANDS_WITHIN_MS)
+                    self.in_flight.settle(f"{path} at {width}px, landed")
+                    self.settle()
+                    self.assertTrue(self.page.evaluate(_STILL_DRAWN), "loaded the page again")
+                    self.assertEqual(self.page.evaluate(BOXES, BOXES_ARGS), drawn, "moved once landed")
+                    self.assertFalse(self.page.locator(SELECTORS["head_offer"]).count(), "offered the reading")
+                    self.assertTrue(self.redrawn, "drew nothing in place")
+                    self.assertEqual(self.unanswered, [])

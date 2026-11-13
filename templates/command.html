@@ -1,8 +1,10 @@
 {% extends "form_page.html" %}
 {% block before %}
 {% comment %}
-A command is its title, what it will change (the lede), its fields and one
-button named for what it does. How it is built belongs to the API reference.
+A command is its title, its fields and one button named for what it does.
+Its summary is for agents, so it draws no lede. How it is built belongs to
+the API reference. A result that only says work was queued draws nothing:
+that work stands in its own row.
 {% endcomment %}
 {% if result %}
 <div class="section-flow">

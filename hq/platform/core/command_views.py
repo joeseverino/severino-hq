@@ -31,7 +31,6 @@ from hq.platform.application.integration_specs import ON_ITS_PAGE, capability_sc
 from hq.platform.application.integrations import integration_graph
 from hq.platform.application.pages import page_context
 from hq.platform.application.payload_words import value_words
-from hq.platform.application.records import says_only_its_title
 from hq.platform.application.refusal_status import refusal_of
 from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.service_context import Cell, ServiceSection
@@ -69,6 +68,18 @@ def _result_projection(payload: dict) -> tuple[tuple[tuple[str, str], ...], Serv
     )
     listed = next(((key, value) for key, value in payload.items() if _is_flat_records(value)), None)
     return facts, _result_table(*listed) if listed else None
+
+
+# What a command that queues work answers beside it: whether this call queued
+# it, which the work's own row says as its state.
+_QUEUED_WORK = frozenset({"ok", "queued", "operation"})
+
+
+def _only_queues(payload: dict) -> bool:
+    """Whether a result says only that work was queued, so the page draws no
+    result: the work stands in its own row, among its runs or on Jobs."""
+
+    return "operation" in payload and set(payload) <= _QUEUED_WORK
 
 
 def _is_flat_records(value: object) -> bool:
@@ -141,6 +152,8 @@ class CommandView(View):
         return saved
 
     def _context(self, form, *, result=None):
+        if result and _only_queues(result["payload"]):
+            result = None
         resource = integration_graph().resources.get(self.spec.subject_resource)
         schema = capability_schema(self.spec)
         facts, table = _result_projection(result["payload"]) if result else ((), None)
@@ -154,11 +167,9 @@ class CommandView(View):
         else:
             trail = (("Search", reverse("search")),)
         return {
-            **page_context(
-                self.spec.title,
-                "" if says_only_its_title(self.spec) else self.spec.summary,
-                trail=trail,
-            ),
+            # No lede: the summary is the agent's description of the command,
+            # and the page says what it changes in its fields and its button.
+            **page_context(self.spec.title, trail=trail),
             "command": self.spec,
             "command_label": self.spec.title,
             "chosen_target": self._chosen_target(form),

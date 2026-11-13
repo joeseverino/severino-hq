@@ -381,16 +381,20 @@ def table_heading(
 
 
 @register.inclusion_tag("partials/_row_group.html")
-def row_group(label: str, count: int | None = None, *, folds: str = "", href: str = "") -> dict[str, Any]:
+def row_group(
+    label: str, count: int | None = None, *, folds: str = "", href: str = "", attention: bool = False
+) -> dict[str, Any]:
     """The heading row of one group of a table's rows, first in that group's
     ``tbody``: its name and, given one, how many rows it holds. It spans every
     column, which its region counts from the table's headings, and its name
     keeps the edge of the rows' names. ``folds`` is the row's id when the group
     starts folded away: its rows name it in ``data-folded``, and its toggle
     stands in the rows' gutter. ``href`` is the page the group's rows are
-    dealt with on together, which its name links to."""
+    dealt with on together, which its name links to. ``attention`` marks a
+    group a reader should weigh before the rest, such as a change that lets a
+    record do more, whose words beside its name say why."""
 
-    return {"label": label, "count": count, "folds": folds, "href": href}
+    return {"label": label, "count": count, "folds": folds, "href": href, "attention": attention}
 
 
 @register.inclusion_tag("partials/_row_actions.html")

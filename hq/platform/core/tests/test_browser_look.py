@@ -9,7 +9,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from contextlib import contextmanager
+from contextlib import contextmanager, redirect_stderr
 from pathlib import Path
 from unittest import mock
 
@@ -124,14 +124,21 @@ class AskedFirstTests(SimpleTestCase):
         The base names no commit, so a look at it first would be refused for that instead.
         """
 
-        for kept in ("clock_at", "asked"):
+        for kept in ("clock_at", "asked", "tree", "tree_store"):
             self.addCleanup(lambda kept=kept: kept in vars(look.Look) and delattr(look.Look, kept))
         environment = {**ASKED, "usage_base": "example-missing", "usage_seed": "showcase", **asked}
+        printed = io.StringIO()
         with (
             mock.patch.dict(os.environ, environment, clear=True),
-            self.assertRaisesMessage(AssertionError, said),
+            redirect_stderr(printed),
+            self.assertRaises(SystemExit) as exited,
         ):
             look.Look.setUpClass()
+        look.Look.doClassCleanups()
+        # A usage error, as the early check's, never a failure of the look's class.
+        self.assertEqual(exited.exception.code, 64)
+        self.assertIn(said, printed.getvalue())
+        return printed.getvalue()
 
     def test_a_rule_that_does_not_exist_is_refused_with_the_rules_that_do_before_the_base_is_looked_at(self):
         self.refused_before_the_base(
@@ -575,12 +582,17 @@ class ReportTests(SimpleTestCase):
                 verdict = look_report.verdict_line("survey", found)
                 self.assertIn(" 3 pages at 2 widths (402, 1360)", verdict)
 
-    def test_a_line_names_each_page_and_width_with_a_finding_and_where_they_are_kept(self):
+    def test_a_line_names_each_page_and_width_with_its_first_finding_inline_and_where_they_are_kept(self):
         lines = look_report.found_lines(self.FOUND, lambda name, width: f"var/look/{name}-{width}.txt")
         self.assertEqual(len(lines), 2)
-        self.assertTrue(lines[0].startswith("example/one at 402: 1 found"), lines)
-        self.assertTrue(lines[0].endswith("var/look/example/one-402.txt"), lines)
-        self.assertTrue(lines[1].startswith("example/three at 402: 2 found"), lines)
+        one, three = lines
+        self.assertTrue(one.startswith("example/one at 402: "), lines)
+        # The finding as found, its check's name first, so the failure needs no file opened.
+        self.assertIn("overflow: a box past the edge", one)
+        self.assertIn("var/look/example/one-402.txt", one)
+        self.assertIn("overlap: two names", three)
+        self.assertNotIn("frames: a frame", three, "the first finding, and the rest in the file")
+        self.assertIn("2 found", three)
 
     def test_against_a_base_only_new_findings_fail_and_fixed_ones_are_named(self):
         base = {
@@ -849,6 +861,7 @@ class _Unanswered:
         self.unanswered_pages = {"estate/example": 404}
         # The tree the run began on, unchanged at its close.
         self.tree = "example-tree"
+        self.tree_store, self.base_unfit = None, ""
 
 
 @tag("source")
@@ -858,7 +871,7 @@ class UnansweredTests(SimpleTestCase):
             tempfile.TemporaryDirectory() as folder,
             override_settings(BASE_DIR=folder),
             mock.patch.object(look, "this_run", lambda: Path(folder, "var", "look", "example-run")),
-            mock.patch.object(look, "tree_of", lambda _root: "example-tree"),
+            mock.patch.object(look, "changed_since", lambda *_: []),
             mock.patch.dict(os.environ, ASKED, clear=True),
             mock.patch("sys.stdout", new_callable=io.StringIO) as said,
         ):

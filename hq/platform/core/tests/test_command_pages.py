@@ -40,7 +40,7 @@ from .command_shapes import SWITCH_WORDS, optional_fields, sets_yes_or_no
 
 User = get_user_model()
 # The changes said on their page, by the confirmation their button waits on.
-# A change to HQ alone is said by its lede and its button.
+# A change to HQ alone is said by its button.
 CONFIRMED = {"infrastructure_change", "destructive"}
 
 
@@ -160,11 +160,8 @@ class EveryHeldRequestTests(TestCase):
 
     def said(self, held) -> tuple[str, str]:
         page = self.client.get(reverse("core:approval_entry", kwargs={"approval_id": held.id}), follow=True)
-        (card,) = [
-            element.words
-            for element in within(page, "data-approval")
-            if "section-lede" in element.attrs.get("class", "")
-        ]
+        # The card's heading is what was asked.
+        card = next(element.words for element in within(page, "data-approval") if element.tag in ("h2", "h3"))
         (bell,) = [item.title for item in waiting_for_approval() if item.key == f"approval:{held.id}"]
         return card, bell
 

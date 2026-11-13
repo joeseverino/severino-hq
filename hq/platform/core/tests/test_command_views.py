@@ -118,12 +118,15 @@ class CommandViewTests(TestCase):
         for built in ("Handler", "Preview"):
             self.assertNotIn(built, text(response))
 
-    def test_a_lede_says_what_the_title_does_not(self):
-        restated = self.client.get("/commands/project.create/")
-        declared = self.client.get("/commands/certificate.renew/")
+    def test_no_command_page_draws_the_agents_summary(self):
+        """A summary is the agent's description: MCP, the API and the CLI
+        carry it, and the page says the command by its title and fields."""
 
-        self.assertFalse(with_class(restated, "page-lede"))
-        self.assertIn(capability_registry()["certificate.renew"].summary, text(declared))
+        for name in ("project.create", "certificate.renew"):
+            with self.subTest(command=name):
+                page = self.client.get(f"/commands/{name}/")
+                self.assertFalse(with_class(page, "page-lede"))
+                self.assertNotIn(capability_registry()[name].summary, text(page))
 
     def test_the_trail_names_where_the_form_lives(self):
         response = self.client.get("/commands/project.create/")
@@ -423,6 +426,17 @@ class CommandResultProjectionTests(TestCase):
         (raw,) = select(response, "id", "command-result-json")
         self.assertNotIn("open", raw.attrs)
         self.assertIn('"resolver": "Example"', raw.words)
+
+    def test_a_result_that_only_queued_work_draws_nothing(self):
+        """The work stands in its own row, so the page draws no Done
+        section for a result that says only it was queued."""
+
+        payload = {"ok": True, "queued": True, "operation": {"id": "example", "state": "queued"}}
+
+        response = self._run("lookup.name.read", payload, {"name": "example.test"})
+
+        self.assertIsNone(result_title(response))
+        self.assertFalse(select(response, "id", "command-result-json"))
 
     def test_a_shape_the_rules_do_not_fit_shows_the_json_open(self):
         payload = {"ok": True, "nested": {"deep": [1, 2]}, "mixed": [{"a": 1}, {"b": {"c": 2}}]}

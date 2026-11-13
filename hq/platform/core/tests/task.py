@@ -97,7 +97,20 @@ def usage() -> Usage:
 
 
 class PageRefused(Exception):
-    """A page asked for that is none, with the names it would take instead."""
+    """A page asked for that is none, with the names it would take instead:
+    ``instead`` holds each refused name's nearest, as it is typed, or "" for
+    one with none, so a tool can say the command that reruns with them."""
+
+    def __init__(self, said: str, instead: Mapping[str, str]):
+        super().__init__(said)
+        self.instead = dict(instead)
+
+
+def _refused(name: str, said: str, offers: Sequence[str]) -> PageRefused:
+    """``name`` refused with ``said`` and the names it would take, the nearest first."""
+
+    head = said + ("; type one of these instead:" if offers else "")
+    return PageRefused(head + _offered(offers), {name: offers[0].split(" (", 1)[0] if offers else ""})
 
 
 @dataclass(frozen=True, slots=True)
@@ -269,7 +282,7 @@ def _record(name: str, records: Records | None, every: Sequence[str]) -> str:
     first page ``_drawn`` finds that draws it, an address or a catalog entry's name."""
 
     if records is None:
-        raise PageRefused(f"No page {name}: here a record's page is named by its path, estate/<path>")
+        raise _refused(name, f"No page {name}: here a record's page is named by its path, estate/<path>", [])
     if name.startswith(TEMPLATE):
         template = name.removeprefix(TEMPLATE)
         if found := next((found for found, page in _drawn(records, every) if page.draws(template)), None):
@@ -279,24 +292,22 @@ def _record(name: str, records: Records | None, every: Sequence[str]) -> str:
             by_last.setdefault(known.rsplit("/", 1)[-1], []).append(known)
         close = difflib.get_close_matches(template.rsplit("/", 1)[-1], by_last, n=_NEAREST, cutoff=0.6)
         offers = [f"{TEMPLATE}{known}" for match in close for known in by_last[match]]
-        said = f"No page or catalog entry draws {template}" + ("; type one of these instead:" if offers else "")
-        raise PageRefused(said + _offered(offers[:_NEAREST]))
+        raise _refused(name, f"No page or catalog entry draws {template}", offers[:_NEAREST])
     if address := next(_of_route(name, records), None):
         return address
     linked = sorted({_route(address) for address in records.linked()} & _record_routes())
     offers = difflib.get_close_matches(name, linked, n=_NEAREST, cutoff=0.5)
-    said = f"No record of {name} is linked from the estate's pages" + ("; type one of these instead:" if offers else "")
-    raise PageRefused(said + _offered([f"{offer} (its first record)" for offer in offers]))
+    said = f"No record of {name} is linked from the estate's pages"
+    raise _refused(name, said, [f"{offer} (its first record)" for offer in offers])
 
 
-def _no_record(address: str, records: Records) -> str:
+def _no_record(name: str, address: str, records: Records) -> PageRefused:
     """A record's address the estate does not answer, refused with that route's records it does."""
 
     route = _route(address)
     theirs = [estate_name(known) for known in islice(_of_route(route, records), _RECORDS_OFFERED)]
     offers = [f"{route} (its first record)", *theirs] if theirs else []
-    said = f"No record at {estate_name(address)} in the estate" + ("; type one of these instead:" if offers else "")
-    return said + _offered(offers)
+    return _refused(name, f"No record at {estate_name(address)} in the estate", offers)
 
 
 def _address(name: str, every: Sequence[str]) -> str | None:
@@ -341,9 +352,9 @@ def _one_page(
         return _record(name, records, every)
     if (address := _address(name, every if by_word else ())) is None:
         offers = nearest(urlsplit(estate_path(name)).path if is_estate(name) else name, named)
-        raise PageRefused(f"No page {name}" + ("; type one of these instead:" if offers else "") + _offered(offers))
+        raise _refused(name, f"No page {name}", offers)
     if records is not None and _takes_a_record(address) and records.at(address) is None:
-        raise PageRefused(_no_record(address, records))
+        raise _no_record(name, address, records)
     return address
 
 
@@ -375,7 +386,7 @@ def pages(
     tool knows by name. Every name that is no page is refused together, each
     with the names it would take."""
 
-    found, refused = [], []
+    found, refused, instead = [], [], {}
     record_routes = _record_routes()
 
     def estate() -> list[str]:
@@ -395,9 +406,10 @@ def pages(
                 found.append(_one_page(name, every, named, records, record_routes, by_word=by_word))
             except PageRefused as said:
                 refused.append(str(said))
+                instead |= said.instead
     if refused:
         raise PageRefused(
-            "\n".join([*refused, _kinds(by_word=by_word, named=bool(named), records=records is not None)])
+            "\n".join([*refused, _kinds(by_word=by_word, named=bool(named), records=records is not None)]), instead
         )
     return list(dict.fromkeys(found))
 

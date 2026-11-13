@@ -293,7 +293,9 @@ class HeldAdoptionTests(AdoptionTestCase):
             with self.subTest(widening=widening):
                 held = self.held(self.proposed(found), key=f"example-agent-adopt-{index}")
 
-                self.assertTrue(review(held)["warnings"], "the person deciding is warned of what it widens")
+                shown = review(held)
+                said = (*shown["warnings"], *(group.warning for group in shown["preview"].groups if group.warning))
+                self.assertTrue(said, "the person deciding is warned of what it widens")
         self.assertEqual(self.adopted(), [FIRST])
 
     def test_a_widening_names_each_playbook_by_its_title_and_its_id_only_beside_a_shared_title(self):
@@ -308,7 +310,7 @@ class HeldAdoptionTests(AdoptionTestCase):
         self.assertEqual(
             list(planned.widens),
             [
-                "The check procedure (example.check) gains the privilege example.root.",
+                "The check procedure (example.check) gains sudo, as the example.root profile allows.",
                 "The check procedure (example.twin) is new, and it stops or deletes.",
             ],
         )

@@ -51,6 +51,7 @@ lazy from django.test import TransactionTestCase
 
 from hq.config.imports import lazily
 from hq.config.sandbox import shared_tempdir
+from hq.platform.core.coverage_contexts import ModuleContexts
 from hq.platform.core.isolation_testing import CompositionIsolation, own_markers, patches_leave_no_copy
 from hq.platform.core.live_objects import live
 lazy from hq.platform.application import plugins, roles
@@ -615,7 +616,7 @@ class CompositionRemoteResult(_StallMarks, CompositionIsolation, RemoteTestResul
         self.events.append(("addClassTime", self.test_index, seconds))
 
 
-class ClassTimedSuite(unittest.TestSuite):
+class ClassTimedSuite(ModuleContexts):
     """A suite that tells its result how long each class took, from its
     ``setUpClass`` to the end of its ``tearDownClass``, and keeps the stall
     watch on while it runs.

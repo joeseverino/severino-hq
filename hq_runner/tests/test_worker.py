@@ -99,6 +99,44 @@ class SuccessTests(PassTestCase):
         self.assertEqual(bridge.reports, [])
 
 
+class ResultTests(PassTestCase):
+    """A run that succeeded says what its playbook found or did, never only that it ended."""
+
+    def test_the_result_a_playbook_states_with_set_stats_is_its_report_s_message(self):
+        bridge = fakes.Bridge(fakes.pending(verification=["The service answers"]))
+
+        self.work(bridge, fakes.Runner([*fakes.WELL[:-1], fakes.STATED]))
+
+        report = self.only_report(bridge)
+        self.assertTrue(report["success"])
+        self.assertEqual(report["message"], fakes.STATED["event_data"]["artifact_data"]["result"])
+
+    def test_a_result_set_machine_by_machine_names_each_machine(self):
+        stated = json.loads(json.dumps(fakes.STATED))
+        stated["event_data"]["artifact_data"]["result"] = {"example-b": "Two", "example-a": "One"}
+        bridge = fakes.Bridge(fakes.pending())
+
+        self.work(bridge, fakes.Runner([stated]))
+
+        self.assertEqual(self.only_report(bridge)["message"], "example-a: One; example-b: Two")
+
+    def test_a_playbook_that_states_none_reports_what_its_record_says_shows_it_worked(self):
+        bridge = fakes.Bridge(fakes.pending(verification=["The service answers", "Its port is open."]))
+
+        self.work(bridge, fakes.Runner(fakes.WELL))
+
+        self.assertEqual(self.only_report(bridge)["message"], "The service answers. Its port is open.")
+
+    def test_a_secret_in_a_stated_result_never_reaches_the_report(self):
+        stated = json.loads(json.dumps(fakes.STATED))
+        stated["event_data"]["artifact_data"]["result"] = f"Read the key {PRIVATE_KEY}"
+        bridge = fakes.Bridge(fakes.pending())
+
+        self.work(bridge, fakes.Runner([stated]))
+
+        self.assertNotIn("PRIVATE KEY", self.only_report(bridge)["message"])
+
+
 class FailedRunTests(PassTestCase):
     def test_a_failed_task_reports_failure_and_names_the_task(self):
         bridge = fakes.Bridge(fakes.pending())

@@ -146,7 +146,7 @@ class Ask:
     # The resource that says how the work stands while it is live.
     status_url: str = ""
     # A CSS selector for the part of the page the result shows in, fetched
-    # again when the work ends; without one the page is loaded again.
+    # again when the work ends; without one, the page's content.
     refresh: str = ""
     name: str = "action"
     value: str = ""

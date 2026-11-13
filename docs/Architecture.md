@@ -1490,7 +1490,12 @@ off, so a scan reports each such directory. While it runs the worker renews
 the lease and stops when HQ answers stop or a renewal fails, and
 ansible-runner's own job timeout ends it at the manifest's `timeout_seconds`. Its report carries one event
 per task and machine, built from Ansible's message alone and struck of
-secrets: the run's secret parameters, the token and each identity's path. A
+secrets: the run's secret parameters, the token and each identity's path.
+A run that succeeded says what its playbook found or did: the `result` it
+set with `ansible.builtin.set_stats` (`per_host: false`), which ansible-runner
+hands over as the `artifact_data` of the `playbook_on_stats` event, each machine
+by name when it is keyed by machine. A playbook that sets none is said by
+its verification, which its checks have just held (`hq_runner/events.py`). A
 journal names each claim before it is sent and records a run once it starts,
 so a claim retried after a crash is answered the same run, which is reported
 as unknown and never run again. `mise run smoke:runner` runs a real playbook

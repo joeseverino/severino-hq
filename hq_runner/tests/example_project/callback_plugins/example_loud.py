@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from ansible.plugins.callback import CallbackBase  # type: ignore[import-not-found]  # ansible-core is the runner group's alone
+from ansible.plugins.callback import CallbackBase
 
 
 class CallbackModule(CallbackBase):

@@ -81,20 +81,24 @@ class ProceduresPageTests(TestCase):
             with self.subTest(procedure=procedure.id):
                 self.assertIn(command_url(capability_name(procedure.id)), links)
 
-    def test_the_adopted_table_says_where_each_playbook_runs_and_its_privilege_in_words(self):
+    def test_the_adopted_table_says_where_each_playbook_runs_and_its_access_as_its_run_page_does(self):
         from hq.platform.application.automation_adoption import procedures
 
         said = _words(self.page(), "procedures-adopted")
         for procedure in procedures():
             with self.subTest(procedure=procedure.id):
                 self.assertNotIn(procedure.id, said, "the title links its page, so its id is not said again")
+                if procedure.privilege:
+                    self.assertIn(f"sudo, as the {procedure.privilege} profile allows", said)
                 if not procedure.hosts:
-                    self.assertIn("Any of your machines", said)
+                    self.assertIn("Any machine", said)
+        self.assertIn("No sudo", said)
         self.assertNotIn("–", said)
 
-    def test_only_a_refused_commit_s_page_carries_a_lede(self):
+    def test_no_playbooks_page_carries_a_lede(self):
         pk = self.held().payload["proposal"]
-        for html in (self.page(), self.page(self.proposal_url(pk))):
+        refused = SourceProposal.objects.order_by("-pk").first().pk
+        for html in (self.page(), self.page(self.proposal_url(pk)), self.page(self.proposal_url(refused))):
             with self.subTest():
                 self.assertFalse(select(html, "class", "page-lede"))
 
@@ -105,11 +109,13 @@ class ProceduresPageTests(TestCase):
         adopted = AdoptedCatalog.objects.order_by("-pk").first().proposal
         self.assertTrue(within(self.page(self.proposal_url(adopted.pk)), "id", "procedures-adopted"))
 
-    def test_a_refused_commit_s_own_page_says_in_its_lede_why_nothing_can_be_done(self):
+    def test_a_refused_commit_says_what_is_wrong_and_nothing_more(self):
         refused = SourceProposal.objects.order_by("-pk").first()
-        said = text(self.page(self.proposal_url(refused.pk)))
-        self.assertIn("HQ can't adopt this commit.", said)
-        self.assertNotIn("Fix these in your repository.", said)
+        for html in (self.page(), self.page(self.proposal_url(refused.pk))):
+            with self.subTest():
+                told = within(html, "class", "notice-error")
+                self.assertTrue([element for element in told if element.tag == "li"])
+                self.assertFalse([element for element in told if element.tag == "p"])
 
     def test_each_commit_says_who_committed_it(self):
         adopted = AdoptedCatalog.objects.order_by("-pk").first()
@@ -156,7 +162,6 @@ class ProceduresPageTests(TestCase):
         self.assertIn(newest.revision[:12], said)
         self.assertIn("The newest commit HQ has read", said)
         self.assertIn("HQ can't adopt this commit", said)
-        self.assertIn("HQ keeps running the adopted playbooks.", said)
         # The held commit is the card's, the adopted one the table's.
         self.assertIn(str(self.held().baseline["revision"])[:12], _card(html))
         adopted = AdoptedCatalog.objects.order_by("-pk").first()
@@ -201,10 +206,19 @@ class ProceduresPageTests(TestCase):
         self.assertIn("development server has no worker", late["note"])
         self.assertIn("hq-host automation", waiting)
 
-    def test_a_refresh_behind_work_the_worker_carries_says_so(self):
+    def test_a_refresh_behind_work_the_worker_carries_waits_for_it_in_a_few_words(self):
+        from datetime import timedelta
+        from unittest import mock
+
         self.assertTrue(OperationRequest.objects.filter(state=OperationRequest.State.CLAIMED).exists())
         answered = json.loads(self.client.post(reverse("control_plane:procedures_refresh"), _sent(), **XHR).content)
-        self.assertIn("busy with work it took", answered["note"])
+        self.assertIn("playbook worker", answered["note"])
+        # What else the worker is doing, and when it took it, is not the reader's question.
+        self.assertNotIn("took", answered["note"])
+        # A worker busy elsewhere is coming, however long the scan has waited.
+        with mock.patch("hq.platform.application.automation_sources.CLAIM_EXPECTED", timedelta(0)):
+            late = json.loads(self.client.get(answered["status"]).content)
+        self.assertNotIn("hq-host automation", late["note"])
 
     def test_a_commit_hq_cannot_adopt_lists_every_reason_and_offers_no_adopt(self):
         from hq.platform.application.automation_adoption import plan
@@ -241,6 +255,24 @@ class ProceduresPageTests(TestCase):
         hrefs = {element.attrs["href"] for element in select(self.page(), "href")}
         self.assertNotIn(reverse("core:approval_entry", kwargs={"approval_id": held.id}), hrefs)
         self.assertNotIn(self.proposal_url(held.payload["proposal"]), hrefs)
+
+    def test_a_held_adoption_says_each_widening_once_beside_the_playbook_it_names(self):
+        from hq.platform.application.automation_adoption import plan
+
+        held = self.held()
+        widens = plan(held.payload["proposal"]).widens
+        self.assertTrue(widens)
+        html = self.page()
+        card = within(html, "data-approval", "pending")
+        heads = [element for element in card if "row-group" in element.attrs.get("class", "").split()]
+        for widening in widens:
+            with self.subTest(widening=widening):
+                (head,) = [head for head in heads if widening in head.words]
+                self.assertIn("data-attention", head.attrs)
+        self.assertFalse(
+            [element for element in card if "notice" in element.attrs.get("class", "").split()],
+            "a widening a playbook carries is not said again above the table",
+        )
 
     def test_a_commit_no_request_holds_says_each_widening_beside_its_changes_and_adopt(self):
         from hq.platform.application.automation_adoption import plan

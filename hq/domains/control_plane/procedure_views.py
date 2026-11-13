@@ -21,8 +21,8 @@ from django.views.generic import TemplateView
 
 from hq.domains.control_plane.models import SourceProposal
 from hq.platform.application.action_links import capability_action_link, command_url
-from hq.platform.application.automation_adoption import ADOPT, anywhere
-from hq.platform.application.automation_runs import capability_name
+from hq.platform.application.automation_adoption import ADOPT
+from hq.platform.application.automation_runs import access_words, anywhere, capability_name
 from hq.platform.application.automation_sources import REFRESH, SourceStanding, scan_standing, standing
 from hq.platform.application.pages import PageMixin
 from hq.platform.application.record_errors import RecordNotFound
@@ -54,6 +54,7 @@ class CatalogRow:
     effect: str
     # Where it runs when it names no machine.
     anywhere: str
+    access: str
 
 
 class ProceduresView(PageMixin, TemplateView):
@@ -79,14 +80,6 @@ class ProceduresView(PageMixin, TemplateView):
         if "pk" in self.kwargs and review is not None:
             return f"Commit {review.revision}"
         return "Playbooks"
-
-    @override
-    def get_page_lede(self) -> str:
-        # Only a refused commit's own page says more than its title and sections.
-        found = self.sources.proposal if "pk" in self.kwargs else None
-        if found is not None and found.refused:
-            return "HQ can't adopt this commit. Fix what's listed below in your repository."
-        return ""
 
     @override
     def get_page_trail(self):
@@ -164,7 +157,8 @@ class ProceduresView(PageMixin, TemplateView):
                     procedure,
                     command_url(capability_name(procedure.id)),
                     effect_label(procedure.effect),
-                    anywhere(procedure),
+                    anywhere(procedure.target_kinds),
+                    access_words(procedure.privilege),
                 )
                 for procedure in sources.procedures
             ],
@@ -240,7 +234,7 @@ class ProposalAdoptView(View):
         if is_held(result):
             messages.info(request, "Adopting this commit waits for approval.")
         elif result.get("adopted"):
-            messages.success(request, "Adopted. HQ now runs this commit's playbooks.")
+            messages.success(request, "Adopted.")
         else:
             messages.info(request, "That commit is already adopted.")
         return redirect("control_plane:procedures")

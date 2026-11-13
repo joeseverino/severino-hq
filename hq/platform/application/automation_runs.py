@@ -122,7 +122,8 @@ type Hosts = Annotated[
     Field(min_length=1, max_length=64),
     AfterValidator(sorted_unique),
     Names("machines"),
-    Describe("The machines to run it on.", api="Each by its name in HQ."),
+    # The label says it on the form, so the sentence is the agent's alone.
+    Describe("", api="The machines to run it on, each by its name in HQ."),
 ]
 # What a run's hosts are titled wherever a person reads them, as every page
 # names them: on the field's own use, since an alias's title names the alias.
@@ -133,12 +134,11 @@ CORRELATION_PATTERN = r"^[!-~]*$"
 type Correlation = Annotated[
     StrictStr,
     Field(max_length=CORRELATION_LONGEST, pattern=CORRELATION_PATTERN),
-    Describe(
-        f"Your own id to find this run by later. Up to {CORRELATION_LONGEST} "
-        "printable characters, no spaces. Kept with the run."
-    ),
+    Describe("", api="Your own id to find this run by later, kept with the run."),
 ]
-type Reason = Annotated[StrictStr, Field(max_length=300), Describe("Why it is run, kept with the operation it queues.")]
+type Reason = Annotated[
+    StrictStr, Field(max_length=300), Describe("", api="Why it is run, kept with the operation it queues.")
+]
 
 
 class RunCommand(BaseModel):
@@ -614,21 +614,25 @@ def _statements(statements: tuple[str, ...]) -> str:
     return " ".join(ended(statement) for statement in statements)
 
 
+def anywhere(target_kinds: Iterable[str]) -> str:
+    """Where a playbook that names no machine may run, in every page's words: "Any machine"."""
+
+    return f"Any {' or '.join(lower_first(kind_label(kind)) for kind in target_kinds)}"
+
+
 def _runs_on(manifest: OperationManifest) -> CommandFact:
     """The machines a procedure runs on: each it names by its link, else any
     of the kinds it is written for."""
 
     if manifest.hosts:
         return CommandFact("Runs on", links=tuple(entity_link("machine", host) for host in manifest.hosts))
-    return CommandFact("Runs on", f"Any {' or '.join(lower_first(kind_label(kind)) for kind in manifest.target_kinds)}")
+    return CommandFact("Runs on", anywhere(manifest.target_kinds))
 
 
-def access_words(privilege: str | None, effect: str) -> str:
-    """What a run may do on a machine beyond its login, in a page's words."""
+def access_words(privilege: str | None) -> str:
+    """What a run may do on a machine beyond its login, in every page's words."""
 
-    if not privilege:
-        return "Read only, no sudo" if effect == "read" else "No sudo"
-    return f"sudo, as the {privilege} profile allows"
+    return f"sudo, as the {privilege} profile allows" if privilege else "No sudo"
 
 
 def _held_runs(manifest: OperationManifest, principal: Principal) -> ServiceSection | None:
@@ -665,7 +669,7 @@ def about(manifest: OperationManifest, principal: Principal) -> CommandAbout:
     facts = (
         _runs_on(manifest),
         CommandFact("Effect", effect_label(manifest.effect)),
-        CommandFact("Access", access_words(manifest.privilege, manifest.effect)),
+        CommandFact("Access", access_words(manifest.privilege)),
         CommandFact("Timeout", str(seconds(manifest.timeout_seconds))),
         CommandFact("Preconditions", _statements(manifest.preconditions)),
         CommandFact("Verification", _statements(manifest.verification)),
@@ -699,7 +703,7 @@ def run_preview(manifest: OperationManifest, held: ApprovalRequest) -> ChangePre
             for name, value in dict(held.baseline.get("parameters") or {}).items()
         ),
         ("Effect", effect_label(str(pinned.get("effect", "")))),
-        ("Access", access_words(str(pinned.get("privilege", "")), str(pinned.get("effect", "")))),
+        ("Access", access_words(str(pinned.get("privilege", "")))),
         ("Adopted commit", str(pinned.get("revision", ""))[:SHORT_REVISION]),
         (field_words("correlation"), str(held.payload.get("correlation") or "")),
     )
@@ -719,20 +723,14 @@ def _reviewed_notes(manifest: OperationManifest) -> tuple[str, ...]:
         ("If it fails:", manifest.recovery),
     )
     return (
-        ended(f"Access: {access_words(manifest.privilege, manifest.effect)}"),
+        ended(f"Access: {access_words(manifest.privilege)}"),
         ended(f"Timeout: {seconds(manifest.timeout_seconds)}"),
         *(f"{lead} {_statements(statements)}" for lead, statements in said if statements),
         ended(f"Retry: {RETRY_WORDS[manifest.retry]}"),
     )
 
 
-def _approval_words(manifest: OperationManifest) -> str:
-    """Whether a run waits for anyone, said before it is asked, as
-    ``waits_for_a_person`` below holds it."""
-
-    if manifest.effect == "read":
-        return "It only reads, so no one approves it, whether you or an agent asks."
-    return "It changes a live system, so when an agent asks, it waits for an operator's approval."
+WAITS_FOR_APPROVAL = "When an agent asks, the run waits for an operator's approval."
 
 
 def _capability(manifest: OperationManifest, titles: Mapping[str, str]) -> CapabilitySpec:
@@ -757,7 +755,7 @@ def _capability(manifest: OperationManifest, titles: Mapping[str, str]) -> Capab
         run = waits_for_a_person(every_call)(run)
     return CapabilitySpec(
         name,
-        f"Run the adopted playbook {named} on the machines you name. {_approval_words(manifest)}",
+        f"Run the adopted playbook {named} on the machines you name.",
         manifest.effect,
         run_authority(manifest.effect),
         command_type(manifest),
@@ -766,7 +764,8 @@ def _capability(manifest: OperationManifest, titles: Mapping[str, str]) -> Capab
             "Find each machine named, and refuse one the playbook is not written for.",
             "Refuse while another run waits or works on this playbook or on one of those machines.",
             "Queue it once, and HQ runs it with Ansible outside this request.",
-            *((asked_again,) if manifest.effect == "read" else ()),
+            # What ``waits_for_a_person`` above holds, for an agent to read before it asks.
+            *((asked_again,) if manifest.effect == "read" else (WAITS_FOR_APPROVAL,)),
             f"Read how it went from `{RUNS}`, by the `operation.id` this answers.",
             *_reviewed_notes(manifest),
         ),

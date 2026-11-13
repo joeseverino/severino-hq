@@ -1,8 +1,9 @@
 {% extends "list_page.html" %}
 {% comment %}
 HQ's jobs and its automation runs as one list (`work_runs.WorkRun`), each
-state said in the same words and tones. What failed on its last run is said
-once above the rows that lead the list. A run's evidence (its machines, who
+state said in the same words and tones. What failed or stopped on its last
+run is named once above the rows that lead the list, under its state's word
+only when both states are there. A run's evidence (its machines, who
 approved it, its correlation id, its lease while a worker holds it, and each
 task's outcome) is in its row's open line, drawn by {% run_evidence %}. A
 run nothing has started ends with its Cancel button, for a reader who may
@@ -11,7 +12,7 @@ cancel it.
 {% block summary %}
 {% if ended_badly %}
   {% notice tone="warning" title=ended_badly_title %}
-    {% for word, titles in ended_badly %}<p>{{ word|breakable:":" }} {{ titles|join:", "|breakable }}</p>{% endfor %}
+    {% for word, titles in ended_badly %}<p>{% if ended_badly|length > 1 %}{{ word|breakable:":" }} {% endif %}{{ titles|join:", "|breakable }}</p>{% endfor %}
   {% endnotice %}
 {% endif %}
 {% endblock %}

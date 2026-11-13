@@ -112,6 +112,37 @@ def from_ansible(event: Mapping[str, Any], secrets: Collection[str] = ()) -> Eve
     return Event(_clip(host, HOST_LIMIT), _clip(task, TASK_LIMIT), outcome, _clip(message, MESSAGE_LIMIT))
 
 
+# The stat a playbook states its result under, with ``ansible.builtin.set_stats``.
+RESULT_STAT = "result"
+
+
+def stated(event: Mapping[str, Any], secrets: Collection[str] = ()) -> str | None:
+    """What a playbook said it found or did, from the ``playbook_on_stats``
+    event that ends its run, or None for any other event or a playbook that
+    set no ``result``.
+
+    ansible-runner carries a run's stats set with ``per_host: false`` as that
+    event's ``artifact_data``. A result keyed by machine, as a playbook on
+    several sets it, is said machine by machine.
+    """
+
+    data = event.get("event_data")
+    if event.get("event") != "playbook_on_stats" or not isinstance(data, Mapping):
+        return None
+    artifact = data.get("artifact_data")
+    result = artifact.get(RESULT_STAT) if isinstance(artifact, Mapping) else None
+    if isinstance(result, Mapping):
+        said = (
+            [str(value) for value in result.values()]
+            if len(result) == 1
+            else [f"{host}: {value}" for host, value in sorted(result.items())]
+        )
+        result = "; ".join(said)
+    if result is None or not _one_line(result):
+        return None
+    return _clip(strike(_one_line(result), secrets), MESSAGE_LIMIT)
+
+
 # The outcomes a report keeps first when a run has more than it can carry:
 # what changed a machine or went wrong.
 _KEPT_FIRST = frozenset({"changed", "failed", "unreachable"})

@@ -9,10 +9,11 @@ holds it."""
 
 import io
 import os
+import shlex
 from contextlib import redirect_stderr, redirect_stdout
 from unittest import mock
 
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, tag
 from django.urls import resolve, reverse
 
 from hq.platform.core.tests import look
@@ -147,6 +148,32 @@ class EarlyRefusalTests(SimpleTestCase):
         self.assertIn("part/form/filter-bar", said)
         self.assertIn("form/filter-bar", [line.split()[0] for line in said.splitlines() if line.startswith("  ")])
 
+    def test_a_refusal_ends_on_the_command_that_reruns_with_the_nearest_and_the_flags_given(self):
+        declared = {
+            "rule": {"name": "rule", "arg": {}},
+            "seed": {"name": "seed", "arg": {}, "default": ["showcase"]},
+            "dark": {"name": "dark"},
+            "perf": {"name": "perf", "negate": "--no-perf"},
+        }
+        with mock.patch.object(look, "declared_flags", lambda: declared):
+            said = self.refused(pages="connections part/form/filter-bar", rule="survey", dark="true", perf="false")
+        command = said.splitlines()[-1]
+        words = shlex.split(command)
+
+        self.assertEqual(words[:3], ["mise", "run", "dev:look"], said)
+        for flag in (["--rule", "survey"], ["--dark"], ["--no-perf"]):
+            self.assertIn(" ".join(flag), command, "the flags as given")
+        self.assertNotIn("--seed", words, "a flag at its default is left at it")
+        pages = [word for word in words[3:] if not word.startswith("--") and word != "survey"]
+        self.assertEqual(pages[0], "connections", "a page that was one stays")
+        with mock.patch.dict(os.environ, ASKED, clear=True):
+            self.assertEqual(len(look._pages(tuple(pages), None)), 2, "and the command names only pages")
+
+    def test_a_refusal_with_nothing_near_points_at_what_a_page_is(self):
+        said = self.refused(pages="example-zzzzqqqq-xxxx")
+
+        self.assertEqual(said.splitlines()[-1], "mise run dev:look --help")
+
     def test_a_rule_that_is_none_is_refused(self):
         self.assertIn("example-no-such-rule", self.refused(pages="connections", rule="example-no-such-rule"))
 
@@ -171,6 +198,20 @@ class EarlyRefusalTests(SimpleTestCase):
         for name in post_names():
             with self.subTest(post=name):
                 self.assertEqual(self.refused(pages=name), "")
+
+
+# mise reads the task's file, which no image ships.
+@tag("source")
+class DeclaredFlagsTests(SimpleTestCase):
+    def test_the_rerun_reads_each_flags_default_from_the_tasks_own_usage(self):
+        look.declared_flags.cache_clear()
+        self.addCleanup(look.declared_flags.cache_clear)
+        # The task's flags alone, beside what finds mise.
+        theirs = {name: value for name, value in os.environ.items() if not name.startswith("usage_")}
+        asked = {**ASKED, "usage_pages": "nosuchpage", "usage_engine": "webkit"}
+        with mock.patch.dict(os.environ, {**theirs, **asked}, clear=True):
+            command = look._rerun({"nosuchpage": "connections"}).splitlines()[-1]
+        self.assertEqual(shlex.split(command), ["mise", "run", "dev:look", "connections"])
 
 
 class PostNamesTests(TestCase):

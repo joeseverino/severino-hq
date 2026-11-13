@@ -222,6 +222,10 @@ SELECTORS = {
     "ask": ".ask",
     # An ask's button.
     "ask_button": "[data-ask] [data-ask-button]",
+    # The button of an ask beside a page's title, which a menu holds a copy of.
+    "head_ask_button": ".page-head > .page-actions > .ask [data-ask-button]",
+    # What a page's head offers when it could not draw a reading in place.
+    "head_offer": ".page-head .ask-said a",
     # One standing in a table's row, rather than in the line a row opens.
     "row_ask": ".data-table > tbody > tr:not(.row-detail) > td [data-ask]",
     # What an ask says on the line its row opens to.

@@ -347,7 +347,31 @@ The tests it selects are:
 A selection past `WIDE` of the test modules (`tools/gate/fast.py`) is a
 wide change, and the whole suite runs with every quick gate instead: the
 rest costs little beside it, and only a whole run's pass records a tree that
-has no passed base.
+has no passed base. `--whole` runs it whatever changed.
+
+A whole run also measures which test modules ran each Python file, as
+pytest-testmon does: coverage runs with its C tracer and a context per test
+module, switched before the module's fixtures
+(`hq/platform/core/coverage_contexts.py`), since `sys.monitoring`, coverage's
+default core, records a line once per process. Its pass keeps that map by
+its tree, under `$(git rev-parse --git-common-dir)/severino/fast-maps/`
+(`tools/gate/testmap.py`); a run that is not whole measures nothing. With a
+map on HEAD's first-parent history, fast also selects from the change since
+the map's tree, and runs whichever selection has fewer modules:
+
+- a Python file the map holds, changed only inside function bodies (a
+  function's docstring aside), selects the test modules that ran it, and
+  not its app: such a change does nothing at import, and a test that ran
+  none of the file runs what it ran before until it reaches another changed
+  file, which selects it;
+- a changed test module touches no app either;
+- every other path (a module-level line, a template, a migration, a file
+  the map does not hold) selects by the rules above, and so does a test
+  module the recording did not run.
+
+The import, task and naming rules apply to every changed file either way,
+which keeps the tests that run a file in a subprocess, which coverage does
+not attribute.
 
 Beside the tests it runs each quick gate the change affects, as mise's
 `--affected` reads it from the base: a quick gate is a task tagged
@@ -881,7 +905,9 @@ one page of the estate whose path it ends (`contacts`), and the run's lines name
 page as `estate/<path>`; a word that ends several paths or none is refused with
 the nearest. An unknown page, rule, probe or seed is refused in seconds, before the look
 waits for the heavy turn; a record's page, named by its route or a template,
-is checked once the run has built the estate. Without `--composed`, a
+is checked once the run has built the estate. Either refusal exits 64 and
+ends on the command that runs the look again with each refused name swapped
+for its nearest, the flags as given. Without `--composed`, a
 template no host directory holds, or a route under a namespace the host lacks,
 is refused as an extension's page, with the flag that loads them. A
 page that answers anything but 200 fails the run. A query rides on the page's name as it does on an address
@@ -972,16 +998,23 @@ A run that judges takes no screenshots, since a shot and its bands cost more
 than the rule that reads the page: `--shots` takes them too, and `--base`,
 `--eval` and `--operation`, which read them, take them anyway. What a rule
 finds is written in the run's folder (`<page>-<width>.txt`) as the run goes, so a run stopped part way keeps it, and to `report.txt` there
-once the run ends. Console errors, uncaught script errors and policy refusals
+once the run ends; a run that fails prints each page's first finding, its
+check named first. Console errors, uncaught script errors and policy refusals
 are judged as findings are: without a base any fails the run, against one only
-a new one does.
+a new one does. A file a page can read (one of `SURVEY_INPUTS`) that changes
+while the run draws is named in its last line with the tree it began on: what
+it found stands, and the gate keeps no pass of a tree that moved (`tree -`).
 
 `--base <ref>` looks at the same pages at `<ref>` first, in a temporary
 worktree that runs the base's own look, catalog, fixtures and seeds, with only
 this checkout's probes laid over it, so both are judged by this checkout's
 rules. A probe laid over that does not import there is put back as the base
-has it, and the closing line names it. A page or catalog entry the base cannot
-draw, such as one added here or a record its estate lacks, is said there,
+has it, or taken out where the base has none, and should the base's own look
+still not import, every probe is the base's own; the closing line names them.
+A base that cannot be looked at even so (its look does not import or does not
+finish) is said in one line, and the run judges without a base, every finding
+counting. A page or catalog entry the base cannot
+draw, such as one added here or a record its estate lacks or does not answer, is said there,
 judged here alone, every finding on it new, and named in the closing line. The base's
 screenshots are kept in
 `base/` inside the run's folder, under the same names as this checkout's

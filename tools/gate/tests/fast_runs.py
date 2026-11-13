@@ -18,12 +18,15 @@ def run_main(
 ) -> tuple[int, list[str]]:
     """fast's run on a change to ``changed``, its quick gates ``selected``, each step through ``step``
     when given, what it prints written into ``printed``: its exit code and printed lines. The gate
-    judged no one tree unless ``judged`` is faked, so no run records a pass in this repository, and
-    no tree passed unless ``passed_ancestor`` is faked; no fix mode runs unless ``fix`` is."""
+    judged no one tree unless ``judged`` is faked, so no run records a pass or a map in this
+    repository, and no tree passed and no map is read unless ``passed_ancestor`` or
+    ``recorded_ancestor`` is faked; no fix mode runs unless ``fix`` is."""
 
     fakes = {
         "merge_base": "0" * 40,
         "passed_ancestor": None,
+        "recorded_ancestor": None,
+        "record_map": None,
         "changed_paths": (list(changed), []),
         "selected_tasks": selected,
         "fix": [],

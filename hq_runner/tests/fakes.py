@@ -98,6 +98,9 @@ def reach(host: str, profile: str) -> Target | None:
 RECORDED: list[dict[str, Any]] = json.loads(Path(__file__).with_name("recorded_events.json").read_text("utf-8"))
 # The run up to the task that failed, and its stats: a run that ends well.
 WELL = [event for event in RECORDED if event.get("event_data", {}).get("task") != "Fail"]
+# The stats event ansible-runner 2.4.3 recorded ending a real run whose play
+# stated its result with ``ansible.builtin.set_stats``.
+STATED: dict[str, Any] = json.loads(Path(__file__).with_name("recorded_stats_event.json").read_text("utf-8"))
 # Its task outcomes alone, one per task, so a test counts the tasks that ran.
 OUTCOMES = [event for event in RECORDED if event["event"] in ("runner_on_ok", "runner_on_failed", "runner_on_skipped")]
 
@@ -212,6 +215,7 @@ def pending(
     timeout: int = 300,
     effect: str = "infrastructure_change",
     privilege: str = PRIVILEGE,
+    verification: Iterable[str] = (),
 ) -> dict[str, Any]:
     """A claimed run as the bridge's claim answers it."""
 
@@ -248,6 +252,7 @@ def pending(
                 "hosts": [],
                 "effect": effect,
                 "privilege": privilege,
+                "verification": list(verification),
             },
             "observed": {},
         },

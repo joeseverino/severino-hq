@@ -13,8 +13,8 @@ from hq.domains.control_plane.models import ApprovalRequest, ManagedResource, Op
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
 from .approvals import COMPARED, DECLARATIONS, DESTRUCTIVE_EFFECT, WARNINGS, shown_by
-from .payload_words import STEP, ChangeRow, changed_words, document, field_words, held_words, value_words
-from .ui import counted
+from .payload_words import STEP, ChangeRow, changed_words, document, field_words, value_words
+from .ui import counted, ended
 lazy from . import capabilities
 lazy from .command_forms import switch_field
 lazy from .command_targets import item_name
@@ -27,18 +27,21 @@ lazy from .resource_operations import ACTION_CAPABILITY
 
 @dataclass(frozen=True, slots=True)
 class ChangeGroup:
-    """One record of the many a comparison holds, such as a procedure of a
-    catalog: the fields of it that move, each named within it, or every field
-    as it stands when none moves."""
+    """One record of the many a comparison holds, such as a playbook of a
+    catalog: the fields of it that move, each named within it, and none when
+    it stays as it is."""
 
     label: str
     rows: tuple[ChangeRow, ...]
     # What the record is at a glance, from its ``SUMMARY``: its name and what it does.
     summary: ChangeRow | None = None
+    # How the change lets the record do more, from the request's warnings
+    # that name it, said beside its name in their place.
+    warning: str = ""
 
     @property
     def changed(self) -> bool:
-        return any(row.change != "unchanged" for row in self.rows)
+        return bool(self.rows)
 
     @property
     def whole(self) -> str:
@@ -52,12 +55,12 @@ class ChangeGroup:
     def said(self) -> str:
         """What happens to the record as a whole, in the words beside its name."""
 
+        if self.warning:
+            return self.warning
         if self.whole == "added":
             return "new"
         if self.whole == "removed":
             return "removed"
-        if not self.changed:
-            return counted(len(self.rows), "field unchanged", "fields unchanged")
         return counted(len(self.rows), "change")
 
 
@@ -70,7 +73,7 @@ class ChangePreview:
     two walls of text that differ somewhere. ``lines`` is the honest fallback for content
     that will not parse: a policy document with comments in it, for instance,
     where a unified diff is the most that can truthfully be said. A comparison
-    of many records of one kind (a catalog's procedures) holds each in
+    of many records of one kind (a catalog's playbooks) holds each in
     ``groups``, beside the ``rows`` of what belongs to none.
     """
 
@@ -102,9 +105,13 @@ class ChangePreview:
         record, each changed field of a record, and a record that comes or goes
         whole as one."""
 
-        return len(self.rows) + sum(
-            1 if group.whole else sum(row.change != "unchanged" for row in group.rows) for group in self.groups
-        )
+        return len(self.rows) + sum(1 if group.whole else len(group.rows) for group in self.groups)
+
+    @property
+    def unchanged(self) -> tuple[str, ...]:
+        """The records that stay as they are, named on one line rather than shown."""
+
+        return tuple(group.label for group in self.groups if not group.changed)
 
     @property
     def empty(self) -> bool:
@@ -186,19 +193,17 @@ def _fields(record: Any) -> dict[str, Any]:
 
 
 def _group(name: Any, was: Any, now: Any) -> ChangeGroup:
-    """One record of a grouped comparison: its fields that move, or every
-    field as it stands, and its summary from the side it is on."""
+    """One record of a grouped comparison: its fields that move, and its
+    summary from the side it is on."""
 
-    rows = changed_words(_fields(was), _fields(now))
     shown = _summary(now or was or {}, "added" if now is not None else "removed")
     label = shown.label if shown is not None and shown.label else str(name)
-    return ChangeGroup(label=label, rows=rows or held_words(_fields(now)), summary=shown)
+    return ChangeGroup(label=label, rows=changed_words(_fields(was), _fields(now)), summary=shown)
 
 
 def grouped(before: Mapping[str, Any], after: Mapping[str, Any], *, label: str) -> ChangePreview:
     """``compare``, with each record of a field that holds many (a catalog's
-    procedures) a group of its own: its fields that move or, when none does,
-    every field as it stands, so a person opens the one they want to read."""
+    playbooks) a group of its own: its fields that move, none when it stays."""
 
     fields = [*before, *(key for key in after if key not in before)]
     held = [key for key in fields if _records(before.get(key)) or _records(after.get(key))]
@@ -400,7 +405,7 @@ def _one_move(shown: ChangePreview) -> ChangeRow | None:
 def review(held: ApprovalRequest) -> dict[str, Any]:
     """What the decision card shows: ``tone`` marks one still waiting for a decision."""
 
-    shown = preview(held)
+    shown, warnings = _marked(preview(held), _warnings(held))
     sentence = asked(held, shown)
     found = ManagedResource.objects.filter(key=held.resource_key).first() if held.resource_kind else None
     # The card opens the page the record lives on, which its own page would redirect to.
@@ -410,7 +415,7 @@ def review(held: ApprovalRequest) -> dict[str, Any]:
         "tone": "attention" if held.state == ApprovalRequest.State.PENDING else "",
         "asked": sentence,
         "preview": shown,
-        "warnings": _warnings(held),
+        "warnings": warnings,
         "resource_url": record.url if record else "",
         "resource_label": _resource_label(held, record, sentence),
     }
@@ -436,3 +441,24 @@ def _warnings(held: ApprovalRequest) -> tuple[str, ...]:
     if provider is None or provider.review_warnings is None or not isinstance(requested, dict):
         return measured
     return (*measured, *provider.review_warnings(requested))
+
+
+def _marked(shown: ChangePreview, warnings: tuple[str, ...]) -> tuple[ChangePreview, tuple[str, ...]]:
+    """``shown`` with each warning that names one of its changed records, as
+    a handler that measures a catalog writes them ("Empty a cache gains ..."),
+    said beside that record, and the warnings no record carries."""
+
+    changed = sorted((group.label for group in shown.groups if group.changed), key=len, reverse=True)
+    carried: dict[str, list[str]] = {}
+    rest = []
+    for warning in warnings:
+        named = next((label for label in changed if warning.startswith(f"{label} ")), None)
+        if named is None:
+            rest.append(warning)
+        else:
+            carried.setdefault(named, []).append(warning.removeprefix(named).strip().rstrip("."))
+    groups = tuple(
+        replace(group, warning=ended("; ".join(carried[group.label]))) if group.label in carried else group
+        for group in shown.groups
+    )
+    return replace(shown, groups=groups), tuple(rest)

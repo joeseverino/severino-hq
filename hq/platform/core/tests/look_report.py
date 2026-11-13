@@ -50,12 +50,13 @@ def verdict_line(rule: str, found: Found) -> str:
     return f"{rule} fails on {len(failed)} of {len(pages)} pages at {at}: {', '.join(failed)}"
 
 
-def found_lines(found: Found, report: Callable[[str, int], str]) -> list[str]:
-    """A line for each page and width that has a finding: how many, and the
-    file ``report`` names that holds them."""
+def found_lines(found: Found, report: Callable[[str, int], str] | None = None) -> list[str]:
+    """A line for each page and width that has a finding: the first, which a
+    survey's check begins with its name, so a failure reads without opening a
+    file, then how many and the file ``report`` names that holds them all."""
 
     return [
-        f"{name} at {width}: {len(said)} found, in {report(name, width)}"
+        f"{name} at {width}: {said[0]} ({len(said)} found{f', in {report(name, width)}' if report else ''})"
         for (name, width), said in found.items()
         if said
     ]
@@ -198,7 +199,7 @@ def looked(shots: list[tuple[str, str]], said: list[str], rule: str, report: str
 
     lines = [f"  shot {path}{f', {shows}' if shows else ''}" for path, shows in shots]
     if rule:
-        lines.append(f"  {rule}: {len(said)} found, in {report}" if said else f"  {rule} holds")
+        lines.append(f"  {rule}: {said[0]} ({len(said)} found, in {report})" if said else f"  {rule} holds")
     else:
         lines += [f"  {line}" for line in said]
     return lines + ([f"  error: {line}" for line in errors] or ["  no console error, uncaught error or policy refusal"])

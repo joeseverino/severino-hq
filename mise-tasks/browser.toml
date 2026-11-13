@@ -100,6 +100,7 @@ vars.classes = """\
   hq.platform.core.tests.browser.reference.ReferenceBrowserTests \
   hq.platform.core.tests.browser.fragments.FragmentBrowserTests \
   hq.platform.core.tests.browser.refresh.RefreshLandingBrowserTests \
+  hq.platform.core.tests.browser.refresh.PressedRefreshBrowserTests \
   hq.platform.core.tests.browser.current_state.CurrentStateBrowserTests \
   hq.platform.core.tests.browser.command_forms.CommandFormBrowserTests \
   hq.platform.core.tests.browser.agent_devices.AgentDeviceBrowserTests"""

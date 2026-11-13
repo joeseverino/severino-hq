@@ -167,16 +167,16 @@ class SameWordsTests(WorkRunsTestCase):
         failed = self.reported(self.run_of(DB, name=f"automation.{LOGS}.run"), success=False)
         self.assertEqual(operation_summary(failed)["tone"], TONES[JobState.FAILED])
 
-    def test_a_queued_run_says_it_waits_for_the_runner(self):
-        """Past any approval, a queued run waits only for the worker, and says
-        so, so it never reads as one waiting for a person."""
+    def test_a_run_not_yet_ended_says_only_its_state(self):
+        """Its State column says Waiting or Running; its Result has nothing yet."""
 
         run = self.run_of(APP)
-
         (row,) = self.listed()
+        self.assertEqual((row.id, row.word, row.note), (str(run.pk), JobState.QUEUED.label, ""))
 
-        self.assertEqual((row.id, row.word), (str(run.pk), JobState.QUEUED.label))
-        self.assertEqual(row.note, "Waiting for HQ's runner to start it.")
+        self.claimed(run)
+        (row,) = self.listed()
+        self.assertEqual((row.word, row.note), (JobState.RUNNING.label, ""))
 
     def test_a_cancelled_run_stopped_early(self):
         run = self.run_of(APP)

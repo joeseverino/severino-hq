@@ -7,4 +7,3 @@ argument_specs:
       mount:
         type: path
         default: /
-        description: The mount point to report on.

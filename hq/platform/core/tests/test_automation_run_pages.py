@@ -159,7 +159,8 @@ class ProcedurePageTests(TestCase):
             for name, spec in procedure.inputs.items():
                 with self.subTest(procedure=procedure.id, input=name):
                     self.assertTrue(select(html, "name", f"parameters.{name}"))
-                    self.assertEqual(text(html).count(spec.description), 1)
+                    if spec.description:
+                        self.assertEqual(text(html).count(spec.description), 1)
 
     def test_each_procedure_s_page_is_named_by_its_playbook_s_title(self):
         """The heading and the button say the title Playbooks gives the
@@ -182,23 +183,24 @@ class ProcedurePageTests(TestCase):
                 self.assertEqual(buttons, [title])
                 self.assertIn(title, capability_registry()[f"automation.{operation_id}.run"].wanted())
 
-    def test_each_procedure_s_lede_says_whether_an_agent_s_run_waits_for_a_person(self):
+    def test_an_agent_reads_whether_its_run_waits_and_the_page_says_none_of_it(self):
+        """Whether an agent's run waits for a person is in the notes
+        describe_capabilities answers, and on no page."""
+
         from hq.platform.application.approvals import no_rule_allows
         from hq.platform.application.automation_adoption import playbook_titles
         from hq.platform.application.capabilities import capability_registry
 
-        said = {
-            True: "It changes a live system, so when an agent asks, it waits for an operator's approval.",
-            False: "It only reads, so no one approves it, whether you or an agent asks.",
-        }
+        waits_note = "When an agent asks, the run waits for an operator's approval."
         waits = set()
-        for operation_id, title in playbook_titles().items():
+        for operation_id in playbook_titles():
             with self.subTest(procedure=operation_id):
                 spec = capability_registry()[f"automation.{operation_id}.run"]
                 waits.add(no_rule_allows(spec))
-                (lede,) = [element.words for element in with_class(self.page(operation_id), "page-lede")]
-                self.assertIn(f"“{title}”", lede)
-                self.assertIn(said[no_rule_allows(spec)], lede)
+                self.assertEqual(waits_note in spec.execution_notes, no_rule_allows(spec))
+                page = self.page(operation_id)
+                self.assertFalse(with_class(page, "page-lede"))
+                self.assertNotIn(spec.summary, text(page))
         self.assertEqual(waits, {True, False})
 
     def test_a_held_run_s_card_says_what_approving_it_runs(self):

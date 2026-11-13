@@ -113,8 +113,7 @@ class ChangeRow:
     """One value that moves, named and valued in words.
 
     ``change`` is "added" when there was nothing before, "removed" when there
-    is nothing after, "unchanged" for a value shown as it stands, and
-    "changed" otherwise. A ``redacted`` value is said only to have changed.
+    is nothing after, and "changed" otherwise. A ``redacted`` value is said only to have changed.
     """
 
     label: str
@@ -175,16 +174,6 @@ def path_words(path: tuple[str | int, ...]) -> str:
     return STEP.join(
         f"Entry {step + 1}" if isinstance(step, int) else field_label(step) if step.isidentifier() else step
         for step in path
-    )
-
-
-def held_words(value: Any) -> tuple[ChangeRow, ...]:
-    """Every value a document holds, named by where it is, as a row that stays."""
-
-    return tuple(
-        ChangeRow(label=path_words(path), before=words, after=words, change="unchanged")
-        for path, held in _leaves(value, ()).items()
-        if (words := value_words(held))
     )
 
 

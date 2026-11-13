@@ -192,24 +192,6 @@ form[data-changed] .save-bar::before { content: ""; position: absolute; z-index:
   contain: inline-size; min-block-size: 1lh;
   color: var(--muted); font-size: var(--text-xs); white-space: normal;
 }
-/* A head is one short line, so what one of its controls says takes a line
-   under them only while there is something to say, as a menu's copy does
-   below: the server draws work it finds under way already saying so, and a
-   press is what makes the line, under the reader's own hand. It ends where
-   the controls end, at the page's edge. */
-.page-head .page-actions > .ask > .ask-said { justify-content: flex-end; text-align: end; flex-wrap: nowrap; }
-/* Its words keep a reading measure of their own, running back from the
-   controls' edge over the head's free space, so a lone button does not hold
-   them to its own width, a word a line. */
-.page-head .page-actions > .ask > .ask-said > .ask-note {
-  flex: none; inline-size: max-content;
-  /* stylelint-disable-next-line declaration-property-value-disallowed-list -- bounds how far the line runs back from the button over the head, which holds no box for it to fill */
-  max-inline-size: 40ch;
-}
-.page-head .page-actions > .ask > .ask-said > .ask-elapsed { flex: none; white-space: nowrap; }
-/* The title stands on the controls' labels' baseline, so a line under them
-   moves it nothing. */
-.page-head:has(> .page-actions > .ask) { align-items: first baseline; }
 /* A menu is drawn over the page, so its copy of an ask says something only
    once there is something to say, in the menu's own inset. */
 .overflow-menu-panel .ask-said { padding: 0 var(--space-5); }
