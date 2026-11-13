@@ -316,9 +316,9 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 @container not style(--break: given) {
   .data-table td code.cell-whole .whole { white-space: nowrap; }
 }
-/* A name among names on a line (an item of a dot list) is no sentence, though it is a list item in a cell: its hyphenated part stays whole, so its column holds the longest name or leaves the table (tables.js), and never squeezes a name into breaking at a hyphen. */
+/* A name among names on a line (an item of a line list) is no sentence, though it is a list item in a cell: its hyphenated part stays whole, so its column holds the longest name or leaves the table (tables.js), and never squeezes a name into breaking at a hyphen. */
 @container not style(--break: given) {
-  .data-table td .dot-list > li code .whole { white-space: nowrap; }
+  .data-table td :is(.line-list, .line-run) > li code .whole { white-space: nowrap; }
 }
 /* A square for a glyph, and as wide as its word when it holds one. */
 .icon-link {

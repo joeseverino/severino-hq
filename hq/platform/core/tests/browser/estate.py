@@ -86,6 +86,16 @@ _IN_A_POPOVER = ("overlaps", "overlapping text", "touching text")
 _PICTURE = re.compile(r'<img\b[^>]*\ssrc="(/[^"/][^"]*)"')
 
 
+def pictures_of(pages, ask):
+    """Each picture ``pages`` draw from HQ's own records (a receipt's file),
+    by its address, as the server answers it: a browser asks for it as the
+    page loads."""
+
+    addresses = {url for page in pages for url in _PICTURE.findall(page) if not url.startswith(settings.STATIC_URL)}
+    asked = {url: ask(url) for url in sorted(addresses)}
+    return {(url, ""): answered(response) for url, response in asked.items() if response.status_code == 200}
+
+
 def fragments_of(client, address, page, answers, ask):
     """Every part the page at ``address`` fetches into itself, and the parts
     inside those, by address and part name, as the server answers them."""
@@ -101,12 +111,6 @@ def fragments_of(client, address, page, answers, ask):
             if response.status_code == 200:
                 answers[url, name] = answered(response)
                 pending.append((url, answers[url, name]))
-        # A picture the page draws from HQ's own records is asked for as it loads.
-        for url in _PICTURE.findall(body):
-            if (url, "") not in answers and not url.startswith(settings.STATIC_URL):
-                response = ask(client, url)
-                if response.status_code == 200:
-                    answers[url, ""] = answered(response)
 
 
 def navigation():
@@ -228,6 +232,7 @@ def render_estate():
                 raise AssertionError(f"{path} answered {response.status_code}")
             answers[path, ""] = answered(response)
             fragments_of(client, path, answers[path, ""], answers, ask)
+        answers |= pictures_of(list(answers.values()), lambda url: ask(client, url))
     return paths, answers
 
 
