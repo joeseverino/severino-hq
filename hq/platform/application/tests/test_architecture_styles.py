@@ -8,7 +8,7 @@ from django.test import SimpleTestCase, tag
 
 from hq.platform.core.interface_text import TEMPLATE_COMMENT
 from hq.platform.core.stylesheets import STATIC, sheet_paths, stylesheet
-from hq.platform.core.templatetags import table_tags
+from hq.platform.core.table_cells import ROLE_CLASSES
 
 from .source import template_files
 
@@ -587,7 +587,7 @@ class TemplateClassStyleTests(SimpleTestCase):
 
         # A class that declares a part's role in a table is read by the region,
         # which marks the part for the stylesheet (table_tags.mark_cells).
-        defined = defined_classes() | set(table_tags.ROLE_CLASSES)
+        defined = defined_classes() | set(ROLE_CLASSES)
         offenders = sorted(
             f"{name}: .{word}"
             for name, path in template_files()

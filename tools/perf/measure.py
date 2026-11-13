@@ -8,6 +8,7 @@ neither layout shifts nor long tasks.
 
 import http.client
 import statistics
+from collections.abc import Collection, Mapping
 from contextlib import ExitStack, closing
 from typing import Any, NamedTuple
 from urllib.parse import urlsplit
@@ -154,35 +155,40 @@ def one_pass(url: str, cookie: tuple[str, str], pages: list[str]) -> dict[str, i
 
 
 def server_times(
-    servers: dict[str, tuple[str, tuple[str, str]]], pages: list[str], rounds: int
+    servers: dict[str, tuple[str, tuple[str, str]]],
+    pages: list[str],
+    rounds: int,
+    *,
+    lacks: Mapping[str, Collection[str]] | None = None,
 ) -> dict[str, dict[str, dict[str, Any]]]:
     """By server, then page: its status, the median and 95th percentile of its server time over
     ``rounds``, every time in the order asked, and the records its tables hold and its HTML's size,
     so a page drawing more rows on one side than the other is told apart from code that got slower.
 
     Each round walks every page, asking each server in turn, and which goes first alternates round
-    by round, so a machine busy for a moment weighs on every side alike."""
+    by round, so a machine busy for a moment weighs on every side alike. A page in a server's
+    ``lacks`` is never asked of it, nor in its answer."""
 
+    has = {name: [page for page in pages if page not in (lacks or {}).get(name, ())] for name in servers}
     with ExitStack() as stack:
         opened = {name: stack.enter_context(closing(Server(url, cookie))) for name, (url, cookie) in servers.items()}
-        _warm(opened, pages)
-        times: dict[str, dict[str, list[float | None]]] = {name: {page: [] for page in pages} for name in opened}
+        # Each page asked WARM times first, untimed, so no timed round pays a first visit.
+        for _ in range(WARM):
+            for name, page in _round(has, pages, 0):
+                opened[name].get(page)
+        times: dict[str, dict[str, list[float | None]]] = {name: {page: [] for page in has[name]} for name in opened}
         last: dict[tuple[str, str], Answer] = {}
         for turn in range(rounds):
-            for page in pages:
-                for name in _asking_order(list(opened), turn):
-                    last[name, page] = answer = opened[name].get(page)
-                    times[name][page].append(answer.took_ms)
-    return {name: {page: _numbers(times[name][page], last[name, page]) for page in pages} for name in opened}
+            for name, page in _round(has, pages, turn):
+                last[name, page] = answer = opened[name].get(page)
+                times[name][page].append(answer.took_ms)
+    return {name: {page: _numbers(times[name][page], last[name, page]) for page in has[name]} for name in opened}
 
 
-def _warm(opened: dict[str, Server], pages: list[str]) -> None:
-    """Asks each server for each page ``WARM`` times, untimed, so no timed round pays a first visit."""
+def _round(has: dict[str, list[str]], pages: list[str], turn: int) -> list[tuple[str, str]]:
+    """One round's asks, by server and page: every page in turn, of each server that has it."""
 
-    for page in pages:
-        for _ in range(WARM):
-            for server in opened.values():
-                server.get(page)
+    return [(name, page) for page in pages for name in _asking_order(list(has), turn) if page in has[name]]
 
 
 def _asking_order(names: list[str], turn: int) -> list[str]:

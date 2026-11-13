@@ -24,7 +24,6 @@ from django.utils.text import slugify
 
 from hq.platform.application.tables import check_drop, column_kind
 from hq.platform.core.table_cells import (
-    ROLE_CLASSES as ROLE_CLASSES,  # noqa: PLC0414 - hq_sdk.template_contract reads it here
     SAYS_NOTHING,
     Cells,
     LineEntry,
@@ -133,7 +132,7 @@ def mark_cells(markup: str, *, sorts: bool = True) -> str | None:
     line (``_detail_row``), so opening a row moves nothing of the row itself.
     What a part of a cell is, which decides how it wraps, is its ``data-cell``:
     ``name`` for what names the row, else the role its class declares
-    (``ROLE_CLASSES``), so the stylesheet never reads a cell's content.
+    (``table_cells.ROLE_CLASSES``), so the stylesheet never reads a cell's content.
     Without ``sorts`` no row sorts on the page, so no heading keeps its control.
     None when the region holds tables and none of them a row beneath its head.
     """

@@ -331,7 +331,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
         </div>
         {% if request_path.unread_headers %}
           <details class="conn-more">
-            <summary>{{ request_path.unread_headers|length }} unread</summary>
+            <summary>{{ request_path.unread_headers|length|measured:"unread" }}</summary>
             <div class="conn-rows">
               {% for header in request_path.unread_headers %}
                 <div class="conn-row">

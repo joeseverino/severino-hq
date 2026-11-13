@@ -68,15 +68,18 @@ class ServerTimes:
         self.asked: list[list[str]] = []
         self.targets: list[FakeTarget] = []
         self.before: list[list[str]] = []
+        # The pages the last call asked of each server.
+        self.pages: dict[str, list[str]] = {}
 
-    def __call__(self, servers, pages, rounds):
+    def __call__(self, servers, pages, rounds, *, lacks=None):
         self.asked.append(list(servers))
         self.before = [step for target in self.targets for step in target.asked]
+        self.pages = {side: [page for page in pages if page not in (lacks or {}).get(side, ())] for side in servers}
         ms = {"base": 4.0, "here": 6.0 if "base" in servers else 4.0}
         return {
             side: {
                 page: {"status": 200, "p50_ms": ms[side], "p95_ms": 5.0, "times_ms": [ms[side]] * rounds}
-                for page in pages
+                for page in self.pages[side]
             }
             for side in servers
         }

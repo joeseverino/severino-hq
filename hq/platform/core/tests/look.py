@@ -893,6 +893,10 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
     on_reference = False
     # Whether the run takes its screenshots, as ``asked_for`` decides.
     shooting = True
+    # Whether the context open runs script, as ``draw_scripted_as`` starts it.
+    drawn_with_script = True
+    # The catalog entries asked, which are drawn without script (``scripted_for``).
+    unscripted: frozenset[str] = frozenset()
     # A look's record is its findings and shots; a trace would snapshot the
     # page at every step of every page the look reads.
     traced = False
@@ -955,7 +959,9 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         estate = [estate_name(path) for path in navigation()]
         cls.addresses = {name: estate_path(name) for name in {*estate, *filter(is_estate, pages)}}
         cls.addresses |= {name: posted(name).address() for name in filter(is_post, pages)}
-        rendered = stress_pages(pages) | catalog_pages(pages)
+        entries = catalog_pages(pages)
+        cls.unscripted = frozenset(entries)
+        rendered = stress_pages(pages) | entries
         if set(pages) & set(REFERENCE_PAGES):
             rendered |= render_reference()
         # Last: the stress estates are rolled back, the example estate is
@@ -1065,11 +1071,12 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             self.visit(self.addresses[name], width)
         else:
             self.on_estate = False
+            self.draw_scripted_as(name)
             super().open(name, width)
         # The viewer mounts on its root wherever a page carries one: the
         # reference HQ serves and the gate's copy in the operator's dark theme.
         reference = self.page.locator(SELECTORS["reference"]).count() > 0
-        self.on_reference = reference and not _asked().switch("no_script")
+        self.on_reference = reference and self.drawn_with_script
         if self.on_reference:
             wait_for_reference(self.page)
             draw_whole_reference(self.page)
@@ -1079,11 +1086,36 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             add_css(self.page, self.css)
             self.settle()
 
+    def scripted_for(self, name) -> bool:
+        """Whether ``name`` is drawn with script: a page is unless
+        ``--no-script``, and a catalog entry never is, as the catalog's gate
+        judges it (``CatalogLayoutTests``), so a look at one sees the state
+        that gate does."""
+
+        return not _asked().switch("no_script") and name not in self.unscripted
+
+    def draw_scripted_as(self, name):
+        """A context that runs script as ``name`` is drawn with, started
+        afresh only when the one open does not."""
+
+        if (scripted := self.scripted_for(name)) != self.drawn_with_script:
+            self.draw_with_script(scripted)
+
+    def draw_with_script(self, scripted):
+        self.start(java_script_enabled=scripted, color_scheme="dark" if _asked().switch("dark") else "light")
+        self.drawn_with_script = scripted
+
+    @override
+    def settle(self):
+        # A page without script runs no frame callback or timer, so a wait on
+        # one never ends; nothing there moves but an animation, which the shot
+        # finishes itself (``animations="disabled"``).
+        if self.drawn_with_script:
+            BrowserGate.settle(self)
+
     def test_look(self):
         widths, rule = self.asked_for()
-        self.start(java_script_enabled=not _asked().switch("no_script"))
-        if _asked().switch("dark"):
-            self.page.emulate_media(color_scheme="dark")
+        self.draw_with_script(not _asked().switch("no_script"))
         self.errors: Found = {}
         self.unanswered_pages: dict[str, int | None] = {}
         if _asked().switch("deep"):
@@ -1454,6 +1486,10 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         shot when it has none."""
 
         shot = _shot(name, width, part)
+        # A page without script polls once and never again, and has nothing
+        # that could move it, so its extent is read once.
+        if not self.drawn_with_script:
+            return self.in_bands(shot, extent_of(self.page), shows)
         try:
             held = self.page.wait_for_function(_EXTENT_HELD, arg=shot.name, polling=_EXTENT_POLL)
             wide, tall = held.json_value()

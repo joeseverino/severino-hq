@@ -122,11 +122,11 @@
 .search-snippet { margin: var(--space-1) 0 0; font-size: var(--text-sm); color: var(--muted); overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; max-block-size: 2lh; overflow: hidden; }
 /* A snippet is a run of prose cut from a record, so a value in it flows as its words do: a box of its own would set a word the match splits in two apart from its matched half. */
 .search-snippet :is(.token, .whole) { display: inline; }
-/* A cell's own identifier (one in a sentence, a `p` or `li`, wraps as a page's does and is never cut) never breaks across lines and never takes more than --identifier-max, a share of the region (`cqi`) since a percentage counts for nothing while columns are sized; past it, it is cut and the opened row shows it whole. Code of plain words (no part `breakable` marks, value_tags) is words no longer than a word may be, so it wraps between them as text does and is never cut. */
-.data-table td code:not(:where(td) :is(p, li) *):where(:has(.token, .whole)) { white-space: nowrap; overflow-wrap: normal; display: inline-block; max-width: min(var(--identifier-max), var(--hold)); vertical-align: bottom; overflow: hidden; text-overflow: ellipsis; }
+/* A cell's own identifier (one in a sentence, a `p` or `li` or free text marked data or prose, wraps as a page's does and is never cut) never breaks across lines and never takes more than --identifier-max, a share of the region (`cqi`) since a percentage counts for nothing while columns are sized; past it, it is cut and the opened row shows it whole. Code of plain words (no part `breakable` marks, value_tags) is words no longer than a word may be, so it wraps between them as text does and is never cut. */
+.data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *):where(:has(.token, .whole)) { white-space: nowrap; overflow-wrap: normal; display: inline-block; max-width: min(var(--identifier-max), var(--hold)); vertical-align: bottom; overflow: hidden; text-overflow: ellipsis; }
 /* The chip's baseline is its token's: the grid's first row, ahead of the
    strut's rows, whose text has none of the chip's padding. */
-.data-table td code:not(:where(td) :is(p, li) *, .cell-whole) > .token[data-sole] {
+.data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole) > .token[data-sole] {
   display: block; justify-self: start; order: -1; max-width: 100%;
   padding: 1px calc(var(--space-2) + 1px) 1px var(--space-2); border-radius: 4px; background: var(--bg-tint); overflow: hidden; text-overflow: ellipsis;
 }

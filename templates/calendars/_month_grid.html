@@ -37,7 +37,7 @@ and a table cell outside a grid takes no aria-selected.
               {% comment %}Timed: a dot, its time, its title. All day: a filled block.{% endcomment %}
               <a class="month-item series-{{ placed.source.slot }}{% if not placed.event.timed %} is-all-day{% endif %}{% if placed.event.state %} is-{{ placed.event.state }}{% endif %}" data-target-equivalent="{{ cell.anchor }}" href="{{ placed.event.url|default:cell.url }}" data-tip="{% if placed.event.time_label %}{{ placed.event.time_label }} {% endif %}{{ placed.event.title }}{% if placed.event.detail %} · {{ placed.event.detail }}{% endif %}">{% if placed.event.time_label %}<time>{{ placed.event.time_label }}</time>{% endif %}<span>{{ placed.event.title|breakable }}</span></a>
             {% endfor %}
-            {% if cell.more %}<a class="month-more" data-target-equivalent="{{ cell.anchor }}" href="{{ cell.url }}">{{ cell.more|breakable }} more</a>{% endif %}
+            {% if cell.more %}<a class="month-more" data-target-equivalent="{{ cell.anchor }}" href="{{ cell.url }}">{{ cell.more|measured:"more" }}</a>{% endif %}
           </td>
         {% endfor %}
       </tr>

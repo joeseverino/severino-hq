@@ -21,6 +21,7 @@ from hq.domains.control_plane.models import (
     ProviderInventory,
 )
 from hq.platform.application.plugin_testing import form_keyed
+from hq_sdk.testing import plain
 
 from ..capabilities import capability_words
 from ..entity_links import entity_link
@@ -167,7 +168,7 @@ class MachinePageTests(TestCase):
         response = self.client.get(reverse("control_plane:machines"))
 
         self.assertContains(response, "a-docker-host")
-        self.assertContains(response, "1 of 1 running")
+        self.assertIn("1 of 1 running", plain(response.content))
 
     def test_the_page_gathers_what_ties_to_one(self):
         response = self.client.get(reverse("control_plane:machine", kwargs={"name": "a-docker-host"}))

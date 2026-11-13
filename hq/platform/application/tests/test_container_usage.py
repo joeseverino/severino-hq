@@ -9,6 +9,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.control_plane.observations.portainer import RUNTIME_KIND
+from hq_sdk.testing import plain
 
 from ..container_reads import get_container
 from ..inventory import record_inventory
@@ -46,7 +47,7 @@ def sweep(*records):
 def fact(page, which):
     """The words of the page's usage fact ``which``; blank when it has none."""
 
-    found = select(page.content, "data-usage", which)
+    found = select(page.content.decode(), "data-usage", which)
     return found[0].words if found else ""
 
 
@@ -137,7 +138,7 @@ class UsageShownTests(TestCase):
         sweep(runtime(after=timedelta(minutes=1), cpu=1_920_000_000))
         page = self.client.get(self.resource.get_absolute_url())
 
-        self.assertIn("146 MB", fact(page, "memory"))
-        self.assertIn("1.0 GB", fact(page, "memory"))
+        self.assertIn("146 MB", plain(fact(page, "memory")))
+        self.assertIn("1.0 GB", plain(fact(page, "memory")))
         self.assertNotIn("%", first)
         self.assertIn("3.2%", fact(page, "cpu"))

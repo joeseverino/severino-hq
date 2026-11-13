@@ -22,8 +22,8 @@ lazy from django.template.loader_tags import BlockNode, ExtendsNode, IncludeNode
 lazy from django.template.smartif import TokenBase
 
 lazy from hq.platform.core.stylesheets import stylesheet
+lazy from hq.platform.core.table_cells import ROLE_CLASSES
 lazy from hq.platform.core.templatetags.part_tags import SectionTakes
-lazy from hq.platform.core.templatetags.table_tags import ROLE_CLASSES
 lazy from hq.platform.core.templatetags.value_tags import Takes
 
 lazy from .contract import _parameters
@@ -109,6 +109,7 @@ FILTERS = (
     "breakable",
     "counted",
     "day",
+    "measured",
     "money",
     "or_empty",
     "outside",
@@ -230,6 +231,67 @@ def _class_word(*words: str, prefix: bool = False) -> str:
     return rf'\bclass="(?:[^"]*[\s}}])?(?:{"|".join(words)}){after}'
 
 
+# What a figure written apart from its word is read by. A line may break at
+# any space the template writes between a figure and the word after it, so
+# that word opens the next line alone ("3.57" above "mi"); the value tags join
+# the two (line_breaks.held). A value is a figure unless what it reads says
+# it is words: a field that holds a name, or a filter that writes its own
+# words. The word after it is a unit or a counted word unless it is one of the
+# closed classes of words that follow a name in a sentence.
+_NAME_FIELDS = ("get_username", "host", "kind", "label", "name", "risk", "status", "title", "username")
+# The value tags that write a figure together with its own words, each joined
+# where a line could break inside it (value_tags, through line_breaks.held).
+WORDED_FIGURES = {
+    "ago": "an age in words",
+    "ago_short": "an age in words",
+    "bytes": "a byte count",
+    "counted": "a count and the words for it",
+    "day": "a day in words",
+    "expiry": "a date and a count of days",
+    "measured": "a figure and its unit",
+    "money": "an amount",
+    "seconds": "a run time",
+    "signed_in": "an age in words",
+    "span": "a length of time",
+}
+# Sorted, so the pattern contract.json records does not move with the order.
+_WORDED_FILTERS = sorted(
+    (
+        *WORDED_FIGURES,
+        "capfirst",
+        "door_words",
+        "interface_label",
+        "kind_label",
+        "lower",
+        "readable",
+        "title",
+        "upper",
+        "when",
+        "yesno",
+    )
+)
+_FUNCTION_WORDS = (
+    "a", "across", "after", "an", "and", "are", "as", "at", "be", "because", "been", "before", "beyond", "but", "by",
+    "can", "cannot", "could", "did", "do", "does", "for", "from", "had", "has", "have", "he", "her", "his",
+    "if", "in", "into", "is", "it", "its", "itself", "may", "might", "must", "nor", "not", "now", "of", "on",
+    "once", "only", "or", "over", "per", "she", "should", "since", "so", "still", "than", "that", "the",
+    "their", "them", "then", "these", "they", "this", "those", "through", "to", "under", "until", "was",
+    "we", "were", "when", "where", "which", "while", "who", "will", "with", "within", "without", "would",
+    "yet", "you",
+)  # fmt: skip
+_ARGUMENT = r"""(?::(?:"[^"]*"|'[^']*'|[\w.-]+))?"""
+_FIGURE_VALUE = (
+    rf"\{{\{{\s*(?!(?:\w+\.)*(?:{'|'.join(_NAME_FIELDS)})\s*(?:\||\}}\}}))[\w.]+"
+    rf"(?:(?:\|\w+{_ARGUMENT})*\|(?!(?:{'|'.join(_WORDED_FILTERS)})\b)\w+{_ARGUMENT})?\s*\}}\}}"
+)
+# A figure written in the text itself ("30 days"), outside a tag.
+_FIGURE_LITERAL = r"(?<![\w.,:$#/+-])\d+(?:[.,:]\d+)*(?![^{}]*[%}]\})"
+_FIGURE_SPLIT = (
+    rf"(?:{_FIGURE_VALUE}|{_FIGURE_LITERAL})(?![^<>]*>)(?:\s|&nbsp;|&#160;)+"
+    rf"(?!(?:{'|'.join(_FUNCTION_WORDS)})\b)(?:(?:[a-z][A-Za-z]*|[A-Z]+s)\b(?![-'])|%)"
+)
+
+
 # The shapes a page draws by hand where a shared part draws it, each with the
 # part to write instead: hq_sdk.validation refuses each in an extension's
 # templates, and the host's source test (test_hand_drawn.py) holds the host's
@@ -310,6 +372,13 @@ HAND_DRAWN: dict[str, dict[str, str]] = {
             r"(?:\|(?!counted)\w+(?::\S+)?)*\s*\}\}</strong>\s+[a-z]"
         ),
         "write": '{{ n|counted:"thing" }}, the figure and its words as one, or {% fact "Label" value=n %}',
+    },
+    "a figure apart from its word": {
+        "pattern": _FIGURE_SPLIT,
+        "write": (
+            '{{ n|counted:"thing" }} for a count, or {{ x|measured:"mi" }} for a unit or a word the count'
+            ' leaves alone ("more"): the figure and its word as one value'
+        ),
     },
     "an empty state": {
         "pattern": _class_word("empty"),

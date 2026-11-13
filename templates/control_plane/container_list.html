@@ -17,9 +17,9 @@ refresh does, daily and whenever a sweep finds a new image, and the band says wh
       <small>{% if tally.vulnerable %}in {{ tally.vulnerable_images|counted:"image" }}{% endif %}{% if tally.unchecked %}{% if tally.vulnerable %}{% dot %}{% endif %}{{ tally.unchecked|breakable }} of {{ tally.running|breakable }} cannot be checked{% endif %}</small>
     {% endfact %}
     {% fact "Updates" icon="deploy" tone=tally.updates_tone %}
-      {% if tally.update_available %}{{ tally.update_available|counted:"has an update,have an update" }}{% elif tally.up_to_date == tally.running %}All up to date{% elif tally.up_to_date %}{{ tally.up_to_date|breakable }} of {{ tally.running|breakable }} up to date{% else %}Unknown{% endif %}
+      {% if tally.update_available %}{{ tally.update_available|counted:"has an update,have an update" }}{% elif tally.up_to_date == tally.running %}All up to date{% elif tally.up_to_date %}{{ tally.up_to_date|breakable }} of {{ tally.running|measured:"up to date" }}{% else %}Unknown{% endif %}
     {% detail %}
-      <small>{% if tally.update_available and tally.up_to_date %}{{ tally.up_to_date|breakable }} up to date{% if tally.update_unknown and tally.up_to_date != tally.running %}, {% endif %}{% endif %}{% if tally.update_unknown and tally.up_to_date != tally.running %}{{ tally.update_unknown|breakable }} unknown{% endif %}{% if tally.update_available and tally.up_to_date or tally.update_unknown and tally.up_to_date != tally.running %}{% dot %}{% endif %}{% include "partials/_reading_age.html" with at=read_at only %}</small>
+      <small>{% if tally.update_available and tally.up_to_date %}{{ tally.up_to_date|measured:"up to date" }}{% if tally.update_unknown and tally.up_to_date != tally.running %}, {% endif %}{% endif %}{% if tally.update_unknown and tally.up_to_date != tally.running %}{{ tally.update_unknown|measured:"unknown" }}{% endif %}{% if tally.update_available and tally.up_to_date or tally.update_unknown and tally.up_to_date != tally.running %}{% dot %}{% endif %}{% include "partials/_reading_age.html" with at=read_at only %}</small>
     {% endfact %}
     {% fact "Pinned" icon="lock" tone=tally.pinned_tone %}
       {{ tally.pinned|breakable }} of {{ tally.running|breakable }}
@@ -56,7 +56,7 @@ refresh does, daily and whenever a sweep finds a new image, and the band says wh
                       {% for finding in standing.urgent|slice:":3" %}
                         <li>{% status finding.severity tone="serious" %} {% entity finding.url|outside label=finding.id %} <code>{{ finding.package|breakable }}</code> {% include "partials/_change.html" with from=finding.installed to=finding.fixed|join:", " %}</li>
                       {% endfor %}
-                      {% if standing.urgent|length > 3 %}<li class="muted">and {{ standing.urgent|length|add:"-3"|breakable }} more on <a href="{{ group.containers.0.url }}#supply-chain">its page</a></li>{% endif %}
+                      {% if standing.urgent|length > 3 %}<li class="muted">and {{ standing.urgent|length|add:"-3"|measured:"more" }} on <a href="{{ group.containers.0.url }}#supply-chain">its page</a></li>{% endif %}
                     </ul>
                   {% endif %}
                 </div>
@@ -99,7 +99,7 @@ refresh does, daily and whenever a sweep finds a new image, and the band says wh
               <br><span class="muted">{% if standing.tag %}{{ standing.tag|breakable }}{% else %}no version tag{% endif %}{% if standing.pinned %}{% dot %}<span tabindex="0" data-tip="Locked to {{ standing.image.digest|slice:':19' }}…">locked</span>{% else %}{% dot %}<span tabindex="0" data-tip="It runs whatever the tag pointed at when it was pulled.">tag only</span>{% endif %}{% if standing.built %}{% dot %}built {{ standing.built|ago_short }}{% endif %}</span>
             </td>
             {% include "control_plane/_container_standing.html" %}
-            {% with posture=item.posture %}<td class="optional-col">{% if posture.serious %}<span class="container-reach" tabindex="0" data-tip="{% for result in posture.unmet %}{% if result.check.serious %}{{ result.check.unmet }}&#10;{% endif %}{% endfor %}">Can control its machine</span>{% elif posture.unmet %}<span tabindex="0" data-tip="{% for result in posture.unmet %}{{ result.check.unmet }}&#10;{% endfor %}">{{ posture.unmet|length }} to fix</span>{% elif posture.measured %}<span class="muted">{% if posture.met == posture.measured %}All {{ posture.measured|breakable }} pass{% else %}{{ posture.met|breakable }} of {{ posture.measured|breakable }} pass{% endif %}</span>{% endif %}</td>{% endwith %}
+            {% with posture=item.posture %}<td class="optional-col">{% if posture.serious %}<span class="container-reach" tabindex="0" data-tip="{% for result in posture.unmet %}{% if result.check.serious %}{{ result.check.unmet }}&#10;{% endif %}{% endfor %}">Can control its machine</span>{% elif posture.unmet %}<span tabindex="0" data-tip="{% for result in posture.unmet %}{{ result.check.unmet }}&#10;{% endfor %}">{{ posture.unmet|length }} to fix</span>{% elif posture.measured %}<span class="muted">{% if posture.met == posture.measured %}All {{ posture.measured|measured:"pass" }}{% else %}{{ posture.met|breakable }} of {{ posture.measured|measured:"pass" }}{% endif %}</span>{% endif %}</td>{% endwith %}
             <td class="optional-col">{% for hostname in item.serves %}{% entity "service"|entity_of:hostname %}{% if not forloop.last %}<br>{% endif %}{% endfor %}</td>
             <td>{% if not item.running.healthy %}{% status item.running.state tone="serious" %}<br>{% endif %}<span class="cell-part">{{ item.uptime|default:item.running.status|breakable }}{% if item.running.health %}<span class="muted">,</span>{% endif %}</span>{% if item.running.health %} <span class="cell-part muted" title="{{ item.running.check|capfirst }}">{{ item.running.health|breakable }}</span>{% endif %}</td>
           </tr>

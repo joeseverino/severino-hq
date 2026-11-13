@@ -273,6 +273,41 @@ class BreakableTests(SimpleTestCase):
         self.assertEqual(wholes(readout("restart example-web now")), ["example-web"])
 
 
+class FigureWordTests(SimpleTestCase):
+    """A value tag that writes a figure with its words joins them as
+    ``breakable`` does, with no markup, so it also serves in an attribute."""
+
+    def render(self, source: str, **context) -> str:
+        from django.template import Context, Template
+
+        return Template("{% load value_tags %}" + source).render(Context(context))
+
+    def test_each_value_tag_keeps_its_figure_and_word_on_one_line(self):
+        for source, context, run in (
+            ('{{ n|counted:"sign-in" }}', {"n": 3}, "3\xa0sign-ins"),
+            ('{{ n|counted:"check passes,checks pass" }}', {"n": 2}, "2\xa0checks pass"),
+            ('{{ x|floatformat:2|measured:"mi" }}', {"x": 3.5712}, "3.57\xa0mi"),
+            ('{{ n|measured:"more" }}', {"n": 4}, "4\xa0more"),
+            ("{{ n|bytes }}", {"n": 3 * 1024**3}, "3.0\xa0GB"),
+            ("{{ n|seconds }}", {"n": 273}, "4\xa0min 33\xa0s"),
+        ):
+            with self.subTest(source=source):
+                drawn = self.render(source, **context)
+                self.assertEqual(drawn, run)
+
+    def test_a_missing_measure_is_the_missing_mark_without_its_unit(self):
+        drawn = self.render('{{ x|measured:"mi" }}', x=None)
+        self.assertIn('class="empty-value"', drawn)
+        self.assertNotIn("mi", drawn)
+
+    def test_the_join_is_breakables_own(self):
+        from hq.platform.core.templatetags.line_breaks import held
+
+        for phrase in ("Due in 80 days", "+0.01 m / 90 days", "3 sign-ins", "12 of example.com", "80 example.com"):
+            with self.subTest(phrase=phrase):
+                self.assertEqual(held(phrase), re.sub(r"<[^>]*>", "", str(breakable(phrase))))
+
+
 class CodeSpanTests(SimpleTestCase):
     """A description's Markdown code spans read as code; nothing else in it is markup."""
 

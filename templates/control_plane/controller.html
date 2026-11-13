@@ -17,7 +17,7 @@ for it. Nothing here asks it anything.
   {% fact "Last read" icon="eye" tone=controller.failing_tone %}
     {% if controller.swept_at %}{{ controller.swept_at|when:"ago" }}{% else %}Never{% endif %}
   {% detail %}
-    {% if controller.swept_at %}<small>{% if controller.failing %}{{ controller.failing|breakable }} of {{ controller.readings|length }} readings failed.{% else %}All {{ controller.readings|length }} readings are current.{% endif %}</small>
+    {% if controller.swept_at %}<small>{% if controller.failing %}{{ controller.failing|breakable }} of {{ controller.readings|length|counted:"reading" }} failed.{% else %}All {{ controller.readings|length|counted:"reading" }} are current.{% endif %}</small>
     {% else %}<small>Nothing has been read yet.</small>{% endif %}
   {% endfact %}
   {% fact "Next read" icon="clock" tone=controller.overdue_tone %}

@@ -40,9 +40,10 @@ _UNBROKEN = 24
 _INNER_SEAM = re.compile(r"\w(?:/|:+|\.)\w")
 _WORDS = re.compile(r"(\s+)")
 # A figure in a phrase: an amount, a time, an address of digits ("$12.00",
-# "9:29", "172.18.0.2"), a range of two ("10.5–12.5"), or a rate ("10:36/mi").
+# "9:29", "172.18.0.2"), a range of two ("10.5–12.5"), a rate ("10:36/mi"), or
+# a share or a prefix length ("3/4", "10.0.0.0/24").
 # Nothing in one is a place a line breaks.
-_FIGURE = re.compile(r"\W*\d+(?:[.:,]\d+)*(?:–\d+(?:[.:,]\d+)*)?(?:/[^\W\d_]+)?\W*")
+_FIGURE = re.compile(r"\W*\d+(?:[.:,]\d+)*(?:–\d+(?:[.:,]\d+)*)?(?:/(?:[^\W\d_]+|\d+(?:[.:,]\d+)*))?\W*")
 # Where a browser may break a hyphenated part: after each inner hyphen.
 _AFTER_HYPHEN = re.compile(r"(?<=[^-\s]-)")
 # A piece of a name shorter than this, alone on a line ("1" under
@@ -274,9 +275,9 @@ def _line(value, *, sole: bool | None = None) -> list[str]:
 
 
 # What a figure counts or measures, which the line never leaves alone below
-# it ("12" above "days"): a word of letters, perhaps per another ("m/s"), or a
-# percent sign, with the sentence's mark after it.
-_UNIT = re.compile(r"(?:[^\W\d_]+(?:/[^\W\d_]+)?|%)[.,;:!?)]*")
+# it ("12" above "days"): a word of letters, perhaps hyphenated ("sign-ins")
+# or per another ("m/s"), or a percent sign, with the sentence's mark after it.
+_UNIT = re.compile(r"(?:[^\W\d_]+(?:-[^\W\d_]+)*(?:/[^\W\d_]+)?|%)[.,;:!?)]*")
 # A separator standing between two words ("+0.01 m / 90 days"), which a line
 # never opens on: the separators the survey reads as a stray.
 _SEPARATOR = re.compile(r"[·•|/\u2013\u2014]")
@@ -297,14 +298,31 @@ def _held_back(words: list[str], at: int) -> bool:
     return bool(_SEPARATOR.fullmatch(word) or (_figure(words[at - 2]) and _UNIT.fullmatch(word)))
 
 
+def _held_places(words: list[str]) -> list[int]:
+    """Where in ``words`` (split by ``_WORDS``, so every second piece is the
+    whitespace between two) a word stays on the line of the one before it."""
+
+    return [at for at in range(2, len(words), 2) if _held_back(words, at)]
+
+
+def held(text: str) -> str:
+    """``text`` as plain text, each figure joined to its unit or counted word by
+    a no-break space as ``breakable`` joins them, and no markup added: for a
+    value tag whose words go in an attribute as well as in a page."""
+
+    words = _WORDS.split(str(text))
+    for at in _held_places(words):
+        words[at - 1] = "\xa0"
+    return "".join(words)
+
+
 def _words(value, *, sole: bool | None = None) -> list[str]:
     """``value``'s words as ``breakable`` draws them, a word standing alone as a
     name unless ``sole`` says otherwise."""
 
     # Escaped first, so the only markup in the result is what is added here.
     words = _WORDS.split(str(conditional_escape(value)))
-    # Every second piece is the whitespace between two words.
-    held = [at for at in range(2, len(words), 2) if _held_back(words, at)]
+    held = _held_places(words)
     # A token that fits on its line moves to the next one whole; one longer than
     # its line wraps at its seams; a part longer than its line alone breaks
     # wherever it must.

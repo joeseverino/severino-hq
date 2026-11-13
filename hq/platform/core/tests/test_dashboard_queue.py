@@ -14,6 +14,7 @@ from hq.platform.application.tests.markup import hrefs, select, with_class, with
 from hq.platform.application.ui import DomainOverview
 from hq.platform.application.workflow_contracts import ActionLink
 from hq.platform.application.workflows import claim_resolution_plan
+from hq_sdk.testing import plain
 
 
 class DashboardQueueTests(TestCase):
@@ -200,7 +201,7 @@ class DashboardQueueTests(TestCase):
         set_aside(self.user, [item["key"] for item in items], aside=True, current=items)
         response = self.client.get("/")
         self.assertEqual((response.context["action_queue_count"], response.context["aside_count"]), (0, 2))
-        self.assertContains(response, "2 dismissed")
+        self.assertIn("2 dismissed", plain(response.content))
 
     def test_empty_filtered_queue_offers_a_way_back(self):
         response = self.client.get("/action-items/", {"q": "not an existing item"})

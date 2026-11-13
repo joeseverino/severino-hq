@@ -17,7 +17,7 @@ here names one.
       {% elif notice_count %}
         Nothing needs you. <a href="{% url 'action_items' %}">{{ notice_count|counted:"notice,notices" }}</a>
       {% elif aside_count %}
-        Nothing needs you. <a href="{% url 'action_items' %}">{{ aside_count|breakable }} dismissed</a>
+        Nothing needs you. <a href="{% url 'action_items' %}">{{ aside_count|measured:"dismissed" }}</a>
       {% elif not controller.known %}
         {% comment %}An empty queue the controller never filled is not a clear one.{% endcomment %}
         HQ has read nothing yet.
@@ -60,7 +60,7 @@ the row is gone once every step is done.
       </li>
     {% endfor %}
   </ol>
-{% aside %}<span class="count">{{ getting_started_left|breakable }} left{% if install_guide %}{% dot %}{% entity install_guide|outside label="Install guide" %}{% endif %}</span>
+{% aside %}<span class="count">{{ getting_started_left|measured:"left" }}{% if install_guide %}{% dot %}{% entity install_guide|outside label="Install guide" %}{% endif %}</span>
 {% endsection %}
 {% endif %}
 
@@ -120,7 +120,7 @@ is said here, over the ones most recently changed, and nowhere else on the page.
         {% endfor %}
       </ul>
     {% endif %}
-  {% aside %}{% if active_project_count %}<span class="count">{{ active_project_count|breakable }} active{% if projects_needing_output %}{% dot %}{{ projects_needing_output|counted:"has no writeup or doc,have no writeup or doc" }}{% endif %}</span>{% endif %}
+  {% aside %}{% if active_project_count %}<span class="count">{{ active_project_count|measured:"active" }}{% if projects_needing_output %}{% dot %}{{ projects_needing_output|counted:"has no writeup or doc,have no writeup or doc" }}{% endif %}</span>{% endif %}
   {% empty %}No active projects.
   {% endsection %}
 

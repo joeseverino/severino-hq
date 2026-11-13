@@ -84,7 +84,7 @@ it is not blocked, since removal never lifts a block.
               <div class="row-below">
                 {% if identity.blocked_at %}<p>Blocked {{ identity.blocked_at|when:"ago" }}{% if identity.blocked_by %} by {{ identity.blocked_by.get_username|breakable:"." }}{% else %}.{% endif %}</p>{% endif %}
                 {% if identity.person %}{% if standing.acts_for_nobody %}<p data-role="none">{{ identity.person.get_username|breakable }} holds no role, so its calls are refused.</p>{% else %}<p data-role="{{ standing.role }}">Role confirmed {{ standing.role_confirmed|when:"ago" }}.</p>{% endif %}{% endif %}
-                {% with streams=standing.streams %}{% if streams.open and not streams.full %}<p data-streams="open">{{ streams.open|breakable }} of {{ streams.cap|breakable }} live update streams open.</p>{% endif %}{% endwith %}
+                {% with streams=standing.streams %}{% if streams.open and not streams.full %}<p data-streams="open">{{ streams.open|breakable }} of {{ streams.cap|counted:"live update stream,live update streams" }} open.</p>{% endif %}{% endwith %}
                 {% if standing.in_force %}<p>Permissions: {% for name in standing.in_force %}<code>{{ name|breakable }}</code> {% endfor %}</p>{% endif %}
                 {% if standing.beyond_role %}<p>Granted, but beyond {{ identity.person.get_username|breakable }}'s role: {% for name in standing.beyond_role %}<code>{{ name|breakable }}</code> {% endfor %}</p>{% endif %}
                 {% if standing.missing %}<p data-missing>Not granted: {% for name in standing.missing %}<code>{{ name|breakable }}</code> {% endfor %}</p><p data-missing>Grant {% if standing.missing|length == 1 %}it{% else %}them{% endif %} to <code>{{ identity.client_id|breakable }}</code> in your sign-in service, then sign it in again. {% entity client_setup|outside label="Client setup" %}</p>{% endif %}
@@ -101,8 +101,8 @@ it is not blocked, since removal never lifts a block.
             <td>{{ identity.last_seen|when:"ago" }}</td>
             <td data-sort="{{ activity.changes }}">
               {{ activity.changes|counted:"change" }}
-              {% if activity.refused %}<br><span class="figure tone-attention">{{ activity.refused|breakable }} refused</span>{% if activity.limited == activity.refused %} <span class="muted">for calling too much</span>{% elif activity.limited %} <span class="muted">{{ activity.limited|breakable }} for calling too much</span>{% endif %}{% endif %}
-              {% with streams=standing.streams %}{% if streams.full %}<br><span class="figure tone-attention" data-streams="full">{{ streams.open|breakable }} of {{ streams.cap|breakable }} streams open</span> <span class="muted">so another is refused</span>{% endif %}{% endwith %}
+              {% if activity.refused %}<br><span class="figure tone-attention">{{ activity.refused|measured:"refused" }}</span>{% if activity.limited == activity.refused %} <span class="muted">for calling too much</span>{% elif activity.limited %} <span class="muted">{{ activity.limited|breakable }} for calling too much</span>{% endif %}{% endif %}
+              {% with streams=standing.streams %}{% if streams.full %}<br><span class="figure tone-attention" data-streams="full">{{ streams.open|breakable }} of {{ streams.cap|counted:"stream" }} open</span> <span class="muted">so another is refused</span>{% endif %}{% endwith %}
             </td>
             {% row_actions actions %}
           </tr>
@@ -183,7 +183,7 @@ approved, and a block stops that device alone.
               <td>{% status device.label tone=device.tone %}{% if device.waits_for %}<br><span class="muted">For {{ device.waits_for|breakable }}</span>{% endif %}</td>
               <td>{{ device.first_seen|when:"ago" }}</td>
               <td>{{ device.last_seen|when:"ago" }}</td>
-              <td data-sort="{{ device.calls }}">{{ device.calls|counted:"call" }}{% if device.refused %}<br><span class="figure tone-attention">{{ device.refused|breakable }} refused</span>{% endif %}</td>
+              <td data-sort="{{ device.calls }}">{{ device.calls|counted:"call" }}{% if device.refused %}<br><span class="figure tone-attention">{{ device.refused|measured:"refused" }}</span>{% endif %}</td>
               {% row_actions actions %}
             </tr>
           {% endfor %}
@@ -242,7 +242,7 @@ reads it, so whatever the server comes to list appears with nothing here to
 change. Asked for when opened: asking takes the server's SDK into the process.
 {% endcomment %}
 {% partialdef mcp_endpoint %}
-<div id="mcp-endpoint" class="mcp-endpoint">
+<div id="mcp-endpoint" class="mcp-endpoint" data-fragment data-fragment-name="mcp_endpoint">
   {% if endpoint %}
     {% facts %}
       {% fact "Address" %}<code>{{ endpoint.url|breakable }}</code>{% endfact %}
@@ -296,7 +296,7 @@ The folded table is drawn when opened, inside the form: a save before then
 posts only the changed rules, and a rule not posted is left as it holds.
 {% endcomment %}
 {% partialdef every_rule %}
-<div id="every-rule">
+<div id="every-rule" data-fragment data-fragment-name="every_rule">
   {% include "core/_policy_table.html" with groups=default_groups label="Defaults" %}
 </div>
 {% endpartialdef %}

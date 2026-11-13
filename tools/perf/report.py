@@ -14,7 +14,7 @@ import sys
 import time
 from collections.abc import Callable, Iterator
 from contextlib import ExitStack, contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -50,6 +50,8 @@ OUT = ROOT / "var" / "perf"
 LOCAL = ROOT / "mise.local.toml"
 # Set when a run starts again host alone, to the refusal that made it.
 ALONE_BECAUSE = "PERF_HOST_ALONE_BECAUSE"
+# What perf says of a page asked that the base answers 404 and this tree serves.
+NOT_AT_BASE = "not at the base, so measured only in the tree that asked"
 
 
 @dataclass(frozen=True)
@@ -329,10 +331,17 @@ class Live:
     recorder: Recorder
     target: Scratch | Image
     cookie: tuple[str, str] = ("", "")
+    # Each page the first pass walked, by its status.
+    answered: dict[str, int] = field(default_factory=dict)
     stopped: bool = False
 
     def entry(self, page: str) -> dict[str, Any]:
         return next(entry for entry in self.recorder.report["pages"] if entry["page"] == page)
+
+    def pages(self, asked: Plan) -> list[str]:
+        """The pages asked that this side has, so a page the base predates is never measured there."""
+
+        return [page for page in asked.pages if not self.entry(page).get("absent")]
 
     def stop(self) -> None:
         if self.stopped:
@@ -355,13 +364,23 @@ def first_pass(server: Live, asked: Plan) -> dict[str, int]:
     return answered
 
 
-def unanswered(server: Live, asked: Plan, answered: dict[str, int]) -> None:
-    """Each page asked that answered anything but 200, recorded as a failure: its numbers measure no page."""
+def unanswered(live: dict[str, Live], asked: Plan) -> None:
+    """Each page asked that a side answered anything but 200, recorded as a failure, since its
+    numbers measure no page; but a page the base answers 404 and this tree serves is one the tree
+    adds, said so and kept out of the base's measurements, as dev:look's base leaves it out."""
 
-    for page in asked.pages:
-        if answered[page] != 200:
-            failed = NotMeasured(f"{page} answered {answered[page]}, not 200")
-            server.recorder.fail(f"page {estate_name(page)}", failed)
+    here = live["here"].answered if "here" in live else {}
+    for side, server in live.items():
+        for page in asked.pages:
+            status = server.answered[page]
+            if status == 200:
+                continue
+            if side == "base" and status == 404 and here.get(page) == 200:
+                server.entry(page)["absent"] = True
+                server.recorder.save()
+                print(f"{estate_name(page)}: {NOT_AT_BASE}", flush=True)
+                continue
+            server.recorder.fail(f"page {estate_name(page)}", NotMeasured(f"{page} answered {status}, not 200"))
 
 
 def measure_costs(server: Live, asked: Plan) -> None:
@@ -377,14 +396,18 @@ def measure_costs(server: Live, asked: Plan) -> None:
         starts = [round(target.cold_start(), 1) for _ in range(COLD_STARTS)]
         report["cold_start"] = {"runs_ms": starts, "median_ms": sorted(starts)[len(starts) // 2]}
 
+    pages = server.pages(asked)
+
     def browser() -> None:
+        if not pages:
+            return
         with chromium() as launched:
-            costs = measure.browser_costs(launched, target.url, server.cookie, asked.pages, asked.viewports)
+            costs = measure.browser_costs(launched, target.url, server.cookie, pages, asked.viewports)
         for page, seen in costs.items():
             server.entry(page)["browser"] = seen
 
     def queries() -> None:
-        for page, count in target.queries(asked.pages).items():
+        for page, count in target.queries(pages).items():
             server.entry(page)["server"]["queries"] = count
 
     report["load"] = runs.load()
@@ -438,11 +461,10 @@ def serve(
     try:
         with recorder.timed("sign in"):
             server.cookie = target.session()
-        answered = first_pass(server, asked)
+        server.answered = first_pass(server, asked)
     except NotMeasured as error:
         recorder.fail("sign in and first pass", error)
         return None
-    unanswered(server, asked, answered)
     return server
 
 
@@ -455,7 +477,10 @@ def measure_server(live: dict[str, Live], asked: Plan) -> None:
     started = time.monotonic()
     try:
         found = measure.server_times(
-            {side: (server.target.url, server.cookie) for side, server in live.items()}, asked.pages, asked.requests
+            {side: (server.target.url, server.cookie) for side, server in live.items()},
+            asked.pages,
+            asked.requests,
+            lacks={side: set(asked.pages) - set(server.pages(asked)) for side, server in live.items()},
         )
     except Exception as error:  # noqa: BLE001 - recorded on every side it was asked of, and the run goes on
         for server in live.values():
@@ -465,7 +490,7 @@ def measure_server(live: dict[str, Live], asked: Plan) -> None:
         for page, numbers in pages.items():
             live[side].entry(page)["server"].update(numbers)
     if {"base", "here"} <= found.keys():
-        for page in asked.pages:
+        for page in found["base"]:
             difference = measure.moved(found["base"][page]["times_ms"], found["here"][page]["times_ms"])
             live["here"].entry(page)["server"].update(difference or {})
     took = round(time.monotonic() - started, 1)
@@ -486,7 +511,8 @@ def failures(doc: dict[str, Any]) -> list[str]:
 
 
 def verdict(here: runs.Report) -> str:
-    """How many pages' server time moved from the base's past its spread, and which."""
+    """How many pages' server time moved from the base's past its spread, and which; a page the
+    base lacks has no move, so it is not counted."""
 
     compared = [entry for entry in here["pages"] if entry["server"].get("moved_ms") is not None]
     moved = [entry["page"] for entry in compared if measure.past_spread(entry["server"])]
@@ -503,6 +529,8 @@ def closing(kept: runs.Run, here: runs.Report, base: runs.Report | None) -> str:
         said += f", {reused}"
     if base:
         said += f": {verdict(here)};"
+        if absent := [estate_name(entry["page"]) for entry in base["pages"] if entry.get("absent")]:
+            said += f" {', '.join(absent)} {NOT_AT_BASE};"
     else:
         said += ":"
     failed = failures(kept.doc)
@@ -560,6 +588,7 @@ def measure_run(base_commit: str | None, here_commit: str, asked: Plan, kept: ru
             )
         live["here"] = serve(ROOT, here_commit, here=True, asked=asked, kept=kept, side="here", stack=stack)
         serving = {side: server for side, server in live.items() if server}
+        unanswered(serving, asked)
         # First, while every server is as its first boot and one pass left it, so neither has a
         # history the other lacks.
         if serving:

@@ -412,7 +412,10 @@ column as wide as its longest label, so a few short pairs never spread across
 a wide page. A label with several values holds them as a list inside one fact.
 An identifier in a value (code, a `|breakable` name) runs inline, code a chip
 on each line it wraps to, so a value's first line stands on its label's line
-in every engine.
+in every engine. A list opened to read more (in a disclosure, a popover, a
+dialog) or set above what a form changes sits closer and ends with what holds
+it; that is where it stands, never an option, so the same summary drawn on a
+page and in a dialog takes each one's spacing.
 A line (`{% facts layout="inline" %}`) is a card's summary: each fact its bold
 value, then its words ("3 rules"). Its facts stand a fixed gap apart, under a
 rule when they follow the card's head. Its labels read on from the value, so
@@ -820,6 +823,16 @@ A count's plural has one owner too: `counted`, which spells a single noun
 through `labels.plural` ("2 entries"). An audit type's plural is
 `object_type_plural`: the model's `verbose_name_plural` where declared.
 
+A figure and the word it counts or measures share one line, held by the
+no-break space `breakable` puts between them, so the word never opens a line
+alone below its number. A template never writes the word after the figure
+itself: `{{ n|counted:"check" }}` for a count,
+`{{ miles|floatformat:2|measured:"mi" }}` for a unit or a word the count
+leaves alone (`measured:"more"`), and the value tags that say a figure in
+words (`bytes`, `seconds`, `when`) join theirs.
+*Gate:* "a figure apart from its word" in `HAND_DRAWN`, over the host's
+templates and every extension's.
+
 A bare figure counting what a heading heads (`.count`) stands in that
 heading after its words: `<h2>Readings <span class="count">7</span></h2>`,
 and the same in a summary, a group row and a tab. Never in parentheses, and
@@ -1185,6 +1198,13 @@ answers the page and the region is found in it by its id, so a region never
 depends on its server having been taught about it. A view may compose only
 what the part shows (the dashboard does for its calendar and links). A part
 whose inputs are known by revision answers an unchanged question with 304.
+
+A part's root carries `data-fragment` and its name as its placeholder did, so
+it is still the region once in place. A region draws no
+box: in a section's body, a table it holds reaches the frame's sides as one
+the body holds itself does. A fold's part is walked by the browser gate at its
+`data-fragment-fallback` address, the page drawn with it open
+(`estate.opened`).
 
 Pressing a control moves nothing else: its feedback is drawn in a line already
 reserved for it, never inserted beside the button or drawn over the page.

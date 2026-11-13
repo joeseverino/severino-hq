@@ -6,6 +6,6 @@ carrying a card that says so.
 {% url 'contacts:list' as messages_url %}
 {% section "Messages" more_label="All messages" more_url=messages_url %}
   {% include "partials/_record_list.html" with rows=recent_contacts %}
-{% aside %}{% if unread_contacts_count %}<span class="count">{{ unread_contacts_count|breakable }} unread</span>{% endif %}
+{% aside %}{% if unread_contacts_count %}<span class="count">{{ unread_contacts_count|measured:"unread" }}</span>{% endif %}
 {% endsection %}
 {% endif %}

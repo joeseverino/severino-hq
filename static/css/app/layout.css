@@ -577,6 +577,13 @@ td > .subtle-link:not(:only-child) { display: table; }
 .facts-list .fact-detail { grid-column: 2; color: var(--muted); }
 /* In a table's row, facts are the row's small print. */
 td .facts-list { font-size: var(--text-xs); gap: var(--space-1) var(--space-6); }
+/* Opened to read more (a disclosure, a popover, a dialog) or set above what a
+   form changes, a list is a few short pairs under what it serves: its pairs
+   sit closer, and it ends where what holds it ends. A folded section is a
+   part of the page, so its list is the page's. Where only, so a table's row
+   in any of them keeps its own small print. */
+:where(details:not(.section-fold), [popover], dialog, form) .facts-list { row-gap: var(--space-2); }
+:where(details:not(.section-fold), [popover], dialog, form) .facts-list:last-child { margin-bottom: 0; }
 /* Addresses, one to a line, each beside its network: the networks in one
    column and the addresses in the next. */
 .address-list { display: grid; grid-template-columns: max-content minmax(0, max-content); gap: var(--space-1) var(--space-3); align-items: baseline; margin: 0; padding: 0; list-style: none; }

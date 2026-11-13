@@ -184,11 +184,21 @@ def records():
     ]
 
 
+def opened():
+    """Each page drawn with a folded part open, at the address its placeholder
+    falls back to (``data-fragment-fallback``): loaded as a reader first meets
+    it, the fold stays closed and its part is never drawn."""
+
+    agents = reverse("agent_policy")
+    return [f"{agents}?endpoint=1", f"{agents}?all=1"]
+
+
 def estate_pages():
     """Every page of the example estate the gate reads and dev:look's ``all``
-    stands for, by address: the navigation's, then a record's page of each kind."""
+    stands for, by address: the navigation's, each with its folded parts open,
+    then a record's page of each kind."""
 
-    return [*navigation(), *records()]
+    return [*navigation(), *opened(), *records()]
 
 
 def render_estate():

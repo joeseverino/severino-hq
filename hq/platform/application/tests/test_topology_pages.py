@@ -12,6 +12,7 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
 from hq.domains.control_plane.topology_views import TopologyView
 from hq.platform.application.derivation_testing import uncached
+from hq_sdk.testing import plain
 
 from ..action_links import topology_investigation_links, topology_url
 from ..command_center import command_center
@@ -333,7 +334,8 @@ class FocusedPageTests(TestCase):
         )
 
         noun = "link" if degree == 1 else "links"
-        self.assertTrue(select(response, "aria-label", f"Details for example.com, {degree} {noun}"))
+        labels = [plain(element.attrs["aria-label"]) for element in select(response, "aria-label")]
+        self.assertIn(f"Details for example.com, {degree} {noun}", labels)
 
     def project(self):
         with host_only():

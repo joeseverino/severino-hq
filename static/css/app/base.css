@@ -72,10 +72,11 @@ pre code { background: transparent; padding: 0; color: inherit; }
    One that fits on its line moves to the next line whole; one longer than its
    line wraps at the seams the filter marks; a hyphenated part (`.whole`) or one
    with no seams breaks inside only when it alone is longer than its line. A
-   table lays out its own identifiers; code in a sentence in a cell is laid
-   out as here. */
+   table lays out its own identifiers; code in a sentence in a cell (a `p` or
+   `li`, or a part of free text, `data-cell` data or prose) is laid out as
+   here. */
 :is(code, .token, .whole):not(pre *, td *, th *),
-:is(td, th) :is(p, li) :is(code, code .token, code .whole):not(pre *) {
+:is(:is(td, th) :is(p, li), [data-cell~=data], [data-cell~=prose]) :is(code, code .token, code .whole):not(pre *) {
   display: inline-block; max-width: 100%; overflow-wrap: break-word; text-decoration: inherit;
   /* As wide as what it says: a sized item is not stretched to its column,
      and still sits where its container aligns its items. */
@@ -272,7 +273,6 @@ pre ::selection { color: var(--code-ink); }
 .primary-nav a[aria-current] { color: var(--ink); background: var(--bg-tint); }
 
 .nav-group-label { display: inline-flex; align-items: center; gap: var(--space-2); }
-.nav-caret { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; opacity: .7; }
 .nav-group-panel a { padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm); font-size: var(--text-sm); }
 
 /* Gives way before the sections do: below the breakpoint it is an icon. */
@@ -291,7 +291,6 @@ pre ::selection { color: var(--code-ink); }
   text-decoration: none;
 }
 .global-search:hover { background: var(--bar-control-bg-hover); color: var(--ink-2); text-decoration: none; }
-.search-icon { flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
 .search-key { padding: 0 var(--space-2); border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--muted-2); font: inherit; font-size: var(--text-3xs); line-height: 1.6; }
 
 @media (max-width: 1280px) {

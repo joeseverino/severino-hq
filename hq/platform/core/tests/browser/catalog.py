@@ -61,6 +61,13 @@ _ONE_LINE = """(values) => [...document.querySelectorAll(values)]
   .map((value) => value.textContent.trim())"""
 
 
+# A list opened to read more set no closer than the page's list before it.
+_TIGHTER = """(lists) => {
+  const [page, opened] = [...document.querySelectorAll(lists)].map((list) => parseFloat(getComputedStyle(list).rowGap));
+  return opened < page ? [] : [`the opened list's rows are ${opened}px apart, the page's ${page}px`];
+}"""
+
+
 # Each form not drawn as one question, or drawn otherwise than its width
 # calls for: its button on the control's line in a form of 30rem or more
 # inside its padding, under the control in one narrower (forms.css).
@@ -675,6 +682,21 @@ CATALOG = {
         "line at the narrower widths, as a reading's note does.{% endfact %}"
         "{% endfacts %}",
         {"none": None},
+    ),
+    # A list on the page and one in a disclosure under it, as a resource's
+    # other settings are drawn: the list opened to read more sits closer.
+    "part/facts-list-compact": Entry(
+        '{% section "Example settings" %}{% facts %}'
+        '{% fact "Example name" value="example-01" %}'
+        '{% fact "Example image" %}<code>{{ image|breakable }}</code>{% endfact %}'
+        "{% endfacts %}"
+        '<details class="control-diagnostics"><summary>Example other settings</summary>{% facts %}'
+        '{% fact "Example port" value="8123" %}'
+        '{% fact "Example restart" value="unless-stopped" %}'
+        '{% fact "Example network" %}<code>example-network</code>{% endfact %}'
+        "{% endfacts %}</details>{% endsection %}",
+        {"image": "registry.example.com/example-team/example-image:2024.11.3"},
+        premise=(_TIGHTER, SELECTORS["facts_list"]),
     ),
     # The notice ({% notice %}) in each tone and with each option; a new tone
     # or option of the tag comes with an entry here (test_notice_tags).

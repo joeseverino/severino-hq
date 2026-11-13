@@ -150,6 +150,54 @@ class SplitCountShapeTests(SimpleTestCase):
         self.assertEqual([line for line in BOLD_PROSE if self._drawn(line)], [])
 
 
+# A figure and the word it counts or measures with a space the template
+# writes between them, in each form a template can write one, and the forms
+# that join them or are no figure and its word.
+SPLIT_FIGURES = (
+    "{{ miles|floatformat:2 }} mi",
+    "<td>{{ row.miles|floatformat:2|breakable }} mi</td>",
+    "{{ standing.findings|length }} lower",
+    '{{ reads|length|add:"-3"|breakable }} more',
+    "{{ n }}\n    checks",
+    "{{ record.ttl|breakable }}&nbsp;s",
+    "{{ n }} day{{ n|pluralize }}",
+    '{{ limit|floatformat:"-2" }} CPUs',
+    "{{ share }} %",
+    "<p>Over the last 90 days</p>",
+    "<p>Read every 2.5 hours</p>",
+)
+JOINED_OR_WORDS = (
+    '{{ miles|floatformat:2|measured:"mi" }}',
+    '{{ n|counted:"check" }} pass',
+    "{{ rx|bytes }} in",
+    "{{ posture.met|breakable }} of {{ n }}",
+    "{{ host|breakable }} itself",
+    "{{ sight.label|breakable }} refused this credential",
+    "{{ identity.person.get_username|breakable }} holds no role",
+    '{{ panel.failed|breakable:")." }} This',
+    "{{ year }} CSV",
+    '<div class="conn-{{ connection.channel.id }} conn-verdict">',
+    "{% if n > 1 and shown %}",
+    "{{ start|when }} to {{ end|when }}",
+    "{{ n }}%",
+    "<p>v2 release</p>",
+)
+
+
+@tag("source")
+class FigureSplitShapeTests(SimpleTestCase):
+    SHAPE = "a figure apart from its word"
+
+    def _drawn(self, line: str) -> bool:
+        return any(shape == self.SHAPE for _, shape in hand_drawn(line, HAND_DRAWN))
+
+    def test_each_figure_written_apart_from_its_word_is_refused(self):
+        self.assertEqual([line for line in SPLIT_FIGURES if not self._drawn(line)], [])
+
+    def test_a_joined_figure_and_a_name_and_its_verb_are_left_alone(self):
+        self.assertEqual([line for line in JOINED_OR_WORDS if self._drawn(line)], [])
+
+
 @tag("source")
 class PublishedTextTests(SimpleTestCase):
     """HQ is public and a queue id is a private reference, so no text hq_sdk publishes names one."""

@@ -365,7 +365,7 @@ WRAPPED = (
 # A fact whose value is a list of names keeps no other pair on its row while
 # it wraps: beside them it makes their row as tall as itself.
 WRAPPED_BESIDE_A_PAIR = (
-    "(values) => {"
+    "([values, pairs]) => {"
     + DESCRIBE
     + LINE_COUNT
     + """
@@ -374,12 +374,13 @@ WRAPPED_BESIDE_A_PAIR = (
     if (!value.checkVisibility()) continue;
     const {lines, top, bottom} = linesOf(value);
     if (lines < 2) continue;
-    const beside = [...value.parentElement.children].some((other) => {
-      if (other === value || other === value.previousElementSibling || !other.checkVisibility()) return false;
+    const pair = value.closest(pairs);
+    const beside = [...pair.parentElement.children].some((other) => {
+      if (other === pair || !other.checkVisibility()) return false;
       const r = other.getBoundingClientRect();
       return r.top < bottom - 1 && r.bottom > top + 1;
     });
-    const name = value.previousElementSibling?.textContent.trim().replace(/\\s+/g, ' ');
+    const name = pair.querySelector(':scope > dt')?.textContent.trim().replace(/\\s+/g, ' ');
     if (beside) found.push(`${describe(value)} "${name}" wraps to ${lines} lines beside another pair`);
   }
   return found;
@@ -405,7 +406,7 @@ CHECKS = {
         LINED_PAST_THE_NAME,
         [SELECTORS["link"], SELECTORS["vendored"], SELECTORS["tag"], SELECTORS["mark"]],
     ),
-    "lists of facts": (WRAPPED_BESIDE_A_PAIR, SELECTORS["fact_list"]),
+    "lists of facts": (WRAPPED_BESIDE_A_PAIR, [SELECTORS["fact_list"], SELECTORS["band_fact_cell"]]),
     "bare folds": (BARE_FOLDS, [SELECTORS["section_fold"], SELECTORS["drawn_when_opened"]]),
     # The dashboard's readings, which no other page draws.
     "readings": Check((_READINGS_OF, SELECTORS["readings"]), only_on="/", findings=reading_problems),

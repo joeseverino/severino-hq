@@ -232,7 +232,7 @@ class MenuTests(TestCase):
         menu = self._menu()
 
         drawn = set().union(*(element.classes for element in menu))
-        self.assertIn("user-icon", drawn)
+        self.assertIn("svg", [element.tag for element in menu])
         self.assertNotIn("role-mark", drawn)
         self.assertNotIn("img", [element.tag for element in menu])
 

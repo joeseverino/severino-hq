@@ -51,7 +51,7 @@ four would turn a typo in a DKIM selector into a mail outage.
       </div>
       <p class="help">
         Usually <code>include:</code> plus a mail service that sends for you. Each one
-        costs a DNS lookup. Receivers ignore SPF past {{ spf_limit|breakable }} lookups. This
+        costs a DNS lookup. Receivers ignore SPF past {{ spf_limit|counted:"lookup" }}. This
         record uses {{ spf.lookups|breakable }} of {{ spf_limit|breakable:"." }}
       </p>
     </div>

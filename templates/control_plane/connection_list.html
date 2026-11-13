@@ -72,7 +72,7 @@ part's heading shows only when there is more than one.
                   {% for read in reads %}{% if forloop.counter <= 3 or folded <= 0 %}{% include "control_plane/_connection_read.html" %}{% endif %}{% endfor %}
                 </ul>
                 {% if folded > 0 %}
-                  <span class="connection-ability-more cell-part row-less">+{{ reads|length|add:"-3"|breakable }} more</span>
+                  <span class="connection-ability-more cell-part row-less">+{{ reads|length|add:"-3"|measured:"more" }}</span>
                   <ul class="connection-ability-list connection-read-list row-below" data-label="Also reads">
                     {% for read in reads|slice:"3:" %}{% include "control_plane/_connection_read.html" %}{% endfor %}
                   </ul>

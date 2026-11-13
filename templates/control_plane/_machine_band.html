@@ -14,9 +14,9 @@ for: one band under the head, as a service's and HQ's own page open.
   {% endif %}
   {% if machine.containers %}
   {% fact "Containers" icon="container" tone=container_counts.tone %}
-    {{ machine.running|breakable }} of {{ machine.containers|length }} running
+    {{ machine.running|breakable }} of {{ machine.containers|length|measured:"running" }}
   {% detail %}
-    <small>{% if container_counts.vulnerable %}{{ container_counts.vulnerable|counted:"has known vulnerabilities,have known vulnerabilities" }}{% dot %}{% endif %}{% if container_counts.update_available %}{{ container_counts.update_available|counted:"has an update,have an update" }}{% elif container_counts.up_to_date == standings|length %}All up to date{% elif container_counts.up_to_date %}{{ container_counts.up_to_date|breakable }} up to date{% else %}Updates not checked yet{% endif %}</small>
+    <small>{% if container_counts.vulnerable %}{{ container_counts.vulnerable|counted:"has known vulnerabilities,have known vulnerabilities" }}{% dot %}{% endif %}{% if container_counts.update_available %}{{ container_counts.update_available|counted:"has an update,have an update" }}{% elif container_counts.up_to_date == standings|length %}All up to date{% elif container_counts.up_to_date %}{{ container_counts.up_to_date|measured:"up to date" }}{% else %}Updates not checked yet{% endif %}</small>
   {% endfact %}
   {% endif %}
   {% if serves_links or machine.roles %}

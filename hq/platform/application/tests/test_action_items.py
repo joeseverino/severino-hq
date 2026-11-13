@@ -12,6 +12,7 @@ from django.utils import timezone
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import ActionItemRead, AuditLog
+from hq_sdk.testing import plain
 
 from ..action_items import (
     FORGET_AFTER,
@@ -202,7 +203,7 @@ class PageTests(TestCase):
         self.assertEqual(expected, 1)
         self.assertEqual(page.context["action_queue_count"], expected)
         self.assertEqual(page.context["profile_action_count"], expected)
-        self.assertContains(page, "1 thing needs you")
+        self.assertIn("1 thing needs you", plain(page.content))
 
     def test_a_row_button_posts_its_key_to_a_route_that_names_the_state(self):
         page = self.client.get(reverse("action_items"))
@@ -307,8 +308,8 @@ class PageTests(TestCase):
 
         with mock.patch("hq.platform.application.dashboard.work_queue", return_value=[ITEM, told]):
             dashboard = self.client.get(reverse("dashboard"))
-        self.assertContains(dashboard, "1 thing needs you")
-        self.assertContains(dashboard, "1 notice")
+        self.assertIn("1 thing needs you", plain(dashboard.content))
+        self.assertIn("1 notice", plain(dashboard.content))
 
     def test_the_page_is_one_section_per_domain(self):
         page = self.client.get(reverse("action_items"))

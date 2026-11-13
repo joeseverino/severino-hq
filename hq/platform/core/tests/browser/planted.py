@@ -267,9 +267,9 @@ PLANTS = {
     "dialogs": Plant('{% include "partials/_modal.html" with id="orphan" title="Orphan" %}'),
     # A list of names wrapping beside another pair of a four-column list.
     "lists of facts": Plant(
-        '<dl class="kv" style="grid-template-columns: 5rem 6rem 5rem 6rem"><dt>Names</dt><dd style="grid-column: auto">'
-        '<span class="code-list"><code>example-one</code><code>example-two</code><code>example-three</code></span>'
-        "</dd><dt>Other</dt><dd>Example</dd></dl>"
+        '{% facts %}{% fact "Names" %}<span class="code-list"><code>example-one</code><code>example-two</code>'
+        '<code>example-three</code></span>{% endfact %}{% fact "Other" value="Example" %}{% endfacts %}',
+        css=".facts-list { grid-template-columns: 5rem 6rem 5rem 6rem } .facts-list > .fact { grid-column: span 2 }",
     ),
     # A card of a few facts across the page, a section beside it in the
     # page's column rather than sharing its row.

@@ -26,6 +26,7 @@ from hq.platform.application.tests.facts import scan
 from hq.platform.application.tests.markup import elements, select
 from hq.platform.application.tests.source import template_files
 from hq.platform.core.templatetags.value_tags import breakable, entity, readable, when
+from hq_sdk.template_contract import WORDED_FIGURES
 
 # Filters whose output holds every name in it: `breakable` itself, and the
 # filters that build on it or print a `<time>`.
@@ -34,19 +35,10 @@ HOLDING = {"breakable", "code_spans", "or_empty", "readout", "when", "readable"}
 # Filters whose output can never hold a hyphen or a seam, so it has nothing
 # to hold.
 WORDS_ONLY = {
-    "counted": "a count and the words for it",
-    "bytes": "a byte count",
-    "money": "an amount",
-    "seconds": "a run time",
-    "span": "a length of time",
-    "ago": "an age in words",
-    "ago_short": "an age in words",
-    "day": "a day in words",
-    "expiry": "a date and a count of days",
+    **WORDED_FIGURES,
     "length": "a number",
     "floatformat": "a number",
     "pluralize": "a suffix",
-    "signed_in": "an age in words",
     "urgency": "one of the words a pill says",
     "json_script": "a script element, read by a script and never shown",
 }

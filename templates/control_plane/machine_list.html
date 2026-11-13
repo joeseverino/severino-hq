@@ -31,7 +31,7 @@ anyway, and would go on meaning nothing after it stopped being.
           </td>
           <td>
             {% if machine.containers %}
-              {{ machine.running|breakable }} of {{ machine.containers|length }} running
+              {{ machine.running|breakable }} of {{ machine.containers|length|measured:"running" }}
             {% elif not machine.containers_visible %}
               <span class="muted" title="No connection reads containers.">Not visible</span>
             {% endif %}
@@ -40,7 +40,7 @@ anyway, and would go on meaning nothing after it stopped being.
             {% if machine.runs_hq %}{{ hq_label|breakable }}{% if machine.hostnames %}<br>{% endif %}{% endif %}
             {% comment %}Two names and a count: a machine serving ten would make its row ten lines tall. Its page lists them all.{% endcomment %}
             {% for hostname in machine.hostnames|slice:":2" %}{% entity "service"|entity_of:hostname %}{% if not forloop.last %}<br>{% endif %}{% endfor %}
-            {% if machine.hostnames|length > 2 %}<br><a class="muted" href="{{ machine.link.url }}#names">+{{ machine.hostnames|length|add:"-2"|breakable }} more</a>{% endif %}
+            {% if machine.hostnames|length > 2 %}<br><a class="muted" href="{{ machine.link.url }}#names">+{{ machine.hostnames|length|add:"-2"|measured:"more" }}</a>{% endif %}
           </td>
           <td>
             {% comment %}

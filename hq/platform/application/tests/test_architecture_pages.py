@@ -13,6 +13,7 @@ from hq.platform.application.routes import routed
 from hq.platform.application.security import operator_capabilities
 from hq.platform.core.middleware import LoginRequiredMiddleware
 from hq.platform.core.test_runner import no_default_role
+from hq_sdk.testing import plain
 
 from .apart import apart
 from .facts import scan
@@ -125,7 +126,7 @@ class CountedTests(SimpleTestCase):
         from django.template import Context, Template
 
         rendered = Template('{{ n|counted:"thing needs you,things need you" }}').render(Context({"n": 1}))
-        self.assertEqual(rendered, "1 thing needs you")
+        self.assertEqual(plain(rendered), "1 thing needs you")
 
 
 class InterfaceTextTests(SimpleTestCase):

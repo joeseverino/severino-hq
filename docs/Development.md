@@ -738,8 +738,11 @@ draw an entry apart. It is answered from memory as a gate page is, with no
 server or estate behind it, so a look at one entry is the quick way to see a
 change to a shared part, ahead of the catalog's whole browser class. A name that begins entries
 (`part/notice`, `table`) is each of them, in the catalog's order. The gate
-reads the catalog without script, so `--no-script` looks at an entry as it
-does. The catalog builds its entries as it is imported, so a look reads it only
+reads the catalog without script, so a look draws an entry without it too, in
+a context of its own beside a real page's, which keeps script unless
+`--no-script`. A page drawn without script runs no frame or timer, so the
+look waits on none there: `--eval`, `--css` and `--open` read it as it stands.
+The catalog builds its entries as it is imported, so a look reads it only
 for `all` or a name no other page is: a `--base` whose parts' constructors this
 checkout's catalog does not fit still looks at every other page.
 
@@ -881,8 +884,10 @@ A first load's bytes are also shown by type (document, stylesheet, script,
 font, image). A load whose stylesheets and scripts all came uncompressed, as a
 live server sends them, shows no byte figure.
 
-A page asked that answers anything but 200 fails the run. The stress sets live
-in the test tree, so no server can serve them to `--seed`. Like `dev:look`,
+A page asked that answers anything but 200 fails the run, except one the
+`--base` answers 404 and this tree serves: perf says it is not at the base and
+measures it on this side alone, outside the count of pages compared. The
+stress sets live in the test tree, so no server can serve them to `--seed`. Like `dev:look`,
 perf refuses a page or data set it cannot serve, with the nearest names, before
 it waits for the heavy turn.
 

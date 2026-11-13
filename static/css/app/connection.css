@@ -448,7 +448,7 @@ details[open] > summary .conn-hop-more::after { transform: rotate(90deg); }
 .conn-carriage .conn-rows { container-type: normal; }
 /* A disclosure in a fact is a target of the least size on its own, so one
    wrapped under another keeps it whatever the column's width. */
-.conn .kv .conn-more > summary { padding: calc((var(--target-min) - 1lh) / 2) 0; }
+.conn :is(.facts-list, .kv) .conn-more > summary { padding: calc((var(--target-min) - 1lh) / 2) 0; }
 .conn-carriage > details { display: contents; }
 .conn-carriage > details > :not(summary) { flex-basis: 100%; }
 .conn-carriage > strong { font-weight: 600; }

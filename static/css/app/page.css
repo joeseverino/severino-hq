@@ -390,7 +390,6 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
   transition: background .12s ease, color .12s ease;
 }
 .nav-group > button:is(:hover, [aria-current], :has(+ :popover-open)) { color: var(--ink); background: var(--bg-tint); }
-.nav-group > button:has(+ :popover-open) .nav-caret { transform: rotate(180deg); }
 .nav-group > .nav-group-panel {
   position-area: block-end span-inline-end;
   min-width: 176px; display: flex; flex-direction: column; gap: 1px;
@@ -437,15 +436,6 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 .user-menu .user-avatar { width: 22px; height: 22px; margin-block: calc((var(--control-size) - 2px - 22px) / 2); border-radius: 50%; object-fit: cover; background: var(--bg-tint); }
 .user-menu > button:hover,
 .user-menu > button:has(+ :popover-open) { border-color: var(--bar-control-line); background: var(--bar-control-bg-hover); color: var(--ink); }
-.user-menu .user-icon {
-  fill: none;
-  stroke: var(--muted);
-  stroke-linecap: round;
-  stroke-width: 1.8;
-  transition: stroke .12s ease;
-}
-.user-menu > button:hover .user-icon,
-.user-menu > button:has(+ :popover-open) .user-icon { stroke: var(--ink); }
 .user-menu-panel {
   display: flex;
   /* As wide as what it holds, up to a width that still fits beside the

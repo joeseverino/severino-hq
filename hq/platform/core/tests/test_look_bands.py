@@ -44,7 +44,8 @@ class BandTests(SimpleTestCase):
 
         # The look's shooting, whichever of its methods it shoots through.
         shooting = {name: member for name, member in vars(look.Look).items() if callable(member)}
-        looker = type("Looker", (), {**shooting, "page": Page(), "shots": []})()
+        # A page with script, whose extent the look polls until it holds.
+        looker = type("Looker", (), {**shooting, "page": Page(), "shots": [], "drawn_with_script": True})()
 
         with (
             tempfile.TemporaryDirectory() as out,

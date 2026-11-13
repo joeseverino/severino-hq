@@ -2941,6 +2941,9 @@
       "day": {
         "argument": "none"
       },
+      "measured": {
+        "argument": "required"
+      },
       "money": {
         "argument": "optional"
       },
@@ -3033,6 +3036,10 @@
       "a figure": {
         "pattern": "\\bclass=\"(?:[^\"]*[\\s}])?(?:kpi|kpi-grid)(?![\\w-])",
         "write": "{% include \"partials/_kpi_grid.html\" %} from hq_sdk.ui.Kpi"
+      },
+      "a figure apart from its word": {
+        "pattern": "(?:\\{\\{\\s*(?!(?:\\w+\\.)*(?:get_username|host|kind|label|name|risk|status|title|username)\\s*(?:\\||\\}\\}))[\\w.]+(?:(?:\\|\\w+(?::(?:\"[^\"]*\"|'[^']*'|[\\w.-]+))?)*\\|(?!(?:ago|ago_short|bytes|capfirst|counted|day|door_words|expiry|interface_label|kind_label|lower|measured|money|readable|seconds|signed_in|span|title|upper|when|yesno)\\b)\\w+(?::(?:\"[^\"]*\"|'[^']*'|[\\w.-]+))?)?\\s*\\}\\}|(?<![\\w.,:$#/+-])\\d+(?:[.,:]\\d+)*(?![^{}]*[%}]\\}))(?![^<>]*>)(?:\\s|&nbsp;|&#160;)+(?!(?:a|across|after|an|and|are|as|at|be|because|been|before|beyond|but|by|can|cannot|could|did|do|does|for|from|had|has|have|he|her|his|if|in|into|is|it|its|itself|may|might|must|nor|not|now|of|on|once|only|or|over|per|she|should|since|so|still|than|that|the|their|them|then|these|they|this|those|through|to|under|until|was|we|were|when|where|which|while|who|will|with|within|without|would|yet|you)\\b)(?:(?:[a-z][A-Za-z]*|[A-Z]+s)\\b(?![-'])|%)",
+        "write": "{{ n|counted:\"thing\" }} for a count, or {{ x|measured:\"mi\" }} for a unit or a word the count leaves alone (\"more\"): the figure and its word as one value"
       },
       "a filter bar": {
         "pattern": "\\bclass=\"(?:[^\"]*[\\s}])?(?:filter-bar)(?![\\w-])",

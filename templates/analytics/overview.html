@@ -17,7 +17,7 @@
     {% include "partials/_kpi_grid.html" with label="Traffic" items=kpis %}
 
     <p class="muted reading-note">
-      {{ totals.start|when:"day" }}{% if totals.start != totals.end %} – {{ totals.end|when:"day" }}{% endif %}{% if totals.sample_interval > 1 %}{% dot %}estimated from 1 in {{ totals.sample_interval|breakable }} visits{% endif %}{% if observed_at %}{% dot %}{% include "partials/_reading_age.html" with at=observed_at only %}{% endif %}{% if coverage.expected_days and not coverage.complete %}{% dot %}{{ coverage.covered_days|breakable }} of {{ coverage.expected_days|breakable }} days read so far, the rest still loading{% endif %}
+      {{ totals.start|when:"day" }}{% if totals.start != totals.end %} – {{ totals.end|when:"day" }}{% endif %}{% if totals.sample_interval > 1 %}{% dot %}estimated from 1 in {{ totals.sample_interval|counted:"visit" }}{% endif %}{% if observed_at %}{% dot %}{% include "partials/_reading_age.html" with at=observed_at only %}{% endif %}{% if coverage.expected_days and not coverage.complete %}{% dot %}{{ coverage.covered_days|breakable }} of {{ coverage.expected_days|counted:"day" }} read so far, the rest still loading{% endif %}
     </p>
 
     <div class="section-flow">
@@ -50,7 +50,7 @@
                 <span class="muted">not enough visits to measure</span>
               {% else %}
                 <span class="vital-rate{% if metric.passing %} is-passing{% endif %}">{{ metric.percent|floatformat:"-1" }}<span class="unit">%</span></span>
-                <span class="muted">{{ metric.good|breakable }} of {{ metric.total|breakable }} good</span>
+                <span class="muted">{{ metric.good|breakable }} of {{ metric.total|measured:"good" }}</span>
               {% endif %}
             </dd>
           </div>

@@ -37,7 +37,7 @@ from hq.platform.application.page_parts import html_attributes
 from hq.platform.application.printable import admitted
 from hq.platform.application.timestamps import moment
 from hq.platform.application.ui import MISSING, counted as _counted
-from hq.platform.core.templatetags.line_breaks import breakable, code_spans, mark_text
+from hq.platform.core.templatetags.line_breaks import breakable, code_spans, held, mark_text
 lazy from hq.domains.control_plane.provider_spec import expiry_phrase
 lazy from hq.platform.application import references, request_identity, security
 lazy from hq.platform.application.derivations import this_year
@@ -60,8 +60,22 @@ def counted(count, phrases):
 
     One word may stand alone (``{{ n|counted:"change" }}``); a phrase gives both
     forms, comma separated, so its verb agrees too. See ``application.ui.counted``.
+    The figure and its first word share a line (``line_breaks.held``).
     """
-    return _counted(int(count or 0), *counted_phrases(phrases))
+    return held(_counted(int(count or 0), *counted_phrases(phrases)))
+
+
+@register.filter
+def measured(value, unit):
+    """``{{ miles|floatformat:2|measured:"mi" }}``: a figure and its unit, or a
+    word the count leaves alone (``measured:"more"``), as one value, so the
+    word never opens a line alone below its number. For a measure no other
+    value tag says (``bytes``, ``seconds``, ``money``) and a word ``counted``
+    would make plural; a missing figure is the missing mark, with no word."""
+
+    if value is None or value == "":
+        return or_empty(value)
+    return held(f"{value} {unit}")
 
 
 def counted_phrases(phrases) -> tuple[str, str | None]:
@@ -100,7 +114,7 @@ def bytes_(value):
     controller's readings already use. Never ``filesizeformat``, which says the
     same count differently."""
 
-    return human_bytes(value)
+    return held(human_bytes(value))
 
 
 @register.filter
@@ -243,8 +257,8 @@ def signed_in(request):
     if hours < 1:
         return "Signed in within the hour"
     if hours < 48:
-        return f"Signed in {_counted(hours, 'hour', 'hours')} ago"
-    return f"Signed in {_counted(hours // 24, 'day', 'days')} ago"
+        return held(f"Signed in {_counted(hours, 'hour', 'hours')} ago")
+    return held(f"Signed in {_counted(hours // 24, 'day', 'days')} ago")
 
 
 @register.filter
@@ -269,15 +283,15 @@ def seconds(value):
     hours, rest = divmod(whole, 3600)
     minutes, left = divmod(rest, 60)
     if hours:
-        return f"{hours} h {minutes} min"
-    return f"{minutes} min {left} s" if minutes else f"{left} s"
+        return held(f"{hours} h {minutes} min")
+    return held(f"{minutes} min {left} s" if minutes else f"{left} s")
 
 
 @register.filter
 def expiry(value):
     """``{{ not_after|expiry }}``: "22 Dec 2026 · 87 days", the one phrasing HQ uses for an end date."""
 
-    return expiry_phrase(str(value or ""))
+    return held(expiry_phrase(str(value or "")))
 
 
 @register.filter

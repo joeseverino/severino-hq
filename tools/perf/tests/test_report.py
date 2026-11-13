@@ -33,6 +33,53 @@ class AnsweredTests(Measured):
         )
         self.assertIn("/contacts/ answered 404", said)
 
+    def beside_a_base_answering(self, base_answers: dict[str, int], here_answers: dict[str, int]):
+        """A run beside a base whose first passes answer as given, every other page 200, and its closing line."""
+
+        base = FakeTarget()
+        base.url = "http://127.0.0.1:8"
+
+        def one_pass(url, _cookie, pages):
+            answers = base_answers if url == base.url else here_answers
+            return {page: answers.get(page, 200) for page in pages}
+
+        with mock.patch.object(report.measure, "one_pass", one_pass):
+            kept, _ = self.measure(FakeTarget(), base=base)
+        with mock.patch.object(report, "ROOT", self.out):
+            said = report.closing(kept, kept.doc["here"], kept.doc["base"])
+        return kept, said
+
+    def test_a_page_the_base_answers_404_and_this_tree_serves_is_measured_here_alone_and_fails_nothing(self):
+        kept, said = self.beside_a_base_answering({"/contacts/": 404}, {})
+
+        self.assertEqual([failure for failure in report.failures(kept.doc) if "answered" in failure], [])
+        self.assertEqual(self.server_times.pages, {"base": ["/"], "here": ["/", "/contacts/"]})
+        contacts = kept.doc["here"]["pages"][1]["server"]
+        self.assertEqual(contacts["p50_ms"], 6.0, "this tree measures the page")
+        self.assertNotIn("moved_ms", contacts, "a page the base lacks has no move from it")
+        self.assertNotIn("queries", kept.doc["base"]["pages"][1]["server"], "the base measures nothing of it")
+        self.assertRegex(said, r"\bof 1 pages moved past their spread", "only the page on both sides is compared")
+        self.assertRegex(said, r"estate/contacts[^;]*not at the base")
+
+    def test_a_page_that_answers_404_on_both_sides_fails_on_both(self):
+        kept, _ = self.beside_a_base_answering({"/contacts/": 404}, {"/contacts/": 404})
+
+        self.assertEqual(
+            [failure for failure in report.failures(kept.doc) if "answered" in failure],
+            [
+                "base page estate/contacts: /contacts/ answered 404, not 200",
+                "here page estate/contacts: /contacts/ answered 404, not 200",
+            ],
+        )
+
+    def test_a_base_page_that_answers_an_error_other_than_404_still_fails(self):
+        kept, _ = self.beside_a_base_answering({"/contacts/": 500}, {})
+
+        self.assertEqual(
+            [failure for failure in report.failures(kept.doc) if "answered" in failure],
+            ["base page estate/contacts: /contacts/ answered 500, not 200"],
+        )
+
 
 class AskedTests(TestCase):
     def test_a_page_that_is_none_is_refused_before_any_server_starts_naming_the_nearest_route(self):

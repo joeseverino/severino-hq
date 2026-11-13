@@ -379,8 +379,11 @@ details.card > summary::before { margin-inline-start: calc(-1em - var(--space-1)
 /* Each part that reaches the sides. Its rows, where they draw no edge of
    their own at the frame's side, keep the frame's inset as their padding
    (`--frame-inset`), so their words stand where the frame's prose does. */
-/* A form in the body that lays out no fields of its own (not .form) adds no box: what it holds reaches the sides as the body's own part would. */
-:is(.section > .section-body, .section > .section-body > form:not(.form)) > :is(.table-scroll, .machine-telemetry-metrics, .relation-list, .github-list, .posture-gaps, .posture-repos,
+/* A form in the body that lays out no fields of its own (not .form) adds no
+   box, and neither does a region (`data-fragment`), which only says where its
+   parts come from: what either holds reaches the sides as the body's own part
+   would. */
+:is(.section > .section-body, .section > .section-body > :is(form:not(.form), [data-fragment])) > :is(.table-scroll, .machine-telemetry-metrics, .relation-list, .github-list, .posture-gaps, .posture-repos,
   .control-summary, .insight-grid, .connection-control-grid, .sweep-grid,
   .month-grid, .list-rows, .setup-list, .day-panel-entry, .search-hits, .conn-rows) {
   --frame-inset: var(--section-side);
@@ -393,19 +396,19 @@ details.card > summary::before { margin-inline-start: calc(-1em - var(--space-1)
    when it starts or ends the frame, its corners the frame's. A list of rows
    or a month, whose outer rows draw no edge there, keeps the frame's padding
    above and below it. */
-:is(.section > .section-body, .section > .section-body > form:not(.form)) > :is(.table-scroll, .machine-telemetry-metrics, .relation-list, .github-list, .posture-gaps, .posture-repos,
+:is(.section > .section-body, .section > .section-body > :is(form:not(.form), [data-fragment])) > :is(.table-scroll, .machine-telemetry-metrics, .relation-list, .github-list, .posture-gaps, .posture-repos,
   .control-summary, .insight-grid, .connection-control-grid, .sweep-grid) {
   --section-corner: calc(var(--radius) - 1px);
   /* In a form that starts the body, its hidden fields draw nothing, so they
      do not count. */
   &:where(.section-body > *):first-child,
-  &:where(.section-body > form:first-child > *):nth-child(1 of :not(input[type="hidden"])) {
+  &:where(.section-body > :is(form, [data-fragment]):first-child > *):nth-child(1 of :not(input[type="hidden"])) {
     margin-block-start: calc(-1 * var(--section-start));
     border-start-start-radius: min(var(--section-start), var(--section-corner));
     border-start-end-radius: min(var(--section-start), var(--section-corner));
   }
   &:where(.section-body > *):last-child,
-  &:where(.section-body > form:last-child > *):last-child {
+  &:where(.section-body > :is(form, [data-fragment]):last-child > *):last-child {
     margin-block-end: calc(-1 * var(--section-end));
     border-end-start-radius: min(var(--section-end), var(--section-corner));
     border-end-end-radius: min(var(--section-end), var(--section-corner));

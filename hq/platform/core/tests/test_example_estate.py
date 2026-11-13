@@ -3,6 +3,7 @@ navigation offers has something on it, and its history is spread over that
 time by the people and machines that made it."""
 
 from datetime import timedelta
+from urllib.parse import urljoin, urlsplit
 
 from django.test import Client, TestCase
 from django.urls import reverse
@@ -27,7 +28,7 @@ from hq.platform.core.audit import ANONYMOUS
 from hq.platform.core.example_estate.agents import AGENT, NOT_CARRIED
 from hq.platform.core.example_estate.testing import sign_in, throwaway_media
 from hq.platform.core.models import AgentIdentity, AuditLog, OwnDevice
-from hq.platform.core.tests.browser.estate import ask_as_production, estate_pages, owner_client
+from hq.platform.core.tests.browser.estate import ask_as_production, estate_pages, landings, owner_client
 
 
 class ExampleEstateTests(TestCase):
@@ -235,6 +236,22 @@ class WalkedStatesTests(TestCase):
 
         self.assertIn(hostname, [service.hostname for service, _actions in page.context["unmanaged_rows"]])
         self.assertTrue(select(page, "formaction", reverse("control_plane:adopt", args=[hostname])))
+
+    def test_each_folded_part_a_walked_page_holds_is_walked_opened(self):
+        # A fold's part is drawn only once opened, which the walk's load never
+        # does, so the page drawn with it open (the address its placeholder falls
+        # back to, the page's own with a query) is walked in its own right. A
+        # fallback to another page is that page's to walk.
+        walked = landings(self.client.get, estate_pages())
+        opened = (
+            urlsplit(urljoin(address, region.attrs["data-fragment-fallback"]))._replace(fragment="")
+            for address in walked
+            for region in select(self.client.get(address), "data-fragment-fallback")
+        )
+        folded = {page.geturl() for page in opened if page.query and page.path in {urlsplit(at).path for at in walked}}
+
+        self.assertIn(f"{reverse('agent_policy')}?endpoint=1", folded)
+        self.assertLessEqual(folded, set(walked))
 
     def test_the_unfiled_receipt_s_match_page_offers_its_expense_as_a_row(self):
         from hq.platform.core.example_estate.records import UNFILED, UNFILED_RECEIPT

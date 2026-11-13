@@ -238,40 +238,40 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 /* A time is one phrase; broken over two lines it doubles its row. */
 .data-table td time { white-space: nowrap; }
 /* Cut to one line, a token is plain text: the ellipsis lands in it and no part draws a box past the cut. */
-.data-table td code:not(:where(td) :is(p, li) *) :is(.token, .whole) { display: contents; }
+.data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *) :is(.token, .whole) { display: contents; }
 /* A one-token identifier asks for its whole length and holds out for its longest piece, through a grid track sized by the name's unseen strut (value_tags); the chip is as wide as the track, with a pixel of slack so a value that fits keeps its last character. Nothing in it is clipped, so it sits on the baseline of the words before it. */
-.data-table td code:not(:where(td) :is(p, li) *, .cell-whole):has(> .token[data-sole]) {
+.data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole):has(> .token[data-sole]) {
   display: inline-grid; grid-template-columns: minmax(0, max-content);
   min-width: var(--cut-floor); max-width: none; padding: 0; background: none; vertical-align: baseline;
 }
 /* A panel shown from the cell is not the column: there the token sets the track, and only the column holds out for the longest piece. */
-.data-table td code:not(:where(td) :is(p, li) *, .cell-whole, [popover] *):has(> .token[data-sole]) {
+.data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole, [popover] *):has(> .token[data-sole]) {
   grid-template-columns: minmax(min-content, max-content);
   & > .token[data-sole] { contain: inline-size; justify-self: stretch; }
 }
 /* The strut is the name twice, unseen: one holds out for the longest piece, one asks for the whole name, so a cap on the hold never caps the ask. */
 .strut { display: none; }
-.data-table td code:not(:where(td) :is(p, li) *, .cell-whole, [popover] *) > .strut { display: contents; }
-.data-table td code:not(:where(td) :is(p, li) *, .cell-whole, [popover] *) > .strut::before,
-.data-table td code:not(:where(td) :is(p, li) *, .cell-whole, [popover] *) > .strut::after {
+.data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole, [popover] *) > .strut { display: contents; }
+.data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole, [popover] *) > .strut::before,
+.data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole, [popover] *) > .strut::after {
   /* stylelint-disable-next-line declaration-property-value-disallowed-list -- a strut is unseen and of no height; it only holds its column's width */
   content: attr(data-strut); display: block; visibility: hidden; block-size: 0; overflow: hidden; white-space: normal;
   padding-inline: var(--space-2) calc(var(--space-2) + 1px);
 }
-.data-table td code:not(:where(td) :is(p, li) *, .cell-whole, [popover] *) > .strut::before {
+.data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole, [popover] *) > .strut::before {
   overflow-wrap: normal;
   /* No piece holds out for more than half its region: one longer breaks where it must (line_breaks.breakable), so the table still fits. */
   max-width: 50cqi;
 }
-.data-table td code:not(:where(td) :is(p, li) *, .cell-whole, [popover] *) > .strut::after { overflow-wrap: anywhere; }
+.data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole, [popover] *) > .strut::after { overflow-wrap: anywhere; }
 /* A narrow box has no width to hold out with (`--cut-floor`), read from the table's mark since a style query does not reach a pseudo-element in every engine. */
-.data-table[data-narrow] td code:not(:where(td) :is(p, li) *) > .strut::before { display: none; }
+.data-table[data-narrow] td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *) > .strut::before { display: none; }
 /* Outside it a closed row's chip holds out for its whole name, up to half the region, so it is cut only once its table has no column left to give way. One in a context line (`.muted`) holds out only for its longest piece, as a name there does (figures.css): the row's name sizes the column. */
-.data-table:not([data-narrow]) > tbody > tr:not(.is-expanded, .row-detail) > td code:not(:where(td) :is(p, li) *, .cell-whole, [popover] *, .muted *) > .strut::before { white-space: nowrap; }
+.data-table:not([data-narrow]) > tbody > tr:not(.is-expanded, .row-detail) > td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole, [popover] *, .muted *) > .strut::before { white-space: nowrap; }
 /* With its cuts lifted an opened row lays an identifier out as a page does (base.css): a part that fits moves whole, and breaks inside only when longer than its line. */
 .data-table > tbody > tr.is-expanded > td .whole:not([data-cell~=name] *, [data-cell~=data] *, .visually-hidden *) { display: inline-block; }
 /* In a chip such a part is set by its top, so a part that wraps leaves the chip's first line on the baseline its line shares (a change's arrow beside it): an inline block's baseline is its last line, and WebKit has no `baseline-source`. The chip's token sets every part in its own face, so the top puts the first line where the baseline would. */
-.data-table > tbody > tr.is-expanded > td code:not(:where(td) :is(p, li) *, .cell-whole) > .token[data-sole] .whole { vertical-align: top; }
+.data-table > tbody > tr.is-expanded > td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole) > .token[data-sole] .whole { vertical-align: top; }
 /* A box that cut a value is as wide as its track, never its content, or a run with no seam would push past the column. */
 .data-table > tbody > tr.is-expanded > td :is(code:not(.cell-whole) > .token[data-sole], [data-entity] > :is(.token[data-sole], .cut)) { width: 100%; }
 /* A row header's one-token name asks for its whole length and fills the room its row has, so the header gives way with the other columns; past it the chip is cut, and the opened row shows it whole. A grid, so the chip sits on its token's baseline as a cell's does. */

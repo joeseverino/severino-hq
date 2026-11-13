@@ -54,7 +54,7 @@ uptime and how the request came.
     {% fact "Container" %}<a href="{{ container.url }}">{{ container.running.name|breakable }}</a>{% endfact %}
     {% fact "Health" %}{{ runtime.health|default:container.running.check|default:container.running.status|capfirst|breakable }}{% if runtime %}{% dot %}{{ runtime.restart_count|default:0|counted:"restart" }}{% endif %}{% endfact %}
     {% with posture=container.posture %}
-    {% fact "How it is run" %}{{ posture.met|breakable }} of {{ posture.measured|breakable }} checks met{% for result in posture.unmet %}<br><span class="muted">{{ result.check.unmet|breakable }}</span>{% endfor %}{% endfact %}
+    {% fact "How it is run" %}{{ posture.met|breakable }} of {{ posture.measured|counted:"check met,checks met" }}{% for result in posture.unmet %}<br><span class="muted">{{ result.check.unmet|breakable }}</span>{% endfor %}{% endfact %}
     {% endwith %}
     {% endwith %}{% else %}
     {% fact "Container" %}<span class="muted">No container HQ reads is known to be HQ's.</span>{% endfact %}

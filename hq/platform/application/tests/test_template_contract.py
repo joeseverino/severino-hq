@@ -103,6 +103,7 @@ DRAWN = (
     '<form method="post">\n<ul class="list-rows">\n<div class="kpi">\n<p class="msg">\n'
     '<form class="filter-bar">\n<svg aria-hidden="true">\n<span class="tone-good">\n<dl class="kv">\n'
     "<strong>{{ refused_count }}</strong> refused\n"
+    "{{ miles|floatformat:2 }} mi\n"
     '<div class="empty">\n<p class="muted">No notes yet.</p>\n'
     '<td>{% post_button "A" "/a/" %}</td>\n'
     '{% comment %}<section>{% endcomment %}{% table_region "A" %}<table class="data-table"></table>'
@@ -125,6 +126,7 @@ class HandDrawnTests(SimpleTestCase):
         "a toned value",
         "label and value facts",
         "a count split from its words",
+        "a figure apart from its word",
         "an empty state",
         "an empty line",
         "a row's actions",

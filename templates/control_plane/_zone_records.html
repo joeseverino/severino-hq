@@ -27,7 +27,7 @@ value under its name (`record.summary`), so the two still read as two.
             <span class="zone-value">{{ record.value|breakable }}</span>
             {% if record.proxied %}{% status "Proxied" tone="neutral" %}{% endif %}
           </td>
-          {% if zone.ttl_set %}<td>{% if record.ttl != 1 %}{{ record.ttl|breakable }}&nbsp;s{% endif %}</td>{% endif %}
+          {% if zone.ttl_set %}<td>{% if record.ttl != 1 %}{{ record.ttl|measured:"s" }}{% endif %}</td>{% endif %}
           {% if zone.managed %}
             <td>
               {% comment %}

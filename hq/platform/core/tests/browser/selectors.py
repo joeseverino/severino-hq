@@ -222,7 +222,7 @@ SELECTORS = {
     # A section's body, the frame what it holds is drawn in (partials/_part_section.html).
     "section_body": ".section-body",
     # A fact whose value is a list of names (partials' .code-list, .address-list).
-    "fact_list": "main .kv > dd:has(> :is(.code-list, .address-list) > :nth-child(2))",
+    "fact_list": "main .facts-list .fact-value:has(> :is(.code-list, .address-list) > :nth-child(2))",
     # A list of facts, label beside value (partials/_facts.html, and a `.kv`
     # drawn by hand), and the frames one is drawn in: a card, a section, or a
     # `.kv` that is its own frame.

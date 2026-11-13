@@ -81,7 +81,7 @@ declaration's machinery: the controller's actions are the buttons above, and
       {% endcomment %}
       {% if resource.status.unreachable_consumers %}
         <details class="operation-evidence" open>
-          <summary>{{ resource.status.unreachable_consumers|length }} unchecked</summary>
+          <summary>{{ resource.status.unreachable_consumers|length|measured:"unchecked" }}</summary>
           <ul>
             {% for item in resource.status.unreachable_consumers %}
               <li>{% if item.domain %}<strong>{{ item.consumer|breakable }}</strong>{% dot %}{{ item.domain|breakable:":" }}{% else %}<strong>{{ item.consumer|breakable:":" }}</strong>{% endif %} {{ item.reason|breakable }}</li>
