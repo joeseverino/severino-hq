@@ -30,7 +30,7 @@
   .kv, .form,
   .auth-card, .mail-stage,
   .topology-workspace, .github-list,
-  .boxed-facts, .relation-list,
+  .relation-list,
   .posture-gaps, .posture-repos, .machine-telemetry-metrics, .route,
   .dashboard-counts) {
     border: var(--surface-border, 1px solid var(--line));
@@ -151,8 +151,8 @@
      dead space inside the card's padding. */
   /* A frame's own padding is its edge: the first and last thing in it keep no
      margin of their own, or a heading's top margin doubles the padding above it. */
-  :is(.card, .control-card, .boxed-facts, .two-col > section, .two-col > div, .section-flow > section) > :last-child { margin-bottom: 0; }
-  :is(.card, .control-card, .boxed-facts, .two-col > section, .two-col > div, .section-flow > section) > :first-child { margin-top: 0; }
+  :is(.card, .control-card, .two-col > section, .two-col > div, .section-flow > section) > :last-child { margin-bottom: 0; }
+  :is(.card, .control-card, .two-col > section, .two-col > div, .section-flow > section) > :first-child { margin-top: 0; }
 
 
   /* ── Disclosure: one marker for everything that opens in place ─────────

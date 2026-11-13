@@ -10,6 +10,7 @@ form written inside another silently detaches every control after it.
 lazy from dataclasses import asdict, is_dataclass
 
 from django import template
+from django.middleware.csrf import get_token
 from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
 
@@ -18,7 +19,8 @@ lazy from hq.platform.application.asks import Ask
 lazy from hq.platform.application.capabilities import capability_words
 lazy from hq.platform.application.dashboard import queue_item
 lazy from hq.platform.application.pages import PageAction, offered_now
-lazy from hq.platform.core.templatetags.value_tags import breakable, is_this_page
+lazy from hq.platform.core.templatetags.value_tags import _request, breakable, is_this_page
+lazy from hq.platform.core.templatetags.write_tags import write_token
 
 register = template.Library()
 
@@ -108,6 +110,32 @@ def post_button(label, url, *, name="action", value="", css="btn", title="", dis
         format_html_join("", ' {}="{}"', ((key, val) for key, val in attributes.items() if val)),
         mark_safe(" disabled") if disabled else "",
         breakable(label),
+    )
+
+
+@register.simple_tag(takes_context=True)
+def post_form(context, action, extra=""):
+    """A POST ``PageAction`` that sends ``fields`` besides its button's own: a
+    form of its own, since the shared form carries only the button's field.
+    It returns to the page it was pressed on unless its fields name a
+    ``next``. Its token is the request's, which an ``{% include ... only %}``
+    keeps when it drops the context processors' values."""
+
+    request = _request(context)
+    sent = {"next": request.get_full_path(), **action.fields}
+    with context.push(csrf_token=get_token(request)):
+        token = write_token(context)
+    attributes = {"name": action.field, "value": action.value, "title": action.title}
+    return (
+        format_html('<form method="post" action="{}" class="post-form">', action.url)
+        + token
+        + format_html_join("", '<input type="hidden" name="{}" value="{}">', sent.items())
+        + format_html(
+            '<button type="submit" class="{}"{}>{}</button></form>',
+            " ".join(part for part in (action.css, extra) if part),
+            format_html_join("", ' {}="{}"', ((key, val) for key, val in attributes.items() if val)),
+            breakable(action.label),
+        )
     )
 
 

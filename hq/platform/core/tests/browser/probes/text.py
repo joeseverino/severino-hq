@@ -1,6 +1,8 @@
 """Probes of running text: broken words, text that overlaps and text past its clamp."""
 
+from hq.platform.core.tests.browser.probes import Check
 from hq.platform.core.tests.browser.probes.describe import CUTS, DESCRIBE, LINES, PAINTED_PART, TEXT_SHOWN
+from hq.platform.core.tests.browser.selectors import SELECTORS
 
 # A plain word split across lines inside a table cell: its column was given
 # less than the word, because another column's content took the width. A word
@@ -644,34 +646,54 @@ const extent = (found) => found.length && {
 """
 
 
-# The facts of a band sit together, as a stat group does in Primer's Stack or
-# Atlassian's Inline: no fact stands further from its neighbor on its row than
-# the widest fact of the band is wide. Read from what each fact draws, so a
-# cell stretched past its words is found however the band lays it out.
+# The facts of a band sit together at its start however wide the band is, as
+# a stat group does in Primer's Stack or Atlassian's Inline: no two facts of a
+# row move apart as the band widens. A track's floor (`--fact-min`) sets a
+# short fact's neighbor a fixed distance off, which a wider band keeps; a
+# track that takes a share of the band (`1fr`, a spread `justify-content`)
+# gives away its width. Read from what each fact draws, with the band set
+# wider for the length of one layout and put back before it paints.
 FACTS_SPREAD_APART = (
     "([band, fact, unseen]) => {"
     + DESCRIBE
     + BASELINES
     + _FACT_DRAWN
     + r"""
+  const WIDER = 240;
+  const gaps = (each) => {
+    const rows = new Map();
+    for (const cell of each.querySelectorAll(`:scope > ${fact}`)) {
+      const at = extent(factRects(cell));
+      if (!at) continue;
+      const top = Math.round(cell.getBoundingClientRect().top);
+      if (!rows.has(top)) rows.set(top, []);
+      rows.get(top).push([cell, at]);
+    }
+    const apart = new Map();
+    for (const row of rows.values()) {
+      row.sort(([, a], [, b]) => a.left - b.left);
+      for (let i = 1; i < row.length; i++) {
+        if (!apart.has(row[i - 1][0])) apart.set(row[i - 1][0], new Map());
+        apart.get(row[i - 1][0]).set(row[i][0], row[i][1].left - row[i - 1][1].right);
+      }
+    }
+    return apart;
+  };
   const found = [];
   for (const each of document.querySelectorAll(band)) {
     if (!each.checkVisibility()) continue;
-    const drawnFacts = [...each.querySelectorAll(`:scope > ${fact}`)]
-      .map((cell) => [cell, extent(factRects(cell))]).filter(([, at]) => at);
-    if (drawnFacts.length < 2) continue;
-    const widest = Math.max(...drawnFacts.map(([, at]) => at.right - at.left));
-    const rows = new Map();
-    for (const [cell, at] of drawnFacts) {
-      const top = Math.round(cell.getBoundingClientRect().top);
-      if (!rows.has(top)) rows.set(top, []);
-      rows.get(top).push(at);
-    }
-    for (const row of rows.values()) {
-      row.sort((a, b) => a.left - b.left);
-      for (let i = 1; i < row.length; i++) {
-        const gap = row[i].left - row[i - 1].right;
-        if (gap > widest + 0.5) found.push(`${describe(each)} sets two facts ${Math.round(gap)}px apart, wider than its widest fact (${Math.round(widest)}px)`);
+    const before = gaps(each);
+    if (!before.size) continue;
+    const style = each.getAttribute('style');
+    each.style.setProperty('inline-size', `${each.getBoundingClientRect().width + WIDER}px`, 'important');
+    each.style.setProperty('max-inline-size', 'none', 'important');
+    const after = gaps(each);
+    if (style === null) each.removeAttribute('style');
+    else each.setAttribute('style', style);
+    for (const [left, next] of before) {
+      for (const [right, gap] of next) {
+        const wider = after.get(left)?.get(right);
+        if (wider !== undefined && wider > gap + 0.5) found.push(`${describe(each)} sets two facts ${Math.round(gap)}px apart, ${Math.round(wider - gap)}px further as it widens by ${WIDER}px`);
       }
     }
   }
@@ -815,3 +837,56 @@ BROKEN_TOKENS = (
   return [...new Set(found)];
 }"""
 )
+
+
+# What is an identifier rather than a word, which the broken-word rule leaves
+# to break where it must.
+IDENTIFIER = "code, kbd, samp, time, .token, [data-entity]"
+
+CHANGES_READ = (
+    CHANGES_OFF_THEIR_LINE,
+    [SELECTORS["change"], SELECTORS["change_arrow"], SELECTORS["change_to"], SELECTORS["unseen"]],
+)
+
+CHIPS_READ = (CHIPS_OFF_THEIR_LINE, [SELECTORS["chip"], SELECTORS["unseen"]])
+
+FACT_ROWS_READ = (
+    VALUES_OFF_THEIR_ROW,
+    [SELECTORS["fact_band"], SELECTORS["band_fact_cell"], SELECTORS["fact_value"], SELECTORS["unseen"]],
+)
+
+# A fact's detail: every part of a fact after its value.
+_FACT_DETAIL = f"{SELECTORS['band_fact_cell']} > dd:not({SELECTORS['fact_value']})"
+
+# How far inside its frame a fact's words and mark stand at the least.
+FACT_INSET = 8
+
+# The survey checks these probes answer (`probes/__init__.py`).
+CHECKS = {
+    "broken words": Check((BROKEN_WORDS, SELECTORS["identifier"]), table=True),
+    "words broken in text": (BROKEN_WORDS_IN_TEXT, IDENTIFIER),
+    "lines opening on a stray": (STRAYS_OPENING_A_LINE, [SELECTORS["unseen"], IDENTIFIER]),
+    "broken identifiers": Check((BROKEN_TOKENS, [SELECTORS["cell_token"], SELECTORS["wraps_in_a_cell"]]), table=True),
+    "overlapping text": (OVERLAPPING_TEXT, SELECTORS["floating"]),
+    "touching text": (TOUCHING_TEXT, [SELECTORS["floating"], SELECTORS["identifier"]]),
+    "chips off their paint": (CHIPS_PAST_THEIR_PAINT, [SELECTORS["chip"], SELECTORS["unseen"]]),
+    "past the clamp": PAST_THE_CLAMP,
+    "cut decisions": (CUT_DECISIONS, [SELECTORS["decision_detail"], "*", SELECTORS["unseen"]]),
+    "cut code in text": (CUT_DECISIONS, [SELECTORS["running_text"], SELECTORS["code"], SELECTORS["unseen"]]),
+    "changes": CHANGES_READ,
+    "chips": CHIPS_READ,
+    "fact rows": FACT_ROWS_READ,
+    "facts together": (FACTS_SPREAD_APART, [SELECTORS["fact_band"], SELECTORS["band_fact_cell"], SELECTORS["unseen"]]),
+    "fact details in words": (DETAIL_WORDS_IN_ROWS, [_FACT_DETAIL, SELECTORS["unseen"]]),
+    # A link in a fact's detail, or a word there that opens its tip, sits on
+    # the line of the words beside it, as a chip does.
+    "links in a fact's detail": (
+        CHIPS_OFF_THEIR_LINE,
+        [f"{_FACT_DETAIL} :is({SELECTORS['link']}, [tabindex])", SELECTORS["unseen"]],
+    ),
+    "facts inside their frame": (
+        FACTS_AGAINST_THEIR_FRAME,
+        [SELECTORS["band_fact_cell"], SELECTORS["unseen"], FACT_INSET],
+    ),
+    "raised text": (RAISED_TEXT, SELECTORS["unseen"]),
+}

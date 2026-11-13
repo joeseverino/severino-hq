@@ -781,7 +781,11 @@ that opens a dialog declares that as well,
 `PageAction("Import", url, modal=PageDialog("import", "Import records", "notes/_import_form.html"))`,
 which `page.html` draws once with the page's context. A head action may also be
 the control `hq_sdk.outbound.ask` returns, so `get_page_actions` returns
-`tuple[PageAction | Ask, ...]`, both from `hq_sdk.pages`.
+`tuple[PageAction | Ask, ...]`, both from `hq_sdk.pages`. A POST action sends
+its `value` as its `field`; one that must also send what it acts on, an
+identifier that may be any string, names it in `fields`
+(`fields={"client_id": client_id}`), and is then a form of its own, never
+drawn inside another.
 
 Where the page sits is declared too. `page_trail` is every crumb above it, from
 the top, as (label, url) pairs, `(("Notes", reverse_lazy("notes:list")),)`. A

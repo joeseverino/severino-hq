@@ -359,6 +359,9 @@ def a_page() -> None:
     # A POST action names the field its value is sent as, for a row's actions.
     assert_type(pages.PageAction("Mark read", "/example/1/", method="post", value="read", field="status").field, str)
     pages.PageAction("Mark read", "/example/1/", field=1)  # type: ignore[arg-type]
+    # A POST action may send more than its button's field: what it acts on.
+    pages.PageAction("Block", "/example/block/", method="post", field="blocked", value="1", fields={"client_id": "a"})
+    pages.PageAction("Block", "/example/block/", method="post", fields=["client_id"])  # type: ignore[arg-type]
     pages.page_context("Example", actions=["Open"])  # type: ignore[list-item]
     assert_type(pages.page_context("Example", reads=("example.things",)), dict[str, pages.Page])
     pages.page_context("Example", reads=1)  # type: ignore[arg-type]

@@ -2,6 +2,7 @@
 the line of the other."""
 
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE
+from hq.platform.core.tests.browser.selectors import SELECTORS
 
 # A heading is said in sentence case: capitals are for a kicker over a group
 # (``kicker``), which is a label, never the heading of a card or a section.
@@ -55,3 +56,10 @@ QUIET_LINKS_IN_THE_LINE = (
   return found;
 }"""
 )
+
+
+# The survey checks these probes answer (`probes/__init__.py`).
+CHECKS = {
+    "headings in capitals": (HEADINGS_IN_CAPITALS, SELECTORS["kicker"]),
+    "quiet links in the line": (QUIET_LINKS_IN_THE_LINE, SELECTORS["quiet_link"]),
+}

@@ -19,10 +19,11 @@ from hq.platform.application.agent_access import REMOVE_AGENT, SET_AGENT_ACCESS,
 from hq.platform.application.agent_devices import APPROVE_AGENT_DEVICE, BLOCK_AGENT_DEVICE
 from hq.platform.application.appearance import SET_THEME
 from hq.platform.application.avatars import avatar_of
+from hq.platform.application.capabilities import capability_words
 from hq.platform.application.command_center import command_center
 from hq.platform.application.denials import COALESCE_WINDOW, LABEL as DENIAL_LABEL
 from hq.platform.application.own_devices import SET_OWN_DEVICE, devices_of
-from hq.platform.application.pages import PageMixin
+from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.projection import projection_scope
 from hq.platform.application.refusal_status import refusal_of
 from hq.platform.application.search import global_search
@@ -211,6 +212,59 @@ class OwnDeviceView(View):
         return redirect(safe_next(request, fallback=reverse("agent_policy")))
 
 
+def _set(command: str, state: str, url: str, target: dict[str, str], field: str, value: str, **style) -> PageAction:
+    """A row's control that sets one ``field`` of the record ``target``
+    names, which travels in the body since its identifier may be any string."""
+
+    words = capability_words(command, state)
+    return PageAction(words, url, method="post", field=field, value=value, fields=target, **style)
+
+
+def agent_actions(standing: agent_activity.AgentStanding, here: str) -> tuple[PageAction, ...]:
+    """What may be done to one agent from its row: let it back in, or block or
+    remove it. Removal never lifts a block, so a blocked agent offers only that."""
+
+    url = reverse("agent_block")
+    target = {"client_id": standing.subject, "next": here}
+    if standing.identity.blocked_at:
+        return (_set(SET_AGENT_BLOCK, "off", url, target, "blocked", "0", primary=True),)
+    return (
+        _set(SET_AGENT_BLOCK, "on", url, target, "blocked", "1"),
+        _set(REMOVE_AGENT, "", url, target, "removed", "1", danger=True),
+    )
+
+
+def device_actions(device: agent_activity.DeviceRow, here: str) -> tuple[PageAction, ...]:
+    """What a person may press for one agent's device: approve it or withdraw
+    the approval when it is theirs to give (``yours``), and block it or let it
+    back in, which anyone who governs agents may. An address the tailnet could
+    not place offers nothing: there is no device to approve. Each returns to
+    the row."""
+
+    record = device.record
+    if record is None:
+        return ()
+    url = reverse("agent_device")
+    target = {"device": str(record.pk), "next": f"{here}#{device.anchor}"}
+    if record.blocked_at:
+        return (_set(BLOCK_AGENT_DEVICE, "off", url, target, "blocked", "0", primary=True),)
+    actions = []
+    if device.yours:
+        if record.approved_at:
+            actions.append(_set(APPROVE_AGENT_DEVICE, "off", url, target, "approved", "0"))
+        else:
+            actions.append(_set(APPROVE_AGENT_DEVICE, "on", url, target, "approved", "1", primary=True))
+    actions.append(_set(BLOCK_AGENT_DEVICE, "on", url, target, "blocked", "1"))
+    return tuple(actions)
+
+
+def own_device_actions(device, here: str) -> tuple[PageAction, ...]:
+    """Removing one of the signed-in person's own devices, from its row."""
+
+    target = {"client_id": device.client_id, "next": here}
+    return (_set(SET_OWN_DEVICE, "off", reverse("own_device"), target, "registered", "0", danger=True),)
+
+
 class ThemeView(View):
     """Choose system, light or dark. The form sends a choice, never a toggle."""
 
@@ -269,16 +323,25 @@ class AgentPolicyView(PageMixin, TemplateView):
         context["every_read"] = part == self.EVERY_PART or "all" in self.request.GET
         if part == self.EVERY_PART:
             return context
-        context["standings"] = agent_activity.standings(self.request.user)
-        context["prompts"] = agent_activity.prompts(context["standings"])
+        context["standings"] = standings = agent_activity.standings(self.request.user)
+        # Each row with what may be done to it, which returns to this view.
+        here = self.request.get_full_path()
+        context["agent_rows"] = [(standing, agent_actions(standing, here)) for standing in standings]
+        context["prompts"] = [
+            (prompt, device_actions(prompt.device, here)) for prompt in agent_activity.prompts(standings)
+        ]
         # The steps for adding an agent start open until one has connected.
-        context["setup_open"] = not context["standings"]
-        context["device_groups"] = [standing for standing in context["standings"] if standing.devices]
+        context["setup_open"] = not standings
+        context["device_groups"] = [
+            (standing, [(device, device_actions(device, here)) for device in standing.devices])
+            for standing in standings
+            if standing.devices
+        ]
         context["recent_days"] = agent_activity.RECENT.days
         context["offered"] = len(agent_grantable())
         context["client_setup"] = agent_activity.CLIENT_SETUP
         context["placement"] = agent_devices.placement_posture()
-        context["devices"] = devices_of(self.request.user)
+        context["devices"] = [(device, own_device_actions(device, here)) for device in devices_of(self.request.user)]
         context["awaiting_count"] = len(awaiting_ids())
         context["refused_count"] = agent_activity.refused_since(timezone.now() - timedelta(hours=24))
         return context

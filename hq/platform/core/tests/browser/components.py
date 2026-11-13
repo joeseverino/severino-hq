@@ -64,6 +64,7 @@ from hq.platform.core.tests.browser.probes.text import (
     BROKEN_WORDS,
     BROKEN_WORDS_IN_TEXT,
     CHIPS_PAST_THEIR_PAINT,
+    IDENTIFIER,
     OVERLAPPING_TEXT,
     TOUCHING_TEXT,
 )
@@ -71,7 +72,6 @@ from hq.platform.core.tests.browser.reading import probe
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import ORIGIN
 from hq.platform.core.tests.browser.stress import ALL_PAGES
-from hq.platform.core.tests.browser.survey import _IDENTIFIER
 from hq.platform.core.tests.browser.widths import NARROWEST, PHONE_SCREEN, TARGET_MIN, WIDE, WIDTHS, viewport
 from hq.platform.core.tests.test_browser_fixtures import PAGES
 
@@ -941,7 +941,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
             ],
         )
 
-        found = [line for line in self.page.evaluate(BROKEN_WORDS_IN_TEXT, _IDENTIFIER) if "example-" in line]
+        found = [line for line in self.page.evaluate(BROKEN_WORDS_IN_TEXT, IDENTIFIER) if "example-" in line]
         self.assertEqual(len(found), 1, found)
         self.assertIn("example-loose", found[0])
 
@@ -967,7 +967,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
             ],
         )
 
-        found = [line for line in self.page.evaluate(BROKEN_WORDS_IN_TEXT, _IDENTIFIER) if "example-" in line]
+        found = [line for line in self.page.evaluate(BROKEN_WORDS_IN_TEXT, IDENTIFIER) if "example-" in line]
         self.assertEqual([line for line in found if "example-digest" in line], [])
         self.assertTrue(any("example-word" in line for line in found), found)
 

@@ -293,6 +293,13 @@ class AgentDeviceTests(TestCase):
 
         self.assertEqual(self.standing(device), "approved")
 
+    def test_a_device_s_control_returns_to_its_row(self):
+        device = self.device(approved_at=timezone.now(), approved_by=self.person)
+
+        response = _submit(self.client, self.page(), "id", f"device-{device.pk}", pressing="blocked")
+
+        self.assertEqual(response.url, f"{reverse('agent_policy')}#device-{device.pk}")
+
     def retry_key(self, page):
         key = select(page, "name", "__retry_key")[0]
         return {"__retry_key": key.attrs["value"]}

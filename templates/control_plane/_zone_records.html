@@ -1,10 +1,10 @@
-{% load nav_tags %}
 {% comment %}
 A zone's DNS records as one table: the records that send traffic somewhere,
 then the policy and verification records folded away under their own group,
 so both halves share one set of columns and sort alike.
 
-Expects `routing`, `policy`, `zone` and `public_dns_enabled`; with public DNS
+Expects `routing` and `policy`, each record with its actions (zone_views'
+`_record_rows`), `zone` and `public_dns_enabled`; with public DNS
 changes off, a record offers no Edit or Remove it would refuse. A state is said
 only where it is not healthy, and a TTL only where it is not automatic:
 seventeen rows that each say "Healthy" and "Auto" say nothing. Where the Value
@@ -44,14 +44,7 @@ value under its name (`record.summary`), so the two still read as two.
                 {% status "New" tone="attention" %}
               {% endif %}
             </td>
-            <td class="actions-col">
-              {% if record.edit_url or record.remove_url %}
-                <span class="row-actions">
-                  {% if record.edit_url %}<a class="subtle-link" href="{{ record.edit_url|returning_to:request.get_full_path }}">{% words "infrastructure.resource.update" %}</a>{% endif %}
-                  {% if record.remove_url %}<a class="subtle-link" href="{{ record.remove_url }}">{% words "infrastructure.resource.remove" %}</a>{% endif %}
-                </span>
-              {% endif %}
-            </td>
+            {% row_actions actions %}
           {% endif %}
         </tr>
 {% endpartialdef %}
@@ -68,7 +61,7 @@ value under its name (`record.summary`), so the two still read as two.
     </thead>
     <tbody>
       {% if policy %}{% row_group "Routing records" routing|length %}{% endif %}
-      {% for record in routing %}
+      {% for record, actions in routing %}
         {% partial record_row %}
       {% empty %}
         <tr><td colspan="6">
@@ -79,7 +72,7 @@ value under its name (`record.summary`), so the two still read as two.
     {% if policy %}
       <tbody>
         {% row_group "Policy records" policy|length folds="zone-policy-records" %}
-        {% for record in policy %}
+        {% for record, actions in policy %}
           {% with folded="zone-policy-records" %}{% partial record_row %}{% endwith %}
         {% endfor %}
       </tbody>

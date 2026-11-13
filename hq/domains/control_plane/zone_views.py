@@ -34,7 +34,12 @@ from hq.platform.application.mail_policy import (
 from hq.platform.application.pages import PageAction, page_context
 from hq.platform.application.pins import DOMAIN, FAVORITE, FAVORITES, PIN, pinned
 from hq.platform.application.relationships import relationships_for
-from hq.platform.application.resource_capabilities import UPDATE_CAPABILITY, public_dns_enabled, resource_capabilities
+from hq.platform.application.resource_capabilities import (
+    REMOVAL_CAPABILITY,
+    UPDATE_CAPABILITY,
+    public_dns_enabled,
+    resource_capabilities,
+)
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.ui import counted
@@ -46,6 +51,7 @@ from hq.platform.application.zones import (
     find_zone,
     zone_catalog,
 )
+from hq.platform.core.templatetags.nav_tags import returning_to
 from hq.platform.core.templatetags.value_tags import entity
 
 
@@ -282,6 +288,10 @@ class ZoneDetailView(View):
                 # once.
                 "public_dns_enabled": public_dns_enabled(),
                 "records_lede": _records_lede(found),
+                "record_rows": {
+                    "routing": _record_rows(found.routing, request.get_full_path()),
+                    "policy": _record_rows(found.policy, request.get_full_path()),
+                },
                 "relationships": relationships,
                 "read_with": read_with,
                 **page_context(
@@ -298,6 +308,24 @@ class ZoneDetailView(View):
                 ),
             },
         )
+
+
+def _record_actions(record, here: str) -> tuple[PageAction, ...]:
+    """What a record's declaration offers from its row: Edit, which comes back
+    to this page, and Remove."""
+
+    actions = []
+    if record.edit_url:
+        actions.append(PageAction(capability_words(UPDATE_CAPABILITY), returning_to(record.edit_url, here)))
+    if record.remove_url:
+        actions.append(PageAction(capability_words(REMOVAL_CAPABILITY), record.remove_url, danger=True))
+    return tuple(actions)
+
+
+def _record_rows(records, here: str) -> list[tuple]:
+    """Each record with its row's actions, as ``_zone_records.html`` draws them."""
+
+    return [(record, _record_actions(record, here)) for record in records]
 
 
 def _declaration_actions(zone) -> tuple[PageAction, ...]:

@@ -314,7 +314,7 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .kpi-grid > .kpi { flex-basis: var(--band-cell, 150px); }
 
 /* A band of facts (`{% facts layout="band" %}`): each fact its icon tile, then label over value over detail; a toned fact's tile and value take its tone, so the state reads before the word. */
-/* The facts sit together at the start, a fixed gap apart, each as wide as what it says up to a bound (`--fact-max`), as Primer's Stack and Atlassian's Inline group what they hold: a few facts never spread across a wide page, and the band draws no rule between them. Each track is at least `--fact-min`, so as many facts share a row as fit; past that they wrap. */
+/* The facts sit together at the start, a fixed gap apart, each track as wide as what it says between a floor (`--fact-min`) and a bound (`--fact-max`), as Primer's Stack and Atlassian's Inline group what they hold: a few facts never spread across a wide page, and the band draws no rule between them. Each track is at least `--fact-min`, so as many facts share a row as fit; past that they wrap. */
 /* Standing alone the band is a surface and keeps an inset of its own; in a frame (a card, a section) the frame's padding is its inset (`--surface-inset`). */
 .facts-band {
   display: grid;
@@ -348,8 +348,9 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .facts-band .fact-value :is(a, [tabindex]) { display: inline-block; vertical-align: top; }
 /* Code in a value is set in its own face, whose line would sit the line half a pixel off the plain value beside it; at one line of its size it stays inside the value's line. */
 .facts-band .fact-value :is(code, kbd, samp) { line-height: 1; }
-/* A part of it that is a box of its own (`.whole`) paints the chip's ground, so its box keeps the face's own height, which a line of one would cut its letters out of. */
-.facts-band .fact-value :is(code, kbd, samp) .whole { line-height: normal; }
+/* It runs inline, its parts too, a chip on each line it wraps to, so its first line is the value's first line in every engine: an inline block stands on its last line wherever `baseline-source` is not supported (WebKit), so a wrapped chip would lift its value off its row's baseline. */
+.facts-band .fact-value :is(code, kbd, samp),
+.facts-band .fact-value :is(code, kbd, samp) :is(.token, .whole) { display: inline; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 .band-icon {
   display: grid; place-items: center; flex: none;
   width: 36px; height: 36px; border-radius: var(--radius);

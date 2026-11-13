@@ -15,25 +15,23 @@
 /* A main panel with a companion. Unlike two equal siblings, the companion is
    sized to its own contents: stretching a three-row list to match a long one
    just produces a tall empty box, which reads worse than a short card that is
-   honestly short. */
-.split { margin: 0 0 var(--stack-gap); }
-/* Main content and a narrower companion. They share a row while both keep a
-   readable width and wrap to a column when they cannot, at whatever width the
-   page or card gives them. One layout for every such pairing: no breakpoint,
-   no per-page columns. */
-:where(.split, .upgrade-detail) {
+   honestly short. They share a row while both keep a readable width and wrap
+   to a column when they cannot, at whatever width the page or card gives
+   them. One layout for every such pairing: no breakpoint, no per-page
+   columns. */
+.split {
+  margin: 0 0 var(--stack-gap);
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
   gap: var(--layout-gap);
 }
-:where(.split, .upgrade-detail) > * { flex: 1 1 16rem; min-width: 0; }
-:where(.split, .upgrade-detail) > :first-child { flex: 2 1 28rem; }
 /* min-width:0 so a child that scrolls its own overflow (a wide table in its
    scroll wrapper) cannot instead force the column open and push the page
-   sideways. A grid item defaults to min-width:auto, which means "as wide as my
+   sideways. A flex item defaults to min-width:auto, which means "as wide as my
    content", and the scroll wrapper never gets the chance to do its job. */
-.split > * { margin: 0; min-width: 0; }
+.split > * { flex: 1 1 16rem; margin: 0; min-width: 0; }
+.split > :first-child { flex: 2 1 28rem; }
 /* The wide column second. A drawing sized to itself beside a table of six
    columns wants the narrow half, and reading order puts the drawing first. */
 .two-col > * { min-width: 0; }

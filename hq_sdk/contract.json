@@ -925,7 +925,8 @@
           "value=",
           "title=",
           "disabled=",
-          "field="
+          "field=",
+          "fields="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -3083,7 +3084,7 @@
         "write": "{% include \"partials/_icon.html\" with name=\"...\" %}; a drawing that says something is role=\"img\""
       },
       "label and value facts": {
-        "pattern": "\\bclass=\"(?:[^\"]*[\\s}])?(?:kv|fact-band|service-band|control-summary|control-metric|boxed-facts|github-facts|vitals-strip|glance-metrics|agent-state-facts|attention-facts)(?![\\w-])",
+        "pattern": "\\bclass=\"(?:[^\"]*[\\s}])?(?:kv|fact-band|service-band|control-summary|control-metric|vitals-strip|glance-metrics|agent-state-facts|attention-facts)(?![\\w-])",
         "write": "{% facts %} around each {% fact \"Label\" value=... %}, or {% facts layout=\"band\" %} for a band"
       }
     },

@@ -1,6 +1,8 @@
 """Probes of tables: their cells, rows, columns and gutter, and the tables drawn to probe them."""
 
+from hq.platform.core.tests.browser.probes import Check
 from hq.platform.core.tests.browser.probes.describe import CUTS, DESCRIBE, PAINTED_PART
+from hq.platform.core.tests.browser.selectors import SELECTORS
 
 CELLS = (
     "() => {"
@@ -738,4 +740,24 @@ IDENTIFIER_VALUES = {
     "host": "status.example.com",
     "networks": "allow 198.51.100.0/24; allow 2001:db8:a1e0::/48",
     "logins": "none",
+}
+
+
+# The survey checks these probes answer (`probes/__init__.py`); the table
+# checks (`table=True`) are read again by the sweep of every width
+# (`BrowserGate.table_defects_at_every_width`) at each shape of the layout,
+# with the rows a reader can open opened.
+CHECKS = {
+    "cells": Check(CELLS, table=True),
+    "tables": Check(TABLES, table=True, findings=lambda report: report["found"]),
+    "tables fit": Check((TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), table=True),
+    "unseen columns": Check((UNSEEN_COLUMNS, SELECTORS["table_scroll"]), table=True),
+    "cut with room": Check(
+        (CUT_WITH_ROOM, [SELECTORS["cut_box"], SELECTORS["name_box"], SELECTORS["unseen"]]), table=True
+    ),
+    "cut beside room": Check((CUT_BESIDE_ROOM, SELECTORS["unseen"]), table=True),
+    "cut and closed": Check((CUT_AND_CLOSED, SELECTORS["unseen"]), table=True),
+    "cut when open": Check((CUT_WHEN_OPEN, SELECTORS["unseen"]), table=True),
+    # Every box and every line of text, not only a card's or code's.
+    "gutter": (PAST_THE_GUTTER, ["*", True]),
 }

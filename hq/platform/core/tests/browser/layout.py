@@ -19,6 +19,7 @@ from hq.platform.core.tests.browser.probes.boxes import (
     SIDEWAYS,
 )
 from hq.platform.core.tests.browser.probes.palette import PAINT
+from hq.platform.core.tests.browser.probes.parts import EVIDENCE_READ, SUMMARIES_READ
 from hq.platform.core.tests.browser.probes.settle import FINISH_TRANSITIONS, SETTLE, STYLESHEETS
 from hq.platform.core.tests.browser.probes.tables import (
     CELLS,
@@ -29,24 +30,16 @@ from hq.platform.core.tests.browser.probes.tables import (
 )
 from hq.platform.core.tests.browser.probes.text import (
     BROKEN_WORDS,
+    CHANGES_READ,
+    CHIPS_READ,
     CUT_DECISIONS,
+    FACT_ROWS_READ,
     PAST_THE_CLAMP,
 )
 from hq.platform.core.tests.browser.reading import reads, taken
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.stress import stress_estate
-from hq.platform.core.tests.browser.survey import (
-    _AUDIT,
-    _SIDEWAYS_READ,
-    _SPILLED_CELLS,
-    _SPILLED_CONTROLS,
-    AS_FINDINGS,
-    CHANGES_READ,
-    CHIPS_READ,
-    EVIDENCE_READ,
-    FACT_ROWS_READ,
-    SUMMARIES_READ,
-)
+from hq.platform.core.tests.browser.survey import AS_FINDINGS, CHECKS
 from hq.platform.core.tests.browser.widths import SPARSE_WIDTHS, WIDTHS
 from hq.platform.core.tests.test_browser_dense_fixtures import DENSE_PAGES
 from hq.platform.core.tests.test_browser_fixtures import PAGES
@@ -274,18 +267,18 @@ class LayoutBrowserTests(BrowserGate):
         # where its end tag was: the rest of the line falls out of it.
         self.assertEqual(self.page.locator(SELECTORS["broken_paragraph"]).count(), 0)
 
-    @reads(_SPILLED_CONTROLS, _SPILLED_CELLS)
+    @reads(CHECKS["control labels"].probe, CHECKS["cell labels"].probe)
     def words_stay_inside_the_box_that_holds_them(self, _name, controls, cells):
         self.assertEqual(controls, [])
         self.assertEqual(cells, [])
 
-    @reads(_SIDEWAYS_READ)
+    @reads(CHECKS["sideways"].probe)
     def only_a_table_scrolls_sideways(self, _name, found):
         """At a phone, tablet and laptop width; again with every disclosure open."""
 
         self.assertEqual(found, [])
 
-    @reads(_SIDEWAYS_READ)
+    @reads(CHECKS["sideways"].probe)
     def only_a_table_scrolls_sideways_with_every_disclosure_open(self, _name, found):
         self.assertEqual(found, [])
 
@@ -318,7 +311,7 @@ class LayoutBrowserTests(BrowserGate):
 
         self.assertEqual(found, [])
 
-    @reads(_AUDIT)
+    @reads(CHECKS["audit"].probe)
     def layout_audit_structural_rules(self, _name, report):
         self.assertEqual(AS_FINDINGS["audit"](report), [])
 

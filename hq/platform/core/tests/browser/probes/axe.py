@@ -3,6 +3,7 @@
 from functools import cache
 from pathlib import Path
 
+from hq.platform.core.tests.browser.probes import Check
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE
 from hq.platform.core.tests.browser.probes.palette import _COLOR, _PAINTED_BY
 from hq.platform.core.tests.browser.selectors import SELECTORS
@@ -126,3 +127,12 @@ def rules_read():
     and its argument."""
 
     return (axe_probe(), [None, TAGS, list(LEFT_OUT), SELECTORS["vendored"]])
+
+
+# The survey checks these probes answer (`probes/__init__.py`), each read only
+# when it runs: a tree without the lint tools (the image, the composed suite's
+# copy) names them all the same.
+CHECKS = {
+    "axe": rules_read,
+    "contrast": Check(contrast_read, palette=True),
+}

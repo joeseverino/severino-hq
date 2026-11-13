@@ -10,7 +10,8 @@ from django.urls import reverse_lazy
 from django.views import View
 from django.views.generic import TemplateView
 
-from hq.platform.application.adoption import unmanaged_services
+from hq.platform.application.adoption import ADOPT_SERVICE, unmanaged_services
+from hq.platform.application.capabilities import capability_words
 from hq.platform.application.connections import machines_once
 from hq.platform.application.entity_links import entity_link
 from hq.platform.application.exposure import OPEN
@@ -98,7 +99,24 @@ class ServiceListView(PageMixin, TemplateView):
         # hostname HQ does not manage is still a hostname that is serving, and
         # hiding it is how a console ends up describing only the tidy half of
         # the estate.
-        context["unmanaged"] = unmanaged_services()
+        context["unmanaged"] = unmanaged = unmanaged_services()
+        # A name read through a connection that manages can be taken under
+        # HQ's management from its row; one only observed cannot.
+        context["unmanaged_rows"] = [
+            (
+                service,
+                ()
+                if service.observed_only
+                else (
+                    PageAction(
+                        capability_words(ADOPT_SERVICE),
+                        reverse("control_plane:adopt", args=[service.hostname]),
+                        method="post",
+                    ),
+                ),
+            )
+            for service in unmanaged
+        ]
         context["inventory"] = inventory_state()
         context["certificate_facet"] = CERTIFICATE_FACET
         context["dns_facet"] = DNS_FACET

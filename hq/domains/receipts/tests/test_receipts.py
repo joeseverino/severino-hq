@@ -52,6 +52,15 @@ class ReceiptLinkTests(TestCase):
         self.assertContains(response, "No expense or asset")
         self.assertNotContains(response, ">expense</a>")
 
+    def test_a_match_s_row_links_it_to_this_receipt(self):
+        receipt = _receipt(vendor="Example Host", amount=Decimal("12.00"))
+        url = reverse("receipts:match", args=[receipt.pk])
+
+        (button,) = select(self.client.get(url), "formaction", url)
+
+        self.assertEqual((button.attrs["name"], button.attrs["value"]), ("expense_id", str(self.expense.pk)))
+        self.assertTrue(any("row-actions" in ancestor.classes for ancestor in button.ancestors))
+
     def test_a_linked_receipt_says_what_it_is_linked_to(self):
         receipt = _receipt(vendor="Example Host", related_expense=self.expense)
 

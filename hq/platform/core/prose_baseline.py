@@ -12,6 +12,4 @@ entries the tree holds now.
 # on its first finding.
 BASELINED_RULES = frozenset({"Plain.Long", "Plain.Narrate"})
 
-BASELINE: dict[tuple[str, str], int] = {
-    ("hq/platform/application/upgrades.py", "Plain.Long"): 1,
-}
+BASELINE: dict[tuple[str, str], int] = {}

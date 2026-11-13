@@ -18,13 +18,13 @@
           </tr>
         </thead>
         <tbody>
-          {% for exp in matches %}
+          {% for exp, actions in matches %}
             <tr>
               <td>{{ exp.date|when }}</td>
               <td><strong>{{ exp.vendor|breakable }}</strong></td>
               <td>{{ exp.item|breakable }}</td>
               <td>{{ exp.total_cost|money }}</td>
-              <td>{% post_button "Link" request.path name="expense_id" value=exp.pk css="btn primary" %}</td>
+              {% row_actions actions %}
             </tr>
           {% endfor %}
         </tbody>

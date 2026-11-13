@@ -1,6 +1,7 @@
 """The probe that scores how far a page moved by itself since it began to load."""
 
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE
+from hq.platform.core.tests.browser.selectors import SELECTORS
 
 # The most a page may shift by itself: Core Web Vitals' line for a good
 # Cumulative Layout Shift.
@@ -63,3 +64,11 @@ LAYOUT_SHIFTS = (
   return report(seen);
 }"""
 )
+
+
+# The survey checks these probes answer (`probes/__init__.py`).
+CHECKS = {
+    # How far the page moved by itself since it began to load, scored from the
+    # browser's own record of it as Cumulative Layout Shift.
+    "layout shifts": (LAYOUT_SHIFTS, [SELECTORS["vendored"], CLS_LIMIT]),
+}

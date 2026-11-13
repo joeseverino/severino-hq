@@ -40,6 +40,7 @@ from hq.platform.core.tests.browser import probes
 from hq.platform.core.tests.browser.estate import ExampleEstateBrowserTests, estate_pages, navigation
 from hq.platform.core.tests.browser.gate import BrowserGate, add_css
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
+from hq.platform.core.tests.browser.probes.audit import AUDIT
 from hq.platform.core.tests.browser.reference import (
     REFERENCE,
     REFERENCE_DARK,
@@ -55,7 +56,7 @@ from hq.platform.core.tests.browser.reference import (
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.shots import TALLEST, extent_of, shoot_page
 from hq.platform.core.tests.browser.stress import ALL_PAGES, stress_pages
-from hq.platform.core.tests.browser.survey import AUDIT, palette_probes, survey_checks
+from hq.platform.core.tests.browser.survey import palette_probes, survey_checks
 from hq.platform.core.tests.browser.widths import PHONE_SCREEN
 from hq.platform.core.tests.look_posts import Posted, is_post, post_names, posted
 from hq.platform.core.tests.look_records import EstatePages

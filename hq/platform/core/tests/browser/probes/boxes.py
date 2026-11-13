@@ -2,6 +2,7 @@
 
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE, PAINTED_PART
 from hq.platform.core.tests.browser.selectors import SELECTORS
+from hq.platform.core.tests.browser.widths import TARGET_MIN
 
 # Nothing moves sideways except inside a box ``allowed`` selects: past the
 # page's edge it is cut off, and a box that clips or scrolls what it holds
@@ -789,3 +790,30 @@ LISTS_ACROSS_AN_EMPTY_FRAME = (
   return [...new Set(found)];
 }"""
 )
+
+
+HEADS_READ = (
+    HEAD_CONTROLS,
+    [SELECTORS["head_actions"], SELECTORS["head_menu"], SELECTORS["head_menu_panel"], SELECTORS["ask"]],
+)
+
+# The survey checks these probes answer (`probes/__init__.py`).
+CHECKS = {
+    "sideways": (SIDEWAYS, SELECTORS["sideways"]),
+    "overlaps": OVERLAPS,
+    "into a neighbor": INTO_A_NEIGHBOR,
+    "small targets": (SMALL_TARGETS, [SELECTORS["target"], TARGET_MIN, SELECTORS["floating"]]),
+    "cut rings": (CUT_RINGS, SELECTORS["target"]),
+    "short of its buttons": (SHORT_OF_ITS_BUTTONS, [SELECTORS["decision_words"], SELECTORS["decision_buttons"]]),
+    "heads": HEADS_READ,
+    "section heads": (CRAMPED_HEADS, SELECTORS["section_head"]),
+    "section asides": (ASIDES_WRAPPED_WITH_ROOM, SELECTORS["section_head"]),
+    "inset in the frame": (INSET_IN_THE_FRAME, SELECTORS["section_body"]),
+    "frames in a row": (FRAMES_OUT_OF_ROW, [SELECTORS["section_head"], SELECTORS["section_body"]]),
+    "frames span their column": (FRAMES_SHORT_OF_THEIR_COLUMN, [PAGE_FRAMES, SELECTORS["floating"]]),
+    "titles at the head's start": (TITLES_OFF_THEIR_START, SELECTORS["section_head"]),
+    "lists across an empty frame": (
+        LISTS_ACROSS_AN_EMPTY_FRAME,
+        [SELECTORS["facts_list"], SELECTORS["list_frame"], SELECTORS["section_head"], 44],
+    ),
+}

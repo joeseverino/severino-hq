@@ -43,30 +43,30 @@ reading; nothing here calls GitHub.
     {% endfact %}
   {% endfacts %}
   {% with rules=repo.rules environment=repo.production_environment %}
-      <dl class="github-facts">
-        <div id="updates-state" data-updates-state><dt>Dependency updates</dt><dd>{% if project.dependency_updates %}On{% with pulls=repo.update_pulls|length %}, {% if pulls %}<a href="#updates">{{ pulls|counted:"open update,open updates" }}</a>{% else %}none open{% endif %}{% endwith %}{% else %}Off{% endif %}
-          {% include "projects/_updates_run.html" with run=updates_run asked=run_asked %}
-        </dd></div>
-        {% if posture.measured %}
-          <div><dt>Repository settings</dt><dd class="prose"><a href="{% url 'posture' %}">{{ posture.met|breakable }} of {{ posture.measured|counted:"check passes,checks pass" }}</a> ({% if repo.private %}private{% else %}public{% endif %} repo rules){% if posture.unmet %}<br><span class="github-gap">{% for result in posture.unmet %}{{ result.check.unmet|breakable:"." }}{% if not forloop.last %} {% endif %}{% endfor %}</span>{% endif %}</dd></div>
-        {% endif %}
-        {% if rules %}
-          <div><dt>Changes to {{ repo.default_branch|breakable }}</dt><dd>
-            {% if rules.pull_request %}Need a pull request{% if rules.reviews %} with {{ rules.reviews|counted:"approval" }}{% endif %}{% else %}Need no pull request{% endif %}
-            and {{ rules.required_checks|length|counted:"passing check,passing checks" }}{% if rules.required_checks %} ({{ rules.required_checks|join:", "|breakable:")." }}{% else %}.{% endif %}{% if rules.blocks_force_push %} Force-push is blocked.{% endif %}
-            {% if repo.unrequired_checks %}<br><span class="github-gap">Run on pull requests but not required: {{ repo.unrequired_checks|join:", "|breakable }}</span>{% endif %}
-          </dd></div>
-        {% elif "branch_rules" in repo.refused %}
-          <div><dt>Changes to {{ repo.default_branch|breakable }}</dt><dd class="muted">GitHub does not offer branch rules for this repository's plan.</dd></div>
-        {% endif %}
-        {% if environment %}
-          <div><dt>Deploy rules</dt><dd>{% if environment.reviewers %}Approval from {{ environment.reviewers|join:", "|breakable }}{% else %}No approval{% endif %}{% if environment.wait_minutes %}, then a {{ environment.wait_minutes|counted:"minute" }} wait{% endif %}{% if environment.branches == "protected" %}, protected branches only{% elif environment.branches != "any" %}, chosen branches only{% endif %}</dd></div>
-        {% endif %}
-        {% for runner in repo.runners %}
-          <div><dt>Runner</dt><dd>{% entity "machine"|entity_of:runner.name %}{% dot %}{{ runner.status|breakable:"," }}{% if runner.busy %} running a job{% else %} idle{% endif %}</dd></div>
-        {% endfor %}
-      </dl>
-    {% endwith %}
+  {% facts %}
+    {% fact "Dependency updates" %}<span id="updates-state" data-updates-state>{% if project.dependency_updates %}On{% with pulls=repo.update_pulls|length %}, {% if pulls %}<a href="#updates">{{ pulls|counted:"open update,open updates" }}</a>{% else %}none open{% endif %}{% endwith %}{% else %}Off{% endif %}
+      {% include "projects/_updates_run.html" with run=updates_run asked=run_asked %}
+    </span>{% endfact %}
+    {% if posture.measured %}
+      {% fact "Repository settings" %}<span class="prose"><a href="{% url 'posture' %}">{{ posture.met|breakable }} of {{ posture.measured|counted:"check passes,checks pass" }}</a> ({% if repo.private %}private{% else %}public{% endif %} repo rules){% if posture.unmet %}<br><span class="github-gap">{% for result in posture.unmet %}{{ result.check.unmet|breakable:"." }}{% if not forloop.last %} {% endif %}{% endfor %}</span>{% endif %}</span>{% endfact %}
+    {% endif %}
+    {% if rules %}
+      {% fact "Changes to "|add:repo.default_branch %}
+        {% if rules.pull_request %}Need a pull request{% if rules.reviews %} with {{ rules.reviews|counted:"approval" }}{% endif %}{% else %}Need no pull request{% endif %}
+        and {{ rules.required_checks|length|counted:"passing check,passing checks" }}{% if rules.required_checks %} ({{ rules.required_checks|join:", "|breakable:")." }}{% else %}.{% endif %}{% if rules.blocks_force_push %} Force-push is blocked.{% endif %}
+        {% if repo.unrequired_checks %}<br><span class="github-gap">Run on pull requests but not required: {{ repo.unrequired_checks|join:", "|breakable }}</span>{% endif %}
+      {% endfact %}
+    {% elif "branch_rules" in repo.refused %}
+      {% fact "Changes to "|add:repo.default_branch %}<span class="muted">GitHub does not offer branch rules for this repository's plan.</span>{% endfact %}
+    {% endif %}
+    {% if environment %}
+      {% fact "Deploy rules" %}{% if environment.reviewers %}Approval from {{ environment.reviewers|join:", "|breakable }}{% else %}No approval{% endif %}{% if environment.wait_minutes %}, then a {{ environment.wait_minutes|counted:"minute" }} wait{% endif %}{% if environment.branches == "protected" %}, protected branches only{% elif environment.branches != "any" %}, chosen branches only{% endif %}{% endfact %}
+    {% endif %}
+    {% for runner in repo.runners %}
+      {% fact "Runner" %}{% entity "machine"|entity_of:runner.name %}{% dot %}{{ runner.status|breakable:"," }}{% if runner.busy %} running a job{% else %} idle{% endif %}{% endfact %}
+    {% endfor %}
+  {% endfacts %}
+  {% endwith %}
 {% aside %}<span class="count prose">{% entity repo.url|outside label=repo.name %}{% if repo.private %}{% dot %}private{% endif %}{% dot %}{% include "partials/_reading_age.html" with reading=repo.reading only %}</span>
 {% endsection %}
 

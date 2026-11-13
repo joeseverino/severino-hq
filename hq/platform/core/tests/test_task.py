@@ -91,6 +91,29 @@ class PagesTests(SimpleTestCase):
             task.pages(asked, self.EVERY), [f"{containers}?q=hq", f"{containers}?q=docker", f"{containers}?q=x"]
         )
 
+    FINDINGS = ("control_plane:findings", "hq_api:findings")
+
+    def test_a_word_is_the_one_estate_page_whose_path_it_ends(self):
+        contacts, containers = reverse("contacts:list"), reverse("control_plane:containers")
+
+        every = [*self.EVERY, containers]
+
+        self.assertEqual(task.pages(["contacts", "containers?q=hq"], every), [contacts, f"{containers}?q=hq"])
+
+    def test_a_word_that_ends_several_estate_pages_or_none_is_refused_with_the_nearest(self):
+        # status ends a route's path, but no estate page's.
+        with self.assertRaises(PageRefused) as refused:
+            task.pages(["findings", "contactz", "status"], [*self.EVERY, *map(reverse, self.FINDINGS)])
+        said = str(refused.exception)
+
+        self.assertIn("No page findings; type one of these instead:", said)
+        for route in self.FINDINGS:
+            self.assertIn(f"\n  {task.estate_name(reverse(route))} (the estate's {route})", said)
+        self.assertIn(
+            "No page contactz; type one of these instead:\n  estate/contacts (the estate's contacts:list)", said
+        )
+        self.assertIn("No page status", said)
+
     def test_a_page_known_by_name_is_named_as_nearest_where_it_is_one(self):
         with self.assertRaisesMessage(PageRefused, "\n  dense/services (a page by name)"):
             task.pages(["dense/service"], self.EVERY, ["dense/services"])

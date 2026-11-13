@@ -37,10 +37,10 @@ or on the device's row below, the same form.
           </tr>
         </thead>
         <tbody>
-          {% for prompt in prompts %}
+          {% for prompt, actions in prompts %}
             <tr data-prompt="{{ prompt.device.anchor }}">
               <th scope="row" class="cell-data"><a href="#{{ prompt.device.anchor }}">{{ prompt.text|breakable }}</a></th>
-              <td class="row-actions">{% include "core/_agent_device_actions.html" with device=prompt.device %}</td>
+              {% row_actions actions %}
             </tr>
           {% endfor %}
         </tbody>
@@ -59,7 +59,6 @@ it is not blocked, since removal never lifts a block.
 {% with days=recent_days|counted:"day" %}{% with lede="Activity over the last "|add:days %}
 {% section "Agents" count=standings|length id="agents" lede=lede %}
 {% if standings %}
-  {% url 'agent_block' as block_url %}
   {% table_region "Agents" %}
     <table class="data-table">
       <thead>
@@ -72,7 +71,7 @@ it is not blocked, since removal never lifts a block.
         </tr>
       </thead>
       <tbody>
-        {% for standing in standings %}{% with identity=standing.identity activity=standing.activity %}
+        {% for standing, actions in agent_rows %}{% with identity=standing.identity activity=standing.activity %}
           <tr data-agent="{{ standing.subject }}" data-client="{{ identity.client_id }}"{% if identity.blocked_at %} data-blocked{% endif %}>
             <th scope="row">
               <code>{{ identity.client_id|breakable }}</code>{% if identity.blocked_at %} {% status "Blocked" tone="attention" %}{% endif %}
@@ -105,14 +104,7 @@ it is not blocked, since removal never lifts a block.
               {% if activity.refused %}<br><span class="figure tone-attention">{{ activity.refused|breakable }} refused</span>{% if activity.limited == activity.refused %} <span class="muted">for calling too much</span>{% elif activity.limited %} <span class="muted">{{ activity.limited|breakable }} for calling too much</span>{% endif %}{% endif %}
               {% with streams=standing.streams %}{% if streams.full %}<br><span class="figure tone-attention" data-streams="full">{{ streams.open|breakable }} of {{ streams.cap|breakable }} streams open</span> <span class="muted">so another is refused</span>{% endif %}{% endwith %}
             </td>
-            <td class="row-actions">
-              {% if identity.blocked_at %}
-                {% words "agent.block.set" "off" as label %}{% include "partials/_target_button.html" with url=block_url target=standing.subject name="blocked" value="0" label=label css="btn compact primary" %}
-              {% else %}
-                {% words "agent.block.set" "on" as label %}{% include "partials/_target_button.html" with url=block_url target=standing.subject name="blocked" value="1" label=label css="btn compact" %}
-                {% words "agent.remove" as label %}{% include "partials/_target_button.html" with url=block_url target=standing.subject name="removed" value="1" label=label css="btn compact" %}
-              {% endif %}
-            </td>
+            {% row_actions actions %}
           </tr>
         {% endwith %}{% endfor %}
       </tbody>
@@ -168,10 +160,10 @@ approved, and a block stops that device alone.
           {% table_heading "Approve or block" "control" hidden=True drop=4 %}
         </tr>
       </thead>
-      {% for standing in device_groups %}{% with identity=standing.identity %}
+      {% for standing, devices in device_groups %}{% with identity=standing.identity %}
         <tbody id="devices-{{ identity.pk }}" data-agent-devices="{{ standing.subject }}">
-          {% row_group standing.label standing.devices|length %}
-          {% for device in standing.devices %}
+          {% row_group standing.label devices|length %}
+          {% for device, actions in devices %}
             <tr id="{{ device.anchor }}" data-device-standing="{{ device.standing }}">
               <th scope="row">
                 {{ device.name|breakable }}
@@ -192,7 +184,7 @@ approved, and a block stops that device alone.
               <td>{{ device.first_seen|when:"ago" }}</td>
               <td>{{ device.last_seen|when:"ago" }}</td>
               <td data-sort="{{ device.calls }}">{{ device.calls|counted:"call" }}{% if device.refused %}<br><span class="figure tone-attention">{{ device.refused|breakable }} refused</span>{% endif %}</td>
-              <td class="row-actions">{% include "core/_agent_device_actions.html" with device=device %}</td>
+              {% row_actions actions %}
             </tr>
           {% endfor %}
         </tbody>
@@ -220,11 +212,11 @@ carries the device permission stands as them. Only theirs, never anybody else's.
           </tr>
         </thead>
         <tbody>
-          {% for device in devices %}
+          {% for device, actions in devices %}
             <tr data-device="{{ device.client_id }}">
               <th scope="row"><code>{{ device.client_id|breakable }}</code></th>
               <td>{{ device.registered_at|when:"ago" }}</td>
-              <td class="row-actions">{% words "agent.device.set" "off" as label %}{% include "partials/_target_button.html" with url=device_url target=device.client_id name="registered" value="0" label=label css="btn compact" %}</td>
+              {% row_actions actions %}
             </tr>
           {% endfor %}
         </tbody>

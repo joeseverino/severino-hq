@@ -390,11 +390,12 @@ A band is listed once, in the band rule in `css/app/figures.css`; its cells
 keep their own padding. Too narrow for two cells, a band reads as a list:
 label left, value right.
 
-A band of facts draws no rule between them and counts nothing. Each fact is
-as wide as what it says, up to `--fact-max`. The facts sit together at the
-start, a fixed gap apart, as Primer's Stack and Atlassian's Inline do. As many
-share a row as fit at `--fact-min`, so a few facts never spread across a wide
-page. Standing alone the band is a surface with its own inset. In a card or a
+A band of facts draws no rule between them and counts nothing. Each fact's
+track is as wide as what it says, at least `--fact-min` and up to
+`--fact-max`. The facts sit together at the start, a fixed gap apart, as
+Primer's Stack and Atlassian's Inline do. A wider band never sets them further
+apart. As many share a row as fit at `--fact-min`. That floor lets a narrow
+band hold fewer facts to a row, and the facts of a row still share their lines. Standing alone the band is a surface with its own inset. In a card or a
 section, the frame's padding is its inset. Under 27.5rem it reads as a list,
 each fact laying out its own rows.
 

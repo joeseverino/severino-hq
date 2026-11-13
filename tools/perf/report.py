@@ -147,15 +147,17 @@ def served(names: tuple[str, ...], every: list[str], *, leave_out: bool) -> list
     the run, or with ``leave_out`` is named and left out, so a caller asking pages of every kind
     (dev:look's) measures those it can."""
 
+    # A bare word dev:look takes as a gate page by name (connections) ends an
+    # estate page's path too, and perf knows no gate page, so it takes no word.
     try:
-        return task.pages(names, every)
+        return task.pages(names, every, by_word=False)
     except PageRefused as refused:
         if not leave_out:
             raise Unservable(f"{refused} perf serves the {ESTATE}'s pages alone.") from None
     chosen = []
     for name in names:
         try:
-            chosen += task.pages([name], every)
+            chosen += task.pages([name], every, by_word=False)
         except PageRefused:
             print(f"perf leaves out {name}: it serves the {ESTATE}'s pages by path or route name alone", flush=True)
     if not chosen:

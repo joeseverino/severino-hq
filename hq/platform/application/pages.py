@@ -10,8 +10,9 @@ Every page also reads under one capability, checked before its view runs
 (``page_refusal``, docs/Security.md#what-a-page-reads-under).
 """
 
+import dataclasses
 import re
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from copy import copy
 from dataclasses import dataclass, field
 from typing import Any
@@ -81,10 +82,18 @@ class PageAction:
     # The field a POST action's ``value`` is sent as, for a view that reads
     # its own ("status") rather than the button's default.
     field: str = "action"
+    # What else a POST action sends, by name: what it acts on, when that is
+    # any string and so travels in the body, or the ``next`` it returns to.
+    # Such an action is a form of its own, so it never stands inside another.
+    fields: Mapping[str, str] = dataclasses.field(default_factory=dict, hash=False)
 
     def __post_init__(self):
         if self.method not in {"get", "post"}:
             raise ValueError(f"PageAction method must be get or post, not {self.method!r}.")
+        if self.fields and self.method != "post":
+            raise ValueError("Only a POST action sends fields.")
+        if self.field in self.fields:
+            raise ValueError(f"A POST action's button sends {self.field!r}; its fields cannot send it too.")
         if self.modal and self.method != "get":
             raise ValueError("Only a GET action can open a dialog.")
 

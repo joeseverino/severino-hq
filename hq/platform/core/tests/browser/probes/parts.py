@@ -1,6 +1,8 @@
 """Probes of a page's parts: disclosures, labels, the dashboard's readings and a check's evidence."""
 
+from hq.platform.core.tests.browser.probes import Check
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE
+from hq.platform.core.tests.browser.selectors import SELECTORS
 
 # Press a heading's sort control and read its column back, top to bottom.
 SPILLED_LABELS = (
@@ -383,3 +385,28 @@ WRAPPED_BESIDE_A_PAIR = (
   return found;
 }"""
 )
+
+
+EVIDENCE_READ = (STRANDED_EVIDENCE, [SELECTORS["check_statement"], SELECTORS["check_evidence"]])
+
+SUMMARIES_READ = (HIDDEN_IN_SUMMARIES, SELECTORS["summary_value"])
+
+_READINGS_OF = f"(selector) => ({READINGS})([...document.querySelectorAll(selector)])"
+
+# The survey checks these probes answer (`probes/__init__.py`).
+CHECKS = {
+    "control labels": (SPILLED_LABELS, SELECTORS["control"]),
+    "cell labels": Check((SPILLED_LABELS, SELECTORS["cell_content"]), table=True),
+    "dialogs": (DIALOGS_WITHOUT_OPENERS, [SELECTORS["dialog"], SELECTORS["dialog_opener"]]),
+    "select arrows": (SELECT_ARROWS, [SELECTORS["dropdown"], SELECTORS["vendored"]]),
+    "link underlines": (PARTS_NOT_UNDERLINED, [SELECTORS["link"], SELECTORS["vendored"]]),
+    "links at rest": (LINKS_AT_REST, [SELECTORS["link"], SELECTORS["vendored"]]),
+    "lined past the name": (
+        LINED_PAST_THE_NAME,
+        [SELECTORS["link"], SELECTORS["vendored"], SELECTORS["tag"], SELECTORS["mark"]],
+    ),
+    "lists of facts": (WRAPPED_BESIDE_A_PAIR, SELECTORS["fact_list"]),
+    "bare folds": (BARE_FOLDS, [SELECTORS["section_fold"], SELECTORS["drawn_when_opened"]]),
+    # The dashboard's readings, which no other page draws.
+    "readings": Check((_READINGS_OF, SELECTORS["readings"]), only_on="/", findings=reading_problems),
+}

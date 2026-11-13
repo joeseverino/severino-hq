@@ -99,8 +99,8 @@ class RecordTableTests(SimpleTestCase):
         return render_to_string(
             "control_plane/_zone_records.html",
             {
-                "routing": rows,
-                "policy": policy,
+                "routing": [(row, ()) for row in rows],
+                "policy": [(row, ()) for row in policy],
                 "zone": SimpleNamespace(managed=True),
                 "public_dns_enabled": True,
                 "request": SimpleNamespace(get_full_path=lambda: "/domains/example.com/"),

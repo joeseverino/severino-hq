@@ -263,18 +263,22 @@ def _no_record(address: str, records: Records) -> str:
     return said + _offered(offers)
 
 
-def _address(name: str) -> str | None:
+def _address(name: str, every: Sequence[str]) -> str | None:
     """The estate address ``name`` names, its query kept as an address keeps
     it, or None for a name that is no route: a route name (``search?q=hq``),
     a path, its leading slash optional once it holds one (``search/?q=hq``),
-    or ``estate/<path>``."""
+    the last word of exactly one path of ``every``, the estate's pages
+    (``contacts``), or ``estate/<path>``. A word that ends no such path or
+    several is None, so its refusal offers the nearest."""
 
     if not (is_estate(name) or name.startswith("/")):
         route, mark, query = name.partition("?")
         with suppress(NoReverseMatch):
             return reverse(route) + mark + query
         if "/" not in route:
-            return None
+            paths = {urlsplit(page).path for page in every}
+            ending = {path for path in paths if _last(path) == route}
+            return f"{ending.pop()}{mark}{query}" if len(ending) == 1 else None
         name = f"/{name}"
     address = estate_path(name if is_estate(name) else f"{ESTATE}{name}")
     try:
@@ -284,13 +288,15 @@ def _address(name: str) -> str | None:
     return address
 
 
-def _one_page(name: str, named: Sequence[str], records: Records | None, record_routes: set[str]) -> str:
+def _one_page(
+    name: str, every: Sequence[str], named: Sequence[str], records: Records | None, record_routes: set[str]
+) -> str:
     """The address of the one page ``name`` asks for, a record's or the
     estate's, or PageRefused saying why it is none, with the names it would take."""
 
     if name.startswith(TEMPLATE) or name in record_routes:
         return _record(name, records)
-    if (address := _address(name)) is None:
+    if (address := _address(name, every)) is None:
         offers = nearest(urlsplit(estate_path(name)).path if is_estate(name) else name, named)
         raise PageRefused(f"No page {name}" + ("; type one of these instead:" if offers else "") + _offered(offers))
     if records is not None and _takes_a_record(address) and records.at(address) is None:
@@ -298,8 +304,22 @@ def _one_page(name: str, named: Sequence[str], records: Records | None, record_r
     return address
 
 
+def _kinds(*, by_word: bool, named: bool, records: bool) -> str:
+    """The kinds of name a page is, as the caller of ``pages`` takes them."""
+
+    kinds = "estate/<path>, a path" + (", the last word of one estate page's path" if by_word else "")
+    kinds += ", a route name" + (", a page by name" if named else "")
+    kinds += ", a route that takes a record, template:<name>" if records else ""
+    return f"A page is {kinds}, estate/all or all."
+
+
 def pages(
-    asked: Sequence[str], every: Sequence[str], named: Sequence[str] = (), records: Records | None = None
+    asked: Sequence[str],
+    every: Sequence[str],
+    named: Sequence[str] = (),
+    records: Records | None = None,
+    *,
+    by_word: bool = True,
 ) -> list[str]:
     """The pages ``asked`` names, in order and once each: an estate page as its
     address, a page known by name (``named``, dev:look's gate pages) as its
@@ -307,8 +327,10 @@ def pages(
     ``estate/all`` and nothing asked stand for; ``all`` is those and ``named``.
     ``records`` is the estate drawn, which a record's page is found in and
     checked against, and a record's page of ``every`` it does not hold is left
-    out of both. Every name that is no page is refused together, each with the
-    names it would take."""
+    out of both. A bare word is the page of ``every`` whose path it ends unless
+    ``by_word`` is false, for a caller that cannot tell it from a page another
+    tool knows by name. Every name that is no page is refused together, each
+    with the names it would take."""
 
     found, refused = [], []
     record_routes = _record_routes()
@@ -327,13 +349,13 @@ def pages(
             found.append(name)
         else:
             try:
-                found.append(_one_page(name, named, records, record_routes))
+                found.append(_one_page(name, every if by_word else (), named, records, record_routes))
             except PageRefused as said:
                 refused.append(str(said))
     if refused:
-        kinds = "estate/<path>, a path, a route name" + (", a page by name" if named else "")
-        kinds += ", a route that takes a record, template:<name>" if records is not None else ""
-        raise PageRefused("\n".join([*refused, f"A page is {kinds}, estate/all or all."]))
+        raise PageRefused(
+            "\n".join([*refused, _kinds(by_word=by_word, named=bool(named), records=records is not None)])
+        )
     return list(dict.fromkeys(found))
 
 

@@ -576,10 +576,13 @@ the test did since its last failure, each step with the page as it stood.
 `uv run --group browser playwright show-trace <file>` opens it. CI uploads
 every such folder of a failed gate.
 
-Every check the survey runs is proven able to fail. `PLANTS`
+A check is declared once, beside its probe: an entry of its probe module's
+`CHECKS` (`hq/platform/core/tests/browser/probes/__init__.py` says what an
+entry holds), which the survey collects from every module there. Every check
+the survey runs is proven able to fail. `PLANTS`
 (`hq/platform/core/tests/browser/planted.py`) holds the smallest defect each
-must find, `PlantedBrowserTests` requires it found, and a new check lands with
-its plant.
+must find, `PlantedBrowserTests` requires it found, and a new check lands as
+its `CHECKS` entry and its plant, never an edit to `survey.py`.
 
 A check selects markup only through `SELECTORS`, and
 `hq/platform/core/tests/test_browser_selectors.py` fails on a selector no
@@ -706,9 +709,11 @@ to copy. What follows is how a look behaves, which the help does not say.
 A record's page is found in the estate the seed builds, and a record's address
 that seed does not hold is refused with the ones it does. Composed, the
 showcase and standard seeds hold each extension's demo too, and `all` reads
-the record pages it names ([Plugins](Plugins.md#demo-data)). An unknown page or
-rule is refused before anything runs, and a page that answers anything but 200
-fails the run. A query rides on the page's name as it does on an address
+the record pages it names ([Plugins](Plugins.md#demo-data)). A bare word is the
+one page of the estate whose path it ends (`contacts`), and the run's lines name that
+page as `estate/<path>`; a word that ends several paths or none is refused with
+the nearest. An unknown page or rule is refused before anything runs, and a
+page that answers anything but 200 fails the run. A query rides on the page's name as it does on an address
 (`'search/?q=docker'`, `'control_plane:containers?q=hq'`), on any page the
 server answers, so a page drawn from its query (Command Center's results, a
 filtered list) is a name like any other.

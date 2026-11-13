@@ -185,9 +185,25 @@ class ReceiptMatchView(ReceiptPage, TemplateView):
         if not matches and receipt.vendor:
             matches = list(potential_expenses.filter(vendor__icontains=receipt.vendor))
 
+        # Each match with its one control, which links it to this receipt.
         ctx.update(
             receipt=receipt,
-            matches=matches[:10],
+            matches=[
+                (
+                    expense,
+                    (
+                        PageAction(
+                            "Link",
+                            self.request.path,
+                            method="post",
+                            primary=True,
+                            field="expense_id",
+                            value=str(expense.pk),
+                        ),
+                    ),
+                )
+                for expense in matches[:10]
+            ],
         )
         return ctx
 

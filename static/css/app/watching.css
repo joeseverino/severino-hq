@@ -3,22 +3,13 @@
 
 @layer components {
   /* ----- Watching: your GitHub profile ----------------------------------- */
-  /* One raised band that says whose this is: the avatar, the name, the account,
+  /* The card that says whose this is: the avatar, the name, the account,
      and the counts beside them. */
-  .gh-profile {
-    display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-6) var(--space-9);
-    margin: 0 0 var(--stack-gap); padding: var(--space-8) var(--space-9);
-    border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow);
-  }
+  .gh-profile { display: flex; flex-wrap: wrap; align-items: center; align-content: start; gap: var(--space-6) var(--space-9); }
   .gh-avatar { width: 64px; height: 64px; border-radius: 50%; box-shadow: 0 0 0 3px var(--accent-tint); }
   .gh-identity { flex: 1 1 260px; min-width: 0; }
   .gh-identity p { margin: 0; }
   .gh-name { font-size: var(--text-xl); font-weight: 650; }
-  /* Under the band, the same repository's settings; framed on its own, its frame is its edge. */
-  .github-facts { display: grid; gap: var(--space-4); margin: 0; padding: var(--space-7) 0 0; font-size: var(--text-sm); }
-  .github-facts > div { display: grid; grid-template-columns: minmax(0, clamp(7rem, 30%, 160px)) minmax(0, 1fr); gap: var(--space-6); }
-  .github-facts dt { color: var(--muted); }
-  .github-facts dd { margin: 0; }
   .github-gap { color: var(--tone-caution-ink, var(--muted)); }
   /* A repository's lists: one surface, a row per item read left to right. */
   .github-list { list-style: none; margin: 0 0 var(--space-6); padding: var(--surface-inset, 0); }
@@ -40,8 +31,6 @@
   /* What the deploy proved before it ran: its own verification steps. */
   .github-verified { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--danger); cursor: default; }
   .github-verified.is-verified { color: var(--ok); }
-  /* The same rows in their own section, whose frame is their edge and inset. */
-  .github-facts.account-facts { padding: 0; border-top: 0; }
   /* Containers: what needs you, one row per image and version, then the table. */
   .container-advisories { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); font-size: var(--text-sm); }
   /* Words rather than a pill: a narrow column wraps them instead of widening. */
@@ -58,9 +47,6 @@
   .upgrade-blockers { font-size: var(--text-sm); }
   .upgrade-blockers p { margin: 0 0 var(--space-3); }
   .upgrade-blockers ul { margin: 0; padding-left: var(--space-9); display: grid; gap: var(--space-2); }
-  .container-facts code { font-size: var(--text-xs); }
-  /* Facts on their own raised surface, as every other section sits. */
-  .boxed-facts { margin: 0 0 var(--space-8); padding: var(--surface-inset, var(--space-5) var(--space-7)); }
   /* Why not on its own: the band's own bottom row, a line each. */
   .upgrade-reasons { display: grid; justify-items: start; gap: var(--space-2); margin: 0; padding: 0; list-style: none; color: var(--muted); font-size: var(--text-sm); }
   .upgrade-reasons li::before { content: "·" / ""; margin-right: var(--space-3); color: var(--muted-2); }

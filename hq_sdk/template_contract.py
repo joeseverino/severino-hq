@@ -294,8 +294,6 @@ HAND_DRAWN: dict[str, dict[str, str]] = {
             "service-band",
             "control-summary",
             "control-metric",
-            "boxed-facts",
-            "github-facts",
             "vitals-strip",
             "glance-metrics",
             "agent-state-facts",

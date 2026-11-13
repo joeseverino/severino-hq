@@ -35,7 +35,8 @@
 .status-tab[aria-current] .count { color: inherit; }
 .row-unread td { background: var(--accent-tint); }
 .row-unread .msg-preview a, .row-unread td:first-child a { font-weight: 650; }
-.row-actions form { display: inline-block; margin: 0; }
+/* A control that posts a form of its own (`post_form`) stands where a button would. */
+.post-form { display: inline-block; margin: 0; }
 .icon-link.danger-link { color: var(--danger); }
 .inline-form { display: inline; margin: 0; }
 .quick-actions { display: flex; flex-wrap: wrap; gap: var(--space-4); margin: 0 0 var(--space-10); }

@@ -557,6 +557,20 @@ CATALOG = {
         '{% fact "Example checks" icon="check-circle" tone="good" value="Passing" %}'
         "{% endfacts %}"
     ),
+    # An identifier longer than its fact's bound beside a plain value, then
+    # one linked outside, as a container's Version and Update facts draw
+    # them: each wraps a chip to a line and stands on its row's baseline.
+    "part/facts-band-code": Entry(
+        '{% facts layout="band" %}'
+        '{% fact "Example running" icon="activity" value="Up 1 week" %}'
+        '{% fact "Example version" icon="layers" %}<code>{{ tag|breakable }}</code>{% endfact %}'
+        "{% endfacts %}"
+        '{% facts layout="band" %}'
+        '{% fact "Example running" icon="activity" value="Up 1 week" %}'
+        '{% fact "Example update" icon="deploy" %}{% entity url|outside label=tag code=True %}{% endfact %}'
+        "{% endfacts %}",
+        {"tag": "2024.11.3-example2404-ls45-example-build", "url": "https://example.com/releases/2024.11.3"},
+    ),
     # A detail given as lines, one of them holding a link among its words.
     "part/facts-band-lines": Entry(
         '{% facts layout="band" %}'

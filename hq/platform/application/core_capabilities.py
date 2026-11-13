@@ -269,6 +269,7 @@ CORE_CAPABILITY_SPECS = (
             "Adopt each one through a connection that manages, in one transaction.",
         ),
         label="Manage a service in HQ",
+        verb="Manage in HQ",
     ),
     CapabilitySpec(
         ADOPT_ZONE,

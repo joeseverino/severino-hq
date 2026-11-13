@@ -25,20 +25,13 @@ which shares the "Runs on" column with the origin it would duplicate.
           </tr>
         </thead>
         <tbody>
-          {% for service in unmanaged %}
+          {% for service, actions in unmanaged_rows %}
             <tr>
               <td><strong>{{ service.hostname|breakable }}</strong></td>
               {% for id, label, value in service.facets %}
                 <td>{% if value %}<code>{{ value|breakable }}</code>{% else %}{% empty_value %}{% endif %}</td>
               {% endfor %}
-              <td>
-                {% if service.observed_only %}
-                  <span class="muted">Read only</span>
-                {% else %}
-                  {% url 'control_plane:adopt' service.hostname as retry_url %}
-                  {% post_button "Manage in HQ" retry_url %}
-                {% endif %}
-              </td>
+              {% if actions %}{% row_actions actions %}{% else %}<td><span class="muted">Read only</span></td>{% endif %}
             </tr>
           {% endfor %}
         </tbody>

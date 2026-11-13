@@ -128,7 +128,7 @@ SELECTORS = {
     "page_title": ".page-head h1",
     # What holds the content and so stays inside its gutter: a card, a block
     # of code.
-    "gutter_bound": "pre, .card, .boxed-facts",
+    "gutter_bound": "pre, .card",
     # The box built to scroll a table sideways.
     "table_scroll": ".table-scroll",
     # The boxes allowed to scroll sideways: a table's, and a block of code,

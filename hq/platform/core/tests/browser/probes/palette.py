@@ -1,6 +1,8 @@
 """Probes of color: field and button edges, the fills a theme paints, and the tokens that paint them."""
 
+from hq.platform.core.tests.browser.probes import Check
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE
+from hq.platform.core.tests.browser.selectors import SELECTORS
 
 # The least a fill may differ from the surface it sits on to show at all:
 # below this it is the surface's own color.
@@ -327,3 +329,10 @@ PAINT = (
   });
 }"""
 )
+
+
+# The survey checks these probes answer (`probes/__init__.py`).
+CHECKS = {
+    "fields": Check((FIELD_EDGES, [SELECTORS["fillable"], FIELD_CONTRAST, SELECTORS["pressed"]]), palette=True),
+    "button edges": Check((BUTTON_EDGES, SELECTORS["pressed"]), palette=True),
+}

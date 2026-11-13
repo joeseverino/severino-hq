@@ -673,8 +673,8 @@ class BrowserGate(SimpleTestCase):
         return self.checked(geometry_probes(path, width))
 
     def table_defects_at_every_width(self):
-        """What the table checks (`TABLE_CHECKS`) find on the loaded page at
-        some window width from the narrowest phone up, as it was resized and
+        """What the table checks (`Check(table=True)`) find on the loaded page
+        at some window width from the narrowest phone up, as it was resized and
         with every row a reader can open opened, and whether opening them
         moved what stayed closed, by check, each finding with the first width
         it was found at; the page is left at the width it was loaded at, its

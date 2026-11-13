@@ -95,7 +95,7 @@ and sorted with the rest they would come first: the least interesting rows in
 the zone at the top of the page.
 {% endcomment %}
 {% section "Records" lede=records_lede %}
-  {% include "control_plane/_zone_records.html" with routing=zone.routing policy=zone.policy zone=zone public_dns_enabled=public_dns_enabled %}
+  {% include "control_plane/_zone_records.html" with routing=record_rows.routing policy=record_rows.policy zone=zone public_dns_enabled=public_dns_enabled %}
 {% aside %}
   {% comment %}How old the records' reading is, beside the one way to add one.{% endcomment %}
   {% for snapshot in inventory %}{% if snapshot.kind == record_kind %}<span class="muted">{% if snapshot.reachable %}{% include "partials/_reading_age.html" with at=snapshot.observed_at only %}{% else %}<span title="{{ snapshot.error }}">{{ snapshot.state_label|breakable }}</span>{% endif %}</span>{% endif %}{% endfor %}

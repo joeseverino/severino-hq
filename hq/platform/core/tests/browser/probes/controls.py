@@ -253,3 +253,21 @@ ACTIONS_STACKED_WITH_ROOM = (
   return found;
 }"""
 )
+
+
+# The survey checks these probes answer (`probes/__init__.py`).
+CHECKS = {
+    "actions on the first line": ACTIONS_OFF_THE_LINE,
+    "row actions stacked with room": (
+        ACTIONS_STACKED_WITH_ROOM,
+        f"{SELECTORS['row_actions_cell']}, {SELECTORS['queue_actions_cell']}",
+    ),
+    "control words on one line": (
+        WRAPPED_CONTROLS,
+        [SELECTORS["pressed"], SELECTORS["choice"], SELECTORS["unseen"], SELECTORS["vendored"]],
+    ),
+    "one height to a row of controls": (
+        CONTROL_HEIGHTS,
+        [SELECTORS["pressed"], SELECTORS["fillable"], SELECTORS["vendored"]],
+    ),
+}

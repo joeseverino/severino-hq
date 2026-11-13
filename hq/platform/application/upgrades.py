@@ -520,8 +520,7 @@ def install_steps(machine: str, *, deployed_here: bool = False) -> tuple[Step, .
         Step(
             "check",
             "Signed in as that account, check that sudo allows it: sudo prints the helper's command when the "
-            "rule allows it. sudo -l only says whether a call is allowed, and the call it asks about names a "
-            "stack that does not exist (example) and a digest of zeros.",
+            "rule allows it. sudo -l only asks, so nothing runs, and the stack it names does not exist.",
             f"sudo -n -l {HELPER} {_PROBE}",
         ),
     )

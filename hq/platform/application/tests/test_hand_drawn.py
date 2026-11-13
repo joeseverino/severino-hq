@@ -53,7 +53,6 @@ PARTS = {
         "the urgent problems' notice, whose heading is for a screen reader alone: nothing visible titles it"
     ),
     ("partials/_form.html", "a form that writes"): "the form part itself",
-    ("partials/_target_button.html", "a form that writes"): "a one-button part's own form",
     ("partials/_visit_refresh.html", "a form that writes"): "a hidden form the page's script submits, with no fields",
     ("core/_dashboard_glance.html", "a form that writes"): "hidden forms the page's script submits, with no fields",
     ("partials/_record_list.html", "a list of rows"): "the list part itself",
