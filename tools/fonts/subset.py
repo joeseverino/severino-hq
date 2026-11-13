@@ -1,13 +1,13 @@
 """The served Inter: the release's variable font cut to what HQ prints and the
 features its stylesheets ask for.
 
-Run as a module, a step of `mise run fix`, it writes SERVED from Inter's own
-release (UPSTREAM beside this file), and lint:drift-font fails when SERVED is
-behind (`--check`).
+Run as lint:drift-font, it fails when SERVED is behind; its fix mode
+(`mise run lint:drift-font --fix`, a step of `mise run fix`) writes SERVED from
+Inter's own release (UPSTREAM beside this file).
 """
 
-import argparse
 import io
+import os
 import re
 import sys
 from pathlib import Path
@@ -124,15 +124,13 @@ def build() -> bytes:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--check", action="store_true", help="fail when the served font is not what this writes")
-    check = parser.parse_args().check
     built = build()
     name = SERVED.relative_to(ROOT)
-    if check:
+    # mise sets it from lint:drift-font's --fix.
+    if os.environ.get("usage_fix") != "true":  # noqa: SIM112 - mise names its usage variables in lower case
         if not SERVED.exists() or SERVED.read_bytes() != built:
             print(
-                f"{name} is behind its source; run `uv run python -m tools.fonts.subset` and commit the result.",
+                f"{name} is behind its source; run `mise run lint:drift-font --fix` and commit the result.",
                 file=sys.stderr,
             )
             return 1

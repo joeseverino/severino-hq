@@ -6,6 +6,7 @@ from django.test import SimpleTestCase
 from hq.platform.application.approval_review import ChangePreview, compare
 from hq.platform.application.payload_words import ChangeRow
 from hq.platform.application.tests.markup import elements, select, with_class, within
+from hq.platform.application.ui import MISSING
 
 
 def _drawn(preview: ChangePreview) -> str:
@@ -16,6 +17,16 @@ def _headings(html: str) -> list[str]:
     return [
         heading.words for heading in elements(html, "th") if any(around.tag == "thead" for around in heading.ancestors)
     ]
+
+
+def _sides(html: str, folds: str) -> dict[str, list[str]]:
+    """The words of each side's cells in the rows folded under ``folds``, by their ``data-side``."""
+
+    cells = [cell for cell in within(html, "data-folded", folds) if cell.tag == "td"]
+    return {
+        side: [cell.words.strip() for cell in cells if cell.attrs.get("data-side") == side]
+        for side in ("before", "after")
+    }
 
 
 class ChangeTableTests(SimpleTestCase):
@@ -41,18 +52,33 @@ class ChangeTableTests(SimpleTestCase):
 
         self.assertEqual([cell.words for cell in elements(html, "td")], ["redacted", "redacted"])
 
-    def test_each_record_that_changes_is_a_group_and_one_that_stays_is_only_named(self):
+    def test_each_field_a_record_moves_is_a_row_named_by_both_and_one_that_stays_is_only_named(self):
         from hq.platform.application.approval_review import grouped
 
         records = {"example.first": {"example_effect": "read"}, "example.second": {"example_effect": "read"}}
         moved = {**records, "example.first": {"example_effect": "change"}}
         html = _drawn(grouped({"records": records}, {"records": moved}, label="Would change"))
 
-        groups = [group.words.split()[0] for group in with_class(html, "row-group")]
-        self.assertEqual(groups, ["example.first"])
+        (row,) = [row for row in elements(html, "tr") if "example.first" in row.words]
+        self.assertIn("Example effect", row.words, "the row names the field beside its record")
+        self.assertEqual([cell.words for cell in elements(html, "td")], ["read", "change"])
+        self.assertFalse(with_class(html, "row-group"), "no row only says what the rows under it say")
         self.assertFalse(select(html, "data-folds"), "nothing that changes is folded away")
         (foot,) = with_class(html, "section-foot")
         self.assertIn("example.second", foot.words)
+
+    def test_a_record_the_change_widens_has_its_rows_marked_and_no_sentence_of_its_own(self):
+        from dataclasses import replace
+
+        from hq.platform.application.approval_review import grouped
+
+        records = {"example.first": {"example_effect": "read"}}
+        shown = grouped({"records": records}, {"records": {"example.first": {"example_effect": "change"}}}, label="X")
+        html = _drawn(replace(shown, groups=tuple(replace(group, widens=True) for group in shown.groups)))
+
+        (row,) = select(html, "data-attention")
+        self.assertEqual(row.tag, "tr")
+        self.assertIn("example.first", row.words)
 
     def test_a_change_keeps_its_own_order(self):
         rows = {f"example_{name}": name for name in ("zulu", "alpha", "mike")}
@@ -62,12 +88,12 @@ class ChangeTableTests(SimpleTestCase):
         self.assertFalse(select(html, "data-sort-local"), "no heading offers to sort a change")
         self.assertFalse(select(html, "aria-sort"))
 
-    def test_a_record_that_comes_whole_is_headed_by_its_name_with_its_summary_its_one_row(self):
+    def test_a_record_that_comes_whole_is_one_row_its_name_and_its_summary_its_fields_folded_under_it(self):
         from hq.platform.application.approval_review import grouped
 
         # approval_review.SUMMARY, written out so the test reads at a ref without it.
         SUMMARY = "_summary"
-        summary = {"label": "An example record", "value": "Changes an example thing."}
+        summary = {"label": "An example record", "value": "Changes an example thing"}
         before = {"commit": "example-old", "records": {"example.first": {"example_effect": "read"}}}
         after = {
             "commit": "example-new",
@@ -78,21 +104,33 @@ class ChangeTableTests(SimpleTestCase):
         }
         html = _drawn(grouped(before, after, label="Would change"))
 
-        (header,) = [group for group in with_class(html, "row-group") if summary["label"] in group.words]
-        self.assertIn("new", header.words)
-        self.assertNotIn("example.second", html, "a record with a name is headed by it, never by its key")
-        folds = header.attrs["id"]
+        (head,) = select(html, "data-folds")
+        self.assertIn(summary["label"], head.words)
+        cells = [cell for cell in elements(html, "td") if any("data-folds" in row.attrs for row in cell.ancestors)]
+        self.assertEqual(len(cells), 2)
+        self.assertEqual(cells[0].words, MISSING, "nothing stood before it")
+        self.assertEqual(cells[1].words, summary["value"], "what it is, after")
+        self.assertNotIn("example.second", html, "a record with a name is named by it, never by its key")
+        self.assertEqual([row.words.count(summary["value"]) for row in elements(html, "tr")].count(1), 1)
+        self.assertFalse(with_class(html, "row-group"), "the record is said once, on its own row")
+        folds = head.attrs["id"]
         self.assertEqual(len(select(html, "data-folded", folds)), 2)
-        cells = [cell for cell in within(html, "data-folded", folds) if cell.tag == "td"]
-        self.assertEqual([cell.attrs.get("colspan") for cell in cells], ["2", "2"], "one value, no empty Before")
-        shown = [row for row in elements(html, "tr") if summary["value"] in row.words]
-        self.assertEqual(len(shown), 1)
-        self.assertNotIn("data-folded", shown[0].attrs, "the summary stays in sight while its fields fold")
-        self.assertNotIn(summary["label"], shown[0].words, "the summary is a sentence, not a field")
+        self.assertEqual(_sides(html, folds), {"before": ["", ""], "after": ["change", "fast"]})
         self.assertNotIn(SUMMARY, html)
         # The count is what a reader sees move: the commit, and the new record as one.
         (count,) = [element for element in with_class(html, "count") if element.words.strip().isdigit()]
         self.assertEqual(count.words.strip(), "2")
+
+    def test_a_record_that_goes_whole_has_its_fields_under_before_and_nothing_after(self):
+        from hq.platform.application.approval_review import grouped
+
+        records = {"example.first": {"example_effect": "read"}, "example.second": {"example_mode": "fast"}}
+        html = _drawn(
+            grouped({"records": records}, {"records": {"example.first": records["example.first"]}}, label="X")
+        )
+
+        (head,) = select(html, "data-folds")
+        self.assertEqual(_sides(html, head.attrs["id"]), {"before": ["fast"], "after": [""]})
 
     def test_a_document_that_will_not_parse_is_a_line_diff(self):
         notes = ("# An example\nfirst", "# An example\nsecond")

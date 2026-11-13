@@ -22,7 +22,9 @@ from pydantic import ConfigDict, Field, create_model, with_config
 
 from hq.domains.control_plane.providers import PROVIDERS, enabled_controller_actions
 lazy from hq.domains.control_plane.models import OperationRequest
+lazy from hq.domains.control_plane.names import normalized_hostname
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
+lazy from hq.domains.control_plane.provider_adapters.declarations import MACHINE_KIND
 
 from . import (
     certificate_expiry,
@@ -87,6 +89,7 @@ from .workflows import (
     serialize_workflow,
 )
 lazy from . import cadence
+lazy from .automation_runs import playbook_remedies
 lazy from .estate import estate_reading
 lazy from .moments import ago
 lazy from .ui import counted
@@ -274,6 +277,14 @@ def _permitted(capability: str, principal: Principal, graph: IntegrationGraph) -
     return False, ""
 
 
+def _playbooks(finding: Finding, subject: TopologyNode | None) -> tuple[FindingRemedy, ...]:
+    """The adopted playbooks that say they fix a finding about a machine, each with that machine chosen."""
+
+    if subject is None or subject.kind != MACHINE_KIND:
+        return ()
+    return playbook_remedies(finding.rule, normalized_hostname(subject.label))
+
+
 def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | None) -> Finding:
     """Drop remedies this principal cannot run, and take effect from the spec.
 
@@ -285,7 +296,7 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
 
     graph = integration_graph()
     kept = []
-    for remedy in finding.remedies:
+    for remedy in (*finding.remedies, *_playbooks(finding, subject)):
         allowed, effect = _permitted(remedy.capability, principal, graph)
         if not allowed or effect == "destructive":
             continue

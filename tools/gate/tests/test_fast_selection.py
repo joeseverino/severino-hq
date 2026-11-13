@@ -47,34 +47,6 @@ EXEMPT = {
 CONFIG = ("mise.toml", "mise.lock", "tools/pipeline/toolchain.env", "controller/go.mod")
 
 
-def selected(*changed: str, deleted: tuple[str, ...] = ()) -> set[str]:
-    """The quick gates fast selects for a change to ``changed`` that removes ``deleted``, made in a fixture
-    repository holding this checkout's task definitions and, at its base, each of those paths."""
-
-    with tempfile.TemporaryDirectory() as folder:
-        root = Path(folder, "tree")
-        shutil.copytree(ROOT / "mise-tasks", root / "mise-tasks")
-        for path in (*CONFIG, *changed, *deleted):
-            if (ROOT / path).is_file() and not (root / path).exists():
-                (root / path).parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(ROOT / path, root / path)
-        git = fixture_git(root)
-        git("init", "--quiet")
-        git("add", "-A")
-        git("commit", "--quiet", "--no-verify", "--allow-empty", "-m", "base")
-        for path in changed:
-            (root / path).parent.mkdir(parents=True, exist_ok=True)
-            with (root / path).open("a", encoding="utf-8") as file:
-                file.write("# changed\n")
-        for path in deleted:
-            (root / path).unlink()
-        with (
-            patch.object(fast_gate, "ROOT", root),
-            patch.dict(os.environ, trusted_mise(root, Path(folder, "state"))),
-        ):
-            return set(fast_gate.selected_tasks([*changed, *deleted], git("rev-parse", "HEAD")))
-
-
 def exclusions(task: str) -> list[str]:
     """The paths a gate's sources take out, each pattern without its `!`."""
 
@@ -113,9 +85,44 @@ class FastGateTaskSelectionTests(GateTestCase):
         self.assertTrue(excluded, "lint:structural takes nothing out, so this holds nothing")
         self.assertFalse(disagree, "lint:structural's ! sources take out what classify.TEST names, and only that")
 
+
+@tag("source")
+class FastGateFixtureSelectionTests(GateTestCase):
+    """The quick gates fast selects for a change, made in a fixture repository holding this checkout's task
+    definitions, which fast reads as its ROOT, so no test here walks this checkout."""
+
+    def setUp(self):
+        self.folder = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.root = self.folder / "tree"
+        self.enterContext(patch.object(fast_gate, "ROOT", self.root))
+
+    def selected(self, *changed: str, deleted: tuple[str, ...] = ()) -> set[str]:
+        """The quick gates fast selects for a change to ``changed`` that removes ``deleted``, the fixture
+        holding at its base each of those paths."""
+
+        shutil.rmtree(self.root, ignore_errors=True)
+        shutil.rmtree(self.folder / "state", ignore_errors=True)
+        shutil.copytree(ROOT / "mise-tasks", self.root / "mise-tasks")
+        for path in (*CONFIG, *changed, *deleted):
+            if (ROOT / path).is_file() and not (self.root / path).exists():
+                (self.root / path).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(ROOT / path, self.root / path)
+        git = fixture_git(self.root)
+        git("init", "--quiet")
+        git("add", "-A")
+        git("commit", "--quiet", "--no-verify", "--allow-empty", "-m", "base")
+        for path in changed:
+            (self.root / path).parent.mkdir(parents=True, exist_ok=True)
+            with (self.root / path).open("a", encoding="utf-8") as file:
+                file.write("# changed\n")
+        for path in deleted:
+            (self.root / path).unlink()
+        with patch.dict(os.environ, trusted_mise(self.root, self.folder / "state")):
+            return set(fast_gate.selected_tasks([*changed, *deleted], git("rev-parse", "HEAD")))
+
     def test_a_docs_change_runs_only_the_prose_gate_and_the_gate_that_derives_it(self):
-        self.assertEqual(selected("docs/Example.md"), {"lint:prose"})
-        self.assertEqual(selected("docs/Connections.md"), {"lint:prose", "lint:drift-connections-reference"})
+        self.assertEqual(self.selected("docs/Example.md"), {"lint:prose"})
+        self.assertEqual(self.selected("docs/Connections.md"), {"lint:prose", "lint:drift-connections-reference"})
 
     def test_a_change_to_a_file_the_shell_gate_reads_runs_it_and_no_other_change_does(self):
         """A workflow's run blocks are read by the shell gate's contracts, as its scripts and suites are."""
@@ -127,10 +134,10 @@ class FastGateTaskSelectionTests(GateTestCase):
             "mise-tasks/lint/shell/_default",
         ):
             with self.subTest(changed=changed):
-                self.assertIn("lint:shell", selected(changed))
+                self.assertIn("lint:shell", self.selected(changed))
         for changed in ("docs/Example.md", "tools/gate/fast.py", "controller/host/verify.go"):
             with self.subTest(changed=changed):
-                self.assertNotIn("lint:shell", selected(changed))
+                self.assertNotIn("lint:shell", self.selected(changed))
 
     def test_a_change_to_a_file_a_drift_gate_derives_from_runs_that_gate(self):
         """Each file the generator reads besides Python, which a change can move without regenerating."""
@@ -143,32 +150,34 @@ class FastGateTaskSelectionTests(GateTestCase):
             ("tools/lint/ast-grep/rules/hand-drawn-table.yml", "lint:drift-sdk-contract"),
         ):
             with self.subTest(changed=changed):
-                self.assertIn(gate, selected(changed))
+                self.assertIn(gate, self.selected(changed))
 
     def test_a_python_change_runs_the_python_gates_and_not_the_stylesheet_ones(self):
-        picked = selected("hq/domains/docs_index/importer.py")
+        picked = self.selected("hq/domains/docs_index/importer.py")
         self.assertLessEqual({"lint:ruff", "lint:mypy", "test:migrations", "lint:drift-api-document"}, picked)
         self.assertNotIn("lint:css", picked)
         self.assertNotIn("lint:drift-font", picked)
 
     def test_a_change_to_a_linters_suppressions_runs_that_linter(self):
-        self.assertIn("lint:js", selected("tools/lint/eslint-suppressions.json"))
+        self.assertIn("lint:js", self.selected("tools/lint/eslint-suppressions.json"))
 
     def test_a_deleted_file_is_a_change_to_the_gates_that_read_it(self):
-        self.assertLessEqual({"lint:ruff", "lint:mypy"}, selected(deleted=("hq/domains/docs_index/importer.py",)))
+        self.assertLessEqual({"lint:ruff", "lint:mypy"}, self.selected(deleted=("hq/domains/docs_index/importer.py",)))
 
     def test_a_change_to_tests_alone_leaves_out_the_structural_bar_which_never_reads_them(self):
-        self.assertNotIn("lint:structural", selected("hq/platform/core/tests/test_example.py"))
-        self.assertIn("lint:structural", selected("hq/platform/core/example.py"))
+        self.assertNotIn("lint:structural", self.selected("hq/platform/core/tests/test_example.py"))
+        self.assertIn("lint:structural", self.selected("hq/platform/core/example.py"))
         self.assertIn(
-            "lint:structural", selected("hq/platform/core/tests/test_example.py", "hq/platform/core/example.py")
+            "lint:structural", self.selected("hq/platform/core/tests/test_example.py", "hq/platform/core/example.py")
         )
 
     def test_a_change_to_what_every_gate_reads_runs_them_all(self):
+        # Read from this checkout's tasks: fast's own listing is cached, and here it would read the fixture.
+        quick = {name for name, task in mise_tasks().items() if fast_gate.QUICK in task["tags"]}
         for changed in ("mise-tasks/lint.toml", "mise-tasks/test.toml", "tools/pipeline/toolchain.env"):
             with self.subTest(changed=changed):
-                self.assertEqual(selected(changed), set(fast_gate.quick_gates()))
-        self.assertEqual(selected("uv.lock"), set(fast_gate.quick_gates()) - {GO})
+                self.assertEqual(self.selected(changed), quick)
+        self.assertEqual(self.selected("uv.lock"), quick - {GO})
 
     def test_a_change_the_go_tests_can_break_on_runs_them_and_no_other_change_does(self):
         """The controller's code and module, the contracts generated for it and the bridge base they are
@@ -185,17 +194,17 @@ class FastGateTaskSelectionTests(GateTestCase):
             "controller/edge/testdata/fuzz/FuzzReadBundle/sparse-file-past-the-body",
         ):
             with self.subTest(changed=changed):
-                self.assertIn(GO, selected(changed))
+                self.assertIn(GO, self.selected(changed))
         for changed in ("docs/Example.md", "hq/domains/docs_index/importer.py", "templates/base.html"):
             with self.subTest(changed=changed):
-                self.assertNotIn(GO, selected(changed))
+                self.assertNotIn(GO, self.selected(changed))
 
     def test_a_change_to_mise_toml_or_a_workflow_runs_the_gates_that_read_them(self):
-        self.assertLessEqual({"lint:mise-format", "lint:workflows"}, selected("mise.toml"))
-        self.assertIn("lint:mise-format", selected("mise-tasks/lint/mise-format"))
-        self.assertIn("lint:workflows", selected(".github/workflows/ci.yml"))
-        self.assertIn("lint:workflows", selected(".github/actions/toolchain/action.yml"))
-        self.assertNotIn("lint:workflows", selected("docs/Example.md"))
+        self.assertLessEqual({"lint:mise-format", "lint:workflows"}, self.selected("mise.toml"))
+        self.assertIn("lint:mise-format", self.selected("mise-tasks/lint/mise-format"))
+        self.assertIn("lint:workflows", self.selected(".github/workflows/ci.yml"))
+        self.assertIn("lint:workflows", self.selected(".github/actions/toolchain/action.yml"))
+        self.assertNotIn("lint:workflows", self.selected("docs/Example.md"))
 
 
 @tag("source")

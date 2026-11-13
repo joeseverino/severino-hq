@@ -65,6 +65,11 @@ def seed(owner=None):
     """Every record of the estate, written into an empty database, the hand-kept
     ones by ``owner`` (``history.dated`` says who when none is named)."""
 
+    with automation.numbered():
+        _seed(owner)
+
+
+def _seed(owner):
     with history.dated(owner):
         # The controller checked in a moment ago; a fresh install's never has.
         cadence.note_controller()

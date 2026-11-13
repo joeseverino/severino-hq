@@ -64,16 +64,13 @@ sources = [
   "tools/pipeline/toolchain.env",
 ]
 outputs = []
+usage = 'flag "--fix" help="Write what each rule that carries a fix: rewrites instead of checking: fast runs it first"'
 # The scan reads the whole repository, since each rule's files: and ignores:
 # say which modules it holds. A rule's cases (rule-tests/) prove it refuses
-# what it is for before its scan is trusted to find nothing.
-run = [
-  "ast-grep test -c tools/lint/ast-grep/sgconfig.yml --skip-snapshot-tests",
-  # The template rules' snapshots hold what each fix writes.
-  "ast-grep test -c tools/lint/ast-grep/sgconfig.yml --filter '^hand-drawn-'",
-  # A suppression no match needs any more fails, so each is removed as its page moves.
-  "ast-grep scan -c tools/lint/ast-grep/sgconfig.yml --error=unused-suppression .",
-]
+# what it is for before its scan is trusted to find nothing, and the template
+# rules' snapshots hold what each fix writes. A suppression no match needs any
+# more fails, so each is removed as its page moves.
+run = 'if [ "${usage_fix:-}" = true ]; then ast-grep scan -c tools/lint/ast-grep/sgconfig.yml --update-all . >/dev/null; else ast-grep test -c tools/lint/ast-grep/sgconfig.yml --skip-snapshot-tests && ast-grep test -c tools/lint/ast-grep/sgconfig.yml --filter "^hand-drawn-" && ast-grep scan -c tools/lint/ast-grep/sgconfig.yml --error=unused-suppression .; fi'
 
 ["lint:openapi"]
 description = "Both OpenAPI descriptions pass specification lint"
@@ -344,6 +341,9 @@ sources = [
   "tools/pipeline/toolchain.env",
 ]
 outputs = []
+usage = 'flag "--fix" help="Format, modernize and regenerate the controller instead of checking: fast runs it first"'
+# The bridge contract's fix writes the specs go generate reads.
+wait_for = ["lint:drift-bridge-contract"]
 run = "controller/scripts/check.sh"
 
 # Every advisory whose vulnerable function the controller can reach, through
@@ -381,7 +381,8 @@ sources = [
 ]
 outputs = []
 extends = "django"
-run = "uv run python manage.py sdk_contract --check"
+usage = 'flag "--fix" help="Rewrite the file instead of checking: fast runs it first"'
+run = 'if [ "${usage_fix:-}" = true ]; then uv run python manage.py sdk_contract; else uv run python manage.py sdk_contract --check; fi'
 
 ["lint:drift-api-document"]
 description = "The machine API's OpenAPI document is current"
@@ -401,14 +402,14 @@ sources = [
 ]
 outputs = []
 extends = "django"
-run = "uv run python manage.py api_openapi --check"
+usage = 'flag "--fix" help="Rewrite the file instead of checking: fast runs it first"'
+run = 'if [ "${usage_fix:-}" = true ]; then uv run python manage.py api_openapi; else uv run python manage.py api_openapi --check; fi'
 
 # A recording the examples file must equal, written to a temporary file of its
 # own rather than over the file.
 ["lint:drift-api-examples"]
 description = "The machine API's recorded examples are what its tests receive"
 hide = true
-tags = ["fast"]
 sources = [
   "**/*.py",
   "hq/platform/api/openapi-examples.json",
@@ -427,7 +428,13 @@ sources = [
 ]
 outputs = []
 extends = "django"
-run = 'recorded="$(mktemp)"; trap "rm -f \"$recorded\"" EXIT; HQ_API_RECORD_EXAMPLES_TO="$recorded" mise run fix:api-examples && diff -u hq/platform/api/openapi-examples.json "$recorded" || { echo "lint:drift-api-examples: the recording differs from hq/platform/api/openapi-examples.json, or did not finish; mise run fix:api-examples records it again" >&2; exit 1; }'
+# A recording: a serial run of the tests fix:api-examples names. So fast
+# selects it on a change to Python alone only where it selects one of those
+# tests, and runs its fix only once its check has failed, then checks again
+# (tools/gate/fast.py, RECORDING).
+tags = ["fast", "recording"]
+usage = 'flag "--fix" help="Record the examples into the file and rewrite the document instead of checking: fast runs it once the check fails"'
+run = 'if [ "${usage_fix:-}" = true ]; then mise run fix:api-examples; exit; fi; recorded="$(mktemp)"; trap "rm -f \"$recorded\"" EXIT; HQ_API_RECORD_EXAMPLES_TO="$recorded" mise run fix:api-examples && diff -u hq/platform/api/openapi-examples.json "$recorded" || { echo "lint:drift-api-examples: the recording differs from hq/platform/api/openapi-examples.json, or did not finish; mise run fix:api-examples records it again" >&2; exit 1; }'
 
 ["lint:drift-bridge-contract"]
 description = "The controller's contracts are the ones the registry derives"
@@ -448,7 +455,8 @@ sources = [
 ]
 outputs = []
 extends = "django"
-run = "uv run python manage.py bridge_contract --check"
+usage = 'flag "--fix" help="Rewrite the file instead of checking: fast runs it first"'
+run = 'if [ "${usage_fix:-}" = true ]; then uv run python manage.py bridge_contract; else uv run python manage.py bridge_contract --check; fi'
 
 ["lint:drift-connections-reference"]
 description = "docs/Connections.md is what the providers declare"
@@ -467,7 +475,8 @@ sources = [
 ]
 outputs = []
 extends = "django"
-run = "uv run python manage.py connections_reference --check"
+usage = 'flag "--fix" help="Rewrite the file instead of checking: fast runs it first"'
+run = 'if [ "${usage_fix:-}" = true ]; then uv run python manage.py connections_reference; else uv run python manage.py connections_reference --check; fi'
 
 ["lint:drift-procedure-schema"]
 description = "The published JSON Schema of a procedure's sidecar is what ProcedureDeclaration validates"
@@ -486,7 +495,8 @@ sources = [
 ]
 outputs = []
 extends = "django"
-run = "uv run python manage.py procedure_schema --check"
+usage = 'flag "--fix" help="Rewrite the file instead of checking: fast runs it first"'
+run = 'if [ "${usage_fix:-}" = true ]; then uv run python manage.py procedure_schema; else uv run python manage.py procedure_schema --check; fi'
 
 ["lint:drift-font"]
 description = "The served font is its source cut to the characters HQ prints and the features its stylesheets use"
@@ -505,7 +515,9 @@ sources = [
   "tools/pipeline/toolchain.env",
 ]
 outputs = []
-run = "uv run python -m tools.fonts.subset --check"
+usage = 'flag "--fix" help="Rewrite the file instead of checking: fast runs it first"'
+# The subsetter reads the fix flag itself.
+run = "uv run python -m tools.fonts.subset"
 
 ["lint:shell:suite"]
 description = "One shell suite under the shell named, or as its first line says for -: a run lint:shell makes of every suite"

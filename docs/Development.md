@@ -309,10 +309,20 @@ why it is the one. `--list` prints the selection.
 Before anything judges the tree, each selected quick gate whose tool fixes
 what it finds runs its fix mode (`--fix` in its usage: `lint:ruff` with
 Ruff's fixes and format, `lint:css` with Stylelint's, `lint:js` with
-ESLint's, `lint:mise-format` with `mise fmt`), and the run names the files
-they rewrote. The gates then check the fixed files, so formatting never
-fails a run, and the tree the run judges is the one the fixes left. What a
-tool cannot fix, its gate still reports.
+ESLint's, `lint:mise-format` with `mise fmt`, `lint:ast-grep` with each
+rule's `fix:`, `lint:controller` with gofmt, `go fix` and `go generate`, and
+each `lint:drift-*` gate with its file's writer), and the run names the files
+they rewrote. The gates then check the fixed files, so formatting or a stale
+derived file never fails a run, and the tree the run judges is the one the
+fixes left. What a tool cannot fix, its gate still reports. Only fast and
+`mise run fix` pass `--fix`, so CI's gates only check.
+
+A gate tagged `recording` (`lint:drift-api-examples`) is a serial run of the
+tests its run names, compared with a file. Its fix records over the file,
+which every gate would wait on, so fast runs it only once the check has
+failed; the gates and tests the rewritten files select then run again, and
+they decide the run. A change to Python files alone runs a recording only
+when it selects one of the tests the recording runs.
 
 The tests it selects are:
 
@@ -543,8 +553,9 @@ run of those tests under a clock that stands still, with fixed ids, so it
 reads the same every run.
 
 `lint:drift-api-examples` records one beside the file and fails when they
-differ, and `mise run fix:api-examples` records them again, then rewrites the
-document. It is not a step of `fix`, being a run of the suite.
+differ, and `mise run fix:api-examples`, its fix mode, records them again,
+then rewrites the document; fast runs it once the check fails. It is not a
+step of `fix`, being a run of the suite.
 
 ### The extension set
 

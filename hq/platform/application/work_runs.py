@@ -27,6 +27,7 @@ from hq.domains.jobs.models import HEARTBEAT_GRACE, Job, JobState
 from .asks import job_standing
 from .automation_runs import capability_name, resource_key, run_title
 from .resource_operations import operation_summary
+from .routes import reverse
 lazy from .automation_adoption import playbook_titles
 lazy from .automation_sources import REFRESH, SOURCE_KEY, capability_specs
 lazy from .scheduled_work import job_names
@@ -128,6 +129,12 @@ class WorkRun:
     effect: str = ""
     # What its reader may do to it where it is listed (``automation_runs.listed_with_actions``).
     actions: tuple[Any, ...] = ()
+
+    @property
+    def url(self) -> str:
+        """Its own page, for a run or a scan; "" for a job, which has none."""
+
+        return run_url(self.id) if self.source == RUN else ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -385,6 +392,28 @@ def run_row(operation: OperationRequest, now: datetime | None = None) -> WorkRun
     """A run read through ``playbook_runs`` as the row every list of work draws."""
 
     return _run_row(operation, JobState(operation.seen), operation.title, now or timezone.now())
+
+
+def run_of(operation_id: str, now: datetime | None = None) -> tuple[WorkRun, OperationRequest] | None:
+    """The run or scan ``operation_id`` names as its page shows it, with its
+    record; None for an id no listed run has."""
+
+    now = now or timezone.now()
+    found = (
+        OperationRequest.objects.filter(pk=operation_id, action__in=_LISTED)
+        .select_related("resource")
+        .annotate(seen=run_seen_state(now), title=_run_title())
+        .first()
+    )
+    if found is None:
+        return None
+    return _run_row(found, JobState(found.seen), found.title, now), found
+
+
+def run_url(operation_id: str) -> str:
+    """The page of the run or scan ``operation_id``."""
+
+    return reverse("jobs:run", kwargs={"pk": operation_id})
 
 
 def run_hosts() -> list[str]:

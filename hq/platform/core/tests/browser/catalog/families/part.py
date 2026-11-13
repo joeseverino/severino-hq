@@ -283,9 +283,13 @@ def _approval(state, **decided):
         "entry": {
             "held": held,
             "tone": "attention" if pending else "",
-            "asked": Asked("example-agent", "wants to adopt the playbooks of ", "a commit", " from your repository"),
+            "asked": Asked("example-agent", "wants to adopt the playbooks", "", ""),
             "preview": compare({}, _CHANGED_AFTER, label="Would change"),
-            "warnings": ("Example run gains sudo, as the example.cache_admin profile allows.",) if pending else (),
+            "warnings": (
+                "example-ansible-requirements.yml changed. It sets which Ansible collections playbooks can use.",
+            )
+            if pending
+            else (),
             "resource_url": "/example/",
             "resource_label": "Playbooks",
         }
@@ -1595,7 +1599,7 @@ ENTRIES = {
                             "example.third": {
                                 SUMMARY: {
                                     "label": "An example record",
-                                    "value": "Changes an example thing, on any example machine, no sudo",
+                                    "value": "Changes an example thing\u00a0· Any example machine\u00a0· No sudo",
                                 },
                                 **_CHANGED_AFTER,
                             },

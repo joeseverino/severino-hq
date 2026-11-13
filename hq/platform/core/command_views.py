@@ -2,8 +2,9 @@
 
 import json
 import secrets
-from typing import override
+from typing import Any, override
 
+from django import forms
 from django.core.exceptions import PermissionDenied
 from django.core.serializers.json import DjangoJSONEncoder
 from django.http import Http404
@@ -106,6 +107,23 @@ def _result_table(key: str, records: list[dict]) -> ServiceSection:
         columns=tuple(column.replace("_", " ") for column in columns),
         records=tuple(tuple(Cell(_cell(item.get(column))) for column in columns) for item in records),
     )
+
+
+def _named_records(form, query) -> dict[str, Any]:
+    """The records a link names for each field that chooses records (a run's
+    machines), kept only where the field offers them, so a link cannot
+    choose one its reader could not have picked. A form's own fields
+    (``__target``, its confirmation) and any other field are never filled
+    from a link."""
+
+    named: dict[str, Any] = {}
+    for name, field in form.fields.items():
+        if name.startswith("__") or not isinstance(field, forms.TypedChoiceField | forms.TypedMultipleChoiceField):
+            continue
+        offered = [value for value in query.getlist(name) if value and field.valid_value(value)]
+        if offered:
+            named[name] = offered if isinstance(field, forms.TypedMultipleChoiceField) else offered[0]
+    return named
 
 
 class CommandView(View):
@@ -270,6 +288,8 @@ class CommandView(View):
             initial["__target"] = target
             initial.update(capability_target_initial(self.spec, target, principal=self.principal))
         form = self.form_class(initial=initial)
+        if named := _named_records(form, request.GET):
+            form = self.form_class(initial={**initial, **named})
         context = self._context(form, result=self._result())
         # A link that named a target the form cannot offer says so, rather than
         # opening on an empty choice that looks like the link worked.

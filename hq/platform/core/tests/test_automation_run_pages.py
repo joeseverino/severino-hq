@@ -8,6 +8,7 @@ from urllib.parse import parse_qs, urlsplit
 from django.test import SimpleTestCase, TestCase, tag
 from django.urls import reverse
 
+from hq.platform.application.automation_runs import access_words
 from hq.platform.application.tests.markup import links, select, text, texts, with_class, within
 from hq.platform.application.tests.source import source_files, template_files
 from hq.platform.application.tests.tree import ROOT
@@ -84,15 +85,13 @@ class AutomationRunPageTests(TestCase):
         self.assertTrue(self.runs["machine"])
         self.assertEqual(_statuses(html, "runs"), [(run.word, f"pill-{run.tone}") for run in self.runs["machine"]])
         self.assertEqual(_more(html, "runs", reverse("jobs:list")), {"host": [MACHINE]})
-        procedure = [
-            element
-            for element in within(html, "id", "runs")
-            if element.attrs.get("href") == reverse("command", args=[RUN])
-        ]
-        self.assertTrue(procedure)
-        # Each run is named by its playbook's title, the name the Playbooks page gives it.
+        flushes = [run for run in self.runs["machine"] if run.kind == RUN]
+        self.assertTrue(flushes)
+        named = {element.attrs.get("href"): element.words for element in within(html, "id", "runs")}
+        # Each run is named by its playbook's title, the name the Playbooks page gives it, linked to its own page.
         title = next(found["title"] for found in PROCEDURES if found["declaration"]["id"] == CACHE_FLUSH)
-        self.assertEqual({element.words for element in procedure}, {title})
+        for run in flushes:
+            self.assertEqual(named.get(reverse("jobs:run", kwargs={"pk": run.id})), title)
 
     def test_a_procedure_s_page_links_each_of_its_runs_waiting_for_approval(self):
         from hq.domains.control_plane.models import ApprovalRequest
@@ -254,7 +253,7 @@ class ProcedurePageTests(TestCase):
                 if manifest.privilege is None:
                     self.assertIn("no sudo", about.lower())
                 else:
-                    self.assertIn(f"sudo, as the {manifest.privilege} profile allows", about)
+                    self.assertIn(access_words(manifest.privilege), about)
 
     def test_a_procedure_runs_on_the_machines_it_names_each_by_its_link_and_else_on_any(self):
         from hq.platform.application.automation_runs import about, operation_registry

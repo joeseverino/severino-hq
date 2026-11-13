@@ -28,7 +28,7 @@ DOORS = {
     WEB_INTERFACE: "on the web",
     DEVICE_INTERFACE: "on their own device",
     CLI_INTERFACE: "at the shell",
-    MCP_INTERFACE: "through the agent connection",
+    MCP_INTERFACE: "over MCP",
     API_INTERFACE: "over the API",
     JOB_INTERFACE: "in a background job",
     CONTROLLER_INTERFACE: "through the controller",

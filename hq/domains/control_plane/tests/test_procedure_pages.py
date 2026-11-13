@@ -35,6 +35,22 @@ def _card(html: str) -> str:
     return " ".join(element.words for element in within(html, "data-approval", "pending"))
 
 
+def _says_each_widening_once(case, elements, planned) -> None:
+    """Each way ``planned`` widens what a named playbook may do is said by
+    that playbook's rows among ``elements``, marked for attention, and never
+    again in a sentence of its own."""
+
+    said = " ".join(element.words for element in elements)
+    marked = [element for element in elements if element.tag == "tr" and "data-attention" in element.attrs]
+    titles = {procedure.title for procedure in planned.procedures.values()}
+    named = {title: widening for widening in planned.widens for title in titles if widening.startswith(f"{title} ")}
+    case.assertTrue(named, "the estate's commit widens what a playbook may do")
+    for title, widening in named.items():
+        with case.subTest(playbook=title):
+            case.assertTrue(any(title in row.words for row in marked), "its row is marked")
+            case.assertNotIn(widening.removeprefix(title).strip().rstrip("."), said)
+
+
 def _links(html: str, section: str) -> set[str]:
     return {element.attrs["href"] for element in within(html, "id", section) if element.tag == "a"}
 
@@ -83,13 +99,14 @@ class ProceduresPageTests(TestCase):
 
     def test_the_adopted_table_says_where_each_playbook_runs_and_its_access_as_its_run_page_does(self):
         from hq.platform.application.automation_adoption import procedures
+        from hq.platform.application.automation_runs import access_words
 
         said = _words(self.page(), "procedures-adopted")
         for procedure in procedures():
             with self.subTest(procedure=procedure.id):
                 self.assertNotIn(procedure.id, said, "the title links its page, so its id is not said again")
                 if procedure.privilege:
-                    self.assertIn(f"sudo, as the {procedure.privilege} profile allows", said)
+                    self.assertIn(access_words(procedure.privilege), said)
                 if not procedure.hosts:
                     self.assertIn("Any machine", said)
         self.assertIn("No sudo", said)
@@ -240,13 +257,11 @@ class ProceduresPageTests(TestCase):
         held = self.held()
         decision = reverse("control_plane:approval_decision", kwargs={"approval_id": held.id})
         entry = self.client.get(reverse("core:approval_entry", kwargs={"approval_id": held.id}), follow=True)
-        widens = plan(held.payload["proposal"]).widens
-        self.assertTrue(widens)
+        planned = plan(held.payload["proposal"])
         for html in (self.page(), self.page(self.proposal_url(held.payload["proposal"])), entry.content.decode()):
             card = _card(html)
             self.assertNotIn(held.resource_key, card, "the card names its record, never by its key")
-            for widening in widens:
-                self.assertIn(widening, card)
+            _says_each_widening_once(self, within(html, "data-approval", "pending"), planned)
             self.assertIn(decision, _posts(html))
             self.assertNotIn(
                 reverse("control_plane:procedures_adopt", kwargs={"pk": held.payload["proposal"]}), _posts(html)
@@ -256,25 +271,18 @@ class ProceduresPageTests(TestCase):
         self.assertNotIn(reverse("core:approval_entry", kwargs={"approval_id": held.id}), hrefs)
         self.assertNotIn(self.proposal_url(held.payload["proposal"]), hrefs)
 
-    def test_a_held_adoption_says_each_widening_once_beside_the_playbook_it_names(self):
+    def test_a_held_adoption_says_each_widening_once_by_the_playbook_s_rows(self):
         from hq.platform.application.automation_adoption import plan
 
         held = self.held()
-        widens = plan(held.payload["proposal"]).widens
-        self.assertTrue(widens)
-        html = self.page()
-        card = within(html, "data-approval", "pending")
-        heads = [element for element in card if "row-group" in element.attrs.get("class", "").split()]
-        for widening in widens:
-            with self.subTest(widening=widening):
-                (head,) = [head for head in heads if widening in head.words]
-                self.assertIn("data-attention", head.attrs)
+        card = within(self.page(), "data-approval", "pending")
+        _says_each_widening_once(self, card, plan(held.payload["proposal"]))
         self.assertFalse(
             [element for element in card if "notice" in element.attrs.get("class", "").split()],
             "a widening a playbook carries is not said again above the table",
         )
 
-    def test_a_commit_no_request_holds_says_each_widening_beside_its_changes_and_adopt(self):
+    def test_a_commit_no_request_holds_says_each_widening_by_its_rows_and_adopt(self):
         from hq.platform.application.automation_adoption import plan
 
         pk = self.decided()
@@ -283,8 +291,7 @@ class ProceduresPageTests(TestCase):
         html = self.page(self.proposal_url(pk))
         self.assertFalse(_card(html))
         said = _words(html, "procedures-proposal")
-        for widening in planned.widens:
-            self.assertIn(widening, said)
+        _says_each_widening_once(self, within(html, "id", "procedures-proposal"), planned)
         # Each playbook the commit holds is a group of the change table, by
         # the title the Adopted table reads it by, never by its id.
         for named, procedure in planned.procedures.items():

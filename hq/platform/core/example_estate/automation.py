@@ -14,12 +14,16 @@ are free to run.
 """
 
 import hashlib
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import timedelta
+from itertools import count
 from typing import Any
+from uuid import NAMESPACE_URL, uuid5
 
 from django.contrib.auth import get_user_model
+from django.db.models.signals import pre_save
 from django.utils import timezone
 
 from hq.domains.control_plane.models import CapabilityRule, ManagedResource, OperationRequest, SourceProposal
@@ -46,6 +50,8 @@ from .names import LAPTOP_NAME, MACHINE, PHONE_NAME
 WORKER = "example-automation-worker"
 CLAIMS_RUNS = ((OPERATION_KIND, "run"),)
 CLAIMS_SCANS = ((SOURCE_KIND, "scan"),)
+# The namespace a run's id is drawn from, with its idempotency key.
+_RUNS = uuid5(NAMESPACE_URL, "https://example.com/runs")
 
 CACHE_FLUSH = "example.cache_flush"
 DISK_REPORT = "example.disk_report"
@@ -217,6 +223,7 @@ WIDENED = (
             "retry": "never",
             "timeout_seconds": 600,
             "recovery": ["Deleted files are gone; restore any still needed from the machine's last backup."],
+            "fixes": ["filesystem-nearly-full"],
         },
         title="Free space on a mount",
         preconditions=["The mount point exists on the machine, and its old logs and caches may be deleted."],
@@ -460,6 +467,25 @@ def _asked(manifest, host, principal, ago, carried_out, *, correlation="") -> No
         OperationRequest.objects.filter(pk=run.pk).update(created_at=at, updated_at=at)
         carried_out(run)
     _dated(run.pk, at)
+
+
+@contextmanager
+def numbered() -> Iterator[None]:
+    """Give each operation written in the block an id drawn from its place in
+    the order they are written, so every build of the estate gives a run the
+    same one and a run's page a look found on one build is found on the server's."""
+
+    written = count()
+
+    def name(sender: type, instance: OperationRequest, **_: Any) -> None:
+        if instance._state.adding:
+            instance.pk = uuid5(_RUNS, str(next(written)))
+
+    pre_save.connect(name, sender=OperationRequest, weak=False)
+    try:
+        yield
+    finally:
+        pre_save.disconnect(name, sender=OperationRequest)
 
 
 def _claimed(run: OperationRequest) -> dict[str, Any]:

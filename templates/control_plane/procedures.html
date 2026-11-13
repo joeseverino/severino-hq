@@ -55,9 +55,9 @@ the deployment.
   {% elif review_held %}
     <p>Its adoption waits for approval.</p>
   {% elif review.preview %}
-    {% if review.widens %}
+    {% if review.unmarked %}
       {% notice tone="warning" title="More access" %}
-        <ul>{% for widening in review.widens %}<li>{{ widening|breakable }}</li>{% endfor %}</ul>
+        <ul>{% for widening in review.unmarked %}<li>{{ widening|breakable }}</li>{% endfor %}</ul>
       {% endnotice %}
     {% endif %}
     {% change_table review.preview %}

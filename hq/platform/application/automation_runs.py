@@ -49,6 +49,8 @@ lazy from .cadence import ring_automation_doorbell
 lazy from .capabilities import capability_words
 lazy from .controller import release_lapsed
 lazy from .entity_links import entity_link, kind_label
+lazy from .finding_model import FindingRemedy
+lazy from .findings import rule_for
 lazy from .idempotency import IdempotencyConflict
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
 lazy from .json_schemas import fields as whole_fields, json_schema
@@ -62,7 +64,7 @@ lazy from .run_reads import RUNS
 lazy from .service_context import Cell, ServiceSection, machines_cell, recent_work
 lazy from .timestamps import moment
 lazy from .ui import ended
-lazy from .work_runs import RUN, WorkRun, operation_of, recent_runs
+lazy from .work_runs import RUN, WorkRun, operation_of, recent_runs, run_url
 
 if TYPE_CHECKING:
     from .pages import PageAction
@@ -196,14 +198,15 @@ def pinned(manifest: OperationManifest) -> dict[str, Any]:
 
     Every field but the input type, which its schema's digest stands for, so a
     new revision or a changed input moves the spec and with it what a held run
-    is measured against.
+    is measured against, and but the findings it fixes, which say where it is
+    offered and nothing of what a run does.
     """
 
     schema = _canonical(json_schema(manifest.input_type))
     return validate_spec(
         OPERATION_KIND,
         {
-            **manifest.model_dump(mode="json", exclude={"id", "input_type", "privilege"}),
+            **manifest.model_dump(mode="json", exclude={"id", "input_type", "privilege", "fixes"}),
             "operation": manifest.id,
             "privilege": manifest.privilege or "",
             "input_schema_sha256": hashlib.sha256(schema.encode()).hexdigest(),
@@ -373,7 +376,7 @@ class HeldWords:
 
     sentence: str
     href: str
-    link: str = "See that run on Jobs"
+    link: str = "See that run"
     # The button that cancels that run, for a reader who may cancel it now.
     cancel: PageAction | None = None
 
@@ -401,9 +404,7 @@ def held_words(details: object, principal: Principal | None = None) -> HeldWords
     else:
         held = f"“{title}” already has a run on {get_text_list(machines, 'and')}, {since}"
         sentence = f"{ended(held)} A playbook runs once at a time, so ask again once that run ends."
-    asked = {"kind": capability_name(playbook), "state": state.as_job.value}
-    href = f"{reverse('jobs:list')}?{urlencode({**asked, **({'host': (shared or machines)[0]} if machines else {})})}"
-    return HeldWords(sentence, href, cancel=_holder_cancel(holding, principal))
+    return HeldWords(sentence, run_url(str(holding["id"])), cancel=_holder_cancel(holding, principal))
 
 
 def _holder_cancel(holding: dict[str, Any], principal: Principal | None) -> PageAction | None:
@@ -588,6 +589,51 @@ def cancel_action(run: WorkRun, principal: Principal) -> PageAction | None:
     return _cancel_button(run.id)
 
 
+def run_here_url(operation_id: str, hosts: tuple[str, ...]) -> str:
+    """The Run page of the playbook ``operation_id`` with ``hosts`` chosen."""
+
+    return command_url(capability_name(operation_id), hosts=hosts)
+
+
+def playbooks_on(machine: str, principal: Principal) -> tuple[tuple[str, str], ...]:
+    """Each adopted playbook that may run on the machine ``machine`` and that
+    ``principal`` may run, as its title and its Run page with the machine
+    chosen, A to Z."""
+
+    titles = automation_adoption.playbook_titles()
+    found = (
+        (run_title(manifest.id, titles), run_here_url(manifest.id, (machine,)))
+        for manifest in operation_registry().values()
+        if manifest.admits(MACHINE_KIND, machine) and principal.permits(run_authority(manifest.effect))
+    )
+    return tuple(sorted(found, key=lambda each: each[0].casefold()))
+
+
+def playbook_remedies(rule: str, machine: str) -> tuple[FindingRemedy, ...]:
+    """Each adopted playbook that says it fixes the finding ``rule`` and may
+    run on the machine ``machine``, as the remedy its Run page is, with the
+    machine chosen, said in its command's words. What its reader may run is
+    the finding's to judge."""
+
+    return tuple(
+        FindingRemedy(
+            capability=capability_name(manifest.id),
+            target="",
+            url=run_here_url(manifest.id, (machine,)),
+        )
+        for manifest in operation_registry().values()
+        if rule in manifest.fixes and manifest.admits(MACHINE_KIND, machine)
+    )
+
+
+def _fixes(manifest: OperationManifest) -> tuple[CommandFact, ...]:
+    """The findings a playbook says it fixes, each by its rule's title, or
+    no fact for one that fixes none."""
+
+    titles = "; ".join(found.title for rule in manifest.fixes if (found := rule_for(rule)))
+    return (CommandFact("Fixes", titles),) if titles else ()
+
+
 def listed_with_actions(runs: Iterable[WorkRun], principal: Principal) -> list[WorkRun]:
     """``runs`` each with what ``principal`` may do to it where it is listed."""
 
@@ -602,9 +648,9 @@ def _run(manifest: OperationManifest, command: RunCommand, *, principal: Princip
 
 
 # What a manifest's ``retry`` lets a run that stopped without a known
-# outcome do, in the words its command's page says it.
+# outcome do, in every page's words.
 RETRY_WORDS = {
-    "never": "Never: a run whose outcome is not known is not run again",
+    "never": "Never",
     "observe_first": "Only once the machines are looked at",
     "safe": "Safe to run again",
 }
@@ -629,10 +675,17 @@ def _runs_on(manifest: OperationManifest) -> CommandFact:
     return CommandFact("Runs on", anywhere(manifest.target_kinds))
 
 
-def access_words(privilege: str | None) -> str:
-    """What a run may do on a machine beyond its login, in every page's words."""
+def timeout_words(timeout_seconds: object) -> str:
+    """How long a run of a playbook has, in every page's words: "10 min"."""
 
-    return f"sudo, as the {privilege} profile allows" if privilege else "No sudo"
+    return str(seconds(timeout_seconds))
+
+
+def access_words(privilege: str | None) -> str:
+    """What a run may do on a machine beyond its login, in every page's words:
+    sudo as the profile ``privilege`` names, or none."""
+
+    return f"sudo ({privilege})" if privilege else "No sudo"
 
 
 def _held_runs(manifest: OperationManifest, principal: Principal) -> ServiceSection | None:
@@ -670,11 +723,12 @@ def about(manifest: OperationManifest, principal: Principal) -> CommandAbout:
         _runs_on(manifest),
         CommandFact("Effect", effect_label(manifest.effect)),
         CommandFact("Access", access_words(manifest.privilege)),
-        CommandFact("Timeout", str(seconds(manifest.timeout_seconds))),
+        CommandFact("Timeout", timeout_words(manifest.timeout_seconds)),
         CommandFact("Preconditions", _statements(manifest.preconditions)),
         CommandFact("Verification", _statements(manifest.verification)),
         CommandFact("Recovery", _statements(manifest.recovery)),
         CommandFact("Retry", RETRY_WORDS[manifest.retry]),
+        *_fixes(manifest),
         CommandFact("Adopted commit", manifest.revision[:SHORT_REVISION]),
         CommandFact("Playbook file", manifest.playbook),
     )
@@ -724,7 +778,7 @@ def _reviewed_notes(manifest: OperationManifest) -> tuple[str, ...]:
     )
     return (
         ended(f"Access: {access_words(manifest.privilege)}"),
-        ended(f"Timeout: {seconds(manifest.timeout_seconds)}"),
+        ended(f"Timeout: {timeout_words(manifest.timeout_seconds)}"),
         *(f"{lead} {_statements(statements)}" for lead, statements in said if statements),
         ended(f"Retry: {RETRY_WORDS[manifest.retry]}"),
     )

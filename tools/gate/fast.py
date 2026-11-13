@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 from concurrent.futures import Future, ThreadPoolExecutor
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -96,11 +97,17 @@ def quick_gates() -> tuple[str, ...]:
     return tuple(quick_tasks())
 
 
-@functools.cache
 def quick_tasks() -> dict[str, dict[str, Any]]:
-    """Every task tagged QUICK, by name, as mise lists it."""
+    """Every task tagged QUICK, by name, as mise lists it, read once per checkout."""
 
-    listed = mise_json("tasks", "ls", "--tag", QUICK, "--hidden", "--local", "--json")
+    return _quick_tasks(ROOT)
+
+
+@functools.cache
+def _quick_tasks(root: Path) -> dict[str, dict[str, Any]]:
+    """A cache per checkout, so a run against a fixture (a test's) never answers for another."""
+
+    listed = mise_json("tasks", "ls", "--tag", QUICK, "--hidden", "--local", "--json", root=root)
     return {task["name"]: task for task in listed}
 
 
@@ -129,10 +136,11 @@ def usage_of(task: dict[str, Any]) -> str:
 def fixed_first(
     gate: Gate, tasks: tuple[str, ...], base: str, paths: tuple[list[str], list[str]]
 ) -> tuple[list[str], list[str]]:
-    """The changed and deleted paths once the fix modes of ``tasks`` have run,
-    and the gate set to judge the tree they left, saying what they rewrote."""
+    """The changed and deleted paths once the fix modes of ``tasks`` but the
+    recordings' have run, and the gate set to judge the tree they left, saying
+    what they rewrote."""
 
-    fixed = fix(tasks)
+    fixed = fix(tuple(task for task in tasks if task not in recordings()))
     if not fixed:
         return paths
     print(f"[fast] the quick gates' fixes rewrote: {' '.join(fixed)}", flush=True)
@@ -156,6 +164,70 @@ def fix(tasks: tuple[str, ...]) -> list[str]:
     return sorted(path for path in before.keys() | after.keys() if before.get(path) != after.get(path))
 
 
+# A quick gate tagged this is a recording: it runs a set of test modules and
+# compares what they receive with a file (lint:drift-api-examples). It reads
+# Python only through those tests, so a change to Python alone selects it
+# where it selects one of them. Its fix is the same run written over the file,
+# so it runs only once the check has failed, and the gates and tests the
+# rewritten files select then judge what it left.
+RECORDING = "recording"
+# A run of the test labels named after it, and a task a run starts.
+TEST_RUN = re.compile(r"\bmanage\.py test((?:\s+[\w.]+)+)")
+RUNS_TASK = re.compile(r"\bmise run ([\w:-]+)")
+
+
+def recordings() -> tuple[str, ...]:
+    """Every quick gate tagged RECORDING."""
+
+    return tuple(name for name, task in quick_tasks().items() if RECORDING in (task.get("tags") or ()))
+
+
+def recorded_labels(name: str) -> list[str]:
+    """The test labels a recording runs, in its own run or one a task its run starts."""
+
+    tasks = mise_tasks()
+    own = body(tasks[name])
+    scripts = [own, *(body(tasks[started]) for started in RUNS_TASK.findall(own) if started in tasks)]
+    return [label for script in scripts for run in TEST_RUN.findall(script) for label in run.split()]
+
+
+def unreached_recordings(tasks: tuple[str, ...], paths: list[str], labels: list[str]) -> list[str]:
+    """The recordings among ``tasks`` that a change to Python files alone
+    (``paths``) selected, though the tests it selects (``labels``) hold none
+    of those they record. A recording that names no test is always kept."""
+
+    if not paths or not all(path.endswith(".py") for path in paths):
+        return []
+    return [
+        name
+        for name in tasks
+        if name in recordings()
+        and (recorded := recorded_labels(name))
+        and not any(label == held or label.startswith(f"{held}.") for label in labels for held in recorded)
+    ]
+
+
+def fixed_after(gate: Gate, steps: list[Step], files: list[Path], parallel: str) -> list[Step]:
+    """``steps``, and when a recording failed in the first, its fix and the
+    run again of the gates and tests the files it rewrote select, the fixed
+    recordings among them. The first step's failure stands unless it failed
+    on the fixed recordings alone, and the run judges the tree the fix left."""
+
+    first = steps[0]
+    failed = [task for task in first.tasks if task in recordings()]
+    fixed = fix(tuple(failed)) if failed else []
+    if not fixed:
+        return steps
+    print(f"[fast] {' '.join(failed)} failed, so its fix ran and rewrote: {' '.join(fixed)}", flush=True)
+    gate.restart()
+    # HEAD as the base: what the fix rewrote is in the checkout, beside any work not yet committed.
+    tasks = (*failed, *(task for task in selected_tasks(fixed, "HEAD") if task not in failed))
+    labels = with_tree(test_labels(files, *affected(fixed, [], files))[0], fixed)
+    if set(first.tasks) <= set(failed) and not first.tests and not first.unimported:
+        first = replace(first, ok=True, tasks=[])
+    return [first, *gates_and_tests(tasks, labels, files, parallel, label="the gates and tests again, on the fix")]
+
+
 def dirty() -> dict[str, str]:
     """Each path where the checkout differs from HEAD, untracked ones included, by a digest of its bytes."""
 
@@ -173,10 +245,11 @@ def selected_tasks(paths: list[str], base: str) -> tuple[str, ...]:
     return selected if SHELL in selected or not shell_files(paths, base) else (*selected, SHELL)
 
 
-def mise_json(*args: str) -> Any:
-    """What a mise command prints as JSON, run in this checkout; its errors print as they come."""
+def mise_json(*args: str, root: Path | None = None) -> Any:
+    """What a mise command prints as JSON, run in ``root`` or this checkout; its errors print as they come."""
 
-    return json.loads(subprocess.run(["mise", *args], cwd=ROOT, check=True, stdout=subprocess.PIPE, text=True).stdout)
+    run = subprocess.run(["mise", *args], cwd=root or ROOT, check=True, stdout=subprocess.PIPE, text=True)
+    return json.loads(run.stdout)
 
 
 def shell_files(paths: list[str], base: str | None = None) -> list[str]:
@@ -746,7 +819,13 @@ def run_command(
 
 
 def gates_and_tests(
-    tasks: tuple[str, ...], labels: list[str], files: list[Path], parallel: str, *, record: bool = False
+    tasks: tuple[str, ...],
+    labels: list[str],
+    files: list[Path],
+    parallel: str,
+    *,
+    record: bool = False,
+    label: str = "quick gates and tests",
 ) -> list[Step]:
     """The one run of the quick gates and the tests."""
 
@@ -757,7 +836,7 @@ def gates_and_tests(
     source, rest = source_first(labels, files)
     if source:
         print(f"[fast] first, the source checks that read the browser gate's modules: {' '.join(source)}")
-    return [step("quick gates and tests", run_command(tasks, source, rest, parallel, record=record))]
+    return [step(label, run_command(tasks, source, rest, parallel, record=record))]
 
 
 def step(label: str, cmd: list[str]) -> Step:
@@ -881,6 +960,8 @@ def main(asked: Usage) -> int:
         print(f"[fast] {said}: the whole suite and every quick gate run, so a pass records this tree and its map")
         labels, every_test = whole_suite(files), True
 
+    # Read before the tests tagged tree join: they run on any change, so they say nothing of its reach.
+    unreached = unreached_recordings(selected, [*changed, *deleted], labels) if gate and not every_test else []
     if changed or deleted:
         print("[fast] every test tagged tree runs too: each walks the checkout, which the change is part of")
     labels = with_tree(labels, [*changed, *deleted], walking)
@@ -888,10 +969,15 @@ def main(asked: Usage) -> int:
         print("\n".join(labels))
         return 0
 
+    if unreached:
+        print(
+            f"[fast] not run, as the change is Python alone and selects none of the tests each records: {' '.join(unreached)}"
+        )
     whole = (*quick_gates(), *group_tests().values())
-    tasks = whole if every_test else (*selected, *group_tasks(files, reached, touched))
+    kept = tuple(task for task in selected if task not in unreached)
+    tasks = whole if every_test else (*kept, *group_tasks(files, reached, touched))
     whole_run = every_test and set(tasks) == set(whole)
-    steps = gates_and_tests(tasks, labels, files, parallel, record=whole_run)
+    steps = fixed_after(gate, gates_and_tests(tasks, labels, files, parallel, record=whole_run), files, parallel)
     if touches_shared_ui([*changed, *deleted]):
         steps.extend(extension_suites(parallel))
     steps.append(step("patch integrity", ["git", "diff", "--check", base]))

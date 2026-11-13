@@ -14,7 +14,6 @@ lazy from hq.domains.control_plane.providers import PROVIDERS
 
 from .approvals import COMPARED, DECLARATIONS, DESTRUCTIVE_EFFECT, WARNINGS, shown_by
 from .payload_words import STEP, ChangeRow, changed_words, document, field_words, value_words
-from .ui import counted, ended
 lazy from . import capabilities
 lazy from .command_forms import switch_field
 lazy from .command_targets import item_name
@@ -35,33 +34,27 @@ class ChangeGroup:
     rows: tuple[ChangeRow, ...]
     # What the record is at a glance, from its ``SUMMARY``: its name and what it does.
     summary: ChangeRow | None = None
-    # How the change lets the record do more, from the request's warnings
-    # that name it, said beside its name in their place.
-    warning: str = ""
+    # Whether the change lets the record do more, as a request's warning
+    # that names it says; its row is marked for attention, never said again.
+    widens: bool = False
 
     @property
     def changed(self) -> bool:
         return bool(self.rows)
 
     @property
+    def named(self) -> tuple[ChangeRow, ...]:
+        """Its fields that move, each named by the record too ("Empty a cache › Access")."""
+
+        return tuple(replace(row, label=f"{self.label}{STEP}{row.label}") for row in self.rows)
+
+    @property
     def whole(self) -> str:
         """ "added" or "removed" when the record comes or goes as a whole, so
-        its summary says it and its fields fold; "" otherwise."""
+        its one row says it and its fields fold; "" otherwise."""
 
         changes = {row.change for row in self.rows}
         return changes.pop() if len(changes) == 1 and changes <= {"added", "removed"} else ""
-
-    @property
-    def said(self) -> str:
-        """What happens to the record as a whole, in the words beside its name."""
-
-        if self.warning:
-            return self.warning
-        if self.whole == "added":
-            return "new"
-        if self.whole == "removed":
-            return "removed"
-        return counted(len(self.rows), "change")
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,15 +82,7 @@ class ChangePreview:
     def changes(self) -> tuple[ChangeRow, ...]:
         """Every value that moves, a grouped one named by its record too."""
 
-        return (
-            *self.rows,
-            *(
-                replace(row, label=f"{group.label}{STEP}{row.label}")
-                for group in self.groups
-                if group.changed
-                for row in group.rows
-            ),
-        )
+        return (*self.rows, *(row for group in self.groups for row in group.named))
 
     @property
     def moves(self) -> int:
@@ -405,7 +390,7 @@ def _one_move(shown: ChangePreview) -> ChangeRow | None:
 def review(held: ApprovalRequest) -> dict[str, Any]:
     """What the decision card shows: ``tone`` marks one still waiting for a decision."""
 
-    shown, warnings = _marked(preview(held), _warnings(held))
+    shown, warnings = marked(preview(held), _warnings(held))
     sentence = asked(held, shown)
     found = ManagedResource.objects.filter(key=held.resource_key).first() if held.resource_kind else None
     # The card opens the page the record lives on, which its own page would redirect to.
@@ -443,22 +428,20 @@ def _warnings(held: ApprovalRequest) -> tuple[str, ...]:
     return (*measured, *provider.review_warnings(requested))
 
 
-def _marked(shown: ChangePreview, warnings: tuple[str, ...]) -> tuple[ChangePreview, tuple[str, ...]]:
-    """``shown`` with each warning that names one of its changed records, as
-    a handler that measures a catalog writes them ("Empty a cache gains ..."),
-    said beside that record, and the warnings no record carries."""
+def marked(shown: ChangePreview, warnings: tuple[str, ...]) -> tuple[ChangePreview, tuple[str, ...]]:
+    """``shown`` with each changed record a warning names, as a handler that
+    measures a catalog writes them ("Empty a cache gains ..."), marked as
+    widening, and the warnings no record carries. A record's own row already
+    says what moved, so its warning is not said again."""
 
     changed = sorted((group.label for group in shown.groups if group.changed), key=len, reverse=True)
-    carried: dict[str, list[str]] = {}
+    carried: set[str] = set()
     rest = []
     for warning in warnings:
         named = next((label for label in changed if warning.startswith(f"{label} ")), None)
         if named is None:
             rest.append(warning)
         else:
-            carried.setdefault(named, []).append(warning.removeprefix(named).strip().rstrip("."))
-    groups = tuple(
-        replace(group, warning=ended("; ".join(carried[group.label]))) if group.label in carried else group
-        for group in shown.groups
-    )
+            carried.add(named)
+    groups = tuple(replace(group, widens=True) if group.label in carried else group for group in shown.groups)
     return replace(shown, groups=groups), tuple(rest)

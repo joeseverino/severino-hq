@@ -219,38 +219,43 @@ def recent_changes(keys: list[str], *, what: str, limit: int) -> ServiceSection 
     )
 
 
+# The id of the section of a page's latest runs (``recent_work``).
+RUNS_SECTION = "runs"
+
+
 def recent_work(
     runs: Sequence[WorkRun], *, by_machine: bool, more_url: str, principal: Principal | None = None
 ) -> ServiceSection | None:
     """The latest ``runs`` as a section, each state in its word and tone; None
     when there are none. A machine's page names what each run was
-    (``by_machine``), a playbook's page the machines each acted on, and
-    ``more_url`` is every run of the two on Jobs.
+    (``by_machine``), a playbook's page leads with when each was asked and
+    the machines each acted on, and ``more_url`` is every run of the two on
+    Jobs. Each row leads with the link to the run's own page.
 
     Who asked for each run and its evidence are Jobs' to show, so only a
-    ``principal`` who may open Jobs reads them here; without one, nobody does.
+    ``principal`` who may open Jobs reads them here, and opens a run's page;
+    without one, nobody does.
     """
 
     shows = principal is not None and principal_opens(principal, urls.resolve(reverse("jobs:list")).func)
+    opens = (
+        bool(runs and runs[0].url)
+        and principal is not None
+        and principal_opens(principal, urls.resolve(runs[0].url).func)
+    )
     if principal is not None:
         runs = listed_with_actions(runs, principal)
-    records = tuple(
-        (
-            _playbook(run) if by_machine else machines_cell(run.evidence.hosts),
-            Cell(run.word, tone=run.tone),
-            Cell(ago(run.created_at), muted=True),
-            Cell(str(seconds(run.duration)) if run.duration is not None else ""),
-            Cell(run.note),
-            Cell(run.by if shows else ""),
-        )
-        for run in runs
-    )
+    records = tuple(_run_record(run, by_machine=by_machine, opens=opens, shows=shows) for run in runs)
     if not records:
         return None
     return ServiceSection(
-        id="runs",
+        id=RUNS_SECTION,
         label="Recent runs",
-        columns=("Playbook" if by_machine else "Machines", "State", "Started", "Duration", "Result", "By"),
+        columns=(
+            ("Playbook", "State", "Started", "Duration", "Result", "By")
+            if by_machine
+            else ("Started", "Machines", "State", "Duration", "Result", "By")
+        ),
         records=records,
         more_label="All runs",
         more_url=more_url,
@@ -259,10 +264,21 @@ def recent_work(
     )
 
 
-def _playbook(run: WorkRun) -> Cell:
-    """A run's playbook by what the run is called, linked to the command it is run through."""
+def _run_record(run: WorkRun, *, by_machine: bool, opens: bool, shows: bool) -> tuple[Cell, ...]:
+    """One run's row, led by its link to its own page where its reader ``opens``
+    it: by the playbook on a machine's page, else by when it was asked."""
 
-    return Cell(run.title, command_url(run.kind))
+    rest = (
+        Cell(str(seconds(run.duration)) if run.duration is not None else ""),
+        Cell(run.note),
+        Cell(run.by if shows else ""),
+    )
+    state = Cell(run.word, tone=run.tone)
+    if by_machine:
+        # Read without the run's page, the playbook leads to the command it is run through.
+        playbook = Cell(run.title, run.url if opens else command_url(run.kind))
+        return (playbook, state, Cell(ago(run.created_at), muted=True), *rest)
+    return (Cell(ago(run.created_at), run.url if opens else ""), machines_cell(run.evidence.hosts), state, *rest)
 
 
 def machines_cell(hosts: Sequence[str]) -> Cell:

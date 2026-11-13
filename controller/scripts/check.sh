@@ -4,6 +4,15 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# lint:controller --fix: write what the first three checks below would refuse,
+# and leave the checking to the run that follows.
+if [ "${usage_fix:-}" = true ]; then
+    gofmt -w .
+    go fix ./...
+    go generate ./...
+    exit 0
+fi
+
 echo "==> gofmt"
 # gofmt itself, over every file: golangci-lint fmt never walks a testdata,
 # vendor or dot directory, whatever its config says.

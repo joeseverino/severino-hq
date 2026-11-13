@@ -99,6 +99,8 @@ def sorted_unique(names: tuple[str, ...]) -> tuple[str, ...]:
 
 
 DottedName = Annotated[str, StringConstraints(pattern=DOTTED_NAME.pattern)]
+# A finding rule's name, in the spelling every rule has (``filesystem-nearly-full``).
+RuleName = Annotated[str, StringConstraints(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=64)]
 Statement = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
 Statements = Annotated[tuple[Statement, ...], Field(min_length=1)]
 
@@ -145,6 +147,10 @@ class ProcedureTerms(BaseModel):
     timeout_seconds: Annotated[int, Field(ge=1, le=LONGEST_TIMEOUT_SECONDS)]
     recovery: Statements
     retry: Literal["never", "observe_first", "safe"]
+    # The findings a run of it fixes, by rule: a finding of one about a
+    # machine it may run on offers its Run page as a remedy. It grants nothing:
+    # the run is asked for, approved and held as any other.
+    fixes: Annotated[tuple[RuleName, ...], AfterValidator(sorted_unique)] = ()
 
     @model_validator(mode="after")
     def _read_needs_no_privilege(self) -> Self:

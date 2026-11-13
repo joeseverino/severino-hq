@@ -41,8 +41,9 @@ from .integration_specs import CapabilitySpec
 from .security import Capability, Principal
 from .ui import ended
 lazy from . import asks, automation_adoption
-lazy from .approval_review import grouped
+lazy from .approval_review import grouped, marked
 lazy from .cadence import ring_automation_doorbell
+lazy from .findings import rule_for
 lazy from .idempotency import IdempotencyConflict
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
 lazy from .moments import ago
@@ -139,6 +140,19 @@ def _declaration_problems(declaration: Any) -> list[str]:
     return []
 
 
+def _unknown_fixes(declaration: Any) -> list[str]:
+    """A problem for each finding a sidecar says its playbook fixes that HQ raises none of."""
+
+    fixes = declaration.get("fixes") if isinstance(declaration, dict) else None
+    if not isinstance(fixes, list):
+        return []
+    return [
+        f"Its sidecar's fixes names {rule}, which is no finding HQ raises."
+        for rule in fixes
+        if isinstance(rule, str) and rule_for(rule) is None
+    ]
+
+
 def judged(procedures: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Each procedure as the worker reported it, with every way HQ finds it
     falls short of a procedure it could adopt added to its problems."""
@@ -153,6 +167,7 @@ def judged(procedures: list[dict[str, Any]]) -> list[dict[str, Any]]:
         named = declaration.get("id") if isinstance(declaration, dict) else None
         if isinstance(named, str) and ids[named] > 1:
             problems.append(f"Another sidecar names the id {named} too.")
+        problems += _unknown_fixes(declaration)
         found.append({**procedure, "problems": problems[:MOST_PROBLEMS]})
     return found
 
@@ -238,6 +253,8 @@ class Reviewed:
     # None when it cannot be adopted, or is the commit adopted now.
     preview: ChangePreview | None
     widens: tuple[str, ...] = ()
+    # The ways it widens that no playbook's row of ``preview`` carries, said above it.
+    unmarked: tuple[str, ...] = ()
     refused: tuple[str, ...] = ()
     # Whether it is the catalog adopted now, so adopting it changes nothing.
     adopted: bool = False
@@ -321,11 +338,8 @@ def _reviewed(proposal: SourceProposal) -> Reviewed:
     if planned.digest == planned.current:
         return Reviewed(proposal, None, adopted=True)
     compared = planned.compared
-    return Reviewed(
-        proposal,
-        grouped(compared["before"], compared["after"], label="Changes"),
-        widens=planned.widens,
-    )
+    shown, unmarked = marked(grouped(compared["before"], compared["after"], label="Changes"), planned.widens)
+    return Reviewed(proposal, shown, widens=planned.widens, unmarked=unmarked)
 
 
 def _held() -> tuple[HeldAdoption, ...]:

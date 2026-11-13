@@ -267,6 +267,24 @@ class HeldAdoptionTests(AdoptionTestCase):
 
         self.assertEqual(self.adopted(), [FIRST])
 
+    def test_a_new_playbook_s_rows_say_what_its_command_page_says_and_name_its_inputs(self):
+        from ..approval_review import preview
+        from ..automation_runs import about, operation_registry
+
+        held = self.held(self.proposed(catalog(procedure("check", effect="infrastructure_change"))))
+        (group,) = [group for group in preview(held).groups if group.whole == "added"]
+        rows = {row.label: row.after for row in group.rows}
+        with self.captureOnCommitCallbacks(execute=True):
+            approve(ApproveCommand(str(held.id)), principal=an_operator())
+        page = {fact.label: fact.value for fact in about(operation_registry()["example.check"], OPERATOR).facts}
+
+        for label in ("Effect", "Access", "Timeout", "Retry"):
+            with self.subTest(label=label):
+                self.assertEqual(rows[label], page[label])
+        self.assertEqual(rows["Inputs"], "Service", "each input by its name, never its terms")
+        self.assertFalse([label for label in rows if label.startswith("Inputs ")], rows)
+        self.assertNotIn("Title", rows, "the playbook's row is named by its title already")
+
     def test_a_narrow_adoption_runs_under_the_agent_s_rule(self):
         self.allowed()
 
@@ -294,12 +312,13 @@ class HeldAdoptionTests(AdoptionTestCase):
                 held = self.held(self.proposed(found), key=f"example-agent-adopt-{index}")
 
                 shown = review(held)
-                said = (*shown["warnings"], *(group.warning for group in shown["preview"].groups if group.warning))
-                self.assertTrue(said, "the person deciding is warned of what it widens")
+                marked = shown["warnings"] or any(group.widens for group in shown["preview"].groups)
+                self.assertTrue(marked, "the person deciding is shown what it widens")
         self.assertEqual(self.adopted(), [FIRST])
 
     def test_a_widening_names_each_playbook_by_its_title_and_its_id_only_beside_a_shared_title(self):
         from ..automation_adoption import plan
+        from ..automation_runs import access_words
 
         self.adopt(self.proposed(catalog(procedure("check", effect="infrastructure_change"))))
         twin = procedure("twin", effect="destructive")
@@ -310,7 +329,7 @@ class HeldAdoptionTests(AdoptionTestCase):
         self.assertEqual(
             list(planned.widens),
             [
-                "The check procedure (example.check) gains sudo, as the example.root profile allows.",
+                f"The check procedure (example.check) gains {access_words('example.root')}.",
                 "The check procedure (example.twin) is new, and it stops or deletes.",
             ],
         )

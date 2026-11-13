@@ -21,6 +21,7 @@ lazy from hq.platform.application.automation_runs import (
     capability_name,
     operation_registry,
     resource_key,
+    timeout_words,
 )
 lazy from hq.platform.application.labels import effect_label
 lazy from hq.platform.application.routes import reverse
@@ -66,7 +67,7 @@ def _readout(spec: dict[str, Any], _status: dict[str, Any]) -> tuple[tuple[str, 
         ("Access", "", access_words(str(spec.get("privilege", "")))),
         ("Record types", "", ", ".join(spec.get("target_kinds", ()))),
         ("Machines", "", ", ".join(spec.get("hosts", ())) or anywhere(spec.get("target_kinds", ()))),
-        ("Timeout", "", f"{spec.get('timeout_seconds', '')} seconds"),
+        ("Timeout", "", timeout_words(spec.get("timeout_seconds"))),
         ("Retry", "", RETRY_WORDS.get(str(spec.get("retry", "")), str(spec.get("retry", "")))),
     )
 

@@ -1,19 +1,22 @@
 """How fast picks the commit it reads the change from, and how it readies the
 tree before its gates judge it: each selected gate's fix mode first."""
 
+import io
+import re
 import subprocess
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from django.test import tag
 
 from hq.platform.core.tests.task import RefError
-from tests.mise_tasks import mise_tasks
+from tests.mise_tasks import ROOT, body, mise_tasks
 from tools.gate import fast as fast_gate
 from tools.gate.tests.base import GateTestCase, fixture_git
 from tools.gate.tests.fast_runs import Recorder, run_main
+from tools.gate.verdict import Step
 
 
 @tag("source")
@@ -158,6 +161,12 @@ class FastGateFixTests(GateTestCase):
             "lint:toml": {"name": "lint:toml", "usage": 'flag "--fix" help="Write the fixes"', "file": None},
             "lint:file": {"name": "lint:file", "usage": "", "file": str(header)},
             "lint:check": {"name": "lint:check", "usage": "", "file": None},
+            "lint:record": {
+                "name": "lint:record",
+                "usage": 'flag "--fix" help="Record over the file"',
+                "file": None,
+                "tags": ["fast", fast_gate.RECORDING],
+            },
         }
         self.enterContext(patch.object(fast_gate, "ROOT", self.root))
         self.enterContext(patch.object(fast_gate, "quick_tasks", return_value=self.tasks))
@@ -194,6 +203,61 @@ class FastGateFixTests(GateTestCase):
         with patch.object(fast_gate, "subprocess", SimpleNamespace(run=run)):
             self.assertEqual(fast_gate.fix(("lint:toml",)), ["changed.py"])
 
+    def test_a_recordings_fix_never_runs_before_the_gates(self):
+        """Its fix is its whole recording again, which every gate would wait on."""
+        with (
+            patch.object(fast_gate, "fix", return_value=[]) as fix,
+            patch.object(fast_gate, "changed_paths") as changed,
+        ):
+            paths = fast_gate.fixed_first(SimpleNamespace(), ("lint:toml", "lint:record"), "base", (["changed.py"], []))
+        fix.assert_called_once_with(("lint:toml",))
+        self.assertEqual(paths, (["changed.py"], []))
+        changed.assert_not_called()
+
+    def after(self, first, fixed=("examples.json",)):
+        """fixed_after on a first step, its fix rewriting ``fixed``: the steps, the fix's calls, the run again's."""
+        gate = Mock()
+        again = Step("again")
+        with (
+            patch.object(fast_gate, "fix", return_value=list(fixed)) as fix,
+            patch.object(fast_gate, "selected_tasks", return_value=("lint:record", "lint:doc")) as selected,
+            patch.object(fast_gate, "affected", return_value=(set(), set())),
+            patch.object(fast_gate, "test_labels", return_value=(["tests.test_examples"], 1)),
+            patch.object(fast_gate, "with_tree", side_effect=lambda labels, paths: labels),
+            patch.object(fast_gate, "gates_and_tests", return_value=[again]) as rerun,
+            patch("sys.stdout", io.StringIO()),
+        ):
+            steps = fast_gate.fixed_after(gate, [first], [], "auto")
+        return steps, fix, selected, rerun, gate
+
+    def test_a_failed_recording_is_fixed_and_what_the_fix_rewrote_is_judged_again(self):
+        steps, fix, selected, rerun, gate = self.after(Step("first", ok=False, code=1, tasks=["lint:record"]))
+
+        fix.assert_called_once_with(("lint:record",))
+        selected.assert_called_once_with(["examples.json"], "HEAD")
+        (tasks, labels, *_), _ = rerun.call_args
+        self.assertEqual(tasks, ("lint:record", "lint:doc"))
+        self.assertEqual(labels, ["tests.test_examples"])
+        gate.restart.assert_called_once_with()
+        # The first run failed on the recording alone, so the run again decides.
+        self.assertTrue(steps[0].ok)
+        self.assertEqual([step.label for step in steps], ["first", "again"])
+
+    def test_a_failure_beside_the_recordings_still_fails_the_run(self):
+        first = Step("first", ok=False, code=1, tasks=["lint:record", "lint:check"])
+        steps, *_ = self.after(first)
+        self.assertFalse(steps[0].ok)
+        self.assertEqual(steps[0].tasks, ["lint:record", "lint:check"])
+
+    def test_a_passing_run_or_a_fix_that_rewrote_nothing_runs_nothing_again(self):
+        for first, fixed in ((Step("first"), ("examples.json",)), (Step("first", ok=False, tasks=["lint:record"]), ())):
+            with self.subTest(failed=first.tasks, fixed=fixed):
+                steps, fix, _, rerun, gate = self.after(first, fixed)
+                self.assertEqual(steps, [first])
+                rerun.assert_not_called()
+                gate.restart.assert_not_called()
+                self.assertEqual(fix.called, bool(first.tasks))
+
     def test_no_selected_fix_mode_runs_nothing(self):
         with patch.object(fast_gate, "subprocess", SimpleNamespace(run=self.fail)):
             self.assertEqual(fast_gate.fix(("lint:check",)), [])
@@ -208,9 +272,58 @@ class FastGateFixTests(GateTestCase):
                 self.assertEqual(restart.called, bool(fixed))
 
 
+# A task named with the fix flag after it, as a run passes it.
+FIXES = re.compile(r"\b(lint:[\w:-]+) --fix\b")
+
+
 @tag("source")
 class FastGateFixModeTests(GateTestCase):
-    def test_each_format_gate_has_a_fix_mode(self):
-        """The gates whose tool rewrites what it finds: Ruff, Stylelint, ESLint and mise fmt."""
-        fixable = set(fast_gate.fixers(fast_gate.quick_gates()))
-        self.assertLessEqual({"lint:ruff", "lint:css", "lint:js", "lint:mise-format"}, fixable)
+    def test_the_quick_gates_a_fixture_lists_never_answer_for_this_checkout(self):
+        """A test that runs fast on a fixture lists the fixture's gates, and the next run in its process reads
+        this checkout's, in either order."""
+        for first in ("checkout", "fixture"):
+            with self.subTest(first=first):
+                if first == "checkout":
+                    self.assertIn("lint:ruff", fast_gate.quick_gates())
+                with (
+                    tempfile.TemporaryDirectory() as folder,
+                    patch.object(fast_gate, "ROOT", Path(folder)),
+                    patch.object(fast_gate, "mise_json", return_value=[]),
+                ):
+                    self.assertEqual(fast_gate.quick_gates(), ())
+                self.assertIn("lint:ruff", fast_gate.quick_gates())
+
+    def test_each_gate_that_knows_its_own_fix_has_a_fix_mode(self):
+        """The gates whose tool rewrites what it finds (Ruff, Stylelint, ESLint, mise fmt, ast-grep and the Go
+        controller's) and every derived file's, so fast writes the fix where a worker would otherwise fail on it."""
+        quick = fast_gate.quick_gates()
+        fixable = set(fast_gate.fixers(quick))
+        tools = {"lint:ruff", "lint:css", "lint:js", "lint:mise-format", "lint:ast-grep", "lint:controller"}
+        derived = {gate for gate in quick if gate.startswith("lint:drift-")}
+        self.assertTrue(derived)
+        self.assertLessEqual(tools | derived, fixable)
+
+    def test_each_recording_names_the_tests_it_records(self):
+        """fast selects a recording by the tests its run names, so one that names none would run on every change."""
+        recordings = fast_gate.recordings()
+        self.assertTrue(recordings)
+        for name in recordings:
+            with self.subTest(name):
+                self.assertTrue(fast_gate.recorded_labels(name), f"{name}'s run names no test labels")
+
+
+@tag("source", "tree")
+class FixFlagPasserTests(GateTestCase):
+    def test_only_fast_and_fix_pass_the_fix_flag(self):
+        """A fix mode writes the tree, so a run that judges a tree it cannot change (CI's check, its lint job)
+        never passes the flag: only fast, before it judges, and `mise run fix`, which an operator runs."""
+        passers = set()
+        for name, task in mise_tasks().items():
+            # A gate's failure may name its own fix, for whoever reads it.
+            if set(FIXES.findall(body(task))) - {name}:
+                passers.add(name)
+        for workflow in (ROOT / ".github").rglob("*.y*ml"):
+            if FIXES.search(workflow.read_text(encoding="utf-8")):
+                passers.add(str(workflow.relative_to(ROOT)))
+        self.assertLessEqual(passers, {"fast", "fix", "fix:derived"})
+        self.assertIn("fix:derived", passers)

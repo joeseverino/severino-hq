@@ -30,7 +30,7 @@ class LearningTests(TestCase):
         self.assertEqual(row.client_id, "example-agent")
         self.assertEqual(row.granted, ["read", "write_projects"])
         self.assertEqual(row.interfaces, ["mcp"])
-        self.assertEqual(_events(), ["First seen: example-agent, through the agent connection, granted 2 permissions"])
+        self.assertEqual(_events(), ["First seen: example-agent, over MCP, granted 2 permissions"])
 
     def test_a_widened_grant_is_announced_permission_by_permission(self):
         observe(agent("read"))

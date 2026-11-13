@@ -100,8 +100,8 @@
 .data-table tbody tr:last-child > * { border-bottom: 0; }
 /* A heading row that opens a group of rows (a tbody per group), so grouped rows share one set of column widths. */
 .data-table .row-group > th { padding-top: var(--space-6); background: var(--surface-2); color: var(--ink-2); font-size: var(--text-xs); font-weight: 650; text-align: left; }
-/* A group a reader should weigh first (row_group attention=) is washed in the caution tone, and its words beside the name, which say why, are its ink. */
-.data-table .row-group[data-attention] > th { background: var(--tone-caution-wash); }
+/* A row or group a reader should weigh first (a row's `data-attention`, row_group attention=) is washed in the caution tone, and a group's words beside its name, which say why, are its ink. */
+.data-table tr[data-attention] > * { background: var(--tone-caution-wash); }
 .data-table .row-group[data-attention] .count { color: var(--tone-caution-ink); }
 /* Inside a card the card is the frame, so the table drops its own. */
 .card .data-table { border: 0; border-radius: 0; box-shadow: none; }

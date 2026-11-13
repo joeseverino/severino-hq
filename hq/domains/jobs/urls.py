@@ -1,6 +1,6 @@
 from django.urls import path
 
-from .views import JobListView, JobStatusView, WorkAskView
+from .views import JobListView, JobStatusView, RunView, WorkAskView
 
 app_name = "jobs"
 
@@ -11,6 +11,7 @@ urlpatterns = [
     # a great deal, and asking for all of that every two seconds to learn one
     # number is how a progress bar becomes the most expensive thing on a host.
     path("<uuid:pk>.json", JobStatusView.as_view(), name="status"),
+    path("runs/<uuid:pk>/", RunView.as_view(), name="run"),
     # Where the control of a declared piece of outbound work posts. The name is
     # the declaration's; the route exists for whatever the composition declares.
     path("ask/<str:name>/", WorkAskView.as_view(), name="ask"),

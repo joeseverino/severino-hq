@@ -69,8 +69,10 @@ from .record_errors import PolicyError, RecordNotFound
 from .security import Capability, Principal
 lazy from . import agent_registry
 lazy from .approval_review import SUMMARY
-lazy from .automation_runs import RETRY_WORDS, access_words, anywhere
-lazy from .labels import effect_label, lower_first
+lazy from .automation_runs import RETRY_WORDS, access_words, anywhere, timeout_words
+lazy from .findings import rule_for
+lazy from .labels import dotted, effect_label, lower_first
+lazy from .payload_words import field_words
 lazy from .ui import ended
 
 ADOPT = "automation.source.adopt"
@@ -475,8 +477,10 @@ def _widens(
 
 
 def _summary(procedure: AdoptedProcedure) -> str:
-    where = ", ".join(procedure.hosts) or lower_first(anywhere(procedure.target_kinds))
-    return f"{effect_label(procedure.effect)}, on {where}, {lower_first(access_words(procedure.privilege))}"
+    """Its Effect, Runs on and Access, in the Playbooks table's words."""
+
+    where = ", ".join(procedure.hosts) or anywhere(procedure.target_kinds)
+    return dotted(effect_label(procedure.effect), where, access_words(procedure.privilege))
 
 
 def _shown(procedure: AdoptedProcedure, named: str) -> dict[str, Any]:
@@ -487,18 +491,16 @@ def _shown(procedure: AdoptedProcedure, named: str) -> dict[str, Any]:
 
     return {
         SUMMARY: {"label": named, "value": _summary(procedure)},
-        "title": procedure.title,
         "effect": effect_label(procedure.effect),
         "runs_on": list(procedure.hosts) or anywhere(procedure.target_kinds),
         "access": access_words(procedure.privilege),
-        "timeout": f"{procedure.timeout_seconds} seconds",
+        "timeout": timeout_words(procedure.timeout_seconds),
         "retry": RETRY_WORDS[procedure.retry],
         "recovery": list(procedure.recovery),
         "preconditions": list(procedure.preconditions),
         "verification": list(procedure.verification),
-        "inputs": {
-            name: spec.model_dump(mode="json", exclude_defaults=True) for name, spec in procedure.inputs.items()
-        },
+        "fixes": [found.title if (found := rule_for(rule)) else rule for rule in procedure.fixes],
+        "inputs": [field_words(name) for name in procedure.inputs],
         "files": {path: name[:SHOWN_OBJECT] for path, name in procedure.files.items()},
     }
 
@@ -708,7 +710,6 @@ def capability_specs() -> tuple[CapabilitySpec, ...]:
             ),
             label="Adopt the playbooks",
             verb="Adopt",
-            wants="adopt the playbooks of a commit from your repository",
             home=automation_sources.PLAYBOOKS,
         ),
     )

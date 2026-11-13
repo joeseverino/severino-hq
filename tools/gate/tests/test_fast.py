@@ -503,6 +503,39 @@ class FastGateGroupTaskTests(GateTestCase):
         self.assertNotIn(GROUP_TASK, gates)
 
 
+class FastGateRecordingSelectionTests(GateTestCase):
+    """A recording mise selects for a change to Python alone runs only where the change selects a test it
+    records; any other change keeps mise's selection."""
+
+    def setUp(self):
+        tasks = {
+            "lint:record": {"name": "lint:record", "tags": ["fast", fast_gate.RECORDING]},
+            "lint:unnamed": {"name": "lint:unnamed", "tags": ["fast", fast_gate.RECORDING]},
+            "lint:ruff": {"name": "lint:ruff", "tags": ["fast"]},
+        }
+        held = {"lint:record": ["example.api", "example.contacts.tests"], "lint:unnamed": []}
+        self.enterContext(patch.object(fast_gate, "quick_tasks", return_value=tasks))
+        self.enterContext(patch.object(fast_gate, "recorded_labels", side_effect=held.__getitem__))
+
+    def unreached(self, paths: list[str], labels: list[str]) -> list[str]:
+        return fast_gate.unreached_recordings(("lint:record", "lint:unnamed", "lint:ruff"), paths, labels)
+
+    def test_a_python_change_that_selects_a_recorded_test_runs_the_recording(self):
+        for label in ("example.api.tests.test_calls", "example.contacts.tests.test_form.FormTests"):
+            with self.subTest(label=label):
+                self.assertEqual(self.unreached(["example/api/views.py"], [label]), [])
+
+    def test_a_python_change_that_selects_none_leaves_it_out_and_every_other_gate_in(self):
+        """A label that only begins with a recorded one's name is another package."""
+        unreached = self.unreached(["example/turn.py"], ["example.apis.tests.test_x", "example.other.tests"])
+        self.assertEqual(unreached, ["lint:record"])
+
+    def test_a_change_beside_python_keeps_mises_selection(self):
+        for paths in (["example/api/openapi-examples.json"], ["example/turn.py", "templates/base.html"], []):
+            with self.subTest(paths=paths):
+                self.assertEqual(self.unreached(paths, []), [])
+
+
 # What a failing `mise run -c` prints at its end, as it prints it.
 FAILING = r"""
 import sys
@@ -718,7 +751,7 @@ class FastGateTurnTests(GateTestCase):
             calls.append((label, cmd))
             return gate_verdict.Step(label)
 
-        run_main(("hq/example.py",), quick, step, affected=(set(), set()), test_labels=([], 0))
+        run_main(("hq/example.py",), quick, step, affected=(set(), set()), test_labels=([], 0), unreached_recordings=[])
         (run,) = [cmd for _, cmd in calls if set(quick) & set(cmd)]
         self.assertIn(fast_gate.TESTS, run)
         self.assertLessEqual(set(quick), set(run))

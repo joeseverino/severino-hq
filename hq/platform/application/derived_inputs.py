@@ -28,6 +28,8 @@ ESTATE_READS: tuple[str, ...] = (
     "control_plane.AddressReading",
     "control_plane.CapabilityRule",
     "control_plane.RefusedReport",
+    # The adopted playbooks, which offer themselves as a finding's remedy.
+    "control_plane.AdoptedCatalog",
     "core.UpstreamReading",
     "projects.Project",
     "analytics.AnalyticsSite",

@@ -1302,6 +1302,7 @@ or one out of range is refused when it is built. What it holds, and why:
 | `verification` | What shows it did what it says | Success is the intended postcondition, observed. |
 | `recovery` | How to recover from a partial run | A cancel or a failure cannot undo what was applied. |
 | `retry` | `never`, `observe_first` or `safe` | After an uncertain failure, whether the run may repeat, or must be observed first. |
+| `fixes` | The finding rules a run of it fixes, `filesystem-nearly-full`; empty by default | A finding of one about a machine it may run on offers its Run page, the machine chosen, as a remedy. It grants nothing: the run is authorized, approved and held as any other, and it is left out of what a run binds to. |
 
 `admits(kind, host)` says whether a target is one the manifest names.
 
@@ -1319,8 +1320,8 @@ HQ's facts, never from the caller.
 A procedure is a playbook, `<name>.yml`, with a sidecar beside it,
 `<name>.hq.yml`, anywhere in the repository. The sidecar says what HQ needs to
 know that Ansible has no word for. That is the manifest's `id`, `target_kinds`,
-`hosts`, `privilege`, `effect`, `timeout_seconds`, `recovery` and `retry`, as
-the table above has them. It also holds `inputs`, which gives each text input
+`hosts`, `privilege`, `effect`, `timeout_seconds`, `recovery`, `retry` and
+`fixes`, as the table above has them. It also holds `inputs`, which gives each text input
 its roles' argument specs declare a `pattern` and a `max_length`. The rest is
 Ansible's own, read from the playbook and its roles at the commit ([Refreshing
 the playbooks](#refreshing-the-playbooks)), and a sidecar names no playbook,
@@ -1348,7 +1349,8 @@ The schema holds a sidecar's shape: every key, its type and range, the dotted
 names, the enumerations, and the inputs' names. What it cannot say HQ still
 refuses at a Refresh, naming each in the proposal. That is a read that names a
 privilege, a host not in HQ's spelling, a statement that is only whitespace, an
-input `pattern` Python cannot compile, and two sidecars with one id.
+input `pattern` Python cannot compile, a finding in `fixes` HQ raises none of,
+and two sidecars with one id.
 
 ### Running a playbook
 

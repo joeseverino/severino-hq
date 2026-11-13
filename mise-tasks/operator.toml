@@ -22,20 +22,20 @@ extends = "heavy"
 run = "uv run --group browser python -m demo.screenshot"
 
 # `mise run fix` writes every derived file, in the order each reads the last:
-# the bridge contract feeds the Go types. lint:drift-* holds each. Each step
-# is one process on an empty database, so none waits for the heavy turn.
+# the bridge contract feeds the Go types. Each is its lint:drift-* gate's own
+# fix mode, one process on an empty database, so none waits for the heavy turn.
 ["fix:derived"]
 description = "Rewrite every derived file from its source (docs/Development.md, Derived files): mise run fix"
 hide = true
 extends = "django"
 run = [
-  "uv run python manage.py sdk_contract",
-  "uv run python manage.py api_openapi",
-  "uv run python manage.py bridge_contract",
+  "mise run lint:drift-sdk-contract --fix",
+  "mise run lint:drift-api-document --fix",
+  "mise run lint:drift-bridge-contract --fix",
   "cd controller && go generate ./...",
-  "uv run python manage.py connections_reference",
-  "uv run python manage.py procedure_schema",
-  "uv run python -m tools.fonts.subset",
+  "mise run lint:drift-connections-reference --fix",
+  "mise run lint:drift-procedure-schema --fix",
+  "mise run lint:drift-font --fix",
 ]
 
 # The runner image's build constraints are a lock of the index's newest

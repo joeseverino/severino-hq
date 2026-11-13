@@ -16,6 +16,12 @@
   {% endsection %}
 {% endif %}
 
+{% comment %}
+Its latest runs, under how it is doing and above what it holds: what was
+last done to it is read before its parts.
+{% endcomment %}
+{% if runs %}<div class="section-flow">{% include "partials/_page_sections.html" with sections=runs spans_row=True %}</div>{% endif %}
+
 {% if machine.containers or unused_images %}
   {% comment %}
   Where they are read from, beside the heading, and what they leave behind

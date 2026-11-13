@@ -6,11 +6,11 @@
       "path": "ansible.cfg"
     },
     {
-      "object": "15b68d488cffd9fd44bd09c10cf6ef913bd8d715",
+      "object": "66816f43bbd7e8a08da98ca764c087030348d3e9",
       "path": "callback_plugins/example_loud.py"
     },
     {
-      "object": "03592f82dc63f6e48bfaaac8813b2d0e1e5146dd",
+      "object": "db0d7a043525b538d40f453fe429db5820285978",
       "path": "collections/ansible_collections/example/smoke/plugins/callback/loud.py"
     },
     {
@@ -54,7 +54,7 @@
       "path": "roles/health/tasks/main.yml"
     },
     {
-      "object": "0def497564f3fdd551b9194b73d26efd3302f7f5",
+      "object": "c36d7ca388d1bcd78822474adb836e664af023c1",
       "path": "roles/service/library/example_probe.py"
     },
     {
@@ -193,7 +193,7 @@
       "profile": "read"
     }
   ],
-  "revision": "d32ae975e8ead147ce187ec8108533c144487d3d",
+  "revision": "899c7e2e78d8bbb625308c4a1126b4d20a51360c",
   "unpinned": [
     {
       "kind": "config",

@@ -5,19 +5,21 @@ from typing import override
 
 from django.core.exceptions import PermissionDenied
 from django.http import Http404, JsonResponse
-from django.urls import reverse
-from django.views.generic import DetailView, ListView, View
+from django.urls import reverse, reverse_lazy
+from django.views.generic import DetailView, ListView, TemplateView, View
 
-from hq.platform.application.pages import PageAction, PageMixin
+from hq.platform.application.pages import PageAction, PageBadge, PageMixin
 from hq.platform.application.security import web_principal
 from hq.platform.application.tables import Projected, TableColumn, TableFilter, TableListMixin, TableQuery, TableSort
 from hq.platform.application.web_writes import execute_posted
 lazy from hq.platform.application import outbound_work, work_runs
 lazy from hq.platform.application.asks import FAILED, Standing, answer, job_standing
-lazy from hq.platform.application.automation_runs import listed_with_actions
+lazy from hq.platform.application.automation_runs import cancel_action, listed_with_actions, run_here_url
+lazy from hq.platform.application.capabilities import capability_registry
 lazy from hq.platform.application.labels import lower_first
 lazy from hq.platform.application.outbound_work import SUBJECT_FIELD
 lazy from hq.platform.application.refusal_status import WANTS_A_GRANT
+lazy from hq.platform.application.run_pages import run_context
 
 from .models import Job, JobState
 
@@ -102,6 +104,47 @@ class JobListView(PageMixin, TableListMixin, ListView):
             said = " or ".join((first, *(lower_first(label) for label, _ in rest)))
             many = sum(len(titles) for _, titles in context["ended_badly"]) > 1
             context["ended_badly_title"] = f"{said} on {'their' if many else 'its'} last run"
+        return context
+
+
+class RunView(PageMixin, TemplateView):
+    """One run of a playbook, or one scan of its source: who asked, its
+    approval, its lease, how it ended and each task's outcome
+    (``application.run_pages``). Jobs' own page for a row, read as Jobs is."""
+
+    template_name = "jobs/run_detail.html"
+    page_trail = (("Background jobs", reverse_lazy("jobs:list")),)
+
+    @override
+    def get(self, request, *args, **kwargs):
+        found = work_runs.run_of(str(kwargs["pk"]))
+        if found is None:
+            raise Http404("No run has that id.")
+        self.run, self.operation = found
+        return super().get(request, *args, **kwargs)
+
+    @override
+    def get_page_title(self):
+        return self.run.title
+
+    @override
+    def get_page_actions(self):
+        cancel = cancel_action(self.run, web_principal(self.request.user))
+        playbook = work_runs.operation_of(self.run.kind)
+        # Its playbook again on the same machines, once it has ended, while that playbook is adopted.
+        ended = self.run.state not in {JobState.QUEUED, JobState.RUNNING}
+        again = (
+            (PageAction("Run again", run_here_url(playbook, self.run.evidence.hosts)),)
+            if ended and playbook and capability_registry().get(self.run.kind)
+            else ()
+        )
+        return (*again, *((cancel,) if cancel is not None else ()))
+
+    @override
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["page_badges"] = (PageBadge(self.run.word, self.run.tone),)
+        context.update(run_context(self.run, self.operation, user=self.request.user))
         return context
 
 

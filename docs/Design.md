@@ -255,12 +255,13 @@ class of the page's:
   (`table_region ... compare=True`), or under Field and Value where nothing
   stood before. A redacted value is said only to have changed, and a document
   that would not parse is shown as its line diff. A comparison of many records
-  of one kind (a catalog's playbooks, from `approval_review.grouped`) gives
-  each that changes its `{% row_group %}`, counted, and names the ones that
-  stay on one line under the table. A record a held request's warning names
-  is headed by the warning's words, marked for attention
-  (`row_group ... attention=True`), which
-  the card then does not repeat. The rows keep the change's own order. An
+  of one kind (a catalog's playbooks, from `approval_review.grouped`) names
+  each field a record moves by the record and the field ("Empty a cache ›
+  Access"), says a record that comes or goes whole on one row (its name and
+  its summary, its fields folded under it), and names the ones that stay on
+  one line under the table. A record a held request's warning names has its
+  rows marked for attention (`data-attention` on the `tr`), and the card does
+  not say the warning again. The rows keep the change's own order. An
   approval card and an audit event draw it (*Gate:* `hand-drawn-change-table`).
 - A row that asks to be read first (a message not yet read) says so in its
   `tr` with `{% row_state emphasized=True %}`: its cells are tinted and its

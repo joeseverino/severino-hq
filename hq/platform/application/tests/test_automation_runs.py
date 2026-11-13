@@ -5,7 +5,6 @@ synthetic ``example.*`` one, supplied as an extension supplies it."""
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
-from urllib.parse import parse_qs, urlsplit
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
@@ -364,6 +363,8 @@ class HeldRunPageTests(RunTestCase):
         )
 
     def test_a_held_machine_names_it_and_the_run_on_it_with_a_link(self):
+        from django.urls import reverse
+
         page = self.post(f"automation.{LOGS}.run", DB)
 
         said = text(page)
@@ -371,11 +372,9 @@ class HeldRunPageTests(RunTestCase):
         self.assertNotIn("details.holding", said)
         self.assertIn(f"{DB} is busy with a run of", said)
         self.assertIn("waiting since", said)
-        (jobs,) = [href for words, href in links(page.content) if words == "See that run on Jobs"]
-        self.assertEqual(
-            parse_qs(urlsplit(jobs).query),
-            {"kind": [RESTART_RUN], "state": ["queued"], "host": [DB]},
-        )
+        (holder,) = [href for words, href in links(page.content) if words == "See that run"]
+        self.assertEqual(holder, reverse("jobs:run", kwargs={"pk": self.first["id"]}))
+        self.assertEqual(self.client.get(holder).status_code, 200)
 
     def test_a_held_playbook_names_its_run_s_machines(self):
         said = text(self.post(RESTART_RUN, EDGE))

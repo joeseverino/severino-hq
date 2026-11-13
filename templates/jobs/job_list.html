@@ -1,9 +1,9 @@
 {% extends "list_page.html" %}
 {% comment %}
 HQ's jobs and its automation runs as one list (`work_runs.WorkRun`), each
-state said in the same words and tones. What failed or stopped on its last
-run is named once above the rows that lead the list, under its state's word
-only when both states are there. A run's evidence (its machines, who
+state said in the same words and tones, a run's title linked to its own
+page. What failed or stopped on its last run is named once above the rows
+that lead the list, under its state's word only when both states are there. A run's evidence (its machines, who
 approved it, its correlation id, its lease while a worker holds it, and each
 task's outcome) is in its row's open line, drawn by {% run_evidence %}. A
 run nothing has started ends with its Cancel button, for a reader who may
@@ -17,7 +17,7 @@ cancel it.
 {% endif %}
 {% endblock %}
 {% block row %}
-  <td class="cell-data"><strong>{{ row.title|breakable }}</strong></td>
+  <td class="cell-data">{% if row.url %}<a href="{{ row.url }}"><strong>{{ row.title|breakable }}</strong></a>{% else %}<strong>{{ row.title|breakable }}</strong>{% endif %}</td>
   <td>{% status row.word tone=row.tone %}</td>
   <td class="date-col">{{ row.created_at|when }}</td>
   <td>{% if row.duration %}{{ row.duration|seconds }}{% else %}{% empty_value %}{% endif %}</td>
