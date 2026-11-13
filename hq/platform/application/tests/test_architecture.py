@@ -270,7 +270,12 @@ class TestPlacementTests(SimpleTestCase):
             for path in modules
             if "tests" not in path.parts and path.name != "test_runner.py"
         )
-        self.assertEqual(misplaced, [])
+        self.assertEqual(
+            misplaced,
+            [],
+            "a test module lives in its package's tests/; a test-support module "
+            "outside tests/ is named testing.py or *_testing.py",
+        )
 
 
 @tag("source")

@@ -7,7 +7,8 @@ It is a pill, or with ``pill=False`` its words in its tone alone, as a figure
 that says which way it went is drawn among others, or with ``dot=True`` those
 words after a steady dot in the same tone, as a standing state reads ("Allowed",
 "Paused"), its words in the ink around them with ``ink="context"`` where
-they are a heading's or a menu's own words, or with ``chip=True`` a
+they are a heading's or a menu's own words, or with ``icon=`` those words
+after an icon in the same tone in place of the dot, or with ``chip=True`` a
 neutral chip: one of a record's names (a technology, a domain, a role), said
 as written. A source test in
 `test_status_tags.py` refuses a pill or tone class written by hand in any
@@ -17,6 +18,7 @@ template the host or an extension ships.
 from typing import Literal, get_args
 
 from django import template
+from django.template.loader import render_to_string
 from django.utils.html import format_html
 from django.utils.safestring import SafeString, mark_safe
 
@@ -44,7 +46,7 @@ def _tone(tone: str) -> str:
 
 def _form(tone_class: str, *, pill: bool, chip: bool, dot: bool, ink: Ink) -> str:
     """The classes of the form a status takes: a chip, its words in its tone
-    (with a dot before them, the words in the ink around them when ``ink`` is
+    (after a dot or an icon, the words in the ink around them when ``ink`` is
     "context"), or a pill."""
 
     # Each assigned whole to `classes`, so the stylesheet's usage check and the
@@ -55,12 +57,28 @@ def _form(tone_class: str, *, pill: bool, chip: bool, dot: bool, ink: Ink) -> st
         classes = f"toned toned-{tone_class if tone_class in STATUS_VALUES else 'neutral'} toned-dot toned-ink-context"
     elif dot:
         classes = f"toned toned-{tone_class if tone_class in STATUS_VALUES else 'neutral'} toned-dot"
+    elif ink == "context":
+        classes = f"toned toned-{tone_class if tone_class in STATUS_VALUES else 'neutral'} toned-ink-context"
     elif not pill:
         # The status vocabulary's tones are the only ones words alone take.
         classes = f"toned toned-{tone_class if tone_class in STATUS_VALUES else 'neutral'}"
     else:
         classes = f"pill pill-{tone_class}" if tone_class else "pill"
     return classes
+
+
+def _refuse_mixed(*, tone: str, pill: bool, chip: bool, dot: bool, ink: str, icon: str) -> None:
+    """Refuse options no one form takes together: a toned chip, a mark beside
+    a pill or a dot, context ink with neither a dot nor a mark."""
+
+    if chip and (tone or not pill or dot):
+        raise ValueError("A chip is a neutral name, never a state: it takes no tone, no pill=False and no dot.")
+    if icon and (pill or dot or chip):
+        raise ValueError("An icon stands where a dot would, before a state's words: only beside pill=False.")
+    if ink not in INKS or (ink == "context" and not (dot or icon)):
+        raise ValueError(
+            f'ink is one of {", ".join(sorted(INKS))}, and "context" only beside dot=True or an icon; got {ink!r}.'
+        )
 
 
 def status_pill(
@@ -74,6 +92,7 @@ def status_pill(
     chip: bool = False,
     dot: bool = False,
     ink: Ink = "tone",
+    icon: str = "",
     **data: object,
 ) -> SafeString:
     """The pill for a state: ``parts`` its words, the first said in sentence
@@ -83,7 +102,10 @@ def status_pill(
     color, which never moves; ``ink="context"`` leaves those words in the
     ink around them, so only the dot carries the tone. ``chip=True`` draws
     a name a record carries, in no tone and in its own case: "django" and
-    "example.com" stay as written.
+    "example.com" stay as written. ``icon`` names a mark (partials/_icon.html)
+    drawn before the words of ``pill=False`` in their tone, where the dot
+    would stand, so a cell says its state by its mark as well as its color;
+    with ``ink="context"`` only the mark takes the tone.
 
     ``href`` makes it a link, ``title`` names it on hover, ``tip`` gives it
     HQ's tooltip (and the focus a tooltip needs), ``css`` adds classes (a
@@ -91,14 +113,14 @@ def status_pill(
     attribute, drawn as ``html_attributes`` draws one.
     """
 
-    if chip and (tone or not pill or dot):
-        raise ValueError("A chip is a neutral name, never a state: it takes no tone, no pill=False and no dot.")
-    if ink not in INKS or (ink == "context" and not dot):
-        raise ValueError(f'ink is one of {", ".join(sorted(INKS))}, and "context" only beside dot=True; got {ink!r}.')
+    _refuse_mixed(tone=tone, pill=pill, chip=chip, dot=dot, ink=ink, icon=icon)
     words = [str(part) for part in parts if part not in (None, "")]
     if words and not chip:
         words[0] = sentence(words[0])
     label = mark_safe(" ".join(str(breakable(word)) for word in words))  # noqa: S308 - each word is escaped by breakable
+    if icon:
+        mark = render_to_string("partials/_icon.html", {"name": icon}).strip()
+        label = mark_safe(f"{mark} {label}")  # noqa: S308 - the icon part's own markup, and the escaped words
     classes = _form(_tone(tone), pill=pill, chip=chip, dot=dot, ink=ink)
     if css:
         classes = f"{classes} {css}"
@@ -159,11 +181,14 @@ def drift_tip(reading):
 
 
 @register.simple_tag(name="status")
-def status(*parts, tone="", css="", href="", title="", tip="", pill=True, chip=False, dot=False, ink="tone", **data):
+def status(
+    *parts, tone="", css="", href="", title="", tip="", pill=True, chip=False, dot=False, ink="tone", icon="", **data
+):
     """``{% status row.get_status_display tone=row.status %}``: a state as a pill,
     or with ``pill=False`` as its words in its tone (``{% status change tone="good" pill=False %}``),
     or with ``dot=True`` as those words after a steady dot (``{% status "Allowed" tone="good" dot=True %}``),
     with ``ink="context"`` the words in the ink around them and only the dot toned,
+    or with ``icon=`` after a mark in its tone (``{% status "1 serious" tone="serious" pill=False icon="shield" %}``),
     or with ``chip=True`` as a neutral chip for a name (``{% status domain chip=True %}``).
 
     Several parts are one label ("HQ expects" and the value it expects), only
@@ -181,5 +206,6 @@ def status(*parts, tone="", css="", href="", title="", tip="", pill=True, chip=F
         chip=bool(chip),
         dot=bool(dot),
         ink=ink,
+        icon=str(icon or ""),
         **data,
     )

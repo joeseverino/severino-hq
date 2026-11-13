@@ -87,6 +87,13 @@ class Measurement:
         return any(result.check.serious for result in self.unmet)
 
     @property
+    def serious_unmet(self) -> str:
+        """What is wrong in each serious check it fails, a line each: what a
+        mark that it is serious says on hover."""
+
+        return "\n".join(result.check.unmet for result in self.unmet if result.check.serious)
+
+    @property
     def gaps(self) -> tuple[dict[str, Any], ...]:
         """What it does not meet, as the queue's rows: serious first, then the
         rest, then each it fails by design with why."""

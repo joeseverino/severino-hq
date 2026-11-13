@@ -191,16 +191,6 @@
     else document.querySelector(".site-header")?.append(reset);
   });
 
-  // Say where the connection panel's headers came from.
-  const relabel = () => {
-    const note = document.querySelector("[data-response-headers]")?.previousElementSibling;
-    if (note?.classList.contains("conn-note")) {
-      note.textContent = "Recorded from HQ when this demo was built. GitHub Pages, which serves the demo, can't send them.";
-    }
-  };
-  document.addEventListener("DOMContentLoaded", relabel);
-  document.addEventListener("hq:fragment", relabel);
-
   // Save dismissals and un-dismissals.
   document.addEventListener("click", (event) => {
     const button = event.target.closest("[data-triage] button[formaction]");

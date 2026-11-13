@@ -16,7 +16,7 @@ standard, with what it uses beside its limits. Each said once; the band above ha
     {% fact "Fixes" icon="shield" tone=plan.fixes_tone %}
       {% if plan.fixes %}{{ plan.fixes|length|counted:"known vulnerability,known vulnerabilities" }}{% elif item.standing.source %}None known{% else %}Cannot check{% endif %}
     {% detail %}
-      {% if plan.fixes %}<span class="band-note">{% for advisory in plan.fixes|slice:":2" %}{% entity advisory.url|outside label=advisory.id %}{% if not forloop.last %} {% endif %}{% endfor %}</span>{% else %}<small>{% if item.standing.source %}Nothing known against the running version.{% else %}The image does not say where its source is.{% endif %}</small>{% endif %}
+      {% if plan.fixes %}<ul class="dot-list">{% for advisory in plan.fixes|slice:":2" %}<li>{% entity advisory.url|outside label=advisory.id %}</li>{% endfor %}</ul>{% else %}<small>{% if item.standing.source %}Nothing known against the running version.{% else %}The image does not say where its source is.{% endif %}</small>{% endif %}
     {% endfact %}
     {% fact "Data" icon="layers" tone=plan.data_tone %}
       {% if plan.stateful %}{{ plan.data|length|counted:"mount,mounts" }} to snapshot first{% else %}Keeps no data{% endif %}
@@ -33,14 +33,11 @@ standard, with what it uses beside its limits. Each said once; the band above ha
     {% steps numbered=True %}
       {% for step in plan.steps %}{% step %}<strong>{{ step.label|breakable }}</strong> <span class="muted">{{ step.detail|breakable }}</span>{% endstep %}{% endfor %}
     {% endsteps %}
-    <div class="upgrade-blockers">
-      {% if plan.viable %}
-        <p><strong>Ready</strong></p>
-      {% else %}
-        <p class="muted">Not yet, because:</p>
-        <ul>{% for blocker in plan.blockers %}<li>{{ blocker.reason|breakable }}</li>{% endfor %}</ul>
-      {% endif %}
-    </div>
+    {% if plan.viable %}
+      {% notice tone="success" title="Ready" %}{% endnotice %}
+    {% else %}
+      {% notice tone="warning" title="Not yet, because:" %}{% stack_list %}{% for blocker in plan.blockers %}<li>{{ blocker.reason|breakable }}</li>{% endfor %}{% endstack_list %}{% endnotice %}
+    {% endif %}
   </div>
 {% aside %}<span class="muted">{{ plan.change_label|breakable }}{% dot %}{{ plan.risk|breakable }} risk</span>
 {% endsection %}
@@ -65,7 +62,7 @@ standard, with what it uses beside its limits. Each said once; the band above ha
       {% if readiness.not_automatic %}<small>{{ readiness.not_automatic|length|counted:"reason,reasons" }}, listed below</small>{% endif %}
     {% endfact %}
   {% endfacts %}
-  {% if readiness.not_automatic %}<ul class="upgrade-reasons">{% for blocker in readiness.not_automatic %}<li>{{ blocker.reason|breakable }}</li>{% endfor %}</ul>{% endif %}
+  {% if readiness.not_automatic %}{% stack_list %}{% for blocker in readiness.not_automatic %}<li class="muted">{{ blocker.reason|breakable }}</li>{% endfor %}{% endstack_list %}{% endif %}
 {% aside %}<span class="muted">{% if readiness.automatic %}Upgrades automatically{% else %}Waits for you{% endif %}</span>
 {% endsection %}
 {% endif %}

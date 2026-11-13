@@ -22,6 +22,11 @@ case ",${MISE_TASK_LOCKS:-}," in
         ;;
     *)
         [ -n "${turn_bound+set}" ] || light_run=1
+        # Run again under the measurer below, found light already.
+        if [ -n "${HQ_FOUND_LIGHT:-}" ]; then
+            unset HQ_FOUND_LIGHT
+            light_run=1
+        fi
         if [ -n "${test_arguments:-}" ] && [ -z "${light_run:-}" ] &&
             eval "uv run python -m tools.gate.turn ${test_arguments}"; then
             light_run=1
@@ -35,6 +40,14 @@ case ",${MISE_TASK_LOCKS:-}," in
                 eval "set -- \"${name}=\${${name}}\" \"\$@\""
             done
             HQ_TURN_BOUND="${turn_bound:?}" exec mise run turn -- env "$@"
+        fi
+        # A run of tests light enough to go ahead outside the turn still ends
+        # with the line on what it spent, as one in the turn does; the task
+        # runs again under the measurer, which costs it only its first lines.
+        if [ -n "${turn_bound+set}" ] && [ -n "${test_arguments:-}" ] && [ -z "${HQ_MEASURED:-}" ]; then
+            HQ_FOUND_LIGHT=1
+            export HQ_FOUND_LIGHT
+            exec ./tools/lib/measured "$0" "$@"
         fi
         ;;
 esac

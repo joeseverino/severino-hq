@@ -188,6 +188,13 @@
    a thing is live. */
 .toned-dot { display: inline-flex; align-items: center; gap: var(--space-3); }
 .toned-dot::before { content: "" / ""; inline-size: 8px; block-size: 8px; flex: none; border-radius: 50%; background: var(--toned); }
+/* A state led by its mark (`icon=`) in place of the dot: inline, so a cell
+   still cuts its words beside it, set on the words' baseline, and in the
+   state's tone even where the words take the ink around them. */
+.toned > .icon { vertical-align: -0.15em; color: var(--toned); }
+/* Its words are a state or a name, never a figure in a column of figures, so
+   they keep the face's own digits and the cell no wider than they need. */
+.toned:has(> .icon) { font-variant-numeric: normal; }
 
 /* A finding stated once, with its arithmetic underneath. The claim is what
    gets read; the numbers are what make it checkable. */

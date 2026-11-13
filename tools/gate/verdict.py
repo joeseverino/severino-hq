@@ -79,6 +79,13 @@ FAILED_UNDER = re.compile(r"^(?:\[[^\]\s]+\] )*\[([^\]\s]+)\] (?:FAIL|ERROR): \S
 # seconds from one second up, in ms, µs or ns below.
 TIMED = re.compile(r"\[([^\]\s]+)\] (?:Finished|passed) in (\d+(?:\.\d+)?)(ns|µs|ms|s)\b")
 UNITS = {"ns": 1e-9, "µs": 1e-6, "ms": 1e-3, "s": 1.0}
+# What a run says it spent, kept in the verdict file under the step times,
+# since that file is what outlives the run: the test runner's slowest classes
+# under their heading (hq/platform/core/test_runner.py, report_class_times),
+# and tools/lib/measured's line on a heavy run's process tree.
+CLASSES = re.compile(r"^(?:\[[^\]\s]+\] )*(Slowest test classes .*)$")
+CLASS_TIME = re.compile(r"^(?:\[[^\]\s]+\] )*(\s+\d+(?:\.\d+)?s\s+\S+)\s*$")
+MEASURED = re.compile(r"^((?:\[[^\]\s]+\] )*)heavy: (.+\bwall\b.+)$")
 # A terminal escape sequence. mise colors its task lines on a CI runner even
 # into a pipe (and wherever CLICOLOR_FORCE is set), so a line is read without
 # them while the copy passed through keeps its color.
@@ -199,6 +206,9 @@ class Step:
     under: dict[str, str] = field(default_factory=dict)
     # The last lines printed under each task's name, and the step's own under "".
     said: dict[str, deque[str]] = field(default_factory=dict)
+    # What the step's runs said they spent (CLASSES, MEASURED), in the order said.
+    spent: list[str] = field(default_factory=list)
+    classes: bool = False
 
     def read(self, line: str) -> None:
         line = ESCAPE.sub("", line)
@@ -213,6 +223,20 @@ class Step:
             self.waited += sum(float(amount) * SPAN[unit] for amount, unit in PART.findall(waiting[1]))
         for task, amount, unit in TIMED.findall(line):
             self.took[task] = float(amount) * UNITS[unit]
+        self.cost(line)
+
+    def cost(self, line: str) -> None:
+        """Keep ``line`` among what the step spent when it is one of the lines that say so."""
+
+        if heading := CLASSES.match(line):
+            self.classes = True
+            self.spent += ["", heading[1]]
+        elif self.classes and (timed := CLASS_TIME.match(line)):
+            self.spent.append(timed[1])
+        else:
+            self.classes = False
+            if measured := MEASURED.match(line):
+                self.spent += ["", f"{measured[1]}heavy: {measured[2]}"]
 
     def hear(self, line: str) -> None:
         """Keep ``line`` among the last said under each task it is printed under,
@@ -517,21 +541,8 @@ class Gate:
         line = verdict(name, self.started, steps, passed, outcome)
         if named:
             line += failed + (f"; rerun: {command}" if (command := rerun(name, steps, tests)) else "")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        # Two runs of one gate can close at once (a suite under sh and dash), so
-        # the last verdict may already be moved, and a reader sees one whole.
-        with contextlib.suppress(FileNotFoundError):
-            path.replace(path.with_name(f"{self.stem}.prev.txt"))
-        kept = [traceback for step in steps for traceback in step.tracebacks()]
-        detail = [said for step in steps for said in step.detail]
         tails = {task: said for step in steps for task, said in step.tails(aggregates).items()}
-        ended = [part for task, said in tails.items() for part in ("", f"{task} ended on:", *said)]
-        with tempfile.NamedTemporaryFile(
-            "w", dir=path.parent, prefix=f".{self.stem}.", suffix=".txt", delete=False
-        ) as whole:
-            judged = TREE_LINE.format(self.judged() or UNSETTLED)
-            whole.write("\n".join([judged, line, *detail, *named, *ended, *timings(steps), *kept]) + "\n")
-        Path(whole.name).replace(path)
+        self.keep(steps, line, named, tails)
         for task, said in tails.items():
             print(f"[{name}] {task} ended on:", *(f"[{name}]   {said_line}" for said_line in said), sep="\n")
         if not self.shows_all:
@@ -540,6 +551,26 @@ class Gate:
         print(f"[{name}] all the run printed in {self.log_path}; verdict kept in {path}")
         print(line, flush=True)
         self.shut()
+
+    def keep(self, steps: list[Step], line: str, named: list[str], tails: dict[str, list[str]]) -> None:
+        """Write the verdict file whole, the last one moved beside it."""
+
+        path = self.path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # Two runs of one gate can close at once (a suite under sh and dash), so
+        # the last verdict may already be moved, and a reader sees one whole.
+        with contextlib.suppress(FileNotFoundError):
+            path.replace(path.with_name(f"{self.stem}.prev.txt"))
+        kept = [traceback for step in steps for traceback in step.tracebacks()]
+        detail = [said for step in steps for said in step.detail]
+        ended = [part for task, said in tails.items() for part in ("", f"{task} ended on:", *said)]
+        spent = [said for step in steps for said in step.spent]
+        with tempfile.NamedTemporaryFile(
+            "w", dir=path.parent, prefix=f".{self.stem}.", suffix=".txt", delete=False
+        ) as whole:
+            judged = TREE_LINE.format(self.judged() or UNSETTLED)
+            whole.write("\n".join([judged, line, *detail, *named, *ended, *timings(steps), *spent, *kept]) + "\n")
+        Path(whole.name).replace(path)
 
     def shut(self) -> None:
         """Give the process its own output back and close the log."""

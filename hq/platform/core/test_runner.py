@@ -19,7 +19,6 @@ import shutil
 import signal
 import subprocess
 import sys
-import tempfile
 import threading
 import traceback
 import unittest
@@ -30,7 +29,7 @@ from pathlib import Path
 
 # Bound here, so a test that patches time.monotonic moves its own clock and never the stall watch's.
 from time import monotonic
-from typing import TYPE_CHECKING, override
+from typing import override
 lazy import inspect
 lazy import pdb
 
@@ -51,14 +50,12 @@ lazy from django.db.backends.sqlite3.creation import DatabaseCreation
 lazy from django.test import TransactionTestCase
 
 from hq.config.imports import lazily
-from hq.config.sandbox import MARKERS, shared_tempdir
+from hq.config.sandbox import shared_tempdir
+from hq.platform.core.isolation_testing import CompositionIsolation, own_markers, patches_leave_no_copy
 from hq.platform.core.live_objects import live
-lazy from hq.platform.application import agent_limits, automation_adoption, plugins, roles
+lazy from hq.platform.application import plugins, roles
 lazy from hq.platform.core import append_only
 lazy from hq.platform.core.attribution import bind_this_thread, bound, command_operation, from_the_shell
-
-if TYPE_CHECKING:
-    from hq.platform.application.agent_limits import Limits
 
 
 def performance_cores() -> int | None:
@@ -210,91 +207,6 @@ def hypothesis_profiles() -> None:
     hypothesis.register_profile("ci", hypothesis.get_profile("ci"), max_examples=200, stateful_step_count=50)
     ci = hypothesis.get_current_profile_name() == "ci"
     hypothesis.load_profile(os.environ.get("HYPOTHESIS_PROFILE") or ("ci" if ci else "dev"))
-
-
-_markers: tuple[int, Path] | None = None
-
-
-def own_markers() -> Path:
-    """This process's directory of the controller's markers, with their
-    settings pointed into it.
-
-    The run's own directory is every worker's, so a heartbeat one worker's
-    test wrote would decide another's controller standing as it ran. Keyed by
-    process, since a forked worker inherits its parent's.
-    """
-
-    global _markers  # noqa: PLW0603 - one directory per process, made on first use
-    if _markers is None or _markers[0] != os.getpid():
-        directory = Path(tempfile.mkdtemp(prefix="markers-"))
-        for setting, name in MARKERS:
-            setattr(settings, setting, str(directory / name))
-        _markers = (os.getpid(), directory)
-    return _markers[1]
-
-
-def _markers_held() -> dict[str, tuple[bytes, int]]:
-    return {path.name: (path.read_bytes(), path.stat().st_mtime_ns) for path in own_markers().iterdir()}
-
-
-def _hold_markers(held: dict[str, tuple[bytes, int]]) -> None:
-    """Leave exactly ``held`` in the markers directory, each as old as it was."""
-
-    for path in own_markers().iterdir():
-        path.unlink(missing_ok=True)
-    for name, (content, mtime) in held.items():
-        path = own_markers() / name
-        path.write_bytes(content)
-        os.utime(path, ns=(mtime, mtime))
-
-
-class _CompositionIsolation:
-    """Make process caches, and the agent limits and the controller's markers
-    every request shares, obey the same per-test isolation as the database.
-
-    The limits and markers are isolated as ``setUpTestData`` rows are: each
-    class sets up on a new set, and each of its tests gets a copy of what that
-    setup left, so a stream an estate opens or a heartbeat it writes in
-    ``setUpClass`` reaches every test of the class and nothing one test takes
-    or writes reaches the next.
-    """
-
-    _class: type | None = None
-    _class_limits: Limits | None = None
-    _class_markers: dict[str, tuple[bytes, int]] | None = None
-
-    def startTest(self, test):
-        plugins.clear_plugin_composition_cache()
-        automation_adoption.forget()
-        if type(test) is not self._class:
-            # The first of its class: what the set holds is what its setup left.
-            self._class, self._class_limits = type(test), agent_limits.LIMITS
-            self._class_markers = _markers_held()
-        else:
-            _hold_markers(self._class_markers or {})
-        agent_limits.LIMITS = _copied(self._class_limits)
-        return super().startTest(test)
-
-    def stopTest(self, test):
-        # The next class sets up on a new set. A new set rather than an
-        # emptied one: a call a test left running gives its slot back to the
-        # set it took it from.
-        agent_limits.LIMITS = agent_limits.Limits()
-        _hold_markers({})
-        return super().stopTest(test)
-
-
-def _copied(limits: agent_limits.Limits) -> agent_limits.Limits:
-    """A set holding what ``limits`` holds, each count its own and behind a lock of its own."""
-
-    copied = agent_limits.Limits.__new__(agent_limits.Limits)
-    with limits._lock:  # noqa: SLF001 - the copy is the set's whole state, which it offers no way to read
-        held = vars(limits)
-        copied.__dict__.update(
-            {name: dict(value) if isinstance(value, dict) else value for name, value in held.items()}
-        )
-    copied._lock = threading.Lock()  # noqa: SLF001 - a lock of its own, not the original's
-    return copied
 
 
 # A gate names a folder here, and the run writes each test that failed into
@@ -618,7 +530,7 @@ class _StallMarks:
         return super().addSubTest(test, subtest, err)
 
 
-class CompositionTextResult(FailureRecord, _StallMarks, _CompositionIsolation, _ClassTimes, unittest.TextTestResult):
+class CompositionTextResult(FailureRecord, _StallMarks, CompositionIsolation, _ClassTimes, unittest.TextTestResult):
     def printErrors(self):
         block_on_output()
         super().printErrors()
@@ -684,7 +596,7 @@ def _pickles(value) -> bool:
     return True
 
 
-class CompositionRemoteResult(_StallMarks, _CompositionIsolation, RemoteTestResult):
+class CompositionRemoteResult(_StallMarks, CompositionIsolation, RemoteTestResult):
     def addError(self, test, err):
         super().addError(test, sendable(test, err))
 
@@ -788,6 +700,7 @@ def _init_worker_on_file_databases(counter, *args, **kwargs):
     stall_watch.workers = counter
     started = _init_worker(counter, *args, **kwargs)
     own_markers()
+    patches_leave_no_copy()
     default_people_to_operator()
     flush_through_the_audit_guard()
     commands_from_the_shell()
@@ -931,6 +844,7 @@ class SeverinoTestRunner(DiscoverRunner):
         super().setup_test_environment(**kwargs)
         sys.breakpointhook = breakpoint_on_the_terminal
         own_markers()
+        patches_leave_no_copy()
         default_people_to_operator()
         flush_through_the_audit_guard()
         commands_from_the_shell()

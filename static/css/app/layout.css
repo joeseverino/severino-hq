@@ -198,6 +198,12 @@
    than its companion, which holds its basis beside it and, wrapped under it,
    is alone on its line and takes the width. */
 .split > .section:first-child:has(> .section-body > .month-grid) { flex: 999 1 36rem; }
+/* A route (`{% check_ladder route=True %}`) in a flow asks for room for a
+   stop's kind, its value and its checks on one line before it shares a row,
+   and its section is the box its narrow layout asks of (connection.css). */
+.section:has(> .section-body > .check-ladder.is-route) {
+  --flow-basis: 30rem; display: grid; gap: var(--space-4); align-content: start; container: route / inline-size;
+}
 /* Seven equal columns: the one fixed grid here, because weeks must line up. */
 .month-grid { width: 100%; border-collapse: collapse; table-layout: fixed; }
 /* stylelint-disable-next-line property-disallowed-list -- a kicker: the weekday row over a month grid's days */

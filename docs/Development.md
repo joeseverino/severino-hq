@@ -204,10 +204,12 @@ command that reruns just those. A gate whose steps queued for the
 working time.
 
 The whole verdict is kept in `var/gate/<name>.txt` beside the run before it,
-with each failed test's exception and traceback and each failed task's last
-lines, and all the run printed in `var/gate/<name>.log` (`HQ_GATE_VERDICTS`
-names another folder, as a gate tool's test does for every process it
-starts). A gate's first line names both files, since the head of a long
+with each failed test's exception and traceback, each failed task's last
+lines, and under the step times what each run said it spent (the test
+runner's slowest classes, and each measured line below), so where a gate's
+time went is read from the file. All the run printed is in
+`var/gate/<name>.log` (`HQ_GATE_VERDICTS` names another folder, as a gate
+tool's test does for every process it starts). A gate's first line names both files, since the head of a long
 output is the part a reader shown only an excerpt of it always sees.
 
 What a gate prints is short enough to read whole. Its commands' output goes
@@ -619,7 +621,9 @@ out of the tree's. The template's `shell`, the line every heavy file task
 sources, and the `turn` task each run their command under it, and
 `HeavyTaskTests` holds every task that takes the lock to one of the three. A
 heavy run inside a measured one adds no line of its own, and a narrow `mise
-run test` runs again under it, so measuring one label is that one command.
+run test`, or a narrow run of a file task that weighs its tests (fast's, a
+labeled `lint:source`), runs again under it, so measuring one label is that
+one command.
 
 The line is a report, never a check: load and the mix of tests move both
 memory and time, so nothing fails on them, and the command's exit status is

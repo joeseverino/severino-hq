@@ -501,6 +501,15 @@ under it where the line is full, and that evidence is shown at every width.
 *Gates:* `a_checks_evidence_follows_its_statement`, `nothing_a_summary_names_is_hidden`.
 *Catalog:* `part/path-hops`.
 
+**Checks read down a ladder.** `{% check_ladder %}` draws checks one after
+another, each a `{% check_rung %}`: its tick for how it stands (`state`:
+holds, does-not, or unknown when not read), its `kind`, the statement with
+the `evidence` it was read from, and a `more` part saying what opening it
+shows; its `body` part is what it opens to. `route=True` draws the rungs as
+the stops of a route, the connection panel's path to HQ, and a ladder inside
+a rung's body draws its checks as rows of it. *Catalog:* `part/check-ladder`,
+`part/check-ladder-route`.
+
 **One main-and-aside.** Content with a narrower companion (`.split`) shares a
 row while both keep a readable width and wraps to a column when they cannot.
 A month as the main takes the room, its companion keeping its basis beside
@@ -745,7 +754,12 @@ is the state's words in its tone, as a headline or a line of text says a
 state, and the sentence that says what a state means takes the same tone
 beside it: a record's title line is "Working · Matches HQ's config.", both
 green, as parts of one `.dot-list`, so the sentence shares the state's line
-where it fits and wraps under it where it does not.
+where it fits and wraps under it where it does not. With `icon=` beside
+`pill=False` a mark (`partials/_icon.html`) leads those words in their tone, so
+a table cell says its state by its mark as well as its color, as a container's
+standing does ("1 serious" after a shield); with `ink="context"` only the mark
+is toned ("Up to date"). A first word holding a digit, a version, is said as
+written. *Catalog:* `status/icon`.
 *Gates:* the `status-pill-built-by-status-pill` ast-grep rule and
 `test_status_tags.py`, which reads every template root for a hand-written pill
 or a state's tone written as a class.

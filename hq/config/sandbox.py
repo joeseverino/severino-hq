@@ -108,7 +108,7 @@ def _directory(variable: str, kind: str, run: Path) -> str:
 
 
 # The controller's markers, each by the setting that moves it. The test
-# runner gives each process and each test its own (``test_runner.own_markers``).
+# runner gives each process and each test its own (``isolation_testing.own_markers``).
 MARKERS = (
     ("SEVERINO_CONTROLLER_HEARTBEAT", "controller-heartbeat"),
     ("SEVERINO_CONTROLLER_DOORBELL", "controller-doorbell"),

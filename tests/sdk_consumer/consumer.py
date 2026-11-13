@@ -126,6 +126,9 @@ def sentences(registrar: str) -> None:
     # A heading's own words after the dot, in the ink around them.
     assert_type(ui.status_pill("Tailnet", tone="good", dot=True, ink="context"), SafeString)
     ui.status_pill("Tailnet", dot=True, ink="page")  # type: ignore[arg-type]
+    # A cell's state led by its mark, in its tone.
+    assert_type(ui.status_pill("1 serious", tone="serious", pill=False, icon="shield"), SafeString)
+    ui.status_pill("1 serious", pill=False, icon=True)  # type: ignore[arg-type]
     assert_type(ui.status_pill("django", chip=True), SafeString)
     ui.status_pill("django", chip="yes")  # type: ignore[arg-type]
     assert_type(ui.Kpi("Net worth", "$1.00", "+$1.00", tone="good", detail_url="/x/").holds_links, bool)

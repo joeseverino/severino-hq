@@ -24,6 +24,8 @@ the alias, and a field that needs another bound is an alias of its own.
 ``fields`` reads a schema's fields whole again.
 """
 
+import copy
+import functools
 import re
 from collections.abc import Iterable, Mapping
 from types import get_original_bases
@@ -273,11 +275,39 @@ def json_schema(
 def json_schemas(
     kinds: Mapping[str, Any], *, mode: JsonSchemaMode, ref_template: str
 ) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
-    """Each of ``kinds``' schemas by its key, and the definitions they share by name."""
+    """Each of ``kinds``' schemas by its key, and the definitions they share by name.
 
-    adapters = [(key, mode, TypeAdapter(kind)) for key, kind in kinds.items()]
+    A type's schema is a function of the type alone, and building one is most
+    of the cost of the API document, which a server and each test that checks
+    a call against the document build whole; so each is built once a process
+    and handed out as a copy its caller may change."""
+
+    asked = tuple(kinds.items())
+    try:
+        built = _built(asked, mode, ref_template)
+    except TypeError:
+        # A type that cannot be a key (an annotation carrying a list) is built each time.
+        built = _build(asked, mode, ref_template)
+    return copy.deepcopy(built)
+
+
+# Enough for every document a process builds: each holds about 170 sets of types.
+_BUILT = 1024
+
+
+@functools.lru_cache(maxsize=_BUILT)
+def _built(
+    kinds: tuple[tuple[str, Any], ...], mode: JsonSchemaMode, ref_template: str
+) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+    return _build(kinds, mode, ref_template)
+
+
+def _build(
+    kinds: tuple[tuple[str, Any], ...], mode: JsonSchemaMode, ref_template: str
+) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+    adapters = [(key, mode, TypeAdapter(kind)) for key, kind in kinds]
     refs, definitions = TypeAdapter.json_schemas(adapters, ref_template=ref_template, schema_generator=DocumentSchema)
-    return {key: refs[(key, mode)] for key in kinds}, definitions.get("$defs", {})
+    return {key: refs[(key, mode)] for key, _kind in kinds}, definitions.get("$defs", {})
 
 
 # Where a value of a fixed set keeps the words a person reads for it, the key

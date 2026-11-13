@@ -235,6 +235,29 @@ class RerunTests(GateTestCase):
         self.assertTrue(latest.splitlines()[1].startswith("[kept] passed in"), latest)
         self.assertTrue(before.splitlines()[1].endswith("; rerun: mise run lint:ruff"), before)
 
+    def test_what_a_run_says_it_spent_is_kept_in_the_verdict_file(self):
+        classes = "Slowest test classes (load average at start / end: 1.00 1.00 1.00 / 2.00 2.00 2.00):"
+        measured = "heavy: 9.0s wall, 20.0s CPU, load average 2.00 2.00 2.00, peak memory 600 MB: gate 40 MB"
+        said = [
+            f"[fast:tests] {classes}",
+            "[fast:tests]      284.1s  hq.example.tests.test_pages.EveryPageTests",
+            "[fast:tests]        3.2s  hq.example.tests.test_rows.RowTests",
+            "[fast:tests] Finished in 290.0s",
+            "   12.0s  not a class time, said after the heading's block ended",
+            f"[test] {measured}",
+        ]
+        passed = self.gate("spent", sys.executable, "-c", f"print({json.dumps(chr(10).join(said))})")
+        self.assertEqual(passed.returncode, 0, passed.stdout)
+        kept = Path(gate_verdict.VERDICTS, "spent.txt").read_text().splitlines()
+        self.assertIn(classes, kept)
+        at = kept.index(classes)
+        self.assertEqual(
+            [line.split()[-1] for line in kept[at + 1 : at + 3]],
+            ["hq.example.tests.test_pages.EveryPageTests", "hq.example.tests.test_rows.RowTests"],
+        )
+        self.assertNotIn("not a class time", "\n".join(kept))
+        self.assertIn(f"[test] {measured}", kept)
+
     # A command that says what it judged in the file its gate hands it, and exits as told.
     SAYS_JUDGED = (
         "import os, sys; from pathlib import Path;"

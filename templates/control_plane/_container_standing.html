@@ -2,16 +2,17 @@
 One container's standing as two table cells (application.containers.ImageStanding):
 what is known against the version that runs, and whether a newer one is
 published. Shared by the containers page and a machine's container table so
-the two cannot drift. A newer version is drawn as its name alone, which the
-cell cuts beside its icon; a word after a name the cell cuts would stand on a
-line of its own, so "available" is the reader's alone.
+the two cannot drift. Each known state is a status led by its mark. A newer
+version is drawn as its name alone, which the cell cuts beside its mark; a
+word after a name the cell cuts would stand on a line of its own, so
+"available" is the reader's alone.
 {% endcomment %}
-<td class="container-standing{% if standing.state == "vulnerable" %} is-vulnerable{% endif %}">
-  {% if standing.state == "vulnerable" %}{% include "partials/_icon.html" with name="shield" %} {% endif %}{% if standing.vulnerabilities_note %}<span{% if standing.state != "vulnerable" %} class="muted"{% endif %} tabindex="0" data-tip="{{ standing.vulnerabilities_note }}">{{ standing.vulnerabilities|capfirst|breakable }}</span>{% else %}<span class="muted">{{ standing.vulnerabilities|capfirst|breakable }}</span>{% endif %}
+<td>
+  {% if standing.state == "vulnerable" %}{% status standing.vulnerabilities tone=standing.vulnerability_tone pill=False icon="shield" tip=standing.vulnerabilities_note %}{% elif standing.vulnerabilities_note %}<span class="muted" tabindex="0" data-tip="{{ standing.vulnerabilities_note }}">{{ standing.vulnerabilities|capfirst|breakable }}</span>{% else %}<span class="muted">{{ standing.vulnerabilities|capfirst|breakable }}</span>{% endif %}
 </td>
-<td class="container-standing{% if standing.update_state == "available" %} is-behind{% elif standing.update_state == "current" %} is-current{% endif %}">
-  {% if standing.update_state == "available" and standing.latest %}{% include "partials/_icon.html" with name="deploy" %} {{ standing.latest|breakable }}<span class="visually-hidden"> available</span>
-  {% elif standing.update_state == "available" %}{% include "partials/_icon.html" with name="deploy" %} {{ standing.update|breakable }}
-  {% elif standing.update_state == "current" %}{% include "partials/_icon.html" with name="check-circle" %} {{ standing.update|capfirst|breakable }}
+<td>
+  {% if standing.update_state == "available" and standing.latest %}{% status standing.latest tone="attention" pill=False icon="deploy" %}<span class="visually-hidden"> available</span>
+  {% elif standing.update_state == "available" %}{% status standing.update tone="attention" pill=False icon="deploy" %}
+  {% elif standing.update_state == "current" %}{% status standing.update tone="good" pill=False icon="check-circle" ink="context" %}
   {% else %}<span class="muted" tabindex="0" data-tip="{{ standing.update_note }}">{{ standing.update|capfirst|breakable }}</span>{% endif %}
 </td>

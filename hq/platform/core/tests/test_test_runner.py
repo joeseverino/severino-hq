@@ -949,16 +949,16 @@ class MarkerIsolationTests(SimpleTestCase):
         self.assertFalse(after, "the next class sets up with no markers")
 
     def test_each_process_keeps_its_markers_apart(self):
-        from hq.platform.core import test_runner
+        from hq.platform.core import isolation_testing as isolation
 
-        here = test_runner.own_markers()
-        kept = {setting: getattr(settings, setting) for setting, _ in test_runner.MARKERS}
+        here = isolation.own_markers()
+        kept = {setting: getattr(settings, setting) for setting, _ in isolation.MARKERS}
         try:
-            with unittest.mock.patch("hq.platform.core.test_runner.os.getpid", lambda: -1):
-                other = test_runner.own_markers()
+            with unittest.mock.patch("hq.platform.core.isolation_testing.os.getpid", lambda: -1):
+                other = isolation.own_markers()
                 heartbeat = settings.SEVERINO_CONTROLLER_HEARTBEAT
         finally:
-            test_runner._markers = (os.getpid(), here)
+            isolation._markers = (os.getpid(), here)
             for setting, value in kept.items():
                 setattr(settings, setting, value)
 

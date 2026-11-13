@@ -333,10 +333,10 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 }
 .fact:is(.tone-good, .tone-attention, .tone-serious) .band-icon { background: var(--tone-bg); color: var(--tone-ink); }
 .fact:is(.tone-good, .tone-attention, .tone-serious) .fact-value { color: var(--tone-ink); }
-/* Under the value, running words: its lines are the ones its markup declares, small print (`<small>`, a `detail=` given as lines) or a list of names that are each the whole of their item (`.band-note`), read by their color. A flex or grid box would make each run of words between two elements a row of its own. */
+/* Under the value, running words: its lines are the ones its markup declares, small print (`<small>`, a `detail=` given as lines), read by their color. A flex or grid box would make each run of words between two elements a row of its own. */
 .facts-band .fact-detail { grid-row: 3; grid-column: -2; min-width: 0; margin: 0; color: var(--muted); font-size: var(--text-sm); line-height: 1.4; }
-.facts-band .fact-detail > :is(small, .band-note) { display: block; }
-.facts-band .fact-detail > :is(small, .band-note) + :is(small, .band-note) { margin-block-start: var(--space-1); }
+.facts-band .fact-detail > small { display: block; }
+.facts-band .fact-detail > small + small { margin-block-start: var(--space-1); }
 /* A detail's link, or a word that opens its tip, is a box a target tall (`--target-min`), however few words share its line, set on the baseline of the words beside it; one set by its top would stand off their baseline by the difference between its line and theirs. */
 .facts-band .fact-detail :is(a, [tabindex]) { display: inline-block; line-height: var(--target-min); }
 
@@ -361,12 +361,12 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .control-origin strong { color: var(--ink); font-weight: 600; }
 
 .icon { width: 1em; height: 1em; flex: none; }
-/* An icon a cell's kept line opens with (tables.css) hangs in the line's padding, a float of no width there, so the value's lines start clear of it and a name the line cuts fills what the line holds out for, beside the icon on its first line. An indent would not do: a cut name is as wide as the line's box, which leaves out the indent its first line gets back. The hang is past the line's hold, so the value holds out for what it would with no icon. In a narrow box the line is no block, and the icon sits in it as in any line. */
+/* An icon a cell's kept line opens with (tables.css), its own or a status's (`icon=`), hangs in the line's padding, a float of no width there, so the value's lines start clear of it and a name the line cuts fills what the line holds out for, beside the icon on its first line. An indent would not do: a cut name is as wide as the line's box, which leaves out the indent its first line gets back. The hang is past the line's hold, so the value holds out for what it would with no icon. In a narrow box the line is no block, and the icon sits in it as in any line. */
 @container style(--box: whole) {
-  .kept-line:has(> .icon:first-child) {
+  .kept-line:has(> .icon:first-child, > .toned:first-child > .icon:first-child) {
     --hang: 1.5em;
     padding-inline-start: var(--hang);
-    & > .icon:first-child {
+    & > .icon:first-child, & > .toned:first-child > .icon:first-child {
       float: inline-start; margin-inline: calc(-1 * var(--hang)) calc(var(--hang) - 1em);
       /* Centered on the first line, as an icon set in the line is. */
       margin-block-start: calc((1lh - 1em) / 2);

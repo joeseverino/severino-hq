@@ -182,9 +182,9 @@ SELECTORS = {
     # stylesheet leaves to the vendor's own rules (tokens.css): the API
     # reference's viewer, which ReferenceBrowserTests holds to its own rules.
     "vendored": "[data-vendored]",
-    # A check in the connection panel: what it says, then what it was read from.
-    "check_statement": ".conn-layer-label",
-    "check_evidence": ".conn-layer-evidence",
+    # A check of a check ladder: what it says, then what it was read from.
+    "check_statement": ".ladder-statement",
+    "check_evidence": ".ladder-evidence",
     # A value a disclosure's handle names.
     "summary_value": "main summary code",
     # The topology map, its lanes and the nodes in them.

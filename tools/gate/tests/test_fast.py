@@ -337,6 +337,14 @@ class FastGateTreeTests(GateTestCase):
         # A labeled run keeps the source tests a bare whole-suite run leaves out.
         self.assertEqual(excluded_tags(labels, set(), set()), set())
 
+    @tag("tree")
+    def test_the_walk_started_beside_the_selection_is_the_one_read(self):
+        with patch.object(fast_gate, "tagged", return_value=["hq.a.tests.test_tree.Walks"]) as walked:
+            walking = fast_gate.walk_for_tree()
+            labels = fast_gate.with_tree(["hq.a.tests.test_b"], ["docs/Example.md"], walking)
+        walked.assert_called_once_with(fast_gate.ROOT, "tree")
+        self.assertEqual(labels, ["hq.a.tests.test_b", "hq.a.tests.test_tree.Walks"])
+
     def test_a_test_both_selected_and_tagged_tree_runs_once(self):
         module = "tools.gate.tests.test_turn"
         once = DiscoverRunner(verbosity=0).build_suite([module])

@@ -78,6 +78,8 @@ uv pip install --quiet --python "$python" --require-hashes -r "$host_requirement
 PYTHONPATH="$hq_root" "$python" -m hq_sdk.validation src
 
 export DJANGO_DEBUG=true
+# Each template read once, as the host's gates and production read them.
+export DJANGO_TEMPLATE_CACHE=1
 export DJANGO_SETTINGS_MODULE=hq.config.settings
 # A check never opens the host checkout's own database.
 export SEVERINO_DATABASE_PATH="$work/check.sqlite3"

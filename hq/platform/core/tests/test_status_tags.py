@@ -20,7 +20,14 @@ class StatusPillTests(SimpleTestCase):
     def test_a_state_is_said_in_sentence_case_whatever_its_source_wrote(self):
         """Docker's "exited", a model's "Done" and a tag's "online" read alike."""
 
-        for said, shown in (("exited", "Exited"), ("online", "Online"), ("Done", "Done"), ("iOS", "iOS")):
+        for said, shown in (
+            ("exited", "Exited"),
+            ("online", "Online"),
+            ("Done", "Done"),
+            ("iOS", "iOS"),
+            ("v1.2.3", "v1.2.3"),
+            ("k3s ready", "k3s ready"),
+        ):
             with self.subTest(said):
                 pill = elements(_drawn("{% status state %}", state=said), "span")[0]
                 self.assertEqual(pill.words, shown)
@@ -120,6 +127,32 @@ class StatusPillTests(SimpleTestCase):
         for source in ('{% status "Up" tone="good" %}', '{% status "Up" tone="good" pill=False %}'):
             with self.subTest(source):
                 self.assertNotIn("toned-dot", elements(_drawn(source), "span")[0].classes)
+
+    def test_a_state_led_by_its_mark_draws_the_mark_in_its_tone(self):
+        """A cell's state ("1 serious", "Up to date") reads by its mark as well
+        as its color: the mark inside the toned words, before them, and with
+        context ink only the mark takes the tone."""
+
+        html = _drawn('{% status "1 serious" tone="serious" pill=False icon="shield" %}')
+        drawn = elements(html, "span")[0]
+        self.assertEqual(drawn.words, "1 serious")
+        self.assertIn("toned-serious", drawn.classes)
+        self.assertNotIn("toned-ink-context", drawn.classes)
+        (mark,) = elements(html, "svg")
+        self.assertIn(drawn, mark.ancestors)
+        self.assertLess(html.index("<svg"), html.index("1 serious"))
+
+        quiet = elements(
+            _drawn('{% status "Up to date" tone="good" pill=False icon="check-circle" ink="context" %}'), "span"
+        )[0]
+        self.assertIn("toned-good", quiet.classes)
+        self.assertIn("toned-ink-context", quiet.classes)
+        self.assertNotIn("toned-dot", quiet.classes)
+
+    def test_a_mark_stands_only_before_a_states_words(self):
+        for options in ({}, {"pill": False, "dot": True}, {"chip": True}):
+            with self.subTest(options), self.assertRaises(ValueError):
+                status_pill("Up", icon="check-circle", **options)
 
     def test_a_chip_refuses_a_tone(self):
         for options in ({"tone": "good"}, {"pill": False}, {"dot": True}):

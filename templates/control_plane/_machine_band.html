@@ -9,7 +9,8 @@ for: one band under the head, as a service's and HQ's own page open.
     {% comment %}A connection named for this machine is named by its kind, a word rather than an identifier.{% endcomment %}
     {% with found=reached_links.0 %}{% if found.0.title %}{% entity found.0 %}{% else %}{% entity found.0 code=True %}{% endif %}{% endwith %}
   {% detail %}
-    {% for link, unanswered in reached_links %}{% if forloop.first %}{% if unanswered %}<small>Not answering</small>{% endif %}{% elif unanswered %}<small>{% entity link %} not answering</small>{% else %}<span class="band-note">{% entity link %}</span>{% endif %}{% endfor %}
+    {% with found=reached_links.0 %}{% if found.1 %}<small>Not answering</small>{% endif %}{% endwith %}
+    {% if reached_links|length > 1 %}<ul class="dot-list">{% for link, unanswered in reached_links|slice:"1:" %}<li{% if unanswered %} class="prose"{% endif %}>{% entity link %}{% if unanswered %} not answering{% endif %}</li>{% endfor %}</ul>{% endif %}
   {% endfact %}
   {% endif %}
   {% if machine.containers %}
@@ -30,7 +31,7 @@ for: one band under the head, as a service's and HQ's own page open.
     {% if names_listed %}
     {% if machine.roles %}<small>{% for role in machine.roles %}<span tabindex="0" data-tip="{{ role.detail }}">{{ role.label|breakable }}</span>{% if not forloop.last %}{% dot %}{% endif %}{% endfor %}</small>{% endif %}
     {% else %}
-    <span class="band-note">{% for link in serves_links %}{% entity link %}{% if forloop.first and machine.runs_hq %} (<a href="{% url 'hq_self' %}">{{ hq_label|breakable:")" }}</a>{% endif %}{% if not forloop.last or machine.roles %}{% dot %}{% endif %}{% endfor %}{% for role in machine.roles %}<span tabindex="0" data-tip="{{ role.detail }}">{{ role.label|breakable }}</span>{% if not forloop.last %}{% dot %}{% endif %}{% endfor %}</span>
+    <ul class="dot-list">{% for link in serves_links %}<li>{% entity link %}{% if forloop.first and machine.runs_hq %} (<a href="{% url 'hq_self' %}">{{ hq_label|breakable:")" }}</a>{% endif %}</li>{% endfor %}{% for role in machine.roles %}<li><span tabindex="0" data-tip="{{ role.detail }}">{{ role.label|breakable }}</span></li>{% endfor %}</ul>
     {% endif %}
   {% endfact %}
   {% endif %}

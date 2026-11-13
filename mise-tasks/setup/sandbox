@@ -7,7 +7,9 @@
 # own, joined by colons; test_audit_tasks.py holds it to them.
 set -euf
 
-uv sync --locked --quiet
+# Inexact: an exact sync would uninstall the groups other tasks' `uv run
+# --group` installed beside it (tools/tests/test_task_syncs.py).
+uv sync --locked --inexact --quiet
 
 IFS=:
 for path in $SANDBOX_WRITES; do

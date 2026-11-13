@@ -18,6 +18,16 @@ ENTRIES = {
         '<p><strong>{% status "Example" tone="good" dot=True ink="context" %}</strong>'
         ' {% status "Examples" tone="attention" dot=True ink="context" %}</p>{% endsection %}'
     ),
+    # A state led by its mark, as a container's standing is: its words in its
+    # tone, a version said as written, and words in the ink around them with
+    # only the mark toned.
+    "status/icon": Entry(
+        '{% section "Example standings" %}'
+        '<p>{% status "1 serious" tone="serious" pill=False icon="shield" tip="An example advisory" %}</p>'
+        '<p>{% status "v2.10.0-example-build-with-a-long-name" tone="attention" pill=False icon="deploy" %}</p>'
+        '<p>{% status "Up to date" tone="good" pill=False icon="check-circle" ink="context" %}</p>'
+        "{% endsection %}"
+    ),
     # The names a record carries, as chips beside its name: each as written.
     "status/chip": Entry(
         '{% section "Example project" %}<p><strong>example-app</strong> {% status "django" chip=True %}'

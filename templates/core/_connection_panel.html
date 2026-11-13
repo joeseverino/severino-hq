@@ -58,28 +58,20 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
       {% if connection.identity.session_expires %}{% fact "Session until" %}{{ connection.identity.session_expires|when }}{% endfact %}{% endif %}
     {% endfacts %}
     {% if connection.identity.corroborated %}
-      <p class="conn-agree conn-agree-yes">
-        Your tailnet account and your sign-in belong to the same person.
-      </p>
+      {% notice tone="success" %}Your tailnet account and your sign-in belong to the same person.{% endnotice %}
     {% elif connection.identity.conflicted %}
-      <p class="conn-agree conn-agree-no">
-        Your tailnet account and your sign-in belong to different people.
-      </p>
+      {% notice tone="warning" %}Your tailnet account and your sign-in belong to different people.{% endnotice %}
     {% elif connection.identity.tailnet_user %}
-      <p class="conn-agree conn-agree-no">
-        Your tailnet account and your sign-in are not linked.
-      </p>
+      {% notice tone="warning" %}Your tailnet account and your sign-in are not linked.{% endnotice %}
     {% else %}
-      <p class="conn-agree conn-agree-no">
-        Only your sign-in identifies you.
-      </p>
+      {% notice tone="warning" %}Only your sign-in identifies you.{% endnotice %}
     {% endif %}
   {% endsection %}
 
   {% section "The link" %}
     {% comment %}A reading older than the panel asks again for is what HQ last saw: the rows below are as of then.{% endcomment %}
     {% if connection.tailnet_observed_at and not connection.tailnet_current %}
-      <p class="conn-note" data-last-seen>Tailnet read {{ connection.tailnet_observed_at|when }}.</p>
+      <p class="muted" data-last-seen>Tailnet read {{ connection.tailnet_observed_at|when }}.</p>
     {% endif %}
     {% facts %}
       {% if connection.path_label %}{% fact "Path" %}<strong>{{ connection.path_label|breakable }}</strong>{% endfact %}{% endif %}
@@ -95,96 +87,75 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
       {% if connection.carried %}{% fact "Node traffic" value=connection.carried %}{% endif %}
       {% fact "Browser round trip" %}<span data-rtt>{% empty_value %}</span><span hidden data-rtt-measure="{% url 'health_live' %}"></span>{% endfact %}
       {% fact "Encryption" value=connection.transport_path %}
-      {% if connection.peer_keys %}
-        {% comment %}
-        The two keys the rows above rest on, checkable against `tailscale
-        status` on either machine. Folded: wanted only when the claim is doubted.
-        {% endcomment %}
-        {% fact "Peered as" %}{% comment %}
-        <!-- ast-grep-ignore: hand-drawn-fold --> the request inspector's own disclosures, a part of its own
-        {% endcomment %}<details class="conn-more">
-            <summary>Both node keys</summary>
-            {% facts %}
-              {% for label, key in connection.peer_keys %}{% fact label %}<code>{{ key|breakable }}</code>{% endfact %}{% endfor %}
-            {% endfacts %}
-            <p class="conn-row-note">Compare with <code>tailscale status</code>.</p>
-          </details>{% endfact %}
-      {% endif %}
     {% endfacts %}
+    {% if connection.peer_keys %}
+      {% comment %}
+      The two keys the rows above rest on, checkable against `tailscale
+      status` on either machine. Folded: wanted only when the claim is doubted.
+      {% endcomment %}
+      {% section "Both node keys" fold=True %}
+        {% facts %}
+          {% for label, key in connection.peer_keys %}{% fact label %}<code>{{ key|breakable }}</code>{% endfact %}{% endfor %}
+        {% endfacts %}
+      {% foot %}Compare with <code>tailscale status</code>.
+      {% endsection %}
+    {% endif %}
   {% endsection %}
 
-  {% section "Path to HQ" css="conn-path" data_connection_layers=True %}
-    <ol class="conn-layers">
+  {% section "Path to HQ" data_connection_layers=True %}
+    {% check_ladder route=True %}
       {% for hop in request_path.hops %}
-        <li class="conn-layer conn-layer-{{ hop.check.layer_state|default:'unknown' }}">
-          {% comment %}
-          <!-- ast-grep-ignore: hand-drawn-fold --> the request inspector's own disclosures, a part of its own
-          {% endcomment %}<details data-connection-hop="{{ hop.step }}"{% if hop.check.state == 'contradicted' %} open{% endif %}>
-            <summary>
-              <span class="conn-tick" aria-hidden="true">{% if hop.check.state == 'proven' %}&check;{% elif hop.check.state == 'contradicted' %}&times;{% else %}?{% endif %}</span>
-              <span class="conn-layer-boundary">{{ hop.label|breakable }}</span>
-              <span class="conn-layer-label">{% if hop.link and hop.link.url %}{{ hop.link.label|breakable }}{% elif hop.name %}{{ hop.name|breakable }}{% elif hop.detail %}{{ hop.detail|breakable }}{% else %}{% empty_value %}{% endif %}{% if hop.name and hop.detail and hop.detail != hop.name and hop.detail != hop.link.label %}<span class="conn-hop-detail">{{ hop.detail|breakable }}</span>{% elif hop.link.url and hop.name and hop.name != hop.link.label %}<span class="conn-hop-detail">{{ hop.name|breakable }}</span>{% endif %}</span>
-              <span class="conn-hop-more">{% if hop.layers %}{{ hop.layers|length|counted:"check,checks" }}{% else %}Details{% endif %}</span>
-            </summary>
-            <div class="conn-layer-body">
-              {% comment %}The thing's own page, here rather than in the summary: a link inside
-              the control that opens the row is a control inside a control.{% endcomment %}
-              {% if hop.link and hop.link.url %}<div class="conn-hop-page">{% entity hop.link %}</div>{% endif %}
-              {% if hop.check or hop.source %}<p class="muted">{% if hop.check %}{{ hop.check.label|breakable:"." }} {{ hop.check.detail|breakable }}{% endif %}{% if hop.source %} Read from {% with mark=hop.source.observed_at|then:",|." %}{{ hop.source.phrase|breakable:mark }}{% endwith %}{% if hop.source.observed_at %} {{ hop.source.observed_at|when }}.{% endif %}{% endif %}</p>{% endif %}
-              {% if hop.check.step %}<p class="conn-agree conn-agree-no">{{ hop.check.step|breakable }}</p>{% endif %}
-              {% if hop.certificate %}<p class="conn-row-note">{{ hop.certificate.statement|breakable }}</p>{% endif %}
-              {% if hop.unread %}<p class="conn-row-note">{{ hop.unread|capfirst|breakable }}</p>{% endif %}
-              {% for relation, link in hop.overlays %}<p class="conn-row-note">{{ relation|breakable }} {% entity link %}</p>{% endfor %}
-              {% if hop.evidence %}
-                {% table_region "Evidence" %}
-                  <table class="data-table">
-                    <thead><tr>{% table_heading "Value" "identifier" gutter=True %}{% table_heading "Type" "status" %}{% table_heading "Note" drop=1 %}</tr></thead>
-                    <tbody>
-                      {% for item in hop.evidence %}
-                        <tr>
-                          <td><code class="cell-whole">{{ item.value|breakable }}</code></td>
-                          <td>{% status item.role|default:item.label tone=item.tone %}</td>
-                          <td>{{ item.detail|breakable }}</td>
-                        </tr>
-                      {% endfor %}
-                    </tbody>
-                  </table>
-                {% endtable_region %}
-              {% endif %}
-              {% if hop.layers %}
-                <ol class="conn-layers">
-                  {% for layer in hop.layers %}
-                    <li class="conn-layer conn-layer-{{ layer.state }}">
-                      {% comment %}
-                      <!-- ast-grep-ignore: hand-drawn-fold --> the request inspector's own disclosures, a part of its own
-                      {% endcomment %}<details data-connection-layer="{{ layer.id }}">
-                        <summary>
-                          <span class="conn-tick" aria-hidden="true">{% if layer.state == 'unknown' %}?{% elif layer.holds %}&check;{% else %}&times;{% endif %}</span>
-                          <span class="conn-check"><span class="conn-layer-label">{{ layer.label|breakable }}</span>{% if layer.evidence %} <code class="conn-layer-evidence">{{ layer.evidence|breakable }}</code>{% endif %}</span>
-                        </summary>
-                        <div class="conn-layer-body">
-                          <p class="muted">{{ layer.detail|breakable }}</p>
-                          {% if layer.rules %}
-                            <div class="conn-rules">
-                              {% for rule in layer.rules %}<code>{{ rule|breakable }}</code>{% endfor %}
-                            </div>
-                          {% endif %}
-                        </div>
-                      </details>
-                    </li>
+        {% check_rung state=hop.check.layer_state kind=hop.label open=hop.check.contradicted data_connection_hop=hop.step %}
+          {% if hop.link and hop.link.url %}{{ hop.link.label|breakable }}{% elif hop.name %}{{ hop.name|breakable }}{% elif hop.detail %}{{ hop.detail|breakable }}{% else %}{% empty_value %}{% endif %}
+        {% detail %}
+          {% if hop.name and hop.detail and hop.detail != hop.name and hop.detail != hop.link.label %}{{ hop.detail|breakable }}{% elif hop.link.url and hop.name and hop.name != hop.link.label %}{{ hop.name|breakable }}{% endif %}
+        {% more %}
+          {% if hop.layers %}{{ hop.layers|length|counted:"check,checks" }}{% else %}Details{% endif %}
+        {% page %}
+          {% if hop.link and hop.link.url %}{% entity hop.link %}{% endif %}
+        {% body %}
+          {% if hop.check or hop.source %}<p class="muted">{% if hop.check %}{{ hop.check.label|breakable:"." }} {{ hop.check.detail|breakable }}{% endif %}{% if hop.source %} Read from {% with mark=hop.source.observed_at|then:",|." %}{{ hop.source.phrase|breakable:mark }}{% endwith %}{% if hop.source.observed_at %} {{ hop.source.observed_at|when }}.{% endif %}{% endif %}</p>{% endif %}
+          {% if hop.check.step %}{% notice tone="warning" %}{{ hop.check.step|breakable }}{% endnotice %}{% endif %}
+          {% if hop.certificate %}<p class="conn-row-note">{{ hop.certificate.statement|breakable }}</p>{% endif %}
+          {% if hop.unread %}<p class="conn-row-note">{{ hop.unread|capfirst|breakable }}</p>{% endif %}
+          {% for relation, link in hop.overlays %}<p class="conn-row-note">{{ relation|breakable }} {% entity link %}</p>{% endfor %}
+          {% if hop.evidence %}
+            {% table_region "Evidence" %}
+              <table class="data-table">
+                <thead><tr>{% table_heading "Value" "identifier" gutter=True %}{% table_heading "Type" "status" %}{% table_heading "Note" drop=1 %}</tr></thead>
+                <tbody>
+                  {% for item in hop.evidence %}
+                    <tr>
+                      <td><code class="cell-whole">{{ item.value|breakable }}</code></td>
+                      <td>{% status item.role|default:item.label tone=item.tone %}</td>
+                      <td>{{ item.detail|breakable }}</td>
+                    </tr>
                   {% endfor %}
-                </ol>
-              {% endif %}
-            </div>
-          </details>
-        </li>
+                </tbody>
+              </table>
+            {% endtable_region %}
+          {% endif %}
+          {% if hop.layers %}
+            {% check_ladder %}
+              {% for layer in hop.layers %}
+                {% check_rung state=layer.state evidence=layer.evidence data_connection_layer=layer.id %}
+                  {{ layer.label|breakable }}
+                {% body %}
+                  <p class="muted">{{ layer.detail|breakable }}</p>
+                  {% if layer.rules %}
+                    {% stack_list %}{% for rule in layer.rules %}<li><code>{{ rule|breakable }}</code></li>{% endfor %}{% endstack_list %}
+                  {% endif %}
+                {% endcheck_rung %}
+              {% endfor %}
+            {% endcheck_ladder %}
+          {% endif %}
+        {% endcheck_rung %}
       {% endfor %}
-    </ol>
+    {% endcheck_ladder %}
   {% aside %}<span class="count">{{ request_path.proof|breakable }}</span>
   {% endsection %}
   </div>
 
-  <div class="conn-aside">
   {% section "Addresses" fold=True open=True lede="Yours and HQ's" %}
     <div class="section-flow">
       {% section "Your addresses" %}
@@ -287,6 +258,5 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
       {% endsection %}
   {% aside %}<span class="count">Yours {{ request_path.headers|length }}</span>
   {% endsection %}
-  </div>
 
 </div>

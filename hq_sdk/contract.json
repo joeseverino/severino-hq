@@ -2513,6 +2513,7 @@
           "chip=",
           "dot=",
           "ink=",
+          "icon=",
           "**data"
         ]
       },
@@ -3562,6 +3563,7 @@
           "chip=",
           "dot=",
           "ink=",
+          "icon=",
           "**data"
         ],
         "parts": []

@@ -182,10 +182,12 @@ linux-x64 = { asset_pattern = "codeql-bundle-linux64.tar.zst" }
 # locked"). A gate sees no extension set it did not ask for. A task extends one
 # template and a template extends none, so django-browser restates django's env
 # (test_browser_gate_tasks holds it to it). The composed suite extends django
-# and sets what it changes in its own header.
+# and sets what it changes in its own header. A gate keeps each template it
+# has read, as production does: DEBUG alone would read and parse every
+# template again on every render, which is most of what a page costs a test.
 
 [task_templates.django]
-env = { SEVERINO_DATABASE_PATH = false, SEVERINO_SANDBOX = "1", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false }
+env = { SEVERINO_DATABASE_PATH = false, SEVERINO_SANDBOX = "1", DJANGO_DEBUG = "1", DJANGO_TEMPLATE_CACHE = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false }
 
 # ------------------------------------------------------------------ heavy
 # A task that loads the machine takes the heavy turn: mise's task lock
@@ -207,7 +209,7 @@ shell = "tools/lib/measured sh -o errexit -c"
 # (axe-core, which the survey runs) installed first, and the test classes its
 # task names in `vars.classes`, which mise renders from the extending task's own vars.
 [task_templates.django-browser]
-env = { SEVERINO_DATABASE_PATH = false, SEVERINO_SANDBOX = "1", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false }
+env = { SEVERINO_DATABASE_PATH = false, SEVERINO_SANDBOX = "1", DJANGO_DEBUG = "1", DJANGO_TEMPLATE_CACHE = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false }
 lock = ["gate", "heavy"]
 timeout = "30m"
 shell = "tools/lib/measured sh -o errexit -c"
@@ -229,7 +231,7 @@ allow_write = [
   "{% if os() == 'macos' %}{{ env.HOME }}/Library/Caches{% else %}{{ xdg_cache_home }}{% endif %}/go-build",
 ]
 depends = ["setup:sandbox"]
-env = { UV_NO_CACHE = "1", SEVERINO_DATABASE_PATH = false, SEVERINO_SANDBOX = "1", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false }
+env = { UV_NO_CACHE = "1", SEVERINO_DATABASE_PATH = false, SEVERINO_SANDBOX = "1", DJANGO_DEBUG = "1", DJANGO_TEMPLATE_CACHE = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false }
 
 # ---------------------------------------------------------------- servers
 # The development servers. Each profile is a task whose env says where it

@@ -26,8 +26,9 @@ cleanup() {
 trap cleanup EXIT
 # Run under lint:shell, this suite is inside that task's turn, which every
 # mise it starts would inherit and so never wait, and inside its measured run,
-# which every run would take as its own.
-unset MISE_TASK_LOCKS MISE_TASK_LOCK_TIMEOUT HQ_MEASURED
+# which every run would take as its own. Under fast, mise's config
+# environment is fast's, whose summary output keeps a passing run silent.
+unset MISE_TASK_LOCKS MISE_TASK_LOCK_TIMEOUT HQ_MEASURED MISE_ENV
 # The uv this checkout pins, for the test runs made from a directory whose
 # config names none, where a shim finds no version.
 uv="$(mise -C "${repo}" which uv)"
@@ -333,6 +334,7 @@ MISE_TASK_LOCK_TIMEOUT=1s mise -C "${repo}" run -q test hq.platform.core.tests.t
     >"${work}/light" 2>&1 || { cat "${work}/light" >&2; fail "a narrow test run waited for the turn, or failed"; }
 MISE_TASK_LOCK_TIMEOUT=1s mise -C "${repo}" run -q lint:source tools.gate.tests.test_turn.NarrowRunTests \
     >"${work}/light" 2>&1 || { cat "${work}/light" >&2; fail "a narrow source test run waited for the turn, or failed"; }
+one_line "${work}/light" "a narrow source test run, outside the turn,"
 for task in "test hq.platform.core.tests" lint:source; do
     status=0
     # shellcheck disable=SC2086  # the task and its label, as typed

@@ -244,7 +244,7 @@ class DemoSiteTests(unittest.TestCase):
         items = (OUT / "action-items" / "index.html").read_text(encoding="utf-8").count('class="attention-title"')
         self.assertLessEqual(items, _MOST_ITEMS)
         connection = (OUT / "connection" / "index.html").read_text(encoding="utf-8")
-        self.assertEqual(re.findall(r'class="conn-layer conn-layer-(?!holds")(\w+)"', connection), [])
+        self.assertEqual(re.findall(r'class="ladder-rung" data-state="(?!holds")([\w-]+)"', connection), [])
 
     def test_a_list_s_toolbar_filters_and_says_what_it_cannot_search(self):
         # A filter ticked in a list's toolbar, which sends the order the list

@@ -99,6 +99,12 @@ class HopCheck:
     def layer_state(self) -> str:
         return _CHECK_STATES[self.state]
 
+    @property
+    def contradicted(self) -> bool:
+        """The request disagrees with the readings here, so the hop is shown opened."""
+
+        return self.state == CONTRADICTED
+
 
 # A forwarded hop's role as the tone its pill takes.
 _ROLE_TONES = {"judged": "good", "ignored": "serious"}

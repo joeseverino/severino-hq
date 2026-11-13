@@ -1580,6 +1580,38 @@ ENTRIES = {
             "--token-file /run/secrets/example-agent-token --name example-host-01.example.com"
         },
     ),
+    # A route as a check ladder: a stop that holds, opened to its own checks
+    # (one read from a value, one that does not hold with the rules it rests
+    # on), a stop not read, and one that does not hold, drawn opened.
+    "part/check-ladder-route": Entry(
+        '{% section "Example path" %}{% check_ladder route=True %}'
+        '{% check_rung state="holds" kind="Device" open=True data_example="device" %}example-laptop{% detail %}Example OS'
+        '{% more %}2 checks{% page %}<a href="/example/machines/example-laptop/">example-laptop</a>{% body %}<p>Example HQ confirmed this example device.</p>'
+        "{% check_ladder %}"
+        '{% check_rung state="holds" evidence="192.0.2.10" %}Example address is the device\'s'
+        "{% body %}<p>The address the request came from is the device's own.</p>{% endcheck_rung %}"
+        '{% check_rung state="does-not" evidence=long %}Example policy admits the device'
+        "{% body %}<p>No example rule admits it.</p>{% stack_list %}<li><code>example:rule-one</code></li>"
+        "<li><code>example:rule-two</code></li>{% endstack_list %}{% endcheck_rung %}"
+        "{% endcheck_ladder %}{% endcheck_rung %}"
+        '{% check_rung kind="Tailnet" %}example-tailnet.example.com{% more %}Details'
+        "{% body %}<p>Example HQ could not read the tailnet.</p>{% endcheck_rung %}"
+        '{% check_rung state="does-not" kind="HQ" open=True %}hq.example.com{% more %}Details'
+        "{% body %}<p>This request disagrees with what example HQ read here.</p>"
+        '{% notice tone="warning" %}Point example-hq.example.com at the example proxy.{% endnotice %}{% endcheck_rung %}'
+        "{% endcheck_ladder %}{% endsection %}",
+        {"long": "example-tag:example-device-with-a-long-name.example.com"},
+    ),
+    # Checks read down as rows, with no route: each in a frame of its own.
+    "part/check-ladder": Entry(
+        '{% section "Example checks" %}{% check_ladder %}'
+        '{% check_rung state="holds" evidence="192.0.2.10" %}Example address is known'
+        "{% body %}<p>Example HQ knows this address.</p>{% endcheck_rung %}"
+        '{% check_rung state="does-not" %}Example sign-in is linked{% body %}<p>No example account links it.</p>'
+        "{% endcheck_rung %}"
+        "{% check_rung %}Example lock is read{% body %}<p>Example HQ could not read it.</p>{% endcheck_rung %}"
+        "{% endcheck_ladder %}{% endsection %}",
+    ),
     # Which network the link rides over, as the panel's Connection row says
     # it: across the internet with the address to look up, through a relay,
     # and on the reader's own network.

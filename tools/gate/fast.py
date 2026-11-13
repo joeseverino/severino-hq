@@ -15,6 +15,7 @@ import re
 import subprocess
 import sys
 import tempfile
+from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -492,8 +493,9 @@ def group_tasks(files: list[Path], reached: set[str], touched: set[str]) -> tupl
     return tuple(sorted({group_tests()[m] for m in picked}))
 
 
-def with_tree(labels: list[str], paths: list[str]) -> list[str]:
-    """The selected labels, and every test tagged tree when anything changed.
+def with_tree(labels: list[str], paths: list[str], walking: Future[list[str]] | None = None) -> list[str]:
+    """The selected labels, and every test tagged tree when anything changed:
+    those ``walking`` finds, or else a walk run now.
 
     A test that walks a directory finds a file there by no import and no name,
     a module, a template or a doc alike, so any change runs every test tagged
@@ -501,7 +503,21 @@ def with_tree(labels: list[str], paths: list[str]) -> list[str]:
     (hq/platform/application/tests/test_tree_tag.py holds the tag to the
     walks)."""
 
-    return [*labels, *tagged(ROOT, "tree")] if paths else labels
+    if not paths:
+        return labels
+    return [*labels, *(walking.result() if walking else tagged(ROOT, "tree"))]
+
+
+def walk_for_tree() -> Future[list[str]]:
+    """The walk for the tests tagged tree, started now on a thread: it runs in a
+    process of its own (``apart``), so it overlaps the reading of the import
+    graph and the paths the modules name, which it does not depend on."""
+
+    pool = ThreadPoolExecutor(max_workers=1)
+    walking = pool.submit(tagged, ROOT, "tree")
+    # Leaving the pool's block would wait for the walk; this lets it run on.
+    pool.shutdown(wait=False)
+    return walking
 
 
 # The module every test that reads each of the browser gate's modules goes
@@ -627,6 +643,7 @@ def main(asked: Usage) -> int:
     gate = None if list_only else Gate("fast")
     base = merge_base(asked.text("base") or None)
     changed, deleted = changed_paths(base, ROOT)
+    walking = walk_for_tree() if changed or deleted else None
     files = python_files()
     reached, touched = affected(changed, deleted, files)
     labels, total = test_labels(files, reached, touched)
@@ -637,7 +654,7 @@ def main(asked: Usage) -> int:
 
     if changed or deleted:
         print("[fast] every test tagged tree runs too: each walks the checkout, which the change is part of")
-    labels = with_tree(labels, [*changed, *deleted])
+    labels = with_tree(labels, [*changed, *deleted], walking)
     if gate is None:
         print("\n".join(labels))
         return 0

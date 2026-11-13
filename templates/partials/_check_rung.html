@@ -1,0 +1,24 @@
+{% comment %}
+One rung of a {% check_ladder %} (partials/_check_ladder.html), drawn by
+{% check_rung %}: {% check_rung state="does-not" evidence="192.0.2.10" data_example=True %}The statement{% body %}Why{% endcheck_rung %}.
+Its tick says how it stands (`state`: holds, does-not, or unknown when not
+read), then its `kind`, the statement with any `detail` part after it and
+the `evidence` it was read from, and its `more` part, which says what opening
+it shows. The `body` part is what it opens to, after the `page` part, a link
+to the thing the rung is about: there rather than in the summary, since a
+link inside the control that opens the rung is a control inside a control.
+`open` draws it opened, and
+each data_* option is an attribute of the disclosure.
+{% endcomment %}<li class="ladder-rung" data-state="{{ state }}">
+  {% comment %}
+  <!-- ast-grep-ignore: hand-drawn-fold --> the check ladder's rung, a part of its own
+  {% endcomment %}<details{{ attributes }}>
+    <summary>
+      <span class="ladder-mark" aria-hidden="true">{% if state == "holds" %}&check;{% elif state == "does-not" %}&times;{% else %}?{% endif %}</span>
+      {% if kind %}<span class="ladder-kind">{{ kind|breakable }}</span>{% endif %}
+      <span class="ladder-check"><span class="ladder-statement">{{ content|safe }}{% if detail %}<span class="ladder-detail">{{ detail|safe }}</span>{% endif %}</span>{% if evidence %} <code class="ladder-evidence">{{ evidence|breakable }}</code>{% endif %}</span>
+      {% if more %}<span class="ladder-more">{{ more|safe }}</span>{% endif %}
+    </summary>
+    {% if page or body %}<div class="ladder-body">{% if page %}<div class="ladder-page">{{ page|safe }}</div>{% endif %}{{ body|safe }}</div>{% endif %}
+  </details>
+</li>
