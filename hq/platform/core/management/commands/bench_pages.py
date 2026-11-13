@@ -31,6 +31,7 @@ from django.test.utils import CaptureQueriesContext, setup_databases, teardown_d
 from django.urls import URLPattern, reverse
 from jwt.algorithms import RSAAlgorithm
 
+from hq.platform.application.automation_adoption import ADOPT
 from hq.platform.application.automation_runs import capability_name
 from hq.platform.application.derivations import counting, derive_ahead
 from hq.platform.application.outbound_work import SUBJECT_FIELD
@@ -42,6 +43,7 @@ from hq.platform.application.tokens import KEYS
 from hq.platform.application.web_writes import RETRY_KEY_FIELD, new_key
 from hq.platform.core.bench import ZONES, Seeded, seed, unchanged_sweep
 from hq.platform.core.example_estate import automation
+lazy from hq.domains.control_plane.models import ApprovalRequest, SourceProposal
 lazy from hq.domains.jobs.testing import held_jobs
 lazy from hq.platform.core.models import LinkedAccount
 
@@ -109,6 +111,7 @@ SAMPLES: dict[str, Callable[[Seeded], dict[str, Any]]] = {
     "core:audit_detail": lambda s: {"pk": s.audit.pk},
     "core:approval_entry": lambda s: {"approval_id": s.approval.pk},
     "command": lambda _s: {"name": "expense.create"},
+    "control_plane:procedures_proposal": lambda _s: {"pk": _held_proposal()},
 }
 
 # The same page asked a narrower question: searched, filtered, sorted, paged.
@@ -122,6 +125,14 @@ VARIANTS: dict[str, tuple[str, ...]] = {
     "control_plane:topology_node": ("id=machine:lab-1",),
     "jobs:list": ("q=example", "state=failed", "host=lab-1", "sort=-created_at", "page=3"),
 }
+
+
+def _held_proposal() -> int | None:
+    """The proposal an agent asked to adopt, which widens what a run may do:
+    the one with the most to compare. The newest when none waits."""
+
+    held = ApprovalRequest.objects.filter(capability=ADOPT, state=ApprovalRequest.State.PENDING).first()
+    return held.payload["proposal"] if held else SourceProposal.objects.values_list("pk", flat=True).first()
 
 
 def _run_command(_seeded: Seeded) -> dict[str, Any] | None:
@@ -161,6 +172,8 @@ ACTIONS: dict[str, PostedAction] = {
     "control_plane:read_now": PostedAction(data=lambda s: {"kind": s.resource.kind}),
     "control_plane:visit": PostedAction(data=lambda _s: {"subject": "machine", "name": "lab-1"}),
     "dashboard_glance": PostedAction(),
+    "control_plane:procedures_refresh": PostedAction(),
+    "control_plane:procedures_adopt": PostedAction(kwargs=lambda _s: {"pk": _held_proposal()}),
 }
 
 # Actions that cannot be posted against a scratch database, and why.

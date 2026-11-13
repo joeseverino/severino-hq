@@ -52,7 +52,8 @@ class StackReviewTests(SimpleTestCase):
         held = SimpleNamespace(
             resource_kind="portainer.stack",
             payload={"spec": {"compose": DANGEROUS, "host": "edge-1"}},
+            baseline={},
         )
 
         self.assertTrue(_warnings(held))
-        self.assertEqual(_warnings(SimpleNamespace(resource_kind="portainer.stack", payload={})), ())
+        self.assertEqual(_warnings(SimpleNamespace(resource_kind="portainer.stack", payload={}, baseline={})), ())

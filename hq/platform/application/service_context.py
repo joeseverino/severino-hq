@@ -9,8 +9,10 @@ every side already carries it, and storing the tie again would make two answers.
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
+
+lazy from django import urls
 
 from hq.domains.control_plane.names import normalized_hostname
 from hq.platform.application.labels import dotted
@@ -32,14 +34,18 @@ lazy from .containers import standings_on
 lazy from .github_estate import repository_for
 lazy from .infrastructure import RESOURCE_TONES
 lazy from .npm_sections import access
-lazy from .pages import PageBadge
+lazy from .pages import PageBadge, principal_opens
 lazy from .path_dependencies import consequence_of
 lazy from .path_model import Route
 lazy from .paths import hq_path
 lazy from .reach import network_of
+lazy from .security import Principal
 lazy from .service_facets import CERTIFICATE_FACET
 lazy from .services import served_here
 lazy from .work_runs import WorkRun
+
+if TYPE_CHECKING:
+    from .work_runs import RunEvidence
 
 
 @display
@@ -95,12 +101,17 @@ class ServiceSection:
     # quiet link ("All runs").
     more_label: str = ""
     more_url: str = ""
+    # What each row's open line shows beneath it, one for each record in its
+    # order (None for a row with nothing), drawn through the run evidence part.
+    below: tuple[RunEvidence | None, ...] = ()
 
     def __post_init__(self) -> None:
         if not PAGE_SECTION_ID.fullmatch(self.id):
             raise ValueError("ServiceSection id must be a valid page section id.")
         if not self.label.strip():
             raise ValueError("ServiceSection label must not be empty.")
+        if self.below and len(self.below) != len(self.records):
+            raise ValueError("ServiceSection below holds one entry for each record.")
         # A column no row has anything in is a heading over nothing. Dropped
         # here, so no section has to check its own; an unknown value (the dash placeholder) is
         # something to say and keeps its column.
@@ -116,6 +127,13 @@ class ServiceSection:
         short ones, which then collect to share rows."""
 
         return self.folded or len(self.columns) >= ROW_COLUMNS
+
+    @property
+    def rows(self) -> tuple[tuple[tuple[Cell, ...], RunEvidence | None], ...]:
+        """Each record with what its open line shows beneath it, if anything."""
+
+        below = self.below or (None,) * len(self.records)
+        return tuple(zip(self.records, below, strict=True))
 
 
 def filled_columns(width: int, records: tuple[tuple[Cell, ...], ...]) -> tuple[int, ...]:
@@ -189,20 +207,27 @@ def recent_changes(keys: list[str], *, what: str, limit: int) -> ServiceSection 
     )
 
 
-def recent_work(runs: Sequence[WorkRun], *, by_machine: bool, more_url: str) -> ServiceSection | None:
+def recent_work(
+    runs: Sequence[WorkRun], *, by_machine: bool, more_url: str, principal: Principal | None = None
+) -> ServiceSection | None:
     """The latest ``runs`` as a section, each state in its word and tone; None
     when there are none. A machine's page names what each run was
     (``by_machine``), a procedure's page the machines each acted on, and
-    ``more_url`` is every run of the two on Jobs."""
+    ``more_url`` is every run of the two on Jobs.
 
+    Who asked for each run and its evidence are Jobs' to show, so only a
+    ``principal`` who may open Jobs reads them here; without one, nobody does.
+    """
+
+    shows = principal is not None and principal_opens(principal, urls.resolve(reverse("jobs:list")).func)
     records = tuple(
         (
-            _procedure(run) if by_machine else _machines(run.hosts),
+            _procedure(run) if by_machine else _machines(run.evidence.hosts),
             Cell(run.word, tone=run.tone),
             Cell(ago(run.created_at), muted=True),
             Cell(str(seconds(run.duration)) if run.duration is not None else ""),
             Cell(run.note),
-            Cell(run.by),
+            Cell(run.by if shows else ""),
         )
         for run in runs
     )
@@ -215,6 +240,7 @@ def recent_work(runs: Sequence[WorkRun], *, by_machine: bool, more_url: str) -> 
         records=records,
         more_label="All runs",
         more_url=more_url,
+        below=tuple(run.evidence or None for run in runs) if shows else (),
     )
 
 

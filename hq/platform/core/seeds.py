@@ -134,6 +134,22 @@ def _reading(owner) -> None:
     apps.get_model("control_plane", "ProviderConnection").objects.update(manages=False)
 
 
+def _rescanned(owner) -> None:
+    """The example estate once a later Refresh found the commit adopted, so
+    the procedures page has nothing to adopt."""
+
+    _estate(owner)
+    example_estate.automation.rescanned(owner)
+
+
+def _scanning(owner) -> None:
+    """The example estate while a Refresh is under way, so the procedures
+    page follows a scan."""
+
+    _estate(owner)
+    example_estate.automation.scanning(owner)
+
+
 @contextmanager
 def seeded_by_hand(path: str, *, at: datetime) -> Iterator[None]:
     """Each audit event the block records, written as the set's owner made it
@@ -167,6 +183,8 @@ SEEDS: dict[str, Seed] = {
     "standard": Seed(_estate, _SET_UP),
     "reading": Seed(_reading, _SET_UP),
     "read-empty": Seed(_read_empty, _SET_UP),
+    "rescanned": Seed(_rescanned, _SET_UP),
+    "scanning": Seed(_scanning, _SET_UP),
     # A fresh install: its one signed-up user, and nothing else.
     "empty": Seed(lambda _owner: None),
     # Years of records, to measure pages at the size they grow to.

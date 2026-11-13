@@ -229,6 +229,8 @@
   :is(.row-expand, .row-fold) > .icon { width: 7px; height: 11px; transition: transform .12s ease; }
   :is(.row-expand, .row-fold)[aria-expanded="true"] > .icon { transform: rotate(90deg); }
   @media (prefers-reduced-motion: reduce) { :is(.row-expand, .row-fold) > .icon { transition: none; } }
+  /* With no script a fold cannot open or close, and every row it would fold shows (tables.css), so it is not drawn. */
+  @media (scripting: none) { .row-fold { display: none; } }
   /* What holds a value to its line, lifted with its cut (cuts.css) in an open row and the line beneath it, and in a panel a cell shows; outranking each column's own rule on purpose. */
   .data-table :is(tr.is-expanded, tr.is-expanded + tr.row-detail) :is(td, th),
   .data-table :is(tr.is-expanded, tr.is-expanded + tr.row-detail) :is(td, th) *:not(.visually-hidden, .visually-hidden *),

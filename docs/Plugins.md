@@ -584,7 +584,8 @@ Fields that shape the Command Center form:
   and the form says where to start. `ON_ITS_PAGE` marks one that the page of
   whatever it acts on sends, which search does not offer.
 - `about` is what the command's page says of it under the form: a callable,
-  read each time the page is drawn, that returns a `CommandAbout(label,
+  read each time the page is drawn and given its reader's `Principal`, so it
+  says only what they may read, that returns a `CommandAbout(label,
   facts, sections)`. Its `facts` are drawn as one section headed `label`
   (required once there are facts), each a `CommandFact(label, value,
   detail)` whose `detail` is the lines under the value. `sections` holds the
@@ -955,6 +956,7 @@ Script hooks: `data-chart`, `data-sort`, `data-submit-busy`, `data-submit-label`
 
 | Rule | Drawn by hand | Write instead |
 | --- | --- | --- |
+| `hand-drawn-change-table` | A before-and-after table drawn by hand, where the change table part draws it. | Build an approval_review.ChangePreview and write `{% change_table preview %}`. |
 | `hand-drawn-control-label` | A control's label drawn by hand, where the control label part draws it. | Write `{% control_label "From" control="the-control-id" %}`. |
 | `hand-drawn-empty-line` | An empty line drawn by hand, where the empty state part draws it. | Write `{% include "partials/_empty_state.html" with message="..." %}`, or a `{% section %}`'s `{% empty %}`. |
 | `hand-drawn-empty-state` | An empty state drawn by hand, where the empty state part draws it. | Write `{% include "partials/_empty_state.html" with message="..." %}`. |

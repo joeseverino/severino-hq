@@ -224,9 +224,8 @@ class MachineDetailView(PageMixin, TemplateView):
         # What else HQ can say about this machine, from a registry rather than
         # from this view. A band appears because a resolver produced one, so
         # what HQ learns next reaches the page without either being edited.
-        sections = machine_sections(found)
-
         principal = web_principal(self.request.user)
+        sections = machine_sections(found, principal=principal)
         whole, context["relationships"] = for_machine(found, sections, principal=principal)
         # One Docker environment is a line under the containers heading. Its
         # table is left for a machine that has several.

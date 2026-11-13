@@ -88,6 +88,9 @@ class ResourceCapabilities:
 
 
 def _offered(resource: ManagedResource, provider, removal: str, *, removal_pending: bool) -> Offered:
+    # A record its source names now is that source's to write, by hand neither.
+    if provider is not None and provider.sourced is not None and provider.sourced(resource):
+        return Offered()
     # With public DNS changes off, nothing that would change what the public
     # internet sees is offered; forgetting a declaration leaves it live, so stays.
     held = provider is not None and provider.public_effect and not public_dns_enabled()

@@ -4,6 +4,7 @@ procedure here is a synthetic ``example.*`` one."""
 
 from dataclasses import replace
 from datetime import timedelta
+from unittest import mock
 
 from django.db import connection
 from django.test import TestCase
@@ -39,6 +40,9 @@ AGENT = Principal("example-agent", "mcp", frozenset({Capability.READ, Capability
 LOGS = "example.service_logs"
 WORKER = "example-worker"
 CLAIMS = (("automation.operation", "run"),)
+# What asks the automation worker for a scan, and what it rings on commit.
+REFRESH = "automation.source.refresh"
+DOORBELL = "hq.platform.application.automation_sources.ring_automation_doorbell"
 
 
 class WorkRunsTestCase(TestCase):
@@ -97,11 +101,11 @@ class OneListTests(WorkRunsTestCase):
         (row,) = self.listed()
 
         summary = operation_summary(run)
-        self.assertEqual((row.by, row.approved_by, row.note), (summary["by"], summary["approved_by"], "Done."))
+        self.assertEqual((row.by, row.evidence.approved_by, row.note), (summary["by"], summary["approved_by"], "Done."))
         self.assertEqual((row.word, row.tone), (JobState.SUCCEEDED.label, TONES[JobState.SUCCEEDED]))
-        self.assertEqual(row.hosts, (APP, DB))
-        self.assertEqual(row.correlation, "example-investigation-7")
-        self.assertEqual(row.events[0]["outcome"], "changed")
+        self.assertEqual(row.evidence.hosts, (APP, DB))
+        self.assertEqual(row.evidence.correlation, "example-investigation-7")
+        self.assertEqual(row.evidence.events[0]["outcome"], "changed")
         self.assertEqual(row.kind, RESTART_RUN)
         self.assertIn(RESTART, row.title)
         self.assertEqual((row.started, row.finished), (run.claimed_at, run.completed_at))
@@ -111,7 +115,7 @@ class OneListTests(WorkRunsTestCase):
 
         (row,) = self.listed()
 
-        self.assertEqual((row.id, row.approved_by), (str(run.pk), "example-owner"))
+        self.assertEqual((row.id, row.evidence.approved_by), (str(run.pk), "example-owner"))
 
     def test_a_job_s_row_is_its_standing(self):
         from ..asks import job_standing
@@ -348,6 +352,43 @@ class WorkKindsTests(WorkRunsTestCase):
         self.assertEqual([row.title for row in self.listed(kind=(RESTART_RUN,))], [kinds[RESTART_RUN][0]])
 
 
+class ScanTests(WorkRunsTestCase):
+    """A Refresh's scan is listed with the rest of the automation work, named
+    by the command that asks for it."""
+
+    def scanned(self):
+        principal = Principal("example-operator", "web", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
+        with self.captureOnCommitCallbacks(execute=True), mock.patch(DOORBELL):
+            answer = run_capability(REFRESH, {}, principal=principal, idempotency_key="example-refresh").answer
+        self.assertTrue(answer["ok"], answer)
+        return OperationRequest.objects.get(pk=answer["operation"]["id"])
+
+    def test_a_scan_is_listed_by_its_command_s_own_words(self):
+        from ..capabilities import capability_title
+
+        scan = self.scanned()
+        title = capability_title(REFRESH)
+        run = self.run_of(APP)
+
+        listed = {row.id: row for row in self.listed()}
+
+        self.assertEqual(set(listed), {str(scan.pk), str(run.pk)})
+        row = listed[str(scan.pk)]
+        self.assertEqual((row.source, row.kind, row.title), (RUN, REFRESH, title))
+        self.assertEqual((row.word, row.evidence.hosts), (JobState.QUEUED.label, ()))
+
+    def test_a_scan_is_a_kind_of_work_the_list_is_filtered_by(self):
+        scan = self.scanned()
+        self.run_of(APP)
+
+        kinds = {found.kind: found for found in work_kinds()}
+
+        self.assertIn(REFRESH, kinds)
+        self.assertEqual([row.id for row in self.listed(kind=(REFRESH,))], [str(scan.pk)])
+        self.assertEqual([row.kind for row in self.listed(kind=(RESTART_RUN,))], [RESTART_RUN])
+        self.assertNotIn(str(scan.pk), [row.id for row in self.listed(host=(APP,))])
+
+
 class EvidenceTests(WorkRunsTestCase):
     def test_a_claimed_run_names_its_worker_and_its_lease_and_a_finished_one_neither(self):
         run = self.claimed(self.run_of(APP))
@@ -360,8 +401,8 @@ class EvidenceTests(WorkRunsTestCase):
         )
         (done,) = self.listed()
 
-        self.assertEqual((working.worker, working.lease_until), (WORKER, run.lease_expires_at))
-        self.assertEqual((done.worker, done.lease_until), ("", None))
+        self.assertEqual((working.evidence.worker, working.evidence.lease_until), (WORKER, run.lease_expires_at))
+        self.assertEqual((done.evidence.worker, done.evidence.lease_until), ("", None))
 
     def test_each_task_outcome_is_said_in_a_tone(self):
         outcomes = ("ok", "changed", "skipped", "failed", "unreachable")
@@ -375,7 +416,9 @@ class EvidenceTests(WorkRunsTestCase):
         (row,) = self.listed()
 
         self.assertEqual(set(OUTCOME_TONES), set(outcomes))
-        self.assertEqual([event["tone"] for event in row.events], [OUTCOME_TONES[outcome] for outcome in outcomes])
+        self.assertEqual(
+            [event["tone"] for event in row.evidence.events], [OUTCOME_TONES[outcome] for outcome in outcomes]
+        )
         self.assertEqual(set(OUTCOME_TONES.values()) - set(TONES.values()), set())
 
 

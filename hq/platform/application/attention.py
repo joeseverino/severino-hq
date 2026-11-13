@@ -748,11 +748,11 @@ def _asked_change(shown) -> str:
             if row.before
             else f"{lower_first(row.label)} set to {row.after or 'empty'}"
         )
-        for row in shown.rows[:3]
+        for row in shown.changes[:3]
     ]
     if not moves:
         return ended(shown.label)
-    more = len(shown.rows) - len(moves)
+    more = len(shown.changes) - len(moves)
     return (
         f"{shown.label}: {', '.join(moves)}"
         + (f", and {counted(more, 'more field', 'more fields')}" if more > 0 else "")

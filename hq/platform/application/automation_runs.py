@@ -26,23 +26,25 @@ lazy from hq.platform.core.audit import audit_operation
 lazy from hq.platform.core.templatetags.value_tags import seconds
 
 from .automation_manifest import OperationManifest, OperationRegistry, sorted_unique
-from .command_fields import Describe
+from .command_fields import Among, Describe, Names
 from .integration_specs import IDEMPOTENCY_FIELD, CapabilitySpec, CommandAbout, CommandFact
 from .record_errors import PolicyError, RecordNotFound
 from .security import Capability, Principal
 lazy from . import automation_adoption
 lazy from .approvals import ApprovalSubject, measured_by
+lazy from .automation_adoption import AdoptedInput, AdoptedProcedure
 lazy from .cadence import ring_automation_doorbell
-lazy from .entity_links import kind_label
+lazy from .entity_links import entity_link, kind_label
 lazy from .idempotency import IdempotencyConflict
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
 lazy from .json_schemas import json_schema
 lazy from .labels import effect_label, lower_first
 lazy from .machines import machine_catalog
+lazy from .payload_words import value_words
 lazy from .resource_operations import OperationQueued, enqueue, serialize_operation
 lazy from .routes import reverse
-lazy from .service_context import recent_work
-lazy from .ui import ended
+lazy from .service_context import Cell, ServiceSection, recent_work
+lazy from .ui import counted, ended
 lazy from .work_runs import recent_runs
 
 
@@ -97,7 +99,8 @@ type Hosts = Annotated[
     tuple[Annotated[StrictStr, Field(min_length=1, max_length=253), AfterValidator(_host)], ...],
     Field(min_length=1, max_length=64),
     AfterValidator(sorted_unique),
-    Describe("The machines to run it on, each by its name in HQ."),
+    Names("machines"),
+    Describe("The machines to run it on.", api="Each by its name in HQ."),
 ]
 type Correlation = Annotated[
     StrictStr,
@@ -133,7 +136,12 @@ def command_type(manifest: OperationManifest) -> type[RunCommand]:
 
     parameters = manifest.input_type
     takes_none = not any(field.is_required() for field in parameters.model_fields.values())
-    fields: dict[str, Any] = {
+    fields: dict[str, Any] = {}
+    if manifest.hosts or MACHINE_KIND not in manifest.target_kinds:
+        # What ``resolved_hosts`` admits, offered as the only choices.
+        admitted = manifest.hosts if MACHINE_KIND in manifest.target_kinds else ()
+        fields["hosts"] = (Annotated[Hosts, Among(admitted)], ...)
+    fields |= {
         "parameters": (
             Annotated[parameters, Describe("The procedure's own inputs, as its manifest lists them.")],
             Field(default_factory=parameters) if takes_none else ...,
@@ -349,13 +357,69 @@ def _statements(statements: tuple[str, ...]) -> str:
     return " ".join(ended(statement) for statement in statements)
 
 
-def about(manifest: OperationManifest) -> CommandAbout:
-    """What a procedure's command page says of it: what the manifest declares,
-    reviewed, and how its latest runs went."""
+# What each input type of an argument spec takes, in a page's words.
+INPUT_TYPE_WORDS = {
+    "str": "Text",
+    "path": "Path",
+    "int": "Whole number",
+    "float": "Number",
+    "bool": "Yes or no",
+    "list": "List",
+}
 
-    kinds = " or ".join(lower_first(kind_label(kind)) for kind in manifest.target_kinds)
+
+def _runs_on(manifest: OperationManifest) -> CommandFact:
+    """The machines a procedure runs on: each it names by its link, else any
+    of the kinds it is written for."""
+
+    if manifest.hosts:
+        return CommandFact("Runs on", links=tuple(entity_link("machine", host) for host in manifest.hosts))
+    return CommandFact("Runs on", f"Any {' or '.join(lower_first(kind_label(kind)) for kind in manifest.target_kinds)}")
+
+
+def _type_words(spec: AdoptedInput) -> str:
+    if spec.type == "list" and spec.elements is not None:
+        return f"List of {lower_first(INPUT_TYPE_WORDS[spec.elements])}"
+    return INPUT_TYPE_WORDS[spec.type]
+
+
+def _inputs(procedure: AdoptedProcedure | None) -> ServiceSection | None:
+    """A procedure's inputs as its argument spec declares them, with the bound
+    its sidecar sets on a text input; None when it takes none, or when its
+    manifest was supplied without the adoption that declares them."""
+
+    if procedure is None:
+        return None
+    records = tuple(
+        (
+            Cell(name),
+            Cell(_type_words(spec)),
+            Cell("Yes" if spec.required else ""),
+            Cell(value_words(spec.default)),
+            Cell(value_words(spec.choices)),
+            Cell(spec.bound.pattern if spec.bound else ""),
+            Cell(counted(spec.bound.max_length, "character") if spec.bound else ""),
+            Cell(spec.description),
+        )
+        for name, spec in procedure.inputs.items()
+    )
+    if not records:
+        return None
+    return ServiceSection(
+        id="inputs",
+        label="Inputs",
+        columns=("Input", "Type", "Required", "Default", "Choices", "Pattern", "Longest", "Description"),
+        records=records,
+    )
+
+
+def about(manifest: OperationManifest, generation: str, principal: Principal) -> CommandAbout:
+    """What a procedure's command page says of it to ``principal``: what its
+    adopted catalog declares, reviewed, the inputs its argument spec takes,
+    and how its latest runs went, with their evidence where they may read Jobs."""
+
     facts = (
-        CommandFact("Runs on", ", ".join(manifest.hosts) or f"Any {kinds}"),
+        _runs_on(manifest),
         CommandFact("Effect", effect_label(manifest.effect)),
         CommandFact("Privilege", manifest.privilege or "None"),
         CommandFact("Timeout", str(seconds(manifest.timeout_seconds))),
@@ -367,11 +431,14 @@ def about(manifest: OperationManifest) -> CommandAbout:
         CommandFact("Playbook", manifest.playbook),
     )
     every = f"{reverse('jobs:list')}?{urlencode({'kind': capability_name(manifest.id)})}"
-    runs = recent_work(recent_runs(manifest.id), by_machine=False, more_url=every)
-    return CommandAbout(label="Procedure", facts=facts, sections=(runs,) if runs else ())
+    sections = (
+        recent_work(recent_runs(manifest.id), by_machine=False, more_url=every, principal=principal),
+        _inputs(next((row for row in automation_adoption.procedures(generation) if row.id == manifest.id), None)),
+    )
+    return CommandAbout(label="Procedure", facts=facts, sections=tuple(section for section in sections if section))
 
 
-def _capability(manifest: OperationManifest) -> CapabilitySpec:
+def _capability(manifest: OperationManifest, generation: str) -> CapabilitySpec:
     name = capability_name(manifest.id)
     longest = ApprovalRequest._meta.get_field("capability").max_length
     if longest is not None and len(name) > longest:
@@ -396,11 +463,12 @@ def _capability(manifest: OperationManifest) -> CapabilitySpec:
         verb=OperationRequest.Action.RUN.label,
         # Read on a held run's card, where the procedure is what was asked for.
         wants=f"carry out the procedure {manifest.id}",
-        about=partial(about, manifest),
+        about=partial(about, manifest, generation),
     )
 
 
 def capability_specs(generation: str | None = None) -> tuple[CapabilitySpec, ...]:
     """The command each procedure of the adopted catalog is run through."""
 
-    return tuple(_capability(manifest) for manifest in operation_registry(generation).values())
+    digest = automation_adoption.generation() if generation is None else generation
+    return tuple(_capability(manifest, digest) for manifest in operation_registry(digest).values())

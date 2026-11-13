@@ -1,0 +1,14 @@
+id: hand-drawn-change-table
+snapshots:
+  "<div>{% table_region label compare=shown.compares %}<table class=\"data-table\"></table>{% endtable_region %}</div>":
+    labels:
+    - source: "{% table_region label compare=shown.compares %}"
+      style: primary
+      start: 5
+      end: 52
+  "{% table_region \"Changes\" compare=True %}<table class=\"data-table\"></table>{% endtable_region %}":
+    labels:
+    - source: "{% table_region \"Changes\" compare=True %}"
+      style: primary
+      start: 0
+      end: 41

@@ -1365,7 +1365,10 @@ below, are one indexed query.
 
 Each procedure has one record, of kind `automation.operation`, written when a
 run is first asked for and pinned to the manifest at every ask. Its spec is
-the manifest as data, the input type standing as its schema's digest. One run
+the manifest as data, the input type standing as its schema's digest. While
+the adopted catalog names the procedure, its record lives on the procedure's
+command page and offers no hand edit or removal (`ProviderSpec.sourced`); once
+the catalog drops it, the record is back on its own page with its removal. One run
 per procedure is active at a time, and two runs never share a machine while
 either waits or works; the refusal's `details.holding` is the run in the way.
 A held run is measured against the manifest as supplied, its parameters as
@@ -1456,8 +1459,49 @@ HQ holds each sidecar to `ProcedureDeclaration`
 (`hq/platform/application/automation_sources.py`), adds every way it falls
 short, and a second sidecar with the same id, to that procedure's problems,
 and stores the whole as a `SourceProposal` of the scan. A proposal runs
-nothing: its procedures become manifests only when a person adopts it through
-approval.
+nothing: its procedures become manifests only when a person adopts it
+([Adopting the procedures](#adopting-the-procedures)).
+
+### Adopting the procedures
+
+`automation.source.adopt` (Adopt) makes one proposal the catalog HQ runs
+from (`hq/platform/application/automation_adoption.py`). It writes an
+`AdoptedCatalog` row, and the newest row is the one declaration every
+procedure's command, its input type and the spec a held run is measured
+against are built from. Its digest names it, so each process builds its
+commands anew at its next request once another process adopts, with no
+restart.
+
+`plan()` judges a proposal before anything is written, and refuses it with
+every reason at once, in `details.refused`:
+
+- a commit whose signature GitHub did not verify, as the scan recorded it
+  with the worker's token (the web process holds none);
+- an `ansible.cfg` or a directory Ansible loads code from, which a run would
+  load beside every procedure;
+- a procedure with a problem the scan or HQ found, or an input no closed type
+  can take.
+
+A commit it would adopt is compared with the catalog adopted now, procedure
+by procedure and file by file, and each way it lets a run do more is a
+widening: a procedure that may run on more machines or kinds of record, a
+raised effect, a new privilege, a write whose files change, a new procedure
+that does more than read, and a changed file every procedure may read or
+that names the collections a run may use. Adopting is a person's act: a
+person adopts at once, an agent's ask waits for a person, and a widening
+waits whatever the agent's rule allows. A held adoption is measured against
+the proposal and the catalog adopted now, so another adoption while it waits
+makes it stale, and its card lists the widenings above the comparison.
+
+The Procedures page (`control_plane:procedures`) is where a person does all
+of this: Refresh, with the newest scan and how it stands, followed while it
+runs; the newest proposal (or any by its id) with the commit's branch, id,
+committer and signature, the comparison drawn by `{% change_table %}`, the
+widenings and the refusals; Adopt, for a person who may; each adoption an
+agent's ask holds; and the catalog adopted now, each procedure linking its
+command page. Every value is the catalog's or a scan's
+(`automation_sources.standing`), and the repository the commit belongs to is
+the deployment's configuration, never named on the page.
 
 ### The automation worker on the host
 

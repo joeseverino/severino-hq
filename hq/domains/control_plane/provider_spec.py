@@ -405,6 +405,11 @@ class ProviderSpec:
     adoption_gap: Sentence = ""
     # The page a resource of this kind lives on, when it has one of its own.
     home: Callable[[Any], str] | None = None
+    # Whether the source HQ derives this kind's records from names this one
+    # now: HQ writes such a record from its source, so no person edits or
+    # removes it by hand, and one the source has dropped is a person's again.
+    # Asked of the source each time, never stored. Unset: no source derives them.
+    sourced: Callable[[Any], bool] | None = None
     # The provider console page for a swept record, built only from ids the
     # record stores. Blank when the record lacks them.
     console: Callable[[dict[str, Any]], str] | None = None

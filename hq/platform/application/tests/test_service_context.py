@@ -21,7 +21,7 @@ from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 from ..service_context import Cell, ServiceSection, sections_for
 from ..services import prospects
 from ..ui import MISSING
-from .markup import select, with_class, within
+from .markup import all_elements, select, with_class, within
 
 
 def a_service(hostname="probe.example.com"):
@@ -538,6 +538,35 @@ class SectionPartTests(SimpleTestCase):
             ("All runs", "/example/runs/"),
             [(element.words, element.attrs.get("href")) for element in within(html, "id", "example")],
         )
+
+    def test_what_a_row_holds_below_it_is_in_its_open_line(self):
+        from ..work_runs import RunEvidence
+
+        evidence = RunEvidence(
+            correlation="example-investigation-7",
+            events=({"host": "example-01", "task": "Example task", "outcome": "ok", "message": "", "tone": "good"},),
+        )
+        html = _drawn(
+            ServiceSection(
+                id="example",
+                label="Example",
+                columns=("Run", "State"),
+                records=((Cell("Nightly"), Cell("Done", tone="good")), (Cell("Weekly"), Cell("Done", tone="good"))),
+                below=(evidence, None),
+            )
+        )
+
+        (detail,) = [element for element in all_elements(html) if "data-row-detail" in element.attrs]
+        opened = [element for element in all_elements(html) if detail in element.ancestors]
+        labels = {element.attrs["data-label"]: element.words for element in opened if "row-below" in element.classes}
+        self.assertIn("example-investigation-7", labels["Correlation"])
+        self.assertIn("Example task", labels["Tasks"])
+
+    def test_a_section_holds_one_below_for_each_record(self):
+        with self.assertRaisesRegex(ValueError, "below"):
+            ServiceSection(
+                id="example", label="Example", columns=("Run",), records=((Cell("Nightly"),),), below=(None, None)
+            )
 
 
 @tag("source")

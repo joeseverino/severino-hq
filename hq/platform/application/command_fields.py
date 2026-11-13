@@ -28,6 +28,9 @@ if TYPE_CHECKING:
 
 # The JSON Schema extension a record-naming field carries.
 NAMES_RECORDS = "x-hq-records"
+# The JSON Schema extension a record-naming field carries when only some of
+# those records may be named.
+AMONG = "x-hq-among"
 # The JSON Schema extension a field holding a model's reference carries.
 REFERS = "x-hq-reference"
 # The JSON Schema extension a field holding a file carries.
@@ -51,6 +54,24 @@ class Names:
             **handler(schema),
             NAMES_RECORDS: {"resource": self.resource, **({"key": self.key} if self.key else {})},
         }
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class Among:
+    """A record-naming field that may name only these of its records, beside
+    its ``Names``: ``Annotated[tuple[str, ...], Names("machines"), Among(("app.example.com",))]``.
+
+    The form offers those the caller may also read; the command's handler
+    still refuses any other, since a caller may name a record another way.
+    """
+
+    values: tuple[str, ...]
+
+    def __init__(self, values: Iterable[Any]) -> None:
+        object.__setattr__(self, "values", tuple(str(value) for value in values))
+
+    def __get_pydantic_json_schema__(self, schema: CoreSchema, handler: GetJsonSchemaHandler) -> dict[str, Any]:
+        return {**handler(schema), AMONG: list(self.values)}
 
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -116,6 +137,13 @@ def named_records(schema: dict[str, Any]) -> dict[str, Any] | None:
     return declared if isinstance(declared, dict) else None
 
 
+def among(schema: dict[str, Any]) -> frozenset[str] | None:
+    """The only records one record-naming field may name, or ``None`` for any."""
+
+    declared = schema.get(AMONG)
+    return frozenset(declared) if isinstance(declared, list) else None
+
+
 def referred(schema: dict[str, Any]) -> tuple[str, str] | None:
     """``(model label, field)`` of the reference one field's schema holds, or ``None``."""
 
@@ -125,14 +153,17 @@ def referred(schema: dict[str, Any]) -> tuple[str, str] | None:
 
 # Every marker is imported from here, Describe too, though it lives in a leaf of its own.
 __all__ = [
+    "AMONG",
     "NAMES_RECORDS",
     "REFERS",
     "UPLOAD",
+    "Among",
     "Choices",
     "Describe",
     "Names",
     "Refers",
     "Upload",
+    "among",
     "is_upload",
     "named_records",
     "referred",

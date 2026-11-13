@@ -13,13 +13,14 @@ from pydantic import BaseModel, ConfigDict, TypeAdapter
 from .display_words import display
 from .json_schemas import fields, json_schema
 from .search_contracts import SearchDefinition
-from .security import Capability
+from .security import Capability, Principal
 from .ui import ended
 lazy from . import records
 lazy from .labels import human_label, lower_first
 lazy from .refusal_status import RefusalEnvelope
 
 if TYPE_CHECKING:
+    from .entity_links import EntityLink
     from .service_context import ServiceSection
 
 
@@ -221,9 +222,11 @@ class CommandFact:
     """One thing a command's page states about what the command is."""
 
     label: str
-    value: str
+    value: str = ""
     # Lines under the value, one each.
     detail: tuple[str, ...] = ()
+    # The things it names, each drawn as its link in place of ``value``.
+    links: tuple[EntityLink, ...] = ()
 
 
 @display
@@ -281,8 +284,9 @@ class CapabilitySpec:
     # page says it and offers only the button that changes it.
     state: Callable[..., bool] | None = None
     # What the command's page says of it beside its form, read when the page
-    # is drawn, so what it lists (a run that just ended) is current.
-    about: Callable[[], CommandAbout] | None = None
+    # is drawn, so what it lists (a run that just ended) is current, and
+    # given its reader, so it lists only what they may read.
+    about: Callable[[Principal], CommandAbout] | None = None
 
     @property
     def required_capabilities(self) -> tuple[Capability | str, ...]:

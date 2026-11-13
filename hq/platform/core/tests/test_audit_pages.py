@@ -236,7 +236,7 @@ class AuditDetailPageTests(_AuthedTestCase):
 
         page = self.client.get(reverse("core:audit_detail", args=[row.pk]))
 
-        self.assertEqual([change["field"] for change in page.context["changes"]], ["Token"])
+        self.assertEqual([change.label for change in page.context["changes"].rows], ["Token"])
         self.assertNotIn("«redacted»", text(page))
 
     def test_the_detail_page_needs_a_session(self):

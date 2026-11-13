@@ -82,7 +82,7 @@ gone (its latest runs, wide, so first) and the facts of what it is.
 {% if about.facts %}
 {% section about.label id="command-about" %}
   {% facts %}
-    {% for fact in about.facts %}{% fact fact.label value=fact.value detail=fact.detail %}{% endfor %}
+    {% for fact in about.facts %}{% if fact.links %}{% fact fact.label %}{% for link in fact.links %}{% entity link mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}{% detail %}{% for line in fact.detail %}<small>{{ line|breakable }}</small>{% endfor %}{% endfact %}{% else %}{% fact fact.label value=fact.value detail=fact.detail %}{% endif %}{% endfor %}
   {% endfacts %}
 {% endsection %}
 {% endif %}

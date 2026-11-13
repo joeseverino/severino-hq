@@ -20,12 +20,14 @@ from typing import Any
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource, OperationRequest
+from hq.domains.control_plane.models import CapabilityRule, ManagedResource, OperationRequest
 from hq.domains.control_plane.provider_adapters.automation import OPERATION_KIND, SOURCE_KIND
-from hq.platform.application.automation_adoption import AdoptProposal, adopt, catch_up
+from hq.platform.application.approvals import is_held
+from hq.platform.application.automation_adoption import ADOPT, AdoptProposal, adopt, catch_up
 from hq.platform.application.automation_manifest import OperationManifest
 from hq.platform.application.automation_runs import capability_name, command_type, operation_registry, request_run
 from hq.platform.application.automation_sources import RefreshCommand, refresh
+from hq.platform.application.capabilities import run_capability
 from hq.platform.application.controller import ControllerReport, claim_next_operation, renew_operation, report_operation
 from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
 from hq.platform.application.integration_specs import IDEMPOTENCY_FIELD
@@ -34,7 +36,7 @@ from hq.platform.application.tokens import token_principal
 from hq.platform.core.audit import stamped
 
 from . import doors
-from .agents import CLAIMS
+from .agents import AGENT, CLAIMS
 from .names import LAPTOP_NAME, MACHINE, PHONE_NAME
 
 # The automation worker, as it names itself when it claims.
@@ -135,14 +137,14 @@ PROCEDURES = (
 )
 
 
-def _files() -> list[dict[str, str]]:
+def _files(procedures: tuple[dict[str, Any], ...] = PROCEDURES) -> list[dict[str, str]]:
     paths = sorted(
         {
-            *(path for procedure in PROCEDURES for path in (procedure["sidecar"], procedure["playbook"])),
-            *(f"roles/{role['role']}/tasks/main.yml" for procedure in PROCEDURES for role in procedure["roles"]),
+            *(path for procedure in procedures for path in (procedure["sidecar"], procedure["playbook"])),
+            *(f"roles/{role['role']}/tasks/main.yml" for procedure in procedures for role in procedure["roles"]),
             *(
                 f"roles/{role['role']}/meta/argument_specs.yml"
-                for procedure in PROCEDURES
+                for procedure in procedures
                 for role in procedure["roles"]
             ),
             "README.md",
@@ -151,40 +153,123 @@ def _files() -> list[dict[str, str]]:
     return [{"path": path, "object": hashlib.sha1(path.encode(), usedforsecurity=False).hexdigest()} for path in paths]
 
 
-def catalog() -> dict[str, Any]:
+def catalog(procedures: tuple[dict[str, Any], ...] = PROCEDURES, revision: str = REVISION) -> dict[str, Any]:
     """The example repository as the worker's scan reports it (``SourceCatalog``)."""
 
     return {
         "branch": "main",
-        "revision": REVISION,
+        "revision": revision,
         "verification": {"verified": True, "reason": "valid", "committer": "example-maintainer"},
-        "procedures": [dict(procedure) for procedure in PROCEDURES],
-        "files": _files(),
+        "procedures": [dict(procedure) for procedure in procedures],
+        "files": _files(procedures),
         "unpinned": [],
     }
 
 
-def adopted(person: Principal) -> None:
-    """The example repository refreshed by ``person``, scanned by its worker,
-    and what it found adopted by ``person``."""
+def _commit(message: str) -> str:
+    """A later commit of the example repository, named by what it changed."""
+
+    return hashlib.sha1(message.encode(), usedforsecurity=False).hexdigest()
+
+
+def _moved(procedure: dict[str, Any], *, declared: dict[str, Any] | None = None, **found: Any) -> dict[str, Any]:
+    """``procedure`` as a later commit declares it: its declaration's terms in
+    ``declared`` replaced, and what the scan found in ``found``."""
+
+    return {**procedure, "declaration": {**procedure["declaration"], **(declared or {})}, **found}
+
+
+def _renamed(procedure: dict[str, Any], name: str, **found: Any) -> dict[str, Any]:
+    """A new procedure the repository grew from ``procedure``: its files and id named ``name``."""
+
+    declared = {"id": f"example.{name}", **found.pop("declared", {})}
+    return _moved(
+        procedure, declared=declared, sidecar=f"playbooks/{name}.hq.yml", playbook=f"playbooks/{name}.yml", **found
+    )
+
+
+_FLUSH, _REPORT, _UPGRADE = PROCEDURES
+# The next commit: emptying a cache escalates now, and the disk role grows a
+# procedure that frees space, so adopting it widens what a run may do.
+WIDENED = (
+    _moved(_FLUSH, declared={"privilege": "example.cache_admin"}),
+    _REPORT,
+    _renamed(
+        _REPORT,
+        "disk_cleanup",
+        declared={"effect": "infrastructure_change", "retry": "never"},
+        title="Free a mount's space",
+    ),
+    _UPGRADE,
+)
+WIDENED_REVISION = _commit("Escalate the cache flush; add a disk cleanup.")
+# The commit after it, whose upgrade names a role the repository does not hold.
+UNREADY = (_FLUSH, _REPORT, _moved(_UPGRADE, problems=["The playbook names a role the repository does not hold."]))
+UNREADY_REVISION = _commit("Move the upgrade onto a new role.")
+
+
+def _scanned(person: Principal, key: str, found: dict[str, Any] | None, message: str) -> OperationRequest:
+    """A Refresh asked by ``person``, claimed by its worker and reported:
+    reading ``found``, or failing with ``message`` when it found nothing."""
 
     with doors.page("command", name="automation.source.refresh"):
-        queued = refresh(RefreshCommand(idempotency_key="example-refresh"), principal=person)["operation"]
+        queued = refresh(RefreshCommand(idempotency_key=key), principal=person)["operation"]
     with doors.controller("claim"):
         claimed = claim_next_operation(WORKER, capabilities=CLAIMS_SCANS)["operation"]
     if claimed is None or claimed["id"] != queued["id"]:
         raise RuntimeError("The estate's scan was not the one its worker claimed.")
     scan = OperationRequest.objects.get(pk=queued["id"])
     report = ControllerReport(
-        success=True, observed_generation=scan.input["generation"], message="Read the procedures.", catalog=catalog()
+        success=found is not None, observed_generation=scan.input["generation"], message=message, catalog=found
     )
     with doors.controller("report"):
         report_operation(queued["id"], report, controller_id=WORKER)
     scan.refresh_from_db()
+    return scan
+
+
+def adopted(person: Principal) -> None:
+    """The example repository refreshed by ``person``, scanned by its worker,
+    and what it found adopted by ``person``."""
+
+    scan = _scanned(person, "example-refresh", catalog(), "Read the procedures.")
     with doors.page("command", name="automation.source.adopt"):
         adopt(AdoptProposal(proposal=scan.result["proposal"]), principal=person)
     # A seed's transaction has not committed, so this process reads what it adopted now.
     catch_up()
+
+
+def proposed(person: Principal, agent: Principal) -> None:
+    """The commits after the one adopted, each refreshed by ``person``: one
+    that widens what a run may do, which ``agent`` asks to adopt and so waits
+    for a person; one whose procedures HQ cannot adopt; and a scan that failed."""
+
+    widened = _scanned(person, "example-refresh-widened", catalog(WIDENED, WIDENED_REVISION), "Read the procedures.")
+    with doors.mcp():
+        held = run_capability(
+            ADOPT, {"proposal": widened.result["proposal"]}, principal=agent, idempotency_key="example-agent-adopt"
+        ).answer
+    if not is_held(held):
+        raise RuntimeError(f"The agent's adoption was not held for a person: {held}")
+    _scanned(person, "example-refresh-unready", catalog(UNREADY, UNREADY_REVISION), "Read the procedures.")
+    _scanned(person, "example-refresh-failed", None, "The repository could not be fetched: the host did not answer.")
+
+
+def rescanned(owner) -> None:
+    """A Refresh by ``owner`` after the estate's that found the commit adopted
+    now, so nothing waits to be adopted."""
+
+    _scanned(web_principal(owner), "example-refresh-again", catalog(), "Read the procedures.")
+
+
+def scanning(owner) -> None:
+    """A Refresh by ``owner`` after the estate's, which its worker has
+    claimed and is reading now."""
+
+    with doors.page("command", name="automation.source.refresh"):
+        refresh(RefreshCommand(idempotency_key="example-refresh-scanning"), principal=web_principal(owner))
+    with doors.controller("claim"):
+        claim_next_operation(WORKER, capabilities=CLAIMS_SCANS)
 
 
 # The id the agent's runs are found by, as an investigation's would be.
@@ -244,9 +329,10 @@ def runs(
 
     owner = owner or get_user_model().objects.order_by("pk").first()
     person = web_principal(owner) if owner is not None else cli_principal()
-    adopted(person)
-    supplied = procedures()
     agent = token_principal(CLAIMS, MCP_INTERFACE)
+    adopted(person)
+    proposed(person, agent)
+    supplied = procedures()
     first, *others = supplied
     approved = replace(agent, approved_by=person.actor)
     endings: tuple[tuple[Principal, Callable[[OperationRequest], None], str], ...] = (
@@ -268,10 +354,28 @@ def runs(
         _asked(others[0], stopped_on, person, timedelta(minutes=40), _went_quiet)
     if len(others) > 1:
         _asked(others[1], waiting_on, agent, timedelta(minutes=1), lambda _run: None)
+    changes = [manifest for manifest in supplied if manifest.effect != "read"]
+    if changes:
+        _held(changes[-1], server, agent, owner)
     # Each procedure's record was written when it was first asked for.
     for record in ManagedResource.objects.filter(kind=OPERATION_KIND):
         first_ask = record.operations.order_by("created_at").values_list("created_at", flat=True).first()
         ManagedResource.objects.filter(pk=record.pk).update(created_at=first_ask)
+
+
+def _held(manifest, host, agent, owner) -> None:
+    """The operator asks to see the agent's runs of ``manifest`` first, so
+    the one it asks for on ``host`` waits for a person."""
+
+    name = capability_name(manifest.id)
+    CapabilityRule.objects.create(subject=AGENT, capability=name, rule=CapabilityRule.Rule.APPROVE, changed_by=owner)
+    key = f"example-held-run-{manifest.id}"
+    with doors.mcp():
+        answer = run_capability(
+            name, {"hosts": [host], IDEMPOTENCY_FIELD: key}, principal=agent, idempotency_key=key
+        ).answer
+    if not is_held(answer):
+        raise RuntimeError(f"The agent's run was not held for a person: {answer}")
 
 
 def _asked(manifest, host, principal, ago, carried_out, *, correlation="") -> None:

@@ -253,7 +253,7 @@ class HeldAdoptionTests(AdoptionTestCase):
 
         self.assertEqual(self.adopted(), [])
         self.assertEqual(held.baseline["committer"], "example-maintainer")
-        shown = {row.label: row for row in preview(held).rows}
+        shown = {row.label: row for row in preview(held).changes}
         self.assertTrue(any("example.check" in label and row.change == "added" for label, row in shown.items()), shown)
 
         approve(ApproveCommand(str(held.id)), principal=an_operator())
@@ -268,6 +268,8 @@ class HeldAdoptionTests(AdoptionTestCase):
         self.assertTrue(answer.get("adopted"), answer)
 
     def test_a_widening_waits_for_a_person_whatever_the_agent_s_rule_says(self):
+        from ..approval_review import review
+
         self.allowed()
         self.adopt(self.proposed(catalog(procedure("check"))), self.agent)
         widenings = {
@@ -283,7 +285,7 @@ class HeldAdoptionTests(AdoptionTestCase):
             with self.subTest(widening=widening):
                 held = self.held(self.proposed(found), key=f"example-agent-adopt-{index}")
 
-                self.assertTrue(held.baseline["widens"], held.baseline)
+                self.assertTrue(review(held)["warnings"], "the person deciding is warned of what it widens")
         self.assertEqual(self.adopted(), [FIRST])
 
     def test_a_held_adoption_goes_stale_when_another_is_adopted_first(self):

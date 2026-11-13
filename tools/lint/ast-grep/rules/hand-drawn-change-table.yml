@@ -1,0 +1,16 @@
+# A change's before and after is the change table part, so every one says
+# its columns, its empty values, its redactions and its groups alike. A table
+# sets two values side by side only there, so a region that compares is the
+# part's own. No fix: the part takes a ChangePreview.
+id: hand-drawn-change-table
+language: html
+severity: error
+message: A before-and-after table drawn by hand, where the change table part draws it.
+note: Build an approval_review.ChangePreview and write {% change_table preview %}.
+files:
+  - "**/templates/**/*.html"
+ignores:
+  - "templates/partials/_change_table.html"
+rule:
+  kind: text
+  regex: '\{%\s*table_region\b[^%]*\bcompare='

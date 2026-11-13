@@ -4,7 +4,7 @@ HQ's jobs and its automation runs as one list (`work_runs.WorkRun`), each
 state said in the same words and tones. What failed on its last run is said
 once above the rows that lead the list. A run's evidence (its machines, who
 approved it, its correlation id, its lease while a worker holds it, and each
-task's outcome) is in its row's open line, each a labeled `row-below`.
+task's outcome) is in its row's open line, drawn by {% run_evidence %}.
 {% endcomment %}
 {% block summary %}
 {% if failed_last %}
@@ -20,19 +20,7 @@ task's outcome) is in its row's open line, each a labeled `row-below`.
   <td>{% if row.duration %}{{ row.duration|seconds }}{% else %}{% empty_value %}{% endif %}</td>
   <td>
     {{ row.note|or_empty }}
-    {% if row.hosts %}
-      <div class="row-below" data-label="Machines">{% for host in row.hosts %}{% entity "machine"|entity_of:host mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}</div>
-    {% endif %}
-    {% if row.approved_by %}<div class="row-below" data-label="Approved by">{{ row.approved_by|breakable }}</div>{% endif %}
-    {% if row.correlation %}<div class="row-below" data-label="Correlation"><code>{{ row.correlation|breakable }}</code></div>{% endif %}
-    {% if row.worker %}<div class="row-below" data-label="Lease">Held by {{ row.worker|breakable }} until {{ row.lease_until|when }}</div>{% endif %}
-    {% if row.events %}
-      <ul class="row-below" data-label="Tasks">
-        {% for event in row.events %}
-          <li>{% status event.outcome tone=event.tone %} <strong>{{ event.task|breakable }}</strong>{% dot %}{{ event.host|breakable }}{% if event.message %}{% dot %}{{ event.message|breakable }}{% endif %}</li>
-        {% endfor %}
-      </ul>
-    {% endif %}
+    {% run_evidence row.evidence %}
   </td>
   <td>{{ row.by|or_empty }}</td>
 {% endblock %}

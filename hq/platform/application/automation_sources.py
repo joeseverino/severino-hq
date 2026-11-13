@@ -15,9 +15,11 @@ import json
 import re
 import secrets
 from collections import Counter
-from typing import Annotated, Any
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Annotated, Any
 
 from django.db import transaction
+from django.utils import timezone
 from pydantic import (
     AfterValidator,
     BaseModel,
@@ -28,7 +30,7 @@ from pydantic import (
     ValidationError,
 )
 
-lazy from hq.domains.control_plane.models import ManagedResource, OperationRequest, SourceProposal
+lazy from hq.domains.control_plane import models
 lazy from hq.domains.control_plane.provider_adapters.automation import SOURCE_KIND
 lazy from hq.platform.core.audit import audit_operation
 
@@ -37,10 +39,26 @@ from .command_fields import Describe
 from .integration_specs import CapabilitySpec
 from .security import Capability, Principal
 from .ui import ended
+lazy from . import asks, automation_adoption
+lazy from .approval_review import grouped
 lazy from .cadence import ring_automation_doorbell
 lazy from .idempotency import IdempotencyConflict
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
+lazy from .record_errors import PolicyError, RecordNotFound
 lazy from .resource_operations import OperationQueued, enqueue, serialize_operation
+lazy from .work_runs import run_seen_state
+
+if TYPE_CHECKING:
+    from hq.domains.control_plane.models import (
+        AdoptedCatalog,
+        ApprovalRequest,
+        ManagedResource,
+        OperationRequest,
+        SourceProposal,
+    )
+
+    from .approval_review import ChangePreview
+    from .asks import Standing
 
 REFRESH = "automation.source.refresh"
 # The one source's record: the repository is the host's configuration, so
@@ -49,6 +67,8 @@ SOURCE_KEY = "automation-source"
 # As the bridge contract's ``ScannedProcedure`` bounds a procedure's problems.
 PROBLEM_LIMIT = 500
 MOST_PROBLEMS = 20
+# The characters of a commit's id a page names it by: enough to tell two apart.
+SHORT_REVISION = 12
 
 
 def _pattern(value: str) -> str:
@@ -124,7 +144,7 @@ def propose(operation: OperationRequest, catalog: dict[str, Any]) -> SourcePropo
     """Store what one scan found, held to the bridge contract at its door."""
 
     verification = catalog["verification"]
-    return SourceProposal.objects.create(
+    return models.SourceProposal.objects.create(
         operation=operation,
         branch=catalog["branch"],
         revision=catalog["revision"],
@@ -149,12 +169,12 @@ class RefreshCommand(BaseModel):
 
 
 def _source(principal: Principal) -> ManagedResource:
-    current = ManagedResource.objects.select_for_update().filter(key=SOURCE_KEY).first()
+    current = models.ManagedResource.objects.select_for_update().filter(key=SOURCE_KEY).first()
     if current is None:
         save_managed_resource(
             ManagedResourceCommand(key=SOURCE_KEY, kind=SOURCE_KIND, spec={"named_by": "host"}), principal=principal
         )
-    return ManagedResource.objects.select_for_update().get(key=SOURCE_KEY)
+    return models.ManagedResource.objects.select_for_update().get(key=SOURCE_KEY)
 
 
 @transaction.atomic
@@ -163,16 +183,16 @@ def refresh(command: RefreshCommand, *, principal: Principal) -> OperationQueued
     key, and answer the one already waiting while there is one."""
 
     key = command.idempotency_key or f"refresh:{secrets.token_urlsafe(18)}"
-    existing = OperationRequest.objects.filter(idempotency_key=key).select_related("resource").first()
+    existing = models.OperationRequest.objects.filter(idempotency_key=key).select_related("resource").first()
     if existing is not None:
-        if existing.action != OperationRequest.Action.SCAN:
+        if existing.action != models.OperationRequest.Action.SCAN:
             raise IdempotencyConflict("That retry key was already used for a different request.")
         return {"ok": True, "queued": False, "operation": serialize_operation(existing)}
     with audit_operation(operation=REFRESH, principal=principal):
         resource = _source(principal)
         operation, created = enqueue(
             resource,
-            OperationRequest.Action.SCAN,
+            models.OperationRequest.Action.SCAN,
             idempotency_key=key,
             requested_actor=principal.actor,
             requested_interface=principal.interface,
@@ -186,6 +206,116 @@ def refresh(command: RefreshCommand, *, principal: Principal) -> OperationQueued
         # waits, and only once it is stored for the claim to find.
         transaction.on_commit(ring_automation_doorbell)
     return {"ok": True, "queued": created, "operation": serialize_operation(operation)}
+
+
+# ----------------------------------------------------------- how it stands
+
+
+@dataclass(frozen=True, slots=True)
+class Reviewed:
+    """One proposal as a person decides on it: what adopting it changes and
+    each way that lets a run do more, or every reason HQ will not adopt it."""
+
+    proposal: SourceProposal
+    # None when it cannot be adopted, or is the commit adopted now.
+    preview: ChangePreview | None
+    widens: tuple[str, ...] = ()
+    refused: tuple[str, ...] = ()
+    # Whether it is the catalog adopted now, so adopting it changes nothing.
+    adopted: bool = False
+
+    @property
+    def revision(self) -> str:
+        return self.proposal.revision[:SHORT_REVISION]
+
+
+@dataclass(frozen=True, slots=True)
+class HeldAdoption:
+    """An adoption an agent asked for, waiting for a person to decide it."""
+
+    approval: ApprovalRequest
+    proposal: int
+    revision: str
+
+
+@dataclass(frozen=True, slots=True)
+class SourceStanding:
+    """Where the automation source stands: its newest scan and how it went,
+    a proposal reviewed, the catalog adopted now, and what waits for a person."""
+
+    scan: OperationRequest | None
+    scanned: Standing
+    proposal: Reviewed | None
+    catalog: AdoptedCatalog | None
+    procedures: tuple[Any, ...]
+    held: tuple[HeldAdoption, ...]
+
+    @property
+    def revision(self) -> str:
+        return self.catalog.revision[:SHORT_REVISION] if self.catalog else ""
+
+
+def _scans():
+    """The source's scans, each with the state Jobs shows it in."""
+
+    return models.OperationRequest.objects.filter(
+        resource__key=SOURCE_KEY, action=models.OperationRequest.Action.SCAN
+    ).annotate(seen=run_seen_state(timezone.now()))
+
+
+def scan_standing(operation_id: str) -> Standing | None:
+    """How one scan stands, or None when the source has no scan by that id."""
+
+    found = _scans().filter(pk=operation_id).first()
+    return asks.operation_standing(found) if found is not None else None
+
+
+def _reviewed(proposal: SourceProposal) -> Reviewed:
+    try:
+        planned = automation_adoption.plan(proposal.pk)
+    except PolicyError as refusal:
+        refused = (refusal.details or {}).get("refused", ())
+        return Reviewed(proposal, None, refused=tuple(str(each) for each in refused))
+    if planned.digest == planned.current:
+        return Reviewed(proposal, None, adopted=True)
+    compared = planned.compared
+    return Reviewed(
+        proposal,
+        grouped(compared["before"], compared["after"], label="Changes"),
+        widens=planned.widens,
+    )
+
+
+def _held() -> tuple[HeldAdoption, ...]:
+    waiting = models.ApprovalRequest.objects.filter(
+        capability=automation_adoption.ADOPT, state=models.ApprovalRequest.State.PENDING
+    ).order_by("-created_at")
+    return tuple(
+        HeldAdoption(held, int(held.payload["proposal"]), str(held.baseline.get("revision", ""))[:SHORT_REVISION])
+        for held in waiting
+        if isinstance(held.payload.get("proposal"), int)
+    )
+
+
+def standing(proposal: int | None = None) -> SourceStanding:
+    """Where the automation source stands, with the proposal ``proposal``
+    reviewed, or the newest one when none is named; RecordNotFound for a
+    proposal it no longer holds."""
+
+    proposals = models.SourceProposal.objects.order_by("-pk")
+    found = proposals.filter(pk=proposal).first() if proposal is not None else proposals.first()
+    if proposal is not None and found is None:
+        raise RecordNotFound("No proposal has that id. A Refresh makes one.")
+    scan = _scans().order_by("-created_at").first()
+    catalog = automation_adoption.adopted()
+    return SourceStanding(
+        scan=scan,
+        scanned=asks.operation_standing(scan) if scan is not None else asks.Standing(),
+        proposal=_reviewed(found) if found is not None else None,
+        catalog=catalog,
+        procedures=automation_adoption.procedures(catalog.digest) if catalog else (),
+        held=_held(),
+    )
 
 
 def capability_specs() -> tuple[CapabilitySpec, ...]:
@@ -204,7 +334,7 @@ def capability_specs() -> tuple[CapabilitySpec, ...]:
                 "Keep what it reports as a proposal, with each way a procedure falls short.",
             ),
             label="Refresh the procedures",
-            verb=OperationRequest.Action.SCAN.label,
+            verb=models.OperationRequest.Action.SCAN.label,
             wants="read which procedures the automation repository holds",
         ),
     )

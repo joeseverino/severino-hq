@@ -5,15 +5,16 @@ the words and the diff move without touching the gate.
 """
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from difflib import unified_diff
 from typing import Any
 
 from hq.domains.control_plane.models import ApprovalRequest, ManagedResource, OperationRequest
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
-from .approvals import COMPARED, DECLARATIONS, DESTRUCTIVE_EFFECT
-from .payload_words import ChangeRow, changed_words, document, field_words, value_words
+from .approvals import COMPARED, DECLARATIONS, DESTRUCTIVE_EFFECT, WARNINGS
+from .payload_words import STEP, ChangeRow, changed_words, document, field_words, held_words, value_words
+from .ui import counted
 lazy from . import capabilities
 lazy from .command_forms import switch_field
 lazy from .command_targets import item_name
@@ -25,6 +26,33 @@ lazy from .resource_operations import ACTION_CAPABILITY
 
 
 @dataclass(frozen=True, slots=True)
+class ChangeGroup:
+    """One record of the many a comparison holds, such as a procedure of a
+    catalog: the fields of it that move, each named within it, or every field
+    as it stands when none moves."""
+
+    label: str
+    rows: tuple[ChangeRow, ...]
+
+    @property
+    def changed(self) -> bool:
+        return any(row.change != "unchanged" for row in self.rows)
+
+    @property
+    def said(self) -> str:
+        """What happens to the record as a whole, in the words beside its name."""
+
+        changes = {row.change for row in self.rows}
+        if changes == {"added"}:
+            return "new"
+        if changes == {"removed"}:
+            return "removed"
+        if not self.changed:
+            return counted(len(self.rows), "field unchanged", "fields unchanged")
+        return counted(len(self.rows), "change")
+
+
+@dataclass(frozen=True, slots=True)
 class ChangePreview:
     """The comparison a decision is taken on.
 
@@ -32,7 +60,9 @@ class ChangePreview:
     by value, so an access policy shows the three grants that moved rather than
     two walls of text that differ somewhere. ``lines`` is the honest fallback for content
     that will not parse: a policy document with comments in it, for instance,
-    where a unified diff is the most that can truthfully be said.
+    where a unified diff is the most that can truthfully be said. A comparison
+    of many records of one kind (a catalog's procedures) holds each in
+    ``groups``, beside the ``rows`` of what belongs to none.
     """
 
     label: str
@@ -41,16 +71,31 @@ class ChangePreview:
     # Whether the request sets these values on its record, so one that moves
     # is said as the change itself.
     amends: bool = False
+    groups: tuple[ChangeGroup, ...] = ()
+
+    @property
+    def changes(self) -> tuple[ChangeRow, ...]:
+        """Every value that moves, a grouped one named by its record too."""
+
+        return (
+            *self.rows,
+            *(
+                replace(row, label=f"{group.label}{STEP}{row.label}")
+                for group in self.groups
+                if group.changed
+                for row in group.rows
+            ),
+        )
 
     @property
     def empty(self) -> bool:
-        return not self.rows and not self.lines
+        return not self.changes and not self.lines
 
     @property
     def compares(self) -> bool:
         """Whether there is a before to show, or only what would be written."""
 
-        return any(row.change != "added" for row in self.rows)
+        return any(row.change != "added" for row in self.changes)
 
 
 def _text_fields(before: dict[str, Any], after: dict[str, Any]) -> tuple[str, ...]:
@@ -97,6 +142,33 @@ def compare(before: dict[str, Any], after: dict[str, Any], *, label: str, amends
     return ChangePreview(label=label, rows=rows, lines=tuple(lines), amends=amends)
 
 
+def _records(value: Any) -> bool:
+    """Whether a field holds many records of one kind, each by its name."""
+
+    return isinstance(value, Mapping) and bool(value) and all(isinstance(each, Mapping) for each in value.values())
+
+
+def grouped(before: Mapping[str, Any], after: Mapping[str, Any], *, label: str) -> ChangePreview:
+    """``compare``, with each record of a field that holds many (a catalog's
+    procedures) a group of its own: its fields that move or, when none does,
+    every field as it stands, so a person opens the one they want to read."""
+
+    fields = [*before, *(key for key in after if key not in before)]
+    held = [key for key in fields if _records(before.get(key)) or _records(after.get(key))]
+    rest = compare(
+        {key: value for key, value in before.items() if key not in held},
+        {key: value for key, value in after.items() if key not in held},
+        label=label,
+    )
+    groups = []
+    for key in held:
+        was, now = dict(before.get(key) or {}), dict(after.get(key) or {})
+        for name in sorted(set(was) | set(now)):
+            rows = changed_words(was.get(name, {}), now.get(name, {}))
+            groups.append(ChangeGroup(label=str(name), rows=rows or held_words(now.get(name, {}))))
+    return replace(rest, groups=tuple(groups))
+
+
 def preview(held: ApprovalRequest) -> ChangePreview:
     """What approving this request would change, as a person needs to read it.
 
@@ -110,7 +182,7 @@ def preview(held: ApprovalRequest) -> ChangePreview:
     compared = held.baseline.get(COMPARED)
     if isinstance(compared, Mapping):
         # A handler that measures its own subject says what it compares.
-        return compare(dict(compared["before"]), dict(compared["after"]), label="Would change")
+        return grouped(compared["before"], compared["after"], label="Would change")
     spec = capabilities.capability_registry().get(held.capability)
     if spec is not None and spec.subject_resource != DECLARATIONS:
         return _record_preview(spec, held)
@@ -257,9 +329,9 @@ def _wanted(spec, held: ApprovalRequest) -> str:
 def _one_move(shown: ChangePreview) -> ChangeRow | None:
     """The one value an amendment moves, when it moves one short enough to say."""
 
-    if not shown.amends or len(shown.rows) != 1 or shown.lines:
+    if not shown.amends or len(shown.changes) != 1 or shown.lines:
         return None
-    (row,) = shown.rows
+    (row,) = shown.changes
     said = (row.before, row.after)
     if row.change != "changed" or any(len(value) > _SAID_INLINE or "\n" in value for value in said):
         return None
@@ -270,25 +342,32 @@ def review(held: ApprovalRequest) -> dict[str, Any]:
     """What the decision card shows: ``tone`` marks one still waiting for a decision."""
 
     shown = preview(held)
+    sentence = asked(held, shown)
+    record = (
+        entity_link("resource", held.resource_key)
+        if held.resource_kind and ManagedResource.objects.filter(key=held.resource_key).exists()
+        else None
+    )
     return {
         "held": held,
         "tone": "attention" if held.state == ApprovalRequest.State.PENDING else "",
-        "asked": asked(held, shown),
+        "asked": sentence,
         "preview": shown,
         "warnings": _warnings(held),
-        "resource_url": (
-            entity_link("resource", held.resource_key).url
-            if held.resource_kind and ManagedResource.objects.filter(key=held.resource_key).exists()
-            else ""
-        ),
+        "resource_url": record.url if record else "",
+        # The aside names the record it links, by the sentence's own name for it when it says one.
+        "resource_label": (sentence.target or record.label) if record else "",
     }
 
 
 def _warnings(held: ApprovalRequest) -> tuple[str, ...]:
-    """What the declaration this request would write reaches, said plainly."""
+    """What the request reaches that a person should weigh, said plainly: what
+    the handler that measured it says (``WARNINGS``), then what its kind's
+    provider reads in the declaration it would write."""
 
+    measured = tuple(str(warning) for warning in held.baseline.get(WARNINGS) or ())
     provider = PROVIDERS.get(held.resource_kind)
     requested = held.payload.get("spec")
     if provider is None or provider.review_warnings is None or not isinstance(requested, dict):
-        return ()
-    return provider.review_warnings(requested)
+        return measured
+    return (*measured, *provider.review_warnings(requested))

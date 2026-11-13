@@ -1,5 +1,6 @@
-"""All the work HQ started, as one list: its own jobs and the automation runs
-it queued, each said in the same words and drawn in the same row shape.
+"""All the work HQ started, as one list: its own jobs and the automation work
+it queued (each procedure's runs and the source's scans), each said in the
+same words and drawn in the same row shape.
 
 A job stays a ``jobs.Job`` and a run an ``OperationRequest``, since the
 runner's lock and the worker's claim and lease need each record as it is. The
@@ -25,6 +26,7 @@ from hq.domains.jobs.models import HEARTBEAT_GRACE, Job, JobState
 from .asks import job_standing
 from .automation_runs import capability_name, resource_key, run_title
 from .resource_operations import operation_summary
+lazy from .automation_sources import REFRESH, SOURCE_KEY, capability_specs
 lazy from .scheduled_work import job_names
 
 type Source = Literal["job", "run"]
@@ -69,8 +71,29 @@ ORDERS = {
 RECENT = 10
 
 # A run's procedure is named on Jobs by the command it is run through: what
-# ``capability_name`` puts before and after the procedure's id.
+# ``capability_name`` puts before and after the procedure's id. A scan is
+# named by the command that asks for one, Refresh.
 _RUN_KIND = tuple(capability_name("\0").split("\0"))
+# The automation work Jobs lists: a procedure's runs and the source's scans.
+_LISTED = (OperationRequest.Action.RUN, OperationRequest.Action.SCAN)
+
+
+@dataclass(frozen=True, slots=True)
+class RunEvidence:
+    """What a run of automation shows for itself (``partials/_run_evidence.html``):
+    its machines, who agreed to it, its asker's correlation id, the worker
+    holding it and until when while it is claimed, and its tasks' outcomes
+    (each a ``RunEvent`` with its ``tone``)."""
+
+    hosts: tuple[str, ...] = ()
+    approved_by: str = ""
+    correlation: str = ""
+    worker: str = ""
+    lease_until: datetime | None = None
+    events: tuple[dict[str, Any], ...] = ()
+
+    def __bool__(self) -> bool:
+        return bool(self.hosts or self.approved_by or self.correlation or self.worker or self.events)
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,19 +113,12 @@ class WorkRun:
     # What it is doing or how it ended, in a sentence.
     note: str
     by: str
-    approved_by: str
     created_at: datetime
     started: datetime | None
     finished: datetime | None
     duration: float | None
-    # A run's machines, its asker's correlation id, the worker holding it and
-    # until when while it is claimed, and its tasks' outcomes (each a
-    # ``RunEvent`` with its ``tone``); empty for a job.
-    hosts: tuple[str, ...] = ()
-    correlation: str = ""
-    worker: str = ""
-    lease_until: datetime | None = None
-    events: tuple[dict[str, Any], ...] = ()
+    # What a run shows for itself; empty for a job.
+    evidence: RunEvidence = RunEvidence()
 
 
 @dataclass(frozen=True, slots=True)
@@ -171,17 +187,41 @@ def _job_title() -> Case:
     )
 
 
+def _scanned(then: str, default: Any) -> Case:
+    return Case(When(action=OperationRequest.Action.SCAN, then=Value(then)), default=default, output_field=CharField())
+
+
 def _run_title() -> Collate:
-    """``run_title`` of the run's procedure, as SQL."""
+    """``run_title`` of the run's procedure, or Refresh's title for a scan, as SQL."""
 
-    return Collate(Concat(Value(run_title("")), KT("input__operation"), output_field=CharField()), "NOCASE")
+    run = Concat(Value(run_title("")), KT("input__operation"), output_field=CharField())
+    return Collate(_scanned(scan_title(), run), "NOCASE")
 
 
-def _run_kind() -> Concat:
-    """``capability_name`` of the run's procedure, as SQL."""
+def scan_title() -> str:
+    """A scan in words: the title of Refresh, the command that asks for one.
+
+    Read from its declaration rather than the registry, whose commands are
+    built from the adopted catalog, so listing work never builds them.
+    """
+
+    return next(spec.title for spec in capability_specs() if spec.name == REFRESH)
+
+
+def _run_kind() -> Case:
+    """``capability_name`` of the run's procedure, or Refresh for a scan, as SQL."""
 
     start, end = _RUN_KIND
-    return Concat(Value(start), KT("input__operation"), Value(end), output_field=CharField())
+    return _scanned(REFRESH, Concat(Value(start), KT("input__operation"), Value(end), output_field=CharField()))
+
+
+def _kind_key(kind: str) -> str:
+    """The key of the record the work of ``kind`` is queued on, or "" for a kind no run is."""
+
+    if kind == REFRESH:
+        return SOURCE_KEY
+    procedure = operation_of(kind)
+    return resource_key(procedure) if procedure else ""
 
 
 def _jobs_latest() -> Exists:
@@ -191,10 +231,10 @@ def _jobs_latest() -> Exists:
 
 
 def _runs_latest() -> Exists:
-    """Where a run is its procedure's latest."""
+    """Where a run is its procedure's latest, or a scan its source's."""
 
     later = OperationRequest.objects.filter(
-        resource=OuterRef("resource"), action=OperationRequest.Action.RUN, created_at__gt=OuterRef("created_at")
+        resource=OuterRef("resource"), action=OuterRef("action"), created_at__gt=OuterRef("created_at")
     )
     return ~Exists(later)
 
@@ -229,16 +269,14 @@ def _jobs(now: datetime, asked: _Asked) -> QuerySet:
 
 
 def _runs(now: datetime, asked: _Asked) -> QuerySet:
-    runs = OperationRequest.objects.filter(action=OperationRequest.Action.RUN).annotate(
-        seen=run_seen_state(now), title=_run_title()
-    )
+    runs = OperationRequest.objects.filter(action__in=_LISTED).annotate(seen=run_seen_state(now), title=_run_title())
     if asked.state:
         runs = runs.filter(seen__in=asked.state)
     if asked.kind:
-        procedures = [operation_of(kind) for kind in asked.kind if operation_of(kind)]
-        runs = runs.filter(resource__key__in=[resource_key(procedure) for procedure in procedures])
+        runs = runs.filter(resource__key__in=[key for kind in asked.kind if (key := _kind_key(kind))])
     if asked.host:
-        # By subquery, so a run on two of the machines asked for is one row.
+        # By subquery, so a run on two of the machines asked for is one row,
+        # and a scan, which acts on no machine, is none.
         runs = runs.filter(pk__in=OperationHost.objects.filter(host__in=asked.host).values("operation"))
     if asked.search:
         runs = runs.annotate(operation=KT("input__operation"), said=KT("result__message")).filter(
@@ -282,7 +320,7 @@ def work_kinds(*, now: datetime | None = None) -> list[WorkKind]:
         .order_by()
     )
     runs = (
-        OperationRequest.objects.filter(action=OperationRequest.Action.RUN)
+        OperationRequest.objects.filter(action__in=_LISTED)
         .annotate(seen=run_seen_state(now), title=_run_title(), named=_run_kind())
         .filter(_runs_latest())
         .values_list("named", "title", "seen")
@@ -294,7 +332,7 @@ def work_kinds(*, now: datetime | None = None) -> list[WorkKind]:
 
 
 def run_hosts() -> list[str]:
-    """Each machine a run has acted on, by its canonical name, A to Z."""
+    """Each machine a run has acted on, by its canonical name, A to Z: a scan acts on none."""
 
     return list(OperationHost.objects.order_by("host").values_list("host", flat=True).distinct())
 
@@ -330,7 +368,6 @@ def _job_row(job: Job, title: str) -> WorkRun:
         tone=TONES[JobState(job.seen_state)],
         note=standing.note,
         by=job.requested_by.get_username() if job.requested_by else "",
-        approved_by="",
         created_at=job.created_at,
         started=job.started_at,
         finished=job.finished_at,
@@ -341,6 +378,7 @@ def _job_row(job: Job, title: str) -> WorkRun:
 def _run_row(operation: OperationRequest, seen: JobState, title: str, now: datetime) -> WorkRun:
     summary = operation_summary(operation)
     asked = operation.input or {}
+    scan = operation.action == OperationRequest.Action.SCAN
     procedure = str(asked.get("operation") or "")
     claimed = operation.state == OperationState.CLAIMED
     lapsed = seen == JobState.LOST and claimed
@@ -349,26 +387,28 @@ def _run_row(operation: OperationRequest, seen: JobState, title: str, now: datet
         source=RUN,
         id=str(operation.pk),
         title=title,
-        kind=capability_name(procedure),
+        kind=REFRESH if scan else capability_name(procedure),
         state=seen.value,
         word=seen.label,
         # A run that finished and found a problem says so in its tone.
         tone=summary["tone"] if seen == JobState.SUCCEEDED else TONES[seen],
         note=LAPSED if lapsed else summary["headline"],
         by=summary["by"],
-        approved_by=summary["approved_by"],
         created_at=operation.created_at,
         started=started,
         finished=finished,
         # A lapsed run was last heard from when its lease ran out.
         duration=_seconds(started, finished or (operation.lease_expires_at if lapsed else now)),
-        hosts=tuple(asked.get("hosts") or ()),
-        correlation=str(asked.get("correlation") or ""),
-        worker=operation.claimed_by if claimed else "",
-        lease_until=operation.lease_expires_at if claimed else None,
-        events=tuple(
-            {**event, "tone": OUTCOME_TONES.get(event.get("outcome", ""), "")}
-            for event in (operation.result or {}).get("events") or ()
+        evidence=RunEvidence(
+            hosts=tuple(asked.get("hosts") or ()),
+            approved_by=summary["approved_by"],
+            correlation=str(asked.get("correlation") or ""),
+            worker=operation.claimed_by if claimed else "",
+            lease_until=operation.lease_expires_at if claimed else None,
+            events=tuple(
+                {**event, "tone": OUTCOME_TONES.get(event.get("outcome", ""), "")}
+                for event in (operation.result or {}).get("events") or ()
+            ),
         ),
     )
 

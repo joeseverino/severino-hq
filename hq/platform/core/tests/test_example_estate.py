@@ -13,20 +13,23 @@ from hq.domains.analytics.models import RumDaily
 from hq.domains.assets.models import Asset
 from hq.domains.contacts import inbox
 from hq.domains.content.models import PAGE_TYPES, WRITEUP_TYPES, ContentItem
+from hq.domains.control_plane.models import OperationRequest, OperationState, SourceProposal
 from hq.domains.expenses.models import Expense
 from hq.domains.jobs import runner
 from hq.domains.jobs.models import Job
 from hq.domains.projects.models import Project
 from hq.platform.application import agent_registry, analytics, approval_review, approvals, github_profile, own_devices
+from hq.platform.application.automation_adoption import ADOPT
 from hq.platform.application.capability_policy import RULE_LABELS
 from hq.platform.application.findings import findings
 from hq.platform.application.linked_accounts import GITHUB, linked_login
 from hq.platform.application.security import WEB_INTERFACE, cli_principal, web_principal
-from hq.platform.application.tests.markup import all_elements, select, with_class, within
+from hq.platform.application.tests.markup import all_elements, elements, select, with_class, within
 from hq.platform.application.topology import derive_topology
 from hq.platform.core import seeds
 from hq.platform.core.audit import ANONYMOUS
-from hq.platform.core.example_estate.agents import AGENT, NOT_CARRIED
+from hq.platform.core.example_estate import automation
+from hq.platform.core.example_estate.agents import AGENT, NOT_CARRIED, REWRITE
 from hq.platform.core.example_estate.testing import sign_in, throwaway_media
 from hq.platform.core.models import AgentIdentity, AuditLog, OwnDevice
 from hq.platform.core.tests.browser.estate import ask_as_production, estate_pages, landings, owner_client
@@ -193,13 +196,51 @@ class ExampleEstateTests(TestCase):
         self.assertTrue(select(page, "data-prompt"), "a device waits for the owner")
 
     def test_the_agents_held_request_reads_as_a_before_and_after(self):
-        (held,) = approvals.pending(principal=cli_principal())
+        (held,) = (held for held in approvals.pending(principal=cli_principal()) if held.target == REWRITE)
         preview = approval_review.preview(held)
 
         self.assertEqual(held.requested_actor, AGENT)
         self.assertTrue(preview.compares, "a person reads what is there now beside what would be")
         self.assertTrue(preview.rows)
         self.assertFalse(preview.lines)
+
+    def test_the_agents_held_adoption_warns_of_what_it_widens_and_reads_each_procedure_apart(self):
+        (held,) = (held for held in approvals.pending(principal=cli_principal()) if held.capability == ADOPT)
+        shown = approval_review.review(held)
+        groups = {group.label: group for group in shown["preview"].groups}
+
+        self.assertTrue(shown["warnings"], "a widening is said before anything is approved")
+        self.assertEqual(
+            set(groups), {procedure["declaration"]["id"] for procedure in automation.PROCEDURES + automation.WIDENED}
+        )
+        self.assertTrue(any(group.changed for group in groups.values()))
+        self.assertTrue(
+            any(not group.changed for group in groups.values()), "a procedure that stays is shown as it stands"
+        )
+
+    def test_each_held_request_s_card_links_the_record_it_acts_on_by_name(self):
+        client = Client()
+        sign_in(client, self.user)
+
+        for held in approvals.pending(principal=cli_principal()):
+            with self.subTest(capability=held.capability):
+                page = client.get(reverse("core:approval_entry", args=[held.pk]), follow=True)
+
+                record = approval_review.review(held)["resource_url"]
+                self.assertEqual(page.status_code, 200)
+                self.assertTrue(record, "every held request the estate seeds acts on a record")
+                self.assertTrue(
+                    [link for link in elements(page, "a") if link.attrs.get("href") == record and link.words],
+                    "the aside's link says where it goes",
+                )
+
+    def test_the_repository_was_scanned_into_a_proposal_hq_cannot_adopt_and_once_failed(self):
+        scans = OperationRequest.objects.filter(action=OperationRequest.Action.SCAN)
+
+        self.assertTrue(
+            any(procedure["problems"] for proposal in SourceProposal.objects.all() for procedure in proposal.procedures)
+        )
+        self.assertTrue(scans.filter(state=OperationState.FAILED).exists())
 
     def test_one_container_runs_by_tag_alone_and_is_asked_to_be_pinned_without_being_behind(self):
         def containers(rule):

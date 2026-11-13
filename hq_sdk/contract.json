@@ -376,8 +376,9 @@
         "bases": [],
         "constructor": [
           "label",
-          "value",
-          "detail="
+          "value=",
+          "detail=",
+          "links="
         ],
         "fields": [],
         "kind": "dataclass",

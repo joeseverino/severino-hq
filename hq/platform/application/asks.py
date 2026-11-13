@@ -18,9 +18,10 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect
 from django.utils import timezone
 
-lazy from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
+lazy from hq.domains.control_plane.models import OperationState, ProviderConnection, ProviderInventory
 lazy from hq.domains.control_plane.providers import registry_label
 lazy from hq.domains.control_plane.reading_parts import WHOLE, refused_parts
+lazy from hq.domains.jobs.models import JobState
 
 from .describe import Describe, listed
 from .moments import duration
@@ -28,7 +29,9 @@ from .routes import reverse
 from .ui import ended
 lazy from . import cadence
 lazy from .cadence import every_sweep, read_request_lifetime
+lazy from .resource_operations import operation_summary
 lazy from .security import safe_next
+lazy from .work_runs import LAPSED
 
 IDLE = "idle"
 QUEUED = "queued"
@@ -273,11 +276,16 @@ def read_standing(kinds: Iterable[str], asked: datetime, *, connection_ref: str 
 # ----- Jobs the runner runs ---------------------------------------------------
 
 
+# How work stands by the state it is seen in, as ``jobs.JobState`` says it,
+# so a job and an operation a worker carries out read alike; any other has
+# ended badly.
+_STANDS = {"queued": QUEUED, "running": RUNNING, "succeeded": DONE}
+
+
 def job_standing(job: Any) -> Standing:
     """How a ``jobs.Job`` stands, in the shared shape."""
 
-    states = {"queued": QUEUED, "running": RUNNING, "succeeded": DONE}
-    state = states.get(job.seen_state, FAILED)
+    state = _STANDS.get(job.seen_state, FAILED)
     note = job.note
     if state == FAILED:
         note = job.seen_error or "Failed."
@@ -290,3 +298,17 @@ def job_standing(job: Any) -> Standing:
         percent=job.percent if state != DONE else 100,
         word=job.seen_state_display,
     )
+
+
+# ----- Operations a worker carries out ----------------------------------------
+
+
+def operation_standing(operation: Any) -> Standing:
+    """How an ``OperationRequest`` stands, in the shared shape: by the state
+    Jobs shows it in, which its query annotates as ``seen``
+    (``work_runs.run_seen_state``), and in the sentence its history says."""
+
+    seen = JobState(operation.seen)
+    lapsed = seen == JobState.LOST and operation.state == OperationState.CLAIMED
+    note = LAPSED if lapsed else operation_summary(operation)["headline"]
+    return Standing(_STANDS.get(seen, FAILED), note, since=operation.created_at, word=seen.label)

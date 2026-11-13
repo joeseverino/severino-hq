@@ -203,6 +203,10 @@ _WAITS = "waits"
 # The key of a measured baseline that holds the comparison a person decides
 # on, as ``{"before": ..., "after": ...}`` (``approval_review.preview``).
 COMPARED = "compared"
+# The key of a measured baseline that holds what the change reaches that a
+# person should weigh before approving it, each a sentence the card warns with
+# (``approval_review.review``).
+WARNINGS = "warnings"
 
 
 def waits_for_a_person[Handler: Callable[..., Any]](

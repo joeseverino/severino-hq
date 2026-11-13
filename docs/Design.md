@@ -219,9 +219,16 @@ class of the page's:
   (`table_heading ... select_all=True`), then each row's
   `{% row_select row.pk %}`, a cell of fixed width, so selecting moves
   nothing. A row with no key keeps the cell empty.
-- A table that sets two values side by side in each row, after the row's
-  name (a change's before and after), is a `table_region ... compare=True`:
-  the two share the room evenly.
+- A change's before and after is `{% change_table preview %}`
+  (`change_tags.py`), given an `approval_review.ChangePreview`: each value
+  that moves under Field, Before and After, which share the room evenly
+  (`table_region ... compare=True`), or Field and Value where nothing stood
+  before; a redacted value said only to have changed; a document that would
+  not parse as its line diff. A comparison of many records of one kind (a
+  catalog's procedures, from `approval_review.grouped`) gives each its
+  `{% row_group %}`, counted, and one that does not change starts folded,
+  every field as it stands. An approval card and an audit event draw it
+  (*Gate:* `hand-drawn-change-table`).
 - A row that asks to be read first (a message not yet read) says so in its
   `tr` with `{% row_state emphasized=True %}`: its cells are tinted and its
   links weigh more.
@@ -476,6 +483,15 @@ Copy button that copies the code), `{% detail %}` (the words under it) and
 `{% notes %}` (`<li>`s, drawn as a stack list), in that order. The code wraps
 rather than scrolls, so a long path stays on screen; with no code the notes
 stand alone. *Catalog:* `part/patch`.
+
+What a run of automation shows for itself (its machines, who approved it, its
+correlation id, its lease while a worker holds it, and each task's outcome) is
+`{% run_evidence evidence %}`, given a `work_runs.RunEvidence` inside a row of
+a table region: each a labeled `row-below` block of the row's open line. Jobs
+draws it in a run's row, and a section's rows draw it through
+`ServiceSection.below`, so a machine's page and a procedure's page show a run
+as Jobs does. A section shows it only to a reader who may open Jobs
+(`service_context.recent_work`). *Catalog:* `part/run-evidence`.
 
 A row of readings beside a page's title is `{% readings %}`, each
 `{% reading icon=... %}`: its mark, its figure, its quiet lines

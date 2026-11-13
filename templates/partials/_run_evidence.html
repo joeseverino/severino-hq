@@ -1,0 +1,21 @@
+{% comment %}
+A run's evidence, drawn by {% run_evidence row.evidence %} inside a row of a
+table_region: its machines, who approved it, its correlation id, its lease
+while a worker holds it, and each task's outcome, each a labeled row-below
+block the row's open line shows (docs/Design.md, "Opening a row moves
+nothing"). Nothing for a row with no evidence.
+{% endcomment %}{% if evidence %}
+  {% if evidence.hosts %}
+    <div class="row-below" data-label="Machines">{% for host in evidence.hosts %}{% entity "machine"|entity_of:host mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}</div>
+  {% endif %}
+  {% if evidence.approved_by %}<div class="row-below" data-label="Approved by">{{ evidence.approved_by|breakable }}</div>{% endif %}
+  {% if evidence.correlation %}<div class="row-below" data-label="Correlation"><code>{{ evidence.correlation|breakable }}</code></div>{% endif %}
+  {% if evidence.worker %}<div class="row-below" data-label="Lease">Held by {{ evidence.worker|breakable }} until {{ evidence.lease_until|when }}</div>{% endif %}
+  {% if evidence.events %}
+    <ul class="row-below" data-label="Tasks">
+      {% for event in evidence.events %}
+        <li>{% status event.outcome tone=event.tone %} <strong>{{ event.task|breakable }}</strong>{% dot %}{{ event.host|breakable }}{% if event.message %}{% dot %}{{ event.message|breakable }}{% endif %}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+{% endif %}

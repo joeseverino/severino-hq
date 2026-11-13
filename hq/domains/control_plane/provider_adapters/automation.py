@@ -14,6 +14,9 @@ from pydantic import Field
 
 from hq.platform.application.automation_manifest import PLAYBOOK, PLAYBOOK_LONGEST, REVISION
 from hq.platform.application.ui import ended
+lazy from hq.platform.application.action_links import command_url
+lazy from hq.platform.application.automation_runs import capability_name, operation_registry, resource_key
+lazy from hq.platform.application.routes import reverse
 
 from ..provider_spec import ProviderModel, ProviderSpec, locked
 
@@ -61,6 +64,21 @@ def _readout(spec: dict[str, Any], _status: dict[str, Any]) -> tuple[tuple[str, 
     )
 
 
+def _named(resource: Any) -> str:
+    """The procedure of the catalog adopted now whose record this is, or ""."""
+
+    return next((operation for operation in operation_registry() if resource_key(operation) == resource.key), "")
+
+
+def _home(resource: Any) -> str:
+    """A procedure's command page, where everything about it is drawn, while
+    the catalog adopted now names it; its record's own page once it is dropped."""
+
+    operation = _named(resource)
+    page = command_url(capability_name(operation)) if operation else ""
+    return page or reverse("control_plane:detail", kwargs={"key": resource.key})
+
+
 OPERATION = ProviderSpec(
     OPERATION_KIND,
     "An automation procedure of the adopted catalog, and the runs asked of it.",
@@ -74,6 +92,9 @@ OPERATION = ProviderSpec(
     declaration_only=True,
     hostnames=None,
     readout=_readout,
+    home=_home,
+    # Written from the adopted catalog while it names the procedure.
+    sourced=lambda resource: bool(_named(resource)),
     key_hint=lambda spec: str(spec.get("operation", "")),
     name=lambda spec: str(spec.get("operation", "")),
     # It arrives with its adopted catalog, so nobody adds one from the picker.

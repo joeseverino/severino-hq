@@ -59,7 +59,7 @@ lazy from hq.domains.control_plane.provider_adapters.automation import SOURCE_KI
 lazy from hq.platform.core.audit import audit_operation
 
 from . import automation_sources
-from .approvals import COMPARED, ApprovalSubject, measured_by, waits_for_a_person
+from .approvals import COMPARED, WARNINGS, ApprovalSubject, measured_by, waits_for_a_person
 from .automation_manifest import PLAYBOOK, OperationManifest, ProcedureTerms, Statement
 from .automation_sources import SOURCE_KEY, InputBound, ProcedureDeclaration
 from .command_fields import Describe
@@ -131,6 +131,7 @@ class AdoptedProcedure(ProcedureTerms):
 @dataclass(frozen=True)
 class _Known:
     digest: str
+    procedures: tuple[AdoptedProcedure, ...]
     manifests: tuple[OperationManifest, ...]
 
 
@@ -184,7 +185,7 @@ def catch_up() -> str:
     digest = _newest_digest()
     known = _THIS_PROCESS.known
     if known is None or known.digest != digest:
-        _THIS_PROCESS.known = _Known(digest, _load(digest))
+        _THIS_PROCESS.known = _load(digest)
     return digest
 
 
@@ -192,7 +193,7 @@ def forget() -> None:
     """Start this process again from no catalog, as a test does, without a
     read: the next request's door reads the database."""
 
-    _THIS_PROCESS.known = _Known("", ())
+    _THIS_PROCESS.known = _Known("", (), ())
 
 
 def _newest_digest() -> str:
@@ -213,22 +214,31 @@ def adopted() -> AdoptedCatalog | None:
 def manifests(digest: str) -> tuple[OperationManifest, ...]:
     """Each procedure of the catalog adopted with ``digest``, as HQ runs it."""
 
+    return _catalog(digest).manifests
+
+
+def procedures(digest: str | None = None) -> tuple[AdoptedProcedure, ...]:
+    """Each procedure of the catalog adopted with ``digest``, as adopted: the
+    terms its manifest leaves out, such as its inputs' argument spec. Read at
+    this process's generation when not given."""
+
+    return _catalog(generation() if digest is None else digest).procedures
+
+
+def _catalog(digest: str) -> _Known:
     known = _THIS_PROCESS.known
     if known is not None and known.digest == digest:
-        return known.manifests
+        return known
     return _load(digest)
 
 
-def _load(digest: str) -> tuple[OperationManifest, ...]:
+def _load(digest: str) -> _Known:
     catalog = AdoptedCatalog.objects.filter(digest=digest).first() if digest else None
     if catalog is None:
-        return ()
-    return tuple(manifest(_procedure(row), catalog.revision) for row in catalog.procedures)
-
-
-def _procedure(row: Mapping[str, Any]) -> AdoptedProcedure:
+        return _Known(digest, (), ())
     # As JSON, which the row is stored as: a list is a strict tuple there.
-    return AdoptedProcedure.model_validate_json(json.dumps(row))
+    rows = tuple(AdoptedProcedure.model_validate_json(json.dumps(row)) for row in catalog.procedures)
+    return _Known(digest, rows, tuple(manifest(row, catalog.revision) for row in rows))
 
 
 def manifest(procedure: AdoptedProcedure, revision: str) -> OperationManifest:
@@ -489,7 +499,7 @@ def plan(proposal_id: int) -> AdoptionPlan:
         )
     files = {entry["path"]: entry["object"] for entry in proposal.files}
     current = adopted()
-    before = {row.id: row for row in map(_procedure, current.procedures)} if current else {}
+    before = {row.id: row for row in _catalog(current.digest).procedures} if current else {}
     files_before = {entry["path"]: entry["object"] for entry in current.files} if current else {}
     shared_before, shared_after = _shared(files_before, before.values()), _shared(files, procedures.values())
     ordered = [procedures[named] for named in sorted(procedures)]
@@ -552,7 +562,7 @@ def subject(command: AdoptProposal) -> ApprovalSubject:
             "committer": proposal.committer,
             "verification": proposal.verification_reason,
             "adopted": planned.current,
-            "widens": list(planned.widens),
+            WARNINGS: list(planned.widens),
             COMPARED: planned.compared,
         },
     )

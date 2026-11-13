@@ -48,6 +48,8 @@
 @media (scripting: none) {
   @container table-region (width >= 640px) {
     .table-scroll > .data-table:has(tbody td:not([colspan])) { width: max-content; min-width: 100%; max-width: 1400px; }
+    /* A compare table's values wrap in their shares of the region (below), so it is as wide as the region. */
+    .table-scroll.is-compare > .data-table:has(tbody td:not([colspan])) { width: 100%; }
   }
 }
 /* Refreshes pin column widths (fixed layout), so an unbroken token must wrap in its cell rather than bleed across them. */
@@ -146,6 +148,8 @@
 /* Figures right-aligned on fixed digit widths compare by eye; the heading too, so the label sits over them. A cell is a figure by its heading's kind, which the region writes on it (table_tags). */
 .data-table > * > tr > [data-kind="numeric"] { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* Two values set side by side to be compared (a `compare` region) share the room evenly, so neither is squeezed into breaking inside its words, and leave the field they belong to a fifth of it. */
+/* The table is as wide as its region, so the shares are of the region: a table of auto width grows until its field's own width is the fifth that is left. */
+.table-scroll.is-compare > .data-table { inline-size: 100%; }
 .table-scroll.is-compare > .data-table > tbody > tr > td { inline-size: 40%; }
 /* A row that asks to be read first (`{% row_state emphasized=True %}`) is tinted, and its links weigh more, as an unread message does in a mail client. */
 .data-table > tbody > tr[data-emphasized] > * { background: var(--accent-tint); }
@@ -496,7 +500,6 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
   /* The last row showing ends its section, as the last row does. */
   .data-table tbody tr:has(~ tr[data-folded]):not(:has(~ tr:not([data-folded]:not([data-open])))) > * { border-bottom: 0; }
 }
-@media (scripting: none) { .row-fold { display: none; } }
 .data-table tr.is-expanded:has(+ .row-detail) > * { border-bottom: 0; }
 /* An opened row adds one panel under the row's name: each part's name in one column, its value beside it. */
 .data-table .row-detail > td { padding-block: 0; padding-left: calc(var(--space-6) + 1.5rem); }

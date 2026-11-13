@@ -452,17 +452,23 @@ class JobsListRunsTests(TestCase):
 
         return OperationRequest.objects.filter(action=OperationRequest.Action.RUN, **lookups)
 
+    def scans(self):
+        from hq.domains.control_plane.models import OperationRequest
+
+        return OperationRequest.objects.filter(action=OperationRequest.Action.SCAN)
+
     def listed(self, **query):
         return self.client.get(reverse("jobs:list"), query)
 
-    def test_every_run_is_listed_beside_the_jobs(self):
+    def test_every_run_and_scan_is_listed_beside_the_jobs(self):
         page = self.listed(sort="-created_at")
         rows = list(page.context["paginator"].object_list[: page.context["paginator"].count])
 
         self.assertEqual(
             {row.id for row in rows if row.source == "run"},
-            {str(pk) for pk in self.runs().values_list("pk", flat=True)},
+            {str(pk) for pk in (*self.runs().values_list("pk", flat=True), *self.scans().values_list("pk", flat=True))},
         )
+        self.assertTrue(self.scans().exists())
         self.assertTrue(any(row.source == "job" for row in rows))
 
     def test_a_state_is_drawn_as_a_status_in_its_tone(self):

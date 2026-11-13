@@ -1,7 +1,7 @@
 """The catalog's parts: the page frame and every shared part no other family names."""
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 from unittest import mock
 from uuid import UUID
@@ -16,6 +16,7 @@ from django.template import Template
 from hq.domains.jobs.models import Job, JobState
 from hq.platform.application import calendar
 from hq.platform.application.appearance import Theme
+from hq.platform.application.approval_review import ChangePreview, compare, grouped
 from hq.platform.application.asks import DONE, FAILED, RUNNING, Ask, Standing
 from hq.platform.application.calendar import CalendarEvent, CalendarSource, SourceView, calendar_month
 from hq.platform.application.capability_policy import RULE_LABELS, Column, Group, PolicyCell, Row
@@ -27,6 +28,7 @@ from hq.platform.application.entity_links import EntityLink
 from hq.platform.application.finding_model import OperatorStep
 from hq.platform.application.freshness import CURRENT, STALE, Freshness
 from hq.platform.application.pages import Page, PageAction, PageVisit
+from hq.platform.application.payload_words import ChangeRow
 from hq.platform.application.posture import CheckOutcome, CheckStanding, Posture, PostureCheck
 from hq.platform.application.relationships import RelationGroup, Relationship, Relationships
 from hq.platform.application.request_channel import NETWORK_CHANNEL, TAILNET_CHANNEL
@@ -48,6 +50,18 @@ lazy from hq.platform.application.github_estate import Repository
 lazy from hq.platform.application.github_posture import posture_of
 lazy from hq.platform.application.path_model import Certificate, Hop, Route
 lazy from hq.platform.application.request_path import CONTRADICTED, PROVEN, HopCheck
+lazy from hq.platform.application.work_runs import RunEvidence
+
+# The fields of an example record, as a change sets them and as two records hold them.
+_CHANGED_AFTER = {
+    "example_effect": "infrastructure_change",
+    "example_timeout_seconds": 300,
+    "example_hosts": ["example-host-01", "example-host-02"],
+}
+_RECORDS = {
+    "example.first": {"example_effect": "read", "example_timeout_seconds": 60},
+    "example.second": {"example_effect": "read", "example_timeout_seconds": 120, "example_retry": "safe"},
+}
 
 
 class _Drawn:
@@ -544,6 +558,72 @@ def _palette():
         "palette_count": 4,
         "palette_total": 9,
     }
+
+
+def _event(task: str, outcome: str, tone: str, *, host: str = "example-01", message: str = "") -> dict:
+    """A task's outcome as a run reports it (the bridge's ``RunEvent``), with its tone."""
+
+    return {"host": host, "task": task, "outcome": outcome, "message": message, "tone": tone}
+
+
+_LONG_HOST = "example-machine-with-a-long-name-01.example.com"
+_EXAMPLE_RUNS = (
+    (
+        "Run example.cache_flush",
+        "Running",
+        "active",
+        "Applying the example playbook.",
+        RunEvidence(
+            hosts=("example-01", "example-02"),
+            approved_by="example-owner",
+            correlation="example-investigation-7",
+            worker="example-automation-worker",
+            lease_until=datetime(2026, 3, 2, 9, 35, tzinfo=UTC),
+            events=(
+                _event("Flush the example cache", "changed", "active"),
+                _event("Check the example cache", "ok", "good", host="example-02"),
+            ),
+        ),
+    ),
+    ("Refresh the procedures", "Queued", "paused", "Waiting for the automation worker.", RunEvidence()),
+    (
+        "Run example.package_upgrade",
+        "Failed",
+        "serious",
+        "The example upgrade failed on one machine.",
+        RunEvidence(
+            hosts=(_LONG_HOST,),
+            approved_by="example-person-with-a-long-name@example.com",
+            correlation="example-investigation-with-a-correlation-id-longer-than-a-phone-is-wide-0123456789",
+            events=(
+                _event(
+                    "Upgrade every example package to the release the example repository pins",
+                    "failed",
+                    "serious",
+                    host=_LONG_HOST,
+                    message="example-package-with-a-long-name 2.0.1 conflicts with "
+                    "example-other-package-with-a-long-name 1.4.0, which the example machine also holds.",
+                ),
+            ),
+        ),
+    ),
+    (
+        "Run example.disk_report",
+        "Done",
+        "good",
+        "Reported every example disk.",
+        RunEvidence(
+            hosts=("example-01",),
+            events=tuple(
+                _event(f"Example task {number}", outcome, tone)
+                for number, (outcome, tone) in enumerate(
+                    (("ok", "good"), ("changed", "active"), ("skipped", "paused"), ("unreachable", "serious")) * 3,
+                    start=1,
+                )
+            ),
+        ),
+    ),
+)
 
 
 ENTRIES = {
@@ -1350,6 +1430,19 @@ ENTRIES = {
             ]
         },
     ),
+    # A run's evidence ({% run_evidence %}) in its row's open line, as Jobs,
+    # a machine's page and a procedure's page draw it: a run with every field,
+    # one with none, one whose names and messages run long, and one with many
+    # tasks.
+    "part/run-evidence": Entry(
+        '{% section "Example runs" %}{% table_region "Example runs" %}<table class="data-table"><thead><tr>'
+        '{% table_heading "Procedure" gutter=True %}{% table_heading "State" "status" %}'
+        '{% table_heading "Result" %}</tr></thead><tbody>'
+        "{% for title, word, tone, note, evidence in runs %}<tr><td><strong>{{ title }}</strong></td>"
+        "<td>{% status word tone=tone %}</td><td>{{ note }}{% run_evidence evidence %}</td></tr>{% endfor %}"
+        "</tbody></table>{% endtable_region %}{% endsection %}",
+        {"runs": _EXAMPLE_RUNS},
+    ),
     # A code patch ({% patch %}), the declaration of its one caller's (a
     # container's compose change): a title naming a long path, the code with a
     # line longer than a phone's, the words under it and its notes.
@@ -1367,6 +1460,67 @@ ENTRIES = {
         '<li class="prose"><strong>Not included</strong> <span class="muted">An example reason it leaves out,'
         ' with <a href="/example/">an example link</a>.</span></li>'
         "{% endpatch %}{% endsection %}"
+    ),
+    # A change's before and after ({% change_table %}), each state its two
+    # callers draw: an approval card's preview and an audit event's changes.
+    # An empty one draws nothing beside what its section already says.
+    "part/change-table-empty": Entry(
+        '{% section "Example request" %}<p>An example start, which changes no field.</p>'
+        "{% change_table preview %}{% endsection %}",
+        {"preview": compare({}, {}, label="Would change")},
+    ),
+    # What is written where nothing stood, such as a first adoption: one column.
+    "part/change-table-first": Entry(
+        "{% change_table preview %}",
+        {"preview": compare({}, _CHANGED_AFTER, label="Would be applied")},
+    ),
+    # One field that moves, its values long enough to wrap on a phone, and
+    # one whose words never reach the log.
+    "part/change-table-one": Entry(
+        "{% change_table preview %}",
+        {
+            "preview": ChangePreview(
+                label="Changes",
+                rows=(
+                    *compare(
+                        {"example_description": "An example description long enough to wrap on a phone's width."},
+                        {"example_description": "Another example description, longer, so it wraps across lines too."},
+                        label="Changes",
+                    ).rows,
+                    ChangeRow(label="Example token", before="", after="", change="changed", redacted=True),
+                ),
+                lines=(),
+            )
+        },
+    ),
+    # Many records of one kind, as a catalog's procedures: what belongs to
+    # none, one that moves, one that is new, one that stays and so starts
+    # folded, and a document that would not parse, said as a line diff.
+    "part/change-table-many": Entry(
+        "{% change_table preview %}",
+        {
+            "preview": replace(
+                grouped(
+                    {"commit": {"revision": "0123456789abcdef" * 2 + "01234567"}, "records": _RECORDS},
+                    {
+                        "commit": {"revision": "fedcba9876543210" * 2 + "fedcba98"},
+                        "records": {
+                            **_RECORDS,
+                            "example.first": {**_RECORDS["example.first"], **_CHANGED_AFTER},
+                            "example.third": _CHANGED_AFTER,
+                        },
+                    },
+                    label="Would change",
+                ),
+                lines=tuple(
+                    compare(
+                        {"example_notes": "# An example note\nfirst line\nsecond line"},
+                        {"example_notes": "# An example note\nfirst line, changed\nsecond line"},
+                        label="",
+                    ).lines
+                ),
+            )
+        },
     ),
     # Agents' rules (core/_policy_table.html), each setting a toned select
     # (core/_policy_setting.html): every state a rule can be in, and a cell
