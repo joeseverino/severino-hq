@@ -625,6 +625,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 '<td>{% include "partials/_ask.html" with ask=ask %}</td></tr></tbody></table>{% endtable_region %}'
                 '<form id="hq-post" method="post" hidden></form>'
                 '<script defer src="{{ static }}js/fragment.js" nonce="{{ nonce }}"></script>'
+                '{% include "partials/_notice_frames.html" %}'
                 '<script defer src="{{ static }}js/ask.js" nonce="{{ nonce }}"></script>',
                 ask=failed,
             ),
@@ -1756,6 +1757,60 @@ class ComponentLayoutTests(LayoutBrowserTests):
         shown = self.page.evaluate(COLUMNS_SHOWN)
         self.assertNotIn("Read from", shown)
         self.assertNotIn("Logins", shown)
+
+    @with_script
+    def test_a_name_a_cell_cuts_keeps_a_pixel_to_spare_on_its_line_where_its_cell_has_room(self):
+        """A one-token name cut by a box of its own, in a cell with room to
+        spare, draws every part on its one line uncut, with a pixel to spare
+        past them: a track sized to the parts' measure alone is short by the
+        fraction an engine can mismeasure them by, and then the last part
+        leaves the line and only its ellipsis shows. WebKit lays a clamped
+        box (`-webkit-box`) out as the legacy box it measures, which keeps
+        its parts on their line however close it comes, so there only the
+        parts are read."""
+
+        from hq.platform.core.templatetags.value_tags import breakable
+
+        names = [f"/opt/apps/{name}" for name in ("example-connect", "example-id", "example-a1")]
+        cells = [
+            *(breakable(name) for name in names),
+            *(f'<span class="cell-line"><span class="cut">{breakable(name)}</span></span>' for name in names),
+            *(f'<a data-entity href="/example/">{breakable(name)}</a>' for name in names),
+        ]
+        rows = "".join(f"<tr><td>{cell}</td><td>Example</td></tr>" for cell in cells)
+        self.pages = {
+            **self.pages,
+            "name-room-probe": probe(
+                '<div class="table-scroll"><table class="data-table"><thead><tr><th>Directory</th><th>State</th></tr>'
+                f"</thead><tbody>{rows}</tbody></table></div>"
+            ),
+        }
+        short = """([boxes, sole, whole]) => {
+          const found = [];
+          const range = document.createRange();
+          for (const box of document.querySelectorAll(boxes)) {
+            if (getComputedStyle(box.parentElement).display !== 'inline-grid') continue;
+            const token = box.closest(sole) ?? box.querySelector(sole);
+            const top = box.getClientRects()[0].top;
+            const parts = [...box.querySelectorAll(whole)];
+            const pad = getComputedStyle(box);
+            range.selectNodeContents(box);
+            const inside = box.clientWidth - parseFloat(pad.paddingLeft) - parseFloat(pad.paddingRight);
+            const spare = inside - range.getBoundingClientRect().width;
+            const off = parts.some((part) => part.getBoundingClientRect().top > top + 1 || part.scrollWidth > part.clientWidth);
+            if (off || (pad.display !== '-webkit-box' && spare < 0.75))
+              found.push(`${token.textContent} spares ${spare.toFixed(2)}px as ${pad.display}`);
+          }
+          return found;
+        }"""
+        for scale in (1, 2):
+            with self.subTest(scale=scale):
+                self.start(java_script_enabled=True, device_scale_factor=scale)
+                self.open("name-room-probe", WIDE)
+                self.page.evaluate(SETTLE)
+                self.assertEqual(
+                    self.page.evaluate(short, [SELECTORS["name_cut"], SELECTORS["sole_token"], SELECTORS["part"]]), []
+                )
 
     @with_script
     def test_a_table_whose_content_widens_after_its_fit_gives_way_again(self):

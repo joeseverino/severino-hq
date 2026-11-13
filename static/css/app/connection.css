@@ -13,10 +13,6 @@
 .btn.pinned { border-color: var(--accent); color: var(--accent); }
 .zone-switch a > span[aria-hidden] { color: var(--accent); }
 
-/* Facts above a form: what the thing is, before what can be changed. */
-/* What the thing already is, as plain facts above what can be changed: not a bar. */
-.form-facts.kv.compact { margin: 0 0 var(--stack-gap); padding: 0; background: none; }
-
 /* Overflow menu: the actions worth having, without a second row of buttons.
    The panel is the nav's dropdown (same box, same shadow, same radius) so
    there is one dropdown in HQ rather than two that nearly match. */
@@ -448,7 +444,7 @@ details[open] > summary .conn-hop-more::after { transform: rotate(90deg); }
 .conn-carriage .conn-rows { container-type: normal; }
 /* A disclosure in a fact is a target of the least size on its own, so one
    wrapped under another keeps it whatever the column's width. */
-.conn :is(.facts-list, .kv) .conn-more > summary { padding: calc((var(--target-min) - 1lh) / 2) 0; }
+.conn .facts-list .conn-more > summary { padding: calc((var(--target-min) - 1lh) / 2) 0; }
 .conn-carriage > details { display: contents; }
 .conn-carriage > details > :not(summary) { flex-basis: 100%; }
 .conn-carriage > strong { font-weight: 600; }

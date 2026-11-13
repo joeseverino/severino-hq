@@ -65,7 +65,7 @@
    flow holds one to a row (the Fab Four step: the clamp's middle term is
    huge below two members' width and negative above it), so on a phone it
    spans the column as every member does. */
-.section-flow > :is(:has(> :is(.facts-list, .kv)), :has(> .section-body > :is(.facts-list, .kv)), .kv) {
+.section-flow > :is(:has(> .facts-list), :has(> .section-body > .facts-list)) {
   min-inline-size: clamp(min(100%, var(--flow-basis)), (2 * var(--flow-basis) + var(--layout-gap) - 100%) * 999, 100%);
   max-inline-size: max-content;
 }
@@ -564,16 +564,14 @@ td > .subtle-link:not(:only-child) { display: table; }
 
 /* ── Facts as a list ────────────────────────────────────────────── */
 
-/* A list of facts (`{% facts %}`, and `.kv` until each moves onto it): each
+/* A list of facts (`{% facts %}`): each
    label beside its value, one pair to a row, so a few short pairs never
    spread across a wide page. The label column is as wide as its longest
    label, up to two fifths of the list; the values take the rest, so a long
    address keeps to one line where the width allows it. */
-:is(.facts-list, .kv) { display: grid; grid-template-columns: fit-content(40%) minmax(0, 1fr); align-items: baseline; gap: var(--space-4) var(--space-6); font-size: var(--text-sm); }
-.facts-list { margin: 0 0 var(--stack-gap); }
-.kv { padding: var(--surface-inset, var(--space-6) var(--space-8)); }
-:is(.facts-list, .kv) dt { color: var(--muted); font-weight: 500; }
-:is(.facts-list, .kv) dd { min-width: 0; margin: 0; color: var(--ink); overflow-wrap: anywhere; }
+.facts-list { display: grid; grid-template-columns: fit-content(40%) minmax(0, 1fr); align-items: baseline; gap: var(--space-4) var(--space-6); margin: 0 0 var(--stack-gap); font-size: var(--text-sm); }
+.facts-list dt { color: var(--muted); font-weight: 500; }
+.facts-list dd { min-width: 0; margin: 0; color: var(--ink); overflow-wrap: anywhere; }
 /* Each fact is a row of the list's two columns, its detail under its value. */
 .facts-list > .fact { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: baseline; row-gap: var(--space-1); }
 .facts-list .fact-detail { grid-column: 2; color: var(--muted); }

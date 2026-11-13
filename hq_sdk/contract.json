@@ -2785,15 +2785,9 @@
       "icon-link",
       "inline",
       "key-col",
-      "kv",
       "list-rows",
-      "msg",
-      "msg-error",
-      "msg-warning",
       "muted",
       "narrow-more",
-      "notice",
-      "notice-attention",
       "optional-col",
       "page-lede",
       "pie-chart",
@@ -3062,7 +3056,7 @@
         "write": "{% include \"partials/_record_list.html\" %} from hq_sdk.ui.ListRow"
       },
       "a notice": {
-        "pattern": "\\bclass=\"(?:[^\"]*[\\s}])?(?:msg|notice)(?![\\w-])",
+        "pattern": "\\bclass=\"(?:[^\"]*[\\s}])?(?:notice)(?![\\w-])",
         "write": "{% notice %}"
       },
       "a row's actions": {
@@ -3091,7 +3085,7 @@
         "write": "{% include \"partials/_icon.html\" with name=\"...\" %}; a drawing that says something is role=\"img\""
       },
       "label and value facts": {
-        "pattern": "\\bclass=\"(?:[^\"]*[\\s}])?(?:kv|fact-band|service-band|control-summary|control-metric|vitals-strip|glance-metrics|agent-state-facts|attention-facts)(?![\\w-])",
+        "pattern": "\\bclass=\"(?:[^\"]*[\\s}])?(?:fact-band|service-band|control-summary|control-metric|vitals-strip|glance-metrics|agent-state-facts|attention-facts)(?![\\w-])",
         "write": "{% facts %} around each {% fact \"Label\" value=... %}, or {% facts layout=\"band\" %} for a band"
       }
     },
@@ -3391,6 +3385,21 @@
         ],
         "parts": [
           "summary"
+        ]
+      },
+      "notice": {
+        "classes": [
+          "css"
+        ],
+        "parameters": [
+          "*",
+          "css=",
+          "title=",
+          "tone=",
+          "**data"
+        ],
+        "parts": [
+          "title"
         ]
       },
       "outside_link": {

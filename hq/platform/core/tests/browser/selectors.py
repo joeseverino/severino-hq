@@ -72,6 +72,11 @@ SELECTORS = {
     "cut_box": ":is(.token[data-sole], .token[data-sole] .whole, code, code > .token)",
     # The box a name in a cell is held by.
     "name_box": "[data-entity], code, .token[data-sole]",
+    # A one-token name a cell cuts, the box inside its track that cuts it,
+    # and the parts it lays out on its line.
+    "sole_token": ".token[data-sole]",
+    "name_cut": "main td :is(.token[data-sole], .cell-line, [data-entity]) > :is(.cut, .token[data-sole])",
+    "part": ".whole",
     "decision_actions": ".queue-act .attention-actions",
     # The queue's table, and its cells of what is wrong and of its buttons.
     "queue_table": ".queue-table",
@@ -225,11 +230,10 @@ SELECTORS = {
     "section_body": ".section-body",
     # A fact whose value is a list of names (partials' .code-list, .address-list).
     "fact_list": "main .facts-list .fact-value:has(> :is(.code-list, .address-list) > :nth-child(2))",
-    # A list of facts, label beside value (partials/_facts.html, and a `.kv`
-    # drawn by hand), and the frames one is drawn in: a card, a section, or a
-    # `.kv` that is its own frame.
-    "facts_list": ".kv, .facts-list",
-    "list_frame": ".card, .section, .kv:not(:is(.card, .section) .kv)",
+    # A list of facts, label beside value (partials/_facts.html), and the
+    # frames one is drawn in: a card or a section.
+    "facts_list": ".facts-list",
+    "list_frame": ".card, .section",
     # What keeps its line wherever it is drawn: the count of planned days kept
     # beside a calendar's legend.
     "one_line": ".calendar-legend > .count",

@@ -684,8 +684,8 @@ class _Builder:
     def typed(self, kind: type) -> dict[str, Any]:
         """The ``$ref`` to a resource's row or record, kept as the component of its name.
 
-        A caller's field mask may keep any of its fields, so the component
-        names each field's type and promises none of them.
+        A caller's field mask cuts it, so neither it nor any part a mask can
+        reach promises a field (``Components.sparse``).
         """
 
         name = kind.__name__
@@ -903,7 +903,7 @@ def document() -> dict[str, Any]:
             "responses": dict(sorted(builder.responses.items())),
             "headers": dict(sorted(builder.headers.items())),
             "examples": dict(sorted(builder.recordings.items())),
-            "schemas": dict(sorted(builder.components.schemas.items())),
+            "schemas": dict(sorted(builder.components.sparse().items())),
         },
     }
 

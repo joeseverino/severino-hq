@@ -30,7 +30,7 @@ var launchVariables = []string{
 	"HQ_CONTROLLER_RUN", "SEVERINO_BRIDGE_SOCKET", "HQ_CONTROLLER_CONNECTIONS",
 	"HQ_CONTROLLER_SSH_DIR", "HQ_ACME_DIR", "HQ_SEAL_DIR", "HQ_CONTROLLER_IMAGE", "SEVERINO_HQ_SOURCE_REPOSITORY",
 	"HQ_CONTROLLER_CA_FILE", "SEVERINO_TAILNET_STATUS", "SEVERINO_TAILNET_LOCK",
-	"SEVERINO_HOST_FIREWALL", "SEVERINO_RENDER_STATUS", "SEVERINO_HOST_UNITS", "SEVERINO_HOST_RESTARTING_UNITS",
+	"SEVERINO_HOST_FIREWALL", "SEVERINO_RENDER_STATUS", "SEVERINO_HOST_UNITS", "SEVERINO_HOST_RESTARTING_UNITS", "SEVERINO_HOST_FILESYSTEMS",
 	"HQ_CONTROLLER_OUT", "SEVERINO_DEPENDENCY_RUN", "SEVERINO_UNIT_SOCKET", "HQ_CONTROLLER_GRANTS",
 }
 
@@ -104,6 +104,8 @@ func newLaunch(t *testing.T) *launch {
 		UnitSocket:    filepath.Join(f.root, "unit", "unit.sock"),
 		Grants:        []Grant{relocated(DependencyUpdates, f.root)},
 		DependencyRun: filepath.Join(f.root, "state", "renovate", "dependency-run.json"),
+		MountTable:    filepath.Join(f.root, "absent-mounts"),
+		Statfs:        func(string) (free, total uint64, err error) { return 59 << 20, 29 << 30, nil },
 		Connections:   func() error { return nil },
 		Lock: func(context.Context) (func(), error) {
 			l.locked = true
@@ -294,13 +296,17 @@ func TestReadingsAreNamedWhetherOrNotTheyCouldBeTaken(t *testing.T) {
 		"SEVERINO_HOST_UNITS=/run/severino-hq/units",
 		"SEVERINO_HOST_RESTARTING_UNITS=/run/severino-hq/units-restarting",
 		"SEVERINO_TAILNET_LOCK=/run/severino-hq/tailnet-lock.json",
+		"SEVERINO_HOST_FILESYSTEMS=/run/severino-hq/filesystems.json",
 	} {
 		if !slices.Contains(envs, want) {
 			t.Errorf("%s is not named: %v", want, envs)
 		}
 	}
 	for target := range l.mounted {
-		if strings.HasPrefix(target, "/run/severino-hq/render-status/") || target == "/run/severino-hq/units" || target == "/run/severino-hq/units-restarting" || target == "/run/severino-hq/tailnet-lock.json" {
+		if strings.HasPrefix(target, "/run/severino-hq/render-status/") || slices.Contains([]string{
+			"/run/severino-hq/units", "/run/severino-hq/units-restarting",
+			"/run/severino-hq/tailnet-lock.json", "/run/severino-hq/filesystems.json",
+		}, target) {
 			t.Errorf("%s was mounted with nothing to mount", target)
 		}
 	}
@@ -308,6 +314,30 @@ func TestReadingsAreNamedWhetherOrNotTheyCouldBeTaken(t *testing.T) {
 		if strings.HasPrefix(env, "SEVERINO_TAILNET_STATUS") || strings.HasPrefix(env, "SEVERINO_HOST_FIREWALL") || strings.HasPrefix(env, "HQ_CONTROLLER_CA_FILE") {
 			t.Errorf("%s named with nothing read", env)
 		}
+	}
+}
+
+// Root asks each real filesystem its space and hands the container the
+// answer, never the mount table it read it from.
+func TestEachFilesystemsSpaceIsMountedAsAReading(t *testing.T) {
+	l := newLaunch(t)
+	table := "/dev/sda2 / ext4 rw,relatime,errors=remount-ro 0 0\noverlay /var/lib/docker/overlay2/example/merged overlay rw 0 0\n"
+	if err := os.WriteFile(l.controller.MountTable, []byte(table), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	l.run(t, Plan)
+
+	var reading hostcore.FilesystemReading
+	if err := json.Unmarshal(l.mounted["/run/severino-hq/filesystems.json"], &reading); err != nil {
+		t.Fatalf("no filesystem reading was mounted: %v", err)
+	}
+	want := []hostcore.Filesystem{{Mount: "/", FreeBytes: 59 << 20, TotalBytes: 29 << 30}}
+	if !slices.Equal(reading.Filesystems, want) || reading.ReadAt == "" {
+		t.Errorf("mounted %+v, want %+v", reading, want)
+	}
+	if joined := strings.Join(l.args, "\n"); strings.Contains(joined, "/dev/sda2") || strings.Contains(joined, "source="+l.controller.MountTable) {
+		t.Errorf("the mount table reached the container: %v", l.args)
 	}
 }
 

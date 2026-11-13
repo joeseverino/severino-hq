@@ -1,0 +1,7 @@
+{% comment %}
+The empty notice of each tone a script draws in (fragment.js, demo.js), so a
+line it adds is the part the server draws and no script writes its class.
+base.html draws it on every page.
+{% endcomment %}<template data-notice="error">{% notice tone="error" %}{% endnotice %}</template>
+<template data-notice="warning">{% notice tone="warning" %}{% endnotice %}</template>
+<template data-notice="info">{% notice tone="info" %}{% endnotice %}</template>

@@ -5,15 +5,15 @@
 {% else %}
 
 {% section event_heading %}
-  <dl class="kv" aria-label="Event">
-    <dt>When</dt><dd>{{ event.created_at|when:"exact" }}</dd>
-    <dt>Who</dt><dd>{% if door %}{{ event.actor_label|breakable:"," }} {{ door|breakable }}{% else %}{{ event.actor_label|breakable }}{% endif %}{% if acting_as %} <span class="muted">as {{ acting_as|breakable }}</span>{% endif %}{% if approved_by %}{% dot %}approved by {{ approved_by|breakable }}{% endif %}</dd>
-    {% if event.object_type %}<dt>Object</dt><dd>{{ event.object_repr|default:event.type_label|or_empty }}{% if event.object_id %} <span class="muted">#{{ event.object_id|breakable }}</span>{% endif %}</dd>{% endif %}
-    {% if about %}<dt>About</dt><dd><a href="{{ about.1 }}">{{ about.0|breakable }}</a> <span class="muted">everything that happened to it</span></dd>{% endif %}
-    {% if cause %}<dt>Started by</dt><dd><a href="{{ cause.1 }}">{{ cause.0|breakable }}</a></dd>{% endif %}
-    {% if operation or operation_id %}<dt>Operation</dt><dd>{{ operation|breakable }}{% if operation and operation_id %} {% endif %}{% if operation_id %}<code>{{ operation_id|breakable }}</code>{% endif %}</dd>{% endif %}
-    {% if event.message %}<dt>Message</dt><dd>{{ event.message|breakable }}</dd>{% endif %}
-  </dl>
+  {% facts label="Event" %}
+    {% fact "When" %}{{ event.created_at|when:"exact" }}{% endfact %}
+    {% fact "Who" %}{% if door %}{{ event.actor_label|breakable:"," }} {{ door|breakable }}{% else %}{{ event.actor_label|breakable }}{% endif %}{% if acting_as %} <span class="muted">as {{ acting_as|breakable }}</span>{% endif %}{% if approved_by %}{% dot %}approved by {{ approved_by|breakable }}{% endif %}{% endfact %}
+    {% if event.object_type %}{% fact "Object" %}{{ event.object_repr|default:event.type_label|or_empty }}{% if event.object_id %} <span class="muted">#{{ event.object_id|breakable }}</span>{% endif %}{% endfact %}{% endif %}
+    {% if about %}{% fact "About" %}<a href="{{ about.1 }}">{{ about.0|breakable }}</a> <span class="muted">everything that happened to it</span>{% endfact %}{% endif %}
+    {% if cause %}{% fact "Started by" %}<a href="{{ cause.1 }}">{{ cause.0|breakable }}</a>{% endfact %}{% endif %}
+    {% if operation or operation_id %}{% fact "Operation" %}{{ operation|breakable }}{% if operation and operation_id %} {% endif %}{% if operation_id %}<code>{{ operation_id|breakable }}</code>{% endif %}{% endfact %}{% endif %}
+    {% if event.message %}{% fact "Message" value=event.message %}{% endif %}
+  {% endfacts %}
 {% endsection %}
 
 {% if changes %}
@@ -42,9 +42,9 @@
 
 {% if extra %}
 {% section "Metadata" %}
-  <dl class="kv" aria-label="Metadata">
-    {% for key, value in extra.items %}<dt>{{ key|breakable }}</dt><dd>{{ value|or_empty }}</dd>{% endfor %}
-  </dl>
+  {% facts label="Metadata" %}
+    {% for key, value in extra.items %}{% fact key %}{{ value|or_empty }}{% endfact %}{% endfor %}
+  {% endfacts %}
 {% endsection %}
 {% endif %}
 

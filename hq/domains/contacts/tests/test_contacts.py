@@ -25,6 +25,7 @@ from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.record_errors import RecordNotFound
 from hq.platform.application.security import Capability, Principal
 from hq.platform.application.tests.facts import ROOT, STRING, scan, strings
+from hq.platform.application.tests.markup import with_class
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog
 
@@ -82,7 +83,7 @@ class InboxReadingTests(TestCase):
 
         self.assertContains(response, "No messages read yet.")
         self.assertContains(response, "Connect Cloudflare API")
-        self.assertNotContains(response, "notice-error")
+        self.assertEqual(with_class(response, "notice-error"), [])
         self.assertEqual(inbox.unread(), (0, "unknown"))
 
     def test_rows_counts_and_search_come_from_the_stored_reading(self):

@@ -43,7 +43,7 @@ class FormErrorsTests(SimpleTestCase):
         form = _Refused(data={"name": "x"})
         form.is_valid()
 
-        (notice,) = with_class(render_to_string(self.PARTIAL, {"form": form}), "msg-error")
+        (notice,) = with_class(render_to_string(self.PARTIAL, {"form": form}), "notice-error")
 
         self.assertEqual(notice.attrs.get("role"), "alert")
         self.assertIn("Those two cannot go together.", notice.words)

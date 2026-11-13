@@ -109,11 +109,12 @@
       list.className = "messages";
       main.prepend(list);
     }
-    const note = document.createElement("li");
-    note.className = "msg msg-info";
-    note.setAttribute("role", "status");
+    // The empty info notice the page drew for a script to fill (base.html).
+    const note = document.querySelector('template[data-notice="info"]').content.firstElementChild.cloneNode(true);
     note.textContent = words;
-    list.replaceChildren(note);
+    const item = document.createElement("li");
+    item.append(note);
+    list.replaceChildren(item);
     main.scrollIntoView({ block: "start" });
   };
 

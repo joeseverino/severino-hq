@@ -216,8 +216,14 @@ def proxy():
 
 
 def host():
-    """What the host reports of itself: its firewall, perimeter and load."""
+    """What the host reports of itself: its firewall, perimeter, disks and load."""
 
+    # A root a build has all but filled, beside a roomy boot partition.
+    store(
+        "host.filesystem",
+        {"mount": "/", "free_bytes": 59_000_000, "total_bytes": 29 * 2**30, "read_at": stamp()},
+        {"mount": "/boot", "free_bytes": 760 * 2**20, "total_bytes": 2**30, "read_at": stamp()},
+    )
     store(
         "host.firewall",
         {

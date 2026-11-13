@@ -233,11 +233,11 @@ const primitives = [
     sheets: tableSheets,
   },
   { name: "button", classes: "btn", sheets: ["page"] },
-  { name: "facts", classes: String.raw`kv|facts-(?:list|band)|fact(?:-label|-value|-detail)?`, sheets: ["layout", "figures", "surfaces"] },
+  { name: "facts", classes: String.raw`facts-(?:list|band)|fact(?:-label|-value|-detail)?`, sheets: ["layout", "figures", "surfaces"] },
   { name: "field", classes: "field", sheets: ["forms"] },
   { name: "section", classes: String.raw`section(?:-[\w-]+)?`, sheets: ["layout", "page", "surfaces"] },
   { name: "stat", classes: String.raw`kpi(?:-[\w-]+)?`, sheets: ["cards", "surfaces"] },
-  { name: "message", classes: "msg|msg-(?:error|info|success|warning)|notice|notice-attention", sheets: ["routes"] },
+  { name: "notice", classes: String.raw`notice(?:-(?:attention|error|info|success|warning))?`, sheets: ["routes"] },
   { name: "card", classes: "card", sheets: ["layout", "surfaces"] },
 ];
 // A sheet that draws a primitive may write that one's variants. Today's

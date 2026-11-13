@@ -578,6 +578,14 @@
       "carried": true
     }
   ],
+  "host.filesystem": [
+    {
+      "free_bytes": 1,
+      "mount": "/",
+      "read_at": "2030-01-01T00:00:00Z",
+      "total_bytes": 1
+    }
+  ],
   "host.firewall": [
     {
       "record": "example",

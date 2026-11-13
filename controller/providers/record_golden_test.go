@@ -49,6 +49,7 @@ var recordTypes = map[runtime.ResourceKind][]any{
 	runtime.ResourceKindHostRenderStatus:             {HostRenderStatusRecord{}},
 	runtime.ResourceKindHostUnit:                     {runtime.HostUnitRecord{}},
 	runtime.ResourceKindHostTailnetLock:              {runtime.HostTailnetLockRecord{}},
+	runtime.ResourceKindHostFilesystem:               {runtime.HostFilesystemRecord{}},
 	runtime.ResourceKindNPMProxyHost:                 {NPMProxyHostRecord{}},
 	runtime.ResourceKindNPMCertificate:               {NPMCertificateRecord{}},
 	runtime.ResourceKindNPMRedirect:                  {NPMRedirectRecord{}},
@@ -93,6 +94,8 @@ var admittedMembers = map[string]any{
 	"HostUnitRecord.NextElapseAt":            instant,
 	"HostUnitRecord.ActiveAt":                instant,
 	"HostUnitRecord.ReadAt":                  instant,
+	"HostFilesystemRecord.Mount":             "/",
+	"HostFilesystemRecord.ReadAt":            instant,
 }
 
 // filled is a value of the type with every member it can hold set: each

@@ -295,7 +295,10 @@ class ExampleEstateGate(BrowserGate):
     def visit(self, path, width):
         self.page.set_viewport_size(viewport(width))
         self.page.goto(f"{ORIGIN}{path}", wait_until="load")
-        self.in_flight.settle(f"{path} at {width}px")
+        # A page without script runs no frame callback, so a wait on one never
+        # ends, and starts no request of its own once loaded.
+        if self.runs_script:
+            self.in_flight.settle(f"{path} at {width}px")
         self.page.evaluate(FONTS_READY)
 
 

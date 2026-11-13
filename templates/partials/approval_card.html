@@ -12,10 +12,9 @@
   </header>
 
   {% if entry.warnings %}
-    <div class="notice notice-attention">
-      <strong>What this affects</strong>
+    {% notice tone="warning" title="What this affects" %}
       <ul>{% for warning in entry.warnings %}<li>{{ warning|breakable }}</li>{% endfor %}</ul>
-    </div>
+    {% endnotice %}
   {% endif %}
   {% if entry.preview.label %}<h3 class="approval-label">{{ entry.preview.label|breakable }}</h3>{% endif %}
   {% if entry.preview.rows %}

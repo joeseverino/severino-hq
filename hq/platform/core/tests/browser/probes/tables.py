@@ -693,8 +693,8 @@ POPOVER_IN_A_CELL = """{% load value_tags %}
 {% table_region "Origins" %}<table class="data-table"><thead><tr>
 {% table_heading "Item" gutter=True %}{% table_heading "Urgency" %}</tr></thead><tbody>
 <tr><td class="row-gutter">Example item</td><td><span class="pill">Urgent</span>
-<div class="modal origin-panel" id="example-origin" popover><div class="modal-panel"><dl class="kv compact">
-<dt>From</dt><dd>{{ source|breakable }}</dd><dt>Key</dt><dd><code>{{ key|breakable }}</code></dd></dl></div></div></td></tr>
+<div class="modal origin-panel" id="example-origin" popover><div class="modal-panel">{% facts %}
+{% fact "From" value=source %}{% fact "Key" %}<code>{{ key|breakable }}</code>{% endfact %}{% endfacts %}</div></div></td></tr>
 </tbody></table>{% endtable_region %}"""
 
 POPOVER_VALUES = {

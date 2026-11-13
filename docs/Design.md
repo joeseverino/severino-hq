@@ -422,7 +422,7 @@ rule when they follow the card's head. Its labels read on from the value, so
 they are written in lower case. A fact with an address is a link whole.
 A fact's detail is running words. Its lines are the ones its markup declares:
 a `<small>` each, or a `detail=` given as a list.
-A fact drawn by hand (`.kv`, a page's own band) is a shape `test_hand_drawn`
+A fact drawn by hand (a page's own band) is a shape `test_hand_drawn`
 counts, and so is a figure set bold apart from the words that count it.
 
 What names a value (`.fact-label`, a tile's label, a `<dt>`) is sentence case
@@ -613,11 +613,16 @@ content it is about. `tone` is one of `info`, `success`, `warning` and
 `error`, Django's message levels, so a message's `level_tag` is its tone as
 it stands; with none it is neutral. An error is an `alert`, which a screen
 reader says at once, and any other a `status`. `title` is its first line, in
-bold; `css` and `data_*` are the page's, as a section's are. Among the page's
+bold; a title the page composes (words around a value, a loop) is the
+`{% title %}` part, written after the body
+(`{% notice tone="warning" %}<p>Pick another.</p>{% title %}{{ name }} cannot be used{% endnotice %}`).
+`css` and `data_*` are the page's, as a section's are. Among the page's
 messages (`<ul class="messages">`, base.html) the same part is a toast, set
 closer; it is never a second part. Drawn with no body it is the frame a script
-clones and fills, so a line a script adds looks like one the server drew. An
-error page's notice (`.notice-page`) is a page of its own, never this part.
+clones and fills: base.html holds one per tone in a `<template data-notice>`,
+so a line a script adds (`fragment.js`, `demo.js`) is the part the server
+draws, and no script writes a notice's class. An error page's notice
+(`.notice-page`) is a page of its own, never this part.
 
 **A state is a pill drawn by `{% status %}`.** `{% status row.get_status_display tone=row.status %}`
 (`status_tags.py`; `hq_sdk.ui.status_pill` from Python) says the state in

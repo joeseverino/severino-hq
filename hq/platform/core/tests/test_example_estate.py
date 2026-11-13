@@ -22,7 +22,7 @@ from hq.platform.application.capability_policy import RULE_LABELS
 from hq.platform.application.findings import findings
 from hq.platform.application.linked_accounts import GITHUB, linked_login
 from hq.platform.application.security import WEB_INTERFACE, cli_principal, web_principal
-from hq.platform.application.tests.markup import select, with_class, within
+from hq.platform.application.tests.markup import all_elements, select, with_class, within
 from hq.platform.core import seeds
 from hq.platform.core.audit import ANONYMOUS
 from hq.platform.core.example_estate.agents import AGENT, NOT_CARRIED
@@ -301,6 +301,55 @@ class WalkedStatesTests(TestCase):
         self.assertEqual(len(set(titles)), 2, titles)
         for title in titles:
             self.assertIn(f"expired {LEFT_OVER_LAPSED.days} days ago", title)
+
+    def test_a_name_one_reading_holds_twice_is_one_item_and_no_source_repeats_a_key(self):
+        # The queue knows an item by its key; a source answering two under one
+        # has given it one item it cannot tell apart, row or dismissal.
+        from hq.domains.control_plane.models import ProviderInventory
+        from hq.platform.application.action_items import item_key
+        from hq.platform.application.domains import all_domains
+        from hq.platform.application.inventory_testing import store
+        from hq.platform.application.projection import projection_scope
+
+        # An edge certificate whose renewal is failing, beside the one it
+        # replaced, which has run out: one name held twice by one reading.
+        kind = "cloudflare.edge_certificate"
+        (edge, *_rest) = ProviderInventory.objects.get(kind=kind).records
+        held_twice = f"legacy.{edge['zone']}"
+        store(
+            kind,
+            edge,
+            *(
+                {**edge, "id": f"example-advanced-{days}", "hosts": [held_twice], "expires_on": when}
+                for days, when in ((5, in_days(5)), (-3, in_days(-3)))
+            ),
+        )
+
+        page = self.walked(reverse("action_items"))
+
+        ids = [element.attrs["id"] for element in all_elements(page) if element.attrs.get("id")]
+        self.assertEqual(sorted({name for name in ids if ids.count(name) > 1}), [])
+        for fold in select(page, "data-fold-toggle"):
+            self.assertTrue(fold.attrs.get("aria-label"), fold)
+        # The name is judged by the certificate that serves it, the newer one.
+        (item,) = [
+            item
+            for group in page.context["action_groups"]
+            for item in group["items"]
+            if item["source_id"] == "hq.estate" and held_twice in item["label"]
+        ]
+        self.assertIn("expires in 5 days", item["label"])
+        with projection_scope():
+            for domain in all_domains():
+                if domain.integration.attention is None:
+                    continue
+                keys = [item_key(domain.id, item) for item in domain.integration.attention()]
+                with self.subTest(source=domain.id):
+                    self.assertEqual(sorted({key for key in keys if keys.count(key) > 1}), [])
+
+
+def in_days(days):
+    return (timezone.now() + timedelta(days=days, hours=1)).isoformat()
 
 
 class PinnedWordsTests(TestCase):

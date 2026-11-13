@@ -46,7 +46,7 @@ OUTSIDE = {
     "templates/example/parts.html": (
         '{% card %}{% section "A" %}B{% aside %}C{% endsection %}{% aside %}C{% endcard %}\n'
         "{% aside %}D\n"
-        '{% card css="kv invented-card" %}{% endcard %}{% card css=chosen %}{% endcard %}\n'
+        '{% card css="muted invented-card" %}{% endcard %}{% card css=chosen %}{% endcard %}\n'
         '{% post_button "Go" url css="invented-button" %}\n{% table_heading "A" css="invented-note" %}\n'
         '{% facts %}{% fact "A" value=n %}{% detail %}B{% endfacts %}'
     ),
@@ -100,8 +100,8 @@ class TemplateValidationTests(SimpleTestCase):
 # then two that are not: one in a comment and a table in its region.
 DRAWN = (
     "<section>\n<h2>A</h2>\n<details>\n<table></table>\n"
-    '<form method="post">\n<ul class="list-rows">\n<div class="kpi">\n<p class="msg">\n'
-    '<form class="filter-bar">\n<svg aria-hidden="true">\n<span class="tone-good">\n<dl class="kv">\n'
+    '<form method="post">\n<ul class="list-rows">\n<div class="kpi">\n<p class="notice">\n'
+    '<form class="filter-bar">\n<svg aria-hidden="true">\n<span class="tone-good">\n<dl class="fact-band">\n'
     "<strong>{{ refused_count }}</strong> refused\n"
     "{{ miles|floatformat:2 }} mi\n"
     '<div class="empty">\n<p class="muted">No notes yet.</p>\n'

@@ -1,5 +1,5 @@
 """dev:look draws a catalog entry without script, as the catalog's gate judges
-it, and a page drawn without script is looked at to the end: with --eval and
+it, and every other page with it whatever was drawn before, and a page drawn without script is looked at to the end: with --eval and
 --open it never waits on a frame, a timer or a second reading the page never
 gives."""
 
@@ -55,7 +55,7 @@ class _Looker:
     shooting = True
     probe = probe_source = ""
     probe_arg = None
-    drawn_with_script = False
+    runs_script = False
 
     def __init__(self, page):
         self.page, self.measured, self.base, self.shots = page, {}, None, []
@@ -98,16 +98,18 @@ class UnscriptedLookTests(SimpleTestCase):
 class _Context:
     """The look's choice of a context to draw each page in, each it starts recorded."""
 
-    drawn_with_script = True
+    runs_script = True
 
     def __init__(self, unscripted):
         self.unscripted, self.started = frozenset(unscripted), []
 
     def __getattr__(self, name):
-        return getattr(look.Look, name).__get__(self)
+        member = getattr(look.Look, name)
+        return member.__get__(self) if hasattr(member, "__get__") else member
 
     def start(self, **options):
         self.started.append(options["java_script_enabled"])
+        self.runs_script = options["java_script_enabled"]
 
 
 @tag("source")
@@ -121,7 +123,7 @@ class CatalogScriptTests(SimpleTestCase):
         with mock.patch.dict(os.environ, {**ASKED, **asked}):
             for name in names:
                 context.draw_scripted_as(name)
-                drawn.append(context.drawn_with_script)
+                drawn.append(context.runs_script)
         return drawn, context.started
 
     def test_a_catalog_entry_is_drawn_without_script_as_its_gate_judges_it_and_a_page_with_script(self):
@@ -135,3 +137,35 @@ class CatalogScriptTests(SimpleTestCase):
         drawn, _started = self.drawn(["connections", "part/example"], usage_no_script="true")
 
         self.assertEqual(drawn, [False, False])
+
+
+class _Opened(_Context):
+    """The look's opening of a page, each estate visit recorded with whether
+    the context it was visited in runs script."""
+
+    css = ""
+
+    def __init__(self, unscripted, addresses):
+        super().__init__(unscripted)
+        self.addresses, self.visited = addresses, []
+        self.page = mock.Mock()
+        self.page.locator.return_value.count.return_value = 0
+
+    def visit(self, path, _width):
+        self.visited.append((path, self.started[-1]))
+
+
+@tag("source")
+class EstateScriptTests(SimpleTestCase):
+    def test_an_estate_page_or_a_post_after_a_catalog_entry_is_drawn_with_script(self):
+        # Visited without script, its wait for the page to settle would wait on a frame that never comes.
+        from .look_posts import post_names
+
+        post = post_names()[0]
+        opened = _Opened({"part/example"}, {"estate/projects": "/projects/", post: "/commands/example/"})
+        with mock.patch.dict(os.environ, ASKED):
+            for name in ("estate/projects", post):
+                opened.draw_scripted_as("part/example")
+                opened.open(name, 402)
+
+        self.assertEqual(opened.visited, [("/projects/", True), ("/commands/example/", True)])

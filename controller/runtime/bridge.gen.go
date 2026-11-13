@@ -632,6 +632,7 @@ const (
 	ResourceKindGitHubProfile                ResourceKind = "github.profile"
 	ResourceKindGitHubRepository             ResourceKind = "github.repository"
 	ResourceKindHQRequestPath                ResourceKind = "hq.request_path"
+	ResourceKindHostFilesystem               ResourceKind = "host.filesystem"
 	ResourceKindHostFirewall                 ResourceKind = "host.firewall"
 	ResourceKindHostPerimeter                ResourceKind = "host.perimeter"
 	ResourceKindHostRenderStatus             ResourceKind = "host.render_status"
@@ -716,6 +717,8 @@ func (e ResourceKind) Valid() bool {
 	case ResourceKindGitHubRepository:
 		return true
 	case ResourceKindHQRequestPath:
+		return true
+	case ResourceKindHostFilesystem:
 		return true
 	case ResourceKindHostFirewall:
 		return true
@@ -816,6 +819,7 @@ const (
 	SweptGitHubDependencyRun          SweptKind = "github.dependency_run"
 	SweptGitHubProfile                SweptKind = "github.profile"
 	SweptGitHubRepository             SweptKind = "github.repository"
+	SweptHostFilesystem               SweptKind = "host.filesystem"
 	SweptHostFirewall                 SweptKind = "host.firewall"
 	SweptHostPerimeter                SweptKind = "host.perimeter"
 	SweptHostRenderStatus             SweptKind = "host.render_status"
@@ -883,6 +887,8 @@ func (e SweptKind) Valid() bool {
 	case SweptGitHubProfile:
 		return true
 	case SweptGitHubRepository:
+		return true
+	case SweptHostFilesystem:
 		return true
 	case SweptHostFirewall:
 		return true
@@ -1626,6 +1632,21 @@ type GlanceWeatherTarget struct {
 	// Endpoint The National Weather Service API the forecast is read from, as HQ's connection states it.
 	Endpoint string `json:"endpoint"`
 	Point    string `json:"point"`
+}
+
+// HostFilesystemRecord One real filesystem on the controller's machine, as statfs(2) states it: the host.filesystem reading's record. Root reads each ext4, xfs, btrfs or zfs mount the machine shows, one per device, and sends where it is mounted and its space; no device, option or file name.
+type HostFilesystemRecord struct {
+	// FreeBytes f_bavail: the bytes a process that is not root can still write.
+	FreeBytes int `json:"free_bytes"`
+
+	// Mount Where the filesystem is mounted, the name a person finds it by.
+	Mount string `json:"mount"`
+
+	// ReadAt When root asked the kernel.
+	ReadAt string `json:"read_at"`
+
+	// TotalBytes f_blocks: the filesystem's size in bytes.
+	TotalBytes int `json:"total_bytes"`
 }
 
 // HostFirewallRecord One host.firewall record: Host firewall.

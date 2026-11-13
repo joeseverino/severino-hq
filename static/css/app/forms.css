@@ -54,7 +54,7 @@
    form fields is just a taller row. `.field` has to stay the wrapper: the
    control styling hangs off `.field select`, so dropping it to kill the margin
    drops the border and padding with it and the control falls back to the
-   browser's own. Same modifier convention as .kv.compact. */
+   browser's own. Same modifier convention as .btn.compact. */
 .field.compact { margin-bottom: 0; }
 .field label { display: block; font-weight: 600; margin-bottom: var(--space-2); font-size: var(--text-sm); }
 .field input, .field select, .field textarea { width: 100%; }

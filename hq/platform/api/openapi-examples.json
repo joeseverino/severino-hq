@@ -258,12 +258,12 @@
               "affected_scopes": [],
               "evidence": [
                 {
-                  "label": "Service",
-                  "value": "example-upload.service"
+                  "label": "Free on /",
+                  "value": "56 MB of 29.0 GB (0.2%)"
                 }
               ],
-              "explanation": "systemd starts it again each time it stops, and it does not stay up.",
-              "id": "claim:351586e64bf742f3",
+              "explanation": "The next write that needs more room than is left fails, and says only that the write did.",
+              "id": "claim:1d767918c4a28e08",
               "investigations": [
                 {
                   "capability": "",
@@ -295,23 +295,23 @@
               ],
               "operator_steps": [
                 {
-                  "command": "ssh example-controller \"sudo systemctl reset-failed example-upload.service\"",
-                  "label": "Once it is fixed, clear its restart count",
+                  "command": "ssh example-controller \"sudo df -h /\"",
+                  "label": "See the space on /",
                   "notes": []
                 }
               ],
               "remedies": [],
-              "rule": "unit-restarting",
-              "scope": "host.unit",
+              "rule": "filesystem-nearly-full",
+              "scope": "host.filesystem",
               "severity": "serious",
               "since": null,
               "subject": "controller:e61d92aae82ff989",
-              "title": "\u201cExample log upload\u201d keeps restarting on example-controller",
+              "title": "The filesystem at / on example-controller is nearly full",
               "workflow": {
-                "id": "resolve:claim:351586e64bf742f3",
+                "id": "resolve:claim:1d767918c4a28e08",
                 "label": "Next steps",
                 "outcome": {
-                  "claim_id": "claim:351586e64bf742f3",
+                  "claim_id": "claim:1d767918c4a28e08",
                   "kind": "claim_absent",
                   "label": ""
                 },
@@ -328,7 +328,7 @@
                         "recommended": false,
                         "refusal": "",
                         "target": "",
-                        "url": "/infrastructure/findings/?rule=unit-restarting"
+                        "url": "/infrastructure/findings/?rule=filesystem-nearly-full"
                       }
                     ],
                     "label": "Check again",
@@ -343,12 +343,12 @@
           "rule": null,
           "schema_version": 2,
           "summary": {
-            "findings": 4,
-            "returned": 4,
+            "findings": 5,
+            "returned": 5,
             "severities": {
               "attention": 2,
               "neutral": 1,
-              "serious": 1
+              "serious": 2
             },
             "truncated": false
           }
@@ -1318,7 +1318,7 @@
     "responses": {
       "200": {
         "data": {
-          "count": 9,
+          "count": 10,
           "items": [
             {
               "action": "Review docs",
@@ -1331,7 +1331,7 @@
             }
           ],
           "next": null,
-          "total": 9,
+          "total": 10,
           "truncated": false
         },
         "ok": true
@@ -2073,7 +2073,7 @@
             "never_read": 1,
             "not_connected": [],
             "out_of_date": 0,
-            "read": 40,
+            "read": 41,
             "readings": [
               {
                 "error": "",
@@ -2349,7 +2349,7 @@
     "responses": {
       "200": {
         "data": {
-          "count": 41,
+          "count": 42,
           "items": [
             {
               "error": "",
@@ -2362,7 +2362,7 @@
             }
           ],
           "next": null,
-          "total": 41,
+          "total": 42,
           "truncated": false
         },
         "ok": true
@@ -3232,7 +3232,7 @@
           "summary": {
             "edges": 306,
             "kinds": {
-              "ability": 58,
+              "ability": 59,
               "connection": 10,
               "controller": 1,
               "machine": 3,
@@ -3242,7 +3242,7 @@
               "target": 2,
               "zone": 1
             },
-            "nodes": 126
+            "nodes": 127
           },
           "trace": null
         },

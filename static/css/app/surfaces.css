@@ -27,7 +27,7 @@
   .table-scroll:has(> .data-table), .card, .section:not(.section .section, [data-head="above"], :not([data-head="inside"], .two-col:has(> .section > .section-body > :not(.table-scroll:only-child)) > *, .section-flow > *):has(> .section-body > .table-scroll:only-child)), .two-col > section:not(.section), .two-col > div, .section-flow > section:not(.section), .control-card,
   .control-metric, .control-summary, .facts-band,
   .filter-bar, .kpi-grid, .insight-grid,
-  .kv, .form,
+  .form,
   .auth-card, .mail-stage,
   .topology-workspace, .github-list,
   .relation-list,

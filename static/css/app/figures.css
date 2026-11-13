@@ -445,7 +445,6 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 /* A short record list on a card reads at body size, not headline size. */
 .control-metric .list-rows strong { font-size: var(--text-sm); font-weight: 600; }
 .control-metric .list-rows li { padding: var(--space-2) 0; }
-.control-metric .kv dt { font-size: var(--text-xs); }
 .control-metric > .control-diagnostics[open] > summary { margin-bottom: var(--space-3); }
 .operation-result { max-width: 34rem; overflow-wrap: anywhere; }
 .operation-result > strong { display: block; line-height: 1.35; }

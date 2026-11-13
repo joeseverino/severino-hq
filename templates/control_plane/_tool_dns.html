@@ -40,31 +40,27 @@
     {% with reading=results|dictkey:"lookup.address.read" %}
       {% if reading %}
         {% if reading.ok %}
-          <dl class="kv">
-            <dt>Address</dt>
-            <dd><code>{{ reading.address|breakable }}</code> IPv{{ reading.version|breakable }}</dd>
+          {% facts %}
+            {% fact "Address" %}<code>{{ reading.address|breakable }}</code> IPv{{ reading.version|breakable }}{% endfact %}
             {% if reading.hostnames %}
-              <dt>Reverse DNS</dt>
-              <dd>{% for hostname in reading.hostnames %}<code>{{ hostname|breakable }}</code> {% endfor %}</dd>
+              {% fact "Reverse DNS" %}{% for hostname in reading.hostnames %}<code>{{ hostname|breakable }}</code> {% endfor %}{% endfact %}
             {% endif %}
             {% if reading.allocation.organization %}
-              <dt>Allocated to</dt>
-              <dd><strong>{{ reading.allocation.organization|breakable }}</strong></dd>
+              {% fact "Allocated to" %}<strong>{{ reading.allocation.organization|breakable }}</strong>{% endfact %}
             {% endif %}
             {% if reading.allocation.prefixes %}
-              <dt>Block</dt>
-              <dd>{% for prefix in reading.allocation.prefixes %}<code>{{ prefix|breakable }}</code> {% endfor %}</dd>
+              {% fact "Block" %}{% for prefix in reading.allocation.prefixes %}<code>{{ prefix|breakable }}</code> {% endfor %}{% endfact %}
             {% endif %}
             {% if reading.allocation.range %}
-              <dt>Range</dt><dd>{{ reading.allocation.range|breakable }}</dd>
+              {% fact "Range" value=reading.allocation.range %}
             {% endif %}
             {% if reading.allocation.handle %}
-              <dt>Registry handle</dt><dd><code>{{ reading.allocation.handle|breakable }}</code></dd>
+              {% fact "Registry handle" %}<code>{{ reading.allocation.handle|breakable }}</code>{% endfact %}
             {% endif %}
             {% if reading.note %}
-              <dt>Note</dt><dd class="muted">{{ reading.note|breakable }}</dd>
+              {% fact "Note" %}<span class="muted">{{ reading.note|breakable }}</span>{% endfact %}
             {% endif %}
-          </dl>
+          {% endfacts %}
           {% if reread %}
             <div class="help">Read {{ reading.observed_at|when }} {% include "partials/_page_action.html" with action=reread extra="ghost compact" only %}</div>
           {% endif %}

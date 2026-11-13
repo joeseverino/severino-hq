@@ -260,6 +260,8 @@ func controller(stdout, stderr io.Writer) *host.Controller {
 		UnitSocket:    host.UnitSocket,
 		Grants:        hostGrants(stderr),
 		DependencyRun: host.DependencyRunFile,
+		MountTable:    hostcore.MountTable,
+		Statfs:        hostcore.Statfs,
 		Connections:   requireConnections,
 		Lock:          host.SharedLock(filepath.Join(hostcore.SecretDir, "ssh.lock"), time.Minute),
 		LookPath:      exec.LookPath,

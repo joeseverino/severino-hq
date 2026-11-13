@@ -30,10 +30,9 @@ is open.
 
 {% section "Path" id="path" %}
 {% if gate_fixes and not read_only %}
-  <div class="notice notice-attention">
-    <strong>Anyone on the internet can open this without signing in</strong>
+  {% notice tone="warning" title="Anyone on the internet can open this without signing in" %}
     <p>{% for fix in gate_fixes %}<a class="btn compact" href="{{ fix.url }}" title="{{ fix.reason }}">{{ fix.label|breakable }}</a> {% endfor %}</p>
-  </div>
+  {% endnotice %}
 {% endif %}
 {% for route, parts in route_parts %}
   {% if routes|length > 1 %}
@@ -80,13 +79,13 @@ is open.
           </span>
           <details class="control-diagnostics">
             <summary>Running now</summary>
-            <dl class="kv compact">
-              {% if facet.observed.image %}<dt>Image</dt><dd><code>{{ facet.observed.image_label|breakable }}</code></dd>{% endif %}
-              {% if facet.observed.published %}<dt>Publishes</dt><dd>{{ facet.observed.published|breakable }}</dd>{% endif %}
-              {% if facet.observed.status %}<dt>Status</dt><dd>{{ facet.observed.status|breakable }}</dd>{% endif %}
-              {% if facet.observed.stack and facet.observed.stack != facet.observed.name %}<dt>Compose project</dt><dd><code>{{ facet.observed.stack|breakable }}</code></dd>{% endif %}
-              <dt>Reading</dt><dd>{% include "partials/_reading_age.html" with at=facet.observed.observed_at only %}</dd>
-            </dl>
+            {% facts %}
+              {% if facet.observed.image %}{% fact "Image" %}<code>{{ facet.observed.image_label|breakable }}</code>{% endfact %}{% endif %}
+              {% if facet.observed.published %}{% fact "Publishes" value=facet.observed.published %}{% endif %}
+              {% if facet.observed.status %}{% fact "Status" value=facet.observed.status %}{% endif %}
+              {% if facet.observed.stack and facet.observed.stack != facet.observed.name %}{% fact "Compose project" %}<code>{{ facet.observed.stack|breakable }}</code>{% endfact %}{% endif %}
+              {% fact "Reading" %}{% include "partials/_reading_age.html" with at=facet.observed.observed_at only %}{% endfact %}
+            {% endfacts %}
             {% if claim.edit_url %}<span class="readout"><a class="subtle-link" href="{{ claim.edit_url|returning_to:request.get_full_path }}">{% words "infrastructure.resource.update" %}{% arrow %}</a></span>{% endif %}
           </details>
         {% endwith %}
@@ -152,15 +151,15 @@ is open.
         <span class="readout prose"><code>{{ facet.observed.name|breakable }}</code>{% if facet.machine %} on {% entity facet.machine.link %}{% else %} on {{ facet.observed.host|breakable }}{% endif %}</span>
         <details class="control-diagnostics">
           <summary>Running now</summary>
-          <dl class="kv compact">
-            {% if facet.observed.image %}<dt>Image</dt><dd><code>{{ facet.observed.image_label|breakable }}</code></dd>{% endif %}
-            {% if facet.observed.published %}<dt>Publishes</dt><dd>{{ facet.observed.published|breakable }}</dd>{% endif %}
-            {% if facet.observed.status %}<dt>Status</dt><dd>{{ facet.observed.status|breakable }}</dd>{% endif %}
+          {% facts %}
+            {% if facet.observed.image %}{% fact "Image" %}<code>{{ facet.observed.image_label|breakable }}</code>{% endfact %}{% endif %}
+            {% if facet.observed.published %}{% fact "Publishes" value=facet.observed.published %}{% endif %}
+            {% if facet.observed.status %}{% fact "Status" value=facet.observed.status %}{% endif %}
             {% comment %}
             Only when it differs from the container's own name.
             {% endcomment %}
-            {% if facet.observed.stack and facet.observed.stack != facet.observed.name %}<dt>Compose project</dt><dd><code>{{ facet.observed.stack|breakable }}</code></dd>{% endif %}
-            <dt>Reading</dt><dd>{% include "partials/_reading_age.html" with at=facet.observed.observed_at only %}</dd>
+            {% if facet.observed.stack and facet.observed.stack != facet.observed.name %}{% fact "Compose project" %}<code>{{ facet.observed.stack|breakable }}</code>{% endfact %}{% endif %}
+            {% fact "Reading" %}{% include "partials/_reading_age.html" with at=facet.observed.observed_at only %}{% endfact %}
             {% comment %}
             The offer to take it on, only when taking it on would not mean
             building a second one. A container started by compose on the machine
@@ -177,16 +176,8 @@ is open.
             though it were the first would ask Portainer to stand up its own
             copy of something already serving.
             {% endcomment %}
-            <dt>Defined by</dt>
-            <dd>
-              {% if facet.observed.portainer_managed %}
-                Portainer.
-                {% for kind, label in facet.declarable %}<a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Manage as {{ label|breakable }}{% arrow %}</a>{% endfor %}
-              {% else %}
-                A compose file on {{ facet.observed.host|breakable:"." }} HQ cannot read it.
-              {% endif %}
-            </dd>
-          </dl>
+            {% fact "Defined by" %}{% if facet.observed.portainer_managed %}Portainer.{% for kind, label in facet.declarable %} <a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Manage as {{ label|breakable }}{% arrow %}</a>{% endfor %}{% else %}A compose file on {{ facet.observed.host|breakable:"." }} HQ cannot read it.{% endif %}{% endfact %}
+          {% endfacts %}
         </details>
       {% elif read_only and facet.id == runtime_facet and hq_machine %}
         {% comment %}HQ's own service: derived, never declared, never offered anything.{% endcomment %}

@@ -21,28 +21,24 @@ four domains behind a click and then need a second one to go anywhere.
 {% problems_about as problems %}{% include "partials/_problems.html" %}
 
 {% if not public_dns_enabled %}
-  <div class="msg msg-info">
+  {% notice tone="info" title="Public DNS changes are off" %}
     <p>
-      <strong>Public DNS changes are off.</strong>
       These records are read-only. Set
       <code>SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS</code> to allow changes.
     </p>
-  </div>
+  {% endnotice %}
 {% endif %}
 
 {% if not zone.managed %}
-  <div class="msg msg-warning">
-    <p>
-      <strong>{{ zone.zone|breakable }} is not managed.</strong>
-      HQ shows its records but will not change them.
-    </p>
+  {% notice tone="warning" %}
+    <p>HQ shows its records but will not change them.</p>
     {% if zone.adopt_token %}
       {% url 'zones:adopt' zone.zone as adopt_url %}
       <p>{% post_button "Manage domain" adopt_url name="token" value=zone.adopt_token css="btn primary" %}</p>
     {% elif zone.observed_only %}
       <p class="muted">HQ can read this domain, but the credential it reads with cannot change it.</p>
     {% endif %}
-  </div>
+  {% title %}{{ zone.zone|breakable }} is not managed{% endnotice %}
 {% endif %}
 
 <div class="control-summary">
@@ -83,9 +79,7 @@ four domains behind a click and then need a second one to go anywhere.
 </div>
 
 {% for notice in zone.notices %}
-  <div class="msg msg-warning">
-    <p><strong>{{ notice.label|breakable:":" }} {{ notice.value|breakable:"." }}</strong> {{ notice.detail|breakable }}</p>
-  </div>
+  {% notice tone="warning" %}<p>{{ notice.detail|breakable }}</p>{% title %}{{ notice.label|breakable:":" }} {{ notice.value|breakable }}{% endnotice %}
 {% endfor %}
 
 {% comment %}

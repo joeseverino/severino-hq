@@ -8,10 +8,5 @@
     "no-restricted-syntax": {
       "count": 2
     }
-  },
-  "static/js/fragment.js": {
-    "no-restricted-syntax": {
-      "count": 2
-    }
   }
 }

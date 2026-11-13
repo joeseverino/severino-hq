@@ -152,10 +152,9 @@ part's heading shows only when there is more than one.
 {% endif %}
 
 {% if connections.unlabeled %}
-  <div class="notice notice-attention">
-    <strong>HQ does not know what these are</strong>
+  {% notice tone="warning" title="HQ does not know what these are" %}
     <p>{% for view in connections.unlabeled %}{% with mark=forloop.last|then:".|," %}{{ view.instance.label|breakable:mark }}{% endwith %}{% if not forloop.last %} {% endif %}{% endfor %} Add a <code>provider</code> field to the item in 1Password, then press {% words "infrastructure.controller.refresh" "all" %}.</p>
-  </div>
+  {% endnotice %}
 {% endif %}
 
 {% include "partials/_posture.html" with posture=connections.standard only %}

@@ -160,7 +160,7 @@ def by_source(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
         group["items"].append(item)
         family = item.get("family", "")
         entry = group["entries"].setdefault(
-            ("family", family) if family else ("item", item["key"]),
+            ("family", family) if family else ("item", len(group["entries"])),
             {"family": family, "id": family_id(item) if family else "", "items": []},
         )
         entry["items"].append(item)
@@ -168,7 +168,12 @@ def by_source(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
         {
             **group,
             "entries": [
-                {**entry, "folded": len(entry["items"]) > 1, "status": entry["items"][0]["status"]}
+                # A fold is drawn under its family's name, so only a family folds.
+                {
+                    **entry,
+                    "folded": bool(entry["family"]) and len(entry["items"]) > 1,
+                    "status": entry["items"][0]["status"],
+                }
                 for entry in group["entries"].values()
             ],
         }

@@ -26,7 +26,7 @@ from .finding_model import (
     machine_step,
 )
 from .moments import ago, duration
-from .reading_facts import FactRow, rows_of, state_on_controller, stated, unjudged
+from .reading_facts import FactRow, OnEachMachine, rows_of, state_on_controller, stated, unjudged
 from .timestamps import moment
 from .topology_model import TopologyNode
 from .ui import counted, ended
@@ -429,61 +429,38 @@ def _stalled_finding(
     )
 
 
-def _restarting(estate: FindingEstate) -> tuple[Finding, ...]:
-    """A service systemd keeps restarting on its own that does not stay up.
-
-    systemd restarts a service with ``Restart=`` set for as long as its start
-    limit allows, and a service slower to fail than that limit is restarted
-    forever: it never reads as failed. The reading holds every such service on
-    the machine, HQ's or not, so a loop in a unit nothing else watches is seen.
-    """
-
-    found = []
-    for node, units in _units(estate):
-        looping = tuple(unit for unit in units if unit.looping)
-        if not looping:
-            continue
-        found.append(
-            Finding(
-                rule="unit-restarting",
-                subject=node.id,
-                scope=UNIT_KIND,
-                title=(
-                    f"{looping[0].named} keeps restarting on {node.label}"
-                    if len(looping) == 1
-                    else f"{counted(len(looping), 'service keeps', 'services keep')} restarting on {node.label}"
-                ),
-                severity="serious",
-                explanation=(
-                    "systemd starts it again each time it stops, and it does not stay up."
-                    if len(looping) == 1
-                    else "systemd starts each again when it stops, and none stays up."
-                ),
-                evidence=tuple(
-                    item
-                    for unit in looping
-                    for item in (
-                        ("Service", unit.unit),
-                        ("Restarted", f"{counted(int(unit.restarts), 'time')} since it was last started"),
-                        ("How it last ended", _ended(unit)),
-                    )
-                ),
-                steps=tuple(
-                    step
-                    for unit in looping
-                    for step in (
-                        *journal_step(f"See why {unit.named} keeps stopping", node.label, unit.unit),
-                        *machine_step(
-                            "Once it is fixed, clear its restart count",
-                            node.label,
-                            f"systemctl reset-failed {shlex.quote(unit.unit)}",
-                        ),
-                    )
-                ),
-                no_help_reason=cannot_run_commands(node.label),
-            )
-        )
-    return tuple(found)
+# A service systemd keeps restarting on its own that does not stay up.
+# systemd restarts a service with ``Restart=`` set for as long as its start
+# limit allows, and a service slower to fail than that limit is restarted
+# forever: it never reads as failed. The reading holds every such service on
+# the machine, HQ's or not, so a loop in a unit nothing else watches is seen.
+_restarting = OnEachMachine(
+    rule="unit-restarting",
+    row=UnitState,
+    picked=lambda unit: bool(unit.unit) and unit.looping,
+    severity=lambda _looping: "serious",
+    title=lambda node, looping: (
+        f"{looping[0].named} keeps restarting on {node.label}"
+        if len(looping) == 1
+        else f"{counted(len(looping), 'service keeps', 'services keep')} restarting on {node.label}"
+    ),
+    explanation=lambda looping: (
+        "systemd starts it again each time it stops, and it does not stay up."
+        if len(looping) == 1
+        else "systemd starts each again when it stops, and none stays up."
+    ),
+    evidence=lambda unit: (
+        ("Service", unit.unit),
+        ("Restarted", f"{counted(int(unit.restarts), 'time')} since it was last started"),
+        ("How it last ended", _ended(unit)),
+    ),
+    steps=lambda node, unit: (
+        *journal_step(f"See why {unit.named} keeps stopping", node.label, unit.unit),
+        *machine_step(
+            "Once it is fixed, clear its restart count", node.label, f"systemctl reset-failed {shlex.quote(unit.unit)}"
+        ),
+    ),
+)
 
 
 def _unread(estate: FindingEstate) -> tuple[Finding, ...]:

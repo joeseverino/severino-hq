@@ -52,10 +52,9 @@ button named for what it does. How it is built belongs to the API reference.
   record's values, for a command that saves defaults, says so (`saves_blanks`).
   {% endcomment %}
   {% if saves_blanks %}
-    <div class="notice notice-attention" data-command-blanks>
-      <strong>A blank field is saved blank</strong>
+    {% notice tone="warning" title="A blank field is saved blank" data_command_blanks=True %}
       <p>Every field replaces what the record holds, as you submit it. To change one field, use the record's own edit page{% if resource_url %}, from <a href="{{ resource_url }}">{{ resource_label|breakable:"." }}</a>{% else %}.{% endif %}</p>
-    </div>
+    {% endnotice %}
   {% endif %}
 
   {% comment %}
@@ -63,22 +62,19 @@ button named for what it does. How it is built belongs to the API reference.
   HQ gave a live record) points there; the form stays for API-shaped use.
   {% endcomment %}
   {% if starting_page %}
-    <div class="notice" data-command-start>
-      <strong>Start from {{ starting_page.0|breakable }}</strong>
+    {% notice data_command_start=True %}
       <p>That page hands this command what it needs. <a href="{{ starting_page.1 }}">Open {{ starting_page.0|breakable }}</a></p>
-    </div>
+    {% title %}Start from {{ starting_page.0|breakable }}{% endnotice %}
   {% elif starts_on_its_page %}
-    <div class="notice" data-command-start>
-      <strong>Start from the page of what it acts on</strong>
+    {% notice title="Start from the page of what it acts on" data_command_start=True %}
       <p>That page sends it for you.</p>
-    </div>
+    {% endnotice %}
   {% endif %}
 
   {% if unoffered_target %}
-    <div class="notice notice-attention">
-      <strong>{{ unoffered_target|breakable }} cannot be used here</strong>
+    {% notice tone="warning" %}
       <p>Pick another below.</p>
-    </div>
+    {% title %}{{ unoffered_target|breakable }} cannot be used here{% endnotice %}
   {% endif %}
 
   <form method="post"{% if form.is_multipart %} enctype="multipart/form-data"{% endif %} class="form command-form" data-command-form{% if hydrates_target %} data-command-hydrate-target{% endif %} data-submit-busy data-submit-label="Working…">

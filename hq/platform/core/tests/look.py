@@ -842,7 +842,7 @@ def _not_the_hosts(asked: tuple[str, ...]) -> list[str]:
     """The names of ``asked`` no page of the host alone can be, so an
     extension's, which a look draws only composed: ``template:<name>`` that no
     host template directory holds, and a route under a namespace the host has
-    none of."""
+    none of. A named POST is the host's, though it reads like a route."""
 
     held = {
         path.relative_to(folder).as_posix() for folder in get_template_directories() for path in folder.rglob("*.html")
@@ -855,7 +855,10 @@ def _not_the_hosts(asked: tuple[str, ...]) -> list[str]:
             name.removeprefix(TEMPLATE) not in held
             and not any(known.endswith(f"/{name.removeprefix(TEMPLATE)}") for known in held)
             if name.startswith(TEMPLATE)
-            else ":" in name.partition("?")[0] and "/" not in name and name.split(":", 1)[0] not in namespaces
+            else not is_post(name)
+            and ":" in name.partition("?")[0]
+            and "/" not in name
+            and name.split(":", 1)[0] not in namespaces
         )
     ]
 
@@ -893,8 +896,6 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
     on_reference = False
     # Whether the run takes its screenshots, as ``asked_for`` decides.
     shooting = True
-    # Whether the context open runs script, as ``draw_scripted_as`` starts it.
-    drawn_with_script = True
     # The catalog entries asked, which are drawn without script (``scripted_for``).
     unscripted: frozenset[str] = frozenset()
     # A look's record is its findings and shots; a trace would snapshot the
@@ -1064,6 +1065,8 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
 
     @override
     def open(self, name, width):
+        # Every page, since one after a catalog entry would be drawn as it was.
+        self.draw_scripted_as(name)
         if is_estate(name):
             self.visit(self.addresses[name], width)
         elif is_post(name):
@@ -1071,12 +1074,11 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             self.visit(self.addresses[name], width)
         else:
             self.on_estate = False
-            self.draw_scripted_as(name)
             super().open(name, width)
         # The viewer mounts on its root wherever a page carries one: the
         # reference HQ serves and the gate's copy in the operator's dark theme.
         reference = self.page.locator(SELECTORS["reference"]).count() > 0
-        self.on_reference = reference and self.drawn_with_script
+        self.on_reference = reference and self.runs_script
         if self.on_reference:
             wait_for_reference(self.page)
             draw_whole_reference(self.page)
@@ -1098,19 +1100,18 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         """A context that runs script as ``name`` is drawn with, started
         afresh only when the one open does not."""
 
-        if (scripted := self.scripted_for(name)) != self.drawn_with_script:
+        if (scripted := self.scripted_for(name)) != self.runs_script:
             self.draw_with_script(scripted)
 
     def draw_with_script(self, scripted):
         self.start(java_script_enabled=scripted, color_scheme="dark" if _asked().switch("dark") else "light")
-        self.drawn_with_script = scripted
 
     @override
     def settle(self):
         # A page without script runs no frame callback or timer, so a wait on
         # one never ends; nothing there moves but an animation, which the shot
         # finishes itself (``animations="disabled"``).
-        if self.drawn_with_script:
+        if self.runs_script:
             BrowserGate.settle(self)
 
     def test_look(self):
@@ -1488,7 +1489,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         shot = _shot(name, width, part)
         # A page without script polls once and never again, and has nothing
         # that could move it, so its extent is read once.
-        if not self.drawn_with_script:
+        if not self.runs_script:
             return self.in_bands(shot, extent_of(self.page), shows)
         try:
             held = self.page.wait_for_function(_EXTENT_HELD, arg=shot.name, polling=_EXTENT_POLL)

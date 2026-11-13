@@ -128,15 +128,4 @@
   .exposure { font-size: var(--text-sm); white-space: nowrap; color: var(--muted); }
   .exposure-open { color: var(--ink); font-weight: 600; }
   .exposure-unknown { color: var(--warn); }
-
-  /* A compact list is short labels beside short values: a column each, at
-     every width, so a few numbers do not spend a screen stacked label over
-     value. A value too long for its column wraps inside it. A pair lines up
-     by its top, never its baseline: a value that opens with a wrapped
-     identifier has its baseline on the identifier's last line in WebKit,
-     which has no `baseline-source`, and a row aligned on it is drawn over
-     the rows above. Label and value share one face, so their first lines
-     still meet. */
-  .kv.compact { margin-bottom: 0; grid-template-columns: minmax(5rem, max-content) minmax(0, 1fr); gap: var(--space-2) var(--space-7); padding: var(--surface-inset, var(--space-5) var(--space-6)); align-items: start; }
-  .kv.compact dt { margin-top: 0; }
 }

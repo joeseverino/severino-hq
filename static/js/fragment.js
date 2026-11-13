@@ -193,11 +193,13 @@ const hqFragment = (() => {
   // follows it instead of a second one starting.
   const successor = new WeakMap();
 
+  // A notice in a tone, cloned from the empty one the server drew for it
+  // (base.html), so a line a script adds is the part the server draws.
+  const notice = (tone) =>
+    document.querySelector(`template[data-notice="${tone}"]`).content.firstElementChild.cloneNode(true);
   // One line, the same everywhere a part could not be had.
   const explain = (region, text, link) => {
-    const line = document.createElement("p");
-    line.className = "notice notice-attention";
-    line.setAttribute("role", "status");
+    const line = notice("warning");
     line.append(text);
     if (link) {
       const anchor = document.createElement("a");
@@ -215,18 +217,19 @@ const hqFragment = (() => {
       list.className = "messages";
       region.prepend(list);
     }
-    const line = document.createElement("li");
-    line.className = "msg msg-error";
-    line.setAttribute("role", "status");
+    const line = notice("error");
     line.textContent = text;
-    list.append(line);
+    const item = document.createElement("li");
+    item.append(line);
+    list.append(item);
   };
 
   // Why a post was refused, as the page it was answered with says it among
   // its messages: the server's own sentence, which nothing else carries once
-  // that page is not the one shown.
+  // that page is not the one shown. An error is the one notice that is an
+  // alert.
   const refusals = (page) =>
-    [...page.querySelectorAll(".messages > .msg-error")].map((line) => line.textContent.trim()).filter(Boolean);
+    [...page.querySelectorAll(".messages [role=alert]")].map((line) => line.textContent.trim()).filter(Boolean);
   // Why an answer that is not a success was given, where it says: a refusal
   // is a sentence, or the page drawn again with it. A server's failure says
   // nothing a person can act on.

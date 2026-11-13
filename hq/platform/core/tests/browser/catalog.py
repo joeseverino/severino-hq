@@ -206,7 +206,9 @@ def _flow(*sections):
 
 
 # A narrow section: a few facts, as the connection panel's identity draws them.
-_NARROW = '<dl class="kv"><dt>Example name</dt><dd>example-01</dd><dt>Example state</dt><dd>Online</dd></dl>'
+_NARROW = (
+    '{% facts %}{% fact "Example name" value="example-01" %}{% fact "Example state" value="Online" %}{% endfacts %}'
+)
 # A wide one: a table of four columns, which takes the whole row.
 _WIDE = (
     '{% table_region "Example hosts" %}<table class="data-table"><thead><tr>'
@@ -782,6 +784,12 @@ CATALOG = {
     "part/notice-titled": Entry(
         '{% notice tone="warning" title="2 example jobs failed on their last run" %}'
         "<p>example-backup, example-sync</p>{% endnotice %}"
+    ),
+    # A title the page composes, written as the tag's title part.
+    "part/notice-composed": Entry(
+        '{% notice tone="warning" %}<p>Pick another below.</p>'
+        "{% title %}{{ name|breakable }} cannot be used here{% endnotice %}",
+        {"name": "example-target.example.com"},
     ),
     "part/notice-info": Entry('{% notice tone="info" %}An example line of news.{% endnotice %}'),
     "part/notice-success": Entry('{% notice tone="success" %}Example saved.{% endnotice %}'),

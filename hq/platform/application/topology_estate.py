@@ -38,6 +38,7 @@ from .topology_model import (
 lazy from . import (
     certificate_expiry,
     docker_estate,
+    filesystem_findings,
     reading_facts,
     reference_findings,
     render_status_findings,
@@ -487,12 +488,13 @@ def _reader_index(nodes) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
 
 def _derived_from_readings(nodes, resources, estate: _Estate) -> None:
     """What provider-specific joins add: container edges, and image, render
-    status, unit, refused report and certificate facts."""
+    status, unit, filesystem, refused report and certificate facts."""
 
     if estate.machine_ids:
         docker_estate.add(nodes, estate.machine)
     render_status_findings.add(nodes, estate.machine)
     unit_findings.add(nodes, estate.machine)
+    filesystem_findings.add(nodes, estate.machine)
     reading_facts.add_refusals(nodes, estate.machine)
     reference_findings.add(nodes, resources)
     by_ref, by_provider = _reader_index(nodes)

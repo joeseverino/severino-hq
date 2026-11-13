@@ -3,8 +3,8 @@
 {% if not_read %}
 {% include "partials/_empty_state.html" with message="No messages read yet." remedy=page.remedy %}
 {% else %}
-{% if problem %}<div class="msg msg-warning">{{ problem|breakable }}{% if observed_at %} Showing the read from {{ observed_at|when }}.{% endif %}</div>{% endif %}
-{% if waiting_note %}<div class="msg msg-info">{{ waiting_note|breakable }}</div>{% endif %}
+{% if problem %}{% notice tone="warning" %}{{ problem|breakable }}{% if observed_at %} Showing the read from {{ observed_at|when }}.{% endif %}{% endnotice %}{% endif %}
+{% if waiting_note %}{% notice tone="info" %}{{ waiting_note|breakable }}{% endnotice %}{% endif %}
 <div class="status-tabs">
   <a class="status-tab"{% if not selected_status %} aria-current="page"{% endif %}
      href="{% url 'contacts:list' %}{% if q %}?q={{ q|urlencode }}{% endif %}">

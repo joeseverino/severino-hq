@@ -21,6 +21,9 @@ class Element:
     # In the line beneath a row (`data-row-detail`), which a reader meets only
     # once the row is opened: a copy of what the row holds back.
     beneath: bool = field(default=False, repr=False, compare=False)
+    # A <template> and what it holds: markup a script clones, which a browser
+    # parses into no element of the page.
+    inert: bool = field(default=False, repr=False, compare=False)
 
     @property
     def classes(self) -> frozenset[str]:
@@ -48,7 +51,9 @@ class _Page(HTMLParser):
     def handle_starttag(self, tag, attrs):
         element = Element(tag, {name: value or "" for name, value in attrs}, ancestors=tuple(self._open))
         element.beneath = "data-row-detail" in element.attrs or any(opened.beneath for opened in self._open)
-        self.elements.append(element)
+        element.inert = tag == "template" or any(opened.inert for opened in self._open)
+        if not element.inert:
+            self.elements.append(element)
         self._edge = self._edge or not _TOKEN_PARTS & element.classes
         if tag not in _VOID:
             self._open.append(element)
@@ -63,6 +68,8 @@ class _Page(HTMLParser):
 
     @override
     def handle_data(self, data):
+        if any(element.inert for element in self._open):
+            return
         # A token (`|breakable`) marks where it may wrap with markup; read, it
         # is one word, with any text it touches.
         # The mark it holds to a value is read with the word it ends.

@@ -2,14 +2,16 @@
 
 import inspect
 import re
+from pathlib import Path
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.messages.storage.base import Message
 from django.template import Context, Template, TemplateSyntaxError
 from django.template.loader import render_to_string
 from django.test import RequestFactory, SimpleTestCase, tag
 
-from hq.platform.application.tests.markup import elements, select, with_class
+from hq.platform.application.tests.markup import all_elements, elements, select, with_class
 from hq.platform.core.tests.test_part_tags import _catalog_templates
 from hq_sdk.testing import plain
 
@@ -53,6 +55,18 @@ class NoticeTagTests(SimpleTestCase):
         self.assertIn(notice, title.ancestors)
         self.assertIn(notice, body.ancestors)
         self.assertLess(plain(html).index("2 jobs failed"), plain(html).index("backup, sync"))
+
+    def test_a_title_the_page_composes_is_its_title_part(self):
+        html = _render(
+            '{% notice tone="warning" %}<p>Pick another.</p>{% title %}{{ name }} cannot be used{% endnotice %}',
+            name="example-target",
+        )
+
+        (notice,) = with_class(html, "notice")
+        (title,) = elements(html, "strong")
+        self.assertEqual(title.words, "example-target cannot be used")
+        self.assertIn(notice, title.ancestors)
+        self.assertLess(plain(html).index("cannot be used"), plain(html).index("Pick another."))
 
     def test_a_pages_class_and_data_attributes_ride_on_it(self):
         html = _render(
@@ -128,3 +142,31 @@ class NoticeCatalogTests(SimpleTestCase):
         self.assertEqual(sorted({*options, "data_"} - drawn_options), [], "add a part/notice-* entry that draws it")
         self.assertEqual(sorted(set(filter(None, TONES)) - drawn_tones), [], "add a part/notice-* entry in it")
         self.assertTrue(any("{% notice" in t and "tone=" not in t for t in notices), "draw a neutral notice")
+
+
+# A tone a script clones a notice in: from template[data-notice="<tone>"],
+# or through fragment.js's notice("<tone>").
+_CLONED = re.compile(r"""(?:data-notice=["']|\bnotice\(")(\w+)""")
+_FRAME = re.compile(r'<template data-notice="(\w+)">(.*?)</template>', re.DOTALL)
+
+
+@tag("source", "tree")
+class NoticeFrameTests(SimpleTestCase):
+    def test_every_tone_a_script_clones_is_an_empty_frame_on_every_page(self):
+        """A script never writes a notice's class: it clones the part the
+        server drew empty in base.html, so the line it adds is that part."""
+
+        root = Path(settings.BASE_DIR)
+        scripts = [*sorted((root / "static" / "js").rglob("*.js")), root / "demo" / "demo.js"]
+        cloned = {tone for path in scripts for tone in _CLONED.findall(path.read_text(encoding="utf-8"))}
+        request = RequestFactory().get("/")
+        request.user = None
+        frames = dict(_FRAME.findall(render_to_string("base.html", {}, request=request)))
+
+        self.assertTrue(cloned, "the scripts clone no notice: the pattern no longer reads them")
+        self.assertEqual(sorted(cloned - set(frames)), [], "draw an empty {% notice %} of that tone in base.html")
+        for tone in cloned:
+            with self.subTest(tone=tone):
+                (notice,) = all_elements(frames[tone])
+                self.assertIn(f"notice-{tone}", notice.classes)
+                self.assertEqual(notice.words, "")

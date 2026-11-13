@@ -91,6 +91,8 @@
     /* It cuts what overruns its line, so nothing in it needs breaking where no seam is; Chromium would otherwise break a held part at an element's edge. */
     overflow-wrap: normal; -webkit-line-clamp: var(--cut-lines); line-clamp: var(--cut-lines); overflow: hidden; text-overflow: ellipsis;
   }
+  /* The track is the box's own max-content, which Chromium can measure a fraction short of the parts it then lays out, and a line short by a fraction sends the last part to a line the clamp hides: a float of no height asks the track for a pixel more, which no line gives up. WebKit's legacy box keeps its parts on their line without it. */
+  & > :is(.token[data-sole], .cut)::before { content: ""; float: inline-end; inline-size: 1px; }
   /* A part longer than the track is cut inside itself, so the name keeps the lines its seams give it rather than losing every part after the cut. */
   & > :is(.token[data-sole], .cut) .whole { display: inline-block; max-width: 100%; white-space: nowrap; vertical-align: top; overflow: hidden; text-overflow: ellipsis; }
 }

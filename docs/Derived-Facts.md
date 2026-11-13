@@ -181,7 +181,7 @@ credential and a 403 a missing permission (`runtime.StatusFailure`).
 
 ### The controller's own machine
 
-Four readings are of the machine a controller runs on and need no credential:
+Five readings are of the machine a controller runs on and need no credential:
 root reads a fact on the host and `hq-host controller` mounts the answer into
 the controller read-only, naming it in an environment variable. The controller
 never holds the ruleset or directory the fact came from. A fact the launcher
@@ -264,6 +264,29 @@ A unit that fails does not wait for the next sweep: its `OnFailure=` starts the
 `units.read` job ([Deployment](Deployment.md#units)), which stores a read
 request for `host.unit` and rings the doorbell, so the next sweep reads that
 one kind.
+
+`host.filesystem` is the space on each real filesystem of the machine
+(`SEVERINO_HOST_FILESYSTEMS`), one record per filesystem: where it is mounted,
+its free bytes (what a process other than root can still write, as `df` counts
+Avail) and its size. Root reads it, since a statfs in the container answers for
+the container's overlay: `hostcore.ReadFilesystems`
+(`controller/internal/hostcore/filesystem.go`) takes each ext4, xfs, btrfs or
+zfs mount in `/proc/self/mounts`, one per device, leaves out a mount another
+covers, and asks statfs. It sends no device, option or file name, and the
+contract admits a mount only as printable ASCII from a slash, with no bar. The
+launcher names the file whether or not it could be taken, so a table it could
+not read is a failed read that keeps the last one.
+
+`hq/platform/application/filesystem_findings.py` raises, on the same node:
+
+| Finding | When | Severity |
+|---|---|---|
+| `filesystem-nearly-full` | a filesystem had under 2 GiB free and under a tenth of its size, when read; one finding per machine names each | attention; serious when one had under 512 MiB and under 3% |
+
+Both a floor and a share must be crossed: a share alone flags a large disk with
+plenty left, and a floor alone flags every small partition, such as a 1 GiB
+`/boot`, for good. Its steps show the mount's space with `df -h`, then what
+fills it with `du -xh --max-depth=1`.
 
 ## Facts about a subject
 

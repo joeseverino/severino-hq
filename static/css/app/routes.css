@@ -238,8 +238,6 @@ kbd {
 .notice > strong { display: block; }
 /* On a saved copy, a line about the reader's connection is marked as an example. */
 span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-weight: 400; }
-/* In a grid that spaces its own rows, a notice adds no margin of its own. */
-.conn > .notice { margin: 0; }
 .notice p { margin: var(--space-2) 0 0; }
 /* A notice is words, so a link in it differs from them by more than its
    color (WCAG 1.4.1), as a link in a paragraph does (base.css). */
@@ -250,16 +248,6 @@ span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-
   text-underline-offset: .18em;
   &:is(:hover, :focus-visible) { text-decoration-color: currentColor; }
 }
-/* A banner written by hand; a new one is a {% notice %}. */
-.msg {
-  padding: var(--space-4) var(--space-6); border-radius: var(--radius-sm); margin-bottom: var(--space-3);
-  font-size: var(--text-sm);
-  background: var(--tone-wash, transparent);
-  color: var(--tone-ink, inherit);
-  border: 1px solid var(--tone-line, var(--line));
-}
-/* Variants carry no color of their own: the tone assignment (page.css)
-   gives them one. */
 
 .pagination { display: flex; gap: var(--space-6); align-items: center; margin: var(--space-8) 0; font-size: var(--text-sm); }
 

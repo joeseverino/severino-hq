@@ -1,8 +1,10 @@
 """The notice: every banner and message a page shows, in one of its tones.
 
 ``{% notice tone="warning" title="2 jobs failed" %}<p>What to do.</p>{% endnotice %}``
-draws ``partials/_notice.html``. A message among the page's messages is the
-same part in a toast's placement (``.messages``), never a second part.
+draws ``partials/_notice.html``. A title the page composes (words around a
+value, a loop) is its ``{% title %}`` part, after the body. A message among
+the page's messages is the same part in a toast's placement (``.messages``),
+never a second part.
 """
 
 from django import template
@@ -45,5 +47,10 @@ def notice_frame(name: str, given: dict) -> dict:
 
 
 slotted(
-    "notice", NOTICE_PARTIAL, ("content",), frozenset(("tone", "title", "css")), shape=notice_frame, library=register
+    "notice",
+    NOTICE_PARTIAL,
+    ("content", "title"),
+    frozenset(("tone", "title", "css")),
+    shape=notice_frame,
+    library=register,
 )

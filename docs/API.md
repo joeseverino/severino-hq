@@ -390,6 +390,13 @@ alone keeps every field. Selection happens after authorization.
 Every adapter reads `fields` beside the query, so no resource query may declare
 a field called `fields`. The registry refuses one at startup.
 
+A masked answer validates against the OpenAPI document. A document cannot say
+an answer's shape follows a query parameter, so each record and row schema,
+and every part a mask can reach inside one at any depth, lists no `required`
+key; each field it names keeps its type and stays closed to keys it does not
+name. A part shared with another answer reads the same there. The test client
+validates every answer it receives, masked ones included.
+
 A list read is one page. `truncated` says more follow it, and `next` is
 `{"cursor": …}`: sent back as `cursor` (`?cursor=` over HTTP, and an argument
 of `list_resource` beside its `filters` and `limit`, as `get_findings` and

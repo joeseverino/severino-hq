@@ -15,16 +15,16 @@ is not.
       <h2>{{ item.label|breakable }}</h2>
       <button type="button" class="modal-close" popovertarget="{{ panel }}" popovertargetaction="hide" aria-label="Close">&times;</button>
     </div>
-    <dl class="kv compact">
+    {% facts %}
       {% if item.origin.rule %}
-        <dt>Rule</dt><dd>{{ item.origin.title|breakable }} <code>{{ item.origin.rule|breakable }}</code></dd>
-        <dt>Severity</dt><dd>{{ item.origin.severity|breakable }}</dd>
-        {% if item.origin.where %}<dt>Defined at</dt><dd><code>{{ item.origin.where|breakable }}</code></dd>{% endif %}
-        {% if item.origin.subsumes %}<dt>Stands in for</dt><dd>{% for name in item.origin.subsumes %}<code>{{ name|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</dd>{% endif %}
+        {% fact "Rule" %}{{ item.origin.title|breakable }} <code>{{ item.origin.rule|breakable }}</code>{% endfact %}
+        {% fact "Severity" value=item.origin.severity %}
+        {% if item.origin.where %}{% fact "Defined at" %}<code>{{ item.origin.where|breakable }}</code>{% endfact %}{% endif %}
+        {% if item.origin.subsumes %}{% fact "Stands in for" %}{% for name in item.origin.subsumes %}<code>{{ name|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endfact %}{% endif %}
       {% endif %}
-      <dt>From</dt><dd>{{ item.origin.source|breakable }}</dd>
-      <dt>Key</dt><dd><code>{{ item.origin.key|breakable }}</code></dd>
-    </dl>
+      {% fact "From" value=item.origin.source %}
+      {% fact "Key" %}<code>{{ item.origin.key|breakable }}</code>{% endfact %}
+    {% endfacts %}
   </div>
 </div>
 {% endwith %}

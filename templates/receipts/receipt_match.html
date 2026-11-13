@@ -1,7 +1,7 @@
 {% extends "page.html" %}
 {% block page %}
 {% if already_linked %}
-  <div class="msg msg-info">Already linked to {% include "receipts/_linked_to.html" %}.</div>
+  {% notice tone="info" %}Already linked to {% include "receipts/_linked_to.html" %}.{% endnotice %}
 {% endif %}
 <div class="section-flow">
 {% card label="Receipt" %}{% facts %}

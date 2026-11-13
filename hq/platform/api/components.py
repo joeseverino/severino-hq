@@ -3,6 +3,7 @@
 ``openapi`` builds the document; this is where a schema it names lands.
 """
 
+import copy
 from typing import Any
 
 from hq.platform.application.json_schemas import LOCAL, json_schemas
@@ -17,15 +18,50 @@ class Components:
 
     def __init__(self) -> None:
         self.schemas: dict[str, Any] = {}
-        # The components a caller's field mask may trim, which promise no field.
+        # The components a caller's field mask cuts, each a record or a row.
         self.masked: set[str] = set()
 
     def mask(self, name: str) -> None:
-        """Promise no field of the component ``name``, whichever schema writes it first."""
+        """Name the component ``name`` as one a caller's field mask cuts."""
 
         self.masked.add(name)
-        if name in self.schemas:
-            self.schemas[name].pop("required", None)
+
+    def sparse(self) -> dict[str, Any]:
+        """The schemas, each part a field mask can reach promising no field.
+
+        A mask keeps any field at any depth (``health.state``), and OpenAPI
+        has no way to say an answer's shape follows a query parameter, so a
+        part a mask reaches lists no ``required`` key; a whole answer still
+        validates against it. Its parts are reached through every subschema
+        and ``$ref``, so a part shared with an answer no mask cuts promises no
+        field there either. A ``oneOf`` reached becomes ``anyOf``: its
+        branches told apart by a required key could all match a cut object.
+        """
+
+        schemas = copy.deepcopy(self.schemas)
+        reached: set[int] = set()
+
+        def reach(schema: Any) -> None:
+            if not isinstance(schema, dict) or id(schema) in reached:
+                return
+            reached.add(id(schema))
+            schema.pop("required", None)
+            if "oneOf" in schema:
+                schema["anyOf"] = schema.pop("oneOf")
+            if (ref := schema.get("$ref", "")).startswith(SCHEMAS):
+                reach(_pointed(schemas, ref.removeprefix(SCHEMAS)))
+            for key in ("properties", "patternProperties"):
+                for part in schema.get(key, {}).values():
+                    reach(part)
+            for key in ("items", "additionalProperties"):
+                reach(schema.get(key))
+            for key in ("anyOf", "allOf", "prefixItems"):
+                for part in schema.get(key, []):
+                    reach(part)
+
+        for name in sorted(self.masked):
+            reach(schemas[name])
+        return schemas
 
     def typed(self, types: dict[str, Any]) -> dict[str, dict[str, Any]]:
         """Schemas for Python types, their definitions hoisted into components."""
@@ -36,8 +72,6 @@ class Components:
         return refs
 
     def add(self, name: str, schema: dict[str, Any]) -> str:
-        if name in self.masked:
-            schema = {key: value for key, value in schema.items() if key != "required"}
         if self.schemas.setdefault(name, schema) != schema:
             raise OpenAPIError(
                 f"Two schemas claim the component name {name!r}: each meaning is a type alias of its own name."
@@ -74,4 +108,13 @@ def _rewritten(value: Any) -> Any:
         }
     if isinstance(value, list):
         return [_rewritten(item) for item in value]
+    return value
+
+
+def _pointed(schemas: dict[str, Any], pointer: str) -> Any:
+    """The part of ``schemas`` a reference past ``SCHEMAS`` names: a component, or a part inside one."""
+
+    value: Any = schemas
+    for token in pointer.split("/"):
+        value = value[token.replace("~1", "/").replace("~0", "~")]
     return value

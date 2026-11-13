@@ -168,6 +168,19 @@ class AsideStateTests(TestCase):
         )
         self.assertEqual([item["key"] for item in groups[0]["items"]], [ITEM["key"], OTHER["key"]])
 
+    def test_only_a_named_family_folds(self):
+        # Items that share no family each stand on their own row, whatever
+        # else they share; a fold is drawn under its family's name.
+        twin = {**ITEM, "label": "Another widget"}
+        named = [{**ITEM, "key": f"example:{n}", "family": "Widgets"} for n in range(2)]
+
+        (group,) = by_source([ITEM, twin, *named])
+
+        self.assertEqual(
+            [(entry["folded"], entry["family"], len(entry["items"])) for entry in group["entries"]],
+            [(False, "", 1), (False, "", 1), (True, "Widgets", 2)],
+        )
+
 
 class PageTests(TestCase):
     def setUp(self):

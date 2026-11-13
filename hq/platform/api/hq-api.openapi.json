@@ -288,12 +288,12 @@
                 "affected_scopes": [],
                 "evidence": [
                   {
-                    "label": "Service",
-                    "value": "example-upload.service"
+                    "label": "Free on /",
+                    "value": "56 MB of 29.0 GB (0.2%)"
                   }
                 ],
-                "explanation": "systemd starts it again each time it stops, and it does not stay up.",
-                "id": "claim:351586e64bf742f3",
+                "explanation": "The next write that needs more room than is left fails, and says only that the write did.",
+                "id": "claim:1d767918c4a28e08",
                 "investigations": [
                   {
                     "capability": "",
@@ -325,23 +325,23 @@
                 ],
                 "operator_steps": [
                   {
-                    "command": "ssh example-controller \"sudo systemctl reset-failed example-upload.service\"",
-                    "label": "Once it is fixed, clear its restart count",
+                    "command": "ssh example-controller \"sudo df -h /\"",
+                    "label": "See the space on /",
                     "notes": []
                   }
                 ],
                 "remedies": [],
-                "rule": "unit-restarting",
-                "scope": "host.unit",
+                "rule": "filesystem-nearly-full",
+                "scope": "host.filesystem",
                 "severity": "serious",
                 "since": null,
                 "subject": "controller:e61d92aae82ff989",
-                "title": "\u201cExample log upload\u201d keeps restarting on example-controller",
+                "title": "The filesystem at / on example-controller is nearly full",
                 "workflow": {
-                  "id": "resolve:claim:351586e64bf742f3",
+                  "id": "resolve:claim:1d767918c4a28e08",
                   "label": "Next steps",
                   "outcome": {
-                    "claim_id": "claim:351586e64bf742f3",
+                    "claim_id": "claim:1d767918c4a28e08",
                     "kind": "claim_absent",
                     "label": ""
                   },
@@ -358,7 +358,7 @@
                           "recommended": false,
                           "refusal": "",
                           "target": "",
-                          "url": "/infrastructure/findings/?rule=unit-restarting"
+                          "url": "/infrastructure/findings/?rule=filesystem-nearly-full"
                         }
                       ],
                       "label": "Check again",
@@ -373,12 +373,12 @@
             "rule": null,
             "schema_version": 2,
             "summary": {
-              "findings": 4,
-              "returned": 4,
+              "findings": 5,
+              "returned": 5,
               "severities": {
                 "attention": 2,
                 "neutral": 1,
-                "serious": 1
+                "serious": 2
               },
               "truncated": false
             }
@@ -1330,7 +1330,7 @@
       "listActionItemsV2OK": {
         "dataValue": {
           "data": {
-            "count": 9,
+            "count": 10,
             "items": [
               {
                 "action": "Review docs",
@@ -1343,7 +1343,7 @@
               }
             ],
             "next": null,
-            "total": 9,
+            "total": 10,
             "truncated": false
           },
           "ok": true
@@ -2078,7 +2078,7 @@
               "never_read": 1,
               "not_connected": [],
               "out_of_date": 0,
-              "read": 40,
+              "read": 41,
               "readings": [
                 {
                   "error": "",
@@ -2362,7 +2362,7 @@
       "listReadingsV2OK": {
         "dataValue": {
           "data": {
-            "count": 41,
+            "count": 42,
             "items": [
               {
                 "error": "",
@@ -2375,7 +2375,7 @@
               }
             ],
             "next": null,
-            "total": 41,
+            "total": 42,
             "truncated": false
           },
           "ok": true
@@ -3322,7 +3322,7 @@
             "summary": {
               "edges": 306,
               "kinds": {
-                "ability": 58,
+                "ability": 59,
                 "connection": 10,
                 "controller": 1,
                 "machine": 3,
@@ -3332,7 +3332,7 @@
                 "target": 2,
                 "zone": 1
               },
-              "nodes": 126
+              "nodes": 127
             },
             "trace": null
           },
@@ -5227,19 +5227,6 @@
             "description": "The list of records it governs; null for none."
           }
         },
-        "required": [
-          "name",
-          "label",
-          "effect",
-          "required_scopes",
-          "grant",
-          "evidence",
-          "available",
-          "missing_scopes",
-          "capability",
-          "subject_resource",
-          "action"
-        ],
         "type": "object"
       },
       "ActionItemRestoreRequest": {
@@ -5394,12 +5381,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "name",
-          "label",
-          "effect",
-          "url"
-        ],
         "type": "object"
       },
       "AddressLookedUp": {
@@ -5472,12 +5453,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "severity",
-          "summary",
-          "url"
-        ],
         "type": "object"
       },
       "AgendaItem": {
@@ -5940,12 +5915,6 @@
             "type": "array"
           }
         },
-        "required": [
-          "projects",
-          "content",
-          "documentation",
-          "expense_ids"
-        ],
         "type": "object"
       },
       "AssetName": {
@@ -6300,10 +6269,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "reason"
-        ],
         "type": "object"
       },
       "Breakdown": {
@@ -6951,14 +6916,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "role",
-          "name",
-          "issuer",
-          "expiry",
-          "source",
-          "unread"
-        ],
         "type": "object"
       },
       "CertificateRenewRequest": {
@@ -7198,12 +7155,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "type",
-          "status",
-          "reason",
-          "message"
-        ],
         "type": "object"
       },
       "ConfirmPrune": {
@@ -7339,11 +7290,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "label",
-          "url",
-          "resource_key"
-        ],
         "type": "object"
       },
       "ConnectionStandingRecord": {
@@ -8527,16 +8473,6 @@
             "type": "array"
           }
         },
-        "required": [
-          "missing",
-          "unseen",
-          "refused",
-          "expires_at",
-          "expiring",
-          "expired",
-          "permissions",
-          "steps"
-        ],
         "type": "object"
       },
       "CredentialRecord": {
@@ -8617,13 +8553,6 @@
             "$ref": "#/components/schemas/CredentialRow/properties/tally"
           }
         },
-        "required": [
-          "provider",
-          "label",
-          "credential_refusal",
-          "tally",
-          "manages"
-        ],
         "type": "object"
       },
       "Cursor": {
@@ -8891,15 +8820,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "name",
-          "record_type",
-          "value",
-          "proxied",
-          "ttl",
-          "declaration",
-          "observed_only"
-        ],
         "type": "object"
       },
       "DocEnvironment": {
@@ -9653,9 +9573,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "label"
-        ],
         "type": "object"
       },
       "EntryRecord": {
@@ -9838,12 +9755,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "label",
-          "value",
-          "detail",
-          "role"
-        ],
         "type": "object"
       },
       "ExpectedUpdatedAt": {
@@ -10363,13 +10274,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "label",
-          "present",
-          "state",
-          "resources"
-        ],
         "type": "object"
       },
       "FactPart": {
@@ -10384,10 +10288,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "label",
-          "value"
-        ],
         "type": "object"
       },
       "Failure": {
@@ -10420,10 +10320,6 @@
             "description": "What was found, most often a name or a sentence."
           }
         },
-        "required": [
-          "label",
-          "value"
-        ],
         "type": "object"
       },
       "Findings": {
@@ -10598,10 +10494,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "entry",
-          "name"
-        ],
         "type": "object"
       },
       "GroupPart": {
@@ -10619,10 +10511,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "name",
-          "members"
-        ],
         "type": "object"
       },
       "HeaderAddressPart": {
@@ -10641,11 +10529,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "label",
-          "address",
-          "holder"
-        ],
         "type": "object"
       },
       "HealthPart": {
@@ -10669,12 +10552,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "state",
-          "label",
-          "reason",
-          "message"
-        ],
         "type": "object"
       },
       "HeldRequest": {
@@ -10771,12 +10648,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "state",
-          "label",
-          "detail",
-          "step"
-        ],
         "type": "object"
       },
       "HopRow": {
@@ -10898,13 +10769,6 @@
             ]
           }
         },
-        "required": [
-          "kind",
-          "label",
-          "connection",
-          "observed_at",
-          "declared"
-        ],
         "type": "object"
       },
       "HqImportRequest": {
@@ -11070,10 +10934,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "tag",
-          "digest"
-        ],
         "type": "object"
       },
       "ImportSummary": {
@@ -11607,14 +11467,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "label",
-          "value",
-          "detail",
-          "url",
-          "concern",
-          "notice"
-        ],
         "type": "object"
       },
       "InternalServerErrorRefusal": {
@@ -11724,12 +11576,6 @@
             "type": "array"
           }
         },
-        "required": [
-          "kind",
-          "label",
-          "connection",
-          "records"
-        ],
         "type": "object"
       },
       "KeptValue": {
@@ -11772,11 +11618,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "summary",
-          "created_at",
-          "audit_id"
-        ],
         "type": "object"
       },
       "LastReviewed": {
@@ -11831,16 +11672,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "label",
-          "state",
-          "detail",
-          "evidence",
-          "boundary",
-          "mechanism",
-          "rules"
-        ],
         "type": "object"
       },
       "LensEntry": {
@@ -12020,16 +11851,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "name",
-          "stack",
-          "image",
-          "state",
-          "status",
-          "published",
-          "watcher",
-          "observed_at"
-        ],
         "type": "object"
       },
       "MachineRecord": {
@@ -12246,22 +12067,6 @@
             "$ref": "#/components/schemas/UpdatedAt"
           }
         },
-        "required": [
-          "key",
-          "kind",
-          "enabled",
-          "in_sync",
-          "health",
-          "public_effect",
-          "last_observed_at",
-          "id",
-          "spec",
-          "status",
-          "conditions",
-          "generation",
-          "observed_generation",
-          "updated_at"
-        ],
         "type": "object"
       },
       "ManagedResourceKey": {
@@ -12745,12 +12550,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "type",
-          "source",
-          "destination",
-          "read_only"
-        ],
         "type": "object"
       },
       "NameAnswer": {
@@ -12929,13 +12728,6 @@
             "description": "Where HQ read it; null when nothing says."
           }
         },
-        "required": [
-          "relation",
-          "name",
-          "link",
-          "detail",
-          "source"
-        ],
         "type": "object"
       },
       "ObsidianPath": {
@@ -13160,30 +12952,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "action",
-          "action_label",
-          "state",
-          "state_label",
-          "tone",
-          "headline",
-          "automatic",
-          "requested_actor",
-          "requested_interface",
-          "by",
-          "approved_by",
-          "created_at",
-          "completed_at",
-          "attempt_count",
-          "reason",
-          "condition",
-          "affected",
-          "evidence",
-          "matched",
-          "expected_fingerprint_sha256",
-          "raw_result"
-        ],
         "type": "object"
       },
       "OperatorStep": {
@@ -13208,9 +12976,6 @@
             "type": "array"
           }
         },
-        "required": [
-          "label"
-        ],
         "type": "object"
       },
       "OriginPart": {
@@ -13230,11 +12995,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "address",
-          "host",
-          "container"
-        ],
         "type": "object"
       },
       "Outcome": {
@@ -13260,10 +13020,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "relation",
-          "link"
-        ],
         "type": "object"
       },
       "PageLimit": {
@@ -13364,12 +13120,6 @@
             "type": "array"
           }
         },
-        "required": [
-          "name",
-          "label",
-          "requires",
-          "provider"
-        ],
         "type": "object"
       },
       "PartRefusalPart": {
@@ -13403,15 +13153,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "kind",
-          "part",
-          "refusal",
-          "reason",
-          "scope",
-          "connection_ref",
-          "address"
-        ],
         "type": "object"
       },
       "PathRecord": {
@@ -13651,12 +13392,6 @@
             "type": "integer"
           }
         },
-        "required": [
-          "grants",
-          "groups",
-          "tags",
-          "tests"
-        ],
         "type": "object"
       },
       "PolicyGrantPart": {
@@ -13681,13 +13416,6 @@
             "$ref": "#/components/schemas/PolicyRulePart/properties/src"
           }
         },
-        "required": [
-          "src",
-          "dst",
-          "sources",
-          "destinations",
-          "ports"
-        ],
         "type": "object"
       },
       "PolicyNamePart": {
@@ -13710,10 +13438,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "text",
-          "link"
-        ],
         "type": "object"
       },
       "PolicyRulePart": {
@@ -13747,12 +13471,6 @@
             "type": "array"
           }
         },
-        "required": [
-          "src",
-          "dst",
-          "sources",
-          "destinations"
-        ],
         "type": "object"
       },
       "PresencePart": {
@@ -13864,27 +13582,6 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "online",
-          "last_seen",
-          "tailnet_name",
-          "dns_name",
-          "tailnet_address",
-          "lan_address",
-          "os",
-          "client_version",
-          "update_available",
-          "key_expires",
-          "authorized",
-          "tags",
-          "advertised_routes",
-          "enabled_routes",
-          "offers_exit_node",
-          "exit_node_approved",
-          "ssh_enabled",
-          "blocks_incoming",
-          "observed_at"
-        ],
         "type": "object"
       },
       "Problem": {
@@ -14194,12 +13891,6 @@
             "$ref": "#/components/schemas/LinkedExpenses"
           }
         },
-        "required": [
-          "assets",
-          "content",
-          "documentation",
-          "expense_ids"
-        ],
         "type": "object"
       },
       "ProjectName": {
@@ -14222,11 +13913,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "name",
-          "slug",
-          "url"
-        ],
         "type": "object"
       },
       "ProjectRecord": {
@@ -14553,12 +14239,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "number",
-          "title",
-          "url",
-          "draft"
-        ],
         "type": "object"
       },
       "PurchaseDate": {
@@ -14590,10 +14270,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "name",
-          "url"
-        ],
         "type": "object"
       },
       "ReachPart": {
@@ -14726,20 +14402,6 @@
             "description": "The bytes sent to it over the tailnet; null when not read."
           }
         },
-        "required": [
-          "network",
-          "label",
-          "summary",
-          "host",
-          "address",
-          "machine",
-          "peer_path",
-          "direct_endpoint",
-          "relay",
-          "handshake",
-          "rx_bytes",
-          "tx_bytes"
-        ],
         "type": "object"
       },
       "ReadConflictRefusal": {
@@ -14858,11 +14520,6 @@
             "description": "What was last read of it; null when nothing reads it yet."
           }
         },
-        "required": [
-          "label",
-          "sight",
-          "ability"
-        ],
         "type": "object"
       },
       "ReadingItem": {
@@ -15293,11 +14950,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "expires",
-          "source",
-          "auto_renew"
-        ],
         "type": "object"
       },
       "RelationGroupPart": {
@@ -15319,11 +14971,6 @@
             "type": "integer"
           }
         },
-        "required": [
-          "phrase",
-          "rank",
-          "items"
-        ],
         "type": "object"
       },
       "RelationshipPart": {
@@ -15359,12 +15006,6 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "entity",
-          "source",
-          "observed_at",
-          "stale"
-        ],
         "type": "object"
       },
       "RelationshipsRecord": {
@@ -15426,11 +15067,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "tag",
-          "url",
-          "published"
-        ],
         "type": "object"
       },
       "RenewalAllowed": {
@@ -15513,16 +15149,6 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "name",
-          "url",
-          "default_branch",
-          "head",
-          "deployed",
-          "undeployed",
-          "verified",
-          "open_pull_requests"
-        ],
         "type": "object"
       },
       "RepositoryUrl": {
@@ -15858,10 +15484,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "label"
-        ],
         "type": "object"
       },
       "RootData": {
@@ -15974,12 +15596,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "via",
-          "port",
-          "line",
-          "hops"
-        ],
         "type": "object"
       },
       "RunRequested": {
@@ -16075,23 +15691,6 @@
             "$ref": "#/components/schemas/SightPart/properties/state_label"
           }
         },
-        "required": [
-          "kind",
-          "label",
-          "source",
-          "state",
-          "state_label",
-          "records",
-          "observed_at",
-          "error",
-          "requires",
-          "refusal",
-          "permissions",
-          "parts",
-          "remedy",
-          "freshness",
-          "freshness_label"
-        ],
         "type": "object"
       },
       "SerialNumber": {
@@ -16221,24 +15820,6 @@
             "description": "The plan that resolves it, a fix and then the check that confirms it; null when it has neither."
           }
         },
-        "required": [
-          "id",
-          "rule",
-          "subject",
-          "scope",
-          "affected_scopes",
-          "title",
-          "severity",
-          "explanation",
-          "evidence",
-          "remedies",
-          "offers",
-          "investigations",
-          "workflow",
-          "operator_steps",
-          "no_help_reason",
-          "since"
-        ],
         "type": "object"
       },
       "ServiceAdopted": {
@@ -16297,16 +15878,6 @@
             "$ref": "#/components/schemas/ServiceRow/properties/status_label"
           }
         },
-        "required": [
-          "hostname",
-          "status",
-          "status_label",
-          "origin",
-          "project",
-          "faults",
-          "mark",
-          "facets"
-        ],
         "type": "object"
       },
       "ServiceRecord": {
@@ -16433,11 +16004,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "label",
-          "value",
-          "machines"
-        ],
         "type": "object"
       },
       "SightPart": {
@@ -16508,21 +16074,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "kind",
-          "label",
-          "source",
-          "state",
-          "state_label",
-          "records",
-          "observed_at",
-          "error",
-          "requires",
-          "refusal",
-          "permissions",
-          "parts",
-          "remedy"
-        ],
         "type": "object"
       },
       "Since": {
@@ -16591,13 +16142,6 @@
             "description": "The record the command runs on."
           }
         },
-        "required": [
-          "capability",
-          "target",
-          "label",
-          "effect",
-          "auto"
-        ],
         "type": "object"
       },
       "SyncStats": {
@@ -16626,11 +16170,6 @@
             "type": "array"
           }
         },
-        "required": [
-          "name",
-          "owners",
-          "machines"
-        ],
         "type": "object"
       },
       "Tailnet": {
@@ -16844,10 +16383,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "count",
-          "state"
-        ],
         "type": "object"
       },
       "TargetedChangeBadRequestRefusal": {
@@ -17494,16 +17029,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "kind",
-          "label",
-          "state",
-          "state_label",
-          "refusal",
-          "error",
-          "remedy",
-          "requires"
-        ],
         "type": "object"
       },
       "UnsupportedMediaTypeRefusal": {
@@ -17658,11 +17183,6 @@
             "description": "When it started, an ISO 8601 date-time."
           }
         },
-        "required": [
-          "outcome",
-          "started_at",
-          "finished_at"
-        ],
         "type": "object"
       },
       "UpdatedAt": {
@@ -17718,12 +17238,6 @@
             "description": "How many open Dependabot alerts no open update pull request answers."
           }
         },
-        "required": [
-          "open_pulls",
-          "oldest_pull_days",
-          "unmatched_alerts",
-          "last_run"
-        ],
         "type": "object"
       },
       "UpgradeRecord": {
@@ -17865,11 +17379,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "label",
-          "detail"
-        ],
         "type": "object"
       },
       "UsagePart": {
@@ -17939,15 +17448,6 @@
             "description": "When its use was read, an ISO 8601 date-time; null when not said."
           }
         },
-        "required": [
-          "memory_bytes",
-          "memory_counted_as",
-          "memory_limit_bytes",
-          "memory_of_limit_percent",
-          "cpu_percent_of_one_core",
-          "cpu_limit",
-          "read_at"
-        ],
         "type": "object"
       },
       "VisitRefreshRequest": {
@@ -18113,11 +17613,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "kind",
-          "claim_id",
-          "label"
-        ],
         "type": "object"
       },
       "WorkflowPlan": {
@@ -18143,12 +17638,6 @@
             "type": "array"
           }
         },
-        "required": [
-          "id",
-          "label",
-          "steps",
-          "outcome"
-        ],
         "type": "object"
       },
       "WorkflowStep": {
@@ -18180,12 +17669,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "phase",
-          "label",
-          "summary",
-          "state"
-        ],
         "type": "object"
       },
       "ZoneAdopted": {
@@ -18221,10 +17704,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "hostname",
-          "status"
-        ],
         "type": "object"
       }
     },
@@ -23405,6 +22884,7 @@
                 "timer-stalled",
                 "unit-restarting",
                 "unit-state-unread",
+                "filesystem-nearly-full",
                 "certificate-expiring",
                 "registration-lapsing",
                 "names-nothing",

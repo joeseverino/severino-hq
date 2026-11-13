@@ -56,6 +56,9 @@ type Environment struct {
 	// HostRestartingUnits is what it printed for the services outside that
 	// set that systemd has restarted on its own.
 	HostRestartingUnits string `env:"SEVERINO_HOST_RESTARTING_UNITS"`
+	// HostFilesystems is root's statfs of each real filesystem on the
+	// machine (hostcore.FilesystemReading).
+	HostFilesystems string `env:"SEVERINO_HOST_FILESYSTEMS"`
 	// UnitSocket is where root's `hq-host unit --serve` answers on the
 	// machine the controller runs on: the one way a run asks a container's
 	// systemd unit to stop, start or restart.

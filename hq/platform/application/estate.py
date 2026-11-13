@@ -226,20 +226,29 @@ def _certificates(domains: tuple[str, ...], hostnames: set[str]) -> tuple[Expiry
 
 
 def _edge_certificates(domains: tuple[str, ...], hostnames: set[str]) -> list[Expiry]:
-    """Each certificate read under the domains that says when it expires,
-    linked to its service when HQ serves the name, else to its zone."""
+    """Each name a reading holds a certificate for that says when it expires,
+    linked to its service when HQ serves the name, else to its zone.
+
+    A reading can hold several for one name (an edge certificate beside the
+    older one it replaced), and the name is served by the one that runs out
+    last, so that one is the name's expiry.
+    """
 
     if not domains:
         return []
-    found = []
+    found: dict[tuple[str, str], Expiry] = {}
     for item in readings().about(Subject.of(zones=domains), facets=("certificate",)):
         if (when := moment(item.expires)) is None:
             continue
         name = next(iter(item.hostnames), "") or item.title
+        source = item.spec.short or item.label
+        held = found.get((source, name))
+        if held is not None and held.expires >= when:
+            continue
         zone = next((domain for domain in domains if in_zone(name, domain)), "")
         link = subject_link("service", name) if name in hostnames else subject_link("zone", zone)
-        found.append(Expiry(name, item.spec.short or item.label, when, link))
-    return found
+        found[source, name] = Expiry(name, source, when, link)
+    return list(found.values())
 
 
 def _managed_certificates() -> list[Expiry]:

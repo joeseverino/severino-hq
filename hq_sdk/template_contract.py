@@ -89,6 +89,7 @@ TAGS = (
     "fact",
     "facts",
     "filter_bar",
+    "notice",
     "outside_link",
     "post_button",
     "reference",
@@ -161,15 +162,9 @@ CLASSES = (
     "icon-link",
     "inline",
     "key-col",
-    "kv",
     "list-rows",
-    "msg",
-    "msg-error",
-    "msg-warning",
     "muted",
     "narrow-more",
-    "notice",
-    "notice-attention",
     "optional-col",
     "page-lede",
     "pie-chart",
@@ -332,7 +327,7 @@ HAND_DRAWN: dict[str, dict[str, str]] = {
         "write": '{% include "partials/_kpi_grid.html" %} from hq_sdk.ui.Kpi',
     },
     "a notice": {
-        "pattern": _class_word("msg", "notice"),
+        "pattern": _class_word("notice"),
         "write": "{% notice %}",
     },
     "a filter bar": {
@@ -347,11 +342,9 @@ HAND_DRAWN: dict[str, dict[str, str]] = {
         "pattern": _class_word("tone-", prefix=True),
         "write": "{% status value tone=tone pill=False %}",
     },
-    # A list of pairs (`.kv`) or one of the bands each page drew its facts in
-    # before the part.
+    # One of the bands each page drew its facts in before the part.
     "label and value facts": {
         "pattern": _class_word(
-            "kv",
             "fact-band",
             "service-band",
             "control-summary",

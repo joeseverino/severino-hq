@@ -11,7 +11,7 @@
   },
   "static/css/app/connection.css": {
     "hq/restyled-primitive": {
-      "count": 33
+      "count": 32
     }
   },
   "static/css/app/cuts.css": {
@@ -47,11 +47,6 @@
   "static/css/app/routes.css": {
     "hq/restyled-primitive": {
       "count": 10
-    }
-  },
-  "static/css/app/watching.css": {
-    "hq/restyled-primitive": {
-      "count": 2
     }
   }
 }

@@ -16,12 +16,11 @@ model validates the submission. Nothing here knows what kind of resource this is
   the service page give, not a second one written here.
   {% endcomment %}
   {% if facts %}
-    <dl class="kv compact form-facts">
+    {% facts %}
       {% for label, desired, observed in facts %}
-        <dt>{{ label|breakable }}</dt>
-        <dd><code>{{ observed|default:desired|or_empty|breakable }}</code></dd>
+        {% fact label %}<code>{{ observed|default:desired|or_empty|breakable }}</code>{% endfact %}
       {% endfor %}
-    </dl>
+    {% endfacts %}
   {% endif %}
 
   {% for field in spec.primary %}{{ field.as_field_group }}{% endfor %}

@@ -52,6 +52,10 @@ type Controller struct {
 	// DependencyRun is the outcome of the last dependency run
 	// (DependencyRunFile), given to the next pass.
 	DependencyRun string
+	// MountTable is the kernel's mount table (hostcore.MountTable), and
+	// Statfs what asks a filesystem its space (hostcore.Statfs).
+	MountTable string
+	Statfs     func(path string) (free, total uint64, err error)
 	// Connections checks the connections document before it is read.
 	Connections func() error
 	// Lock holds the renderer's identity lock shared until the returned
@@ -479,6 +483,19 @@ func (c *Controller) readings(ctx context.Context, run string) ([]string, error)
 	}
 	args = append(args, "--env", "SEVERINO_HOST_UNITS=/run/severino-hq/units",
 		"--env", "SEVERINO_HOST_RESTARTING_UNITS=/run/severino-hq/units-restarting")
+
+	// Root reads each filesystem's space here, since a statfs in the
+	// container answers for its overlay. Named whether or not it could be
+	// taken, so a table root could not read is a failed read in HQ that keeps
+	// the last one.
+	if table, err := os.ReadFile(c.MountTable); err == nil {
+		if reading, err := hostcore.ReadFilesystems(table, c.Statfs, c.Now()); err == nil {
+			if err := give("filesystems.json", reading, "/run/severino-hq/filesystems.json"); err != nil {
+				return nil, err
+			}
+		}
+	}
+	args = append(args, "--env", "SEVERINO_HOST_FILESYSTEMS=/run/severino-hq/filesystems.json")
 
 	// The last dependency run's outcome, once there has been one.
 	if info, err := os.Lstat(c.DependencyRun); err == nil && info.Mode().IsRegular() {

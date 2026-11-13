@@ -165,6 +165,13 @@ class EarlyRefusalTests(SimpleTestCase):
         # Composed, the extensions' templates are theirs to hold, which the run reads.
         self.assertEqual(self.refused(pages="template:example_extension/_example.html", composed="true"), "")
 
+    def test_a_named_post_is_the_hosts_though_it_reads_like_a_route(self):
+        from hq.platform.core.tests.look_posts import post_names
+
+        for name in post_names():
+            with self.subTest(post=name):
+                self.assertEqual(self.refused(pages=name), "")
+
 
 class PostNamesTests(TestCase):
     def test_every_named_post_is_refused_on_the_seed_as_it_says(self):

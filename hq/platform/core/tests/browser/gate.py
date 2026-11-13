@@ -391,6 +391,8 @@ class BrowserGate(SimpleTestCase):
     playwright: Playwright
     browser: Browser
     context: BrowserContext | None
+    # Whether the context open runs the page's script, as ``start`` started it.
+    runs_script = False
 
     @classmethod
     def render(cls):
@@ -450,6 +452,7 @@ class BrowserGate(SimpleTestCase):
         self.close_context()
         test = getattr(self, self._testMethodName, None)
         options.setdefault("java_script_enabled", getattr(test, "scripted", self.scripted))
+        self.runs_script = options["java_script_enabled"]
         # Scripts asked for while this is a list wait in it, unanswered.
         self.held = None
         self.context = self.browser.new_context(**options)

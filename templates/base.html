@@ -244,6 +244,7 @@
   </main>
   {# What the head's expect link waits for: the content above is parsed. #}
   <template id="parsed"></template>
+  {% include "partials/_notice_frames.html" %}
 
   {% block site_footer %}
     {% if saved_copy and user.is_authenticated %}

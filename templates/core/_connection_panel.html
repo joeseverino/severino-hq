@@ -72,56 +72,27 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
   {% comment %}Who you are, the link and the path to HQ: as many side by side as the panel holds.{% endcomment %}
   <div class="section-flow">
   {% section "Identity" %}
-    <dl class="kv">
-      <dt>Signed in</dt>
-      <dd>
-        <strong>{{ connection.identity.full_name|default:connection.identity.username|breakable }}</strong>
-        {% if connection.identity.email %}<code>{{ connection.identity.email|breakable }}</code>{% endif %}
-      </dd>
+    {% facts %}
+      {% fact "Signed in" %}<strong>{{ connection.identity.full_name|default:connection.identity.username|breakable }}</strong>{% if connection.identity.email %} <code>{{ connection.identity.email|breakable }}</code>{% endif %}{% endfact %}
       {% comment %}A row is drawn only when it has a value: the strip above already says why there is no device.{% endcomment %}
-      {% if connection.identity.tailnet_user %}
-        <dt>Tailnet account</dt>
-        <dd><code>{{ connection.identity.tailnet_user|breakable }}</code></dd>
-      {% endif %}
+      {% if connection.identity.tailnet_user %}{% fact "Tailnet account" %}<code>{{ connection.identity.tailnet_user|breakable }}</code>{% endfact %}{% endif %}
       {% if connection.caller_device %}
-        <dt>Device</dt>
-        <dd>
-          <strong>{{ connection.caller_device.label|breakable }}</strong>
-          {% if connection.caller_device.os %}<span class="conn-row-note">{{ connection.caller_device.os|breakable }}</span>{% endif %}
-          {% if connection.untrusted_forwarding and connection.reported_device %}<span class="conn-row-note">From the proxy's header</span>{% endif %}
-        </dd>
+        {% fact "Device" %}<strong>{{ connection.caller_device.label|breakable }}</strong>{% if connection.caller_device.os %} <span class="conn-row-note">{{ connection.caller_device.os|breakable }}</span>{% endif %}{% if connection.untrusted_forwarding and connection.reported_device %} <span class="conn-row-note">From the proxy's header</span>{% endif %}{% endfact %}
       {% endif %}
-      {% if connection.caller_device.dns_name %}
-        <dt>MagicDNS</dt><dd><code>{{ connection.caller_device.dns_name|breakable }}</code></dd>
-      {% endif %}
+      {% if connection.caller_device.dns_name %}{% fact "MagicDNS" %}<code>{{ connection.caller_device.dns_name|breakable }}</code>{% endfact %}{% endif %}
       {% if connection.caller_device.tags %}
-        <dt>Tags</dt>
-        <dd>{% for tag in connection.caller_device.tags %}<code>{{ tag|breakable }}</code> {% endfor %}</dd>
+        {% fact "Tags" %}{% for tag in connection.caller_device.tags %}<code>{{ tag|breakable }}</code> {% endfor %}{% endfact %}
       {% endif %}
       {% if connection.identity.route %}
-        <dt>Signed in via</dt>
-        <dd>
-          {{ connection.identity.route|breakable }}
-          {% if connection.identity.provider %}<code>{{ connection.identity.provider|breakable }}</code>{% endif %}
-        </dd>
+        {% fact "Signed in via" %}{{ connection.identity.route|breakable }}{% if connection.identity.provider %} <code>{{ connection.identity.provider|breakable }}</code>{% endif %}{% endfact %}
       {% endif %}
       {% if connection.identity.groups %}
-        <dt>Groups</dt>
-        <dd>{% for group in connection.identity.groups %}<code>{{ group|breakable }}</code> {% endfor %}</dd>
+        {% fact "Groups" %}{% for group in connection.identity.groups %}<code>{{ group|breakable }}</code> {% endfor %}{% endfact %}
       {% endif %}
-      <dt>Rights</dt>
-      <dd>
-        {% if connection.identity.superuser %}superuser
-        {% elif connection.identity.staff %}staff
-        {% else %}standard{% endif %}
-      </dd>
-      {% if connection.identity.last_sign_in %}
-        <dt>Last sign-in</dt><dd>{{ connection.identity.last_sign_in|when }}</dd>
-      {% endif %}
-      {% if connection.identity.session_expires %}
-        <dt>Session until</dt><dd>{{ connection.identity.session_expires|when }}</dd>
-      {% endif %}
-    </dl>
+      {% fact "Rights" %}{% if connection.identity.superuser %}superuser{% elif connection.identity.staff %}staff{% else %}standard{% endif %}{% endfact %}
+      {% if connection.identity.last_sign_in %}{% fact "Last sign-in" %}{{ connection.identity.last_sign_in|when }}{% endfact %}{% endif %}
+      {% if connection.identity.session_expires %}{% fact "Session until" %}{{ connection.identity.session_expires|when }}{% endfact %}{% endif %}
+    {% endfacts %}
     {% if connection.identity.corroborated %}
       <p class="conn-agree conn-agree-yes">
         Your tailnet account and your sign-in belong to the same person.
@@ -146,68 +117,43 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
     {% if connection.tailnet_observed_at and not connection.tailnet_current %}
       <p class="conn-note" data-last-seen>Tailnet read {{ connection.tailnet_observed_at|when }}.</p>
     {% endif %}
-    <dl class="kv">
-      {% if connection.path_label %}
-        <dt>Path</dt>
-        <dd>
-          <strong>{{ connection.path_label|breakable }}</strong>
-        </dd>
-      {% endif %}
+    {% facts %}
+      {% if connection.path_label %}{% fact "Path" %}<strong>{{ connection.path_label|breakable }}</strong>{% endfact %}{% endif %}
       {% if connection.observer %}
-        <dt>Measured by</dt>
-        <dd>
-          <strong{% if connection.serving_basis %} title="{{ connection.serving_basis|capfirst }}"{% endif %}>{{ connection.measurement_label|breakable }}</strong>
-        </dd>
+        {% fact "Measured by" %}<strong{% if connection.serving_basis %} title="{{ connection.serving_basis|capfirst }}"{% endif %}>{{ connection.measurement_label|breakable }}</strong>{% endfact %}
       {% endif %}
       {% comment %}Named as Tailscale names a connection type, and left out where the reading names no path.{% endcomment %}
       {% if connection.peering %}
-      <dt>Connection</dt>
-      <dd class="conn-carriage conn-carriage-{{ connection.peering.id }}">
-        <strong>{{ connection.peering.label|breakable }}</strong>
-        {% if connection.peering.public %}
-          <details class="conn-more" data-peering-detail>
-            <summary>
-              About <code>{{ connection.peering.address|breakable }}</code>
-            </summary>
-            <div class="conn-rows"
-                 data-fragment="{% url 'tool_public_address' %}?address={{ connection.peering.address|urlencode }}"
-                 data-fragment-load
-                 data-fragment-failure="Lookup failed.">
-              <div class="conn-row">
-                <span class="conn-row-note">Loading…</span>
+        {% fact "Connection" %}<div class="conn-carriage conn-carriage-{{ connection.peering.id }}">
+          <strong>{{ connection.peering.label|breakable }}</strong>
+          {% if connection.peering.public %}
+            <details class="conn-more" data-peering-detail>
+              <summary>
+                About <code>{{ connection.peering.address|breakable }}</code>
+              </summary>
+              <div class="conn-rows"
+                   data-fragment="{% url 'tool_public_address' %}?address={{ connection.peering.address|urlencode }}"
+                   data-fragment-load
+                   data-fragment-failure="Lookup failed.">
+                <div class="conn-row">
+                  <span class="conn-row-note">Loading…</span>
+                </div>
               </div>
-            </div>
-          </details>
-        {% endif %}
-      </dd>
+            </details>
+          {% endif %}
+        </div>{% endfact %}
       {% endif %}
-      {% if connection.presence.direct_endpoint %}
-        <dt>WireGuard endpoint</dt>
-        <dd>
-          <code>{{ connection.presence.direct_endpoint|breakable }}</code>
-        </dd>
-      {% endif %}
-      {% if connection.presence %}
-        <dt>Last handshake</dt>
-        <dd>{{ connection.handshake|breakable }}</dd>
-      {% endif %}
-      {% if connection.carried %}
-        <dt>Node traffic</dt><dd>{{ connection.carried|breakable }}</dd>
-      {% endif %}
-      <dt>Browser round trip</dt>
-      <dd>
-        <span data-rtt>{% empty_value %}</span>
-        <span hidden data-rtt-measure="{% url 'health_live' %}"></span>
-      </dd>
-      <dt>Encryption</dt><dd>{{ connection.transport_path|breakable }}</dd>
+      {% if connection.presence.direct_endpoint %}{% fact "WireGuard endpoint" %}<code>{{ connection.presence.direct_endpoint|breakable }}</code>{% endfact %}{% endif %}
+      {% if connection.presence %}{% fact "Last handshake" value=connection.handshake %}{% endif %}
+      {% if connection.carried %}{% fact "Node traffic" value=connection.carried %}{% endif %}
+      {% fact "Browser round trip" %}<span data-rtt>{% empty_value %}</span><span hidden data-rtt-measure="{% url 'health_live' %}"></span>{% endfact %}
+      {% fact "Encryption" value=connection.transport_path %}
       {% if connection.peer_keys %}
         {% comment %}
         The two keys the rows above rest on, checkable against `tailscale
         status` on either machine. Folded: wanted only when the claim is doubted.
         {% endcomment %}
-        <dt>Peered as</dt>
-        <dd>
-          <details class="conn-more">
+        {% fact "Peered as" %}<details class="conn-more">
             <summary>Both node keys</summary>
             <dl class="conn-keys">
               {% for label, key in connection.peer_keys %}
@@ -216,10 +162,9 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
               {% endfor %}
             </dl>
             <p class="conn-row-note">Compare with <code>tailscale status</code>.</p>
-          </details>
-        </dd>
+          </details>{% endfact %}
       {% endif %}
-    </dl>
+    {% endfacts %}
   {% endsection %}
 
   {% section "Path to HQ" css="conn-path" data_connection_layers=True %}

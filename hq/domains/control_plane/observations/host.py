@@ -237,11 +237,39 @@ class HostUnitRecord(ObservationRecord):
     read_at: UnitInstant = Field(description="When the launcher asked systemd.")
 
 
+# A mount point as the kernel's mount table spells it, its escapes undone:
+# printable ASCII from a slash, without the bar HQ's fact rows keep between
+# fields. The controller reads the pattern from this record's schema in the
+# bridge contract and passes over a mount it does not admit.
+FILESYSTEM_MOUNT = r"^/[ -{}~]*$"
+FILESYSTEM_MOUNT_LENGTH = 255
+
+
+class HostFilesystemRecord(ObservationRecord):
+    """One real filesystem on the controller's machine, as statfs(2) states
+    it: the host.filesystem reading's record. Root reads each ext4, xfs, btrfs
+    or zfs mount the machine shows, one per device, and sends where it is
+    mounted and its space; no device, option or file name.
+    """
+
+    model_config = ConfigDict(extra="ignore", frozen=True, json_schema_extra={"additionalProperties": False})
+
+    mount: str = Field(
+        pattern=FILESYSTEM_MOUNT,
+        max_length=FILESYSTEM_MOUNT_LENGTH,
+        description="Where the filesystem is mounted, the name a person finds it by.",
+    )
+    free_bytes: int = Field(ge=0, description="f_bavail: the bytes a process that is not root can still write.")
+    total_bytes: int = Field(ge=0, description="f_blocks: the filesystem's size in bytes.")
+    read_at: UnitInstant = Field(description="When root asked the kernel.")
+
+
 FIREWALL_KIND = "host.firewall"
 PERIMETER_KIND = "host.perimeter"
 RENDER_STATUS_KIND = "host.render_status"
 UNIT_KIND = "host.unit"
 TAILNET_LOCK_KIND = "host.tailnet_lock"
+FILESYSTEM_KIND = "host.filesystem"
 
 OBSERVATIONS: tuple[ObservationSpec, ...] = (
     ObservationSpec(
@@ -284,5 +312,13 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         HostTailnetLockRecord,
         title=lambda record: "On" if record.get("enabled") else "Off",
         relation="Tailnet lock seen from",
+    ),
+    ObservationSpec(
+        FILESYSTEM_KIND,
+        "host",
+        "Disk space",
+        HostFilesystemRecord,
+        title=lambda record: str(record.get("mount", "")),
+        relation="Disk space on",
     ),
 )

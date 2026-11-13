@@ -8,6 +8,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.template import Context, Template
+from django.template.loader import render_to_string
 from django.test import Client
 from django.urls import reverse
 
@@ -17,11 +18,17 @@ from hq.platform.core.tests.browser.probes.settle import SETTLE
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import NONCE, ORIGIN
 
+# fragment.js, with the empty notices it clones, which base.html draws on
+# every page HQ serves.
+_FRAGMENT_JS = f'<script defer src="{settings.STATIC_URL}js/fragment.js" nonce="{NONCE}"></script>' + render_to_string(
+    "partials/_notice_frames.html"
+)
+
 # A region that polls and names its parts, a disclosure and a menu, a
 # placeholder behind a closed disclosure, and one whose address answers a
 # whole page.
 _FRAGMENT_PROBE = f"""<!doctype html><html><head><title>Probe</title>
-<script defer src="{settings.STATIC_URL}js/fragment.js" nonce="{NONCE}"></script>
+{_FRAGMENT_JS}
 </head><body><main>
 <section data-fragment="/probe-strip/" data-fragment-poll="1">
 <details data-fragment-part="first"><summary>First</summary>as drawn</details>
@@ -41,7 +48,7 @@ _PROBE_STRIP = """<section data-fragment="/probe-strip/"{poll}>
 # A form answered in place whose submitting button shares a field's name,
 # between that field and another.
 _FORM_PROBE = f"""<!doctype html><html><head><title>Probe</title>
-<script defer src="{settings.STATIC_URL}js/fragment.js" nonce="{NONCE}"></script>
+{_FRAGMENT_JS}
 </head><body><main>
 <form action="/probe-sent/" data-fragment-target="sent">
 <input name="key" value="field">
@@ -63,7 +70,7 @@ def _keyed_probe():
     )
     forms = "".join(Template(form.replace("{answer}", answer)).render(Context({})) for answer in _KEYED_ANSWERS)
     return f"""<!doctype html><html><head><title>Probe</title>
-<script defer src="{settings.STATIC_URL}js/fragment.js" nonce="{NONCE}"></script>
+{_FRAGMENT_JS}
 </head><body><main>
 {forms}
 <div id="sent" data-fragment="/probe-sent/">waiting</div>
@@ -72,7 +79,7 @@ def _keyed_probe():
 
 # A region that asks to add its answers to history, which nothing restores.
 _PUSH_PROBE = f"""<!doctype html><html><head><title>Probe</title>
-<script defer src="{settings.STATIC_URL}js/fragment.js" nonce="{NONCE}"></script>
+{_FRAGMENT_JS}
 </head><body><main>
 <div id="pushed" data-fragment data-fragment-links data-fragment-history="push">
 <a data-probe="push" href="/probe-push/?turn=2">Next</a>
@@ -100,7 +107,7 @@ def _dialog_probe():
         Context({"slot": slot})
     )
     return f"""<!doctype html><html><head><title>Probe</title>
-<script defer src="{settings.STATIC_URL}js/fragment.js" nonce="{NONCE}"></script>
+{_FRAGMENT_JS}
 </head><body><main>
 <button type="button" data-probe="open" command="show-modal" commandfor="modal-probe">Open</button>
 {dialog}
@@ -123,7 +130,7 @@ def _asking_dialog_probe():
     )
     return (
         f"""<!doctype html><html><head><title>Probe</title>
-<script defer src="{settings.STATIC_URL}js/fragment.js" nonce="{NONCE}"></script>
+{_FRAGMENT_JS}
 <script defer src="{settings.STATIC_URL}js/ask.js" nonce="{NONCE}"></script>
 </head><body><main>
 <button type="button" data-probe="open" command="show-modal" commandfor="modal-probe">Open</button>
@@ -148,7 +155,7 @@ def _asking_head_probe():
         Context({"visit": PageVisit("page", "example")})
     )
     scripts = f"""<!doctype html><html><head><title>Probe</title>
-<script defer src="{settings.STATIC_URL}js/fragment.js" nonce="{NONCE}"></script>
+{_FRAGMENT_JS}
 <script defer src="{settings.STATIC_URL}js/ask.js" nonce="{NONCE}"></script>
 </head><body>"""
     return [
@@ -209,8 +216,8 @@ _REFUSED = "Example refused: its connection only reads."
 _DECLINED = "Example declined: it needs a connection that manages."
 # Another page, saying the refusal among its messages. Read again, it would
 # not: a message is said once.
-_ELSEWHERE = f"""<!doctype html><html><head><title>Elsewhere</title></head><body>
-<main class="content" id="elsewhere"><ul class="messages"><li class="msg msg-error">{_REFUSED}</li></ul></main>
+_ELSEWHERE = """<!doctype html><html><head><title>Elsewhere</title></head><body>
+<main class="content" id="elsewhere"><ul class="messages"><li>{% notice tone="error" %}{{ refused }}{% endnotice %}</li></ul></main>
 </body></html>"""
 
 # What each press leaves of the rows.
@@ -313,7 +320,7 @@ class FragmentBrowserTests(BrowserGate):
             if row == "refused":
                 # Refused, and answered with another page that says why: what
                 # a redirect elsewhere answers, which a route cannot send.
-                return self.fulfill(route, _ELSEWHERE)
+                return self.fulfill(route, Template(_ELSEWHERE).render(Context({"refused": _REFUSED})))
             if row == "declined":
                 # Refused, answered with the sentence alone (``refusal_response``).
                 return route.fulfill(status=409, content_type="text/plain; charset=utf-8", body=_DECLINED)

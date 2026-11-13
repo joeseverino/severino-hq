@@ -22,7 +22,14 @@ from typing import Any, ClassVar, Self
 from .cadence import slowest_sweep_interval
 from .core_capabilities import CONTROLLER_REFRESH
 from .derivations import passed
-from .finding_model import Finding, FindingEstate, FindingRemedy, fact_values
+from .finding_model import (
+    Finding,
+    FindingEstate,
+    FindingRemedy,
+    OperatorStep,
+    cannot_run_commands,
+    fact_values,
+)
 from .moments import when
 from .timestamps import moment
 from .topology_model import TopologyNode, derived_id
@@ -162,6 +169,43 @@ def stated[R: FactRow](estate: FindingEstate, row: type[R]) -> Iterator[tuple[To
         values = fact_values(node, row.KEY)
         if values and not too_old(estate, taken_at(node, row.KIND)):
             yield node, tuple(row.of(value) for value in values)
+
+
+@dataclass(frozen=True, slots=True)
+class OnEachMachine[R: FactRow]:
+    """A detector that says one thing per machine about the rows of its reading
+    it picks: one finding, with each picked row's evidence and steps in turn,
+    a command on that machine HQ cannot run."""
+
+    rule: str
+    row: type[R]
+    picked: Callable[[R], bool]
+    severity: Callable[[tuple[R, ...]], str]
+    title: Callable[[TopologyNode, tuple[R, ...]], str]
+    explanation: Callable[[tuple[R, ...]], str]
+    evidence: Callable[[R], Iterable[tuple[str, str]]]
+    steps: Callable[[TopologyNode, R], Iterable[OperatorStep]]
+
+    def __call__(self, estate: FindingEstate) -> tuple[Finding, ...]:
+        found = []
+        for node, rows in stated(estate, self.row):
+            picked = tuple(row for row in rows if self.picked(row))
+            if not picked:
+                continue
+            found.append(
+                Finding(
+                    rule=self.rule,
+                    subject=node.id,
+                    scope=self.row.KIND,
+                    title=self.title(node, picked),
+                    severity=self.severity(picked),
+                    explanation=self.explanation(picked),
+                    evidence=tuple(item for row in picked for item in self.evidence(row)),
+                    steps=tuple(step for row in picked for step in self.steps(node, row)),
+                    no_help_reason=cannot_run_commands(node.label),
+                )
+            )
+        return tuple(found)
 
 
 @dataclass(frozen=True, slots=True)
