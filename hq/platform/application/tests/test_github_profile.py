@@ -4,7 +4,9 @@ from pathlib import Path
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.db import connection
 from django.test import TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
@@ -313,6 +315,16 @@ class PageTests(TestCase):
         hold(reachable=False, error="GitHub profile: provider answered 502")
         failed = self.client.get(status).json()
         self.assertEqual((failed["state"], failed["note"]), ("failed", "GitHub profile: provider answered 502"))
+
+    def test_the_account_a_sign_in_names_is_read_once_a_page(self):
+        LinkedAccount.objects.create(user=self.user, provider="github", login="example-user")
+        hold()
+        table = LinkedAccount._meta.db_table
+
+        with CaptureQueriesContext(connection) as captured:
+            self.assertEqual(self.client.get(reverse("watching")).status_code, 200)
+
+        self.assertEqual(sum(f'FROM "{table}"' in query["sql"] for query in captured.captured_queries), 1)
 
     def test_a_status_hq_did_not_sign_is_not_found(self):
         self.assertEqual(self.client.get(reverse("control_plane:read_status"), {"watch": "forged"}).status_code, 404)

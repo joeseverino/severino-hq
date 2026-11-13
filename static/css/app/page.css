@@ -158,9 +158,10 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
   --own: 0;
   --held: 0;
   --readings: calc(var(--own) + var(--held));
-  /* The narrowest a reading stands beside another: under it, a phone's half
-     row, a line would wrap past the lines a reading holds. */
-  --reading: 12rem;
+  /* The narrowest a reading stands beside another, inside a phone's half row
+     so two stand to a row there: under it, a line would wrap past the lines a
+     reading holds. */
+  --reading: 11rem;
   /* A reading's lead, and one of its quiet lines with the gap it leaves
      before the next. */
   --reading-lead: 26px;

@@ -231,8 +231,9 @@ def _region(
     the row's name, and they share the room evenly. Only a ``pane`` (a box of its own height, or a table sized to its
     content) scrolls in it. A ``chart``'s table fits its box as any table
     does, read whole with no row held back and in the chart's own order, so
-    no heading sorts it; its region and a pane's are
-    each a stop for the keyboard, should what they hold still overflow.
+    no heading sorts it. Every region is drawn as a stop for the keyboard;
+    once script has run, only a pane, a chart's and one whose table scrolls
+    stay one.
 
     Tables with no row are drawn as the one empty state instead
     (docs/Design.md, Nothing empty takes space): ``empty`` says what is
@@ -259,7 +260,7 @@ def _region(
             "action_url": action_url,
             "action_label": action_label,
         }
-    return {"label": label, "css": " ".join(classes), "chart": chart, "scrolls": pane or chart, "empty": nothing}
+    return {"label": label, "css": " ".join(classes), "chart": chart, "empty": nothing}
 
 
 class RegionNode(template.Node):
@@ -273,20 +274,26 @@ class RegionNode(template.Node):
         self.options = options
 
     def render(self, context: Any) -> str:
-        region = _region(
-            self.label.resolve(context), **{name: value.resolve(context) for name, value in self.options.items()}
-        )
+        label = self.label.resolve(context)
+        # What would fill an empty table (`page.remedy` reads the database) is
+        # asked only of a table with no rows, which is the only one to show it.
+        options = {name: value.resolve(context) for name, value in self.options.items() if name != "remedy"}
+        region = _region(label, **options)
         content = mark_cells(self.nodelist.render(context), sorts=not region["chart"])
         if content is None:
             # A table with no rows would draw its headings over nothing, so the
             # region says it has nothing instead (docs/Design.md, Nothing empty
             # takes space).
+            if "remedy" in self.options:
+                region = _region(label, **options, remedy=self.options["remedy"].resolve(context))
             return render_to_string("partials/_empty_state.html", region["empty"])
-        # Only a box that scrolls is a stop for the keyboard, and it is named
-        # so that stop says what it holds. It is a group and no landmark: a
-        # landmark around it (its section, its card) already has its place in
-        # the page's outline, often by the same name, and a box that fits is
-        # nothing a reader needs to reach (docs/Design.md, A table fits its box).
+        # A box that scrolls is a stop for the keyboard, named so the stop says
+        # what it holds. Without script any region may scroll, so every one is
+        # drawn as a stop, and tables.js takes it off a region whose table
+        # fits, which holds nothing a reader needs to reach. It is a group and
+        # no landmark: a landmark around it (its section, its card) already
+        # has its place in the page's outline, often by the same name
+        # (docs/Design.md, A table fits its box).
         # A table whose rows open an editor ({% row_editor %}) is a region of
         # the page's own (docs/Design.md, A read is a fragment), found by its
         # id in the page that answers it, so an editor opens, saves and closes
@@ -295,7 +302,7 @@ class RegionNode(template.Node):
         return format_html(
             '<div class="table-scroll{}"{}{}{}>{}</div>',
             f" {region['css']}" if region["css"] else "",
-            format_html(' role="group" aria-label="{}" tabindex="0"', region["label"]) if region["scrolls"] else "",
+            format_html(' role="group" aria-label="{}" tabindex="0"', region["label"]),
             mark_safe(" data-chart") if region["chart"] else "",
             format_html(' id="table-{}" data-fragment=""', slugify(region["label"])) if edits else "",
             # The region's own content, rendered and escaped already; the mark

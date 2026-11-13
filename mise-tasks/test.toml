@@ -37,7 +37,9 @@ run = "uv run python manage.py makemigrations --check --dry-run"
 ["test:api-properties"]
 description = "Generated API cases through the real WSGI middleware"
 hide = true
-# One module in one process: a narrow run, outside the heavy turn (tools/gate/turn.py).
+# One module in one process: a narrow run, outside the heavy turn (tools/gate/turn.py),
+# which fast still runs in the turn it holds for its tests (tools/gate/fast.py, HEAVY).
+tags = ["heavy"]
 extends = "django"
 run = "uv run --group fuzz python manage.py test tests.fuzz.api_properties --noinput --parallel 1"
 
@@ -48,8 +50,8 @@ run = "uv run --group fuzz python manage.py test tests.fuzz.api_properties --noi
 description = "The Go controller's tests under the race detector"
 hide = true
 extends = "heavy"
-# A quick gate too: fast runs it when its sources moved, in its one run, where
-# it takes the heavy turn itself (tools/gate/fast.py, run_command).
+# A quick gate too: fast runs it when its sources moved, beside its tests in
+# the heavy turn it holds for them (tools/gate/fast.py, heavy_gates).
 tags = ["fast"]
 # What the Go tests read, which tools/pipeline/legs.py and fast match a change
 # against, so the Test job and fast leave them out when none moved: the

@@ -559,8 +559,56 @@ def _urgent_dashboard():
         yield
 
 
+@contextmanager
+def _rechecks(*, populated):
+    """The queue as a machine's findings fill it: urgent rows whose only remedy
+    is the check that reads again, beside the reader's Dismiss, each title a
+    quoted unit name long enough to wrap. No row holds a third button, so a
+    table of them is as narrow as two buttons leave it."""
+
+    from hq.platform.application.dashboard import queue_item
+    from hq.platform.application.finding_model import CHECK_AGAIN
+    from hq.platform.application.workflow_contracts import ActionLink
+
+    titles = (
+        (
+            "“Example Remote Upload Service” keeps restarting on example-host-01",
+            "systemd starts it again each time it stops, and it does not stay up.",
+        ),
+        ("Edge certificate example.com expires in 19 days", "Visitors get a certificate error once it expires."),
+    )
+    queue = [
+        {
+            **queue_item(
+                "example.rechecks",
+                "Example",
+                Insight(
+                    "serious",
+                    "Example",
+                    title,
+                    "1",
+                    detail,
+                    key=f"example:recheck-{place}",
+                    actions=(ActionLink("verify", CHECK_AGAIN, "read", f"/example/check/{place}/", method="POST"),),
+                ),
+            ),
+            "aside": False,
+        }
+        for place, (title, detail) in enumerate(titles)
+    ]
+    with (
+        _dashboard(populated=populated),
+        mock.patch("hq.platform.application.action_items.with_aside_state", return_value=queue),
+    ):
+        yield
+
+
 PAGES = {
     "dashboard": (lambda: reverse("dashboard"), lambda: _dashboard(populated=True)),
+    # The queue's urgent rows as a machine's findings fill it, each with two
+    # buttons: in place on the dashboard, and on the queue's own page.
+    "dashboard-rechecks": (lambda: reverse("dashboard"), lambda: _rechecks(populated=False)),
+    "action-items-rechecks": (lambda: reverse("action_items"), lambda: _rechecks(populated=False)),
     # The urgent part of the queue read on the dashboard, beside its buttons.
     "dashboard-urgent": (lambda: reverse("dashboard"), _urgent_dashboard),
     "dashboard-bare": (lambda: reverse("dashboard"), lambda: _dashboard(populated=False)),

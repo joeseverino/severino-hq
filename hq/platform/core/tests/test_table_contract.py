@@ -167,20 +167,19 @@ _ROWS = '<table class="data-table"><tbody><tr><td>a</td></tr></tbody></table>'
 
 
 class TableTagTests(SimpleTestCase):
-    def test_a_region_that_fits_is_a_box_and_one_that_scrolls_a_named_stop(self):
-        """A region that fits holds nothing to scroll to, so it is no stop and
-        no landmark; one that scrolls is a stop for the keyboard, named so the
-        stop says what it holds."""
+    def test_every_region_is_drawn_as_a_stop_named_for_its_table(self):
+        """Without script any region may scroll, so the server draws each one
+        as a stop for the keyboard, named so the stop says what it holds;
+        tables.js takes it off a region whose table fits."""
 
-        html = _render('{% table_region "Machines" %}' + _ROWS + "{% endtable_region %}")
-        (region,) = with_class(html, "table-scroll")
-        self.assertFalse({"role", "aria-label", "tabindex"} & set(region.attrs))
-        self.assertEqual(len(elements(html, "table")), 1)
-        for source in ('{% table_region "Links" pane=True %}', '{% table_region "Runs" chart=True %}'):
-            with self.subTest(source):
-                (scrolls,) = with_class(_render(source + _ROWS + "{% endtable_region %}"), "table-scroll")
-                self.assertEqual(scrolls.attrs["tabindex"], "0")
-                self.assertTrue(scrolls.attrs["aria-label"])
+        for options in ("", " pane=True", " chart=True", ' room="shared"', " compare=True"):
+            with self.subTest(options=options):
+                html = _render('{% table_region "Machines"' + options + " %}" + _ROWS + "{% endtable_region %}")
+                (region,) = with_class(html, "table-scroll")
+                self.assertEqual(
+                    (region.attrs.get("role"), region.attrs.get("aria-label"), region.attrs.get("tabindex")),
+                    ("group", "Machines", "0"),
+                )
         (pane,) = with_class(_render('{% table_region "Links" pane=True %}{% endtable_region %}'), "table-scroll")
         self.assertIn("is-pane", pane.classes)
 
@@ -256,22 +255,43 @@ class TableTagTests(SimpleTestCase):
                 self.assertEqual(len(elements(html, "table")), 1)
                 self.assertEqual(select(html, "data-empty-state"), [])
 
-    def test_a_region_names_the_room_its_identifiers_get_and_still_does_not_scroll(self):
+    def test_what_would_fill_a_region_is_asked_only_when_it_is_empty(self):
+        """A remedy may read the database (`page.remedy`), so a region with
+        rows, which never shows one, never asks for it."""
+
+        asked = []
+
+        class Page:
+            @property
+            def remedy(self):
+                asked.append(True)
+                return {"label": "Add a run", "url": "/runs/new/"}
+
+        source = (
+            '{% table_region "Runs" empty="No runs yet." remedy=page.remedy %}<table class="data-table"><thead><tr>'
+            '{% table_heading "Name" "identifier" %}</tr></thead>'
+            "<tbody>{% for row in rows %}<tr><td>{{ row }}</td></tr>{% endfor %}</tbody></table>{% endtable_region %}"
+        )
+        _render(source, {"rows": ["a"], "page": Page()})
+        self.assertEqual(asked, [])
+        ((words, href),) = links(_render(source, {"rows": [], "page": Page()}))
+        self.assertEqual((words.startswith("Add a run"), href), (True, "/runs/new/"))
+        self.assertEqual(asked, [True])
+
+    def test_a_region_names_the_room_its_identifiers_get(self):
         for room in ("shared", "snug"):
             with self.subTest(room):
                 source = '{% table_region "Services" room="' + room + '" %}{% endtable_region %}'
                 (region,) = with_class(_render(source), "table-scroll")
                 self.assertIn(f"is-{room}", region.classes)
-                self.assertNotIn("tabindex", region.attrs)
         (plain,) = with_class(_render('{% table_region "Services" %}{% endtable_region %}'), "table-scroll")
         self.assertFalse({"is-shared", "is-snug"} & set(plain.classes))
 
-    def test_a_compare_region_says_so_and_still_does_not_scroll(self):
+    def test_a_compare_region_says_so(self):
         (region,) = with_class(
             _render('{% table_region "Changes" compare=True %}{% endtable_region %}'), "table-scroll"
         )
         self.assertIn("is-compare", region.classes)
-        self.assertNotIn("tabindex", region.attrs)
         (plain,) = with_class(_render('{% table_region "Changes" %}{% endtable_region %}'), "table-scroll")
         self.assertNotIn("is-compare", plain.classes)
 

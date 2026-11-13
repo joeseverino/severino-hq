@@ -28,6 +28,10 @@
     "description": "The runner image's hashed build constraints, compiled by uv pip compile from the .in beside them; Renovate runs the command their header records.",
     "managerFilePatterns": ["/^hq_runner/build-constraints\\.txt$/"]
   },
+  "ansible-galaxy": {
+    "description": "The Ansible collections the worker image ships, in ansible-galaxy's requirements format under a name the manager's default patterns miss.",
+    "managerFilePatterns": ["/^hq_runner/collections\\.yml$/"]
+  },
   "postUpdateOptions": ["gomodTidy"],
   "packageRules": [
     {

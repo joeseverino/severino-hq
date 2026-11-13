@@ -135,9 +135,11 @@ transitions from nothing, so every button fades in on load.
 
 **A table fits its box, at every width.** No screen width is asked anywhere
 in the table primitive. A table takes its box's width and wraps, the browser
-sizing each column from what it holds. With no script nothing leaves: in a
-phone's region the table takes every give below at once, and it scrolls in
-its region only once it has none left.
+sizing each column from what it holds. Only script fits a table to its box.
+With no script nothing leaves, gives way or breaks, and a table wider than
+its region scrolls in it, at any width. The gates hold it inside its card,
+with no word broken and no column narrower than its words; a survey check
+declared `scripted` (`browser/probes`) is held only once script has run.
 
 Each column that may leave has a rank, 1 first
 (`{% table_heading ... drop=N %}`). A list's ranks are derived by `ranked`:
@@ -190,9 +192,11 @@ cells stand closer. Still wider, its identifiers break where they must
 (`data-scrolls`), so no table runs past its card at any width. The gates fail
 one that does: the narrowest phone (320px) and every width above it hold every
 table the gates draw. `a_table_fits_its_box_at_every_width` and the example
-estate's `ExampleEstateTableFitTests` sweep each page from 320px up, reading it
-at the first width of each shape its layout takes (`TABLE_LAYOUT`), where a
-table has the least room.
+estate's `ExampleEstateTableFit` classes sweep each page from 320px up, reading it
+at the first width of each shape its layout and its tables take
+(`TABLE_LAYOUT`: the viewport queries, the boxes around each region, and how
+far each table has given way), where a table has the least room, with its
+rows as drawn, its folds open and every row opened.
 
 The region marks each body cell that says nothing (`data-blank`) and every
 cell of a column blank in every row (`data-blank-column`), which is not drawn.
@@ -205,12 +209,17 @@ page's chrome (a scroll box in either axis would pin it to the region). A table
 that scrolls once it has given all it can (`data-scrolls`) is in such a box, so
 its heading sticks to nothing and stays on its first row. *Gate:*
 `test_a_rows_controls_stay_in_its_card_and_a_table_that_cannot_fit_scrolls`.
-Only a region declared a pane, or a chart's (`chart=True`), scrolls, pins its
-heading to its own edge, and takes focus. It is named, so the stop says what it
-holds, as the focusable scroll box of the usual responsive-table pattern is. It
-is a `group` where that pattern writes `region`, and a region that fits is a
-plain box, so neither is a landmark: the section or card around a table is one
-already, often by the same name. *Gate:*
+Only a region declared a pane, or a chart's (`chart=True`), scrolls by design
+and pins its heading to its own edge. A region that scrolls takes focus, named
+by its table's label so the stop says what it holds, as the focusable scroll
+box of the usual responsive-table pattern is. Without script any region may
+scroll, so the server draws every one as that stop; once script has run, only
+a pane, a chart's and one whose table scrolls (`data-scrolls`) keep it, and a
+region that fits is a plain box. The stop is a `group` where that pattern
+writes `region`, so it is no landmark: the section or card around a table is
+one already, often by the same name. *Gates:*
+`test_every_region_is_drawn_as_a_stop_named_for_its_table`,
+`test_a_rows_controls_stay_in_its_card_and_a_table_that_cannot_fit_scrolls`,
 `test_a_section_and_the_table_in_it_are_one_landmark`. A pane (`pane=True`) is
 as tall as its rows up to a fixed reading height, as the topology ledger is,
 and scrolls past it. A table never stacks into cards and is not swiped through.
@@ -1799,8 +1808,8 @@ Decoration:
    catalog's `__init__.py` and listed in `test_browser_probes.py`'s `MODULES`.
    The entry is drawn through the part's own partial or tag, and held by the
    whole survey. An entry whose state is not on the page by itself says so as
-   its premise. An entry is drawn without script, so a table entry must fit by
-   CSS alone.
+   its premise. An entry is drawn without script, so a table entry is held
+   by every check but those declared `scripted`, and may scroll in its region.
 6. Run `mise run check` and `mise run browser`, then look at the page at a phone,
    a tablet and a desktop width (`mise run dev:look`), against the rules held
    by eye. The gates catch classes of mistakes; they do

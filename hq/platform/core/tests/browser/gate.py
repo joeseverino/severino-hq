@@ -12,6 +12,7 @@ from collections.abc import Mapping
 from functools import cache, partial
 from hashlib import sha256
 from html import unescape
+from itertools import pairwise
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast, override
 from unittest import TestResult, mock
@@ -25,8 +26,9 @@ lazy from playwright.sync_api import Error as BrowserError
 
 from hq.platform.core.csp_views import _blocked, _csp_violations, _directive
 from hq.platform.core.speculation import rules_document
+from hq.platform.core.stalls import stall_watch
 from hq.platform.core.stylesheets import stylesheet
-from hq.platform.core.test_runner import browser_failures, stall_watch
+from hq.platform.core.test_runner import browser_failures
 from hq.platform.core.tests.browser.probes.palette import (
     FILL_PAINTERS,
     FILL_STEPS,
@@ -45,7 +47,7 @@ from hq.platform.core.tests.browser.probes.settle import (
     STILL,
     hushed,
 )
-from hq.platform.core.tests.browser.probes.tables import opened_tables_read
+from hq.platform.core.tests.browser.probes.tables import PRESS, TABLE_LAYOUT, UNPRESS, tables_read
 from hq.platform.core.tests.browser.reading import _in_one_trip, taken
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import NONCE, ORIGIN, static_file
@@ -689,69 +691,85 @@ class BrowserGate(SimpleTestCase):
 
     def table_defects_at_every_width(self):
         """What the table checks (`Check(table=True)`) find on the loaded page
-        at some window width from the narrowest phone up, as it was resized and
-        with every row a reader can open opened, and whether opening them
+        at some window width from the narrowest phone up, as it was resized,
+        in each state a reader can draw its tables in (rows as drawn, folds
+        open, every row a reader can open opened), and whether opening rows
         moved what stayed closed, by check, each finding with the first width
-        it was found at; the page is left at the width it was loaded at, its
-        rows closed.
+        it was found at and the state it was found in; the page is left at
+        the width it was loaded at, its rows closed.
 
-        A table's room changes only where the layout around it changes shape
-        (`TABLE_LAYOUT`): at an edge of the stylesheet's viewport queries, and
-        between two edges wherever a box around it wraps or adds a track, which
-        moves one way as the window grows. So the sweep reads each span between
-        edges at its two ends, and halves a span whose ends differ down to the
-        first width of each new shape. Within a shape a region grows with the
-        window and a table at its narrowest asks no more than it did, so a
-        table that fits at the first width of a shape fits at every width of
-        it. Each width is one trip and one page state (`opened_tables_read`)."""
+        A table's room changes only where its shape changes (`TABLE_LAYOUT`):
+        at an edge of the stylesheet's viewport queries, and between two edges
+        wherever a box around it wraps or adds a track, or a table gives way
+        or takes back what it gave, each of which moves one way as the window
+        grows. Within a shape a region grows with the window and a table at
+        its narrowest asks no more than it did, so a table that holds every
+        check at the first width of a shape holds them at every width of it.
+        So the sweep finds those widths, reading only the shape at each span's
+        two ends and halving a span whose ends differ down to the first width
+        of each new shape, and reads the checks once at each (`tables_read`).
+        It does so with the rows the page's folds hold folded, then again with
+        them open, since a table fits the rows it shows; the rows are opened
+        with the folds open, so every row is read open."""
 
         loaded = self.page.viewport_size
-        queries = viewport_queries(stylesheet())
+        layout = [SELECTORS["table_scroll"], viewport_queries(stylesheet()), cuts_marked_after()]
         probes = table_probes()
         sources, args = zip(*probes.values(), strict=True)
-        script = opened_tables_read(hushed(_in_one_trip(sources)))
-        arg = [
-            [SELECTORS["table_scroll"], queries],
-            cuts_marked_after(),
-            SELECTORS["row_fold"],
-            SELECTORS["row_opener"],
-            SELECTORS["own_records"],
-            list(args),
-        ]
+        script = tables_read(hushed(_in_one_trip(sources)))
         # Each finding once, as first found: the same defect at another width
-        # differs only in its measures.
+        # or in another state differs only in its measures.
         found: dict[str, dict[str, str]] = {}
-        shapes: dict[int, str] = {}
 
-        def take(check, said, width):
+        def take(check, said, where):
             kept = found.setdefault(check, {})
             for line in said:
-                kept.setdefault(re.sub(r"\d+", "#", str(line)), f"{line} at {width}px")
+                kept.setdefault(re.sub(r"\d+", "#", str(line)), f"{line} {where}")
 
-        def read(width):
-            self.page.set_viewport_size(viewport(width))
-            shape, sizes, misfits, outcomes, moved = self.page.evaluate(script, arg)
-            take("tables fit", misfits, width)
-            for check, (returned, value) in zip(probes, outcomes, strict=False):
-                take(check, AS_FINDINGS.get(check, _as_is)(value) if returned else [f"the probe threw: {value}"], width)
-            take("opening rows moves", moved, width)
-            shapes[width] = shape
-            return sizes
+        def sweep(state, rows):
+            shapes: dict[int, str] = {}
 
-        def between(low, high):
-            if high - low > 1 and shapes[low] != shapes[high]:
-                middle = (low + high) // 2
-                read(middle)
-                between(low, middle)
-                between(middle, high)
+            def shape(width):
+                self.page.set_viewport_size(viewport(width))
+                shapes[width], sizes = self.page.evaluate(TABLE_LAYOUT, layout)
+                return sizes
 
-        # A page with no table region has nothing to sweep.
-        if read(NARROWEST):
-            edges = query_edges(queries)
+            def between(low, high):
+                if high - low > 1 and shapes[low] != shapes[high]:
+                    middle = (low + high) // 2
+                    shape(middle)
+                    between(low, middle)
+                    between(middle, high)
+
+            # A page with no table region has nothing to sweep.
+            if not shape(NARROWEST):
+                return
+            edges = query_edges(layout[1])
             for low, high in zip([NARROWEST, *edges], [edge - 1 for edge in edges] + [LARGEST], strict=True):
                 for width in {low, high} - shapes.keys():
-                    read(width)
+                    shape(width)
                 between(low, high)
+            widths = sorted(shapes)
+            for width in [NARROWEST, *(width for before, width in pairwise(widths) if shapes[width] != shapes[before])]:
+                self.page.set_viewport_size(viewport(width))
+                states, moved = self.page.evaluate(
+                    script, [layout[0], layout[2], state, rows, SELECTORS["own_records"], list(args)]
+                )
+                for said_state, outcomes in states:
+                    where = f"at {width}px" + (f", {said_state}" if said_state else "")
+                    for check, (returned, value) in zip(probes, outcomes, strict=False):
+                        said = AS_FINDINGS.get(check, _as_is)(value) if returned else [f"the probe threw: {value}"]
+                        take(check, said, where)
+                take("opening rows moves", moved, f"at {width}px")
+
+        folds = self.page.evaluate_handle(PRESS, SELECTORS["row_fold"])
+        if self.page.evaluate("(pressed) => pressed.length", folds):
+            sweep("its folds open", SELECTORS["row_opener"])
+            folds.evaluate(UNPRESS)
+            sweep("", None)
+        else:
+            sweep("", SELECTORS["row_opener"])
+        folds.dispose()
         self.page.set_viewport_size(loaded)
         self.page.evaluate(SETTLE)
         return {check: list(said.values()) for check, said in found.items() if said}
@@ -800,14 +818,14 @@ class BrowserGate(SimpleTestCase):
     def findings(self, path, width):
         """What the layout rules find in HQ's own markup, checks that found
         nothing left out: the geometry and the palette checks in the palette
-        loaded, and the fills in both.
-        The vendored markup is stood in for while they read, and put back
-        however they end: each probe runs on its own."""
+        loaded, and the fills in both; on a page with no script, only those
+        that hold without it. The vendored markup is stood in for while they
+        read, and put back however they end: each probe runs on its own."""
 
         found = self.checked(
             {
                 "stand in": (STAND_IN, SELECTORS["vendored"]),
-                **geometry_probes(),
+                **geometry_probes(self.runs_script),
                 **palette_probes(),
                 "put back": (PUT_BACK, None),
             }

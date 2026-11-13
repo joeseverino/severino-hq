@@ -123,14 +123,6 @@
 .table-scroll.is-compare > .data-table > tbody > tr > td[data-side] { inline-size: 40%; }
 /* A change's side (`data-side`, partials/_change_table.html) keeps its words whole, so it is never narrower than its longest word and an identifier in it breaks into pieces no narrower than that, never a letter wide; a table too wide then lets its Status go to the row's line beneath (tables.js). */
 .table-scroll > .data-table > tbody > tr > td[data-side] { overflow-wrap: break-word; }
-/* With no script a phone's box has no line beneath a row for Status to go to, and the change's columns of whole words are wider than the box, so Status, its last column, leaves outright: each side already shows the change, with a dash where a value is absent. */
-@media (scripting: none) {
-  @container table-region (width < 640px) {
-    .table-scroll > .data-table:has(> tbody > tr > td[data-side]) > * > tr:not(.row-detail) > :last-child { display: none; }
-    /* Its three columns of whole words then fill the narrowest phone to the pixel, and an engine draws the same words a pixel or two wider than another, so its cells stand closer and the table keeps room to spare. */
-    .table-scroll > .data-table:has(> tbody > tr > td[data-side]) > * > tr > * { padding-inline: var(--space-2); }
-  }
-}
 /* A row that asks to be read first (`{% row_state emphasized=True %}`) is tinted, and its links weigh more, as an unread message does in a mail client. */
 .data-table > tbody > tr[data-emphasized] > * { background: var(--accent-tint); }
 .data-table > tbody > tr[data-emphasized] > * a:not(.btn) { font-weight: 650; }
@@ -437,7 +429,7 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 /* A table still wider than its region in a narrow box is tight (`data-tight`, tables.js), and then breaks its identifiers (`data-break`); each give is a property the rules below read, so a box no script measures can take them too. */
 .data-table[data-tight] { --tight: given; }
 .data-table[data-break] { --break: given; }
-/* With no script nothing measures the table, so a phone's box is narrow by its width alone, and takes every give at once: the table wraps all it can before its region scrolls. No column leaves, so the columns that share the region (`--showing`) are every heading drawn, counted here as tables.js counts them. */
+/* With no script nothing measures the table, so it takes no give: it is whole at every width and scrolls in its region when wider. No column leaves, so the columns that share the region (`--showing`) are every heading drawn, counted here as tables.js counts them. */
 @media (scripting: none) {
   .data-table:has(> thead > tr:last-child > th:nth-child(2 of :not(.select-column, [data-blank-column]))) { --showing: 2; }
   .data-table:has(> thead > tr:last-child > th:nth-child(3 of :not(.select-column, [data-blank-column]))) { --showing: 3; }
@@ -454,9 +446,8 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
   .data-table:has(> thead > tr:last-child > th:nth-child(14 of :not(.select-column, [data-blank-column]))) { --showing: 14; }
   .data-table:has(> thead > tr:last-child > th:nth-child(15 of :not(.select-column, [data-blank-column]))) { --showing: 15; }
   .data-table:has(> thead > tr:last-child > th:nth-child(16 of :not(.select-column, [data-blank-column]))) { --showing: 16; }
-  @container table-region (width < 640px) {
-    .data-table { --box: narrow; --tight: given; --break: given; }
-  }
+  /* A table that scrolls holds a kept line to no share of its region: the line is whole and the region scrolls. */
+  .data-table > tbody td > .kept-line { max-width: none; }
 }
 /* A table with no headings has none to count, so it says how many columns its rows hold (`data-columns`). With no script a phone's box opens no line beneath, so every part stays beside the name and the row shares the region as one column. */
 .data-table[data-columns="2"] { --columns: 2; }

@@ -14,9 +14,9 @@ from unittest.mock import patch
 from django.test import tag
 
 from hq.platform.core.tests.task import Usage
-from tools.gate import fast as fast_gate
+from tools.gate import chain as fast_chain, fast as fast_gate
 from tools.gate.tests.base import GateTestCase, fixture_git
-from tools.gate.tests.fast_runs import Recorder, run_main
+from tools.gate.tests.fast_runs import Recorder, everywhere, run_main
 
 VIEWS = "hq/domains/example/views.py"
 OTHER = "hq/domains/other/helpers.py"
@@ -73,9 +73,9 @@ class FastGateMapSelectionTests(GateTestCase):
                 (root / path).parent.mkdir(parents=True, exist_ok=True)
                 (root / path).write_text(text)
             with (
-                patch.object(fast_gate, "ROOT", root),
-                patch.object(fast_gate, "passed_ancestor", return_value=None),
-                patch.object(fast_gate, "merge_base", return_value=base),
+                patch.object(fast_chain, "ROOT", root),
+                everywhere("passed_ancestor", return_value=None),
+                everywhere("merge_base", return_value=base),
                 patch("sys.stdout", new_callable=io.StringIO) as out,
             ):
                 self.assertEqual(fast_gate.main(Usage({"list": "true"})), 0)
@@ -114,14 +114,15 @@ class FastGateMapSelectionTests(GateTestCase):
 class FastGateMapRecordTests(GateTestCase):
     def test_the_whole_run_measures_the_map_and_a_narrow_one_does_not(self):
         suite = [f"hq.example.tests.test_{n}" for n in range(10)]
-        for share, whole in ((7, True), (2, False)):
+        for whole in (True, False):
             with self.subTest(whole=whole):
                 recorder = Recorder()
                 run_main(
                     ("hq/example.py",),
                     step=recorder,
+                    asked={"whole": "true"} if whole else {},
                     affected=(set(), set()),
-                    test_labels=(suite[:share], len(suite)),
+                    test_labels=(suite[:2], len(suite)),
                     whole_suite=suite,
                     record_pass=None,
                     touches_shared_ui=False,
@@ -145,7 +146,7 @@ class FastGateMapRecordTests(GateTestCase):
 
 class FastGateMapContextTests(GateTestCase):
     def test_a_test_modules_class_fixtures_and_tests_run_in_its_context(self):
-        from hq.platform.core.test_runner import ClassTimedSuite
+        from hq.platform.core.run_report import ClassTimedSuite
 
         measuring = SimpleNamespace(context=None, get_option={"run:core": "ctrace"}.get)
         measuring.switch_context = lambda name: setattr(measuring, "context", name)

@@ -20,7 +20,7 @@ SERVER: tuple[tuple[str, Read, int], ...] = (
     ("p95 ms", lambda server: server.get("p95_ms"), 1),
     ("queries", lambda server: server.get("queries"), 0),
     ("rows", lambda server: server.get("rows"), 0),
-    ("HTML KB", lambda server: _kilobytes(server["html_bytes"]), 1),
+    ("HTML KB", lambda server: _kilobytes(server.get("html_bytes")), 1),
 )
 # Beside a base, the server time's round-by-round difference from the base's, and a mark past its spread.
 PAIRED: tuple[tuple[str, Read, int], ...] = (
@@ -75,8 +75,10 @@ def headers(*, compared: bool) -> list[str]:
     return ["page", "width", *server_headers(compared=compared), *(name for name, _, _ in BROWSER)]
 
 
-def _kilobytes(size: float) -> float:
-    return size / 1024
+def _kilobytes(size: float | None) -> float | None:
+    """None for a size that was not measured, as a page whose server never started."""
+
+    return None if size is None else size / 1024
 
 
 def _number(value: float | None, places: int) -> str:

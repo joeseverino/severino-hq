@@ -18,7 +18,7 @@ from typing import Any, Protocol
 from . import tracing
 from .bridge import BridgeError
 from .claim import CAPABILITIES, Claimed, Installed, Reach, Refused, Run, bind, claimed
-from .events import Event, bounded, from_ansible, learned, stated, strike
+from .events import Event, Stopped, bounded, from_ansible, learned, stated, strike
 from .journal import Journal
 
 # The lease a claim asks for, and how often a running run renews it: three
@@ -130,29 +130,42 @@ def _report(
     return report
 
 
-def _ended(run: Run, status: str, result: str | None) -> tuple[bool, str, str]:
+# The outcomes that say why a failed run failed, so a run with none of them
+# failed before any task did.
+_FAILED = frozenset({"failed", "unreachable"})
+
+
+def _ended(
+    run: Run, status: str, result: str | None, events: Sequence[Event], stopped: str | None
+) -> tuple[bool, str, str]:
     """Whether a run ansible-runner ended as ``status`` succeeded, and why not.
 
     A run that succeeded says what its playbook stated it found or did, else
-    what its record says shows it worked, which its checks have just held.
+    what its record says shows it worked, which its checks have just held. A
+    run that failed with no task failed or machine unreached says the error
+    Ansible stopped it with (``events.Stopped``).
     """
 
     if status == "successful":
         return True, "", result or " ".join(f"{each.rstrip('.')}." for each in run.verification)
     if status == "failed":
+        if stopped and not any(event.outcome in _FAILED for event in events):
+            return False, "Failed", stopped
         return False, "Failed", "A task failed or a machine could not be reached."
     if status == "timeout":
         return False, "TimedOut", f"It ran past its procedure's {run.timeout_seconds} second timeout."
     return False, "Failed", f"ansible-runner ended it as {status}."
 
 
-def _finish(run: Run, status: str, hold: _Hold, events: list[Event], result: str | None) -> dict[str, Any]:
+def _finish(
+    run: Run, status: str, hold: _Hold, events: list[Event], result: str | None, stopped: str | None
+) -> dict[str, Any]:
     kept, left_out = bounded(events)
     if hold.stopped is not None:
         reason, message = hold.stopped
         success = False
     else:
-        success, reason, message = _ended(run, status, result)
+        success, reason, message = _ended(run, status, result, events, stopped)
     if left_out:
         message = f"{message} {left_out} task outcomes that were fine or skipped are not listed.".lstrip()
     return _report(run.generation, success=success, message=message, reason=reason, events=kept)
@@ -173,8 +186,10 @@ def run_claimed(
     hold = _Hold(bridge, controller_id, run, clock, secrets)
     events: list[Event] = []
     result: list[str] = []
+    stopped = Stopped(run.procedure.project_dir, secrets)
 
     def on_event(event: Mapping[str, Any]) -> None:
+        stopped.read(event)
         if (said := stated(event, secrets)) is not None:
             result.append(said)
         found = from_ansible(event, secrets)
@@ -187,7 +202,7 @@ def run_claimed(
         hold.span = ran
         status = runner(run, on_event=on_event, should_stop=hold.should_stop)
         tracing.note(**{"ansible.status": status})
-    report = _finish(run, status, hold, events, result[-1] if result else None)
+    report = _finish(run, status, hold, events, result[-1] if result else None, stopped.message)
     if hold.stopped is not None:
         tracing.note(**{"hq.stopped": hold.stopped[0]})
     return report

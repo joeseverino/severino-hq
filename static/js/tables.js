@@ -97,6 +97,23 @@
     }
   };
   const tableIn = (region) => region.querySelector(":scope > .data-table");
+  // The server draws every region as a named stop for the keyboard, since
+  // without script any of them may scroll (table_tags). Fitted, a region is
+  // one only while its table scrolls; a pane or a chart's always is. An
+  // attribute moves nothing on the page.
+  const stopNames = new WeakMap();
+  const holdStop = (region, scrolls) => {
+    if (region.matches(".is-pane, [data-chart]")) return;
+    if (!stopNames.has(region)) stopNames.set(region, region.getAttribute("aria-label"));
+    const name = stopNames.get(region);
+    if (scrolls && name) {
+      region.setAttribute("role", "group");
+      region.setAttribute("aria-label", name);
+      region.setAttribute("tabindex", "0");
+    } else {
+      ["role", "aria-label", "tabindex"].forEach((attribute) => region.removeAttribute(attribute));
+    }
+  };
   // The width each region was last fitted at.
   const regionWidths = new WeakMap();
   // A region's table fitted at the width the region has now. One whose
@@ -117,6 +134,7 @@
     const open = [...table.querySelectorAll(":scope > tbody > tr.is-expanded")];
     open.forEach((row) => row.classList.remove("is-expanded"));
     fit(table, changed || before === undefined || width > before);
+    holdStop(region, table.hasAttribute("data-scrolls"));
     if (open.length) {
       holdColumns(table);
       open.forEach((row) => row.classList.add("is-expanded"));

@@ -1,0 +1,29 @@
+# Every stored provider reading and every reported connection is read whole
+# once per request: facts.every_snapshot (and stored_snapshots) and
+# connections.connection_rows, through read_once in the request's projection
+# scope. A whole-table read anywhere else asks the same query again on a page
+# that already holds the rows. The bench seeds and measures outside any
+# request.
+id: provider-tables-read-once
+language: python
+severity: error
+message: A provider table is read whole outside its one per-request read.
+note: >-
+  Read every stored snapshot through every_snapshot() or stored_snapshots()
+  in hq.platform.application.facts, and every connection through
+  connection_rows() in hq.platform.application.connections.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+  - "tools/**"
+ignores:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/migrations/**"
+  - "hq/platform/application/facts.py"
+  - "hq/platform/application/connections.py"
+  - "hq/platform/core/bench.py"
+rule:
+  any:
+    - pattern: ProviderInventory.objects.all()
+    - pattern: ProviderConnection.objects.all()

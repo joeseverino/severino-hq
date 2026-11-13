@@ -530,7 +530,7 @@ DATABASES = {
 }
 
 # Django's own runner, plus a WAL checkpoint before it clones the test database
-# for parallel workers. See core/test_runner.py for why that is necessary.
+# for parallel workers. See core/file_clones.py for why that is necessary.
 TEST_RUNNER = "hq.platform.core.test_runner.SeverinoTestRunner"
 
 # Under test, a warning from this codebase and any leaked resource fail the run.

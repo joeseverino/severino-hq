@@ -37,7 +37,7 @@ lazy from playwright.sync_api import Error as BrowserError
 from hq.platform.application import fragments
 from hq.platform.core import append_only, seeds
 from hq.platform.core.speculation import NOT_A_NAVIGATION
-from hq.platform.core.test_runner import stall_watch
+from hq.platform.core.stalls import stall_watch
 from hq.platform.core.tests import task
 from hq.platform.core.tests.browser import probes
 from hq.platform.core.tests.browser.estate import ExampleEstateBrowserTests, estate_pages, navigation
@@ -59,7 +59,14 @@ from hq.platform.core.tests.browser.reference import (
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.shots import TALLEST, extent_of, shoot_page
 from hq.platform.core.tests.browser.stress import ALL_PAGES, stress_pages
-from hq.platform.core.tests.browser.survey import BUSY, CLOSE_OPENED, open_every_fold, palette_probes, survey_checks
+from hq.platform.core.tests.browser.survey import (
+    BUSY,
+    CLOSE_OPENED,
+    geometry_probes,
+    open_every_fold,
+    palette_probes,
+    survey_checks,
+)
 from hq.platform.core.tests.browser.widths import PHONE_SCREEN
 from hq.platform.core.tests.look_posts import Posted, is_post, post_names, posted
 from hq.platform.core.tests.look_records import EstatePages
@@ -836,15 +843,34 @@ def _shown(path: Path) -> str:
     return str(path.relative_to(settings.BASE_DIR)) if path.is_relative_to(settings.BASE_DIR) else str(path)
 
 
-def _rules() -> list[str]:
-    """What ``--rule`` may name: each check that takes a page's name alone."""
+def _by_name() -> set[str]:
+    """Each check that takes a page's name alone."""
 
-    return sorted(
+    return {
         name
         for owner in (Look, LayoutBrowserTests)
         for name, member in vars(owner).items()
         if inspect.isfunction(member) and list(inspect.signature(member).parameters)[1:] in (["name"], ["_name"])
-    )
+    }
+
+
+def _rules() -> list[str]:
+    """What ``--rule`` may name: each check that takes a page's name alone,
+    and every rule the gate's sweep without script holds."""
+
+    return sorted(_by_name() | set(LayoutBrowserTests.unscripted_rules()))
+
+
+def held_without_script_only(rule: str) -> list[int]:
+    """The widths the gate holds ``rule`` at without script, when it holds it
+    only there: a rule of the sweep without script that reads a probe the
+    survey, which the gate holds once script has run, does not."""
+
+    widths = LayoutBrowserTests.unscripted_rules().get(rule, [])
+    if not widths or rule in _by_name():
+        return []
+    surveyed = {source for source, _arg in [*geometry_probes().values(), *palette_probes().values()]}
+    return widths if any(source not in surveyed for source, _arg in getattr(LayoutBrowserTests, rule).probes) else []
 
 
 def no_rule(rule: str) -> str:
@@ -1040,6 +1066,12 @@ def _checked(records: task.Records | None) -> Asked:
     pages = _served(rest, records) if rest or not undrawn else []
     if (rule := Look.rule_asked()) and rule not in _rules():
         raise AssertionError(no_rule(rule))
+    if rule and not given.switch("no_script") and (widths := held_without_script_only(rule)):
+        at = ",".join(map(str, widths))
+        raise AssertionError(
+            f"{rule} is held without script, at {at}: mise run dev:look --rule {rule} --no-script --widths {at}"
+            f" {' '.join(names)}"
+        )
     probe, probe_source = _probe(given.text("probe"))
     if given.text("arg") and not probe:
         raise AssertionError("--arg is what --probe's function takes: name the probe")
@@ -1944,7 +1976,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         path = self.addresses.get(name, name)
         if not getattr(self, "said_checks", False):
             self.said_checks = True
-            print(f"survey checks: {', '.join(survey_checks(path, self.width))}", flush=True)
+            print(f"survey checks: {', '.join(survey_checks(path, self.width, self.runs_script))}", flush=True)
         failed = self.findings(path, self.width)
         if failed:
             raise AssertionError("\n".join(f"{check}: {line}" for check, said in failed.items() for line in said))

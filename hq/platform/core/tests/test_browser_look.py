@@ -150,6 +150,12 @@ class AskedFirstTests(SimpleTestCase):
         self.assertIn("a_table_fits_its_box_at_every_width", rules)
         self.assertNotIn("look", rules)
 
+    def test_a_rule_held_only_without_script_is_refused_with_script_naming_the_command(self):
+        self.refused_before_the_base(
+            {"usage_pages": "dense/machines", "usage_rule": "a_table_frame_spans_its_box"},
+            "mise run dev:look --rule a_table_frame_spans_its_box --no-script --widths ",
+        )
+
     def test_a_page_that_does_not_exist_is_refused_before_the_base_is_looked_at(self):
         self.refused_before_the_base({"usage_pages": "example/no-such-page"}, "No page example/no-such-page")
 

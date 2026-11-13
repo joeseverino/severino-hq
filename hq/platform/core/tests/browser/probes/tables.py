@@ -132,14 +132,19 @@ TABLES_THAT_DO_NOT_FIT = """(scroll) => [...document.querySelectorAll('main ' + 
 
 # A table region's layout at this width, as a value that changes only where the
 # layout around it changes shape as the window grows: which viewport queries
-# hold, whether the page scrolls, and around each region how many tracks each
-# grid has and how many lines each wrapping flex box makes. Each of those moves
-# one way as the window grows, so a sweep that finds it changed between two
-# widths knows a change of shape lies between them. With it, after a frame (two,
-# so WebKit's observer has fitted the tables too), each region's width and the
-# tables that do not fit.
-TABLE_LAYOUT = (
-    """async ([scroll, queries]) => {
+# hold, whether the page scrolls, around each region how many tracks each grid
+# has and how many lines each wrapping flex box makes, and how far each
+# region's table has given way (tables.js: how many of its columns have left,
+# and whether it is narrow, tight, broken or scrolls). Each of those moves one
+# way as the window grows, so a sweep that finds it changed between two widths
+# knows a change of shape lies between them. It is read, with each region's
+# width, once tables.js has measured the tables' cuts at this width (``marked``,
+# `tables_read`), which can take back what a table gave as the window moved,
+# and a frame after (two, so WebKit's observer has fitted the tables too).
+# Opening a row changes no table's shape, since tables.js fits a table with its
+# rows closed.
+TABLE_LAYOUT = """async ([scroll, queries, marked]) => {
+  await new Promise((done) => setTimeout(done, marked));
   await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
   const lines = (el) => {
     const shown = [...el.children].filter((child) => child.getClientRects().length);
@@ -151,8 +156,11 @@ TABLE_LAYOUT = (
     if (style.display.endsWith('flex') && style.flexWrap !== 'nowrap') return `f${lines(el)}`;
     return '';
   };
-  const around = [...document.querySelectorAll('main ' + scroll)].map((region) => {
-    let said = '';
+  const gave = (table) => !table ? '' : table.querySelectorAll(':scope > thead > tr:last-child > th[data-dropped]').length
+    + ['narrow', 'tight', 'break', 'scrolls'].filter((step) => table.hasAttribute(`data-${step}`)).map((step) => step[0]).join('');
+  const regions = [...document.querySelectorAll('main ' + scroll)];
+  const around = regions.map((region) => {
+    let said = gave(region.querySelector(':scope > table')) + ':';
     for (let el = region.parentElement; el && el !== document.body; el = el.parentElement) said += shape(el);
     return said;
   });
@@ -161,12 +169,8 @@ TABLE_LAYOUT = (
     window.innerWidth - document.documentElement.clientWidth,
     ...around,
   ].join(' ');
-  const sizes = [...document.querySelectorAll('main ' + scroll)].map((region) => region.clientWidth).join(' ');
-  return [layout, sizes, ("""
-    + TABLES_THAT_DO_NOT_FIT
-    + """)(scroll)];
+  return [layout, regions.map((region) => region.clientWidth).join(' ')];
 }"""
-)
 
 # Each table region's showing columns' widths and its rows' heights, with
 # the rows themselves, for `MOVED` to compare within one trip.
@@ -206,39 +210,43 @@ _MOVED = (
 )
 
 
-def opened_tables_read(trip):
-    """One width's whole read of the tables, in one trip: `TABLE_LAYOUT` as
-    the window left them, then, once tables.js has measured their cuts at it,
-    every row a reader can open opened (the folds first, then each row whose
-    toggle shows once their rows are marked), ``trip`` run on that one state,
-    and what opening them moved. The rows are closed again last, so the next
-    width is the page as a reader resized it.
+# Every toggle ``selector`` finds showing and closed, pressed, as a list of
+# those it pressed, so `UNPRESS` can close them again in reverse.
+PRESS = """(selector) => [...document.querySelectorAll(selector)]
+  .filter((toggle) => toggle.checkVisibility() && toggle.getAttribute('aria-expanded') !== 'true')
+  .map((toggle) => { toggle.click(); return toggle; })"""
+
+UNPRESS = "(pressed) => [...pressed].reverse().forEach((toggle) => toggle.click())"
+
+
+def tables_read(trip):
+    """One width's read of the tables in one trip, once tables.js has
+    measured their cuts at it: ``trip`` run on the page as it stands (said to
+    be in the state ``state`` names) and, if ``rows``, again with every row a
+    reader can open opened, and what opening them moved, the rows closed
+    again last, so the next width is the page as a reader resized it. A page
+    with no row to open has no second state to read.
 
     tables.js measures a resized window's cuts on a timer the resize starts
     (`markTablesSoon`); a timer at least as long started after it runs after
     it (HTML's timer ordering), so ``marked`` is that timer's delay."""
 
-    return f"""async ([layout, marked, folds, rows, records, args]) => {{
-  const [shape, sizes, misfits] = await ({TABLE_LAYOUT})(layout);
-  if (!sizes) return [shape, sizes, misfits, [], []];
+    return f"""async ([scroll, marked, state, rows, records, args]) => {{
   const frame = () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+  const places = {_PLACES};
   await new Promise((done) => setTimeout(done, marked));
   await frame();
-  const press = (selector) => [...document.querySelectorAll(selector)]
-    .filter((toggle) => toggle.checkVisibility() && toggle.getAttribute('aria-expanded') !== 'true')
-    .map((toggle) => {{ toggle.click(); return toggle; }});
-  const places = {_PLACES};
-  const folded = press(folds);
+  const states = [[state, await ({trip})(args)]];
+  if (!rows) return [states, []];
+  const before = places([scroll, records]);
+  const opened = ({PRESS})(rows);
+  if (!opened.length) return [states, []];
   await frame();
-  const before = places([layout[0], records]);
-  const opened = press(rows);
+  states.push(['its rows open', await ({trip})(args)]);
+  const moved = ({_MOVED})([before, places([scroll, records]), opened.map((toggle) => toggle.closest('tr'))]);
+  ({UNPRESS})(opened);
   await frame();
-  const outcomes = await ({trip})(args);
-  const moved = ({_MOVED})([before, places([layout[0], records]), opened.map((toggle) => toggle.closest('tr'))]);
-  [...opened].reverse().forEach((toggle) => toggle.click());
-  [...folded].reverse().forEach((toggle) => toggle.click());
-  await frame();
-  return [shape, sizes, misfits, outcomes, moved];
+  return [states, moved];
 }}"""
 
 
@@ -411,6 +419,7 @@ CUT_AND_CLOSED = (
     return false;
   };
   const rows = 'main table > tbody > tr:not([data-row-detail], .row-detail, .is-expanded)';
+  const scripted = matchMedia('(scripting: enabled)').matches;
   for (const row of document.querySelectorAll(rows)) {
     if (!row.checkVisibility() || row.closest('details:not([open])')) continue;
     if ([...row.querySelectorAll('[aria-expanded]')].some((toggle) => toggle.checkVisibility())) continue;
@@ -418,7 +427,8 @@ CUT_AND_CLOSED = (
     for (const cell of row.querySelectorAll(':scope > :is(td, th)')) {
       for (const {node, boxes, marked} of cutsIn(cell, unseen)) {
         const by = boxes.at(-1);
-        const why = !marked ? 'with no ellipsis' : narrow ? 'in a narrow box' : titled(node, boxes[0], cell) ? '' : 'with no title';
+        // Without script no row opens and nothing gives a cut its title, so a cut shown by its ellipsis is all a page can say.
+        const why = !marked ? 'with no ellipsis' : !scripted ? '' : narrow ? 'in a narrow box' : titled(node, boxes[0], cell) ? '' : 'with no title';
         if (why) found.push(`${describe(by)} "${by.textContent.trim().slice(0, 40)}" is cut ${why}, in a row that does not open`);
       }
     }
@@ -764,12 +774,14 @@ IDENTIFIER_VALUES = {
 
 # The survey checks these probes answer (`probes/__init__.py`); the table
 # checks (`table=True`) are read again by the sweep of every width
-# (`BrowserGate.table_defects_at_every_width`) at each shape of the layout,
-# with the rows a reader can open opened.
+# (`BrowserGate.table_defects_at_every_width`) at the first width of each shape
+# of the layout and of its tables (`TABLE_LAYOUT`), in each state a reader can
+# draw the rows in: as drawn, with their folds open, and opened.
 CHECKS = {
     "cells": Check(CELLS, table=True),
     "tables": Check(TABLES, table=True, findings=lambda report: report["found"]),
-    "tables fit": Check((TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), table=True),
+    # Only script fits a table to its box (tables.js); without it a table scrolls in its region.
+    "tables fit": Check((TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), table=True, scripted=True),
     "unseen columns": Check((UNSEEN_COLUMNS, SELECTORS["table_scroll"]), table=True),
     "cut with room": Check(
         (CUT_WITH_ROOM, [SELECTORS["cut_box"], SELECTORS["name_box"], SELECTORS["unseen"]]), table=True

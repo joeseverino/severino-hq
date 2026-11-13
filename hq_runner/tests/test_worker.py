@@ -161,6 +161,62 @@ class FailedRunTests(PassTestCase):
         self.assertEqual(report["conditions"][0]["type"], "Degraded")
 
 
+class StoppedRunTests(PassTestCase):
+    """A run Ansible stops before its first task says the error it stopped
+    with, from the runs ``fakes.STOPPED`` recorded."""
+
+    def test_a_run_stopped_before_its_first_task_says_ansible_s_error_and_where(self):
+        cases = {
+            "broken_role": ("YAML parsing failed", "roles/broken/tasks/main.yml:4:1"),
+            "missing_collection": ("example.absent.compose_restart", "playbooks/missing_collection.yml:7:7"),
+        }
+        for name, (said, where) in cases.items():
+            with self.subTest(name):
+                bridge = fakes.Bridge(fakes.pending())
+
+                self.work(bridge, fakes.Runner(fakes.STOPPED[name], status="failed"))
+
+                report = bridge.reports[-1]
+                self.assertFalse(report["success"])
+                self.assertEqual(report["events"], [])
+                self.assertIn(said, report["message"])
+                self.assertIn(where, report["message"])
+                self.assertNotIn("/srv/example/project", report["message"])
+                self.assertNotIn("\x1b", report["message"])
+                self.assertNotIn("[ERROR]", report["message"])
+                self.assertEqual(report["conditions"][0]["message"], report["message"])
+
+    def test_a_secret_parameter_in_ansible_s_error_is_struck(self):
+        bridge = fakes.Bridge(fakes.pending(parameters={"api_token": "example.absent.compose_restart"}))
+
+        self.work(bridge, fakes.Runner(fakes.STOPPED["missing_collection"], status="failed"))
+
+        message = bridge.reports[-1]["message"]
+        self.assertNotIn("example.absent.compose_restart", message)
+        self.assertIn("[redacted]", message)
+
+    def test_an_error_line_never_replaces_a_failed_task(self):
+        bridge = fakes.Bridge(fakes.pending())
+
+        self.work(bridge, fakes.Runner([*fakes.STOPPED["broken_role"], *fakes.RECORDED], status="failed"))
+
+        report = bridge.reports[-1]
+        self.assertNotIn("YAML parsing failed", report["message"])
+        self.assertIn("failed", [event["outcome"] for event in report["events"]])
+
+    def test_a_place_outside_the_project_is_never_said(self):
+        moved = json.loads(json.dumps(fakes.STOPPED["missing_collection"]))
+        for event in moved:
+            event["stdout"] = event["stdout"].replace("/srv/example/project", "/srv/example/elsewhere")
+        bridge = fakes.Bridge(fakes.pending())
+
+        self.work(bridge, fakes.Runner(moved, status="failed"))
+
+        message = bridge.reports[-1]["message"]
+        self.assertIn("example.absent.compose_restart", message)
+        self.assertNotIn("elsewhere", message)
+
+
 class TimeoutTests(PassTestCase):
     def test_a_run_ansible_runner_ended_at_its_timeout_reports_timed_out(self):
         bridge = fakes.Bridge(fakes.pending(timeout=30))

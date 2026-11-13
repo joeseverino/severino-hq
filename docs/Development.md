@@ -147,7 +147,9 @@ database's directory can be too long a path for one. `tools/dev/scratch_automati
 where the host's automation units stand: on each automation doorbell, or 15
 minutes after the last worker ended, it writes a connections document for
 the machine the server runs on and starts the worker from the runner group's
-environment (`var/runner/venv`, which `smoke:runner` shares). It watches the
+environment (`var/runner/venv`, which `smoke:runner` shares, with the
+collections `hq_runner/collections.yml` pins installed in it as the image
+installs them, by `tools/lib/runner-environment.sh`). It watches the
 reloader's own process, so a reload leaves it running and starts no second
 one, and each worker it starts runs the code as it stands then. It stops with
 the server and removes the socket's directory.
@@ -164,9 +166,15 @@ What it holds to:
 - Its one login is to the machine HQ's inventory says the server runs on
   (the machine page's "runs HQ", matched by this host's addresses), so
   Playbooks offers that machine alone and a run's page names where it ran.
-  With no such machine it has no login, and a run can't be asked. The login
-  reaches 127.0.0.1 and every play there sets its connection to local, so a
-  run acts on this Mac alone.
+  A scratch server with no such machine declares `scratch-host` at this
+  host's addresses in its own database, through the operator's create
+  command, when the worker first starts; `dev` declares nothing in its real
+  data, and with no such machine its worker has no login. The login reaches
+  127.0.0.1 and every play there sets its connection to local, so a run acts
+  on this Mac alone.
+- Its one change, `example.note_write`, writes one file in the run's own
+  temporary directory, which the worker removes as the run ends; where it
+  writes is no input's to say.
 
 What it cannot show: GitHub's word on a commit's signature, so the worker
 reports each commit it scans as verified; the renderer's real runner
@@ -174,8 +182,25 @@ connections and identities; and the egress table and container confinement the
 host gives the worker. A run that names a commit the local repository does not
 hold, as the showcase's do, is ended as failed to fetch by the first pass that
 finds it waiting, and a database that adopted another commit shows the local
-one as pending. Adopting the local commit makes `example.disk_report` its one
-playbook.
+one as pending. Adopting the local commit makes `example.disk_report`,
+`example.container_report` (a read through a shipped collection's module) and
+`example.note_write` its playbooks.
+
+An agent's path is walked on the same server with `hq_call --agent <client>
+--grant <permissions>`, one MCP tool call made as that agent, the request on
+stdin as `hq_call` takes it:
+
+```sh
+echo '{"tool": "execute_capability", "arguments": {"name": "automation.example.note_write.run", "payload": {"hosts": ["scratch-host"], "parameters": {"text": "hello"}, "idempotency_key": "walk-1"}}}' \
+  | mise run manage --scratch -- hq_call --agent example-claude --grant read,manage_infrastructure
+```
+
+It answers only with DEBUG on and every host the server serves a loopback one,
+as a scratch server's are. The agent holds the permissions named and no more,
+and a name no agent's token can carry is refused. The call is admitted and
+served as an agent's over /mcp/ (its rate, the Agents page's brakes, its
+authorization and approval), so the change above answers `awaiting_approval`
+until a person approves it.
 
 Python dependencies come from `uv.lock`. `mise.toml` sets `UV_LOCKED`, so
 every task's `uv run` refuses a lock that `pyproject.toml` has moved past, and
@@ -305,7 +330,7 @@ On an 8 GB Apple silicon machine:
 `mise run fast [BASE]` maps the changed files against a base. One asked for
 (`BASE`, `$CHECK_BASE`) is read as its merge base with HEAD. With none, the
 base is the nearest commit on HEAD's first-parent history (as far back as
-`PASSED_REACH` in `tools/gate/fast.py`) whose tree passed fast (the record
+`PASSED_REACH` in `tools/gate/chain.py`) whose tree passed fast (the record
 below), so the change is only what came after a proven tree. Without one,
 it is the merge base with the branch HEAD lands on, then `origin/main`,
 `main`. The branch HEAD lands on is its own branch's
@@ -369,10 +394,9 @@ The tests it selects are:
   change reaches what extensions render through (`templates/`, `static/`,
   `hq_sdk/`, the shared table, page, UI and moment modules, template tags).
 
-A selection past `WIDE` of the test modules (`tools/gate/fast.py`) is a
-wide change, and the whole suite runs with every quick gate instead: the
-rest costs little beside it, and only a whole run's pass records a tree that
-has no passed base. `--whole` runs it whatever changed.
+A run runs its selection however wide it is. `--whole` runs the whole suite
+with every quick gate instead, whatever changed: the landing asks for it, and
+its pass records the tree and its map.
 
 A whole run also measures which test modules ran each Python file, as
 pytest-testmon does: coverage runs with its C tracer and a context per test
@@ -398,16 +422,16 @@ The import, task and naming rules apply to every changed file either way,
 which keeps the tests that run a file in a subprocess, which coverage does
 not attribute.
 
-Beside the tests it runs each quick gate the change affects, as mise's
+Before the tests it runs each quick gate the change affects, as mise's
 `--affected` reads it from the base: a quick gate is a task tagged
 `fast`, and it is affected when a changed or deleted file matches its
 `sources` (`!` patterns take paths out) or its own definition changed. Every
 quick gate's sources also name the tool pins and task definitions, and each
 one that runs Python its dependencies (`pyproject.toml`, `uv.lock`), so a
 change to one runs every gate that reads it. The controller's Go tests
-(`test:controller`) are a quick gate too: they take the heavy lock
-themselves, so they run once the rest has passed, and Go's own test cache
-reruns only the packages a change reached. Each quick gate declares
+(`test:controller`) are a quick gate too, which runs beside the tests in
+the heavy turn, as it takes the lock itself, and Go's own test cache reruns
+only the packages a change reached. Each quick gate declares
 `outputs = []`, so a direct `mise run` of it never skips as up to date. The
 shell gate also runs when a path the change touched is one
 `tools/gate/shell-sources.sh` names (a deleted one as the base had it), which
@@ -421,10 +445,19 @@ exclusions its tool declares.
 A test module that a `test:*` task runs by its label in a dependency group's
 environment (`uv run --group fuzz`), which the tests' environment lacks, is
 never a label. When the selection above would reach it, its task runs as a
-quick gate instead, read from the task's own `run`.
+gate beside the tests instead, read from the task's own `run`.
 
-The quick gates and the tests run in one `mise run`, whose output
-`var/gate/fast.log` keeps ([The gates](#the-gates)), in the config
+fast runs in two stages, each one `mise run`. The quick gates run first, side
+by side, before the tests are selected, and the tests start only once every
+one has passed, so a lint or drift finding fails the run in the seconds they
+take. A recording waits for the selection, which says whether it runs. The tests then run
+beside each selected gate that runs in the heavy turn ([Heavy gates take
+turns](#heavy-gates-take-turns)): with one, fast takes the turn once, through
+the hidden task `turn`, for the tests and those gates together, and mise hands
+its lock down to every task under it, so a gate that takes the lock itself
+goes ahead at once, beside the rest. With none, the tests take the turn
+themselves when their run is heavy. Both runs' output is kept in
+`var/gate/fast.log` ([The gates](#the-gates)), and both run in the config
 environment `mise.fast.toml` sets: mise's summary output, where a gate that
 passed prints its `passed in` line as it ends and one that failed prints
 whole as it ends. The tests run as `fast:tests` (`mise-tasks/fast/`), whose
@@ -432,11 +465,9 @@ own output setting outranks the environment's, so they print as they run,
 their wait for the heavy turn included; `--output` or `MISE_TASK_OUTPUT`
 would outrank both.
 
-The run goes on past a failure (`--continue-on-error`) until every task it
-holds has ended, so one run names every gate and test that failed, and the
-verdict's last line names the rerun of each. A quick gate that takes the
-heavy lock itself (the shell gate, for its suites) runs in it too, once it
-has the turn. The selected tests that read every browser gate module (each
+Each run goes on past a failure (`--continue-on-error`) until every task it
+holds has ended, so it names every gate and test that failed, and the
+verdict's last line names the rerun of each. The selected tests that read every browser gate module (each
 imports `browser_modules`: the probe check among them) start no browser,
 and run first as `fast:source`, ahead of the tests, which run after them
 whether or not they passed.
@@ -457,9 +488,14 @@ verdict file opens on, as an empty file named by that hash under
 `$(git rev-parse --git-common-dir)/severino/fast-passes/`, which every
 worktree shares and which a re-signed commit keeps. It records one only when
 the run proves the tree: its base's tree has a record, so what the change left
-unselected had passed, or the run selected every test and quick gate. A wide
-change runs them all, so a branch whose history has no recorded tree records
-one on its first wide run, and each run after reads from it.
+unselected had passed, or the run selected every test and quick gate. A base
+with no record here is asked of GitHub once, through `gh`: when CI's last
+completed run on that commit (`ci.yml`, a run of this repository's own
+commit, never a fork's) passed, its tree is recorded first, so a run from
+`origin/main` or any pushed commit starts the chain, and each run after reads
+from it. With no network, no `gh` or no passed run, the run says so in its one
+line on the record and goes on unrecorded (`passed_in_ci` in
+`tools/gate/chain.py`).
 
 ### What `check` runs
 
@@ -646,7 +682,13 @@ the machine (a suite, a browser, an image build, CodeQL) waits for one turn
 shared by every checkout and worktree, and a waiting task names the holder.
 
 A step of one process (a Django command, a linter, a serial test run) runs
-beside the holder. An aggregate (`check`, `lint`, `test`, `browser`) holds no
+beside the holder. A gate whose one process still loads the machine
+through most of a fast run (`lint:mypy` is one) carries the tag `heavy`, which only fast reads: fast
+runs it beside its tests in the turn it takes for them, never among its
+quick gates, while a direct `mise run` of it, `lint` and CI run it as a step
+of one process. `FastGateStageTests` (`tools/gate/tests/test_fast_stages.py`)
+holds every gate fast runs to one side: tagged `fast` as a quick gate, or
+tagged `heavy` or taking the lock. An aggregate (`check`, `lint`, `test`, `browser`) holds no
 turn of its own, so its light gates never wait; `build` holds one across its
 steps, which share the VM it boots. A one-off command in the built image
 (`mise run image:run -- python -V`) holds the turn and the VM while it runs,
@@ -903,7 +945,10 @@ Inter's widths fails.
 
 A test that stalls fails and says where. Each test process (every parallel
 worker) watches for progress: a test, a class fixture or a subtest starting, a
-subtest ending, a page in `dev:look`.
+subtest ending, a page in `dev:look`, or CPU spent by the process and every
+process under it, a browser included. A tree under 1% of a core is idle; one
+at work spends more however loaded the machine is, so load never stalls a
+test.
 
 Once none has come for `HQ_TEST_STALL_SECONDS` (300 unless the environment
 says otherwise; `0` turns it off, for a debugger), it prints a stall report.
@@ -914,7 +959,9 @@ run goes on.
 
 One that does not stop within 30 seconds of that ends its process, and a
 parallel worker that ends stops the whole run. So a hang never holds the heavy
-turn or a CI job until its bound.
+turn or a CI job until its bound. A loop that spins (a renderer inside
+`page.evaluate`) spends CPU, so the watch keeps it; its job's
+`timeout-minutes` bounds it on CI.
 
 #### Looking at a page
 
@@ -980,8 +1027,9 @@ stay where it printed them. A page that could not be looked at (refused, no
 
 The look keeps its test database in `var/dev-look/` through Django's
 `--keepdb`, so a second run creates nothing; an edited migration needs
-`rm -r var/dev-look`. A composed look keeps its database in
-`var/dev-look/composed/`.
+`rm -r var/dev-look`. Each run works on a copy of its own and hands it back
+as it ends, so looks started together share no database. A composed look
+keeps its database in `var/dev-look/composed/`.
 
 A look holds still: the page's clock is frozen at the moment the run began
 (its `--base` run shares that instant), and each screenshot is taken with

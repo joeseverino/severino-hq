@@ -255,6 +255,28 @@ class RefusedRuleTests(SimpleTestCase):
                 self.assertIn(f"--rule {holder}", said)
                 self.assertIn(holder, look._rules())
 
+    def test_every_rule_the_gate_holds_without_script_is_a_rule_by_its_name(self):
+        """A rule CI fails on is run locally under the name its failure prints."""
+
+        from hq.platform.core.tests.browser.layout import LayoutBrowserTests
+
+        rules = look._rules()
+        self.assertIn("no_column_is_narrower_than_its_words", rules)
+        held = LayoutBrowserTests.unscripted_rules()
+        self.assertIn("no_column_is_narrower_than_its_words", held)
+        self.assertEqual(sorted(set(held) - set(rules)), [])
+
+    def test_a_rule_held_only_without_script_names_the_command_that_runs_it(self):
+        from hq.platform.core.tests.browser.layout import LayoutBrowserTests
+
+        held = LayoutBrowserTests.unscripted_rules()
+        self.assertEqual(
+            look.held_without_script_only("a_table_frame_spans_its_box"), held["a_table_frame_spans_its_box"]
+        )
+        # One the survey reads too is held once script has run, as is one that takes a page's name alone.
+        self.assertEqual(look.held_without_script_only("no_column_is_narrower_than_its_words"), [])
+        self.assertEqual(look.held_without_script_only("no_block_breaks_a_paragraph"), [])
+
     def test_a_name_that_is_no_check_names_no_gate_test(self):
         said = look.no_rule("example-no-such-check")
 

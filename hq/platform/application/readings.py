@@ -13,7 +13,11 @@ from django.utils import timezone
 
 from hq.platform.core.models import UpstreamReading
 
+from .projection import read_once
+
 _LONG_AGO = datetime(2000, 1, 1, tzinfo=UTC)
+# Each key asked within one projection, with its reading or None for none.
+_ASKED = "readings.asked"
 
 
 def stored(key: str) -> UpstreamReading | None:
@@ -21,8 +25,15 @@ def stored(key: str) -> UpstreamReading | None:
 
 
 def stored_many(keys) -> dict[str, UpstreamReading]:
-    """The stored readings for ``keys`` that exist, in one query."""
-    return {reading.key: reading for reading in UpstreamReading.objects.filter(key__in=list(keys))}
+    """The stored readings for ``keys`` that exist, in one query for the keys
+    the projection has not asked yet."""
+
+    keys = list(keys)
+    asked = read_once(_ASKED, dict)
+    if missing := [key for key in keys if key not in asked]:
+        found = {reading.key: reading for reading in UpstreamReading.objects.filter(key__in=missing)}
+        asked.update((key, found.get(key)) for key in missing)
+    return {key: reading for key in keys if (reading := asked[key]) is not None}
 
 
 def refresh(key: str, fetch: Callable[[], Any], *, older_than: timedelta) -> None:
@@ -42,6 +53,7 @@ def record(key: str, value: Any, *, observed_at: datetime | None = None) -> None
     UpstreamReading.objects.update_or_create(
         key=key, defaults={"value": value, "observed_at": observed_at or timezone.now()}
     )
+    read_once(_ASKED, dict).pop(key, None)
 
 
 def machine_telemetry(machine_key: str) -> str:
@@ -57,3 +69,4 @@ def expire(key: str) -> None:
     """Keep the value, but have the next refresh read again."""
 
     UpstreamReading.objects.filter(key=key).update(observed_at=_LONG_AGO)
+    read_once(_ASKED, dict).pop(key, None)

@@ -1,44 +1,29 @@
 """What a suite run selects, and what it leaves behind."""
 
-import contextlib
 import io
-import json
-import multiprocessing
 import os
-import pickle
 import subprocess
 import sys
 import tempfile
-import threading
 import time
 import unittest
 import unittest.mock
-from dataclasses import asdict
 from pathlib import Path
-from typing import override
 
 from django.conf import settings
-from django.test import Client, SimpleTestCase, override_settings, tag
+from django.test import SimpleTestCase, override_settings, tag
 from django.test.runner import DiscoverRunner
 
 from hq.platform.application import agent_limits
+from hq.platform.core.run_report import REPORTS, CompositionTextResult
+from hq.platform.core.stalls import block_on_output
 from hq.platform.core.test_runner import (
     BROWSER_TESTS,
-    DEFAULT_STALL_SECONDS,
-    REPORTS,
     SOURCE,
-    STALL_SECONDS,
-    ClassTimedSuite,
-    CompositionRemoteResult,
-    CompositionTextResult,
     FileClonedParallelSuite,
     SeverinoTestRunner,
-    Stalled,
-    StallWatch,
-    block_on_output,
     drives_a_browser,
     excluded_tags,
-    report_class_times,
     tests_in,
 )
 
@@ -287,221 +272,9 @@ class BlockingOutputTests(SimpleTestCase):
             self.assertTrue(os.get_blocking(write))
 
 
-def _timed_classes(clock):
-    """Two classes whose fixtures and test advance ``clock`` by known amounts."""
-
-    class Slow(unittest.TestCase):
-        @classmethod
-        def setUpClass(cls):
-            clock[0] += 5
-
-        def test_it(self):
-            clock[0] += 1
-
-    class Quick(unittest.TestCase):
-        def test_it(self):
-            clock[0] += 2
-
-    return Slow, Quick
-
-
-class ClassTimeTests(SimpleTestCase):
-    """Each class's wall time reaches the run's result, its fixtures included,
-    whether it ran here or in a parallel worker."""
-
-    def run_timed(self, result):
-        """The tests run, as the parent holds them: a suite empties itself as it runs."""
-
-        clock = [0.0]
-        slow, quick = _timed_classes(clock)
-        loader = unittest.defaultTestLoader
-        tests = [*loader.loadTestsFromTestCase(slow), *loader.loadTestsFromTestCase(quick)]
-        with unittest.mock.patch("hq.platform.core.test_runner.monotonic", lambda: clock[0]):
-            ClassTimedSuite(tests).run(result)
-        return tests
-
-    def times(self, result):
-        return {name.rsplit(".", 1)[-1]: seconds for name, seconds in result.class_times.items()}
-
-    def test_a_serial_run_times_each_class_with_its_set_up(self):
-        result = CompositionTextResult(io.StringIO(), descriptions=True, verbosity=0)
-        self.run_timed(result)
-
-        self.assertEqual(self.times(result), {"Slow": 6, "Quick": 2})
-
-    def test_a_workers_times_reach_the_parent(self):
-        worker = CompositionRemoteResult()
-        tests = self.run_timed(worker)
-
-        parent = CompositionTextResult(io.StringIO(), descriptions=True, verbosity=0)
-        for event in pickle.loads(pickle.dumps(worker.events)):
-            FileClonedParallelSuite.handle_event(None, parent, tests, event)
-        self.assertEqual(self.times(parent), {"Slow": 6, "Quick": 2})
-
-    def test_the_report_puts_the_slowest_first_beside_the_load(self):
-        result = CompositionTextResult(io.StringIO(), descriptions=True, verbosity=0)
-        result.class_times = {"example.Quick": 2.0, "example.Slow": 6.0}
-        stream = io.StringIO()
-        report_class_times(result, stream, (1.0, 2.0, 3.0))
-
-        said = stream.getvalue()
-        self.assertIn("load average", said)
-        self.assertLess(said.index("example.Slow"), said.index("example.Quick"))
-
-
-def _failing_class():
-    """A failure, an error, a test whose subtests fail, and a pass."""
-
-    class Failing(unittest.TestCase):
-        def test_compares(self):
-            self.assertEqual("expected", "found")
-
-        def test_raises(self):
-            raise LookupError("no example.invalid record")
-
-        def test_subtests(self):
-            for n in range(2):
-                with self.subTest(n=n):
-                    self.assertEqual(n, -1)
-
-        def test_passes(self):
-            pass
-
-    return Failing
-
-
-class FailureRecordTests(SimpleTestCase):
-    """Each failed test reaches the gate running the suite as the result saw
-    it, whether it ran here or in a parallel worker."""
-
-    def run_failing(self, result):
-        tests = list(unittest.defaultTestLoader.loadTestsFromTestCase(_failing_class()))
-        unittest.TestSuite(tests).run(result)
-        return tests
-
-    def assert_recorded(self, result):
-        failed = {each.test.rsplit(".", 1)[-1]: each for each in vars(result)["failed"].values()}
-        self.assertEqual(set(failed), {"test_compares", "test_raises", "test_subtests"})
-        self.assertEqual(failed["test_compares"].exception, "AssertionError: 'expected' != 'found'")
-        self.assertEqual(failed["test_raises"].exception, "LookupError: no example.invalid record")
-        self.assertIn('raise LookupError("no example.invalid record")', failed["test_raises"].traceback)
-        self.assertEqual(failed["test_subtests"].exception, "AssertionError: 0 != -1")
-
-    def test_a_serial_run_records_each_failed_test_once(self):
-        result = CompositionTextResult(io.StringIO(), descriptions=True, verbosity=0)
-        self.run_failing(result)
-
-        self.assert_recorded(result)
-
-    def test_a_workers_failures_reach_the_parent_with_their_tracebacks(self):
-        # A class local to a function does not pickle, so this holds that a
-        # worker sends none of a failed subtest's case.
-        worker = CompositionRemoteResult()
-        tests = self.run_failing(worker)
-
-        parent = CompositionTextResult(io.StringIO(), descriptions=True, verbosity=0)
-        for event in pickle.loads(pickle.dumps(worker.events)):
-            FileClonedParallelSuite.handle_event(None, parent, tests, event)
-        self.assert_recorded(parent)
-
-    def run_suite(self, folder: str | None):
-        suite = unittest.defaultTestLoader.loadTestsFromTestCase(_failing_class())
-        with unittest.mock.patch.dict(os.environ), contextlib.redirect_stderr(io.StringIO()):
-            os.environ.pop(REPORTS, None)
-            if folder:
-                os.environ[REPORTS] = folder
-            return SeverinoTestRunner(verbosity=0).run_suite(suite)
-
-    def test_the_run_writes_them_where_its_gate_reads_them(self):
-        with tempfile.TemporaryDirectory() as folder:
-            result = self.run_suite(folder)
-
-            written = [json.loads(path.read_text()) for path in Path(folder).iterdir()]
-        self.assertEqual(written, [[asdict(each) for each in vars(result)["failed"].values()]])
-        self.assert_recorded(result)
-
-    def test_a_run_no_gate_runs_writes_nothing(self):
-        with unittest.mock.patch.object(Path, "write_text") as write:
-            self.run_suite(None)
-
-        write.assert_not_called()
-
-
-class UnpicklableError(Exception):
-    """An exception holding what cannot pickle, as a jsonschema error holds its validator's functions."""
-
-    def __init__(self, message: str) -> None:
-        super().__init__(message)
-        self.check = lambda: message
-
-
-class UnpicklableFailure(AssertionError):
-    def __init__(self, message: str) -> None:
-        super().__init__(message)
-        self.check = lambda: message
-
-
-def _unpicklable_class():
-    class Unpicklable(unittest.TestCase):
-        def test_errors(self):
-            raise UnpicklableError("example.invalid schema refused")
-
-        def test_fails(self):
-            raise UnpicklableFailure("example.invalid page differs")
-
-        def test_subtest_fails(self):
-            with self.subTest(n=1):
-                raise UnpicklableFailure("example.invalid subtest differs")
-
-    return Unpicklable
-
-
-class UnpicklableFailureTests(SimpleTestCase):
-    """A worker's failure whose exception does not pickle still reaches the
-    parent as the failure it is, its exception's text and the line it was
-    raised on, rather than ending the run on multiprocessing's error."""
-
-    def test_each_reaches_the_parent_as_its_text_and_kind(self):
-        tests = list(unittest.defaultTestLoader.loadTestsFromTestCase(_unpicklable_class()))
-        worker = CompositionRemoteResult()
-        unittest.TestSuite(tests).run(worker)
-
-        parent = CompositionTextResult(io.StringIO(), descriptions=True, verbosity=0)
-        for event in pickle.loads(pickle.dumps(worker.events)):
-            FileClonedParallelSuite.handle_event(None, parent, tests, event)
-        failed = {each.test.rsplit(".", 1)[-1]: each for each in vars(parent)["failed"].values()}
-        self.assertEqual(
-            {name: each.exception for name, each in failed.items()},
-            {
-                "test_errors": f"{__name__}.UnpicklableError: example.invalid schema refused",
-                "test_fails": f"{__name__}.UnpicklableFailure: example.invalid page differs",
-                "test_subtest_fails": f"{__name__}.UnpicklableFailure: example.invalid subtest differs",
-            },
-        )
-        self.assertIn('raise UnpicklableError("example.invalid schema refused")', failed["test_errors"].traceback)
-        self.assertEqual((len(parent.errors), len(parent.failures)), (1, 2))
-
-
 class _Held:
     """Cases a test runs on its own, kept off the module so discovery never
     runs them, and importable by name so a spawned worker can unpickle them."""
-
-    class ClientPages(unittest.TestCase):
-        """A case holding a test client ready to serve, whose handler does not
-        pickle. Not a SimpleTestCase, which leaves such an attribute out when
-        it is pickled."""
-
-        def setUp(self):
-            self.client = Client()
-            self.client.handler.load_middleware()
-
-        def test_each(self):
-            for page in ("first", "second"):
-                with self.subTest(page=page):
-                    self.assertEqual(page, "first", "example.invalid page")
-
-        def test_passes(self):
-            pass
 
     class Prints(SimpleTestCase):
         def test_passes(self):
@@ -572,242 +345,6 @@ class OutputTests(SimpleTestCase):
         self.assertIn("(Pdb)", ran.stdout)
 
 
-def report_both_ways(path: str) -> None:
-    """Run ``_Held.ClientPages`` serially and in two workers, and write what each result lists to ``path``."""
-
-    import django
-
-    django.setup()
-    report = {}
-    for way in ("serial", "parallel"):
-        tests = list(unittest.defaultTestLoader.loadTestsFromTestCase(_Held.ClientPages))
-        result = CompositionTextResult(io.StringIO(), descriptions=True, verbosity=0)
-        if way == "serial":
-            ClassTimedSuite(tests).run(result)
-        else:
-            suite = FileClonedParallelSuite([ClassTimedSuite([test]) for test in tests], processes=2)
-            suite.serialized_aliases = suite.used_aliases = set()
-            suite.run(result)
-        report[way] = {
-            "failures": [[str(test), test.id(), printed] for test, printed in result.failures],
-            "errors": [[str(test), printed] for test, printed in result.errors],
-            "successful": result.wasSuccessful(),
-            "failed": sorted(vars(result).get("failed", {})),
-        }
-    Path(path).write_text(json.dumps(report))
-
-
-class ParallelSubtestTests(SimpleTestCase):
-    """A failed subtest in a parallel worker reaches the run's result under its
-    own name, as a serial run reports it, though its case does not pickle."""
-
-    def test_a_subtest_whose_case_holds_a_client_is_reported_as_a_serial_run_reports_it(self):
-        with tempfile.TemporaryDirectory() as folder:
-            path = Path(folder, "report.json")
-            # Its own process: a parallel worker, as this test may run in, may
-            # not start workers of its own.
-            ran = subprocess.run(
-                [sys.executable, "-c", f"from {__name__} import report_both_ways; report_both_ways({str(path)!r})"],
-                capture_output=True,
-                text=True,
-                timeout=300,
-                check=False,
-            )
-            self.assertEqual(ran.returncode, 0, ran.stderr[-4000:])
-            report = json.loads(path.read_text())
-
-        serial, parallel = report["serial"], report["parallel"]
-        self.assertEqual(
-            [each[:2] for each in parallel["failures"]], [each[:2] for each in serial["failures"]], parallel
-        )
-        [(name, test_id, printed)] = parallel["failures"]
-        self.assertIn("page='second'", name)
-        self.assertIn("page='second'", test_id)
-        self.assertIn("example.invalid page", printed)
-        self.assertEqual(parallel["errors"], [])
-        self.assertFalse(parallel["successful"])
-        self.assertEqual(parallel["failed"], serial["failed"])
-
-
-class _Marks(StallWatch):
-    def __init__(self):
-        super().__init__(seconds=600)
-        self.marks = []
-
-    @override
-    def mark(self, label):
-        self.marks.append(label)
-        super().mark(label)
-
-
-class StallWatchTests(SimpleTestCase):
-    """A test process that stops making progress says what it was running and
-    where every thread is, and only a process running tests does."""
-
-    def written(self, watch):
-        watch.stream.seek(0)
-        return watch.stream.read()
-
-    def watch(self, seconds, kind=StallWatch):
-        watch = kind(seconds=seconds)
-        # A real file: faulthandler writes the stacks to its descriptor.
-        watch.stream = self.enterContext(tempfile.TemporaryFile("w+"))
-        return watch
-
-    def test_the_report_names_what_stalled_shows_the_evidence_and_every_stack(self):
-        watch = self.watch(60)
-        watch.evidence.append(lambda stream: stream.write("browser launched\n"))
-        watch.report("example.Tests.test_it")
-
-        said = self.written(watch)
-        self.assertIn("example.Tests.test_it", said)
-        self.assertIn("browser launched", said)
-        self.assertIn("test_the_report_names_what_stalled_shows_the_evidence_and_every_stack", said)
-
-    def test_the_report_shows_a_call_waiting_on_another_greenlet(self):
-        # As Playwright's sync API leaves a test: switched away mid-call. The
-        # greenlet package comes only with the browser group, so a stand-in
-        # carries its documented surface: the type, and gr_frame on a
-        # suspended one.
-        class Suspended:
-            def __init__(self, frame):
-                self.gr_frame = frame
-
-        def waiting_on_the_browser():
-            yield
-
-        call = waiting_on_the_browser()
-        next(call)
-        self.addCleanup(call.close)
-        self.waiting = Suspended(call.gi_frame)
-        stand_in = unittest.mock.Mock(greenlet=Suspended)
-        watch = self.watch(60)
-        with unittest.mock.patch.dict(sys.modules, {"greenlet": stand_in}):
-            watch.report("example.Tests.test_it")
-
-        self.assertIn("waiting_on_the_browser", self.written(watch))
-
-    def test_the_report_reaches_the_process_stderr_though_a_test_holds_sys_stderr(self):
-        # --buffer swaps sys.stderr for a buffer it prints only once the test
-        # fails, which a process that exits on the stall never reaches.
-        watch = StallWatch(seconds=60)
-        stderr = self.enterContext(tempfile.TemporaryFile("w+"))
-        held = io.StringIO()
-        with unittest.mock.patch.object(sys, "__stderr__", stderr), contextlib.redirect_stderr(held):
-            watch.report("example.Tests.test_hangs")
-            with unittest.mock.patch.object(os, "_exit"):
-                watch.end("example.Tests.test_hangs")
-        stderr.seek(0)
-        written = stderr.read()
-        self.assertIn("stalled 60s: example.Tests.test_hangs", written)
-        self.assertIn("example.Tests.test_hangs did not stop", written)
-        self.assertEqual(held.getvalue(), "")
-
-    def test_a_test_that_patches_the_clock_is_not_stalled_by_it(self):
-        # As a test that fakes time.monotonic from its setUp leaves the watch:
-        # its deadline set on the real clock, then woken under the fake one.
-        watch = self.watch(60)
-        with watch.watching():
-            watch.mark("example.Tests.test_clocked")
-            with unittest.mock.patch("time.monotonic", lambda: 10.0**12):
-                with watch.watching():
-                    pass
-                threading.Event().wait(0.2)
-        self.assertNotIn("example.Tests.test_clocked", self.written(watch))
-
-    def test_a_mark_left_unfollowed_fails_what_it_marked_after_its_report(self):
-        watch = self.watch(0.01)
-        with self.assertRaises(Stalled), watch.watching():
-            watch.mark("example.Tests.test_stuck")
-            threading.Event().wait(60)
-        self.assertIn("example.Tests.test_stuck", self.written(watch))
-
-    def test_a_test_that_will_not_stop_ends_its_process(self):
-        ended = threading.Event()
-
-        class Ending(StallWatch):
-            @override
-            def end(self, label):
-                ended.set()
-
-        watch = self.watch(0.01, Ending)
-        watch.grace = 0.05
-        with watch.watching():
-            watch.mark("example.Tests.test_swallows")
-            while not ended.is_set():
-                with contextlib.suppress(Stalled):
-                    self.assertTrue(ended.wait(60))
-
-    def test_a_worker_that_ends_stops_its_parent_and_exits_failed(self):
-        watch = self.watch(60)
-        watch.workers = multiprocessing.Value("i", 2)
-        with unittest.mock.patch.object(os, "_exit") as exited:
-            watch.end("example.Tests.test_swallows")
-        self.assertLess(watch.workers.value, 0)
-        self.assertNotEqual(exited.call_args.args[0], 0)
-
-    def test_a_pause_holds_no_deadline_and_restarts_the_bound(self):
-        watch = self.watch(600)
-        with watch.watching():
-            watch.mark("example.Tests.test_waits")
-            with watch.paused():
-                self.assertIsNone(watch._deadline)
-            self.assertIsNotNone(watch._deadline)
-            self.assertEqual(watch._label, "example.Tests.test_waits")
-
-    def test_a_process_that_only_replays_results_is_not_watched(self):
-        watch = self.watch(0.01)
-        watch.mark("example.Tests.test_it")
-        self.assertIsNone(watch._thread)
-
-    def test_unset_the_default_bound_watches(self):
-        with unittest.mock.patch.dict(os.environ, {STALL_SECONDS: ""}):
-            self.assertEqual(StallWatch.from_environment().seconds, DEFAULT_STALL_SECONDS)
-
-    def test_zero_watches_nothing(self):
-        with unittest.mock.patch.dict(os.environ, {STALL_SECONDS: "0"}):
-            watch = StallWatch.from_environment()
-        with watch.watching():
-            watch.mark("example.Tests.test_it")
-        self.assertFalse(watch.enabled)
-        self.assertIsNone(watch._thread)
-
-    def test_a_run_inside_a_test_gives_the_outer_test_back_its_watch(self):
-        watch = self.watch(600)
-        with watch.watching():
-            watch.mark("outer")
-            with watch.watching():
-                watch.mark("inner")
-            self.assertEqual(watch._label, "outer")
-        self.assertIsNone(watch._deadline)
-
-    def test_a_suite_marks_each_class_fixture_and_test(self):
-        watch = _Marks()
-        slow, quick = _timed_classes([0.0])
-        loader = unittest.defaultTestLoader
-        tests = [*loader.loadTestsFromTestCase(slow), *loader.loadTestsFromTestCase(quick)]
-        with unittest.mock.patch("hq.platform.core.test_runner.stall_watch", watch):
-            ClassTimedSuite(tests).run(CompositionRemoteResult())
-
-        self.assertEqual(
-            [mark.rsplit(".", 1)[-1] for mark in watch.marks],
-            ["Slow setUpClass", "test_it", "Slow tearDownClass", "Quick setUpClass", "test_it", "Quick tearDownClass"],
-        )
-
-    def test_a_subtest_that_ends_is_progress(self):
-        class Pages(unittest.TestCase):
-            def test_each(self):
-                for page in ("first", "second"):
-                    with self.subTest(page=page):
-                        pass
-
-        watch = _Marks()
-        with unittest.mock.patch("hq.platform.core.test_runner.stall_watch", watch):
-            ClassTimedSuite(unittest.defaultTestLoader.loadTestsFromTestCase(Pages)).run(CompositionRemoteResult())
-
-        self.assertTrue(any("second" in mark for mark in watch.marks), watch.marks)
-
-
 class BrowserTestTests(SimpleTestCase):
     """A test drives a browser when its class comes from the browser gates'
     package, wherever the class itself is declared (tools/gate/turn.py)."""
@@ -827,21 +364,18 @@ class BrowserTestTests(SimpleTestCase):
 
         self.assertTrue(drives_a_browser(Drawn("test_it")))
 
-    def test_the_whole_suite_leaves_out_every_browser_gate_it_discovers(self):
+    def test_the_whole_suite_leaves_out_every_browser_gate_it_discovers_and_still_runs_across_workers(self):
         gate = type("Gate", (SimpleTestCase,), {"__module__": f"{BROWSER_TESTS}.catalog", "test_it": lambda self: None})
-
-        class Plain(SimpleTestCase):
-            def test_it(self):
-                pass
-
-        found = unittest.TestSuite([gate("test_it"), Plain("test_it")])
+        plain = [type(name, (SimpleTestCase,), {"test_it": lambda self: None}) for name in ("One", "Two")]
+        found = unittest.TestSuite([gate("test_it"), *(kind("test_it") for kind in plain)])
         with (
-            unittest.mock.patch.object(DiscoverRunner, "build_suite", return_value=found),
+            unittest.mock.patch.object(DiscoverRunner, "load_tests_for_label", return_value=found),
             unittest.mock.patch("hq.platform.core.test_runner.plugin_test_modules", return_value=[]),
         ):
-            suite = SeverinoTestRunner(verbosity=0).build_suite([])
+            suite = SeverinoTestRunner(verbosity=0, parallel=2).build_suite([])
 
-        self.assertEqual([type(test) for test in tests_in(suite)], [Plain])
+        self.assertCountEqual([type(test) for test in tests_in(suite)], plain)
+        self.assertIsInstance(suite, FileClonedParallelSuite)
 
 
 class BrowserFailureShotTests(SimpleTestCase):

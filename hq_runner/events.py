@@ -5,13 +5,16 @@ An event is built from four fields of what Ansible said (the host, the task's
 name, its outcome and its own one-line ``msg``), never from its whole result,
 its stdout or its arguments, so what a module returned beside its message
 never leaves the worker. A task marked ``no_log`` says only that it was hidden.
-HQ strikes the credential shapes it knows again at the bridge's door; this is
-the worker's own strike, of what it alone knows to be secret.
+The one line of stdout read is the error that stops a run before any task
+ends (``Stopped``), struck as a task's message is. HQ strikes the credential
+shapes it knows again at the bridge's door; this is the worker's own strike,
+of what it alone knows to be secret.
 """
 
 import re
 from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass
+from pathlib import PurePath
 from typing import Any
 
 # The bridge contract's RunEvent bounds, and its report's.
@@ -118,6 +121,79 @@ def from_ansible(event: Mapping[str, Any], secrets: Collection[str] = ()) -> Eve
     host = strike(_one_line(data.get("host", "")), secrets)
     task = strike(_one_line(data.get("task", "")), secrets)
     return Event(_clip(host, HOST_LIMIT), _clip(task, TASK_LIMIT), outcome, _clip(message, MESSAGE_LIMIT))
+
+
+# How ansible-core 2.22 begins a line it prints as an error
+# (``ansible/utils/display.py``, ``Display.error``), and the line after it
+# that says where the error is, as ``<path>:<line>:<column>``.
+ERROR = "[ERROR]: "
+ORIGIN = "Origin: "
+# A terminal's color code, which Ansible wraps an error line in.
+_COLOR = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+
+
+def _printed(event: Mapping[str, Any]) -> str | None:
+    """The line Ansible printed outside any task, as ansible-runner 2.4.3
+    delivers one: a ``verbose`` event whose ``stdout`` is that line
+    (``ansible_runner/utils/__init__.py``, ``OutputEventFilter._emit_event``),
+    color stripped; None for any other event."""
+
+    if event.get("event") != "verbose":
+        return None
+    return _one_line(_COLOR.sub("", str(event.get("stdout", ""))))
+
+
+class Stopped:
+    """Why Ansible stopped a run before any task ended: the first line it
+    printed as an error (a playbook or role file that does not parse, a module
+    no collection installed provides), with the file and line it named when
+    that file is in the project.
+
+    It is the one event read from stdout, so it keeps that one line, struck of
+    secrets and clipped as a task's message is, and a path outside the project
+    (the worker's own directories) is never said.
+    """
+
+    def __init__(self, project_dir: PurePath, secrets: Collection[str] = ()) -> None:
+        self._project_dir = project_dir
+        self._secrets = secrets
+        self._error = ""
+        self._where = ""
+        self._next = False
+
+    def read(self, event: Mapping[str, Any]) -> None:
+        line = _printed(event)
+        if line is None:
+            return
+        if not self._error:
+            if line.startswith(ERROR):
+                self._error = line.removeprefix(ERROR)
+                self._next = True
+            return
+        if self._next:
+            self._next = False
+            if line.startswith(ORIGIN):
+                self._where = self._within(line.removeprefix(ORIGIN))
+
+    def _within(self, origin: str) -> str:
+        path, _, place = origin.rpartition(":")
+        path, _, line = path.rpartition(":")
+        if not (line.isdigit() and place.isdigit()):
+            return ""
+        try:
+            relative = PurePath(path).relative_to(self._project_dir)
+        except ValueError:
+            return ""
+        if ".." in relative.parts:
+            return ""
+        return f"{relative.as_posix()}:{line}:{place}"
+
+    @property
+    def message(self) -> str | None:
+        if not self._error:
+            return None
+        said = f"{self._where}: {self._error}" if self._where else self._error
+        return _clip(strike(said, self._secrets), MESSAGE_LIMIT)
 
 
 # The stat a playbook states its result under, with ``ansible.builtin.set_stats``.
