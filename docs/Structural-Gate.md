@@ -152,6 +152,13 @@ what they depend on:
 A run on inputs already read answers from there and compares that answer with
 the baseline. So the verdict is the one a fresh graph gives.
 
+On other inputs the graph indexes the tree into its own store, kept in
+`var/structural/graph` between runs, so the graph's incremental route
+reindexes only the files that changed and those that read what they declare.
+It rebuilds the whole store when it cannot bound a change, when the store
+fails its integrity check, and when its index format moves. A lock holds a
+second run in the same checkout until the first is done.
+
 The bar prints its verdict and a count of the pairs a classification explains.
 `mise run lint:structural --pairs` first prints every pair outside tests, one
 per line and sorted, with the classification that explains it or

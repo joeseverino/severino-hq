@@ -261,6 +261,14 @@ name its gutter draws its own (`{% row_toggle %}`). It shows only where the row 
 column that left with something in it, a `narrow-more` or `row-below` part, a
 fold, or a value `tables.js` found cut (`data-cut`).
 
+A run of short parts in a cell (a project's technologies, what a connection
+reads or reaches) is `{% line_list values as value %}…{% endline_list %}`,
+with `list="dot-list"` where the body draws each `li`. No count decides how
+many show: its first three size the column and wrap with it, the rest ask
+the column for nothing and show as many as the line they end has room for,
+each whole, and the row opens only when one is cut. A list folded at a fixed
+number behind `row-more` is refused (`test_template_line_lists`).
+
 The toggle stands in a gutter that every row of the table keeps while any row
 opens, so names share one edge whether or not a given row opens. The gutter
 follows from the server's markup and the box's width alone. A cut value shows
@@ -847,11 +855,25 @@ panels side by side with the window showing around it by a gap that grows
 with the window, scrolling under a title that stays put, and the whole screen
 on a phone.
 
-**One filter bar.** `{% filter_bar filtered=... clear=... %}`: the page's
-search field and selects, one Filter (or the bar's own `verb=`), Clear
-filters back to `clear` when anything is set, and the count of what shows
-(`{% summary %}`) at the row's end. A list's table toolbar is the same bar.
-The search takes the row's room; every other control is as wide as what it
+**One filter bar.** `{% filter_bar filtered=... clear=... shown=... total=... %}`:
+the page's controls in one order (the search, then its selects, then its
+toggles), one Filter (or the bar's own `verb=` for a bar that asks a
+question rather than narrows a list), Clear filters back to `clear` when
+anything is set, and the summary at the row's end. The controls wrap in a
+box of their own and the button stands beside their last line, so it
+never takes a line alone. The summary is the part's words: "`shown` of
+`total` shown.", then what the page holds back without being asked
+(`held=`, each part counted, as the map's main lanes hold back its context)
+and the one link that shows it (`more=`), then the page's own facts about
+what shows (`{% summary %}`, "1 needs a look."), never a count of its own.
+A page passes counts and links, never the sentence. A list's table toolbar
+is the same bar, its count its pager's. A select that narrows names the
+dimension it narrows (`every="type"`), and the part leads it with "Any
+type", which claims no total, so no summary contradicts it; a select that
+picks a view or an order (the map's View, a table's Sort) offers only named
+choices, its default named for what it shows ("Main lanes"), never Any or
+All. The empty option comes only from `every=`. A state no control holds
+travels as a hidden input. The search takes the line's room; every other control is as wide as what it
 says, a select its longest option. No chip walls: a set of on-or-off choices
 is `partials/_toggle_set.html`, checkboxes in a row of their own words under
 one hidden legend, named (`name=`) when Filter sends them and unnamed when the
@@ -865,9 +887,12 @@ control label names it by, and with no visible label `label` the name a
 reader hears (a table cell's setting). `tone` says the choice in a status
 tone, the status part's ink, edged in it unless neutral, as an agent's rule
 reads "On" in the good tone and "Off" in the serious one.
-*Gate:* the `hand-drawn-filter-bar` rule refuses `.filter-bar` written by hand; the
-survey's "filter choices as wide as their options" finds a choice stretched
-over its bar.
+*Gate:* the `hand-drawn-filter-bar` rule refuses `.filter-bar` written by hand;
+`test_filter_tags.FilterBarUseTests` reads every `{% filter_bar %}` in the
+templates and refuses an empty option written by hand, `every=` on a view
+or an order, a count written in the summary, a narrowing bar with no
+count, and a search after another control; the survey's "filter choices
+as wide as their options" finds a choice stretched over its bar.
 
 **One switch.** `{% switch label=... %}{% choice url=... current=... %}...{% endchoice %}{% summary %}...{% endswitch %}`
 (`switch_tags.py`, drawn by `partials/_switch.html`): a row of links to the

@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import ast
 import json
+import math
 import re
 import shlex
 import subprocess
 from collections import defaultdict
 from functools import cache, cached_property
-from itertools import combinations
+from itertools import combinations, pairwise
 from operator import eq
 from pathlib import Path
 from typing import NamedTuple
@@ -282,7 +283,6 @@ SLOTS = 64
 # 0.85 is where the pairs a reader finds by hand appear and the shapes that
 # are not duplicates can still be named.
 THRESHOLD = 0.85
-BANDS = 32
 
 
 class Unit(NamedTuple):
@@ -353,18 +353,21 @@ def fingerprinted(row):
 
 def near_pairs(units):
     """Each pair of same-language units whose fingerprints agree on THRESHOLD
-    of their slots. Agreeing on 55 of 64 slots leaves at most 9 that differ, so
-    at least 23 of the 32 two-slot bands match whole: banding finds every such
-    pair, never a sample of them."""
+    of their slots. Agreeing on 55 of 64 slots leaves at most 9 that differ,
+    so cut into 10 bands, every such pair matches whole on at least one band:
+    banding finds every such pair, never a sample of them, and wide bands
+    leave few candidates to compare."""
 
+    agreeing = THRESHOLD * SLOTS
+    bands = SLOTS - math.ceil(agreeing) + 1
+    edges = [SLOTS * band // bands for band in range(bands + 1)]
     # Only units of one language pair, so the language is part of the bucket.
     buckets = defaultdict(list)
     for index, unit in enumerate(units):
         language = Path(unit.path).suffix
-        for band in range(BANDS):
-            buckets[(language, band, unit.slots[2 * band], unit.slots[2 * band + 1])].append(index)
+        for band, (start, end) in enumerate(pairwise(edges)):
+            buckets[(language, band, unit.slots[start:end])].append(index)
     seen = set()
-    agreeing = THRESHOLD * SLOTS
     for members in buckets.values():
         for i, j in combinations(members, 2):
             if (i, j) in seen:

@@ -8,6 +8,7 @@ import sys
 import tempfile
 import threading
 from pathlib import Path
+from types import LazyImportType
 from typing import TYPE_CHECKING
 from unittest import mock
 
@@ -25,7 +26,7 @@ _left_by = None
 
 
 def patches_leave_no_copy() -> None:
-    """When a ``mock.patch`` ends, no module still holds its mock under the name it patched.
+    """When a ``mock.patch`` ends, no module still holds its mock under the name it patched or an alias of it.
 
     Imports are lazy (``hq.config.imports``): ``from .domains import
     all_domains`` binds when the name is first used, or when its module first
@@ -39,6 +40,18 @@ def patches_leave_no_copy() -> None:
     if _left_by is None:
         _left_by = mock._patch.__exit__  # noqa: SLF001 - the one door every patch leaves by
         mock._patch.__exit__ = _taking_back_copies(_left_by)  # noqa: SLF001 - as above
+        # And the one every patch comes in by, so a module loaded before it
+        # has its lazy aliases noted before the patch can bind them.
+        mock._patch.__enter__ = _noting_aliases(mock._patch.__enter__)  # noqa: SLF001 - as above
+
+
+def _noting_aliases(enter):
+    @functools.wraps(enter)
+    def entering(patcher):
+        _read_new_modules()
+        return enter(patcher)
+
+    return entering
 
 
 def _taking_back_copies(leave):
@@ -47,22 +60,72 @@ def _taking_back_copies(leave):
         name = patcher.attribute
         started = patcher.is_started
         target = patcher.target if started else None
-        replaced = getattr(target, name, None) if started else None
+        replaced = _held(target, name) if started else None
         try:
             return leave(patcher, *exc_info)
         finally:
             if started:
-                _give_back(name, replaced, getattr(target, name, None))
+                _give_back(name, replaced, _held(target, name))
 
     return leaving
 
 
+def _held(target: object, name: str) -> object:
+    """What ``target`` holds under ``name``, read from its namespace first as
+    mock reads an original, so a lazy import put back stays unimported: its
+    module may be one this environment lacks."""
+
+    try:
+        namespace = vars(target)
+    except TypeError:
+        return getattr(target, name, None)
+    return namespace[name] if name in namespace else getattr(target, name, None)
+
+
 def _give_back(name: str, replaced: object, original: object) -> None:
+    _read_new_modules()
     for module in list(sys.modules.values()):
         # An entry can be a stand-in with no namespace (None blocks an import).
         with contextlib.suppress(TypeError):
             if vars(module).get(name) is replaced:
                 vars(module)[name] = original
+    for key, alias in tuple(_aliased.get(name, ())):
+        with contextlib.suppress(TypeError):
+            namespace = vars(sys.modules.get(key))
+            if namespace.get(alias) is replaced:
+                namespace[alias] = original
+
+
+# The modules read for aliases, by name; and each name a lazy import binds
+# under another (``from x import f as g``), with each module and the name it
+# binds there.
+_read: set[str] = set()
+_last_read: tuple[int, str | None] = (0, None)
+_aliased: dict[str, set[tuple[str, str]]] = {}
+
+
+def _read_new_modules() -> None:
+    """Note each name a module loaded since the last patch came or went
+    imports lazily under another. A bound name keeps no record of the name it
+    came in under, so this reads the lazy objects still waiting, which name
+    it as ``<lazy_import 'x.f'>``. So a module that first loads while the name
+    it aliases is patched, and binds the alias then, keeps the mock."""
+
+    global _last_read  # noqa: PLW0603 - where the last read left sys.modules
+    # A module loads at the end of sys.modules, so an unchanged count and
+    # last entry mean none loaded since.
+    mark = (len(sys.modules), next(reversed(sys.modules), None))
+    if mark == _last_read:
+        return
+    _last_read = mark
+    for key in sys.modules.keys() - _read:
+        _read.add(key)
+        with contextlib.suppress(TypeError):
+            for bound, value in tuple(vars(sys.modules.get(key)).items()):
+                if isinstance(value, LazyImportType):
+                    imported = repr(value).split("'")[1].rpartition(".")[2]
+                    if imported != bound:
+                        _aliased.setdefault(imported, set()).add((key, bound))
 
 
 _markers: tuple[int, Path] | None = None

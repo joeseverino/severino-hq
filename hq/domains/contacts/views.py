@@ -105,6 +105,8 @@ def contact_list(request):
             "q": q,
             # The search cleared, on the tab it was asked on.
             "search_cleared": reverse("contacts:list") + (f"?status={selected_status}" if selected_status else ""),
+            # What the search narrows: the messages of the tab it was asked on.
+            "status_total": next(tab["count"] for tab in status_tabs if tab["current"]),
             "total_count": sum(current.counts.values()),
             "problem": current.problem,
             "observed_at": current.observed_at,

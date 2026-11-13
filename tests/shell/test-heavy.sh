@@ -26,9 +26,8 @@ cleanup() {
 trap cleanup EXIT
 # Run under lint:shell, this suite is inside that task's turn, which every
 # mise it starts would inherit and so never wait, and inside its measured run,
-# which every run would take as its own. Under fast, mise's config
-# environment is fast's, whose summary output keeps a passing run silent.
-unset MISE_TASK_LOCKS MISE_TASK_LOCK_TIMEOUT HQ_MEASURED MISE_ENV
+# which every run would take as its own.
+unset MISE_TASK_LOCKS MISE_TASK_LOCK_TIMEOUT HQ_MEASURED
 # The uv this checkout pins, for the test runs made from a directory whose
 # config names none, where a shim finds no version.
 uv="$(mise -C "${repo}" which uv)"

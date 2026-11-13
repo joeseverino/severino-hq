@@ -7,29 +7,25 @@ control_plane/_topology_node_body.html), never inside a card. It is useful
 HTML before any script: a card's select control is a link that focuses the
 node, and static/js/topology.js, reading data-topology and the data-topology-*
 hooks, filters it and loads a card's details in place. topology_kinds are the
-toggles of the kind filter, topology_lenses the views, active_lens the one
-seen through; focus_node, topology_shown, topology_total, topology_left_out
-and topology_everything say what the map holds and what it leaves out.
-{% endcomment %}{% url 'control_plane:topology' as everything_url %}
-<div data-topology data-topology-ledger="topology-relations" data-focus="{{ focus_node }}" data-topology-total="{{ topology_total }}">
+toggles of the kind filter, topology_views the views (topology_view the one
+seen through, active_lens its lens); focus_node, topology_shown,
+topology_total and topology_held say what the map holds and what it holds
+back, and topology_more the view that shows it.
+{% endcomment %}{% url 'control_plane:topology' as main_lanes_url %}
+<div data-topology data-topology-ledger="topology-relations" data-focus="{{ focus_node }}">
   {% comment %}
   One bar, in the order a reader narrows: a name, then which view (the
-  server's question, which its Filter sends), then the kinds. The count says
-  what the map leaves out, beside the one control for it: the lanes that are
-  context and the cards nothing links to (`topology_lenses.kept_on_the_map`).
-  The script rewrites only the count, and shows Clear selection only while a
-  card is selected.
+  server's question, which its Filter sends), then the kinds. The main lanes
+  hold back the lanes that are context and the cards nothing links to
+  (`topology_lenses.kept_on_the_map`), which the bar's count names. The
+  script rewrites only the number shown, and shows Clear selection only
+  while a card is selected.
   {% endcomment %}
-  {% filter_bar filtered=active_lens clear=everything_url %}
+  {% filter_bar filtered=topology_view clear=main_lanes_url shown=topology_shown total=topology_total held=topology_held more=topology_more %}
     <input type="search" placeholder="Find on the map" aria-label="Find on the map" data-topology-search autocomplete="off">
-    <select name="lens" aria-label="View">
-      <option value="">Show: everything</option>
-      {% for lens in topology_lenses %}<option value="{{ lens.name }}"{% if active_lens.name == lens.name %} selected{% endif %}>{{ lens.label }}</option>{% endfor %}
-    </select>
+    {% select "lens" topology_views chosen=topology_view label="View" %}
     {% include "partials/_toggle_set.html" with legend="Show" set="kind" toggles=topology_kinds only %}
     <button class="btn ghost compact" type="button" data-topology-reset hidden>Clear selection</button>
-  {% summary %}<span data-topology-status>{{ topology_shown|breakable }} of {{ topology_total|measured:"shown" }}.</span>
-    {% if topology_left_out %}<a href="{{ everything_url }}?all=1#map">Show {{ topology_left_out|measured:"more" }}</a>{% elif topology_everything %}<a href="{{ everything_url }}#map">Show fewer</a>{% endif %}
   {% endfilter_bar %}
 
   <div class="topology-workspace">

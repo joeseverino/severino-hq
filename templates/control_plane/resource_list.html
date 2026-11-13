@@ -7,14 +7,10 @@ filter keeps rows by their own words and by one type; the type list always
 offers every type.
 {% endcomment %}
 {% url 'control_plane:list' as every_record %}
-{% filter_bar filtered=records.filtered clear=every_record %}
+{% filter_bar filtered=records.filtered clear=every_record shown=records.shown total=records.total %}
   <input type="search" name="q" value="{{ records.query }}" placeholder="Filter by name" aria-label="Filter by name">
-  <select name="type" aria-label="Type">
-    <option value="">All types</option>
-    {% for group in records.types %}<option value="{{ group.kind }}"{% if records.kind == group.kind %} selected{% endif %}>{{ group.label }} ({{ group.rows|length }})</option>{% endfor %}
-  </select>
-{% summary %}
-    <strong>{% if records.filtered %}{{ records.shown|breakable }} of {% endif %}{{ records.total|counted:"record" }}</strong>{% if records.unsettled %}, {{ records.unsettled|counted:"needs a look,need a look" }}{% endif %}
+  {% select "type" records.type_choices chosen=records.kind label="Type" every="type" %}
+{% summary %}{% if records.unsettled %}{{ records.unsettled|counted:"needs a look,need a look" }}.{% endif %}
 {% endfilter_bar %}
 {% table_region "Records" empty="No records yet." filtered=records.filtered clear=every_record %}
   <table class="data-table">

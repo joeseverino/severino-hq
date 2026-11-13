@@ -53,6 +53,7 @@ from hq.platform.core.tests.browser.probes.tables import (
     ROW_ACTIONS_TABLES,
     ROW_ARRIVES,
     ROW_TOGGLE_TABLES,
+    ROW_TOGGLE_VALUES,
     ROW_TOGGLES,
     SORT_BY,
     TABLES_THAT_DO_NOT_FIT,
@@ -1463,7 +1464,8 @@ class ComponentLayoutTests(LayoutBrowserTests):
         """Every row the server made openable has its toggle in the HTML, in
         the cell that names it, and shows it only while the row holds
         something back: a column that left a table wider than its box, with
-        something in it, a part of a list it folds, or a value cut short,
+        something in it, a part of a list it folds, or a value cut short (a
+        run of parts' rest past its line's room, never one whose parts all show),
         which opens its row only where the gutter is kept already. A narrow
         box keeps it for every table whose rows open, since touch has no
         hover title; a wide one only for a table with something else to open. A dash in a dropped column says
@@ -1472,10 +1474,10 @@ class ComponentLayoutTests(LayoutBrowserTests):
         withholds. Whether a value is cut is measured, so script is on.
         """
 
-        self.pages = {**self.pages, "row-toggle-probe": probe(ROW_TOGGLE_TABLES)}
+        self.pages = {**self.pages, "row-toggle-probe": probe(ROW_TOGGLE_TABLES, **ROW_TOGGLE_VALUES)}
         shown_at = {
-            PHONE_SCREEN[0]: {"dropped", "cut", "folded", "cut-in-a-kept-gutter"},
-            1280: {"folded", "cut-in-a-kept-gutter"},
+            PHONE_SCREEN[0]: {"dropped", "cut", "folded", "cut-in-a-kept-gutter", "line-cut"},
+            1280: {"folded", "cut-in-a-kept-gutter", "line-cut"},
         }
         for width, expected in shown_at.items():
             with self.subTest(width=width):

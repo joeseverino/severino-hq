@@ -4,7 +4,9 @@ How the identity provider's grant, the default and the rules combine is
 docs/Security.md#what-hq-enforces. For an agent, anything destructive (a
 deletion, a stop) waits for a person by default: a caller that may have read
 untrusted text is the one whose deletes and stops most deserve a second look.
-Operators are never subject to policy.
+A call its handler holds for a person every time (a procedure that changes a
+machine) waits whatever the agent's rule, and no rule may allow it. Operators
+are never subject to policy.
 """
 
 from dataclasses import dataclass
@@ -18,7 +20,7 @@ from hq.platform.core.audit import record_event
 from hq.platform.core.models import AgentIdentity, AuditLog
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
-from .approvals import DESTRUCTIVE_EFFECT, READ_EFFECT, is_destructive, waits
+from .approvals import DESTRUCTIVE_EFFECT, READ_EFFECT, is_destructive, no_rule_allows, waits
 from .command_fields import Describe
 from .default_hold import held_by_default, may_be_held_by_default, needs_approval
 from .doors import interface_label
@@ -99,8 +101,9 @@ def set_rule(
 ) -> bool:
     """Set an agent's rule, or clear it with None. Returns whether anything changed.
 
-    Refuses approval on a read, and an agent rule for a capability its grant
-    does not carry or its sign-in could never use. Who may set one at all is
+    Refuses approval on a read, allowing a call that always waits for a
+    person, and an agent rule for a capability its grant does not carry or its
+    sign-in could never use. Who may set one at all is
     ``GOVERN_AGENTS``'s, which ``Principal.require`` holds to a person. The rule
     and its audit row commit together.
     """
@@ -111,6 +114,8 @@ def set_rule(
         raise ValueError(f"Only a person in the browser can {spec.title.lower()}, so no agent has a rule for it.")
     if rule == Rule.APPROVE and spec.effect == READ_EFFECT:
         raise ValueError(f"{spec.title} only reads. It can be allowed or blocked, not held for approval.")
+    if rule == Rule.ALLOW and no_rule_allows(spec):
+        raise ValueError(f"{spec.title} waits for a person every time an agent asks, so no agent can be allowed it.")
     if rule is not None:
         identity = identity_of(subject).first()
         if identity is None:
@@ -367,7 +372,9 @@ def _cell(spec, column: Column, current, grants, group: str) -> PolicyCell:
         return PolicyCell(field, column.label, None, (), "Not granted")
     if not _usable_by(spec, column.identity):
         return PolicyCell(field, column.label, None, (), "Needs a person")
-    options = [("", "Default"), (Rule.ALLOW, RULE_LABELS[Rule.ALLOW])]
+    options = [("", "Default")]
+    if not no_rule_allows(spec):
+        options.append((Rule.ALLOW, RULE_LABELS[Rule.ALLOW]))
     if spec.effect != READ_EFFECT:
         options.append((Rule.APPROVE, RULE_LABELS[Rule.APPROVE]))
     options.append((Rule.DENY, RULE_LABELS[Rule.DENY]))

@@ -216,6 +216,42 @@
 /* A line that is a label, not prose: cut with an ellipsis, whole on hover. */
 .one-line { white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 
+/* A run of short parts in a cell (`line_list`, table_tags): its first parts
+   size their column and wrap with it as words do, and the rest ask for
+   nothing, filling what is left of the line those end and showing only that
+   line, so a part shows wherever its line has room, no column is wider for
+   it, and a row opens only for what is cut (tables.js marks it). A part
+   past that room is cut whole, never sliced: an empty part a line tall
+   opens the rest's first line, so a part wider than the room goes to the
+   next, a line further down than a part may stand past its own line (a
+   chip's padding), below the clip. That part has no baseline, so it and the
+   rest are set by their tops. An open row gives the rest lines of its own.
+   Without script nothing opens a row, so there the rest wraps on lines
+   below the first parts, still asking for nothing. */
+.line-list { display: flex; flex-wrap: wrap; align-items: baseline; row-gap: var(--space-1); }
+.line-rest { display: flex; align-self: start; flex: 1 1 100%; inline-size: 0; min-inline-size: 0; }
+.line-run { display: flex; flex-wrap: wrap; align-items: baseline; flex: 1 1 auto; min-inline-size: 0; row-gap: var(--space-1); }
+.line-run::before { content: ""; align-self: start; block-size: 1lh; }
+/* In a run with separators (page.css) the separator before the rest goes
+   with its first part, so a rest that shows none ends the run on a part:
+   it stands in the room the rest takes back from the gap before it, inside
+   the clip; the empty part takes no gap. */
+.dot-list > .line-rest { margin-inline-start: calc(-1 * var(--dot-gap)); }
+.dot-list > .line-rest::before { content: none; }
+.line-run.dot-list { padding-inline-start: var(--dot-gap); }
+.line-run.dot-list::before { margin-inline-end: calc(-1 * var(--dot-gap)); }
+.line-run.dot-list > :first-child::before {
+  content: "·" / ""; display: inline-block; inline-size: var(--dot-gap); margin-inline-start: calc(-1 * var(--dot-gap));
+  text-align: center; color: var(--muted-2); text-decoration: none;
+}
+@media (scripting: enabled) {
+  .data-table > tbody > tr.is-expanded > td .line-rest { flex: 1 1 auto; inline-size: auto; }
+  .data-table > tbody > tr:not(.is-expanded, .row-detail) > td .line-rest { flex: 1 1 0; inline-size: 0; max-block-size: calc(1lh + .5em); overflow: clip; }
+  .data-table > tbody > tr:not(.is-expanded, .row-detail) > td .line-run { flex: 1 1 0; row-gap: 1lh; overflow-x: clip; }
+  /* A link the clip hides shows them all once the keyboard reaches it. */
+  .data-table > tbody > tr:not(.is-expanded, .row-detail) > td .line-rest:focus-within { max-block-size: none; overflow: visible; }
+}
+
 /* An open row lifts every cut in it, and in the line beneath it, at once;
    the cuts it lifts are each specific to a column, so this one outranks
    them on purpose. A panel a cell shows (a popover, drawn over the page) is

@@ -109,4 +109,21 @@ ENTRIES = {
         '<td>{% status "Online" tone="good" %}</td></tr>{% endfor %}</tbody></table>{% endtable_region %}{% endsection %}',
         {"rows": ((1, "example-01"), (2, "example-02"), (None, "example-03"))},
     ),
+    # A run of parts in a cell ({% line_list %}): four that all show, two,
+    # and nine. With script the parts past the first three show as far as
+    # their line has room and the row opens for the rest; without it, as
+    # here, the rest wrap on lines of their own beneath the first three.
+    "table/line-list": Entry(
+        '{% section "Example stacks" %}{% table_region "Example stacks" %}<table class="data-table"><thead><tr>'
+        '{% table_heading "Name" "identifier" gutter=True %}{% table_heading "Parts" %}</tr></thead><tbody>'
+        "{% for row in rows %}<tr><td>{{ row.0 }}</td><td>{% line_list row.1 as part %}{% status part chip=True %}"
+        "{% endline_list %}</td></tr>{% endfor %}</tbody></table>{% endtable_region %}{% endsection %}",
+        {
+            "rows": (
+                ("example-01", ("Debian", "systemd", "Caddy", "Tailscale")),
+                ("example-02", ("Django", "SQLite")),
+                ("example-03", tuple(f"example-part-{at:02}" for at in range(1, 10))),
+            )
+        },
+    ),
 }

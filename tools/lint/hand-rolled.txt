@@ -20,7 +20,6 @@ control_plane/_tool_dns.html lookup-grid
 control_plane/_whatif_result.html verdict
 control_plane/connection_list.html connection-ability-all
 control_plane/connection_list.html connection-ability-list
-control_plane/connection_list.html connection-ability-more
 control_plane/connection_list.html connection-authority
 control_plane/connection_list.html connection-authority-*
 control_plane/connection_list.html connection-depends
@@ -28,7 +27,6 @@ control_plane/connection_list.html connection-more-scope
 control_plane/connection_list.html connection-next
 control_plane/connection_list.html connection-problems
 control_plane/connection_list.html connection-reach
-control_plane/connection_list.html connection-read-list
 control_plane/connection_list.html connection-row-meta
 control_plane/connection_list.html connection-sight-list
 control_plane/connection_list.html connection-sight-refusal

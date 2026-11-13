@@ -479,8 +479,8 @@ their `src` directories and `HQ_LOCAL_PLUGINS` the manifests they declare.
 mise writes the file and keeps every other value in it, and
 `mise doctor project` then checks that the set imports.
 
-A worktree Claude Code makes gets a copy of the file through the gitignored
-`.worktreeinclude`, so it composes the extensions' main checkouts. A value of
+A worktree Claude Code makes gets a copy of the file, and of mypy's cache,
+through `.worktreeinclude`, so it composes the extensions' main checkouts. A value of
 either already in the environment wins, so an extension worktree is composed
 by naming its sources on the command line, one `src` per package, joined by
 `:`, and another set by naming its manifests:

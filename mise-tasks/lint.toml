@@ -534,6 +534,8 @@ arg "<shell>" help="The shell to run the suite under, which the suite finds in S
 arg "<suite>" help="The suite, tests/shell/test-*.sh"
 '''
 # A suite matches the words the tools it runs print, and mise colors them
-# under GitHub Actions even with no terminal.
+# under GitHub Actions even with no terminal. Every mise a suite starts reads
+# its project's config alone: under fast, the config environment is fast's,
+# whose summary output keeps a passing run silent.
 env = { NO_COLOR = "1" }
-run = 'if [ "$usage_shell" = - ]; then exec "$usage_suite"; fi; SHELL_UNDER_TEST="$usage_shell" exec "$usage_shell" "$usage_suite"'
+run = 'unset MISE_ENV; if [ "$usage_shell" = - ]; then exec "$usage_suite"; fi; SHELL_UNDER_TEST="$usage_shell" exec "$usage_shell" "$usage_suite"'

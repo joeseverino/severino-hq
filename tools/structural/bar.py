@@ -8,10 +8,12 @@ The graph is the codebase-memory-mcp release mise.toml pins, since the
 answer's shape is that release's; an answer the classifier refuses fails too.
 The pairs are kept under var/structural by a digest of everything they depend
 on (``inputs_key``), so a run on inputs already read answers without the graph.
+The graph's own store stays there too, so the graph reindexes only what changed.
 """
 
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
 import os
@@ -43,8 +45,8 @@ HEADER = (
 
 def cli(store: Path, tool: str, arguments: dict) -> dict:
     # The graph's store and daemon directory are the gate's own, so it meets no
-    # daemon an editor started from another build and leaves nothing behind.
-    env = os.environ | {"CBM_CACHE_DIR": str(store / "cache"), "CBM_RUNTIME_DIR": str(store / "run")}
+    # daemon an editor started from another build and no index of another tree.
+    env = os.environ | {"CBM_CACHE_DIR": str(CACHE / "graph"), "CBM_RUNTIME_DIR": str(store / "run")}
     # The tool says why it could not answer; without that this fails silently.
     answer = subprocess.run(
         [TOOL, "cli", "--json", tool],
@@ -120,15 +122,24 @@ def main(asked: Usage) -> int:
 
 def measure() -> dict[str, str | None] | None:
     """Every pair outside tests with what explains it, from a graph of this
-    tree indexed afresh; None when the classifier refuses the graph."""
+    tree; None when the classifier refuses the graph."""
 
     project = "structural-bar"
-    # Under /tmp: the daemon's socket lives in the store, and a socket's path
-    # must fit 104 bytes, which macOS's per-user temporary directory overruns.
-    with tempfile.TemporaryDirectory(prefix="cbm-", dir="/tmp") as scratch:
+    # The graph's indexes outlive the run, so the graph's own incremental
+    # route reindexes only the files whose size, mtime or content moved, and
+    # rebuilds whole on a store it cannot trust or a new index format. A lock
+    # keeps a second run in this checkout from writing the store at once.
+    indexes = CACHE / "graph"
+    indexes.mkdir(mode=0o700, parents=True, exist_ok=True)
+    # Under /tmp: the daemon's socket lives in its run directory, and a socket's
+    # path must fit 104 bytes, which macOS's per-user temporary directory overruns.
+    with (
+        (indexes / ".lock").open("w") as held,
+        tempfile.TemporaryDirectory(prefix="cbm-", dir="/tmp") as scratch,
+    ):
+        fcntl.flock(held, fcntl.LOCK_EX)
         store = Path(scratch)
-        for part in ("cache", "run"):
-            (store / part).mkdir(mode=0o700)
+        (store / "run").mkdir(mode=0o700)
         cli(store, "index_repository", {"repo_path": str(ROOT), "mode": "full", "name": project})
         try:
             return similar_pairs(ROOT, build_inspector(store), graph_pages(store, project))

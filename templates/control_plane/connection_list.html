@@ -60,24 +60,14 @@ part's heading shows only when there is more than one.
             {% endcomment %}
             <td>
               {% comment %}
-              Three, then "+N more": a controller credential reads a dozen
-              kinds, and a dozen stacked would make the row a dozen lines tall.
-              Opened, the rest run beneath the row across its width, from the
-              same list, and so does what the credential lets HQ change.
+              As many as the line has room for: a controller credential reads a
+              dozen kinds, and a dozen stacked would make the row a dozen lines
+              tall. Opened, the row shows them all, and what the credential
+              lets HQ change runs beneath it.
               {% endcomment %}
               {% with reads=row.reads %}
               {% if reads %}
-                {% with folded=reads|length|add:"-4" %}
-                <ul class="connection-ability-list connection-read-list">
-                  {% for read in reads %}{% if forloop.counter <= 3 or folded <= 0 %}{% include "control_plane/_connection_read.html" %}{% endif %}{% endfor %}
-                </ul>
-                {% if folded > 0 %}
-                  <span class="connection-ability-more cell-part row-less">+{{ reads|length|add:"-3"|measured:"more" }}</span>
-                  <ul class="connection-ability-list connection-read-list row-below" data-label="Also reads">
-                    {% for read in reads|slice:"3:" %}{% include "control_plane/_connection_read.html" %}{% endfor %}
-                  </ul>
-                {% endif %}
-                {% endwith %}
+                {% line_list reads as read list="connection-ability-list connection-read-list" %}{% include "control_plane/_connection_read.html" %}{% endline_list %}
               {% elif row.changes_only %}
                 <span class="muted">Changes only:</span>
                 <ul class="connection-ability-list connection-ability-all">
@@ -106,8 +96,8 @@ part's heading shows only when there is more than one.
               {% endcomment %}
               <span class="connection-depends">
               {% with targets=connection.instance.targets dependencies=connection.instance.dependencies %}
-              {% if targets %}<ul class="dot-list">{% for link in targets %}{% if forloop.counter == 4 and forloop.length > 4 %}<li class="muted row-less">+{{ forloop.length|add:"-3"|breakable }}</li>{% endif %}<li{% if forloop.counter > 3 and forloop.length > 4 %} class="row-more"{% endif %}>{% entity link|declared_link %}</li>{% endfor %}</ul>{% endif %}
-              {% if dependencies %}<ul class="dot-list">{% if dependencies|length > 4 %}<li class="muted row-less">{{ dependencies|length|counted:"record" }}</li>{% endif %}{% for link in dependencies %}<li{% if forloop.length > 4 %} class="row-more"{% endif %}>{% entity link|declared_link code=True %}</li>{% endfor %}</ul>{% endif %}
+              {% line_list targets as link list="dot-list" %}<li>{% entity link|declared_link %}</li>{% endline_list %}
+              {% line_list dependencies as link list="dot-list" %}<li>{% entity link|declared_link code=True %}</li>{% endline_list %}
               {% if not targets and not dependencies %}{% empty_value %}{% endif %}
               {% endwith %}
               </span>

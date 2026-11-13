@@ -1,17 +1,25 @@
 {% comment %}
-A filter bar, drawn by {% filter_bar %}: {% filter_bar filtered=narrowed clear=every_url %}<select name="kind">...</select>{% summary %}3 of 12{% endfilter_bar %}.
-The page's controls come first, a search taking what its row leaves and
-every other control as wide as what it says (a select its longest option);
-then the
-one button that sends them (verb, Filter unless told), Clear filters back to
-clear while anything narrows (filtered), and the summary, a count of what
-shows, at the row's end. It is a query (method get), sent to action when it
-asks another page; css a class of the page's beside the part's; each data_*
-option a data- attribute, as the table toolbar's data-table-toolbar is
-(filter_tags.py).
+A filter bar, drawn by {% filter_bar filtered=narrowed clear=every_url shown=3 total=12 %}{% select "kind" kinds every="kind" %}{% summary %}...{% endfilter_bar %}.
+The page's controls, then the one button that sends them (verb, Filter
+unless told) and Clear filters back to clear while anything narrows
+(filtered), then the summary: shown of total, what the page holds back
+(held, each counted) with the one link that shows it (more), and the
+page's facts about what shows. It is a query (method get), sent to action
+when it asks another page; css a class of the page's beside the part's;
+each data_* option a data- attribute, as the table toolbar's
+data-table-toolbar is (filter_tags.py). How it lays out and what each
+option says: docs/Design.md, "One filter bar".
 {% endcomment %}<search><form class="{{ classes }}" method="get"{% if action %} action="{{ action }}"{% endif %}{{ data }}>
-  {{ content|safe }}
-  <button class="btn" type="submit">{{ verb|breakable }}</button>
-  {% if clear %}<a class="btn ghost" href="{{ clear }}">Clear filters</a>{% endif %}
-  {% if summary %}<p class="filter-bar-summary" role="status">{{ summary|safe }}</p>{% endif %}
+  <div class="filter-bar-query">
+    <div class="filter-bar-controls">{{ content|safe }}</div>
+    <div class="filter-bar-send">
+      <button class="btn" type="submit">{{ verb|breakable }}</button>
+      {% if clear %}<a class="btn ghost" href="{{ clear }}">Clear filters</a>{% endif %}
+    </div>
+  </div>
+  {% if shown or summary %}<p class="filter-bar-summary" role="status">
+    {% if shown %}<span data-filter-bar-shown>{{ shown|breakable }}</span> of {{ total|measured:"shown" }}.{% endif %}
+    {% if held %}Held back: {% for phrase in held %}{% if forloop.last %}{{ phrase|breakable:"." }}{% else %}{{ phrase|breakable:forloop }}{% endif %} {% endfor %}<a href="{{ more }}">Show them</a>{% endif %}
+    {{ summary|safe }}
+  </p>{% endif %}
 </form></search>

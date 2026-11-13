@@ -14,10 +14,9 @@ hqFragment.each("[data-topology]", (workspace) => {
   const edges = [...(ledger?.querySelectorAll("[data-topology-edge]") || [])];
   const search = workspace.querySelector("[data-topology-search]");
   const kindControls = [...workspace.querySelectorAll('[data-toggle-set="kind"] input')];
-  const status = workspace.querySelector("[data-topology-status]");
+  // The bar's count says its own words; this rewrites only the number shown.
+  const shown = workspace.querySelector("[data-filter-bar-shown]");
   const reset = workspace.querySelector("[data-topology-reset]");
-  // The total counts every card, including those hidden until asked for.
-  const total = Number(workspace.dataset.topologyTotal) || nodes.length;
   let focused = nodes.some((node) => node.dataset.topologyNode === workspace.dataset.focus)
     ? workspace.dataset.focus : "";
 
@@ -74,9 +73,7 @@ hqFragment.each("[data-topology]", (workspace) => {
     }
   };
 
-  // `said`: whether the status line speaks for the view. The server draws it
-  // for the page as it loads, so the first pass leaves it standing.
-  const render = ({ said = true } = {}) => {
+  const render = () => {
     const selected = nodes.find((node) => node.dataset.topologyNode === focused);
     const related = new Set(selected?.dataset.topologyNeighbors.split(" ").filter(Boolean) || []);
     workspace.classList.toggle("has-focus", Boolean(selected));
@@ -110,12 +107,7 @@ hqFragment.each("[data-topology]", (workspace) => {
       edge.toggleAttribute("data-emphasized", touchesFocus);
     });
     if (ledger) ledger.hidden = edges.length > 0 && edges.every((edge) => edge.hidden);
-    if (status && said) {
-      const visible = nodes.filter((node) => !node.hidden).length;
-      status.textContent = selected
-        ? `${selected.querySelector("strong")?.textContent || "Selected"}: ${related.size} direct relationship${related.size === 1 ? "" : "s"}.`
-        : `${visible} of ${total} shown.`;
-    }
+    if (shown) shown.textContent = nodes.filter((node) => !node.hidden).length.toLocaleString("en-US");
   };
 
   // Isolating a node shrinks the lanes under whatever the page was scrolled
@@ -184,7 +176,7 @@ hqFragment.each("[data-topology]", (workspace) => {
       }
     }
   });
-  render({ said: false });
+  render();
   if (focused) {
     showDetail(Boolean(detail?.childElementCount));
     map?.scrollTo({ top: 0, behavior: "auto" });

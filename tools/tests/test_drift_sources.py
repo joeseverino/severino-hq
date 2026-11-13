@@ -8,6 +8,7 @@ import os
 import subprocess
 import tempfile
 from collections.abc import Iterable, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path, PurePath
 from typing import Any, override
 
@@ -82,7 +83,10 @@ class DriftSourcesTests(SimpleTestCase):
     def setUpClass(cls) -> None:
         super().setUpClass()
         cls.tasks = {name: task for name, task in mise_tasks().items() if name.startswith(DRIFT)}
-        cls.runs = {name: reads(name) for name in cls.tasks}
+        # Side by side: each run's outcome and reads stay its own, and the
+        # whole takes as long as the slowest gate rather than their sum.
+        with ThreadPoolExecutor(max_workers=len(cls.tasks) or 1) as pool:
+            cls.runs = dict(zip(cls.tasks, pool.map(reads, cls.tasks), strict=True))
 
     def test_each_drift_gate_names_every_file_it_reads_in_its_sources(self) -> None:
         self.assertTrue(self.tasks, "no task is named lint:drift-*, so this holds nothing")

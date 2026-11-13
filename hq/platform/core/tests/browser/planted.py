@@ -506,6 +506,26 @@ _LEFT_BEHIND = _TABLE.format('on <span style="display: inline-block">example-nam
 _CAPS = "planted/caps"
 _CAPPED = '<div class="section-flow"><section style="max-inline-size: 12rem"><p>Example</p></section></div>'
 
+# A run of parts whose rest asks its column for nothing and shows one line
+# (`line_list`, written out so it stands without the stylesheet): one held
+# short of the room its cell has by a box around it, which is cut beside
+# room, and one in a cell it fills, which is cut for want of room.
+_RESTS = "planted/rests"
+_REST = (
+    '<span style="display: flex; flex-wrap: wrap; align-items: baseline; {}">'
+    '<span class="tag">{}-01</span><span style="display: flex; flex-wrap: wrap; align-items: baseline; align-self: start; '
+    'flex: 1 1 0; inline-size: 0; min-inline-size: 0; max-block-size: 1lh; overflow: clip">'
+    '<span style="align-self: start; block-size: 1lh"></span>'
+    + "".join(f'<span class="tag">{{}}-{at:02}</span>' for at in range(2, 7))
+    + "</span></span>"
+)
+_RESTED = (
+    '<div class="table-scroll"><table class="data-table"><tbody><tr><td>Example</td><td>'
+    + _REST.format("max-inline-size: 9rem", *["example-capped"] * 6)
+    + '</td></tr></tbody></table></div><div class="table-scroll" style="inline-size: 14rem"><table class="data-table">'
+    "<tbody><tr><td>" + _REST.format("", *["example-full"] * 6) + "</td></tr></tbody></table></div>"
+)
+
 # Who a layout shift is charged to, each page a part that one shift moves
 # (`example-moved`) by its margin before it is removed or kept: a vendored
 # part moved from inside its box to above it, as a viewer's skeleton is; one
@@ -556,6 +576,7 @@ class PlantedBrowserTests(LayoutBrowserTests):
             _LIFTED: probe(_OUTRANKED),
             _LEFT: probe(_LEFT_BEHIND),
             _CAPS: probe(_CAPPED),
+            _RESTS: probe(_RESTED),
             **{name: probe(markup) for name, markup in _SHIFTS.items()},
         }
 
@@ -598,6 +619,11 @@ class PlantedBrowserTests(LayoutBrowserTests):
     def test_a_flow_member_that_caps_its_width_leaves_its_row_short(self):
         found = self.found(_CAPS, Plant("")).get("flows share their rows", [])
         self.assertTrue([said for said in found if "caps its width" in said], found)
+
+    def test_a_rest_that_asks_for_nothing_is_cut_beside_its_own_cell_s_room_only(self):
+        found = self.found(_RESTS, Plant("")).get("cut beside room", [])
+        self.assertTrue([said for said in found if '"example-capped' in said], found)
+        self.assertFalse([said for said in found if '"example-full' in said], found)
 
     def shifted(self, name, *, removed, given=(SELECTORS["vendored"], CLS_LIMIT)):
         """What the layout shift check finds once ``name``'s part has moved up

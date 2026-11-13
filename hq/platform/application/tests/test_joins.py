@@ -555,7 +555,7 @@ class TopologyEstateTests(TestCase):
         user = get_user_model().objects.create_user("operator", password="x" * 20)
         self.client.force_login(user)
         with offering(self.finance, alone=True):
-            response = self.client.get(reverse("control_plane:topology"), {"all": 1})
+            response = self.client.get(reverse("control_plane:topology"), {"lens": "everything"})
 
         kinds = [group["kind"] for group in response.context["topology_groups"]]
         self.assertLess(kinds.index("machine"), kinds.index("target"))

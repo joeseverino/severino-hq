@@ -150,18 +150,28 @@ ENTRIES = {
         {"form": _ExampleNaming(data={})},
         premise=(_ONE_QUESTION, _QUESTION_PARTS),
     ),
-    # The filter bar ({% filter_bar %}) narrowed, with its way back and its
-    # count; with one choice and nothing narrowed; and with labeled choices
-    # asking another page, its verb its own. A new option of the tag comes
-    # with an entry here (test_filter_tags).
+    # The filter bar ({% filter_bar %}) narrowed, with its way back, its
+    # count and a fact about what shows; holding a part back, with the one
+    # link that shows it; with one choice and nothing narrowed; and with
+    # labeled choices asking another page, its verb its own. A new option of
+    # the tag comes with an entry here (test_filter_tags).
     "form/filter-bar": Entry(
-        '{% filter_bar filtered=True clear="#" %}'
+        '{% filter_bar filtered=True clear="#" shown=3 total=12 %}'
         '<input type="search" name="q" value="example" placeholder="Filter example records" '
         'aria-label="Filter example records">'
-        '<select name="state" aria-label="Example state"><option value="">Any example state</option>'
-        '<option value="on" selected>Online</option></select>'
-        '<select name="kind" aria-label="Example kind"><option value="">All example kinds</option></select>'
-        "{% summary %}<strong>3 of 12 example records</strong>, 1 needs a look{% endfilter_bar %}"
+        '{% select "state" states chosen="on" label="Example state" every="example state" %}'
+        '{% select "kind" kinds label="Example kind" every="example kind" %}'
+        "{% summary %}1 needs a look.{% endfilter_bar %}",
+        {"states": (("on", "Online"), ("off", "Offline")), "kinds": (("host", "Example host"),)},
+    ),
+    "form/filter-bar-held": Entry(
+        '{% filter_bar shown=93 total=170 held=held more="#" %}'
+        '<input type="search" placeholder="Find an example" aria-label="Find an example">'
+        '{% select "view" views label="Example view" %}{% endfilter_bar %}',
+        {
+            "views": (("", "Example main view"), ("everything", "Everything")),
+            "held": ("30 example readings", "20 example lookups", "27 example records with no links"),
+        },
     ),
     "form/filter-bar-one": Entry(
         '{% filter_bar %}<select name="year" aria-label="Example year"><option>2026</option>'
@@ -179,15 +189,35 @@ ENTRIES = {
     # to wrap in a narrow bar, and a control a script shows only once it has
     # something to act on.
     "form/filter-bar-toggles": Entry(
-        '{% filter_bar %}<input type="search" placeholder="Find an example" aria-label="Find an example">'
+        '{% filter_bar shown=12 total=12 %}<input type="search" placeholder="Find an example" aria-label="Find an example">'
         '{% include "partials/_toggle_set.html" with legend="Example kinds" set="kind" name="kind" toggles=toggles only %}'
         '<button class="btn ghost compact" type="button" hidden>Example clear</button>'
-        "{% summary %}12 of 12 shown.{% endfilter_bar %}",
+        "{% endfilter_bar %}",
         {
             "toggles": [
                 {"value": f"example-{number}", "label": f"Example kind {number}", "checked": number % 3 != 0}
                 for number in range(1, 7)
             ]
+        },
+    ),
+    # A list's table toolbar with several toggles and a sort, as a list page
+    # draws it: its controls wrap in a narrow bar, and the button that sends
+    # them stays beside the last of them.
+    "form/filter-bar-sorted": Entry(
+        '{% include "partials/_table_toolbar.html" %}',
+        {
+            "table": {
+                "query": "",
+                "search_placeholder": "Search example projects",
+                "filters": (),
+                "toggles": tuple(
+                    {"name": f"example_{number}", "label": f"Example toggle {number}", "selected": number == 1}
+                    for number in range(1, 5)
+                ),
+                "sorts": ({"value": "name", "label": "Name"}, {"value": "updated", "label": "Last updated"}),
+                "selected_sort": "name",
+                "active_count": 0,
+            }
         },
     ),
     # A file field that takes a drop: as it is first drawn, and sent with

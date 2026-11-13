@@ -433,3 +433,59 @@ def row_state(*, emphasized: bool = False) -> str:
     yet read, whose row is tinted and whose links weigh more."""
 
     return mark_safe(" data-emphasized") if emphasized else ""
+
+
+# How many of a line list's parts size its column and wrap with it, as any
+# value's words do; the rest show only as far as the line they end has room.
+LINE_LEAD = 3
+
+
+class LineListNode(template.Node):
+    def __init__(self, nodelist: Any, values: Any, name: str, list_class: Any) -> None:
+        self.nodelist = nodelist
+        self.values = values
+        self.name = name
+        self.list_class = list_class
+
+    def _parts(self, context: Any, values: list[Any]) -> str:
+        drawn = []
+        for value in values:
+            with context.push(**{self.name: value}):
+                drawn.append(self.nodelist.render(context))
+        return "".join(drawn)
+
+    def render(self, context: Any) -> str:
+        values = [value for value in self.values.resolve(context) or () if value not in (None, "")]
+        if not values:
+            return ""
+        css = str(self.list_class.resolve(context)) if self.list_class else ""
+        lead, rest = values[:LINE_LEAD], values[LINE_LEAD:]
+        # Parts already rendered and escaped by their own template.
+        parts = mark_safe(self._parts(context, lead))  # noqa: S308 - rendered and escaped already
+        tail = mark_safe(self._parts(context, rest))  # noqa: S308 - rendered and escaped already
+        # The rest is the box that clips; its run lays the parts out.
+        if css:
+            more = format_html('<li class="line-rest"><ul class="{} line-run">{}</ul></li>', css, tail) if rest else ""
+            return format_html('<ul class="{} line-list">{}{}</ul>', css, parts, more)
+        more = format_html('<span class="line-rest"><span class="line-run">{}</span></span>', tail) if rest else ""
+        return format_html('<span class="line-list">{}{}</span>', parts, more)
+
+
+@register.tag("line_list")
+def line_list(parser: Any, token: Any) -> LineListNode:
+    """``{% line_list row.tech_list as name %}{% status name chip=True %}{% endline_list %}``:
+    a run of short parts in a cell, each drawn by the body, as many on its
+    line as the line has room for; what does not fit waits for the row to
+    open, and only then does the row offer to (tables.js measures the cut).
+    ``list="dot-list"`` draws it as that list, the body drawing each ``li``.
+    No count decides what shows: the layout does (docs/Design.md)."""
+
+    bits = token.split_contents()
+    if len(bits) not in (4, 5) or bits[2] != "as":
+        raise template.TemplateSyntaxError('line_list takes values "as" name, then optionally list="<class>"')
+    options = token_kwargs(bits[4:], parser)
+    if len(options) != len(bits[4:]) or set(options) - {"list"}:
+        raise template.TemplateSyntaxError('line_list takes one option, list="<class>"')
+    nodelist = parser.parse(("endline_list",))
+    parser.delete_first_token()
+    return LineListNode(nodelist, parser.compile_filter(bits[1]), bits[3], options.get("list"))

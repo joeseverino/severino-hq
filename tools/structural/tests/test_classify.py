@@ -65,10 +65,15 @@ class FingerprintTests(SimpleTestCase):
         self.assertEqual(list(module.near_pairs(far)), [])
 
     def test_banding_finds_a_pair_whose_differing_slots_spoil_the_most_bands(self):
-        """Nine differing slots, one in each of nine bands: 23 bands still match whole."""
+        """Nine differing slots, as far apart as they fit, at every offset: each
+        lands in a band of its own wherever the bands are cut, and the pair is
+        still found."""
 
-        spread = "".join("f" * 8 if i % 2 == 0 and i < 18 else "0" * 8 for i in range(64))
-        self.assertEqual(len(list(module.near_pairs([unit("a.py", "a"), unit("b.py", "b", fp=spread)]))), 1)
+        for offset in range(7):
+            differing = {offset + 7 * step for step in range(9)}
+            spread = "".join("f" * 8 if i in differing else "0" * 8 for i in range(64))
+            with self.subTest(offset=offset):
+                self.assertEqual(len(list(module.near_pairs([unit("a.py", "a"), unit("b.py", "b", fp=spread)]))), 1)
 
     def test_a_test_by_its_path_or_its_name_is_left_out(self):
         for path, name in (("pkg/tests/test_a.py", "helper"), ("demo/check.py", "test_pages"), ("x_test.go", "f")):

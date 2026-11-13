@@ -737,7 +737,8 @@ nothing leaked.
       shared static bearer; without the provider configured, MCP is off.
 - [ ] A destructive capability called by an agent, or its change to public
       DNS, waits for an operator's approval unless a rule explicitly allows
-      it for that agent or surface.
+      it for that agent or surface. An automation procedure that changes a
+      machine waits for one every time an agent asks, and no rule allows it.
 - [ ] The app environment's source of truth is the 1Password app-environment
       item. It is rendered to the root-only noswap tmpfs at
       `/run/severino-hq-secrets/web/`, never to the runner-writable checkout,

@@ -96,7 +96,11 @@ PROJECTS = (
     ),
 )
 # What each project is built with, where its operator wrote it down.
-STACKS = {"hq": "Django, SQLite, Go", "photo-library": "Immich, PostgreSQL"}
+STACKS = {
+    "hq": "Django, SQLite, Go",
+    "photo-library": "Immich, PostgreSQL",
+    "tailnet-hardening": "Debian, systemd, Caddy, Tailscale",
+}
 # Slug, title, the project it writes up, how long ago it was published.
 WRITEUPS = (
     ("why-a-control-panel", "Why the homelab has a control panel", "hq", 40),

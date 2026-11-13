@@ -138,7 +138,7 @@ class TopologyPageTests(TestCase):
                 spec={"zone": "example.com", "name": "example.com", "record_type": "CAA", "content": content},
             )
 
-        response = self.page(all="1")
+        response = self.page(lens="everything")
 
         def values(node):
             return [
@@ -162,7 +162,7 @@ class TopologyPageTests(TestCase):
     def test_a_node_states_each_edge_from_where_it_stands(self):
         """Direction is the half of an edge a neighbor list throws away."""
 
-        response = self.page(all=1)
+        response = self.page(lens="everything")
 
         ability_id = "ability:infrastructure.controllers:adguard.rewrite"
         relations = {
@@ -231,31 +231,31 @@ class TopologyPageTests(TestCase):
         from ..topology_lenses import QUIET_KINDS
 
         shown = self.page()
-        everything = self.page(all=1)
+        everything = self.page(lens="everything")
 
         def cards(response):
             return [item for group in response.context["topology_groups"] for item in group["items"]]
 
         self.assertTrue(all(item["degree"] and item["node"].kind not in QUIET_KINDS for item in cards(shown)))
-        left_out = shown.context["topology_left_out"]
-        self.assertGreater(left_out, 0)
-        self.assertEqual(len(cards(everything)), len(cards(shown)) + left_out)
-        # "N of M shown" is out of every card, the ones left out included.
+        self.assertTrue(shown.context["topology_held"])
+        # "N of M shown" is out of every card, the ones held back included.
+        self.assertLess(len(cards(shown)), len(cards(everything)))
         self.assertEqual(shown.context["topology_total"], len(cards(everything)))
+        self.assertTrue(select(shown, "data-filter-bar-shown"))
         self.assertEqual(shown.context["topology_shown"], len(cards(shown)))
-        self.assertTrue(select(shown, "data-topology-total", str(len(cards(everything)))))
 
     def test_a_view_shows_everything_it_holds(self):
         from ..topology_lenses import topology_lenses
 
         for lens in topology_lenses():
             with self.subTest(lens=lens.name):
-                self.assertEqual(self.page(lens=lens.name).context["topology_left_out"], 0)
+                context = self.page(lens=lens.name).context
+                self.assertEqual((context["topology_held"], context["topology_shown"]), ((), context["topology_total"]))
 
     def test_a_node_nothing_reaches_says_so_rather_than_drawing_an_empty_box(self):
         alone = next(
             item["node"].id
-            for group in self.page(all=1).context["topology_groups"]
+            for group in self.page(lens="everything").context["topology_groups"]
             for item in group["items"]
             if not item["degree"]
         )
@@ -296,7 +296,7 @@ class FocusedPageTests(TestCase):
         self.assertTrue(select(related, "data-topology-edge"))
 
         with host_only():
-            unfocused = self.client.get(reverse("control_plane:topology"), {"all": 1})
+            unfocused = self.client.get(reverse("control_plane:topology"), {"lens": "everything"})
         lonely = next(
             item["node"].id
             for group in unfocused.context["topology_groups"]

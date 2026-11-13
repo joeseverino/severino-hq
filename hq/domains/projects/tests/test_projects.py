@@ -227,8 +227,10 @@ class ProjectListTests(TestCase):
         page = text(response)
         self.assertIn("Example Tool tool", page)
         self.assertNotIn("Example example", page)
-        # The first three technologies, the rest behind the row's toggle.
-        self.assertIn("Go SQLite Django +2", page)
+        # Every technology is drawn, in its order; the cell's room decides how
+        # many show before the row opens.
+        self.assertIn("Go SQLite Django htmx CSS", page)
+        self.assertNotIn("+2", page)
 
     def test_every_cell_answers_its_heading(self):
         Project.objects.create(name="Example", slug="example")

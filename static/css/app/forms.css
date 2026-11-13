@@ -1,4 +1,4 @@
-/* Forms: fields and their errors, the dropzone, the modal, and what a
+/* Forms: fields and their errors, the filter bar, the dropzone, the modal, and what a
    command shows before and after it runs. */
 
 @layer components {
@@ -470,5 +470,37 @@ select.toned:not(.toned-neutral) { border-color: currentColor; }
 }
 .connection-sight-never_swept .connection-sight-state,
 .connection-sight-not_connected .connection-sight-state { color: var(--muted); }
+
+/* ── Filter bar ─────────────────────────────────────────────────── */
+
+/* One bar for every query a page asks of what it lists (partials/_filter_bar.html), a list's table toolbar among them: the controls, the one button that sends them, Clear, and the count at the row's end. */
+.filter-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4);
+  padding: var(--surface-inset, var(--space-5));
+  margin: 0 0 var(--space-6);
+}
+/* The controls wrap in a box of their own, and the button that sends them, with Clear, stands in a column beside it at the controls' last line, so it never takes a line alone. The count follows, its own margin carrying it to the row's end. */
+.filter-bar-query {
+  flex: 1 1 auto; min-width: 0;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: var(--space-4);
+}
+.filter-bar-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); min-width: 0; }
+.filter-bar-send { display: flex; align-items: center; gap: var(--space-4); }
+/* The search alone grows, taking what its line leaves: it asks first for its whole placeholder, or what is typed in it (`field-sizing`), so the controls beside it wrap before it is cut. Every other control is as wide as what it says, as a native control is. */
+.filter-bar-controls > input[type=search] { flex: 1 1 auto; field-sizing: content; min-width: 0; }
+/* A choice is as wide as its longest option, so the bar holds still as the choice changes (never `field-sizing`, which follows the option chosen), and narrower only in a bar too narrow for it. */
+.filter-bar-controls > select { max-width: 100%; min-width: 0; }
+/* A control a script shows only once it has something to act on. */
+.filter-bar-controls > [hidden] { display: none; }
+/* A set of toggles (partials/_toggle_set.html): the checkboxes in a row of their own words, wrapping between them. */
+.toggle-set {
+  display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6);
+  min-width: 0; max-width: 100%; margin: 0; padding: 0; border: 0;
+}
+.toggle-set label { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--ink-2); font-size: var(--text-xs); white-space: nowrap; }
+.toggle-set input { accent-color: var(--accent); }
+/* What the filter bar currently shows, at its far end. */
+.filter-bar-summary { margin: 0 0 0 auto; align-self: center; color: var(--muted); font-size: var(--text-sm); }
+.filter-bar-summary strong { color: var(--ink); }
 
 }

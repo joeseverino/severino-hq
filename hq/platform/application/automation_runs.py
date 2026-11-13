@@ -31,7 +31,7 @@ from .integration_specs import IDEMPOTENCY_FIELD, CapabilitySpec, CommandAbout, 
 from .record_errors import PolicyError, RecordNotFound
 from .security import Capability, Principal
 lazy from . import automation_adoption
-lazy from .approvals import ApprovalSubject, measured_by
+lazy from .approvals import ApprovalSubject, every_call, measured_by, waits_for_a_person
 lazy from .automation_adoption import AdoptedInput, AdoptedProcedure
 lazy from .cadence import ring_automation_doorbell
 lazy from .entity_links import entity_link, kind_label
@@ -447,6 +447,10 @@ def _capability(manifest: OperationManifest, generation: str) -> CapabilitySpec:
         )
 
     run = measured_by(partial(run_subject, manifest))(partial(_run, manifest))
+    if manifest.effect != "read":
+        # A procedure that changes a machine is a person's to approve each time
+        # an agent asks; a person's own click is their consent.
+        run = waits_for_a_person(every_call)(run)
     return CapabilitySpec(
         name,
         f"Run the reviewed procedure {manifest.id} on the machines named.",

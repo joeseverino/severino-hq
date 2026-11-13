@@ -134,7 +134,7 @@ class StylesheetUsageTests(SimpleTestCase):
             sorted(unused - UNDRAWN),
             [],
             "The stylesheet defines classes nothing renders: delete their rules, and a published one's "
-            "hq_sdk.template_contract.CLASSES entry, or draw it in the example extension.",
+            "hq_sdk.template_contract.CLASSES entry, or draw it in the example extension (examples/extension; tests/fixtures is not read).",
         )
         self.assertEqual(sorted(UNDRAWN - unused), [], "a class is drawn or gone: delete its UNDRAWN entry")
 

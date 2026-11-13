@@ -12,8 +12,8 @@
   {% endfor %}
 {% endswitch %}
 
-{% filter_bar verb="Search" filtered=q clear=search_cleared %}
-  <input type="search" name="q" value="{{ q }}" placeholder="Search name, email, or message…" aria-label="Search name, email, or message">
+{% filter_bar filtered=q clear=search_cleared shown=submissions|length total=status_total %}
+  <input type="search" name="q" value="{{ q }}" placeholder="Filter by name, email, or message" aria-label="Filter by name, email, or message">
   {% if selected_status %}<input type="hidden" name="status" value="{{ selected_status }}">{% endif %}
 {% endfilter_bar %}
 
@@ -21,7 +21,6 @@
 {% if not total_count and not q %}
   {% include "partials/_empty_state.html" with message="No messages yet." only %}
 {% else %}
-{% if q %}<p class="muted">{{ submissions|length|counted:"message" }} match.</p>{% endif %}
 
 {% table_region "Messages" %}
 <table class="data-table">

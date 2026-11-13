@@ -384,6 +384,7 @@ sources = [
   ".editorconfig",
   ".gitattributes",
   ".gitignore",
+  ".worktreeinclude",
   "AGENTS.md",
   "CLAUDE.md",
   "Dockerfile",

@@ -223,7 +223,7 @@ class InfrastructureViewsTests(TestCase):
 
         response = self.client.get(reverse("control_plane:findings"))
 
-        self.assertIn("kind-never-swept", [rule.name for rule in response.context["finding_rules"]])
+        self.assertIn("kind-never-swept", [name for name, _ in response.context["finding_rules"]])
         self.assertGreaterEqual(response.context["finding_counts"].get("serious", 0), 1)
         links = hrefs(response)
         self.assertIn(f"{reverse('control_plane:findings')}?rule=kind-never-swept", links)

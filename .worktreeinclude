@@ -1,0 +1,7 @@
+# The gitignored files Claude Code copies from the main checkout into each
+# worktree it makes (.gitignore syntax; a tracked file is never copied).
+# The extension set the composed suite and the dev servers load.
+mise.local.toml
+# mypy's cache: a worktree's first lint:mypy reads it and rechecks only the
+# modules whose source hash differs, so a copy from another commit stays sound.
+.mypy_cache/

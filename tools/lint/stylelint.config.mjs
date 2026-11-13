@@ -114,7 +114,7 @@ const primitives = [
     names: String.raw`(?:\.(?:data-table|row-detail|row-columns)(?![-\w])|(?<![-\w.#])(?:table|caption|thead|tbody|tfoot|tr|td|th)(?![-\w]))`,
     sheets: ["base", "cuts", "figures", "tables", "surfaces"],
     parts: [
-      "btn", "cell-line", "cell-part", "cell-whole", "cut", "external-link", "is-expanded", "kept-line", "muted",
+      "btn", "cell-line", "cell-part", "cell-whole", "cut", "external-link", "is-expanded", "kept-line", "line-rest", "line-run", "muted",
       "name-line", "narrow-more", "narrow-only", "part", "pill", "readout", "row-actions", "row-below", "row-gutter",
       "row-less", "row-more", "strut", "table-clamp", "table-scroll", "token", "visually-hidden", "whole",
     ],

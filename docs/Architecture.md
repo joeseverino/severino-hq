@@ -1344,8 +1344,11 @@ an input `pattern` Python cannot compile, and two sidecars with one id.
 Each supplied manifest is run through a command of its own,
 `automation.<id>.run` (`hq/platform/application/automation_runs.py`), so a
 grant or a rule names the procedures it allows one by one. Its effect is the
-manifest's: a read runs under `read`, a change needs `manage_infrastructure`,
-and a destructive one waits for a person when an agent asks. A run passes the
+manifest's: a read runs under `read`, and a change or a destructive one needs
+`manage_infrastructure` and waits for a person's approval every time an agent
+asks. No agent rule allows such a run (`waits_for_a_person(every_call)`), so
+the Agents page offers none, while a person's own Run in the browser is their
+consent and queues at once. A run passes the
 one capability checkpoint like any command (authority, retry key, validation,
 pause, approval) and queues an operation for the automation worker; nothing
 runs in the request, and the controller never claims one. How the worker

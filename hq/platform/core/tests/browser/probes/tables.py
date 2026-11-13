@@ -298,6 +298,9 @@ CUT_WITH_ROOM = (
 # max-content, unseen, beside it so its rules still reach it). A column
 # holding a cut gives none, and a fixed layout's columns none at all. A value
 # longer than its row's room is cut wherever it goes, so that room is none.
+# A box that asks its column for nothing (a flex item grown from no basis, as
+# the rest of a `line_list` is) never widens a column, so only its own cell's
+# room is its, and it is given that room as a box of its own size.
 CUT_BESIDE_ROOM = (
     "(unseen) => {"
     + DESCRIBE
@@ -359,7 +362,9 @@ CUT_BESIDE_ROOM = (
         }
       }
       const own = Math.max(0, inner(cell).right - end);
-      const others = [...slack].reduce((sum, [place, room]) => sum + (place === cell.cellIndex ? 0 : room), 0);
+      const asksNothing = boxes.some((box) => /flex/.test(getComputedStyle(box.parentElement).display)
+        && getComputedStyle(box).flexGrow !== '0' && parseFloat(getComputedStyle(box).flexBasis) === 0);
+      const others = asksNothing ? 0 : [...slack].reduce((sum, [place, room]) => sum + (place === cell.cellIndex ? 0 : room), 0);
       const room = own + others;
       if (room < 1) continue;
       // Each box that cuts it given the room, to see whether it then shows
@@ -368,7 +373,7 @@ CUT_BESIDE_ROOM = (
       const kept = boxes.map((box) => [box, box.style.cssText, box.getBoundingClientRect().width]);
       for (const [box, was, wide] of kept) {
         box.style.cssText = `${was}; box-sizing: border-box !important; inline-size: ${wide + room - 1}px !important; `
-          + 'min-inline-size: 0 !important; max-inline-size: none !important';
+          + `min-inline-size: 0 !important; max-inline-size: none !important${asksNothing ? '; flex: none !important' : ''}`;
       }
       const cured = !cutsIn(cell, unseen).some((cut) => cut.node === node);
       for (const [box, was] of kept) box.style.cssText = was;
@@ -592,7 +597,9 @@ COLUMNS_SHOWN = """() => [...document.querySelectorAll('thead th')]
 # row's only clipped text is for screen readers, beside a decoration hidden
 # from them, and one row's value really is cut off. In the second a row folds
 # part of a list, so the gutter is kept at every width, and a row's value is
-# cut off there too.
+# cut off there too. In the third a run of parts (`line_list`) shows them all
+# in a cell with room, and in a cell held narrow it cuts the parts its line
+# has no room for.
 ROW_TOGGLE_TABLES = """
 {% table_region "Dropping" %}<table class="data-table"><thead><tr>
 {% table_heading "Name" gutter=True %}{% table_heading "Value" %}{% table_heading "Note" drop=1 %}</tr></thead><tbody>
@@ -611,7 +618,19 @@ ROW_TOGGLE_TABLES = """
 <td><span class="tag">One</span><span class="muted row-less">+1</span><span class="row-more"><span class="tag">Two</span></span></td></tr>
 <tr data-probe="cut-in-a-kept-gutter"><td>Name</td>
 <td><div style="max-width: 40px; overflow: hidden; white-space: nowrap">a value far too long to fit</div></td></tr>
+</tbody></table>{% endtable_region %}
+{% table_region "Lining" %}<table class="data-table"><thead><tr>
+{% table_heading "Name" gutter=True %}{% table_heading "Parts" %}</tr></thead><tbody>
+<tr data-probe="line-fits"><td>Fits</td>
+<td>{% line_list fits as part %}<span class="tag">{{ part }}</span>{% endline_list %}</td></tr>
+<tr data-probe="line-cut"><td>Cut</td>
+<td><div style="max-width: 9rem">{% line_list many as part %}<span class="tag">{{ part }}</span>{% endline_list %}</div></td></tr>
 </tbody></table>{% endtable_region %}"""
+
+ROW_TOGGLE_VALUES = {
+    "fits": ("One", "Two", "Three", "Four"),
+    "many": ("One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight"),
+}
 
 # A table of cut values, each the word its row is probed by then more: one
 # with no title, one carrying its whole text as a title, one titled in a row

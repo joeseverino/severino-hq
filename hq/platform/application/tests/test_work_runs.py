@@ -2,7 +2,6 @@
 in the database, each row said in the words and tones a job is. Every
 procedure here is a synthetic ``example.*`` one."""
 
-from dataclasses import replace
 from datetime import timedelta
 from unittest import mock
 
@@ -34,7 +33,7 @@ from ..work_runs import (
     work_kinds,
     work_rows,
 )
-from .procedures import APP, DB, EDGE, RESTART, RESTART_RUN, Supply, manifest, run_payload
+from .procedures import APP, APPROVER, DB, EDGE, RESTART, RESTART_RUN, Supply, approved_run, manifest, run_payload
 
 AGENT = Principal("example-agent", "mcp", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
 LOGS = "example.service_logs"
@@ -50,10 +49,10 @@ class WorkRunsTestCase(TestCase):
         self.supply = Supply(self, manifest(), manifest(id=LOGS))
         self.keys = iter(range(1000))
 
-    def run_of(self, *hosts, name=RESTART_RUN, principal=AGENT, **fields):
-        answer = run_capability(
-            name, run_payload(*hosts, **fields), principal=principal, idempotency_key=f"example-{next(self.keys)}"
-        ).answer
+    def run_of(self, *hosts, name=RESTART_RUN, **fields):
+        answer = approved_run(
+            self, run_payload(*hosts, **fields), principal=AGENT, key=f"example-{next(self.keys)}", name=name
+        )
         self.assertTrue(answer["ok"], answer)
         return OperationRequest.objects.get(pk=answer["operation"]["id"])
 
@@ -111,11 +110,11 @@ class OneListTests(WorkRunsTestCase):
         self.assertEqual((row.started, row.finished), (run.claimed_at, run.completed_at))
 
     def test_an_approved_run_names_who_approved_it(self):
-        run = self.run_of(APP, principal=replace(AGENT, approved_by="example-owner"))
+        run = self.run_of(APP)
 
         (row,) = self.listed()
 
-        self.assertEqual((row.id, row.evidence.approved_by), (str(run.pk), "example-owner"))
+        self.assertEqual((row.id, row.evidence.approved_by), (str(run.pk), APPROVER))
 
     def test_a_job_s_row_is_its_standing(self):
         from ..asks import job_standing

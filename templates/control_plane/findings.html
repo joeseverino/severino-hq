@@ -6,14 +6,9 @@ The same filter bar every list uses. A chip per rule would spend a phone's
 first screen on chips before the first finding.
 {% endcomment %}
 {% url 'control_plane:findings' as every_finding %}
-{% filter_bar filtered=active_rule clear=every_finding %}
-  <select name="rule" aria-label="Problem type">
-    <option value="">All problems</option>
-    {% for rule in finding_rules %}<option value="{{ rule.name }}"{% if active_rule.name == rule.name %} selected{% endif %}>{{ rule.title }}</option>{% endfor %}
-  </select>
-  {% comment %}The count sits in the bar it filters, not in a second bar under it.{% endcomment %}
-{% summary %}
-    <strong>{{ finding_entries|length|counted:"problem" }}</strong>{% if finding_entries|length == 1 %}{% if finding_counts.serious %}, urgent{% elif finding_counts.attention %}, needs attention{% endif %}{% else %}{% if finding_counts.serious %}, <strong>{{ finding_counts.serious|counted:"urgent,urgent" }}</strong>{% endif %}{% if finding_counts.attention %}, <strong>{{ finding_counts.attention|counted:"needs attention,need attention" }}</strong>{% endif %}{% endif %}
+{% filter_bar filtered=active_rule clear=every_finding shown=finding_entries|length total=finding_total %}
+  {% select "rule" finding_rules chosen=active_rule.name label="Problem type" every="problem" %}
+{% summary %}{% if finding_counts.serious %}{{ finding_counts.serious|counted:"urgent,urgent" }}{% if finding_counts.attention %}, {% else %}.{% endif %}{% endif %}{% if finding_counts.attention %}{{ finding_counts.attention|counted:"needs attention,need attention" }}.{% endif %}
 {% endfilter_bar %}
 {% endif %}
 

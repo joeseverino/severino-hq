@@ -49,6 +49,17 @@ class SelectTagTests(SimpleTestCase):
         self.assertEqual(elements(plain, "select")[0].classes, frozenset())
         self.assertLessEqual({"toned", "toned-good"}, elements(toned, "select")[0].classes)
 
+    def test_a_choice_that_narrows_leads_with_any_of_its_dimension_chosen_by_default(self):
+        html = _render('{% select "kind" kinds chosen=kind every="type" %}', kinds=(("host", "Host"),), kind=None)
+
+        options = elements(html, "option")
+        self.assertEqual([(o.attrs["value"], o.words) for o in options], [("", "Any type"), ("host", "Host")])
+        self.assertIn("selected", options[0].attrs)
+
+    def test_a_choice_that_names_its_own_default_is_a_pick_and_never_any(self):
+        with self.assertRaises(TemplateSyntaxError):
+            _render('{% select "view" options every="view" %}')
+
     def test_a_tone_outside_the_status_vocabulary_and_a_select_with_no_name_are_refused(self):
         for source in ('{% select "rule" options tone="allow" %}', '{% select "" options %}'):
             with self.subTest(source=source), self.assertRaises(TemplateSyntaxError):
@@ -64,3 +75,4 @@ class SelectCatalogTests(SimpleTestCase):
         drawn = re.findall(r"\{% select (.*?)%\}", " ".join(_catalog_templates().values()))
         self.assertTrue(any("id=" in found for found in drawn), "draw a select a control label names")
         self.assertTrue(any("tone=" in found for found in drawn), "draw a select in a tone")
+        self.assertTrue(any("every=" in found for found in drawn), "draw a select that narrows")

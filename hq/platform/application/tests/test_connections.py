@@ -261,7 +261,7 @@ class ConnectionPageTests(SentinelMixin, TestCase):
         self.assertContains(response, AUTHORITY_LABELS["whole_account"])
 
     def test_the_reads_column_names_what_the_tally_counts_and_nothing_it_only_changes(self):
-        """The row's three, its "Also reads" and its tally are one list: each
+        """The row's reads and its tally are one list: each
         reading the sweep counts is named once, in one set of words, and a kind
         the credential may change but no sweep reads is under "Changes"."""
 
@@ -278,8 +278,26 @@ class ConnectionPageTests(SentinelMixin, TestCase):
         page = all_elements(response)
         (tr,) = [element for element in page if element.tag == "tr" and "a-portainer" in element.attrs.get("id", "")]
         reads_cell = [element for element in page if element.tag == "td" and element.ancestors[-1:] == (tr,)][1]
+
+        # A read past the row's first few is an item of the list's rest. Elements
+        # compare by their markup, so a holder is matched by identity.
+        def held_by(element, holders):
+            parents = element.ancestors[-2:-1]
+            return bool(parents) and any(parents[0] is holder for holder in holders)
+
+        rests = [
+            element
+            for element in page
+            if element.tag == "li"
+            and "line-rest" in element.attrs.get("class", "").split()
+            and held_by(element, [reads_cell])
+        ]
         items = [
-            element for element in page if element.tag == "li" and element.ancestors[-1].ancestors[-1:] == (reads_cell,)
+            element
+            for element in page
+            if element.tag == "li"
+            and not any(element is rest for rest in rests)
+            and held_by(element, [reads_cell, *rests])
         ]
         # Each item's name is its first element; a state word may follow it.
         named = [

@@ -76,3 +76,25 @@ class Supply:
 
 def run_payload(*hosts: str, service: str = "web", **fields: Any) -> dict[str, Any]:
     return {"hosts": list(hosts or (APP,)), "parameters": {"service": service}, **fields}
+
+
+APPROVER = "example-owner"
+
+
+def approved_run(
+    test: TestCase, payload: dict[str, Any], *, principal: Any, key: str, name: str = RESTART_RUN
+) -> dict[str, Any]:
+    """The run an agent asked for, once a person approved it: the only way an
+    agent's change reaches the automation worker. Answers what the run's
+    command answered."""
+
+    from django.contrib.auth import get_user_model
+
+    from ..approvals import ApproveCommand, approve
+    from ..capabilities import run_capability
+    from ..security import web_principal
+
+    held = run_capability(name, payload, principal=principal, idempotency_key=key).answer
+    test.assertEqual(held.get("status"), "awaiting_approval", held)
+    person, _ = get_user_model().objects.get_or_create(username=APPROVER)
+    return approve(ApproveCommand(held["approval"]["id"]), principal=web_principal(person))["result"]

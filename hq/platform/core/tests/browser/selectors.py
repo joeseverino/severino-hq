@@ -67,8 +67,10 @@ SELECTORS = {
     "decision_words": "[data-attention-item] :is(.attention-head, .attention-detail)",
     "decision_buttons": ".queue-act",
     # Running text, and what an opened row shows beneath it: code in it is
-    # never cut, since only a cell's own identifier is.
-    "running_text": ":is(p, li, .row-detail)",
+    # never cut, since only a cell's own identifier is. The rest of a
+    # `line_list` is no text but the parts its line has no room for, each
+    # an item of its own.
+    "running_text": ":is(p, li:not(.line-rest), .row-detail)",
     "code": "code",
     # The boxes that cut a cell's identifier: the token, the box it draws
     # the name in (a chip in code), a part inside it.

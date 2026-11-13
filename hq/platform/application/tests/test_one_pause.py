@@ -92,11 +92,10 @@ class OnePauseTests(TestCase):
     def test_an_agent_s_queued_run_waits_out_the_pause(self):
         """What an agent asked a procedure to do is held from the automation worker too."""
 
-        from ..capabilities import run_capability
-        from .procedures import RESTART_RUN, Supply, manifest, run_payload
+        from .procedures import Supply, approved_run, manifest, run_payload
 
         Supply(self, manifest())
-        answer = run_capability(RESTART_RUN, run_payload(), principal=AGENT, idempotency_key="example-run").answer
+        answer = approved_run(self, run_payload(), principal=AGENT, key="example-run")
         self.assertTrue(answer["queued"], answer)
 
         def claim():

@@ -10,7 +10,7 @@ from ..machines import Machine
 from ..security import Capability, Principal
 from .procedures import APP, DB, RESTART_RUN, Supply, manifest, run_payload
 
-AGENT = Principal("example-agent", "mcp", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
+OPERATOR = Principal("example-operator", "web", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
 READER = Principal("example-reader", "mcp", frozenset({Capability.READ}))
 
 
@@ -18,7 +18,7 @@ class RunHostTests(TestCase):
     def setUp(self):
         self.supply = Supply(self, manifest())
 
-    def ask(self, payload, *, principal=AGENT, key="example-run-1"):
+    def ask(self, payload, *, principal=OPERATOR, key="example-run-1"):
         return run_capability(RESTART_RUN, payload, principal=principal, idempotency_key=key).answer
 
     def hosts(self):
@@ -52,7 +52,7 @@ class RunHostTests(TestCase):
         }
         for case, asked in cases.items():
             with self.subTest(case=case):
-                answer = self.ask(asked["payload"], principal=asked.get("principal", AGENT))
+                answer = self.ask(asked["payload"], principal=asked.get("principal", OPERATOR))
 
                 self.assertFalse(answer["ok"], answer)
                 self.assertEqual(self.hosts(), [])
@@ -62,7 +62,7 @@ class RunHostTests(TestCase):
         first = self.ask(run_payload(APP, DB))["operation"]["id"]
 
         answer = run_capability(
-            "automation.example.service_logs.run", run_payload(DB), principal=AGENT, idempotency_key="example-run-2"
+            "automation.example.service_logs.run", run_payload(DB), principal=OPERATOR, idempotency_key="example-run-2"
         ).answer
 
         self.assertEqual(answer["error"]["details"]["holding"]["id"], first)

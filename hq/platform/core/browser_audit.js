@@ -241,10 +241,14 @@ async (page) => {
       // Controls only: a status line at the end of a filter bar is text, and
       // text is not the height of a button. A label that holds its control
       // (a table toolbar's toggle or sort) is pressed as the label, so the
-      // label is the control's box.
+      // label is the control's box. A filter bar's row is its controls and
+      // the button that sends them, each in a box of its own.
       const control = 'input, select, textarea, button, summary, a.btn';
       const pressed = (child) => child.matches(`${control}, label:has(input, select)`);
-      const controls = Array.from(row.children)
+      const children = row.matches('.filter-bar')
+        ? row.querySelectorAll(':scope .filter-bar-controls > *, :scope .filter-bar-send > *')
+        : row.children;
+      const controls = Array.from(children)
         .map((child) => (pressed(child) ? child : child.querySelector(control)))
         .filter((el) => el && el.getBoundingClientRect().height > 0);
       if (controls.length < 2) return;

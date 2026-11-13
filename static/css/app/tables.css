@@ -1,4 +1,4 @@
-/* Tables: the filter bar, the data table and its regions, allocation rows,
+/* Tables: the data table and its regions, allocation rows,
    and how a table gives way in a narrow box. */
 
 /* A length rather than the words that make it, so `1lh` is read on the cell
@@ -7,27 +7,6 @@
 
 @layer components {
 
-/* ── Filter bar ─────────────────────────────────────────────────── */
-
-/* One bar for every query a page asks of what it lists (partials/_filter_bar.html), a list's table toolbar among them: the controls, the one button that sends them, Clear, and the count at the row's end. */
-.filter-bar {
-  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4);
-  padding: var(--surface-inset, var(--space-5));
-  margin: 0 0 var(--space-6);
-}
-/* The search alone grows, taking what its row leaves: it asks first for its whole placeholder, or what is typed in it (`field-sizing`), so the controls beside it wrap before it is cut. Every other control is as wide as what it says, as a native control is; the count's own margin carries it to the row's end. */
-.filter-bar > input[type=search] { flex: 1 1 auto; field-sizing: content; min-width: 0; }
-/* A choice is as wide as its longest option, so the bar holds still as the choice changes (never `field-sizing`, which follows the option chosen), and narrower only in a bar too narrow for it. */
-.filter-bar > select { max-width: 100%; min-width: 0; }
-/* A control a script shows only once it has something to act on. */
-.filter-bar > [hidden] { display: none; }
-/* A set of toggles (partials/_toggle_set.html): the checkboxes in a row of their own words, wrapping between them. */
-.toggle-set {
-  display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6);
-  min-width: 0; max-width: 100%; margin: 0; padding: 0; border: 0;
-}
-.toggle-set label { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--ink-2); font-size: var(--text-xs); white-space: nowrap; }
-.toggle-set input { accent-color: var(--accent); }
 /* A field and its button on one line: the field takes the room. */
 .field-row { display: flex; gap: var(--space-4); align-items: center; margin-top: var(--space-6); }
 .field-row > input { flex: 1; min-width: 0; }
@@ -416,7 +395,7 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 .data-table tr:has(> * .row-below) > * > [data-row-toggle] { display: inline-grid; }
 /* The gutter the toggle stands in is kept in every row and the heading of a table where any row opens, so names share one edge; every rule reads only what the server drew and the box's width (`--gutter`), so nothing marked after paint moves a name. */
 .data-table .row-gutter { position: relative; }
-.data-table:is(:has(> tbody > tr.is-expanded), :has(> tbody > tr > * .row-more), :has(> tbody > tr > * .row-below), :has(> tbody > tr > * > [data-fold-toggle])) > * > tr > .row-gutter { padding-left: var(--row-gutter); --gutter: kept; }
+.data-table:is(:has(> tbody > tr.is-expanded), :has(> tbody > tr > * :is(.row-more, .line-rest)), :has(> tbody > tr > * .row-below), :has(> tbody > tr > * > [data-fold-toggle])) > * > tr > .row-gutter { padding-left: var(--row-gutter); --gutter: kept; }
 /* A value found cut opens its row only where the gutter is already kept; elsewhere it reads whole on hover, by the title tables.js gives it (`markCut`). */
 @container style(--gutter: kept) {
   .data-table tr[data-cut] > .row-gutter > [data-row-toggle] { display: inline-grid; }

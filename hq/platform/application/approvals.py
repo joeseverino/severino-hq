@@ -223,6 +223,18 @@ def waits_for_a_person[Handler: Callable[..., Any]](
     return declare
 
 
+def every_call(_command: Any) -> bool:
+    """``waits_for_a_person``'s test for a handler whose every call from an agent waits."""
+
+    return True
+
+
+def no_rule_allows(spec) -> bool:
+    """Whether every call of ``spec`` an agent asks waits for a person, so no agent rule may allow it."""
+
+    return waits(spec) is every_call
+
+
 def waits(spec) -> Callable[[Any], bool] | None:
     """The handler's test of a call no rule may let past a person, when it waits for one by default."""
 

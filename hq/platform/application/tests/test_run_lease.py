@@ -18,7 +18,7 @@ from hq.platform.core.models import AuditLog
 from ..capabilities import run_capability
 from ..controller import ControllerReport, claim_next_operation, report_operation
 from ..security import Capability, Principal
-from .procedures import APP, DB, RESTART_KEY, RESTART_RUN, Supply, manifest, run_payload
+from .procedures import APP, DB, RESTART_KEY, RESTART_RUN, Supply, approved_run, manifest, run_payload
 
 AGENT = Principal("example-agent", "mcp", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
 WORKER = "example-worker"
@@ -41,7 +41,7 @@ class LeasedRunTestCase(TestCase):
 
     def setUp(self):
         self.supply = Supply(self, manifest(retry=self.retry))
-        answer = run_capability(RESTART_RUN, run_payload(), principal=AGENT, idempotency_key="example-run").answer
+        answer = approved_run(self, run_payload(), principal=AGENT, key="example-run")
         self.assertTrue(answer["queued"], answer)
         self.operation_id = answer["operation"]["id"]
 

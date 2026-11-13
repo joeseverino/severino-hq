@@ -500,6 +500,12 @@ class RecordList:
     def filtered(self) -> bool:
         return bool(self.query or self.kind)
 
+    @property
+    def type_choices(self) -> tuple[tuple[str, str], ...]:
+        """The filter's choice of type: each type, with how many records it has."""
+
+        return tuple((group.kind, f"{group.label} ({len(group.rows)})") for group in self.types)
+
 
 def _grouped(rows: list[Any]) -> tuple[RecordGroup, ...]:
     found: dict[str, list[Any]] = {}

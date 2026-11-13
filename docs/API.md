@@ -147,7 +147,8 @@ An operator can allow, hold, or deny each capability per client. Handle all thre
 
 With no rules set, changes to gated infrastructure are held, and so is
 anything destructive, because an API client is an agent
-(`capability_policy.decide`). The rules themselves are in
+(`capability_policy.decide`). A procedure run that changes a machine is held
+whatever the rules say, since no rule may allow it. The rules themselves are in
 [Security](Security.md#what-hq-enforces).
 
 A person's own device is no agent: it stands as its person. So the `/agents/`

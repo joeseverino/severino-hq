@@ -136,6 +136,15 @@ SMALL_TARGETS = (
     const over = top.getBoundingClientRect();
     return over.left <= x && x <= over.right && over.top <= y && y <= over.bottom;
   };
+  const clippedAway = (el, r) => {
+    for (let up = el.parentElement; up; up = up.parentElement) {
+      const style = getComputedStyle(up);
+      if (![style.overflowX, style.overflowY].some((value) => value === 'hidden' || value === 'clip')) continue;
+      const b = up.getBoundingClientRect();
+      if (r.bottom <= b.top || r.top >= b.bottom || r.right <= b.left || r.left >= b.right) return true;
+    }
+    return false;
+  };
   // Inert: marked so, or outside the modal dialog open over the page, which
   // makes the rest of the document inert. No pointer reaches it.
   const modal = document.querySelector('dialog:modal');
@@ -163,6 +172,9 @@ SMALL_TARGETS = (
       const drawn = box(el);
       // Out of sight until focused (a skip link), or drawn by its label.
       if (drawn.width <= 1 || drawn.height <= 1) continue;
+      // Clipped wholly away by a box around it (the parts a `line_list` has
+      // no room for): no pointer reaches it until what holds it shows it.
+      if (clippedAway(el, drawn)) continue;
       if (covered(el, drawn)) beneath.push(el);
       else targets.push({el, drawn, r: area(el), layer: layer(el)});
     }

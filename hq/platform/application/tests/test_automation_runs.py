@@ -5,16 +5,20 @@ synthetic ``example.*`` one, supplied as an extension supplies it."""
 import tempfile
 from pathlib import Path
 
+from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 
-from hq.domains.control_plane.models import ManagedResource, OperationRequest
-from hq.platform.core.models import IdempotencyRecord
+from hq.domains.control_plane.models import CapabilityRule, ManagedResource, OperationRequest
+from hq.platform.core.models import AgentIdentity, IdempotencyRecord
 
 from ..capabilities import capability_registry, run_capability
+from ..capability_policy import Rule, matrix, set_rule
 from ..controller import claim_next_operation
 from ..security import Capability, Principal, cli_principal
 from .procedures import APP, DB, EDGE, RESTART, RESTART_KEY, RESTART_RUN, REVISION, Supply, manifest, run_payload
 
+# A person's own click in the browser, which is their consent.
+OPERATOR = Principal("example-operator", "web", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
 AGENT = Principal("example-agent", "mcp", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
 READER = Principal("example-reader", "mcp", frozenset({Capability.READ}))
 KIND = "automation.operation"
@@ -25,7 +29,7 @@ class RunTestCase(TestCase):
     def setUp(self):
         self.supply = Supply(self, manifest())
 
-    def ask(self, payload, *, principal=AGENT, key="example-run-1", name=RESTART_RUN):
+    def ask(self, payload, *, principal=OPERATOR, key="example-run-1", name=RESTART_RUN):
         return run_capability(name, payload, principal=principal, idempotency_key=key).answer
 
     def refused(self, payload, code, **asked):
@@ -111,6 +115,56 @@ class QueuedRunTests(RunTestCase):
 
         resource = ManagedResource.objects.get(key=RESTART_KEY)
         self.assertEqual((resource.spec["revision"], resource.generation), (NEXT_REVISION, 2))
+
+
+class AgentAskedRunTests(RunTestCase):
+    """A procedure that changes a machine waits for a person whenever an agent
+    asks for it, and no rule an operator sets for that agent lets it past."""
+
+    CHANGES = (RESTART_RUN, "automation.example.wipe.run")
+
+    def setUp(self):
+        super().setUp()
+        self.supply(manifest(), manifest(id="example.wipe", effect="destructive"), manifest(id=LOGS, effect="read"))
+        AgentIdentity.objects.create(
+            client_id=AGENT.actor, interfaces=["mcp"], granted=["read", "manage_infrastructure"]
+        )
+        self.user = get_user_model().objects.create_user("example-operator", password="x" * 20)
+
+    def assert_held(self, name):
+        answer = self.ask(run_payload(), principal=AGENT, name=name)
+
+        self.assertEqual(answer.get("status"), "awaiting_approval", answer)
+        self.assertFalse(OperationRequest.objects.exists())
+
+    def test_a_change_an_agent_asks_waits_for_a_person(self):
+        for name in self.CHANGES:
+            with self.subTest(name):
+                self.assert_held(name)
+
+    def test_no_agent_rule_can_allow_a_change(self):
+        registry = capability_registry()
+        for name in self.CHANGES:
+            with self.subTest(name):
+                with self.assertRaises(ValueError):
+                    set_rule(subject=AGENT.actor, spec=registry[name], rule=Rule.ALLOW, user=self.user)
+                # A rule stored past that refusal still lifts nothing.
+                CapabilityRule.objects.update_or_create(
+                    subject=AGENT.actor, capability=name, defaults={"rule": Rule.ALLOW}
+                )
+                self.assert_held(name)
+
+    def test_the_agents_page_offers_no_allow_for_a_change(self):
+        _columns, groups = matrix()
+        offered = {
+            row.name: {value for cell in row.cells for value, _ in cell.options}
+            for group in groups
+            for row in group.rows
+        }
+
+        for name in self.CHANGES:
+            self.assertNotIn(Rule.ALLOW, offered[name], name)
+        self.assertIn(Rule.ALLOW, offered[f"automation.{LOGS}.run"])
 
 
 class DoorbellTests(RunTestCase):
