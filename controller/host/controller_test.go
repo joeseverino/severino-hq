@@ -1,8 +1,10 @@
 package host
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"io"
@@ -460,6 +462,30 @@ func TestTheFirewallIsDistilled(t *testing.T) {
 			t.Errorf("%s: %+v", name, reading)
 		}
 	}
+}
+
+// Whatever nft prints, the reading is the one record of two answers and
+// when they were read: nothing of the chain's own text reaches HQ.
+func FuzzReadFirewall(f *testing.F) {
+	f.Add([]byte("chain input {\n\tiifname \"tailscale0\" tcp dport 8000 accept\n\tiifname != \"tailscale0\" tcp dport 8000 drop\n}\n"))
+	f.Add([]byte("chain input {\n\ttcp dport 8000 accept\n}\n"))
+	f.Add([]byte("chain input {\n\tiifname != \"tailscale0\" drop comment \"\\\"},{\\\"x\\\":1\"\n}\n"))
+	at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.FixedZone("example", -3600))
+	f.Fuzz(func(t *testing.T, chain []byte) {
+		data, err := ReadFirewall(chain, at)
+		if err != nil {
+			t.Fatalf("the reading failed: %v", err)
+		}
+		var reading Firewall
+		if err := jsonv2.Unmarshal(data, &reading, jsonv2.RejectUnknownMembers(true)); err != nil {
+			t.Fatalf("read %s (%v)", data, err)
+		}
+		fixed := Firewall{Record: "interface-binding", Interface: "tailscale0", ReadAt: "2026-01-02T04:04:05Z",
+			AcceptRequiresInterface: reading.AcceptRequiresInterface, ForeignInterfaceDropped: reading.ForeignInterfaceDropped}
+		if want, _ := json.Marshal(fixed); !bytes.Equal(data, want) {
+			t.Fatalf("read %s, not one of the fixed records", data)
+		}
+	})
 }
 
 func TestTheCertificateStateIsTheControllersWithoutFollowingLinks(t *testing.T) {

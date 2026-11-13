@@ -20,7 +20,7 @@ from .integration_validation import (
 )
 from .search_contracts import SearchDefinition
 from .ui import ended
-lazy from . import outbound_work, plugins
+lazy from . import automation_runs, outbound_work, plugins
 lazy from .core_capabilities import CORE_CAPABILITY_SPECS
 lazy from .domains import host_specs
 lazy from .plugins import plugin_capability_specs, plugin_search_definitions
@@ -315,6 +315,7 @@ def _compiled_integration_graph() -> IntegrationGraph:
             *host_specs("capabilities"),
             *plugin_capability_specs(),
             *outbound_work.capability_specs(),
+            *automation_runs.capability_specs(),
         ),
         resources=(*core_resource_specs(), *host_specs("resources"), *plugins.plugin_resource_specs()),
         connections=(*host_specs("connections"), *plugins.plugin_connection_specs()),

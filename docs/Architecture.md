@@ -1275,3 +1275,34 @@ Ansible Runner's or Ansible's own execution settings (a playbook, an
 inventory, extra-vars, a limit, tags, a module, SSH options, `become`),
 however the name is spelled. A run's playbook, inventory and connection come
 from its manifest and HQ's facts, never from the caller.
+
+### Running a procedure
+
+Each supplied manifest is run through a command of its own,
+`automation.<id>.run` (`hq/platform/application/automation_runs.py`), so a
+grant or a rule names the procedures it allows one by one. Its effect is the
+manifest's: a read runs under `read`, a change needs `manage_infrastructure`,
+and a destructive one waits for a person when an agent asks. A run passes the
+one capability checkpoint like any command (authority, retry key, validation,
+pause, approval) and queues an operation for the automation worker; nothing
+runs in the request, and the controller never claims one.
+
+The command takes `hosts` (machines by their name in HQ), `parameters` (the
+manifest's input type), an optional `correlation` (up to 200 printable
+characters, kept with the run so an investigation can find it) and `reason`.
+Anything else is refused, inside the parameters too. Each host resolves to a
+machine `machine_catalog()` knows, by its name or an alias, and is held to
+`admits`. The operation's `input` carries `operation`, `revision`,
+`parameters` as validated, `hosts` as resolved and `correlation`; the web
+process holds no SSH user, key or host key, which stay in the connections
+document the worker reads.
+
+Each procedure has one record, of kind `automation.operation`, written when a
+run is first asked for and pinned to the manifest at every ask. Its spec is
+the manifest as data, the input type standing as its schema's digest. One run
+per procedure is active at a time, and two runs never share a machine while
+either waits or works; the refusal's `details.holding` is the run in the way.
+A held run is measured against the manifest as supplied, its parameters as
+validated and its hosts as they resolve then (`approvals.measured_by`), so a
+new revision, a parameter that validates to another value or a host that now
+resolves elsewhere stales the approval.

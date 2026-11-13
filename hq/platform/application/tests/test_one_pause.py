@@ -89,6 +89,23 @@ class OnePauseTests(TestCase):
             approve(ApproveCommand(str(held.id)), principal=self.operator)
             self.assertIsNotNone(self._claim())
 
+    def test_an_agent_s_queued_run_waits_out_the_pause(self):
+        """What an agent asked a procedure to do is held from the automation worker too."""
+
+        from ..capabilities import run_capability
+        from .procedures import RESTART_RUN, Supply, manifest, run_payload
+
+        Supply(self, manifest())
+        answer = run_capability(RESTART_RUN, run_payload(), principal=AGENT, idempotency_key="example-run").answer
+        self.assertTrue(answer["queued"], answer)
+
+        def claim():
+            return claim_next_operation("example-worker", capabilities=(("automation.operation", "run"),))["operation"]
+
+        with patch(HELPER, return_value=PAUSED):
+            self.assertIsNone(claim())
+        self.assertEqual(claim()["id"], answer["operation"]["id"])
+
     def test_a_person_is_never_paused(self):
         """A person's own request runs and is claimed while agents are paused."""
 

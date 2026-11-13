@@ -2156,7 +2156,7 @@
                   "loc": [
                     "kind"
                   ],
-                  "msg": "Input should be 'tls.certificate', 'tls.uploaded_certificate', 'npm.proxy_host', 'github.delivery', 'portainer.stack', 'portainer.container', 'tailscale.device', 'tailscale.policy', 'network', 'pki.authority', 'machine', 'tls.delivery_target', 'caddy.route', 'adguard.rewrite', 'cloudflare.dns_record', 'cloudflare.zone' or 'cloudflare.contact_inbox'",
+                  "msg": "Input should be 'tls.certificate', 'tls.uploaded_certificate', 'npm.proxy_host', 'github.delivery', 'portainer.stack', 'portainer.container', 'tailscale.device', 'tailscale.policy', 'network', 'pki.authority', 'machine', 'tls.delivery_target', 'caddy.route', 'adguard.rewrite', 'cloudflare.dns_record', 'cloudflare.zone', 'cloudflare.contact_inbox' or 'automation.operation'",
                   "type": "literal_error"
                 }
               ],
@@ -2171,7 +2171,7 @@
                 "tool": "describe_resources"
               }
             },
-            "message": "infrastructure: kind must be one of tls.certificate, tls.uploaded_certificate, npm.proxy_host, github.delivery, portainer.stack, portainer.container, tailscale.device, tailscale.policy, network, pki.authority, machine, tls.delivery_target, caddy.route, adguard.rewrite, cloudflare.dns_record, cloudflare.zone, cloudflare.contact_inbox."
+            "message": "infrastructure: kind must be one of tls.certificate, tls.uploaded_certificate, npm.proxy_host, github.delivery, portainer.stack, portainer.container, tailscale.device, tailscale.policy, network, pki.authority, machine, tls.delivery_target, caddy.route, adguard.rewrite, cloudflare.dns_record, cloudflare.zone, cloudflare.contact_inbox, automation.operation."
           },
           "ok": false
         },
@@ -12092,11 +12092,13 @@
           "adguard.rewrite",
           "cloudflare.dns_record",
           "cloudflare.zone",
-          "cloudflare.contact_inbox"
+          "cloudflare.contact_inbox",
+          "automation.operation"
         ],
         "type": "string",
         "x-enumDescriptions": {
           "adguard.rewrite": "Internal DNS record",
+          "automation.operation": "Automation procedure",
           "caddy.route": "Caddy route",
           "cloudflare.contact_inbox": "Contact inbox",
           "cloudflare.dns_record": "Public DNS record",
@@ -12735,7 +12737,7 @@
         "type": "string"
       },
       "OperationAction": {
-        "description": "What it does: `reconcile`, `renew`, `delete`, `restart`, `start`, `stop` or `approve-routes`.",
+        "description": "What it does: `reconcile`, `renew`, `delete`, `restart`, `start`, `stop`, `approve-routes` or `run`.",
         "type": "string"
       },
       "OperationCommand": {
@@ -12773,6 +12775,10 @@
           },
           "completed_at": {
             "$ref": "#/components/schemas/CompletedAt"
+          },
+          "correlation": {
+            "description": "The asker's own id for finding it later, such as an investigation's; empty for none.",
+            "type": "string"
           },
           "created_at": {
             "$ref": "#/components/schemas/AskedAt"
@@ -12825,7 +12831,8 @@
           "claimed_by",
           "lease_expires_at",
           "attempt_count",
-          "result"
+          "result",
+          "correlation"
         ],
         "type": "object"
       },
@@ -25234,7 +25241,8 @@
                     "adguard.rewrite",
                     "cloudflare.dns_record",
                     "cloudflare.zone",
-                    "cloudflare.contact_inbox"
+                    "cloudflare.contact_inbox",
+                    "automation.operation"
                   ],
                   "type": "string"
                 },

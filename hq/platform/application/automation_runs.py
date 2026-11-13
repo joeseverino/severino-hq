@@ -1,0 +1,349 @@
+"""Running an automation procedure: the command each supplied manifest is asked
+through, and the operation it queues for the automation worker.
+
+A run passes HQ's one capability checkpoint like any command, and nothing runs
+here. What it binds to, and what its approval is measured against:
+docs/Architecture.md, "Running a procedure".
+"""
+
+import hashlib
+import json
+import secrets
+from functools import cache, partial
+from typing import Annotated, Any
+
+from django.core.exceptions import ImproperlyConfigured
+from django.db import transaction
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StrictStr, create_model
+
+from hq.domains.control_plane.names import is_hostname, normalized_hostname
+lazy from hq.domains.control_plane.models import ApprovalRequest, ManagedResource, OperationRequest
+lazy from hq.domains.control_plane.provider_adapters.automation import OPERATION_KIND
+lazy from hq.domains.control_plane.provider_adapters.declarations import MACHINE_KIND
+lazy from hq.domains.control_plane.providers import validate_spec
+lazy from hq.platform.core.audit import audit_operation
+
+from .automation_manifest import OperationManifest, OperationRegistry
+from .command_fields import Describe
+from .integration_specs import IDEMPOTENCY_FIELD, CapabilitySpec
+from .record_errors import PolicyError, RecordNotFound
+from .security import Capability, Principal
+lazy from . import plugins
+lazy from .approvals import ApprovalSubject, measured_by
+lazy from .idempotency import IdempotencyConflict
+lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
+lazy from .json_schemas import json_schema
+lazy from .machines import machine_catalog
+lazy from .resource_operations import OperationQueued, enqueue, serialize_operation
+
+
+@cache
+def _registry() -> OperationRegistry:
+    return OperationRegistry(plugins.plugin_operations())
+
+
+def operation_registry() -> OperationRegistry:
+    """Every manifest the composition supplies, by id, built once per composition."""
+
+    return _registry()
+
+
+def clear_operation_registry_cache() -> None:
+    _registry.cache_clear()
+
+
+def capability_name(operation_id: str) -> str:
+    """The command a procedure is run through, which a grant or a rule names it by."""
+
+    return f"automation.{operation_id}.run"
+
+
+def resource_key(operation_id: str) -> str:
+    """The key of a procedure's record: its id in a key's spelling. A dotted
+    name's segments hold no hyphen, so no two ids share a key."""
+
+    return f"automation-{operation_id.replace('.', '-')}"
+
+
+def _host(name: str) -> str:
+    host = normalized_hostname(name)
+    if not is_hostname(host):
+        raise ValueError("Name a machine by its host name, such as app.example.com.")
+    return host
+
+
+def _sorted_unique(names: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(sorted(set(names)))
+
+
+type Hosts = Annotated[
+    tuple[Annotated[StrictStr, Field(min_length=1, max_length=253), AfterValidator(_host)], ...],
+    Field(min_length=1, max_length=64),
+    AfterValidator(_sorted_unique),
+    Describe("The machines to run it on, each by its name in HQ."),
+]
+type Correlation = Annotated[
+    StrictStr,
+    Field(max_length=200, pattern=r"^[!-~]*$"),
+    Describe(
+        "An id of your own to find this run by later, such as an investigation's: up to 200 "
+        "printable characters, no spaces. Kept with the run."
+    ),
+]
+type Reason = Annotated[StrictStr, Field(max_length=300), Describe("Why it is run, kept with the operation it queues.")]
+
+
+class RunCommand(BaseModel):
+    """What every run takes beside its procedure's own parameters.
+
+    Closed like every command, so a playbook, an inventory, extra-vars or a
+    path sent beside the parameters is refused, and the procedure's input
+    type refuses one sent inside them (``automation_manifest._closed``).
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    hosts: Hosts
+    # Each procedure's own input type, which ``command_type`` declares.
+    parameters: BaseModel
+    correlation: Correlation = ""
+    reason: Reason = ""
+
+
+def command_type(manifest: OperationManifest) -> type[RunCommand]:
+    """The command one procedure is run with: the run's own fields, its
+    parameters as its manifest's input type, and the retry key of a change."""
+
+    parameters = manifest.input_type
+    takes_none = not any(field.is_required() for field in parameters.model_fields.values())
+    fields: dict[str, Any] = {
+        "parameters": (
+            Annotated[parameters, Describe("The procedure's own inputs, as its manifest lists them.")],
+            Field(default_factory=parameters) if takes_none else ...,
+        ),
+    }
+    if manifest.effect != "read":
+        # Filled by the capability runner with the caller's key, or a fresh one.
+        fields[IDEMPOTENCY_FIELD] = (StrictStr, ...)
+    model: type[RunCommand] = create_model(
+        f"Run{''.join(part.title() for part in manifest.id.replace('.', '_').split('_'))}",
+        __base__=RunCommand,
+        __module__=__name__,
+        **fields,
+    )
+    return model
+
+
+def _canonical(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+
+
+def pinned(manifest: OperationManifest) -> dict[str, Any]:
+    """The manifest as its record's spec holds it: what a run binds to.
+
+    Every field but the input type, which its schema's digest stands for, so a
+    new revision or a changed input moves the spec and with it what a held run
+    is measured against.
+    """
+
+    schema = _canonical(json_schema(manifest.input_type))
+    return validate_spec(
+        OPERATION_KIND,
+        {
+            **manifest.model_dump(mode="json", exclude={"id", "input_type", "privilege"}),
+            "operation": manifest.id,
+            "privilege": manifest.privilege or "",
+            "input_schema_sha256": hashlib.sha256(schema.encode()).hexdigest(),
+        },
+    )
+
+
+def resolved_hosts(manifest: OperationManifest, hosts: tuple[str, ...]) -> tuple[str, ...]:
+    """Each host named, as the machine HQ knows it by, held to what the manifest admits.
+
+    A machine is found by its name or any name it is also known by, so a run
+    asked by an alias binds to the one machine it is, and two runs naming one
+    machine two ways are seen to share it.
+    """
+
+    known: dict[str, str] = {}
+    for machine in machine_catalog():
+        canonical = normalized_hostname(machine.name)
+        for name in (machine.name, *machine.aliases):
+            known.setdefault(normalized_hostname(name), canonical)
+    unknown = [host for host in hosts if host not in known]
+    if unknown:
+        raise RecordNotFound(
+            "A host this names is no machine HQ knows; details.unknown lists them.", details={"unknown": unknown}
+        )
+    resolved = tuple(sorted({known[host] for host in hosts}))
+    refused = [host for host in resolved if not manifest.admits(MACHINE_KIND, host)]
+    if refused:
+        raise PolicyError(
+            "This procedure is not written for a machine this names; details.refused lists them, and "
+            "details.admits what it is written for.",
+            details={
+                "refused": refused,
+                "admits": {"target_kinds": list(manifest.target_kinds), "hosts": list(manifest.hosts)},
+            },
+        )
+    return resolved
+
+
+def _bound(manifest: OperationManifest, command: RunCommand) -> dict[str, Any]:
+    """What a run of ``command`` binds to: the procedure, its parameters as
+    validated, and its hosts as resolved."""
+
+    return {
+        "operation": manifest.id,
+        "revision": manifest.revision,
+        "parameters": command.parameters.model_dump(mode="json"),
+        "hosts": list(resolved_hosts(manifest, command.hosts)),
+        "correlation": command.correlation,
+    }
+
+
+def run_subject(manifest: OperationManifest, command: RunCommand) -> ApprovalSubject:
+    """What a held run is about and measured against: the manifest as supplied,
+    the parameters as validated and the hosts as they resolve now. Read from the
+    manifest rather than its record, which a run writes only when it is asked
+    for, so an approval of one revision never applies another."""
+
+    bound = _bound(manifest, command)
+    return ApprovalSubject(
+        OPERATION_KIND,
+        resource_key(manifest.id),
+        {"spec": pinned(manifest), "parameters": bound["parameters"], "hosts": bound["hosts"]},
+    )
+
+
+def _record(manifest: OperationManifest, *, principal: Principal) -> ManagedResource:
+    """The procedure's record, written as its manifest now says.
+
+    Written here, when a run is asked for, rather than when the registry is
+    composed: composing happens in every process and before any database is
+    migrated, with nobody to attribute a write to, while a request has a
+    transaction, an actor and an audit binding. An id nobody runs needs no
+    record, and each ask pins the record to the manifest it was asked of, so
+    the record says what its latest run bound to.
+    """
+
+    key = resource_key(manifest.id)
+    current = ManagedResource.objects.select_for_update().filter(key=key).first()
+    spec = pinned(manifest)
+    if current is None or current.kind != OPERATION_KIND or current.spec != spec:
+        save_managed_resource(
+            ManagedResourceCommand(
+                key=key, kind=OPERATION_KIND, spec=spec, enabled=current.enabled if current else True
+            ),
+            principal=principal,
+            current_key=key if current else None,
+        )
+    return ManagedResource.objects.select_for_update().get(key=key)
+
+
+def _holding(resource: ManagedResource, hosts: list[str]) -> OperationRequest | None:
+    """A run waiting or working on this procedure, else one on any of these hosts.
+
+    One run per procedure is also the database's rule
+    (``one_active_operation_per_resource_action``); one writer per host is
+    this, read under the write lock every request takes.
+    """
+
+    active = OperationRequest.objects.filter(
+        action=OperationRequest.Action.RUN, state__in=(OperationRequest.State.QUEUED, OperationRequest.State.CLAIMED)
+    )
+    same = active.filter(resource=resource).first()
+    if same is not None:
+        return same
+    wanted = set(hosts)
+    return next((run for run in active.order_by("created_at") if wanted & set(run.input.get("hosts") or ())), None)
+
+
+@transaction.atomic
+def request_run(
+    manifest: OperationManifest, command: RunCommand, *, principal: Principal, idempotency_key: str
+) -> OperationQueued:
+    """Queue one run of ``manifest`` for the automation worker, once per retry key."""
+
+    bound = _bound(manifest, command)
+    asked = {
+        **bound,
+        **({"approved_by": principal.approved_by} if principal.approved_by else {}),
+    }
+    existing = OperationRequest.objects.filter(idempotency_key=idempotency_key).select_related("resource").first()
+    if existing is not None:
+        kept = {name: existing.input.get(name) for name in bound}
+        if (
+            existing.resource.key != resource_key(manifest.id)
+            or existing.action != OperationRequest.Action.RUN
+            or (kept != bound)
+        ):
+            raise IdempotencyConflict("That retry key was already used for a different request.")
+        return {"ok": True, "queued": False, "operation": serialize_operation(existing)}
+    with audit_operation(operation="automation.run.request", principal=principal):
+        resource = _record(manifest, principal=principal)
+        if not resource.enabled:
+            raise PolicyError("This procedure is switched off in HQ.")
+        holder = _holding(resource, bound["hosts"])
+        if holder is not None:
+            raise PolicyError(
+                "Another run holds this procedure or one of these machines; details.holding is that run. "
+                "Ask again once it ends.",
+                details={"holding": serialize_operation(holder)},
+            )
+        # No run of this procedure is active and the key is new, so this
+        # queues one.
+        operation, _ = enqueue(
+            resource,
+            OperationRequest.Action.RUN,
+            idempotency_key=idempotency_key,
+            requested_actor=principal.actor,
+            requested_interface=principal.interface,
+            requested_device=principal.device,
+            requested_person_key=principal.person_key,
+            reason=command.reason,
+            input={"generation": resource.generation, **asked},
+        )
+    return {"ok": True, "queued": True, "operation": serialize_operation(operation)}
+
+
+def _run(manifest: OperationManifest, command: RunCommand, *, principal: Principal) -> OperationQueued:
+    # A read takes no retry key, so its run is keyed afresh: asking twice
+    # queues twice, and the procedure's one active run refuses the second.
+    key = getattr(command, IDEMPOTENCY_FIELD, "") or f"run:{secrets.token_urlsafe(18)}"
+    return request_run(manifest, command, principal=principal, idempotency_key=key)
+
+
+def _capability(manifest: OperationManifest) -> CapabilitySpec:
+    name = capability_name(manifest.id)
+    longest = ApprovalRequest._meta.get_field("capability").max_length
+    if longest is not None and len(name) > longest:
+        raise ImproperlyConfigured(
+            f"Operation {manifest.id!r} has an id too long to be run: {name!r} is over {longest} characters."
+        )
+
+    run = measured_by(partial(run_subject, manifest))(partial(_run, manifest))
+    return CapabilitySpec(
+        name,
+        f"Run the reviewed procedure {manifest.id} on the machines named.",
+        manifest.effect,
+        Capability.READ if manifest.effect == "read" else Capability.MANAGE_INFRASTRUCTURE,
+        command_type(manifest),
+        run,
+        execution_notes=(
+            "Find each machine named, and refuse one the procedure is not written for.",
+            "Refuse while another run waits or works on this procedure or on one of those machines.",
+            "Queue it once for the automation worker, which runs it outside this request.",
+        ),
+        label=f"{OperationRequest.Action.RUN.label} {manifest.id}",
+        verb=OperationRequest.Action.RUN.label,
+        # Read on a held run's card, where the procedure is what was asked for.
+        wants=f"carry out the procedure {manifest.id}",
+    )
+
+
+def capability_specs() -> tuple[CapabilitySpec, ...]:
+    """The command each supplied procedure is run through."""
+
+    return tuple(_capability(manifest) for manifest in operation_registry().values())

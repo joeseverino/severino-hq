@@ -17,7 +17,7 @@ from hq.domains.expenses.models import Expense
 from hq.domains.jobs import runner
 from hq.domains.jobs.models import Job
 from hq.domains.projects.models import Project
-from hq.platform.application import agent_registry, analytics, approvals, github_profile, own_devices
+from hq.platform.application import agent_registry, analytics, approval_review, approvals, github_profile, own_devices
 from hq.platform.application.capability_policy import RULE_LABELS
 from hq.platform.application.findings import findings
 from hq.platform.application.linked_accounts import GITHUB, linked_login
@@ -186,7 +186,7 @@ class ExampleEstateTests(TestCase):
 
     def test_the_agents_held_request_reads_as_a_before_and_after(self):
         (held,) = approvals.pending(principal=cli_principal())
-        preview = approvals.preview(held)
+        preview = approval_review.preview(held)
 
         self.assertEqual(held.requested_actor, AGENT)
         self.assertTrue(preview.compares, "a person reads what is there now beside what would be")

@@ -1,0 +1,53 @@
+name: Fuzz
+
+# Go's native fuzzing over the controller's parsers of untrusted input: every
+# Fuzz target, each for a bounded time (mise run fuzz). A pull request runs
+# each target's seeds and kept inputs as plain tests in Test's Go leg, so the
+# search for new inputs runs here, weekly, rather than on every push.
+#
+# What the targets have learned is Go's generated corpus in GOCACHE/fuzz,
+# kept between runs in a cache of its own so each run starts where the last
+# ended. An input that fails is written to its package's testdata/fuzz and
+# uploaded, to be committed beside its fix.
+on:
+  schedule:
+    - cron: "41 6 * * 3"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    name: Fuzz
+    runs-on: ubuntu-26.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/toolchain
+        with:
+          go: true
+      - id: corpus
+        name: Read where Go keeps its corpus
+        run: echo "path=$(go env GOCACHE)/fuzz" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.corpus.outputs.path }}
+          key: fuzz-corpus-${{ github.run_id }}
+          restore-keys: fuzz-corpus-
+      - name: Fuzz
+        run: mise run fuzz --time 3m
+      # A run dispatched on a branch reads the corpus and writes none.
+      - if: ${{ !cancelled() && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.corpus.outputs.path }}
+          key: fuzz-corpus-${{ github.run_id }}
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fuzz-failures
+          path: controller/**/testdata/fuzz/**
+          retention-days: 30

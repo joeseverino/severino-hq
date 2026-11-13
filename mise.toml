@@ -31,7 +31,7 @@
 # command to; nothing here needs a virtualenv made by hand. uv itself is one of
 # the tools below.
 
-min_version = "2026.11.5"
+min_version = "2026.11.6"
 
 [settings]
 # The runners, which build the images, the machines gates run on by hand, and
@@ -120,6 +120,14 @@ osv-scanner = { version = "2.7.1", lazy = true }
 # Reads the names templates, strings and other languages' files hand to Python,
 # which vulture cannot see (audit:dead). Lazy, as age is.
 ripgrep = { version = "15.2.0", lazy = true }
+
+# Compares the machine API's document with its base's and names each change
+# that breaks a client (lint:openapi-breaking). Not in mise's registry. Lazy:
+# only that gate runs it.
+[tools."github:oasdiff/oasdiff"]
+version = "1.37.0"
+lazy = true
+lazy_bins = ["oasdiff"]
 
 # Each Go binary's bytes by package and module, read from its own symbol and
 # line tables (audit:dependency-weight). Not in mise's registry, so named by its

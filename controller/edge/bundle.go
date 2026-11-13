@@ -56,11 +56,14 @@ var (
 
 // ReadBundle is a bundle's chain and key: exactly the two names, each once
 // and a regular file, so a link or a third file is never read or installed.
+// Together they are never more than the payload's own bytes: a sparse file's
+// header can claim any size, and the reader fills its holes with zeros.
 func ReadBundle(payload []byte) (fullchain, privateKey []byte, err error) {
 	reader := tar.NewReader(bytes.NewReader(payload))
 	files := map[string][]byte{}
 	entries := 0
 	irregular := false
+	budget := int64(len(payload))
 	for {
 		header, err := reader.Next()
 		if errors.Is(err, io.EOF) {
@@ -81,10 +84,11 @@ func ReadBundle(payload []byte) (fullchain, privateKey []byte, err error) {
 			irregular = true
 			continue
 		}
-		data, err := io.ReadAll(reader)
-		if err != nil {
+		data, err := io.ReadAll(io.LimitReader(reader, budget+1))
+		if err != nil || int64(len(data)) > budget {
 			return nil, nil, ErrBundleInvalid
 		}
+		budget -= int64(len(data))
 		files[header.Name] = data
 	}
 	switch {

@@ -1,0 +1,2 @@
+go test fuzz v1
+string("--operation\x00op-1\x00--service\x00app\x00--from\x00ghcr.io/example/app:1.2.0\x00--to\x00ghcr.io/example/app@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\x00--service\x00other")

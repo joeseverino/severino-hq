@@ -8,6 +8,7 @@ what admitting one takes, is docs/Architecture.md#providers.
 from ..provider_spec import ConnectionKind
 from . import (
     adguard,
+    automation,
     caddy,
     cloudflare,
     declarations,
@@ -18,7 +19,7 @@ from . import (
     tls,
 )
 
-ADMITTED = (tls, npm, github, portainer, tailscale, declarations, caddy, adguard, cloudflare)
+ADMITTED = (tls, npm, github, portainer, tailscale, declarations, caddy, adguard, cloudflare, automation)
 
 DECLARATIONS = tuple(definition for module in ADMITTED for definition in module.DEFINITIONS)
 

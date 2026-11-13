@@ -655,6 +655,42 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.assertEqual(button.get_attribute("title"), "Read the example again.")
 
     @with_script
+    def test_an_ask_among_a_rows_actions_keeps_them_on_one_line(self):
+        """An ask before another of a row's actions leaves that action on the
+        row's first line beside it, and what the ask says once pressed comes
+        on the line the cell keeps under them, so the row grows no taller."""
+
+        self.pages = {
+            **self.pages,
+            "ask-actions-probe": probe(
+                '{% table_region "Things" %}<table class="data-table"><thead><tr>'
+                '{% table_heading "Name" gutter=True %}{% table_heading "Act" hidden=True %}</tr></thead><tbody>'
+                '<tr><td>A</td><td class="row-actions">{% include "partials/_ask.html" with ask=ask %}'
+                '<a class="btn ghost compact" href="/example/remove/">Remove</a></td></tr></tbody></table>'
+                "{% endtable_region %}"
+                '<form id="hq-post" method="post" hidden></form>'
+                '<script defer src="{{ static }}js/fragment.js" nonce="{{ nonce }}"></script>'
+                '{% include "partials/_notice_frames.html" %}'
+                '<script defer src="{{ static }}js/ask.js" nonce="{{ nonce }}"></script>',
+                ask=Ask("Refresh", "/example/ask/", title="Read the example again.", compact=True),
+            ),
+            "example/ask": json.dumps(Standing(asks.FAILED, "The example could not be read.").as_json()),
+        }
+        for width in (PHONE_SCREEN[0], WIDE):
+            with self.subTest(width=width):
+                self.open("ask-actions-probe", width)
+                button = self.page.locator(f"{SELECTORS['row_ask']} [data-ask-button]")
+                remove = self.page.get_by_role("link", name="Remove")
+                middles = [box["y"] + box["height"] / 2 for box in (button.bounding_box(), remove.bounding_box())]
+                self.assertLessEqual(abs(middles[0] - middles[1]), 1.5)
+                row = button.evaluate_handle("(button) => button.closest('tr')").as_element()
+                tall = row.bounding_box()["height"]
+                button.press("Enter")
+                self.page.wait_for_selector(f'{SELECTORS["row_ask"]}[data-ask-state="failed"]')
+                self.assertTrue(self.page.locator(SELECTORS["ask_note"]).first.is_visible())
+                self.assertLessEqual(row.bounding_box()["height"], tall + 1)
+
+    @with_script
     def test_an_opened_row_keeps_its_words_in_their_cells(self):
         """Opening a row lifts every cut in it, and what was cut breaks inside
         its column rather than running under the next one."""

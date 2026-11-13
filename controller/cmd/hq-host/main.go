@@ -169,7 +169,7 @@ func runWeb(ctx context.Context, args []string, getenv func(string) string, stdo
 		RootUID:   0, WebUID: hostcore.WebUID,
 		Docker: func(ctx context.Context, args ...string) *exec.Cmd { return hostcore.Command(ctx, "docker", args...) },
 		Notify: func(state string) error { return host.Notify(getenv("NOTIFY_SOCKET"), state) },
-		Poll:   2 * time.Second,
+		Poll:   host.WebPoll,
 		// The renderer's own bound on a run, so a slow boot render is waited
 		// out and a failed one retried when the unit restarts.
 		Await:          host.RenderBound,

@@ -28,6 +28,7 @@ from .derivations import derivation, forget, holds_until, present
 from .ui import STATUS_VALUES, DomainOverview
 lazy from .action_items import item_key
 lazy from .automation_manifest import OperationManifest
+lazy from .automation_runs import clear_operation_registry_cache
 lazy from .domains import NAVIGATION_GROUPS
 lazy from .integrations import clear_integration_graph_cache
 lazy from .item_help import instructions
@@ -387,6 +388,7 @@ def clear_plugin_composition_cache() -> None:
 
     clear_integration_graph_cache()
     clear_outbound_work_cache()
+    clear_operation_registry_cache()
 
 
 def installed_plugin_apps() -> list[str]:

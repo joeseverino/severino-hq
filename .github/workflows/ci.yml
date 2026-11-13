@@ -135,6 +135,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # The commit and its first parent: on a pull request the base its
+          # merge commit merges into, on main the commit before the squash.
+          # lint:openapi-breaking compares the API document with that one.
+          fetch-depth: 2
       - uses: ./.github/actions/toolchain
         with:
           # The structural bar builds its Go inspector from the controller's
@@ -145,6 +149,8 @@ jobs:
         # Every gate named lint:* (mise-tasks/lint.toml, mise-tasks/lint/).
         # Each runs to the end, and the last lines of this step name every one
         # that failed.
+        env:
+          CHECK_BASE: HEAD^1
         run: mise run lint
       - name: Dependency review
         if: github.event_name == 'pull_request'

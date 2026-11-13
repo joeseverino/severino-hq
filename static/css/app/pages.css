@@ -321,7 +321,6 @@ form[data-changed] .save-bar::before { content: ""; position: absolute; z-index:
    press is what makes the line, under the reader's own hand. It ends where
    the controls end, at the page's edge. */
 .page-head .page-actions > .ask > .ask-said { justify-content: flex-end; text-align: end; }
-.page-head .page-actions > .ask > .ask-said:has(.ask-note:empty):has(.ask-elapsed:empty) { display: none; }
 /* The title stands on the controls' labels' baseline, so a line under them
    moves it nothing. */
 .page-head:has(> .page-actions > .ask) { align-items: first baseline; }
@@ -329,7 +328,7 @@ form[data-changed] .save-bar::before { content: ""; position: absolute; z-index:
    once there is something to say, in the menu's own inset. */
 .overflow-menu-panel .ask-said { padding: 0 var(--space-5); }
 .overflow-menu-panel .ask-said span { padding: 0; white-space: normal; }
-.overflow-menu-panel .ask-said:has(.ask-note:empty):has(.ask-elapsed:empty) { display: none; }
+:is(.page-head .page-actions, .overflow-menu-panel) > .ask > .ask-said:has(.ask-note:empty):has(.ask-elapsed:empty) { display: none; }
 .ask-note { overflow-wrap: anywhere; }
 /* A note says its state's word and its sentence (_ask.html): the sentence
    where the line is the row's, the word alone in a table's cell, whose line is

@@ -28,7 +28,8 @@ type WebRunner struct {
 	Docker func(ctx context.Context, args ...string) *exec.Cmd
 	// Notify sends one sd_notify state.
 	Notify func(state string) error
-	// Poll is how often the environment and the health are looked at; Await
+	// Poll is how often the environment and the health are looked at
+	// (WebPoll on a host); Await
 	// bounds the wait for the environment, after which the start fails and
 	// the unit tries again.
 	Poll, Await time.Duration
@@ -49,6 +50,11 @@ type WebRunner struct {
 	Stdout, Stderr io.Writer
 	Log            *slog.Logger
 }
+
+// WebPoll is how often a host's web runner reads HQ's health, and so how
+// often a healthy HQ pings the watchdog: well under half the unit's
+// WatchdogSec=, the pace sd_watchdog_enabled(3) asks for.
+const WebPoll = 2 * time.Second
 
 // ErrNotRendered is a start that found no environment to run on.
 var ErrNotRendered = errors.New("the application environment was not rendered")
@@ -92,6 +98,12 @@ func (r *WebRunner) Run(ctx context.Context) error {
 	return r.supervise(ctx, exited)
 }
 
+// supervise watches HQ until it stops. Before ready it waits for the first
+// healthy answer; after, every poll that reads healthy pings the service
+// manager's watchdog (WatchdogSec= in the unit), and one that reads
+// unhealthy stops HQ and fails the unit, which restarts it. A read that fails
+// sends no ping, so a Docker that stops answering, or a supervisor that
+// stops polling, is the watchdog's to end.
 func (r *WebRunner) supervise(ctx context.Context, exited <-chan error) error {
 	ticker := time.NewTicker(r.Poll)
 	defer ticker.Stop()
@@ -105,29 +117,41 @@ func (r *WebRunner) supervise(ctx context.Context, exited <-chan error) error {
 			return fmt.Errorf("the container stopped on its own: %w", err)
 		case <-ctx.Done():
 			_ = r.Notify("STOPPING=1")
-			_ = r.Docker(context.WithoutCancel(ctx), "stop", "--time", StopSeconds, hostcore.Container).Run()
-			<-exited //nolint:errcheck // stopped on purpose, so how it exited says nothing
+			r.stop(ctx, exited)
 			return nil
 		case <-ticker.C:
-			if ready {
-				continue
-			}
 			switch r.health(ctx) {
 			case "healthy":
+				if ready {
+					// A ping that is not delivered is a missed one, which
+					// the watchdog already answers.
+					_ = r.Notify("WATCHDOG=1")
+					continue
+				}
 				ready = true
 				if err := r.Notify("READY=1\nSTATUS=HQ is healthy."); err != nil {
 					return fmt.Errorf("the service manager was not told HQ is ready: %w", err)
 				}
 				r.Log.Info("HQ is healthy.", slog.String("event", "host.web.ready"))
 			case "unhealthy":
+				_ = r.Notify("STATUS=HQ is unhealthy.")
+				r.stop(ctx, exited)
+				if ready {
+					return errors.New("HQ turned unhealthy")
+				}
 				// Past its start period and failing: the start fails now,
 				// so a deploy of an image that cannot serve rolls back.
-				_ = r.Docker(context.WithoutCancel(ctx), "stop", "--time", StopSeconds, hostcore.Container).Run()
-				<-exited //nolint:errcheck // stopped on purpose, so how it exited says nothing
 				return errors.New("HQ did not become healthy")
 			}
 		}
 	}
+}
+
+// stop stops the container and waits for it to exit. Not ctx, which may be
+// cancelled: the stop is what ends HQ.
+func (r *WebRunner) stop(ctx context.Context, exited <-chan error) {
+	_ = r.Docker(context.WithoutCancel(ctx), "stop", "--time", StopSeconds, hostcore.Container).Run()
+	<-exited //nolint:errcheck // stopped on purpose, so how it exited says nothing
 }
 
 // sealPublic is whether HQ is given the public sealing key: only root's file,

@@ -300,7 +300,7 @@ host adds beside a shipped one is the host's, and `verify` does not compare it.
 
 | Unit | Runs |
 | :--- | :--- |
-| `severino-hq-web.service` | the web container; the only thing that starts it |
+| `severino-hq-web.service` | the web container; the only thing that starts it. Once HQ is ready, a health poll that reads unhealthy stops it and fails the unit, which restarts it, and a supervisor or health read that hangs for 90 seconds misses the watchdog (`WatchdogSec=`), which does the same |
 | `severino-hq-secrets.service` / `.timer` | `hq-secrets`, hourly ([Secrets](Secrets.md)) |
 | `severino-hq-controller.service` / `.timer` / `.path` | `hq-controller --apply`, when HQ rings the doorbell (work queued or a pass due), else 15 minutes after each run ends |
 | `severino-hq-glance.service` / `.path` | `hq-controller --glance` beside any controller pass, when HQ creates the glance doorbell (a Refresh press, or a page opening on a due reading). The pass removes the doorbell before it reads; one created while it reads still stands when it ends, and the path unit starts it again. It reads while HQ is still waiting on a panel, up to three times, and never counts as the controller arriving |

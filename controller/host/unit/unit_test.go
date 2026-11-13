@@ -1,8 +1,10 @@
 package unit
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -367,4 +369,53 @@ func TestASocketPeerOfAnotherAccountIsRefused(t *testing.T) {
 	if err := admit(strings.NewReader("stop hermes.service")); err != nil {
 		t.Fatalf("a carrier that is not a socket was refused: %v", err)
 	}
+}
+
+// Whatever arrives on the socket, a request outside the closed grammar is
+// refused before anything runs, and one inside it is exactly `VERB NAME`.
+func FuzzRequest(f *testing.F) {
+	f.Add([]byte("stop hermes.service\n"))
+	f.Add([]byte("restart example-apps.service"))
+	f.Add([]byte("start hermes.service\nstop ssh.service\n"))
+	f.Add([]byte("stop  hermes.service"))
+	f.Add([]byte("stop getty@tty1.service"))
+	f.Add([]byte("stop ../hermes.service"))
+	f.Add([]byte("stop hermes.service\r\n"))
+	f.Add([]byte("stop " + strings.Repeat("a", RequestLimit) + ".service"))
+	f.Add([]byte("stop " + strings.Repeat("a", RequestLimit-14) + ".service\n"))
+	f.Fuzz(func(t *testing.T, data []byte) {
+		line, err := ReadRequest(bytes.NewReader(data))
+		if err != nil {
+			if _, typed := errors.AsType[refusal](err); !typed {
+				t.Fatalf("an untyped refusal: %v", err)
+			}
+			return
+		}
+		if strings.Contains(line, "\n") || len(line) >= RequestLimit || !bytes.HasPrefix(data, []byte(line)) {
+			t.Fatalf("read %q from %q", line, data)
+		}
+		ran := false
+		runner := &Runner{EUID: 0, Command: func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+			ran = true
+			// A program no PATH holds: Start fails before any process is made.
+			return exec.CommandContext(ctx, "hq-fuzz-no-such-program")
+		}}
+		verb, name, err := Parse(line)
+		result := runner.Run(t.Context(), line)
+		if err != nil {
+			if _, typed := errors.AsType[refusal](err); !typed {
+				t.Fatalf("an untyped refusal: %v", err)
+			}
+			if ran || result.Outcome != Refused {
+				t.Fatalf("%q is outside the grammar and ran: %+v", line, result)
+			}
+			return
+		}
+		if !slices.Contains(Verbs, verb) || !Name.MatchString(name) || Request(verb, name) != line {
+			t.Fatalf("%q parsed as %q %q", line, verb, name)
+		}
+		if result.Outcome == Done {
+			t.Fatalf("%q acted though docker named no container", line)
+		}
+	})
 }

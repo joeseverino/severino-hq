@@ -332,6 +332,14 @@ suites share the machine's memory:
 | `build` | the image build and what an image must pass |
 | `scan` | CodeQL's analysis, which finds no alert here; in CI, no alert GitHub holds open on the analyzed ref, so a dismissed one passes |
 
+A Go fuzz target's seeds and kept inputs run as plain tests in `test`; the
+search for new inputs is `mise run fuzz`, outside every gate, which runs each
+target for a bounded time, as the weekly Fuzz workflow does. A parser of
+input from outside a privilege boundary has a `Fuzz` target in its package's
+tests that holds its promise: a refusal is the parser's own error, and what it
+reads round-trips or keeps the invariant it documents. An input a run finds
+failing is kept in that package's `testdata/fuzz` with its fix.
+
 A setting whose default follows `DEBUG` is held by a test that loads the
 settings both ways. The suite inside an image runs once, in Compose, on the
 composed image production runs.

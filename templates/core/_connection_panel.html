@@ -189,7 +189,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
               {% if hop.evidence %}
                 {% table_region "Evidence" %}
                   <table class="data-table">
-                    <thead><tr>{% table_heading "Value" "identifier" %}{% table_heading "Type" "status" %}{% table_heading "Note" %}</tr></thead>
+                    <thead><tr>{% table_heading "Value" "identifier" gutter=True %}{% table_heading "Type" "status" %}{% table_heading "Note" drop=1 %}</tr></thead>
                     <tbody>
                       {% for item in hop.evidence %}
                         <tr>

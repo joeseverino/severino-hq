@@ -479,6 +479,10 @@ class OperationRequest(TimestampedModel):
         # that machine to carry that traffic, so it is asked for once, by an
         # operator, about a route the machine is already offering.
         APPROVE_ROUTES = "approve-routes", "Approve routes"
+        # A reviewed automation procedure, run once on the hosts it names. The
+        # automation worker claims it, never the controller, which has no
+        # handler for it (``provider_adapters.automation``).
+        RUN = "run", "Run"
 
     # Declared above the model so a rule in ``Meta`` can name its values.
     State = OperationState

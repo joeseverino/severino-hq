@@ -81,6 +81,9 @@ class OperationItem(TypedDict):
     ]
     attempt_count: AttemptCount
     result: Annotated[dict[str, Any], Describe("What the controller reported of its run; empty until it has run.")]
+    correlation: Annotated[
+        str, Describe("The asker's own id for finding it later, such as an investigation's; empty for none.")
+    ]
 
 
 # The reconcile a save queues, which every answer built on a save carries.
@@ -155,6 +158,7 @@ def serialize_operation(operation: OperationRequest) -> OperationItem:
         "lease_expires_at": (operation.lease_expires_at.isoformat() if operation.lease_expires_at else None),
         "attempt_count": operation.attempt_count,
         "result": operation.result,
+        "correlation": str((operation.input or {}).get("correlation", "")),
     }
 
 
@@ -563,7 +567,8 @@ def request_stop(command: OperationCommand, *, principal: Principal, current_key
 
 
 # The capability that asks for each verb, so a page asks for one by its verb
-# and runs it through the capability runner like every other caller.
+# and runs it through the capability runner like every other caller. A run is
+# asked through its procedure's own command (``automation_runs.capability_name``).
 ACTION_CAPABILITY = {
     OperationRequest.Action.RECONCILE: "infrastructure.resource.reconcile",
     OperationRequest.Action.RENEW: "certificate.renew",

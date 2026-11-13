@@ -22,6 +22,9 @@ type harness struct {
 	notes  []string
 	mu     sync.Mutex
 	run    *exec.Cmd
+	// inspects counts the health reads, so a scenario can change HQ's
+	// health after the first.
+	inspects int
 }
 
 // docker is the CLI as the runner tests see it: each call recorded, and the
@@ -33,10 +36,21 @@ func (h *harness) docker(scenario string) func(context.Context, ...string) *exec
 		h.log = append(h.log, strings.Join(args, " "))
 		switch args[0] {
 		case "inspect":
+			h.inspects++
+			later := h.inspects > 1
 			health := "starting"
-			switch scenario {
-			case "healthy", "unhealthy":
+			switch {
+			case scenario == "healthy", scenario == "unhealthy":
 				health = scenario
+			case scenario == "sickens":
+				health = "healthy"
+				if later {
+					health = "unhealthy"
+				}
+			case scenario == "unreadable" && later:
+				return exec.CommandContext(ctx, "/bin/sh", "-c", "exit 1")
+			case scenario == "unreadable":
+				health = "healthy"
 			}
 			return exec.CommandContext(ctx, "/bin/sh", "-c", "echo "+health)
 		case "run":
@@ -94,6 +108,30 @@ func (h *harness) calls() string {
 		return ""
 	}
 	return strings.Join(h.log, "\n") + "\n"
+}
+
+// pings is how many watchdog keep-alives were sent, and how many of them
+// came before READY=1.
+func (h *harness) pings() (all, early int) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	ready := false
+	for _, note := range h.notes {
+		ready = ready || strings.HasPrefix(note, "READY=1")
+		if note == "WATCHDOG=1" {
+			all++
+			if !ready {
+				early++
+			}
+		}
+	}
+	return all, early
+}
+
+func (h *harness) healthReads() int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.inspects
 }
 
 func (h *harness) ready() bool {
@@ -237,5 +275,90 @@ func TestAnUnhealthyContainerFailsTheStart(t *testing.T) {
 	}
 	if !strings.Contains(h.calls(), "stop --time 30 "+hostcore.Container) {
 		t.Errorf("the unhealthy container was not stopped:\n%s", h.calls())
+	}
+}
+
+func TestAHealthyHQPingsTheWatchdogOnEachPoll(t *testing.T) {
+	h := newHarness(t, "healthy")
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- h.runner.Run(ctx) }()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for all, _ := h.pings(); all < 3 && time.Now().Before(deadline); all, _ = h.pings() {
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("a requested stop is not a failure: %v", err)
+	}
+	all, early := h.pings()
+	if all < 3 {
+		t.Fatalf("a healthy HQ sent %d watchdog pings; it pings on every poll", all)
+	}
+	if early != 0 {
+		t.Errorf("%d watchdog pings came before HQ was ready", early)
+	}
+}
+
+func TestHQTurningUnhealthyStopsItAndFailsTheUnit(t *testing.T) {
+	h := newHarness(t, "sickens")
+	done := make(chan error, 1)
+	go func() { done <- h.runner.Run(context.Background()) }()
+
+	var err error
+	select {
+	case err = <-done:
+	case <-time.After(5 * time.Second):
+		// Stop the run that never ended, so the test leaves nothing behind.
+		_ = h.runner.Docker(context.Background(), "stop").Run()
+		t.Fatal("HQ turned unhealthy after it was ready and the unit kept running")
+	}
+	if err == nil {
+		t.Fatal("HQ turning unhealthy did not fail the unit, so systemd would not restart it")
+	}
+	if !h.ready() {
+		t.Fatal("HQ was never ready, so this is the start path, not a later failure")
+	}
+	calls := strings.Split(strings.TrimSpace(h.calls()), "\n")
+	if last := calls[len(calls)-1]; last != "stop --time 30 "+hostcore.Container {
+		t.Errorf("the unhealthy container was not stopped before the unit failed:\n%s", h.calls())
+	}
+}
+
+func TestAnUnreadableHealthSendsNoPing(t *testing.T) {
+	h := newHarness(t, "unreadable")
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- h.runner.Run(ctx) }()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for h.healthReads() < 4 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("a requested stop is not a failure: %v", err)
+	}
+	if h.healthReads() < 4 {
+		t.Fatal("the health stopped being read once it could not be")
+	}
+	if !h.ready() {
+		t.Fatal("HQ was never ready")
+	}
+	if all, _ := h.pings(); all != 0 {
+		t.Errorf("%d watchdog pings were sent while the health could not be read", all)
+	}
+}
+
+func TestTheWebUnitsWatchdogOutlastsTwoPolls(t *testing.T) {
+	value := unitValue(t, filepath.Join(shippedUnits, "severino-hq-web.service"), "WatchdogSec")
+	limit, err := time.ParseDuration(value)
+	if err != nil {
+		t.Fatalf("WatchdogSec=%q is not a span this test reads: %v", value, err)
+	}
+	// sd_watchdog_enabled(3): ping at least every half of the limit.
+	if WebPoll > limit/2 {
+		t.Errorf("the web runner polls every %s, more than half of WatchdogSec=%s, so a healthy HQ can be killed", WebPoll, value)
 	}
 }

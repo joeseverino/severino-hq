@@ -19,7 +19,7 @@ from hq.domains.control_plane.models import ApprovalRequest, DashboardMachine, M
 from hq.domains.projects.models import Project
 from hq.platform.application.action_links import command_url
 from hq.platform.application.agent_access import SET_AGENT_ACCESS
-from hq.platform.application.approvals import asked
+from hq.platform.application.approval_review import asked
 from hq.platform.application.attention import waiting_for_approval
 from hq.platform.application.capabilities import capability_registry
 from hq.platform.application.capability_policy import agents_may_hold

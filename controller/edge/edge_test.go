@@ -132,7 +132,7 @@ type certificatePair struct {
 	chain, key, fingerprint string
 }
 
-func issue(t *testing.T, name string, notAfter time.Time) certificatePair {
+func issue(t testing.TB, name string, notAfter time.Time) certificatePair {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -248,28 +248,30 @@ func TestDeployInstallsAMatchedPairAndReloads(t *testing.T) {
 
 // A deploy that should be refused leaves the installed pair alone and never
 // reloads Caddy.
+// tarOf is a tar of these headers, each regular file holding four bytes.
+func tarOf(t testing.TB, headers ...tar.Header) []byte {
+	var buffer bytes.Buffer
+	archive := tar.NewWriter(&buffer)
+	for _, header := range headers {
+		header.Mode, header.Format = 0o600, tar.FormatUSTAR
+		if header.Typeflag == tar.TypeReg {
+			header.Size = 4
+		}
+		if err := archive.WriteHeader(&header); err != nil {
+			t.Fatal(err)
+		}
+		if header.Typeflag == tar.TypeReg {
+			_, _ = archive.Write([]byte("data"))
+		}
+	}
+	_ = archive.Close()
+	return buffer.Bytes()
+}
+
 func TestDeployRefusesWhatCaddyWouldServeWrongly(t *testing.T) {
 	good := issue(t, "new.example.test", now.Add(24*time.Hour))
 	other := issue(t, "other.example.test", now.Add(24*time.Hour))
 	expired := issue(t, "expired.example.test", now.Add(-time.Hour))
-	tarOf := func(headers ...tar.Header) []byte {
-		var buffer bytes.Buffer
-		archive := tar.NewWriter(&buffer)
-		for _, header := range headers {
-			header.Mode, header.Format = 0o600, tar.FormatUSTAR
-			if header.Typeflag == tar.TypeReg {
-				header.Size = 4
-			}
-			if err := archive.WriteHeader(&header); err != nil {
-				t.Fatal(err)
-			}
-			if header.Typeflag == tar.TypeReg {
-				_, _ = archive.Write([]byte("data"))
-			}
-		}
-		_ = archive.Close()
-		return buffer.Bytes()
-	}
 	for name, body := range map[string][]byte{
 		"a key that does not match the certificate": Bundle([]byte(good.chain), []byte(other.key)),
 		"unparseable input":                         Bundle([]byte("not a certificate\n"), []byte("not a key\n")),
@@ -277,13 +279,13 @@ func TestDeployRefusesWhatCaddyWouldServeWrongly(t *testing.T) {
 		"an expired certificate":                    Bundle([]byte(expired.chain), []byte(expired.key)),
 		"no body":                                   nil,
 		"a body that is not a tar":                  []byte("fullchain.pem privkey.pem"),
-		"a third file": tarOf(tar.Header{Name: Fullchain, Typeflag: tar.TypeReg},
+		"a third file": tarOf(t, tar.Header{Name: Fullchain, Typeflag: tar.TypeReg},
 			tar.Header{Name: PrivateKey, Typeflag: tar.TypeReg}, tar.Header{Name: "extra.pem", Typeflag: tar.TypeReg}),
-		"a file named twice": tarOf(tar.Header{Name: Fullchain, Typeflag: tar.TypeReg},
+		"a file named twice": tarOf(t, tar.Header{Name: Fullchain, Typeflag: tar.TypeReg},
 			tar.Header{Name: PrivateKey, Typeflag: tar.TypeReg}, tar.Header{Name: PrivateKey, Typeflag: tar.TypeReg}),
-		"a link in place of the key": tarOf(tar.Header{Name: Fullchain, Typeflag: tar.TypeReg},
+		"a link in place of the key": tarOf(t, tar.Header{Name: Fullchain, Typeflag: tar.TypeReg},
 			tar.Header{Name: PrivateKey, Typeflag: tar.TypeSymlink, Linkname: "/etc/shadow"}),
-		"a path beside the name": tarOf(tar.Header{Name: "./" + Fullchain, Typeflag: tar.TypeReg},
+		"a path beside the name": tarOf(t, tar.Header{Name: "./" + Fullchain, Typeflag: tar.TypeReg},
 			tar.Header{Name: PrivateKey, Typeflag: tar.TypeReg}),
 		"a body past the limit": append(Bundle([]byte(good.chain), []byte(good.key)), make([]byte, MaxBody)...),
 	} {
@@ -596,4 +598,37 @@ func TestOwnerIsANameOrANumber(t *testing.T) {
 	if _, err := id("nobody-here", missing); err == nil {
 		t.Fatal("an unknown name resolved")
 	}
+}
+
+// A deploy's body is whatever the caller sent. It is refused with one of the
+// bundle's own errors, or it is exactly a chain and a key, the two the
+// bundle the edge would build from them holds again.
+func FuzzReadBundle(f *testing.F) {
+	pair := issue(f, "new.example.test", now.Add(24*time.Hour))
+	f.Add(Bundle([]byte(pair.chain), []byte(pair.key)))
+	f.Add(Bundle(nil, nil))
+	f.Add([]byte("fullchain.pem privkey.pem"))
+	f.Add(tarOf(f, tar.Header{Name: Fullchain, Typeflag: tar.TypeReg},
+		tar.Header{Name: PrivateKey, Typeflag: tar.TypeReg}, tar.Header{Name: "extra.pem", Typeflag: tar.TypeReg}))
+	f.Add(tarOf(f, tar.Header{Name: Fullchain, Typeflag: tar.TypeReg},
+		tar.Header{Name: PrivateKey, Typeflag: tar.TypeReg}, tar.Header{Name: PrivateKey, Typeflag: tar.TypeReg}))
+	f.Add(tarOf(f, tar.Header{Name: Fullchain, Typeflag: tar.TypeReg},
+		tar.Header{Name: PrivateKey, Typeflag: tar.TypeSymlink, Linkname: "/etc/shadow"}))
+	f.Add(tarOf(f, tar.Header{Name: "./" + Fullchain, Typeflag: tar.TypeReg}, tar.Header{Name: PrivateKey, Typeflag: tar.TypeReg}))
+	f.Fuzz(func(t *testing.T, payload []byte) {
+		fullchain, privateKey, err := ReadBundle(payload)
+		if err != nil {
+			if !errors.Is(err, ErrBundleInvalid) && !errors.Is(err, ErrBundleUnexpected) && !errors.Is(err, ErrBundleIncomplete) {
+				t.Fatalf("an untyped refusal: %v", err)
+			}
+			return
+		}
+		if len(fullchain)+len(privateKey) > len(payload) {
+			t.Fatal("read more than the payload holds")
+		}
+		again, key, err := ReadBundle(Bundle(fullchain, privateKey))
+		if err != nil || !bytes.Equal(again, fullchain) || !bytes.Equal(key, privateKey) {
+			t.Fatalf("the pair read does not bundle back to itself: %v", err)
+		}
+	})
 }

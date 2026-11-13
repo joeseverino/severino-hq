@@ -40,7 +40,8 @@ from .services import service_catalog
 from .timestamps import moment
 from .ui import counted, ended
 from .workflow_contracts import ActionLink, WorkflowPlan
-lazy from .approvals import asked, pending, preview, reads_every_hold
+lazy from .approval_review import asked, preview
+lazy from .approvals import pending, reads_every_hold
 lazy from .connections import machines_once
 lazy from .tailnet import policy as tailnet_policy
 lazy from .tailnet_presence import tailnet_presence

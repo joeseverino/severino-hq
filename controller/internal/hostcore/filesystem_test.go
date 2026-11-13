@@ -6,6 +6,7 @@ import (
 	"slices"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 // A mount table as a host's /proc/self/mounts prints one inside a sandboxed
@@ -80,6 +81,65 @@ func TestNoFilesystemReadIsNoReading(t *testing.T) {
 	if data, err := ReadFilesystems([]byte(table), refused, time.Now()); err == nil {
 		t.Errorf("a table statfs answered nothing for reads as %s", data)
 	}
+}
+
+// Whatever a mount table holds, statfs is asked once of each real
+// filesystem's reachable point and of nothing else, and the reading names
+// exactly the filesystems it answered for.
+func FuzzReadFilesystems(f *testing.F) {
+	f.Add([]byte(table))
+	f.Add([]byte("/dev/sda2 / ext4 rw 0 0\n/dev/sdc1 /home/example ext4 rw 0 0\ntmpfs /home tmpfs ro 0 0\n"))
+	f.Add([]byte("/dev/sda2 /a\\134b ext4 rw 0 0\n/dev/sda3 /a\\04 xfs rw 0 0\n/dev/sda4 /a\\ zfs rw 0 0\n"))
+	f.Add([]byte("/dev/sda2 /srv ext4 rw 0 0\n/dev/sda3 /srv/ ext4 rw 0 0\r\n/dev/sda4 / btrfs rw"))
+	now := time.Date(2030, 1, 1, 6, 0, 0, 0, time.FixedZone("example", 3600))
+	f.Fuzz(func(t *testing.T, mounts []byte) {
+		points := Mounts(mounts)
+		asked := map[string]int{}
+		// Every third path answers for no space, as a filesystem statfs
+		// cannot read does.
+		statfs := func(path string) (free, total uint64, err error) {
+			asked[path]++
+			return uint64(len(path)), uint64(len(path) % 3), nil
+		}
+		data, err := ReadFilesystems(mounts, statfs, now)
+		answered := []string{}
+		for _, point := range points {
+			if asked[point] != 1 {
+				t.Fatalf("statfs was asked %d times of %q", asked[point], point)
+			}
+			delete(asked, point)
+			if len(point)%3 != 0 {
+				answered = append(answered, point)
+			}
+		}
+		if len(asked) != 0 {
+			t.Fatalf("statfs was asked of %v, which the table does not mount", asked)
+		}
+		if err != nil {
+			if len(answered) != 0 {
+				t.Fatalf("refused a table statfs answered for: %v", err)
+			}
+			return
+		}
+		var reading FilesystemReading
+		if err := json.Unmarshal(data, &reading); err != nil || reading.ReadAt != "2030-01-01T05:00:00Z" {
+			t.Fatalf("read %s (%v)", data, err)
+		}
+		if len(reading.Filesystems) != len(answered) {
+			t.Fatalf("read %d filesystems of the %d statfs answered for", len(reading.Filesystems), len(answered))
+		}
+		for i, filesystem := range reading.Filesystems {
+			point := answered[i]
+			if utf8.ValidString(point) && filesystem.Mount != point || filesystem.TotalBytes != uint64(len(point)%3) || filesystem.FreeBytes != uint64(len(point)) {
+				t.Fatalf("read %+v for %q", filesystem, point)
+			}
+		}
+		for i, point := range points {
+			if slices.Contains(points[i+1:], point) {
+				t.Fatalf("%q is read twice", point)
+			}
+		}
+	})
 }
 
 func must(data []byte, err error) []byte {

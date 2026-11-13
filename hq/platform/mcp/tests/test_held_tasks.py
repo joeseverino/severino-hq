@@ -21,7 +21,8 @@ from mcp.shared.exceptions import MCPError
 from pydantic import Field, TypeAdapter
 
 from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule, OperationRequest
-from hq.platform.application.approvals import ApproveCommand, RejectCommand, approve, asked, reject
+from hq.platform.application.approval_review import asked
+from hq.platform.application.approvals import ApproveCommand, RejectCommand, approve, reject
 from hq.platform.application.controller import ControllerReport, claim_next_operation, report_operation
 from hq.platform.application.hq_self import site_host
 from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource

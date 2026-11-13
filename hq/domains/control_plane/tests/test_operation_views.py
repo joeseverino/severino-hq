@@ -8,7 +8,8 @@ from django.urls import NoReverseMatch, reverse
 from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule, ManagedResource, OperationRequest
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.platform.application.adoption_testing import managing_everything
-from hq.platform.application.approvals import DESTRUCTIVE_EFFECT, ApproveCommand, approve, asked, preview
+from hq.platform.application.approval_review import asked, preview
+from hq.platform.application.approvals import DESTRUCTIVE_EFFECT, ApproveCommand, approve
 from hq.platform.application.capabilities import capability_registry, execute_capability
 from hq.platform.application.capability_policy import Rule
 from hq.platform.application.plugin_testing import form_keyed

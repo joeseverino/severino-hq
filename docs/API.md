@@ -678,6 +678,18 @@ Resource filters emit individual query parameters; an unknown one is refused
 `mise run lint:openapi` installs the locked Redocly from `tools/lint` and
 validates every description against the specification.
 
+`mise run lint:openapi-breaking` compares `hq-api.openapi.json` with the
+base's copy (fast's base; in CI the commit the change lands on) through
+oasdiff, and fails on each change that breaks a client: a removed path,
+operation or response field, a parameter or request field made required, a
+narrowed enum, a changed type. Each line it prints is oasdiff's account of one
+break. A deliberate break is admitted by copying that line into
+`hq/platform/api/hq-api.breaking-exemptions.md`, oasdiff's own `--err-ignore`
+file, followed by `Reason:` and why clients can take it; an entry with no
+reason fails the gate. Once the change is on main the entry matches nothing
+and is deleted. The controller's two documents are left out, since both of
+their ends ship in one image.
+
 ### The document
 
 `hq/platform/api/openapi.py` derives the document from the API's routes and
@@ -964,7 +976,7 @@ capabilities. A client that declares nothing keeps the held answer.
 
 Every answer carries a `statusMessage`, since a client shows the last one it
 was sent: the sentence the approval card and the audit log say the hold by
-(`approvals.asked`), then where it stands, with the review page's absolute
+(`approval_review.asked`), then where it stands, with the review page's absolute
 address while it waits (`hq_self.site_url`, built from the declared site
 host, never from the request).
 

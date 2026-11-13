@@ -3,6 +3,7 @@ package install
 import (
 	"bufio"
 	"bytes"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -36,8 +37,12 @@ func within(dir, mount string) bool {
 // CheckMountInfo reads /proc/self/mountinfo's text. Every mount stacked at the
 // innermost mount point holding dir must be tmpfs, and the one on top must
 // carry noswap: a plain tmpfs pages its contents out to swap. An answer that
-// cannot be read is a refusal, never a yes.
+// cannot be read is a refusal, never a yes, and so is a dir that is not an
+// absolute, clean path, which no mount point can be said to hold.
 func CheckMountInfo(mountinfo []byte, dir string) error {
+	if !filepath.IsAbs(dir) || filepath.Clean(dir) != dir {
+		return hostError("Controller secret directory must be an absolute, clean path.")
+	}
 	type mount struct {
 		point, fstype string
 		options       []string

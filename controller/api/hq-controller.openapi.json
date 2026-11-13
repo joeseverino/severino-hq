@@ -793,6 +793,10 @@
           "result": {
             "description": "The provider's last result for this operation, as Django stored it.",
             "x-go-type": "any"
+          },
+          "correlation": {
+            "description": "The asker's own id for finding it later; empty for none.",
+            "type": "string"
           }
         },
         "additionalProperties": false,
@@ -809,7 +813,8 @@
           "claimed_by",
           "lease_expires_at",
           "attempt_count",
-          "result"
+          "result",
+          "correlation"
         ],
         "description": "A queued or claimed operation, as serialize_operation emits it."
       },
@@ -5041,6 +5046,7 @@
           "adguard.dns",
           "adguard.query_summary",
           "adguard.rewrite",
+          "automation.operation",
           "caddy.route",
           "cloudflare.access_app",
           "cloudflare.access_service_token",
@@ -5102,6 +5108,7 @@
           "ResourceKindAdGuardDNS",
           "ResourceKindAdGuardQuerySummary",
           "ResourceKindAdGuardRewrite",
+          "ResourceKindAutomationOperation",
           "ResourceKindCaddyRoute",
           "ResourceKindCloudflareAccessApp",
           "ResourceKindCloudflareAccessServiceToken",

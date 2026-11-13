@@ -96,6 +96,28 @@ depends = ["setup:lint-tools"]
 env = { REDOCLY_SUPPRESS_UPDATE_NOTICE = "true" }
 run = "redocly lint --extends=spec --format=stylish hq/platform/api/hq-api.openapi.json controller/api/hq-controller.openapi.json controller/api/hq-connections.openapi.json || { echo 'lint:openapi: each problem is at the file:line:column above. HQ writes these documents: fix the Python that declares the shape, then rewrite them: mise run manage -- api_openapi for hq-api, mise run manage -- bridge_contract for the two under controller/api.' >&2; exit 1; }"
 
+["lint:openapi-breaking"]
+description = "The machine API's document breaks no client of its base's, or its exemption file admits the break with a reason"
+hide = true
+tags = ["fast"]
+sources = [
+  "hq/platform/api/hq-api.openapi.json",
+  "hq/platform/api/hq-api.breaking-exemptions.md",
+  "tools/openapi_breaking.py",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
+# Only hq-api: the controller's two documents ship in the same image as both
+# of their ends. The base is fast's; CI's lint job names the commit its
+# change lands on in CHECK_BASE.
+usage = 'arg "[base]" env="CHECK_BASE" help="The ref to compare with; default the branch HEAD lands on, then origin/main"'
+run = 'uv run python -m tools.openapi_breaking "${usage_base:-}"'
+
 ["lint:deptry"]
 description = "Host code imports only declared runtime dependencies and imports every one, or pyproject.toml says why not"
 hide = true

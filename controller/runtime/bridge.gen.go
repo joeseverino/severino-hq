@@ -614,6 +614,7 @@ const (
 	ResourceKindAdGuardDNS                   ResourceKind = "adguard.dns"
 	ResourceKindAdGuardQuerySummary          ResourceKind = "adguard.query_summary"
 	ResourceKindAdGuardRewrite               ResourceKind = "adguard.rewrite"
+	ResourceKindAutomationOperation          ResourceKind = "automation.operation"
 	ResourceKindCaddyRoute                   ResourceKind = "caddy.route"
 	ResourceKindCloudflareAccessApp          ResourceKind = "cloudflare.access_app"
 	ResourceKindCloudflareAccessServiceToken ResourceKind = "cloudflare.access_service_token"
@@ -681,6 +682,8 @@ func (e ResourceKind) Valid() bool {
 	case ResourceKindAdGuardQuerySummary:
 		return true
 	case ResourceKindAdGuardRewrite:
+		return true
+	case ResourceKindAutomationOperation:
 		return true
 	case ResourceKindCaddyRoute:
 		return true
@@ -1931,10 +1934,13 @@ type NPMStreamRecord struct {
 
 // Operation A queued or claimed operation, as serialize_operation emits it.
 type Operation struct {
-	Action             string     `json:"action"`
-	AttemptCount       int        `json:"attempt_count"`
-	ClaimedBy          string     `json:"claimed_by"`
-	CompletedAt        *time.Time `json:"completed_at"`
+	Action       string     `json:"action"`
+	AttemptCount int        `json:"attempt_count"`
+	ClaimedBy    string     `json:"claimed_by"`
+	CompletedAt  *time.Time `json:"completed_at"`
+
+	// Correlation The asker's own id for finding it later; empty for none.
+	Correlation        string     `json:"correlation"`
 	CreatedAt          time.Time  `json:"created_at"`
 	ID                 string     `json:"id"`
 	LeaseExpiresAt     *time.Time `json:"lease_expires_at"`

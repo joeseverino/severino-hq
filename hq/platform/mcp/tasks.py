@@ -15,7 +15,7 @@ from mcp_types.version import MODERN_PROTOCOL_VERSIONS
 from pydantic import Field
 
 from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
-from hq.platform.application import approvals
+from hq.platform.application import approval_review, approvals
 from hq.platform.application.held_answer import applying
 from hq.platform.application.refusal_status import refusal_of, refuse
 from hq.platform.application.resource_operations import serialize_operation
@@ -115,7 +115,7 @@ def _task(held: Any) -> tuple[dict[str, Any], dict[str, Any] | None]:
         "ttlMs": None if settled else int((held.expires_at - held.created_at).total_seconds() * 1000),
         "pollIntervalMs": APPLYING_POLL_INTERVAL_MS if settled else POLL_INTERVAL_MS,
         # On every answer, since a client shows the last one it was sent.
-        "statusMessage": f"{approvals.asked(held)}. {said}",
+        "statusMessage": f"{approval_review.asked(held)}. {said}",
     }
     return task, answer
 

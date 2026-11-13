@@ -18,6 +18,7 @@ from hq.domains.control_plane.models import ApprovalRequest, ManagedResource, Op
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.core.models import AuditLog
 
+from ..approval_review import compare, preview
 from ..approvals import (
     APPROVE,
     MAX_PENDING_PER_ACTOR,
@@ -26,9 +27,7 @@ from ..approvals import (
     ApproveCommand,
     RejectCommand,
     approve,
-    compare,
     pending,
-    preview,
     reject,
 )
 from ..capabilities import execute_capability

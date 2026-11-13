@@ -224,13 +224,18 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 .actions-col { width: 1%; text-align: right; white-space: nowrap; }
 /* A row's actions (`{% row_actions %}`) end its line side by side, each with its middle on the middle of the row's first line, as the words beside it are set, however much taller than a line a button stands. `--row-line` carries the cell's line down to each control, whose own is its label's. */
 .data-table td.row-actions { --row-line: 1lh; text-align: right; white-space: nowrap; }
-.data-table td.row-actions > * { translate: 0 calc(var(--row-line) / 2 - 50%); }
+.data-table td.row-actions > *, .data-table td.row-actions > [data-ask] > [data-ask-button] { translate: 0 calc(var(--row-line) / 2 - 50%); }
 .data-table td.row-actions > * + * { margin-inline-start: var(--space-4); }
+/* An ask's controls flow as words do in a cell (partials/_ask.html), so its own line there would break theirs and stand the next control under it. The cell keeps the line under all its controls instead, and what the ask says stands in it out of the flow, as wide as the cell and asking it for no width, so a press moves nothing. */
+.data-table td:has(> [data-ask]) { position: relative; padding-block-end: calc(var(--row-pad) + 1lh); }
+.data-table td > [data-ask] > :has(> [data-ask-note]) { position: absolute; inset-inline: var(--space-6); inset-block-end: var(--row-pad); }
+.data-table td.row-actions > [data-ask] > :has(> [data-ask-note]) { justify-content: flex-end; }
 /* A control column is as wide as what it holds will go (`width: 1px` above), so a row's controls keep one line between them and the column asks for that line: controls that may wrap would stand one to a line in a row with room to spare. Each has its middle on the middle of the row's first line, as a row's actions do; a note the cell holds beside them wraps as words do. */
 .data-table td > span.row-actions { flex-wrap: nowrap; }
 .data-table > tbody > tr > [data-kind="control"] { --row-line: 1lh; white-space: nowrap; }
 .data-table > tbody > tr > [data-kind="control"] > :is(.muted, p) { white-space: normal; }
-.data-table > tbody > tr > [data-kind="control"] > :is(a, button, .btn, form) { vertical-align: top; translate: 0 calc(var(--row-line) / 2 - 50%); }
+.data-table > tbody > tr > [data-kind="control"] > :is(a, button, .btn, form),
+.data-table > tbody > tr > [data-kind="control"] > [data-ask] > [data-ask-button] { vertical-align: top; translate: 0 calc(var(--row-line) / 2 - 50%); }
 .data-table > tbody > tr > [data-kind="control"] > :is(a, button, .btn, form) + :is(a, button, .btn, form) { margin-inline-start: var(--space-4); }
 
 /* A pill fits the cell's line, so a row holding one is no taller than one without. */

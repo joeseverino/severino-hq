@@ -12,7 +12,7 @@ from django.urls import reverse, reverse_lazy
 from django.views.generic import DetailView, ListView
 lazy from django.utils import timezone
 
-from hq.platform.application import approvals, history
+from hq.platform.application import approval_review, approvals, history
 from hq.platform.application.doors import door_words
 from hq.platform.application.labels import dotted
 from hq.platform.application.pages import PageAction, PageMixin
@@ -306,7 +306,7 @@ class AuditLogDetailView(PageMixin, DetailView):
         """The approval this event opened, reviewed, if it opened one."""
 
         held = approvals.for_audit_event(self.object)
-        return approvals.review(held) if held is not None else None
+        return approval_review.review(held) if held is not None else None
 
     @override
     def get_page_title(self):
