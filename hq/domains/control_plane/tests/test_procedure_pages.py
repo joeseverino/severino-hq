@@ -110,7 +110,7 @@ class ProceduresPageTests(TestCase):
         refused = SourceProposal.objects.order_by("-pk").first()
         said = text(self.page(self.proposal_url(refused.pk)))
         self.assertIn("HQ can't adopt this commit.", said)
-        self.assertNotIn("Fix it in the repository, then Refresh.", said)
+        self.assertNotIn("Fix these in your repository.", said)
 
     def test_each_commit_says_who_committed_it(self):
         adopted = AdoptedCatalog.objects.order_by("-pk").first()
@@ -126,23 +126,86 @@ class ProceduresPageTests(TestCase):
         self.assertEqual(held.state, ApprovalRequest.State.REJECTED)
         return held.payload["proposal"]
 
-    def test_the_title_says_when_the_repository_was_last_read_and_why_the_newest_scan_failed(self):
+    def test_the_title_says_in_one_line_why_the_newest_scan_failed_and_when_one_last_reached_it(self):
         newest = OperationRequest.objects.filter(action=OperationRequest.Action.SCAN).order_by("-created_at").first()
         self.assertEqual(newest.state, OperationRequest.State.FAILED)
         html = self.page()
         (failed,) = select(html, "data-scan-failed")
         self.assertIn(newest.result["message"], failed.words)
-        self.assertIn("Refresh to try again.", failed.words)
-        # Beside a failure, the last read is said as the last one that succeeded.
-        (age,) = select(html, "data-reading-age", "read")
-        self.assertIn("Last successful read", age.words)
+        self.assertIn("Last reached", failed.words)
+        # One line on the repository's reach: no age of its own beside the failure.
+        self.assertFalse(select(html, "data-reading-age"))
+        # A Refresh still waiting leaves the failure said.
+        self.client.post(reverse("control_plane:procedures_refresh"), _sent(), **XHR)
+        (still,) = select(self.page(), "data-scan-failed")
+        self.assertIn(newest.result["message"], still.words)
         # A scan that read the repository leaves only when it did.
         from hq.platform.core.example_estate import automation
 
+        OperationRequest.objects.filter(action=OperationRequest.Action.SCAN, state="queued").delete()
         automation.rescanned(self.owner)
         html = self.page()
         self.assertFalse(select(html, "data-scan-failed"))
         self.assertEqual(len(select(html, "data-reading-age", "read")), 1)
+
+    def test_the_page_reads_from_what_runs_now_to_the_newest_commit_to_what_waits(self):
+        html = self.page()
+        order = [html.index(mark) for mark in ('id="procedures-adopted"', 'id="procedures-proposal"', "data-approval=")]
+        self.assertEqual(order, sorted(order))
+        newest = SourceProposal.objects.order_by("-pk").first()
+        said = _words(html, "procedures-proposal")
+        self.assertIn(newest.revision[:12], said)
+        self.assertIn("The newest commit HQ has read", said)
+        self.assertIn("HQ can't adopt this commit", said)
+        self.assertIn("HQ keeps running the adopted playbooks.", said)
+        # The held commit is the card's, the adopted one the table's.
+        self.assertIn(str(self.held().baseline["revision"])[:12], _card(html))
+        adopted = AdoptedCatalog.objects.order_by("-pk").first()
+        self.assertIn(adopted.revision[:12], _words(html, "procedures-adopted"))
+
+    def test_a_card_on_the_page_links_nowhere_for_the_record_this_page_is(self):
+        here = reverse("control_plane:procedures")
+        targets = {
+            urlsplit(element.attrs["href"]).path
+            for element in within(self.page(), "data-approval")
+            if element.tag == "a" and "href" in element.attrs
+        }
+        self.assertNotIn(here, targets)
+
+    def stop_the_worker(self):
+        """No run holds the worker: each claim's lease has run out."""
+
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        OperationRequest.objects.filter(state=OperationRequest.State.CLAIMED).update(
+            lease_expires_at=timezone.now() - timedelta(minutes=1)
+        )
+
+    def test_a_refresh_says_what_it_waits_on_and_what_to_do_when_it_does_not_come(self):
+        from datetime import timedelta
+        from unittest import mock
+
+        self.stop_the_worker()
+        answered = json.loads(self.client.post(reverse("control_plane:procedures_refresh"), _sent(), **XHR).content)
+        self.assertEqual(answered["state"], "queued")
+        self.assertIn("playbook worker", answered["note"])
+        self.assertNotIn("hq-host automation", answered["note"])
+        # Past when a worker comes, it says how to start one, and where none can be.
+        with mock.patch("hq.platform.application.automation_sources.CLAIM_EXPECTED", timedelta(0)):
+            late = json.loads(self.client.get(answered["status"]).content)
+            # A page loaded while it waits says the same.
+            waiting = " ".join(element.words for element in within(self.page(), "data-ask"))
+        self.assertEqual(late["state"], "queued")
+        self.assertIn("hq-host automation", late["note"])
+        self.assertIn("development server has no worker", late["note"])
+        self.assertIn("hq-host automation", waiting)
+
+    def test_a_refresh_behind_work_the_worker_carries_says_so(self):
+        self.assertTrue(OperationRequest.objects.filter(state=OperationRequest.State.CLAIMED).exists())
+        answered = json.loads(self.client.post(reverse("control_plane:procedures_refresh"), _sent(), **XHR).content)
+        self.assertIn("busy with work it took", answered["note"])
 
     def test_a_commit_hq_cannot_adopt_lists_every_reason_and_offers_no_adopt(self):
         from hq.platform.application.automation_adoption import plan
@@ -271,6 +334,24 @@ class ProceduresPageTests(TestCase):
         automation.scanning(self.owner)
         (ask,) = select(self.page(), "data-ask-status")
         self.assertEqual(json.loads(self.client.get(ask.attrs["data-ask-status"]).content)["state"], "running")
+
+
+class EmptyProceduresPageTests(TestCase):
+    """Before any scan: what to press, and nothing about a read that never happened."""
+
+    @classmethod
+    def setUpTestData(cls):
+        with throwaway_media(), seeds.built("empty") as owner:
+            cls.owner = owner
+
+    def test_with_no_scan_the_title_says_to_press_refresh(self):
+        self.client.force_login(self.owner)
+        html = self.client.get(reverse("control_plane:procedures")).content.decode()
+        (none,) = select(html, "data-scan-none")
+        self.assertIn("No scan yet", none.words)
+        self.assertFalse(select(html, "data-reading-age"))
+        self.assertFalse(select(html, "data-scan-failed"))
+        self.assertFalse(within(html, "id", "procedures-proposal"))
 
 
 class OperationStandingTests(TestCase):

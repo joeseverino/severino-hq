@@ -47,7 +47,7 @@ standard, with what it uses beside its limits. Each said once; the band above ha
     {% fact "Checked afterwards by" icon="check-circle" tone=readiness.verified_tone %}
       {% if readiness.verified_by %}{{ readiness.verified_by.0|capfirst|breakable }}{% else %}Nothing{% endif %}
     {% detail %}
-      <small>{% for what in readiness.verified_by|slice:"1:" %}{{ what|capfirst|breakable }}{% if not forloop.last %}{% dot %}{% endif %}{% empty %}{% if not readiness.verified_by %}Add a health check to change that.{% endif %}{% endfor %}</small>
+      <small>{% for what in readiness.verified_by|slice:"1:" %}{{ what|capfirst|breakable }}{% if not forloop.last %}{% dot %}{% endif %}{% empty %}{% if not readiness.verified_by %}HQ can only see that it stays running.{% endif %}{% endfor %}</small>
     {% endfact %}
     {% fact "Data" icon="layers" %}
       {% if readiness.data %}{{ readiness.data|length|counted:"mount,mounts" }} to snapshot first{% else %}Keeps no data{% endif %}

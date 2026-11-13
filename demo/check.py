@@ -28,10 +28,40 @@ _ADDRESS = re.compile(r'(?:href|src|data-[\w-]+-url)="(/[^"#?]*)')
 _VISITED = ("/", "/hq/", "/infrastructure/findings/", "/action-items/", "/infrastructure/", "/connection/")
 # What a healthy homelab never says on its dashboard.
 _ALARMS = ("No reading yet", "Not configured", "not fully set up", "not answering", " failed", "not confirmed")
-# The showcase leaves four things to do on purpose (an image update, an image
-# run by tag alone, a certificate to renew, an agent's request to approve);
-# anything more is the seed missing a reading.
-_MOST_ITEMS = 4
+# Where each thing the demo leaves to do on purpose is on Needs you, as
+# demo/first_glance.py declares them and demo/build.py saves them.
+_ON_PURPOSE = OUT / "__fragments__" / "on-purpose.json"
+
+
+class _OpenItems(HTMLParser):
+    """The id of each queue item on a page outside the part that holds what was dismissed."""
+
+    def __init__(self):
+        super().__init__()
+        self.ids: list[str] = []
+        self._aside: list[str] = []
+        self._depth = 0
+
+    def handle_starttag(self, tag, attrs):
+        found = {name: value or "" for name, value in attrs}
+        if self._aside:
+            self._depth += tag == self._aside[0]
+        elif "data-set-aside" in found:
+            self._aside, self._depth = [tag], 1
+        elif "data-attention-item" in found:
+            self.ids.append(found.get("id", ""))
+
+    def handle_endtag(self, tag):
+        if self._aside and tag == self._aside[0]:
+            self._depth -= 1
+            if not self._depth:
+                self._aside = []
+
+
+def _open_items(page: str) -> list[str]:
+    parser = _OpenItems()
+    parser.feed(page)
+    return parser.ids
 
 
 _MARK = re.compile(r'\sclass="([^"]*)"|\s(data-[\w-]+)')
@@ -241,10 +271,41 @@ class DemoSiteTests(unittest.TestCase):
         for alarm in _ALARMS:
             with self.subTest(alarm=alarm):
                 self.assertNotIn(alarm, dashboard)
-        items = (OUT / "action-items" / "index.html").read_text(encoding="utf-8").count('class="attention-title"')
-        self.assertLessEqual(items, _MOST_ITEMS)
+        on_purpose = json.loads(_ON_PURPOSE.read_text(encoding="utf-8"))
+        self.assertTrue(on_purpose, "the demo leaves something to do on purpose")
+        items = _open_items((OUT / "action-items" / "index.html").read_text(encoding="utf-8"))
+        self.assertEqual(sorted(items), sorted(on_purpose))
         connection = (OUT / "connection" / "index.html").read_text(encoding="utf-8")
         self.assertEqual(re.findall(r'class="ladder-rung" data-state="(?!holds")([\w-]+)"', connection), [])
+
+    def test_the_playbooks_open_healthy_with_an_approved_run_finished(self):
+        # Playbooks and Jobs say nothing failed or alarming at first glance:
+        # no warning or error notice and no failed scan. A playbook Playbooks
+        # links has a run a person approved that finished, each task's outcome
+        # beside it.
+        for path in ("infrastructure/procedures", "jobs"):
+            with self.subTest(path=path):
+                # A <template> is a frame a script fills, never drawn as it stands.
+                page = re.sub(
+                    r"<template\b.*?</template>",
+                    "",
+                    (OUT / path / "index.html").read_text(encoding="utf-8"),
+                    flags=re.DOTALL,
+                )
+                marks = {mark for classes, hook in _MARK.findall(page) for mark in (classes.split() or [hook])}
+                self.assertFalse(marks & {"notice-warning", "notice-error", "data-scan-failed"})
+        playbooks = (OUT / "infrastructure" / "procedures" / "index.html").read_text(encoding="utf-8")
+        runs = sorted(set(re.findall(r'href="(/commands/[^"/]+\.run/)"', playbooks)))
+        self.assertTrue(runs, "Playbooks links each playbook's runs")
+        approved = []
+        for path in runs:
+            page = (OUT / path.strip("/") / "index.html").read_text(encoding="utf-8")
+            for row in re.split(r"<tr\b", page):
+                tones = {mark for classes, _ in _MARK.findall(row) for mark in classes.split()}
+                labels = set(re.findall(r'data-label="([^"]+)"', row))
+                if {"Approved by", "Tasks"} <= labels and "pill-good" in tones and "pill-serious" not in tones:
+                    approved.append(path)
+        self.assertTrue(approved, "a playbook's runs hold one approved and finished")
 
     def test_a_list_s_toolbar_filters_and_says_what_it_cannot_search(self):
         # A filter ticked in a list's toolbar, which sends the order the list
@@ -356,12 +417,18 @@ class DemoSiteTests(unittest.TestCase):
 
     def test_each_thing_to_do_offers_a_way_to_do_it(self):
         queue = (OUT / "action-items" / "index.html").read_text(encoding="utf-8")
-        rows = re.split(r"<tr [^>]*data-attention-item", queue)[1:]
-        self.assertEqual(len(rows), _MOST_ITEMS)
+        open_items = set(_open_items(queue))
+        rows = [
+            row
+            for row in re.split(r"<tr\b", queue)
+            if re.match(r'[^>]*\sid="([^"]+)"[^>]*data-attention-item', row)
+            and re.match(r'[^>]*\sid="([^"]+)"', row).group(1) in open_items
+        ]
+        self.assertEqual(len(rows), len(open_items))
         # One of them is the change the example agent asked for, held for a person.
         self.assertEqual(len([row for row in rows if 'href="/audit/approval/' in row]), 1)
         for row in rows:
-            title = re.search(r'class="attention-title"[^>]*>([^<]*)', row)
+            title = re.search(r'class="attention-title[^"]*"[^>]*>([^<]*)', row)
             with self.subTest(item=title.group(1) if title else row[:80]):
                 actions = re.search(r'class="attention-actions[^"]*">(.*?)</div>', row, re.DOTALL)
                 self.assertTrue(actions and re.search(r"<(?:a|button)\b", actions.group(1)))
@@ -391,7 +458,8 @@ class DemoSiteTests(unittest.TestCase):
             any(lately.fullmatch(line) for row in agents for line in _lines(row)),
             "an agent was seen within the hour",
         )
-        refused = re.search(r"<strong>(\d+)</strong> refused in the last day", page)
+        # The count is the value of the fact its words label.
+        refused = re.search(r">refused in the last day<.*?<dd\b[^>]*>(?:<[^>]+>)*(\d+)<", page, re.DOTALL)
         self.assertTrue(refused and int(refused.group(1)) > 0, "a refusal is counted")
 
     def test_every_page_is_drawn_in_the_reader_s_scheme(self):

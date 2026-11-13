@@ -2,38 +2,22 @@
 {% block page %}
 {% comment %}
 Expects `sources` (automation_sources.SourceStanding), `read_at`, when
-HQ last read the repository, `held`, the
-approval cards (approval_review.review) of the adoptions held, `review`, the
-commit to decide on that no card holds, `adopt`, the Adopt command's link for
-a reader who may adopt it, `review_said` and `adopted_said`, each commit in a
-line, and
-`adopted`, the catalog's rows, drawn when `shows_adopted`. On a commit's own page (`own_page`) only that commit is drawn, and its lede says why a refused one has nothing to do. Every name on it is the catalog's or a scan's.
+HQ last read the repository, `held`, the approval cards
+(approval_review.review) of the adoptions held, `review`, the commit to
+decide on unless it is the one adopted, `review_held`, whether a card below
+holds its adoption, `adopt`, the Adopt command's link for a reader who may
+adopt it, `review_said` and `adopted_said`, each commit in a line, and
+`adopted`, the catalog's rows, drawn when `shows_adopted`. On a commit's own
+page (`own_page`) only that commit is drawn, and its lede says why a refused
+one has nothing to do. Every name on it is the catalog's or a scan's.
+
+It reads in the order a person decides in: what runs now, the newest commit
+read and whether it can be adopted, then what waits for a person.
 The commit is said by its branch and id: which repository it is belongs to
 the deployment.
 {% endcomment %}
-{% for entry in held %}{% include "partials/approval_card.html" with entry=entry %}{% endfor %}
-
-{% if review.refused %}
-  {% notice tone="error" %}
-    <ul>{% for reason in review.refused %}<li>{{ reason|breakable }}</li>{% endfor %}</ul>
-    {% if not own_page %}<p>Fix it in the repository, then Refresh.</p>{% endif %}
-  {% title %}Commit {{ review.revision|breakable }} can't be adopted{% endnotice %}
-{% elif review.preview %}
-{% section "Scan result" lede=review_said id="procedures-proposal" edge=review.widens|yesno:"attention," %}
-  {% if review.widens %}
-    {% notice tone="warning" title="More access" %}
-      <p>This commit gives its playbooks more access:</p>
-      <ul>{% for widening in review.widens %}<li>{{ widening|breakable }}</li>{% endfor %}</ul>
-    {% endnotice %}
-  {% endif %}
-  {% change_table review.preview %}
-{% aside %}
-  {% if adopt %}{% url 'control_plane:procedures_adopt' review.proposal.pk as adopt_url %}{% post_button adopt.label adopt_url css="btn primary" %}{% endif %}
-{% endsection %}
-{% endif %}
-
 {% if shows_adopted %}
-{% section "Adopted" count=adopted|length|default:"" lede=adopted_said id="procedures-adopted" %}
+{% section "Adopted playbooks" count=adopted|length|default:"" lede=adopted_said id="procedures-adopted" %}
   {% if adopted %}
     {% table_region "Adopted playbooks" %}
       <table class="data-table">
@@ -58,7 +42,32 @@ the deployment.
       </table>
     {% endtable_region %}
   {% endif %}
-{% empty %}No playbooks adopted yet. Refresh to read the repository, then adopt a commit.
+{% empty %}No playbooks are adopted yet.
 {% endsection %}
 {% endif %}
+
+{% if review %}
+{% section "Scan result" lede=review_said id="procedures-proposal" edge=review.widens|yesno:"attention," %}
+  {% if review.refused %}
+    {% notice tone="error" %}
+      <ul>{% for reason in review.refused %}<li>{{ reason|breakable }}</li>{% endfor %}</ul>
+      {% if not own_page %}<p>Fix these in your repository.{% if shows_adopted and adopted %} HQ keeps running the adopted playbooks.{% endif %}</p>{% endif %}
+    {% title %}HQ can't adopt this commit{% endnotice %}
+  {% elif review_held %}
+    <p>Its adoption waits for approval.</p>
+  {% elif review.preview %}
+    {% if review.widens %}
+      {% notice tone="warning" title="More access" %}
+        <p>Adopting this commit gives its playbooks more access:</p>
+        <ul>{% for widening in review.widens %}<li>{{ widening|breakable }}</li>{% endfor %}</ul>
+      {% endnotice %}
+    {% endif %}
+    {% change_table review.preview %}
+  {% endif %}
+{% aside %}
+  {% if adopt %}{% url 'control_plane:procedures_adopt' review.proposal.pk as adopt_url %}{% post_button adopt.label adopt_url css="btn primary" %}{% endif %}
+{% endsection %}
+{% endif %}
+
+{% for entry in held %}{% include "partials/approval_card.html" with entry=entry %}{% endfor %}
 {% endblock %}

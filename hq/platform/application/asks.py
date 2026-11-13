@@ -77,6 +77,16 @@ class StandingAnswer(TypedDict):
     percent: Annotated[int | None, Describe("How far along the work is, where it knows; null where it does not.")]
 
 
+def _bare(said: str) -> str:
+    return said.strip().rstrip(".…").strip().casefold()
+
+
+def restates(sentence: str, word: str) -> bool:
+    """Whether ``sentence`` says nothing ``word`` does not, its stops aside."""
+
+    return bool(sentence) and _bare(sentence) == _bare(word)
+
+
 @dataclass(frozen=True, slots=True)
 class Standing:
     """How one piece of asked-for work stands; a status resource answers with ``as_json``."""
@@ -90,6 +100,13 @@ class Standing:
     percent: int | None = None
     # The state in words, where the work's own record has them.
     word: str = ""
+
+    def __post_init__(self) -> None:
+        # Every caller says how its work stands through here, so a sentence
+        # that only says the state's word again ("Waiting" and "Waiting…") is
+        # dropped once, for every control, and the word stands alone.
+        if restates(self.note, self.label):
+            object.__setattr__(self, "note", "")
 
     @property
     def live(self) -> bool:
@@ -286,11 +303,7 @@ def job_standing(job: Any) -> Standing:
     """How a ``jobs.Job`` stands, in the shared shape."""
 
     state = _STANDS.get(job.seen_state, FAILED)
-    note = job.note
-    if state == FAILED:
-        note = job.seen_error or "Failed."
-    elif state == QUEUED and not note:
-        note = WAITING
+    note = job.seen_error if state == FAILED else job.note
     return Standing(
         state,
         note,

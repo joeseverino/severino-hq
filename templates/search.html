@@ -29,7 +29,7 @@
   {% endfor %}
 
   {% if not total and not discovery_total %}
-  {% include "partials/_empty_state.html" with message="Nothing matches. Try a shorter word, a domain name, or an id." only %}
+  {% include "partials/_empty_state.html" with message="Nothing matches." only %}
   {% endif %}
 {% else %}
   {% notice %}<p>Search finds machines, services, domains, records, pages and commands.<span class="keyboard-only"> <kbd>⌘ K</kbd> opens it from any page.</span></p>{% endnotice %}

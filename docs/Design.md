@@ -78,7 +78,9 @@ act, or nothing, and deleting a line is the first fix. No sentence argues with
 itself, hedges, explains HQ's machinery, or narrates the page, as "Open one to
 see" does. `Plain.Long` refuses a sentence past twenty words and
 `Plain.Narrate` the narrating lede. A file that still breaks either is counted
-in `hq/platform/core/prose_baseline.py`, which only falls.
+in `hq/platform/core/prose_baseline.py`, which only falls. No sentence chains
+"of" phrases ("the procedures of the commit of its repository"): name the
+thing once, by what owns it ("the playbooks you adopted").
 
 **No page writes a style.** A page's look comes only from HQ's own sheets.
 The policy's `style-src-elem 'self'` refuses a `<style>` element, and HQ
@@ -649,6 +651,8 @@ where a value would stand (a fact, a cell, a row) is the same part with
 so no page draws headings over nothing. Its `empty=` says what is missing in
 the page's words, with `remedy=` (or `action_url=` and `action_label=`).
 `filtered=` with `clear=` says its filter emptied it, with the way back.
+The message is the fact alone, one sentence ("No playbooks adopted yet."), with
+no how-to after it: the action and the page's controls say what to do.
 
 **One head.** `partials/_page_head.html`: trail, title, controls, lede, laid
 out the same at every width. The title and its controls share a row (the title
@@ -664,7 +668,8 @@ its confirmation, which names what it stops.
 cannot show: a fact that changes how you read it ("Lookups run from outside
 this network"), or the record's own details. Never a table of contents of the
 page, a pointer to another page (link to it instead), or how HQ works inside
-(a file path, a background mechanism).
+(a file path, a background mechanism). Never "What X may run: ...", which says
+the heading again.
 
 **Say what HQ knows, once.** A sentence on a page is derived from the record
 that holds its answer, never a generic placeholder or a hardcoded string. The
@@ -1521,6 +1526,12 @@ the state's word alone ("Waiting", "Failed") and the row keeps its height. The
 sentence is the button's title, and the line the row opens to says the word
 and the sentence under the button's label, so a reader with no title to hover
 still reads why.
+
+Each thing is said once. A sentence that only says the state's word again
+("Waiting" and "Waiting…") is dropped where every standing is made
+(`asks.Standing`), so the word stands alone, in a cell and beside a head's
+button alike, and the row opens no line for it. A sentence earns its place by
+saying what the word cannot: what the work waits on, or why it failed.
 
 Without script the same button is a form post back to the page, which draws
 the control from what is stored. So a page loaded while the work is live says

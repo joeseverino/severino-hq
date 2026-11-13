@@ -207,7 +207,7 @@ def _run_title() -> Collate:
         for playbook, title in playbook_titles().items()
         if title
     )
-    unadopted = Concat(Value(run_title("")), operation, output_field=CharField())
+    unadopted = Concat(Value(run_title("", {})), operation, output_field=CharField())
     run = Case(*titled, default=unadopted, output_field=CharField())
     return Collate(_scanned(scan_title(), run), "NOCASE")
 

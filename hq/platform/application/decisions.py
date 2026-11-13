@@ -147,7 +147,7 @@ def _origin(item: dict[str, Any]) -> dict[str, Any]:
     return {"source": item.get("source", ""), "key": key, **(rule or {})}
 
 
-def _anchor(key: str) -> str:
+def item_anchor(key: str) -> str:
     """Where an item's card is on the queue page, stable while its key is."""
 
     return "item-" + hashlib.sha256(key.encode()).hexdigest()[:12]
@@ -179,7 +179,7 @@ def decision(item: dict[str, Any]) -> dict[str, Any]:
             steps.append({**step, "actions": remaining})
     subject = item.get("subject") or {}
     links, advice = _next_step(item, identities)
-    anchor = _anchor(str(item.get("key", "")))
+    anchor = item_anchor(str(item.get("key", "")))
     return {
         **item,
         "href": subject.get("url") or item.get("url") or "",

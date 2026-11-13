@@ -43,7 +43,7 @@ class EmptyListTests(TestCase):
         for name, says in (
             ("control_plane:list", "No records yet."),
             ("control_plane:machines", "No machines yet."),
-            ("control_plane:services", "No services."),
+            ("control_plane:services", "No services yet."),
         ):
             with self.subTest(name):
                 response = self.client.get(reverse(name))

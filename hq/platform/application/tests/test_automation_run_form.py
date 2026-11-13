@@ -65,6 +65,9 @@ class RunFormTests(TestCase):
     def test_hosts_are_a_choice_of_the_machines_hq_knows(self):
         self.assertEqual(self.offered(), [APP, DB, EDGE])
 
+    def test_hosts_are_named_machines_as_every_page_names_them(self):
+        self.assertEqual(self.form_class().base_fields["hosts"].label, "Machines")
+
     def test_hosts_offer_only_the_machines_a_procedure_names(self):
         self.supply(manifest(hosts=(APP, "gone.example.com")))
 

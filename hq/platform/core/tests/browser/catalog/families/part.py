@@ -18,7 +18,7 @@ from hq.domains.jobs.models import Job, JobState
 from hq.platform.application import calendar
 from hq.platform.application.appearance import Theme
 from hq.platform.application.approval_review import SUMMARY, Asked, ChangePreview, compare, grouped
-from hq.platform.application.asks import DONE, FAILED, RUNNING, Ask, Standing
+from hq.platform.application.asks import DONE, FAILED, QUEUED, RUNNING, WAITING, Ask, Standing
 from hq.platform.application.calendar import CalendarEvent, CalendarSource, SourceView, calendar_month
 from hq.platform.application.capability_policy import RULE_LABELS, Column, Group, PolicyCell, Row
 from hq.platform.application.card_items import Insight, Kpi, ListRow, Timeline, TimelineItem
@@ -1730,6 +1730,23 @@ ENTRIES = {
             )
         },
     ),
+    # Waiting its turn, given a sentence that only says its word again: the
+    # word alone, in the cell and in the head, and no line under the row.
+    "part/ask-waiting": Entry(
+        '{% section "Example connections" %}{% table_region "Example connections" %}<table class="data-table">'
+        '<thead><tr>{% table_heading "Name" "identifier" %}{% table_heading "Read" "control" %}</tr></thead>'
+        '<tbody><tr><td>example-main</td><td>{% include "partials/_ask.html" with ask=ask %}</td></tr>'
+        '</tbody></table>{% endtable_region %}<p>{% include "partials/_ask.html" with ask=ask %}</p>{% endsection %}',
+        {
+            "ask": Ask(
+                "Read now",
+                "/example/read/",
+                standing=Standing(QUEUED, note=WAITING, since=_NOW - timedelta(seconds=20)),
+                status_url="/example/read/status/",
+                compact=True,
+            )
+        },
+    ),
     # As a page's own action, beside a link, in its head.
     "part/ask-in-the-head": Entry(
         '{% include "partials/_page_head.html" %}',
@@ -1739,6 +1756,32 @@ ENTRIES = {
                 actions=(
                     Ask("Read now", "/example/read/", title="Reads example-host-01 again."),
                     PageAction("Edit", "/example/edit/"),
+                ),
+            )
+        },
+        heads_the_page=True,
+    ),
+    # Waiting in the head with a long sentence, which runs back from the
+    # button over the head's free space.
+    "part/ask-in-the-head-waiting": Entry(
+        '{% include "partials/_page_head.html" %}',
+        {
+            "page": Page(
+                title="Example playbooks",
+                actions=(
+                    Ask(
+                        "Refresh",
+                        "/example/refresh/",
+                        standing=Standing(
+                            QUEUED,
+                            note=(
+                                "Nothing has taken it; it last took work 3 hours ago. On the example host, "
+                                "example-host automation starts the worker or says what it lacks."
+                            ),
+                            since=_NOW - timedelta(minutes=4),
+                        ),
+                        status_url="/example/refresh/status/",
+                    ),
                 ),
             )
         },

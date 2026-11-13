@@ -408,7 +408,7 @@ def _controller_connection_spec() -> ConnectionSpec:
         secret_store="1Password",  # noqa: S106 - the store's name, no credential
         # The one family fed by sweeps rather than by its own configuration,
         # so the one whose emptiness means a report has not arrived.
-        empty_message="Each is a vault item the controller is given; it appears here once the controller reports.",
+        empty_message="The controller has not reported yet.",
         documentation_url=guide_url(),
     )
 

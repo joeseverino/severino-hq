@@ -94,13 +94,26 @@ class _Attributes(HTMLParser):
     def handle_starttag(self, tag, attrs):
         for name, value in attrs:
             if name in _SHOWN_ATTRIBUTES and value:
-                self.found.append((self.getpos()[0], value))
+                # Each branch of an attribute is shown alone, never run on into the next.
+                self.found.extend((self.getpos()[0], branch) for branch in value.split(_BRANCH) if branch.strip())
 
 
 def _blank(match: re.Match) -> str:
     """The same lines, with nothing on them: positions after it stay true."""
 
     return "\n" * match.group().count("\n")
+
+
+# What an ``{% else %}`` or an ``{% elif %}`` stands as in an attribute.
+_BRANCH = "\x02"
+
+
+def _branched(match: re.Match) -> str:
+    """A tag blanked, but a branch's separator kept, so the words on either
+    side are read as the alternatives they are."""
+
+    name = (match.group()[2:-2].split() or [""])[0] if match.group().startswith("{%") else ""
+    return (_BRANCH if name in {"else", "elif"} else "") + _blank(match)
 
 
 def shown(source: str) -> list[tuple[int, str]]:
@@ -114,7 +127,7 @@ def shown(source: str) -> list[tuple[int, str]]:
             (line, literal.group(2)) for literal in _TAG_LITERAL.finditer(tag.group()) if _is_prose(literal.group(2))
         )
     parser = _Attributes()
-    parser.feed(_TEMPLATE_TAG.sub(_blank, uncommented))
+    parser.feed(_TEMPLATE_TAG.sub(_branched, uncommented))
     parser.close()
     found.extend(parser.found)
     return sorted(found)

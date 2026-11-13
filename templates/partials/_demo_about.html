@@ -7,6 +7,8 @@ Each thing to try is a fact band's cell that leads to the page it names.
 <p class="modal-lede">HQ is the app one person runs a homelab from, shown here with sample data. Its own pages are saved as static files, so nothing you do here saves beyond this browser.</p>
 {% section "Things to try" %}
   {% facts layout="band" %}
+    {% url 'control_plane:procedures' as playbooks_url %}
+    {% fact "Playbooks" value="Adopt one, read its runs" url=playbooks_url icon="deploy" %}
     {% url 'core:audit_list' as audit_url %}
     {% fact "Approval" value="Agent DNS change" url=audit_url|add:"?awaiting=1" icon="shield" %}
     {% url 'control_plane:containers' as containers_url %}

@@ -8,7 +8,7 @@ from urllib.parse import parse_qs, urlsplit
 from django.test import SimpleTestCase, TestCase, tag
 from django.urls import reverse
 
-from hq.platform.application.tests.markup import select, within
+from hq.platform.application.tests.markup import links, select, texts, within
 from hq.platform.application.tests.source import source_files, template_files
 from hq.platform.application.tests.tree import ROOT
 from hq.platform.core import seeds
@@ -144,6 +144,38 @@ class ProcedurePageTests(TestCase):
                     if spec.bound is not None:
                         self.assertIn(spec.bound.pattern, row)
                         self.assertIn(str(spec.bound.max_length), row)
+
+    def test_each_procedure_s_page_is_named_by_its_playbook_s_title(self):
+        """The heading and the button say the title Playbooks gives the
+        playbook, and a held run's sentence names it so too."""
+
+        from hq.platform.application.automation_adoption import playbook_titles
+        from hq.platform.application.capabilities import capability_registry
+
+        titles = playbook_titles()
+        self.assertTrue(titles)
+        for operation_id, title in titles.items():
+            with self.subTest(procedure=operation_id):
+                html = self.page(operation_id)
+                self.assertEqual(texts(html, "h1"), [title])
+                buttons = [
+                    element.words
+                    for element in within(html, "data-command-form")
+                    if element.attrs.get("type") == "submit"
+                ]
+                self.assertEqual(buttons, [title])
+                self.assertIn(title, capability_registry()[f"automation.{operation_id}.run"].wanted())
+
+    def test_each_procedure_s_page_leads_back_to_playbooks(self):
+        from hq.platform.application.automation_adoption import procedures
+
+        home = reverse("control_plane:procedures")
+        for procedure in procedures():
+            with self.subTest(procedure=procedure.id):
+                html = self.page(procedure.id)
+                trail = [element.attrs["href"] for element in within(html, "class", "page-trail") if element.tag == "a"]
+                self.assertEqual(trail, [home])
+                self.assertEqual([href for words, href in links(html) if words == "Cancel"], [home])
 
     def test_each_procedure_s_page_names_its_privilege(self):
         from hq.platform.application.automation_runs import operation_registry

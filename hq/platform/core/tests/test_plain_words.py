@@ -342,6 +342,11 @@ class TemplatePieceTests(SimpleTestCase):
             [line.split(": ")[0:2] for line in printed.getvalue().splitlines()], [[f"{page}:4", "Plain.Reconcile"]]
         )
 
+    def test_each_branch_of_an_attribute_is_read_alone(self):
+        template = '<button aria-label="{% if open %}Show less of this row{% else %}Show all of this row{% endif %}">\n'
+
+        self.assertEqual(plain_words.shown(template), [(1, "Show all of this row"), (1, "Show less of this row")])
+
     def test_a_path_that_is_gone_fails_rather_than_passing(self):
         with self.assertRaises(FileNotFoundError):
             plain_words.document([Path("templates/no-such-page.html")])

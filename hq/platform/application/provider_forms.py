@@ -363,7 +363,7 @@ def _offered(original: forms.Field, options: tuple[tuple[str, str], ...]) -> for
 
     many = isinstance(original, NameList)
     field_class = forms.MultipleChoiceField if many else forms.ChoiceField
-    empty = "" if options else "Nothing to choose from yet: HQ has not read or been given one."
+    empty = "" if options else "Nothing to choose from yet."
     return field_class(
         choices=options,
         required=original.required,

@@ -6,7 +6,7 @@
 Columns come from SERVICE_FACETS, not from this markup: minus the runtime one,
 which shares the "Runs on" column with the origin it would duplicate.
 {% endcomment %}
-{% include "control_plane/_service_rows.html" with groups=service_groups row_count=service_count show_service_projects=service_projects empty_message="No services. Add a DNS record or a proxy host to create one." %}
+{% include "control_plane/_service_rows.html" with groups=service_groups row_count=service_count show_service_projects=service_projects empty_message="No services yet." %}
 
 {% if unmanaged %}
   {% comment %}

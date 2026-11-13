@@ -86,10 +86,14 @@
       if (title) button.title = title;
       else button.removeAttribute("title");
     });
+    // Work with nothing to say beyond its word says the word alone, wherever
+    // the note stands (asks.restates, _ask.html).
+    const worded = "askWord" in note.dataset;
+    const alone = worded && !text ? word : text;
     // Written only when it changes: a live region reads out every write.
-    const said = "askWord" in note.dataset && text ? `${word}${text}` : text;
+    const said = worded && text && word ? `${word}${text}` : alone;
     if (note.textContent === said) return;
-    if (said === text) note.textContent = text;
+    if (said === alone) note.textContent = alone;
     else note.replaceChildren(part("ask-word", word), part("ask-sentence", text));
     // A note its line may cut (`data-ask-cut`, a page's) holds the whole
     // sentence in its title.
@@ -98,8 +102,8 @@
       else note.removeAttribute("title");
     }
     // A line of the head's own keeps its room whether or not it says anything.
-    if (control.matches(".ask-quiet") && control.contains(note)) note.hidden = !text;
-    if ("askWord" in note.dataset) sayBelow(control, text && word ? `${word}: ${text}` : text);
+    if (control.matches(".ask-quiet") && control.contains(note)) note.hidden = !said;
+    if (worded) sayBelow(control, text && word ? `${word}: ${text}` : "");
   };
 
   // A table's row shows the note's word alone, and a phone has no title to

@@ -61,7 +61,7 @@ class ProceduresView(PageMixin, TemplateView):
     proposal's id, that commit instead."""
 
     template_name = "control_plane/procedures.html"
-    page_lede = "Ansible playbooks HQ can run, from the commit you adopted."
+    page_lede = "HQ runs only the commit you adopt."
 
     @cached_property
     def sources(self) -> SourceStanding:
@@ -88,7 +88,7 @@ class ProceduresView(PageMixin, TemplateView):
             return self.page_lede
         found = self.sources.proposal
         if found is not None and found.refused:
-            return "HQ can't adopt this commit. Fix what's listed below in the repository, then Refresh."
+            return "HQ can't adopt this commit. Fix what's listed below in your repository."
         return ""
 
     @override
@@ -110,7 +110,7 @@ class ProceduresView(PageMixin, TemplateView):
                 reverse("control_plane:procedures_refresh"),
                 standing=scanned if live else Standing(),
                 status_url=scan_status_url(str(scan.pk)) if live else "",
-                title="Scan your repository for a new commit.",
+                title="Read your repository for a newer commit.",
             ),
         )
 
@@ -125,20 +125,41 @@ class ProceduresView(PageMixin, TemplateView):
             if "pk" not in self.kwargs
             or (sources.proposal is not None and each.proposal == sources.proposal.proposal.pk)
         ]
-        shown = self._shown(sources, {each.proposal for each in sources.held})
+        own_page = "pk" in self.kwargs
+        found = sources.proposal
+        held_commits = {each.proposal for each in sources.held}
+        # The commit this page asks about, unless it is the one adopted now,
+        # which the adopted section says.
+        newest = found if found is not None and not found.adopted else None
         catalog = sources.catalog
+        here = reverse("control_plane:procedures")
+        adopted_said = _said(catalog, sources.revision, "adopted") if catalog else ""
+        if catalog and found is not None and found.adopted and not own_page:
+            adopted_said += " It's also the newest commit HQ has read."
         context.update(
             page_aside="control_plane/_procedures_read.html",
-            failed_tone=TONES[JobState(sources.scan.seen)] if sources.scanned.state == FAILED else "",
+            failed_tone=(
+                TONES[JobState(sources.reached.seen)]
+                if sources.reached is not None and sources.reach.state == FAILED
+                else ""
+            ),
             sources=sources,
             # When HQ last read the repository: a scan result is kept only by a read that succeeded.
             read_at=SourceProposal.objects.order_by("-pk").values_list("created_at", flat=True).first(),
-            review=shown,
-            held=[review(approval) for approval in held],
-            adopt=capability_action_link(ADOPT, principal=self.principal) if shown and shown.preview else None,
-            review_said=_said(shown.proposal, shown.revision, "read") if shown else "",
-            adopted_said=_said(catalog, sources.revision, "adopted") if catalog else "",
-            own_page="pk" in self.kwargs,
+            review=newest,
+            # Its adoption already waits for a person, on the card below.
+            review_held=newest is not None and newest.proposal.pk in held_commits,
+            held=[_on_this_page(review(approval), here) for approval in held],
+            adopt=(
+                capability_action_link(ADOPT, principal=self.principal)
+                if newest and newest.preview and newest.proposal.pk not in held_commits
+                else None
+            ),
+            review_said=(
+                _said(newest.proposal, newest.revision, "read", newest=not own_page) if newest is not None else ""
+            ),
+            adopted_said=adopted_said,
+            own_page=own_page,
             # A commit's own page draws the adopted catalog only when it is that commit.
             shows_adopted="pk" not in self.kwargs or (sources.proposal is not None and sources.proposal.adopted),
             adopted=[
@@ -153,23 +174,21 @@ class ProceduresView(PageMixin, TemplateView):
         )
         return context
 
-    @staticmethod
-    def _shown(sources: SourceStanding, held: set[int]):
-        """The commit the page asks about, apart from what its approval card
-        says: none once it is the commit adopted or an adoption of it is held."""
 
-        found = sources.proposal
-        if found is None or found.adopted or found.proposal.pk in held:
-            return None
-        return found
-
-
-def _said(commit, revision: str, done: str) -> str:
+def _said(commit, revision: str, done: str, *, newest: bool = False) -> str:
     """A commit in the one line a section's lede gives it: its id, branch and
-    committer, and when it was read or adopted."""
+    committer, and when it was read or adopted; the newest read says so."""
 
     by = f", committed by {commit.committer}" if commit.committer else ""
-    return f"Commit {revision} on {commit.branch}{by}, {done} {ago(commit.created_at)}."
+    said = f"{revision} on {commit.branch}{by}, {done} {ago(commit.created_at)}."
+    return f"The newest commit HQ has read: {said}" if newest else f"Commit {said}"
+
+
+def _on_this_page(entry: dict[str, Any], here: str) -> dict[str, Any]:
+    """An approval card drawn on the page its record lives on links nowhere
+    else for it, since its link would be this page."""
+
+    return {**entry, "resource_url": ""} if entry["resource_url"] == here else entry
 
 
 class RefreshView(View):

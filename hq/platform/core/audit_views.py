@@ -100,7 +100,7 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
     @override
     def get_page_lede(self) -> str:
         about = self._about()
-        return f"What happened to {about}." if about else self.page_lede
+        return f"Events about {about}." if about else self.page_lede
 
     @override
     def get_queryset(self):

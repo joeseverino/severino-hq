@@ -32,6 +32,18 @@ The example estate lives in `hq/`, not here, because `seed` and the suite
 run inside the image, which `demo/` is not copied into. `seed` refuses a
 database that already holds records rather than merging into it.
 
+The example estate holds every state a page can draw, for development and the
+tests: failed scans and runs, held requests, findings. The demo's first glance
+is a healthy homelab, so `first_glance.py` has the estate's owner settle it
+after it is seeded and before a page is saved, through the same capabilities
+HQ's pages use. A later Refresh reads the adopted commit, the agent's held
+requests other than its DNS change are declined, the worker finishes what
+waits, each playbook whose newest run did not finish runs again and finishes,
+and everything on Needs you but the four things left on purpose is
+dismissed. Their history stays: a failed run is still in Jobs and on its
+machine, and what was dismissed is under Dismissed on Needs you. Only the
+showcase and standard sets are settled, and only in the demo build.
+
 Everything in the seeds is `example.*` and private address ranges; tailnet
 addresses are derived from the range HQ declares, never written out.
 
@@ -115,7 +127,10 @@ so Scalar does not offer GitHub Pages as one.
   the connection panel passing, and only the four things left to do on
   purpose (an image update, an image run by tag alone, a certificate to
   renew and an agent's request held for approval), each offering a way to do
-  it.
+  it, and nothing else waiting on Needs you.
+- Playbooks and Jobs show no warning, error or failed scan, and a playbook
+  Playbooks links has a run a person approved that finished, each task's
+  outcome beside it.
 - Every expense has its receipt.
 - Every place that describes the reader's connection says it is an example.
 - No line ends in a separator with nothing after it.
@@ -155,6 +170,7 @@ repository's Pages settings. `demo/` is not copied into the Docker image.
 | Path | What it is |
 | --- | --- |
 | `build.py` | The crawl (a test, so it gets its own database). |
+| `first_glance.py` | The estate settled for a first-time visitor, and the things it leaves to do on purpose. |
 | `demo.js` | The script the demo adds to each page. |
 | `demo-theme.js` | Runs first: the chosen theme, and the saved copy of an address with a query. |
 | `check.py` | The checks above; plain unittest, no Django. |

@@ -9,6 +9,7 @@ docs/Architecture.md, "Running a playbook".
 import hashlib
 import json
 import secrets
+from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import lru_cache, partial
 from typing import Annotated, Any
@@ -42,6 +43,7 @@ from .security import Capability, Principal
 lazy from . import automation_adoption
 lazy from .approvals import ApprovalSubject, every_call, measured_by, waits_for_a_person
 lazy from .automation_adoption import AdoptedInput, AdoptedProcedure
+lazy from .automation_sources import PLAYBOOKS
 lazy from .cadence import ring_automation_doorbell
 lazy from .controller import release_lapsed
 lazy from .entity_links import entity_link, kind_label
@@ -87,10 +89,12 @@ def capability_name(operation_id: str) -> str:
     return f"automation.{operation_id}.run"
 
 
-def run_title(operation_id: str) -> str:
-    """A procedure's run in words, as its command's button and a list of work say it."""
+def run_title(operation_id: str, titles: Mapping[str, str]) -> str:
+    """A procedure's run in words, as its command's heading and button and a
+    list of work say it: its playbook's title among ``titles``
+    (``automation_adoption.playbook_titles``), else Run and its id."""
 
-    return f"{OperationRequest.Action.RUN.label} {operation_id}"
+    return titles.get(operation_id) or f"{OperationRequest.Action.RUN.label} {operation_id}"
 
 
 def resource_key(operation_id: str) -> str:
@@ -114,6 +118,9 @@ type Hosts = Annotated[
     Names("machines"),
     Describe("The machines to run it on.", api="Each by its name in HQ."),
 ]
+# What a run's hosts are titled wherever a person reads them, as every page
+# names them: on the field's own use, since an alias's title names the alias.
+MACHINES = Field(title="Machines")
 # The longest correlation id a run keeps, and the pattern of one: printable, no spaces.
 CORRELATION_LONGEST = 200
 CORRELATION_PATTERN = r"^[!-~]*$"
@@ -121,7 +128,7 @@ type Correlation = Annotated[
     StrictStr,
     Field(max_length=CORRELATION_LONGEST, pattern=CORRELATION_PATTERN),
     Describe(
-        f"Your own id to find this run by later, such as an investigation's. Up to {CORRELATION_LONGEST} "
+        f"Your own id to find this run by later. Up to {CORRELATION_LONGEST} "
         "printable characters, no spaces. Kept with the run."
     ),
 ]
@@ -138,7 +145,7 @@ class RunCommand(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    hosts: Hosts
+    hosts: Annotated[Hosts, MACHINES]
     # Each procedure's own input type, which ``command_type`` declares.
     parameters: BaseModel
     correlation: Correlation = ""
@@ -155,7 +162,7 @@ def command_type(manifest: OperationManifest) -> type[RunCommand]:
     if manifest.hosts or MACHINE_KIND not in manifest.target_kinds:
         # What ``resolved_hosts`` admits, offered as the only choices.
         admitted = manifest.hosts if MACHINE_KIND in manifest.target_kinds else ()
-        fields["hosts"] = (Annotated[Hosts, Among(admitted)], ...)
+        fields["hosts"] = (Annotated[Hosts, Among(admitted), MACHINES], ...)
     fields |= {
         "parameters": (
             Annotated[parameters, Describe("The playbook's own inputs, as its manifest lists them.")],
@@ -373,8 +380,7 @@ def held_words(details: object) -> HeldWords | None:
         return None
     holding = details["holding"]
     playbook = str(details.get("playbook") or "")
-    titles = {procedure.id: procedure.title for procedure in automation_adoption.procedures()}
-    title = titles.get(playbook) or run_title(playbook)
+    title = run_title(playbook, automation_adoption.playbook_titles())
     state = OperationRequest.State(holding["state"])
     asked_at = moment(holding.get("created_at"))
     since = f"{lower_first(state.as_job.label)} since {when(asked_at)}" if asked_at else lower_first(state.as_job.label)
@@ -560,7 +566,7 @@ def _reviewed_notes(manifest: OperationManifest) -> tuple[str, ...]:
     return tuple(f"{lead} {_statements(statements)}" for lead, statements in said if statements)
 
 
-def _capability(manifest: OperationManifest, generation: str) -> CapabilitySpec:
+def _capability(manifest: OperationManifest, generation: str, title: str) -> CapabilitySpec:
     name = capability_name(manifest.id)
     longest = ApprovalRequest._meta.get_field("capability").max_length
     if longest is not None and len(name) > longest:
@@ -586,10 +592,12 @@ def _capability(manifest: OperationManifest, generation: str) -> CapabilitySpec:
             "Queue it once, and HQ runs it with Ansible outside this request.",
             *_reviewed_notes(manifest),
         ),
-        label=run_title(manifest.id),
+        label=title,
         verb=OperationRequest.Action.RUN.label,
         # Read on a held run's card, where the procedure is what was asked for.
-        wants=f"carry out the playbook {manifest.id}",
+        wants=f"run the playbook “{title}”",
+        # A run belongs to Playbooks, where its playbook is listed.
+        home=PLAYBOOKS,
         about=partial(about, manifest, generation),
     )
 
@@ -598,4 +606,7 @@ def capability_specs(generation: str | None = None) -> tuple[CapabilitySpec, ...
     """The command each procedure of the adopted catalog is run through."""
 
     digest = automation_adoption.generation() if generation is None else generation
-    return tuple(_capability(manifest, digest) for manifest in operation_registry(digest).values())
+    titles = automation_adoption.playbook_titles(digest)
+    return tuple(
+        _capability(manifest, digest, run_title(manifest.id, titles)) for manifest in operation_registry(digest).values()
+    )
