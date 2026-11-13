@@ -1,9 +1,5 @@
 {% if cell.unavailable %}
   <span class="muted policy-unavailable">{{ cell.unavailable|breakable }}</span>
 {% else %}
-  <select class="policy-select rule-{{ cell.rule|default:'default' }}" name="{{ cell.field }}" aria-label="{{ row.label }}, {{ group.label }}, for {{ cell.column }}">
-    {% for value, label in cell.options %}
-      <option value="{{ value }}"{% if value == cell.rule or not value and not cell.rule %} selected{% endif %}>{{ label }}</option>
-    {% endfor %}
-  </select>
+  {% select cell.field cell.options chosen=cell.rule label=cell.label tone=cell.tone %}
 {% endif %}

@@ -10,14 +10,13 @@
 
 <div data-search-results>
 {% if q %}
-  {% if discovery_total %}
+  {% if discovery_sections %}
   <div class="section-flow">
-    {% include "partials/_discovery_catalog.html" with title="Machines, services and domains" items=discovered_estate %}
-    {% include "partials/_discovery_catalog.html" with title="Pages" items=discovered_resources plain=True %}
-    {% include "partials/_discovery_catalog.html" with title="Commands" items=discovered_commands %}
-    {% include "partials/_discovery_catalog.html" with title="Connections" items=discovered_connections %}
-    {% include "partials/_discovery_catalog.html" with title="Map views" items=discovered_views %}
-    {% include "partials/_discovery_catalog.html" with title="Checks" items=discovered_checks %}
+    {% for section in discovery_sections %}
+    {% section section.label count=section.rows|length %}
+      {% include "partials/_record_list.html" with rows=section.rows label=section.label whole_rows=True only %}
+    {% endsection %}
+    {% endfor %}
   </div>
   {% endif %}
 

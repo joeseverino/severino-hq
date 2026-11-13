@@ -264,6 +264,15 @@ class TableTagTests(SimpleTestCase):
         (plain,) = with_class(_render('{% table_region "Services" %}{% endtable_region %}'), "table-scroll")
         self.assertFalse({"is-shared", "is-snug"} & set(plain.classes))
 
+    def test_a_compare_region_says_so_and_still_does_not_scroll(self):
+        (region,) = with_class(
+            _render('{% table_region "Changes" compare=True %}{% endtable_region %}'), "table-scroll"
+        )
+        self.assertIn("is-compare", region.classes)
+        self.assertNotIn("tabindex", region.attrs)
+        (plain,) = with_class(_render('{% table_region "Changes" %}{% endtable_region %}'), "table-scroll")
+        self.assertNotIn("is-compare", plain.classes)
+
     def test_a_room_no_share_is_named_for_is_refused(self):
         with self.assertRaises(ValueError):
             _render('{% table_region "Services" room="wide" %}{% endtable_region %}')
@@ -625,6 +634,14 @@ class TableTagTests(SimpleTestCase):
         self.assertIn("select-column", elements(html, "th")[0].classes)
         (box,) = select(html, "data-select-all")
         self.assertEqual(box.attrs["aria-label"], "Select all rows")
+
+    def test_a_row_says_it_is_emphasized_and_no_other_does(self):
+        html = _render(
+            "<table><tbody>{% for each in rows %}<tr{% row_state emphasized=each %}><td>x</td></tr>{% endfor %}"
+            "</tbody></table>",
+            {"rows": [True, False]},
+        )
+        self.assertEqual(["data-emphasized" in row.attrs for row in elements(html, "tr")], [True, False])
 
     def test_rows_sort_on_the_page_only_when_there_are_two(self):
         """A heading that sorts on the page keeps its control where its table

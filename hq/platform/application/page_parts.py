@@ -20,6 +20,7 @@ lazy from hq.platform.core.templatetags.value_tags import breakable
 
 from .display_words import display
 from .labels import DOT_MARKUP
+lazy from .ui import STATUS_VALUES
 
 # The arrow that ends a link onward, written inside its last word's box as
 # breakable writes a mark, so a wrapped label never leaves it alone on a line.
@@ -64,8 +65,10 @@ class SectionPart:
     when there is somewhere to go, so a page passes its address as it has
     one. ``figure``
     draws it as a figure, its head the caption. ``head`` overrides where the stylesheet
-    stands the head, ``"above"`` or ``"inside"`` its frame. ``data`` holds the
-    ``data-`` attributes a script reads.
+    stands the head, ``"above"`` or ``"inside"`` its frame. ``edge`` marks
+    the frame's starting edge in a status tone, for a section that stands out
+    from those beside it while it is in that state (a request waiting for a
+    decision). ``data`` holds the ``data-`` attributes a script reads.
     """
 
     heading: str = ""
@@ -90,6 +93,7 @@ class SectionPart:
     more_label: str = ""
     more_url: str = ""
     figure: bool = False
+    edge: str = ""
 
     def __post_init__(self) -> None:
         if self.head not in HEADS:
@@ -106,6 +110,8 @@ class SectionPart:
             raise ValueError("A figure is drawn open, with its caption as its head; it does not fold.")
         if self.when and self.moment is None:
             raise ValueError("A section's when is the form of the moment it names, and it names none.")
+        if self.edge and self.edge not in STATUS_VALUES:
+            raise ValueError(f"A section's edge is a status tone, one of {', '.join(sorted(STATUS_VALUES))}.")
         if not TOP_LEVEL <= self.level <= LAST_LEVEL:
             raise ValueError(f"A section's heading is h{TOP_LEVEL} to h{LAST_LEVEL}.")
 
@@ -163,6 +169,7 @@ class SectionPart:
                     (
                         "section",
                         "section-fold" if self.fold else "",
+                        f"section-edge toned-{self.edge}" if self.edge else "",
                         self.css,
                     ),
                 )

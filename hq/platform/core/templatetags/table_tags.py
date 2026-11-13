@@ -5,7 +5,8 @@ follows from its headings: a figure's alignment down its column, the sort
 control only where there are rows to sort, and each row's toggle in the
 gutter. ``{% table_heading %}`` draws each column heading with its kind, its
 drop rank and its sort control, and ``{% row_toggle %}`` draws the disclosure
-of a row in a table with no headings to say where its gutter is. Which columns
+of a row in a table with no headings to say where its gutter is.
+``{% row_state %}`` says how a row stands among the others. Which columns
 show is the browser's to say (docs/Design.md, A table fits its box).
 """
 
@@ -209,6 +210,7 @@ def _region(
     css: str = "",
     chart: bool = False,
     pane: bool = False,
+    compare: bool = False,
     room: str = "",
     empty: str = "",
     remedy: Any = None,
@@ -221,7 +223,8 @@ def _region(
 
     An identifier in it is cut at a share of the region's width, and ``room``
     names a smaller one (docs/Design.md, A table is laid out before any script
-    runs). Only a ``pane`` (a box of its own height, or a table sized to its
+    runs). A ``compare`` table sets two values side by side in each row, after
+    the row's name, and they share the room evenly. Only a ``pane`` (a box of its own height, or a table sized to its
     content) scrolls in it. A ``chart``'s table fits its box as any table
     does, read whole with no row held back and in the chart's own order, so
     no heading sorts it; its region and a pane's are
@@ -240,6 +243,7 @@ def _region(
     classes = [
         *([css] if css else []),
         *(["is-pane"] if pane else []),
+        *(["is-compare"] if compare else []),
         *([f"is-{room}"] if room else []),
     ]
     if filtered:
@@ -410,3 +414,12 @@ def row_toggle() -> dict[str, Any]:
     the row has something hidden."""
 
     return {}
+
+
+@register.simple_tag
+def row_state(*, emphasized: bool = False) -> str:
+    """How a row stands among the others, written in its ``tr``:
+    ``emphasized`` for one that asks to be read first, such as a message not
+    yet read, whose row is tinted and whose links weigh more."""
+
+    return mark_safe(" data-emphasized") if emphasized else ""

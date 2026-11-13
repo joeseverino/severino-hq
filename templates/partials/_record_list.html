@@ -6,12 +6,13 @@ Record list: a compact list of records that speak for themselves.
 `rows` are application.ui.ListRow, each named by its `title` and `url` or
 by its `link`, an entity drawn as `{% entity %}` draws one. A row's `actions` (PageAction) end its
 line as compact controls, a POST one through `post_button`. A search hit's
-`snippet` is a line of its own under the row, its match marked. Use _insight_grid.html instead when each
+`snippet` is a line of its own under the row, its match marked. Its `chips` follow its line.
+With `whole_rows`, a list of places to go, each row is its title's link. Use _insight_grid.html instead when each
 entry needs interpreting rather than just identifying.
 {% endcomment %}
 {% comment %}
 <!-- ast-grep-ignore: hand-drawn-list-rows --> the list part itself
-{% endcomment %}<ul class="list-rows"{% if label %} aria-label="{{ label }}"{% endif %}>
+{% endcomment %}<ul class="list-rows{% if whole_rows %} whole-rows{% endif %}"{% if label %} aria-label="{{ label }}"{% endif %}>
   {% for row in rows %}
     <li>
       <span class="row-main">
@@ -20,6 +21,7 @@ entry needs interpreting rather than just identifying.
         {% if row.detail %}<span class="muted">{{ row.detail|breakable }}</span>{% endif %}
         {% if row.badge %}{% status row.badge tone=row.status|default:"neutral" %}{% endif %}
       </span>
+      {% if row.chips %}<span class="row-chips">{% for chip in row.chips %}<span class="scope-chip">{{ chip|breakable }}</span>{% endfor %}</span>{% endif %}
       {% if row.meta or row.at %}<span class="row-meta">{% if row.meta %}{{ row.meta|breakable }}{% endif %}{% if row.meta and row.at %}{% dot %}{% endif %}{% if row.at %}{{ row.at|when:"day" }}{% endif %}</span>{% endif %}
       {% if row.actions %}<span class="row-actions">{% for action in row.actions %}{% include "partials/_page_action.html" with action=action extra="compact" only %}{% endfor %}</span>{% endif %}
       {% if row.snippet %}<p class="row-snippet">{% for text, matched in row.snippet %}{% if matched %}<mark>{{ text|breakable }}</mark>{% else %}{{ text|breakable }}{% endif %}{% endfor %}</p>{% endif %}

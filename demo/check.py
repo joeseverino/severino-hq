@@ -619,7 +619,7 @@ class DemoSiteTests(unittest.TestCase):
             weather = page.locator('.reading[data-fragment-part="weather"]')
             self.assertTrue(weather.is_visible(), "the forecast is on the dashboard")
             self.assertIn("°", weather.locator(".reading-lead").inner_text())
-            self.assertTrue(weather.locator(".glance-hours li").count())
+            self.assertTrue(weather.locator(".tile-strip li").count())
             for width in (402, 1360):
                 page.set_viewport_size({"width": width, "height": 900})
                 with self.subTest(width=width):

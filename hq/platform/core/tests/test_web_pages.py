@@ -53,6 +53,27 @@ class SearchPageTests(_AuthedTestCase):
         self.assertIn(reverse("projects:list"), links)
         self.assertNotIn("project.create", text(response))
 
+    def test_a_place_found_is_a_row_with_its_state_and_a_page_is_its_name(self):
+        from hq.platform.application.command_center import DiscoveryItem
+        from hq.platform.core.views import DISCOVERY_GROUPS
+
+        def item(kind, label, summary, badges):
+            return DiscoveryItem(kind, label.lower(), label, summary, f"/example/{kind}/", label, badges)
+
+        found = {
+            **dict.fromkeys(DISCOVERY_GROUPS, ()),
+            "estate": (item("machine", "Example host", "An example machine", ("Running", "")),),
+            "resources": (item("page", "Example page", "What the example page lists", ()),),
+        }
+        with patch("hq.platform.core.views.command_center", return_value=found):
+            response = self.client.get("/search/", {"q": "example"})
+
+        shown = text(response)
+        self.assertLessEqual({"/example/machine/", "/example/page/"}, set(hrefs(response)))
+        self.assertIn("An example machine", shown)
+        self.assertIn("Running", shown)
+        self.assertNotIn("What the example page lists", shown)
+
     def test_query_filters_commands_as_well_as_records(self):
         response = self.client.get("/search/", {"q": "certificate.renew"})
 

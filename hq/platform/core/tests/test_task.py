@@ -119,6 +119,65 @@ class PagesTests(SimpleTestCase):
             task.pages(["dense/service"], self.EVERY, ["dense/services"])
 
 
+class _Drawing:
+    """An estate whose pages each draw the templates given them, recording what was read."""
+
+    def __init__(self, linked, entries, unlinked, followed):
+        self.drawn = {**linked, **unlinked, **followed}
+        self._linked, self._entries, self._followed = list(linked), entries, list(followed)
+        self.read: list[str] = []
+
+    def linked(self):
+        return self._linked
+
+    def at(self, address):
+        self.read.append(address)
+        return task.Drawn(frozenset(self.drawn[address])) if address in self.drawn else None
+
+    def entries(self):
+        self.read.append("entries")
+        return [(name, task.Drawn(frozenset(drawn))) for name, drawn in self._entries.items()]
+
+    def followed(self):
+        self.read.append("followed")
+        return self._followed
+
+
+@tag("source")
+class TemplatePagesTests(SimpleTestCase):
+    def estate(self):
+        return _Drawing(
+            linked={reverse("contacts:list"): ["contacts/contact_list.html"]},
+            entries={"part/example": ["partials/_example_part.html"]},
+            unlinked={reverse("calendar:entry_new"): ["calendars/_example_fields.html"]},
+            followed={reverse("contacts:delete", args=[1]): ["contacts/contact_confirm_delete.html"]},
+        )
+
+    def test_a_template_reaches_the_page_or_the_catalog_entry_that_draws_it(self):
+        cases = {
+            "contacts/contact_list.html": reverse("contacts:list"),
+            "_example_part.html": "part/example",
+            "calendars/_example_fields.html": reverse("calendar:entry_new"),
+            "contacts/contact_confirm_delete.html": reverse("contacts:delete", args=[1]),
+        }
+        for template, page in cases.items():
+            with self.subTest(template=template):
+                self.assertEqual(task.pages([f"template:{template}"], [], records=self.estate()), [page])
+
+    def test_a_template_a_linked_page_draws_reads_nothing_past_it(self):
+        estate = self.estate()
+
+        task.pages(["template:contacts/contact_list.html"], [], records=estate)
+
+        self.assertEqual(estate.read, [reverse("contacts:list")])
+
+    def test_a_template_nothing_draws_is_refused_with_the_nearest_any_page_draws(self):
+        with self.assertRaises(PageRefused) as refused:
+            task.pages(["template:_example_fieldz.html"], [], records=self.estate())
+
+        self.assertIn("\n  template:calendars/_example_fields.html", str(refused.exception))
+
+
 def _git(*args: str, cwd: Path) -> str:
     return subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True, check=True).stdout
 

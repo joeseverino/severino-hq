@@ -2294,7 +2294,8 @@
           "actions=",
           "link=",
           "category=",
-          "snippet="
+          "snippet=",
+          "chips="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -2379,7 +2380,8 @@
           "foot=",
           "more_label=",
           "more_url=",
-          "figure="
+          "figure=",
+          "edge="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -3365,7 +3367,8 @@
         "about": "A compact list of records, from `hq_sdk.ui.ListRow`.",
         "optional": [
           "empty",
-          "label"
+          "label",
+          "whole_rows"
         ],
         "required": [
           "rows"
@@ -3611,6 +3614,7 @@
           "moment=",
           "when=",
           "head=",
+          "edge=",
           "**data"
         ],
         "parts": [
@@ -3668,6 +3672,7 @@
           "css=",
           "chart=",
           "pane=",
+          "compare=",
           "room=",
           "empty=",
           "remedy=",

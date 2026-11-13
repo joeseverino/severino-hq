@@ -216,6 +216,9 @@ class ListRow:
     # in runs, each with whether it is the match, which is marked. Quoted as
     # the record holds it, so it is not held to words.
     snippet: tuple[tuple[str, bool], ...] = field(default=(), metadata=QUOTED)
+    # The words a place is known by besides its name, each a chip after its
+    # line: a machine's state, the abilities of a connection a search matched.
+    chips: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         _one_of("ListRow status", self.status, STATUS_VALUES, or_empty=True)

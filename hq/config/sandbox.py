@@ -107,6 +107,15 @@ def _directory(variable: str, kind: str, run: Path) -> str:
     return os.environ[variable]
 
 
+# The controller's markers, each by the setting that moves it. The test
+# runner gives each process and each test its own (``test_runner.own_markers``).
+MARKERS = (
+    ("SEVERINO_CONTROLLER_HEARTBEAT", "controller-heartbeat"),
+    ("SEVERINO_CONTROLLER_DOORBELL", "controller-doorbell"),
+    ("SEVERINO_ACTIVITY_MARKER", "hq-activity"),
+)
+
+
 def isolate(database: str = "") -> str:
     """The database to open: ``database``, or a new empty file in the run's directory,
     named to every process the run starts so they all open the one file."""
@@ -122,11 +131,7 @@ def isolate(database: str = "") -> str:
     # heartbeat one run wrote would decide whether the next run's controller
     # is arriving.
     markers = Path(_directory("SEVERINO_TEST_MARKERS", "markers", run))
-    for variable, marker in (
-        ("SEVERINO_CONTROLLER_HEARTBEAT", "controller-heartbeat"),
-        ("SEVERINO_CONTROLLER_DOORBELL", "controller-doorbell"),
-        ("SEVERINO_ACTIVITY_MARKER", "hq-activity"),
-    ):
+    for variable, marker in MARKERS:
         os.environ.setdefault(variable, str(markers / marker))
     # A repository a test makes gets none of git's template (sample hooks, a
     # description, info/exclude), which no test reads: an empty template

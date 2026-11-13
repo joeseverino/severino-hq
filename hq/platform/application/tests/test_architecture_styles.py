@@ -579,6 +579,27 @@ class TemplateClassStyleTests(SimpleTestCase):
         )
         self.assertEqual(offenders, [], "define the class where its part is styled, or delete it")
 
+    def test_each_dialog_size_is_one_the_dialog_offers(self):
+        """The dialog draws its `size` as a class built as it renders, which the
+        literal read above never sees, so a size it does not offer would draw
+        a form-width dialog with nothing to say why."""
+
+        defined = defined_classes()
+        sizes = [
+            (name, size)
+            for name, path in template_files()
+            for include in re.findall(
+                r'{%\s*include\s+"partials/_modal\.html"[^%]*%}', path.read_text(encoding="utf-8")
+            )
+            for size in re.findall(r'\bsize="([^"]*)"', include)
+        ]
+        self.assertTrue(sizes, "no dialog names a size, so this check reads nothing")
+        self.assertEqual(
+            [f"{name}: size={size!r}" for name, size in sizes if f"modal-{size}" not in defined],
+            [],
+            "name a size the dialog offers (partials/_modal.html), or add it beside .modal-wide in forms.css",
+        )
+
     def test_host_templates_draw_only_the_shared_parts_classes(self):
         """A host page is drawn from the shared parts, so a class of its own is
         a hand-rolled part the survey never sees and an extension cannot draw.

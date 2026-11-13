@@ -148,6 +148,13 @@ class ContactViewTests(TestCase):
         self.assertContains(response, "Hello from the contact form.")
         self.assertContains(response, "Mark read")
 
+    def test_a_message_not_read_is_the_emphasized_row(self):
+        _read(_row(1, name="Unread Example"), _row(2, name="Read Example", status="read"))
+        body = self.client.get(reverse("contacts:list")).content.decode()
+        emphasized = [row.words for row in elements(body, "tr") if "data-emphasized" in row.attrs]
+        self.assertEqual(len(emphasized), 1)
+        self.assertIn("Unread Example", emphasized[0])
+
     def test_the_status_switch_marks_the_status_shown_and_keeps_the_search(self):
         response = self.client.get(reverse("contacts:list"), {"status": "unread", "q": "Jane"})
 

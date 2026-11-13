@@ -203,28 +203,18 @@
 .bar-track::-moz-meter-bar { min-inline-size: 2px; border-radius: 4px; background: var(--bg-tint); }
 .bar-value { position: relative; flex: none; font-feature-settings: "tnum"; font-weight: 650; }
 
-/* A held request: who asks, what would happen, the decision. */
-.approval-card { border-left: 3px solid var(--line); }
-.approval-card[data-state="pending"] { border-left-color: var(--warn); }
-/* Their own words, a field of their own the card's padding holds. */
+/* A held request: who asks, what would happen, the decision. Their own words, a field of their own the card's padding holds. */
 .approval-reason { margin: var(--space-6) 0 0; padding: var(--space-4) var(--space-6); border-radius: var(--radius); background: var(--bg-tint); color: var(--ink-2); font-size: var(--text-sm); }
 .approval-actions { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-top: var(--space-10); }
 
 /* An agent's latest events, under its row: one line each, newest first. */
 .agent-events { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
 .mcp-endpoint { display: grid; gap: var(--stack-gap); }
-.policy-table .policy-select { width: 100%; max-width: 11rem; }
-.policy-table thead th:first-child { color: var(--ink-2); font-size: var(--text-xs); }
-.policy-table tbody th { font-weight: 500; color: var(--ink); }
 .policy-effect { margin-left: var(--space-3); font-size: var(--text-3xs); font-weight: 600; color: var(--muted-2); }
 .policy-effect.effect-destructive { color: var(--danger); }
 .policy-effect.effect-infrastructure_change { color: var(--warn); }
 .policy-default { color: var(--muted); }
 .policy-unavailable { font-size: var(--text-xs); white-space: nowrap; }
-.policy-select { --chevron-inset: var(--space-4); min-width: 7.5rem; padding-inline-start: var(--space-4); color: var(--muted); font-size: var(--text-xs); }
-.policy-select.rule-allow { color: var(--ok); border-color: currentColor; }
-.policy-select.rule-approve { color: var(--warn); border-color: currentColor; }
-.policy-select.rule-deny { color: var(--danger); border-color: currentColor; }
 /* A long form's closing row: drawn in its place from the first draw, so
    nothing moves when the form changes and its frame ends with a row that
    holds the verb rather than with room kept for one. Once the form has
@@ -323,15 +313,15 @@ form[data-changed] .save-bar::before { content: ""; position: absolute; z-index:
 /* Busy keeps the button focusable, so it is marked rather than disabled. */
 .ask [aria-disabled="true"],
 form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity: .6; }
-/* The forecast's hours ahead, in its reading's panel (core/_dashboard_glance.html). */
-/* Every hour in view: as many to a row as the popover holds, the rest on the
-   rows under them. */
-/* stylelint-disable-next-line hq/flow-grid -- the hours of a day at a glance, tiles of one strip */
-.glance-hours { display: grid; grid-template-columns: repeat(auto-fill, minmax(2.6rem, 1fr)); gap: var(--space-4) 0; margin: 0; padding: var(--space-4) 0 0; list-style: none; border-top: 1px solid var(--line-2); }
-.glance-hours li { display: grid; justify-items: center; gap: 1px; font-size: var(--text-3xs); color: var(--muted); }
-.glance-hours strong { color: var(--ink); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
-.glance-hours small { color: var(--muted-2); }
-.glance-hours small.is-wet { color: var(--accent); font-weight: 600; }
+/* A tile strip (partials/_tile_strip.html): every tile in view, as many to
+   a row as the box holds, the rest on the rows under them. A note is said
+   only when it stands out, so it is marked. */
+/* stylelint-disable-next-line hq/flow-grid -- small figures read across, tiles of one strip */
+.tile-strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(2.6rem, 1fr)); gap: var(--space-4) 0; margin: 0; padding: 0; list-style: none; }
+/* Tiles start level, so a figure stands on the same line whether a note is under it or not. */
+.tile-strip li { display: grid; align-content: start; justify-items: center; gap: 1px; font-size: var(--text-3xs); color: var(--muted); }
+.tile-strip strong { color: var(--ink); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+.tile-strip small { color: var(--accent); font-weight: 600; }
 .section-period { margin-left: var(--space-3); color: var(--muted-2); font-weight: 500; letter-spacing: 0; }
 .empty-value { color: var(--muted-2); }
 

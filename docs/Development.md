@@ -229,7 +229,9 @@ names another checkout, as an extension's check names its package's.
 
 A `dev:look --rule survey` without `--css` is kept so too, per engine, in
 `var/gate/look-survey-<engine>.txt`, the pages and widths it judged beneath;
-one that found anything or judged nothing fails. Landing a change to
+one that found anything or judged nothing fails. A `--base` look is a survey
+too, so its verdict replaces the record and names only the pages it was asked.
+Landing a change to
 `templates/`, `static/css` or `static/js` reads both engines' records for the
 tip's tree.
 

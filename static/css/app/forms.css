@@ -64,6 +64,10 @@
 /* A list box is as wide as its field, so a long option wraps inside it
    rather than running under its edge where no one can scroll to it. */
 .field select:is([multiple], [size]) option { white-space: normal; overflow-wrap: anywhere; padding-block: var(--space-1); }
+/* A toned select (`{% select tone= %}`) says its choice in the tone's ink
+   (`.toned`), and a choice that is a stand, not the neutral default, is
+   edged in it too. */
+select.toned:not(.toned-neutral) { border-color: currentColor; }
 /* Never shorter than a few lines, however little is in it (`field-sizing`). */
 .field textarea { resize: vertical; min-height: 80px; }
 /* A field shown only when another field's value calls for it: data-when names
@@ -216,6 +220,49 @@
 .modal-lede { margin: 0 0 var(--space-7); font-size: var(--text-sm); color: var(--muted); line-height: 1.5; }
 .modal .form { background: none; border: 0; padding: 0; box-shadow: none; }
 
+/* `size="wide"`: a page in a dialog, wide enough for two panels side by side.
+   The window shows around it on every side, the gap growing with the window
+   so a large screen keeps the same share of page around it. It takes its full
+   height as it opens, so what it fetches fills it rather than growing it from
+   the middle of the window, and scrolls inside itself, its title held at the
+   top. */
+.modal-wide {
+  --modal-gutter: clamp(24px, 6vmin, 72px);
+  width: min(1040px, 100vw - 2 * var(--modal-gutter));
+  height: calc(100dvh - 2 * var(--modal-gutter));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+.modal-wide .modal-head {
+  position: sticky;
+  z-index: 5;
+  top: 0;
+  /* Cover the panel's top padding too, or what scrolls under the title
+     paints in the strip above it on mobile Safari. */
+  padding: var(--space-9) 0 var(--space-5);
+  margin-top: calc(var(--space-9) * -1);
+  background: var(--ground);
+}
+
+/* On a phone the wide dialog stops being a dialog and becomes the page: a
+   floating box with margins on four sides wastes the only dimension there is. */
+@media (max-width: 560px) {
+  .modal-wide {
+    position: fixed; inset: 0;
+    width: 100vw; max-width: 100vw; height: 100dvh; max-height: none;
+    margin: 0; border: 0; border-radius: 0;
+  }
+  .modal-wide .modal-panel {
+    min-height: 100%;
+    padding-top: 0;
+  }
+  .modal-wide .modal-head {
+    margin-top: 0;
+    padding-top: max(18px, env(safe-area-inset-top));
+  }
+}
+
 .command-center-modal {
   width: min(780px, calc(100vw - 28px));
   max-height: min(760px, calc(100vh - 28px));
@@ -347,31 +394,6 @@
 /* The margin parts a chip from the next; the last has none to part, so it takes the whole of its line, and a value in it is cut only past its cell's edge. */
 .tag:last-child { margin-inline-end: 0; }
 
-.discovery-list { list-style: none; margin: 0; padding: 0; }
-.discovery-list li { border-top: 1px solid var(--line); }
-.discovery-list li:first-child { border-top: 0; }
-.discovery-link {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-7);
-  padding: var(--space-5) 0;
-  color: inherit;
-  text-decoration: none;
-}
-a.discovery-link:hover strong { color: var(--accent); }
-.discovery-main { display: grid; gap: var(--space-1); min-width: 0; flex: 1 1 20rem; }
-.discovery-main .muted { font-size: var(--text-xs); line-height: 1.4; }
-.discovery-meta {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-  flex: 1 1 16rem;
-}
-.discovery-meta code { font-size: var(--text-3xs); }
 /* A key to press is said only where there are keys: not on a touch screen. */
 @media (hover: none) { .keyboard-only { display: none; } }
 .command-confirm {

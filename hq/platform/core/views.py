@@ -388,7 +388,18 @@ class AgentPolicyView(PageMixin, TemplateView):
         return redirect("agent_policy")
 
 
-DISCOVERY_GROUPS = ("estate", "resources", "commands", "connections", "views", "checks")
+# Each group of places a search finds, by its key, with its heading, in the
+# order the page draws them.
+DISCOVERY_GROUPS = {
+    "estate": "Machines, services and domains",
+    "resources": "Pages",
+    "commands": "Commands",
+    "connections": "Connections",
+    "views": "Map views",
+    "checks": "Checks",
+}
+# The palette's order: what to do leads what to read.
+PALETTE_GROUPS = ("estate", "commands", "resources", "connections", "views", "checks")
 # What a search scope's name may hold besides what a fragment id does.
 SCOPE_ID = re.compile(r"[^a-z0-9-]+")
 
@@ -415,14 +426,8 @@ class SearchView(PageMixin, TemplateView):
     def _palette_groups(self, discovery):
         remaining = self.palette_result_limit
         groups = []
-        for key, label in (
-            ("estate", "Machines, services and domains"),
-            ("commands", "Commands"),
-            ("resources", "Pages"),
-            ("connections", "Connections"),
-            ("views", "Map views"),
-            ("checks", "Checks"),
-        ):
+        for key in PALETTE_GROUPS:
+            label = DISCOVERY_GROUPS[key]
             items = tuple(item for item in discovery[key] if item.url)[: min(self.palette_group_limit, remaining)]
             if items:
                 groups.append({"key": key, "label": label, "items": items})
@@ -446,6 +451,30 @@ class SearchView(PageMixin, TemplateView):
             if not remaining:
                 break
         return visible
+
+    @staticmethod
+    def _discovery_sections(discovery) -> list[dict]:
+        """The places a search found, a section of rows per group that has
+        any: the name a person knows each by, one line of what it is, and at
+        most a word of state. A page's name says what it is, so it has no
+        line."""
+
+        return [
+            {
+                "label": label,
+                "rows": [
+                    ListRow(
+                        title=item.label,
+                        url=item.url,
+                        detail="" if key == "resources" else item.summary,
+                        chips=tuple(badge for badge in item.badges if badge),
+                    )
+                    for item in discovery[key]
+                ],
+            }
+            for key, label in DISCOVERY_GROUPS.items()
+            if discovery[key]
+        ]
 
     @staticmethod
     def _result_sections(q: str, groups: list[dict], contacts: list) -> list[dict]:
@@ -549,12 +578,7 @@ class SearchView(PageMixin, TemplateView):
                 if len(sections) > 1
                 else None
             ),
-            discovered_estate=discovery["estate"],
-            discovered_resources=discovery["resources"],
-            discovered_commands=discovery["commands"],
-            discovered_connections=discovery["connections"],
-            discovered_views=discovery["views"],
-            discovered_checks=discovery["checks"],
+            discovery_sections=[] if palette_request else self._discovery_sections(discovery),
             discovery_total=discovery_total,
             # The estate leads, above records and the audit log.
             palette_estate=[group for group in palette_groups if group["key"] == "estate"],

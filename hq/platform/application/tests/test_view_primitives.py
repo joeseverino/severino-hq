@@ -121,6 +121,21 @@ class ListRowTests(SimpleTestCase):
         with self.assertRaises(ValueError):
             ListRow(title="Example host", detail=quoted)
 
+    def test_a_places_chips_are_each_a_word_after_its_line(self):
+        from django.template.loader import render_to_string
+
+        from ..card_items import ListRow
+        from .markup import elements
+
+        row = ListRow(
+            title="Example connection", url="/example/connection/", chips=("Reads accounts", "Reads balances")
+        )
+        drawn = render_to_string("partials/_record_list.html", {"rows": [row], "whole_rows": True})
+
+        (link,) = elements(drawn, "a")
+        self.assertEqual((link.attrs["href"], link.words), ("/example/connection/", "Example connection"))
+        self.assertEqual([span.words for span in elements(drawn, "span") if span.words in row.chips], list(row.chips))
+
     def test_a_rows_actions_end_its_line_a_post_one_submitting_its_value(self):
         """A record moved or removed from its row posts through the page's one
         form, a glyph named aloud by its title, and one that cannot be pressed

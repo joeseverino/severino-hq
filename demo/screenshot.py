@@ -51,7 +51,7 @@ SHOTS = (
         "ai/approvals.png",
         "/audit/?awaiting=1",
         follow="main tbody a",
-        frame=("main .page-head", "main .approval-card"),
+        frame=("main .page-head", "main [data-approval]"),
     ),
 )
 

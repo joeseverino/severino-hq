@@ -595,6 +595,11 @@ uses", "Keys are kept in a vault": what was checked, in plain words. Not a
 sweeping claim ("every credential is limited to what HQ needs"), and not
 "knows", "ensures" or "limited".
 
+Repositories against their standard are drawn by
+`projects/_repository_postures.html`: a row each of its name, a meter with a
+segment per check, its score and who can reach it. The meter follows the name
+column, so one check sits in the same place on every row.
+
 **A zero is information.** A count of zero says the thing was checked and there
 is none; it stays on the page. Hiding it leaves the reader wondering whether it
 was counted.
@@ -662,7 +667,10 @@ nothing). `head="above"` or `head="inside"` overrides it for a page that
 needs the other look. Frames that share a row start together, so in a pair
 (`.two-col`) a table section beside a section whose body is anything else
 takes its head inside its frame; alone, or beside another table, it keeps its
-head above. A
+head above. `edge` takes a status tone (`{% section "Request" edge=entry.tone %}`)
+for a section that stands out from those beside it while it is in a state, a
+request waiting for a decision: the tone runs down the starting edge of
+whichever box frames it, and with no tone it has no edge. A
 heading is plain words, never markup a filter draws (`|when`): `SectionPart`
 refuses markup in it, and a template meets that only as it renders. A
 heading that names a moment gives it as `moment`, in the `when` form
@@ -781,7 +789,11 @@ section's body or a head's aside, never in a fold's summary: a button inside
 the summary is a control nested in the toggle, whose role a screen reader
 loses. Host-only, as the dialog it opens is. A panel a status opens in place
 (an urgency's origin) is the same `partials/_modal.html` with `popover=True`:
-it opens as a popover, and its close button hides it.
+it opens as a popover, and its close button hides it. The dialog is a form's
+width; `size="wide"` makes it a page in a dialog (the connection panel), two
+panels side by side with the window showing around it by a gap that grows
+with the window, scrolling under a title that stays put, and the whole screen
+on a phone.
 
 **One filter bar.** `{% filter_bar filtered=... clear=... %}`: the page's
 search field and selects, one Filter (or the bar's own `verb=`), Clear
@@ -791,6 +803,12 @@ The search takes the row's room; every other control is as wide as what it
 says, a select its longest option. No chip walls.
 A control's visible name is `{% control_label "From" control="id" %}`, the
 `<label>` of the control with that id; with no `control` it names what follows.
+A choice of one drawn from data is `{% select "rule" choices chosen=rule label="What it sets" tone=tone %}`:
+an option for each `(value, words)`, the chosen one selected, `id` the one a
+control label names it by, and with no visible label `label` the name a
+reader hears (a table cell's setting). `tone` says the choice in a status
+tone, the status part's ink, edged in it unless neutral, as an agent's rule
+reads "On" in the good tone and "Off" in the serious one.
 *Gate:* the `hand-drawn-filter-bar` rule refuses `.filter-bar` written by hand; the
 survey's "filter choices as wide as their options" finds a choice stretched
 over its bar.
@@ -803,6 +821,11 @@ current one `aria-current="page"`, a choice's `count` beside its chip and its
 
 **Values read as what they are.** `|readout` puts identifiers (keys, hosts,
 paths, ports) in `<code>` and leaves counts, words and phrases as text.
+
+A person's free text with the names HQ knows in it (a project's deployment
+notes) is `partials/_linked_text.html`, over the text's runs that
+`application.where_it_runs.named_links` finds: each name a link as every
+mention is, and its line breaks kept.
 
 Numbers are never chips: a figure stands in a KPI cell, a numeric column or a
 sentence (`hq/platform/core/tests/test_template_chips.py`). One that carries a
@@ -1089,7 +1112,13 @@ record's own text each with whether it is the match: a line of its own under
 the row, two lines at most, the match marked. It is quoted as the record holds
 it, so it is the one field not held to words. Search draws every group of
 results this way, the count in its filter bar, a way to each group in the
-page navigation over them, and the hint before a search as a notice.
+page navigation over them, and the hint before a search as a notice. A row's
+`chips` are the words a place is known by besides its name (a machine's
+state, the abilities a search matched), each a `.scope-chip` after its line.
+A list of places to go, as search draws the machines, pages and commands it
+found, is included `with whole_rows=True`: each row is its title's link,
+stretched over the row, so the row is one target and its markup stays a link
+around a name.
 
 A pair whose value is a list of names (`.address-list`, or a `.code-list` of
 two or more) takes a row of its own. So it never wraps beside another pair and
@@ -1245,6 +1274,12 @@ underlined. One whose value is its link tints the same while the value is
 pointed at or focused. In a card or an overview the tint reaches into the gap
 as a shadow, so nothing moves, and a lead that spans the frame tints a band
 across it.
+
+A run of small figures read across, as a forecast's hours are, is a tile
+strip (`partials/_tile_strip.html`), each a `StripTile`
+(`application.drawings`): what it is of, the figure, and a `note` said only
+when something stands out, and then marked. As many tiles stand to a line as the box holds, the rest on
+the lines under them.
 
 A figure that is itself a change takes `tone`, a status tone its value is
 drawn in, featured or not, so a rise and a fall never read alike; a figure

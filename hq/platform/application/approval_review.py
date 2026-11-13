@@ -263,11 +263,12 @@ def _one_move(shown: ChangePreview) -> ChangeRow | None:
 
 
 def review(held: ApprovalRequest) -> dict[str, Any]:
-    """What the decision card shows."""
+    """What the decision card shows: ``tone`` marks one still waiting for a decision."""
 
     shown = preview(held)
     return {
         "held": held,
+        "tone": "attention" if held.state == ApprovalRequest.State.PENDING else "",
         "asked": asked(held, shown),
         "preview": shown,
         "warnings": _warnings(held),

@@ -39,10 +39,10 @@
   .hardening-notes li { min-width: 0; overflow-wrap: anywhere; }
   [data-copy-target][hidden] { display: none; }
 
-  /* Posture's repositories: a row per repository with a segment per check. A
-     row is short: as many to a line as the frame holds, each cell drawing its
-     own hairlines as a band's do, so a wide frame is not a column of rows
-     ending halfway across it. */
+  /* Repositories' posture (projects/_repository_postures.html): a row per
+     repository with a segment per check. A row is short: as many to a line
+     as the frame holds, each cell drawing its own hairlines as a band's do,
+     so a wide frame is not a column of rows ending halfway across it. */
   /* stylelint-disable-next-line declaration-property-value-disallowed-list, hq/flow-grid -- the grid clips its cells' outer hairlines, not their text; a repository's posture segments, cells of one frame */
   .posture-repos { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 32rem), 1fr)); list-style: none; margin: 0 0 var(--space-7); padding: var(--surface-inset, 0); overflow: clip; }
   .posture-repos li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-6); padding: var(--space-5) var(--space-7); box-shadow: -1px 0 0 var(--line-2), 0 -1px 0 var(--line-2); }
@@ -54,13 +54,14 @@
   .posture-access { flex: 1 1 12rem; min-width: 0; color: var(--muted); font-size: var(--text-sm); }
   .posture-access .icon { color: var(--muted-2); vertical-align: -0.15em; }
   .posture-access .is-unmet { color: var(--danger); }
-  /* Fixed segments, the shared checks first, so one check sits in the same
-     column on every row and a gap reads straight down the list. */
+  /* Fixed segments right after the name, the shared checks first, so one
+     check sits in the same column on every row and a gap reads straight
+     down the list; the score follows, as wide as it says. */
   .posture-meter span { flex: 0 1 1.6rem; min-width: 0.4rem; height: 0.6rem; border-radius: 2px; background: var(--line); }
   .posture-meter .posture-meter-break { flex: 0 0 var(--space-6); background: none; }
   .posture-meter .is-met { background: var(--ok); }
   .posture-meter .is-unmet { background: var(--danger); }
-  .posture-score { flex: 0 0 4.5rem; font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+  .posture-score { flex: none; font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
   .posture-score.is-met { color: var(--ok); }
   .posture-score.is-unmet { color: var(--danger); }
 

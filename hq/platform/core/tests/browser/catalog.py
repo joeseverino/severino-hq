@@ -27,10 +27,11 @@ from hq.platform.application.appearance import Theme
 from hq.platform.application.asks import DONE, FAILED, RUNNING, Ask, Standing
 from hq.platform.application.cadence_chart import Cadence, CadenceMatrix, CadenceRow, CadenceWeek
 from hq.platform.application.calendar import CalendarEvent, CalendarSource, SourceView, calendar_month
+from hq.platform.application.capability_policy import RULE_LABELS, Column, Group, PolicyCell, Row
 from hq.platform.application.card_items import Insight, Kpi, ListRow, Timeline, TimelineItem
 from hq.platform.application.command_center import DiscoveryItem
 from hq.platform.application.credential_mint import CredentialFix
-from hq.platform.application.drawings import AllocationBar, Dot, Dots, Share, Trend
+from hq.platform.application.drawings import AllocationBar, Dot, Dots, Share, StripTile, Trend
 from hq.platform.application.entity_links import EntityLink
 from hq.platform.application.finding_model import OperatorStep
 from hq.platform.application.forms import ChoiceCards, SuffixedInput
@@ -57,10 +58,13 @@ from hq.platform.application.ui import (
     line_chart,
     stacked_bar_chart,
 )
+from hq.platform.core.models import AgentIdentity
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.widths import PHONE_SCREEN, SPARSE_WIDTHS
 lazy from hq.platform.application.dashboard import queue_item
+lazy from hq.platform.application.github_estate import Repository
+lazy from hq.platform.application.github_posture import posture_of
 lazy from hq.platform.application.path_model import Certificate, Hop, Route
 lazy from hq.platform.application.request_path import CONTRADICTED, PROVEN, HopCheck
 lazy from hq.platform.core.templatetags.stylesheet_tags import stylesheets
@@ -369,6 +373,61 @@ def _problems(*titles, family="", status="attention"):
     ]
 
 
+def _policy():
+    """Agents' rules as the Agents page draws them for one agent: a row per
+    action, its rule in every state a rule can be in, and a cell past the
+    agent's grant. The catalog draws without script, which drops no column,
+    so one agent's column is the table that fits every width."""
+
+    options = (("", "Default"), *((rule, words) for rule, words in RULE_LABELS.items()))
+    column = Column("example-agent", "example-agent", "MCP", AgentIdentity(client_id="example-agent"))
+
+    def row(name, label, effect, effect_label, default, rule, unavailable=""):
+        cell = PolicyCell(
+            f"example-agent-{name}",
+            column.label,
+            rule,
+            options,
+            unavailable=unavailable,
+            label=f"{label}, for {column.label}",
+        )
+        return Row(name, label, effect, effect_label, default, (cell,))
+
+    return {
+        "columns": (column,),
+        "label": "Example rules",
+        "groups": (
+            Group(
+                "Example records",
+                (
+                    row("example.edit", "Edit an example record", "write", "Changes HQ", "On", "allow"),
+                    row("example.move", "Move an example record", "write", "Changes HQ", "On", None),
+                    row(
+                        "example.stop",
+                        "Stop an example container",
+                        "destructive",
+                        "Stops or deletes",
+                        "Ask me first",
+                        "approve",
+                    ),
+                    row(
+                        "example.delete",
+                        "Delete an example record",
+                        "destructive",
+                        "Stops or deletes",
+                        "Ask me first",
+                        "deny",
+                    ),
+                ),
+            ),
+            Group(
+                "Example hosts",
+                (row("example.read", "Read an example host", "read", "", "On", None, "Not granted"),),
+            ),
+        ),
+    }
+
+
 def _flow(*sections):
     """A run of sections in the flow (`.section-flow`), each named and holding
     what it is given."""
@@ -517,6 +576,37 @@ def _posture(met, *, advanced=True):
         return CheckStanding(check, outcome)
 
     return Posture(advanced, tuple(standing(index, held) for index, held in enumerate(met, 1)))
+
+
+def _repository_postures():
+    """Repositories against their standard: a public one others can reach
+    through a key that can write, a private one that meets it all, and one
+    whose access was never read."""
+
+    kept = {
+        "collaborators": [{"login": "example", "role": "admin"}],
+        "deploy_keys": [
+            {"title": "example deploy", "read_only": True, "last_used": (_NOW - timedelta(days=2)).isoformat()}
+        ],
+        "token": "read",
+        "pinning_required": True,
+        "vulnerability_alerts": True,
+    }
+    reached = {
+        **kept,
+        "collaborators": [{"login": "example", "role": "admin"}, {"login": "example-two", "role": "write"}],
+        "deploy_keys": [{"title": "example release", "read_only": False, "last_used": None}],
+        "token": "write",
+    }
+    records = (
+        ("example/example-site", {"private": False, "access": reached, "variables": ["EXAMPLE_HOST"]}),
+        ("example/example-app", {"private": True, "access": kept, "variables": []}),
+        ("example/example-notes", {"private": True}),
+    )
+    return [
+        {"posture": posture_of(Repository(name, {"url": f"https://example.com/{name}", **record}, _NOW))}
+        for name, record in records
+    ]
 
 
 def _paged(number):
@@ -814,6 +904,16 @@ CATALOG = {
         '{% fact "Example alerts" value="Clear" icon="shield" %}'
         "{% endfacts %}<p>An example line after the band.</p>{% endsection %}"
     ),
+    # A section that stands out while in a state, its tone down its frame's
+    # starting edge: framed whole as a held request's card is, and framed by
+    # its body under a head that stands above it.
+    "part/section-edge": Entry(
+        '{% section "Example request" edge="attention" lede="An example agent wants to change an example record." '
+        'more_label="example.com" more_url="/example/" %}<p>An example line of prose in the frame.</p>'
+        '{% endsection %}{% section "Example hosts" edge="serious" %}{% table_region "Example hosts" %}'
+        '<table class="data-table"><thead><tr><th scope="col">Name</th></tr></thead>'
+        "<tbody><tr><td>example-01</td></tr></tbody></table>{% endtable_region %}{% endsection %}"
+    ),
     "part/section-fold": Entry(
         '{% section "Example readings" count=3 fold=True lede="An example lede of a folded section."'
         " %}<p>An example line behind the fold.</p>{% aside %}<span>Example source</span>{% endsection %}"
@@ -916,6 +1016,25 @@ CATALOG = {
     "part/section-more-wrapped": Entry(
         '{% section "Example request" more_label="example-service-with-a-deliberately-long-name.example.com"'
         ' more_url="/example/" %}<p>An example line of prose in the frame.</p>{% endsection %}'
+    ),
+    # A choice of one ({% select %}) with a visible label, then one named by
+    # its label alone in each status tone, as a rule's setting is.
+    "part/select": Entry(
+        '{% control_label "Example rule" control="example-rule" %}'
+        '{% select "example" options chosen="allow" id="example-rule" %}'
+        '{% for tone in tones %} {% select "example-"|add:tone options chosen=tone label="Example rule, "|add:tone tone=tone %}'
+        "{% endfor %}",
+        {
+            "options": (
+                ("", "Default"),
+                ("allow", "On"),
+                ("good", "Example good"),
+                ("attention", "Example attention"),
+                ("serious", "Example serious"),
+                ("neutral", "Example neutral"),
+            ),
+            "tones": ("good", "attention", "serious", "neutral"),
+        },
     ),
     # A trail of steps a word of two letters long: each is a small target, so
     # the survey's small targets hold it by its spacing from the next, the
@@ -1049,6 +1168,25 @@ CATALOG = {
                     category="homelab",
                     at=date(2026, 11, 3),
                 ),
+            ]
+        },
+    ),
+    # Places to go, as search draws what it found, each row its link: a
+    # place with its chips, one with a line long enough to wrap and more
+    # chips than fit beside it, and one with no page of its own.
+    "part/record-list-places": Entry(
+        '{% section "Example places" count=3 %}'
+        '{% include "partials/_record_list.html" with whole_rows=True %}{% endsection %}',
+        {
+            "rows": [
+                ListRow("Example host one", url="/example/host/", detail="Example machine", chips=("Running",)),
+                ListRow(
+                    "Example connection",
+                    url="/example/connection/",
+                    detail="Reads the example store's accounts, balances and the transactions under them",
+                    chips=("Reads accounts", "Reads balances", "Reads transactions"),
+                ),
+                ListRow("Example check", detail="An example check with no page"),
             ]
         },
     ),
@@ -1521,6 +1659,20 @@ CATALOG = {
         {"image": "registry.example.com/example-team/example-image:2024.11.3"},
         premise=(_TIGHTER, SELECTORS["facts_list"]),
     ),
+    # A note in its own words with the names HQ knows in it as links, its
+    # line breaks kept, and a name with no break in it.
+    "part/linked-text": Entry(
+        '{% section "Example notes" %}{% include "partials/_linked_text.html" %}{% endsection %}',
+        {
+            "parts": (
+                "Deploys to ",
+                EntityLink("example-host-one", "/example/host/", kind="machine", kind_label="machine"),
+                " behind ",
+                EntityLink("example-proxy", "/example/proxy/"),
+                ".\nRestart it there after a change to example-configuration-with-a-long-unbroken-name.yaml.",
+            )
+        },
+    ),
     # The notice ({% notice %}) in each tone and with each option; a new tone
     # or option of the tag comes with an entry here (test_notice_tags).
     "part/notice-neutral": Entry(
@@ -1553,6 +1705,10 @@ CATALOG = {
             ]
         },
     ),
+    # Agents' rules (core/_policy_table.html), each setting a toned select
+    # (core/_policy_setting.html): every state a rule can be in, and a cell
+    # past an agent's grant.
+    "part/policy-table": Entry('{% include "core/_policy_table.html" %}', _policy()),
     # An error page, which titles itself outside the page frame: one with the
     # search field, as a missing page offers it, and one naming the request
     # id its log line carries, long enough to break at its dots.
@@ -2121,6 +2277,18 @@ CATALOG = {
         '{% card element="div" data_example_region=True %}{% include "partials/_visit_refresh.html" with '
         'subject="page" name="example" refresh="[data-example-region]" %}<p>An example line.</p>{% endcard %}'
     ),
+    # A strip of tiles, more than one line holds in a narrow box: a tile
+    # with a note and one without, side by side.
+    "part/tile-strip": Entry(
+        '{% section "Example hours" %}{% include "partials/_tile_strip.html" with label="Example hours" %}'
+        "{% endsection %}",
+        {
+            "tiles": tuple(
+                StripTile(f"{hour} PM", f"{80 - hour}°", note="40%" if hour % 3 == 0 else "", tip="Example showers")
+                for hour in range(1, 13)
+            )
+        },
+    ),
     # A horizon of dated events, more than one column holds on a wide
     # screen: a link, one with a line under it and a badge, each tone.
     "part/timeline": Entry(
@@ -2220,6 +2388,13 @@ CATALOG = {
             ],
             "others": [_Service("shop.example.com")],
         },
+    ),
+    # Repositories against their standard, each a row of its name, its meter
+    # and its score: one failing that others can reach, one meeting it all,
+    # and one whose access was never read.
+    "part/repository-postures": Entry(
+        '{% section "Example repositories" count=3 %}{% include "projects/_repository_postures.html" %}{% endsection %}',
+        {"repositories": _repository_postures()},
     ),
     # A dense page's map, more links than a phone's row holds, over the
     # sections it opens.

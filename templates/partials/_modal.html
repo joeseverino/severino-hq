@@ -29,11 +29,17 @@ nobody can open.
 heading itself under the dialog's title. Escape and the backdrop close the
 dialog; both are handled by the host, not by the caller.
 
+`size="wide"` draws a page in a dialog: two panels side by side, the window
+showing around it, scrolling inside itself under a title that stays put, and
+the whole screen on a phone. Without it the dialog is a form's width.
+`modal_class` names a dialog a sheet styles of its own (Command Center, an
+urgency's origin).
+
 `popover` draws it as a popover rather than a modal dialog, for a panel a
 script shows beside what opened it (`showPopover()`, partials/_urgency_pill.html),
 which a press elsewhere dismisses; its close button hides the popover.
 {% endcomment %}
-<dialog class="modal {{ modal_class }}" id="modal-{{ id }}" aria-labelledby="modal-{{ id }}-title"{% if popover %} popover{% endif %}>
+<dialog class="modal{% if size %} modal-{{ size }}{% endif %}{% if modal_class %} {{ modal_class }}{% endif %}" id="modal-{{ id }}" aria-labelledby="modal-{{ id }}-title"{% if popover %} popover{% endif %}>
   {% comment %}
   tabindex and autofocus together: the dialog moves focus inside itself on open,
   and without a target it lands on the close button and rings it.

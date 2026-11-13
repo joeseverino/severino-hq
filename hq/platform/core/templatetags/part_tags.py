@@ -55,6 +55,7 @@ class SectionTakes:
         "moment",
         "when",
         "head",
+        "edge",
     )
 
     def __init__(self) -> None:

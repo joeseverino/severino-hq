@@ -152,15 +152,22 @@ class ExampleEstateTests(TestCase):
         self.assertTrue(partial.exists())
 
     def test_the_agents_page_draws_every_state_a_rule_and_an_agent_can_be_in(self):
+        from hq.platform.application.capability_policy import RULE_TONES
+
         client = Client()
         sign_in(client, self.user)
         page = client.get(reverse("agent_policy"), {"all": 1})
 
-        # A rule is each state RULE_LABELS names, or the default.
-        drawn = {
-            name for each in with_class(page, "policy-select") for name in each.classes if name.startswith("rule-")
-        }
-        self.assertEqual(drawn, {f"rule-{state}" for state in ("default", *RULE_LABELS)})
+        # A rule is each state RULE_LABELS names, or the default, each said in its tone.
+        chosen = [
+            element
+            for element in within(page, "data-policy")
+            if element.tag == "option" and "selected" in element.attrs
+        ]
+        self.assertEqual({option.attrs["value"] for option in chosen}, {"", *RULE_LABELS})
+        for option in chosen:
+            (setting,) = [element for element in option.ancestors if element.tag == "select"]
+            self.assertIn(f"toned-{RULE_TONES.get(option.attrs['value'], 'neutral')}", setting.classes)
         self.assertTrue(with_class(page, "policy-unavailable"), "a cell past an agent's grant")
         # An agent a viewer signed in: what of its grant is in force, and what is beyond their role.
         row = " ".join(element.words for element in within(page, "data-client", "example-reader"))

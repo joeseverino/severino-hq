@@ -135,8 +135,11 @@
 .data-table .date-col { white-space: nowrap; }
 /* Figures right-aligned on fixed digit widths compare by eye; the heading too, so the label sits over them. A cell is a figure by its heading's kind, which the region writes on it (table_tags). */
 .data-table > * > tr > [data-kind="numeric"] { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-/* Two values set side by side to be compared (`compare-table`) share the room evenly, so neither is squeezed into breaking inside its words, and leave the field they belong to a fifth of it. */
-.data-table.compare-table > tbody > tr > td { inline-size: 40%; }
+/* Two values set side by side to be compared (a `compare` region) share the room evenly, so neither is squeezed into breaking inside its words, and leave the field they belong to a fifth of it. */
+.table-scroll.is-compare > .data-table > tbody > tr > td { inline-size: 40%; }
+/* A row that asks to be read first (`{% row_state emphasized=True %}`) is tinted, and its links weigh more, as an unread message does in a mail client. */
+.data-table > tbody > tr[data-emphasized] > * { background: var(--accent-tint); }
+.data-table > tbody > tr[data-emphasized] > * a:not(.btn) { font-weight: 650; }
 /* An index or label column takes only what it needs; auto layout would hand digits the share of sentences. */
 .data-table .tight-col { width: 1%; white-space: nowrap; }
 /* A `th[scope=row]` table with no `thead` is a description list: its label column as wide as its longest label and no wider; with headings the row header breaks at its words. */

@@ -15,6 +15,7 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ProviderInventory
 from hq.platform.core.tests.forwarding import arrived
 
+from .. import cadence
 from ..request_connection import connection
 from ..request_path import CONTRADICTED, UNPROVEN, request_path
 from .connection_requests import A_TAILNET_ADDRESS, a_device, a_request, a_tailnet
@@ -94,6 +95,8 @@ class AsLastReadTests(TestCase):
 class PanelTests(TestCase):
     def setUp(self):
         self.client.force_login(get_user_model().objects.create_superuser("panel-reader"))
+        # A controller reports to this HQ, so an old reading is one it can refresh.
+        cadence.note_controller()
 
     def panel(self):
         return self.client.get(reverse("connection"), **arrived(REMOTE_ADDR=A_TAILNET_ADDRESS)).content.decode()

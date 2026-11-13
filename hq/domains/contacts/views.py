@@ -96,7 +96,10 @@ def contact_list(request):
         "contacts/contact_list.html",
         {
             "not_read": current.state == inbox.NOT_READ,
-            "submissions": [{**each, "actions": _row_actions(each)} for each in submissions],
+            "submissions": [
+                {**each, "unread": each.get("status") == "unread", "actions": _row_actions(each)}
+                for each in submissions
+            ],
             "status_tabs": status_tabs,
             "selected_status": selected_status,
             "q": q,

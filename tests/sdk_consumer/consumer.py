@@ -134,6 +134,9 @@ def sentences(registrar: str) -> None:
     # A search hit's snippet is runs of the record's text, each with whether it matched.
     ui.ListRow("Backup host", snippet=(("nightly ", False), ("backup", True)))
     ui.ListRow("Backup host", snippet="nightly backup")  # type: ignore[arg-type]
+    # A place's chips are words, one each.
+    ui.ListRow("Backup host", url="/x/", chips=("Running",))
+    ui.ListRow("Backup host", chips="Running")  # type: ignore[arg-type]
     assert_type(validation.sentence_closes("src"), list[str])
     assert_type(validation.sentence_labels("src"), list[str])
 

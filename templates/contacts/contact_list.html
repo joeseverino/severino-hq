@@ -38,14 +38,14 @@
   </thead>
   <tbody>
     {% for s in submissions %}
-      <tr {% if s.status == "unread" %}class="row-unread"{% endif %}>
+      <tr{% row_state emphasized=s.unread %}>
         <td>{{ s.id|breakable }}</td>
         <td class="muted">{{ s.created_at|when }}</td>
         <td>
           <a href="{% url 'contacts:detail' s.id %}"><strong>{{ s.name|breakable }}</strong></a>
           <div class="muted">{% cell_line s.email %}</div>
         </td>
-        <td class="msg-preview">{% url 'contacts:detail' s.id as message_url %}{% cell_line s.message_preview message_url %}</td>
+        <td>{% url 'contacts:detail' s.id as message_url %}{% cell_line s.message_preview message_url %}</td>
         <td>{% status s.status tone=s.status %}{% if s.pending %} {% status "Waiting" tone="attention" %}{% endif %}</td>
         <td class="muted">{{ s.country|or_empty }}</td>
         {% row_actions s.actions gap=gap %}

@@ -791,7 +791,8 @@ def _pages(asked: tuple[str, ...], records: task.Records | None) -> list[str]:
             found = task.pages(_families(asked), estate_pages(), [*named, *posts], records)
     except task.PageRefused as refused:
         raise AssertionError(str(refused)) from None
-    return [page if page in named or page in posts else estate_name(page) for page in found]
+    # An estate page is found as its address, which no page known by name begins as.
+    return [estate_name(page) if page.startswith("/") else page for page in found]
 
 
 # What a look at a base says of a page it does not have.

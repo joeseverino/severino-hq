@@ -172,6 +172,8 @@ def _usable_by(spec, identity: AgentIdentity) -> bool:
 
 # What a rule is called on the page, beside "Default". The stored values keep their names.
 RULE_LABELS = {Rule.ALLOW: "On", Rule.APPROVE: "Ask me first", Rule.DENY: "Off"}
+# The status tone a rule is drawn in; the default is neutral.
+RULE_TONES = {Rule.ALLOW: "good", Rule.APPROVE: "attention", Rule.DENY: "serious"}
 
 
 def _name(rule: str | None) -> str:
@@ -232,6 +234,12 @@ class PolicyCell:
     rule: str | None
     options: tuple[tuple[str, str], ...]
     unavailable: str = ""
+    # What a reader hears the setting named: its action, group and agent.
+    label: str = ""
+
+    @property
+    def tone(self) -> str:
+        return RULE_TONES.get(self.rule, "neutral")
 
 
 @dataclass(frozen=True, slots=True)
@@ -306,7 +314,7 @@ def matrix(current: dict[tuple[str, str], str] | None = None) -> tuple[tuple[Col
                 spec.effect,
                 EFFECTS[spec.effect],
                 _default_label(spec),
-                tuple(_cell(spec, column, current, grants) for column in cols),
+                tuple(_cell(spec, column, current, grants, label) for column in cols),
             )
             for spec in specs
         )
@@ -349,7 +357,7 @@ def _approved_types(spec) -> str:
     return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
 
 
-def _cell(spec, column: Column, current, grants) -> PolicyCell:
+def _cell(spec, column: Column, current, grants, group: str) -> PolicyCell:
     field = field_name(column.subject, spec.name)
     if not _held_by_grant(spec, grants[column.subject]):
         return PolicyCell(field, column.label, None, (), "Not granted")
@@ -364,6 +372,7 @@ def _cell(spec, column: Column, current, grants) -> PolicyCell:
         column.label,
         current.get((column.subject, spec.name)),
         tuple(options),
+        label=f"{spec.title}, {group}, for {column.label}",
     )
 
 

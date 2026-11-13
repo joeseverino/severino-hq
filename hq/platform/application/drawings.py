@@ -216,3 +216,19 @@ class AllocationBar:
 
         heard = ", ".join(f"{part.label} {percent}" for part, percent in self.legend)
         return f"{self.label}: {heard}" if heard else self.label
+
+
+@display
+class StripTile:
+    """One of a strip of small figures read across, each as a person scans
+    a forecast: what it is of, the figure, and what stands out about it.
+
+    Drawn by ``partials/_tile_strip.html``. ``note`` is said only when there
+    is something to say, and then it is marked; ``tip`` is the tile's whole
+    sentence, on hover.
+    """
+
+    label: str
+    value: str
+    note: str = ""
+    tip: str = ""

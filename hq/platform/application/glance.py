@@ -25,6 +25,7 @@ from . import readings
 from .cadence import ring_glance_doorbell
 from .command_fields import Describe
 from .connections import ConnectionAbility, ConnectionInstance, ConnectionLink, ConnectionSpec, machines_once
+from .drawings import StripTile
 from .freshness import DASHBOARD_GLANCE, freshness
 from .labels import dotted
 from .record_errors import InputError, PolicyError
@@ -362,8 +363,22 @@ def _panel(
         "refreshing": refreshing,
         "refreshable": refreshable,
         "readings": shown,
+        "hours": tuple(_hour_tile(hour) for hour in payload.get("hours") or ()),
         **_head(shown, spec),
     }
+
+
+def _hour_tile(hour: dict[str, str]) -> StripTile:
+    """A forecast hour as a tile: its time, its temperature, and a chance of
+    rain said only when there is one."""
+
+    chance = hour.get("precipitation", "")
+    return StripTile(
+        hour.get("time", ""),
+        hour.get("temperature", ""),
+        note="" if chance in {"", "0%"} else chance,
+        tip=hour.get("forecast", ""),
+    )
 
 
 def _head(shown: tuple[dict[str, Any], ...], spec: DashboardPanelSpec) -> dict[str, Any]:

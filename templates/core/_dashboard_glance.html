@@ -45,22 +45,7 @@ are the row's own (partials/_readings.html).
       {% else %}
         <p>{% if panel.refreshing %}{% refreshing %}{% elif panel.payload.summary %}{{ panel.payload.summary|breakable }}{% else %}{{ panel.empty|breakable }}{% endif %}</p>
       {% endif %}
-      {% if panel.payload.hours %}
-        {% comment %}
-        The hours ahead, the forecast's own: no shared part draws a row of
-        tiles of an hour, a figure and a chance under it.
-        {% endcomment %}
-        <ol class="glance-hours" aria-label="The hours ahead">
-          {% for hour in panel.payload.hours %}
-            <li title="{{ hour.forecast }}">
-              <span>{{ hour.time|breakable }}</span>
-              <strong>{{ hour.temperature|breakable }}</strong>
-              {% comment %}A chance of rain is said only when there is one.{% endcomment %}
-              <small{% if hour.precipitation != "0%" %} class="is-wet"{% endif %}>{% if hour.precipitation != "0%" %}{{ hour.precipitation|breakable }}{% endif %}</small>
-            </li>
-          {% endfor %}
-        </ol>
-      {% endif %}
+      {% if panel.hours %}{% include "partials/_tile_strip.html" with tiles=panel.hours label="The hours ahead" only %}{% endif %}
     {% foot %}
       {% if panel.link %}<a href="{{ panel.link.url }}">{{ panel.link.label|breakable }}{% arrow %}</a>{% endif %}
       <span>

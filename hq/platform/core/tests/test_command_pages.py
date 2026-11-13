@@ -162,7 +162,7 @@ class EveryHeldRequestTests(TestCase):
         page = self.client.get(reverse("core:approval_entry", kwargs={"approval_id": held.id}), follow=True)
         (card,) = [
             element.words
-            for element in within(page, "class", "approval-card")
+            for element in within(page, "data-approval")
             if "section-lede" in element.attrs.get("class", "")
         ]
         (bell,) = [item.title for item in waiting_for_approval() if item.key == f"approval:{held.id}"]

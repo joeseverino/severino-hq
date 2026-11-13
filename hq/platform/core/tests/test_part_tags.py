@@ -204,6 +204,23 @@ class SectionTagTests(SimpleTestCase):
         with self.assertRaises(ValueError):
             _render('{% section "Hosts" head="beside" %}<p>Body</p>{% endsection %}')
 
+    def test_an_edged_section_wears_its_tone_and_keeps_its_head_and_body(self):
+        source = '{% section "Request" EDGE%}<p>Body</p>{% endsection %}'
+        plain = _render(source.replace("EDGE", ""))
+        edged = _render(source.replace("EDGE", 'edge="attention" '))
+
+        (landmark,) = elements(edged, "section")
+        self.assertIn("section-edge", landmark.classes)
+        self.assertIn("toned-attention", landmark.classes)
+        self.assertNotIn("section-edge", elements(plain, "section")[0].classes)
+        self.assertEqual(
+            [(e.tag, e.words) for e in all_elements(edged)[1:]], [(e.tag, e.words) for e in all_elements(plain)[1:]]
+        )
+
+    def test_an_edge_in_no_status_tone_is_refused(self):
+        with self.assertRaises(ValueError):
+            _render('{% section "Request" edge="pending" %}<p>Body</p>{% endsection %}')
+
     def test_its_foot_says_how_to_read_the_body_in_the_frame_after_it(self):
         html = _render(
             '{% section "Trends" %}<p>Body</p>{% aside %}<span>Weeks</span>'

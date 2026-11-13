@@ -21,10 +21,6 @@
 
 .pill-unread { font-weight: 650; }
 
-/* ── Contact submissions ────────────────────────────────────────── */
-
-.row-unread td { background: var(--accent-tint); }
-.row-unread .msg-preview a, .row-unread td:first-child a { font-weight: 650; }
 /* A control that posts a form of its own (`post_form`) stands where a button would. */
 .post-form { display: inline-block; margin: 0; }
 .icon-link.danger-link { color: var(--danger); }
@@ -336,6 +332,10 @@ details.card > summary::before { margin-inline-start: calc(-1em - var(--space-1)
   --section-head-rule: var(--surface-inset);
   --section-inset: var(--surface-inset);
 }
+/* An edged section (`edge=`) wears its tone down its frame's starting edge,
+   drawn by whichever box frames it (surfaces.css): the section framed whole,
+   or its body under a head that stands above. */
+.section-edge { --surface-edge: 3px solid var(--toned); }
 /* A figure's own margin is the browser's; the page's stacking gives it its room. */
 :where(figure.section) { margin: 0; }
 /* A heading is never left alone at the foot of a column or a printed page:
