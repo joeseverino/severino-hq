@@ -546,7 +546,7 @@ stand alone. *Catalog:* `part/patch`.
 
 What a run of automation shows for itself is `{% run_evidence evidence %}`,
 given a `work_runs.RunEvidence` inside a row of a table region. That is its
-machines, who approved it, its correlation id, its lease while a worker holds
+machines, its correlation id, its lease while a worker holds
 it, and each task's outcome, each a labeled `row-below` block of the row's open
 line. Jobs draws it in a run's row, and a section's rows draw it through
 `ServiceSection.below`, so a machine's page and a procedure's page show a run

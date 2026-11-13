@@ -388,9 +388,9 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
 - Held requests are read by their client, interface and person together,
   including MCP tasks and the action queue. Queued operations keep the same
   person key, so blocking one person's agent holds its approvals and work
-  without stopping another person's use of that client. Older operations
-  whose person was never recorded keep a null key: a block on any identity
-  of that client still holds them until it is lifted. An empty key instead
+  without stopping another person's use of that client. An operation with
+  no recorded person has a null key: a block on any identity
+  of that client holds it until the block is lifted. An empty key instead
   names a machine token, whose block is its own.
 - The identity provider's grant is the one declaration of what an agent may
   do: each permission is ticked per client on HQ's Pocket ID API resource, and

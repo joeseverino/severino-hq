@@ -376,6 +376,7 @@ def recent_activity(clients: list[str]) -> dict[str, Activity]:
             limited=Window(_refusals(Q(reason__in=LIMITED)), **by_agent),
         )
         .filter(rank__lte=SHOWN)
+        .select_related("user")
         .order_by("actor", "rank")
     )
     found: dict[str, list[AuditLog]] = {}

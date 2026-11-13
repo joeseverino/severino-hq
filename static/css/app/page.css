@@ -393,7 +393,7 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
 .btn.ghost.danger:hover { background: color-mix(in srgb, var(--danger) 8%, var(--surface)); color: var(--danger); }
 /* A control in a row or a head among words, a line's height rather than a
    form's. */
-.btn.compact { min-height: 30px; padding: var(--space-2) var(--space-4); font-size: var(--text-xs); }
+.btn.compact { min-height: var(--control-compact); padding: var(--space-2) var(--space-4); font-size: var(--text-xs); }
 /* A control that would be refused stands as a span, focusable for its reason
    (partials/_page_action.html), and looks as a disabled button does. */
 .btn:disabled, button:disabled, span.btn[aria-disabled="true"] { cursor: not-allowed; opacity: .52; }

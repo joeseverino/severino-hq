@@ -26,7 +26,7 @@ carries stands above it. Decisions only while pending.
     </p>
   {% endif %}
 {% aside %}
-  Asked {% if entry.held.requested_interface %}{{ entry.held.requested_interface|door_words|breakable }} {% endif %}{{ entry.held.created_at|ago }}{% if entry.held.state == 'pending' %}{% dot %}expires {{ entry.held.expires_at|when:"ahead" }}
+  Asked {% if entry.who.door %}{{ entry.who.door|breakable }} {% endif %}{{ entry.held.created_at|ago }}{% if entry.held.state == 'pending' %}{% dot %}expires {{ entry.held.expires_at|when:"ahead" }}
   {% else %}{% dot %}<strong>{{ entry.held.get_state_display|breakable }}</strong>{% if entry.held.decided_actor %} by <code>{{ entry.held.decided_actor|breakable }}</code>{% endif %}{% if entry.held.decided_at %} {{ entry.held.decided_at|ago }}{% endif %}
   {% endif %}
 {% endsection %}

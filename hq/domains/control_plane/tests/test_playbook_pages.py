@@ -1,7 +1,8 @@
 """The Playbooks page: the adopted catalog, the commit it was adopted at on
-the title's line, and, while a newer scanned commit waits, a person's View
-diff, Adopt all and Reject all; and the scan's own page, which View diff
-opens, each drawn from what the estate stored."""
+the title's line, and, while a newer scanned commit waits, a row for every
+playbook with how the commit changes it and its own Adopt and Reject, and a
+person's View diff, Adopt all and Reject all; and the audit entry of the
+scan's read, which View diff opens, each drawn from what the estate stored."""
 
 import json
 from urllib.parse import urlsplit
@@ -59,7 +60,22 @@ def _reject(pk: int) -> str:
 
 
 def _scan_page(proposal: SourceProposal) -> str:
-    return reverse("jobs:run", kwargs={"pk": proposal.operation_id})
+    from hq.platform.application.automation_sources import entry_url
+
+    return entry_url(proposal)
+
+
+def _decisions(html: str) -> dict[str, dict[str, str]]:
+    """Each one-playbook decision a page offers: by the playbook it names,
+    each button's words and where it posts, with the kind of change its row says."""
+
+    offered: dict[str, dict[str, str]] = {}
+    for sent in select(html, "name", "playbook"):
+        (form,) = [element for element in sent.ancestors if element.tag == "form"]
+        rows = [element for element in sent.ancestors if "data-change" in element.attrs]
+        found = offered.setdefault(sent.attrs["value"], {"change": rows[0].attrs["data-change"] if rows else ""})
+        found[form.words] = urlsplit(form.attrs["action"]).path
+    return offered
 
 
 class PlaybooksPageTests(TestCase):
@@ -147,7 +163,7 @@ class PlaybooksPageTests(TestCase):
         self.assertFalse(select(html, "data-scan-failed"))
         self.assertEqual(len(select(html, "data-adopted-commit")), 1)
 
-    def test_a_newer_commit_puts_view_diff_adopt_all_and_reject_all_beside_refresh(self):
+    def test_a_newer_commit_puts_view_diff_adopt_all_and_reject_all_beside_refresh_at_the_far_right(self):
         newest = self.newest()
         html = self.page()
         head = _head(html)
@@ -155,20 +171,89 @@ class PlaybooksPageTests(TestCase):
         self.assertLessEqual({_adopt(newest.pk), _reject(newest.pk)}, _posts(html))
         (actions,) = [element for element in head if "page-actions" in element.classes]
         self.assertIn("data-many", actions.attrs, "every one stands beside the title")
-        labels = [element.words for element in head if element.tag in {"a", "button"} and element.words]
-        self.assertLess(labels.index("Refresh"), labels.index("View diff"))
+        beside = [element for element in head if not any("overflow-menu" in up.classes for up in element.ancestors)]
+        labels = [element.words for element in beside if element.tag in {"a", "button"} and element.words]
+        self.assertEqual(labels[-1], "Refresh")
         self.assertLess(labels.index("View diff"), labels.index("Adopt all"))
         self.assertLess(labels.index("Adopt all"), labels.index("Reject all"))
 
-    def test_view_diff_opens_the_scan_s_page_with_who_refreshed_both_commits_and_each_playbook_s_rows(self):
+    def test_while_a_commit_waits_every_playbook_has_a_row_and_each_change_its_status_adopt_and_reject(self):
+        from hq.platform.application.automation_adoption import judged, procedures
+
+        newest = self.newest()
+        changes = {change.key: change.change for change in judged(newest.pk).changes}
+        self.assertEqual(set(changes.values()), {"added", "changed", "removed"}, "the estate's commit holds each kind")
+        html = self.page()
+        rows = [element for element in within(html, "data-adopted-playbooks") if element.tag == "tr"]
+        said = " ".join(row.words for row in rows)
+        for procedure in procedures():
+            self.assertIn(procedure.title, said, "an adopted playbook keeps its row")
+        offered = _decisions(html)
+        self.assertEqual(set(offered), set(changes))
+        for key, change in changes.items():
+            with self.subTest(playbook=key):
+                self.assertEqual(offered[key]["change"], change)
+                self.assertEqual(offered[key]["Adopt"], _adopt(newest.pk))
+                self.assertEqual(offered[key]["Reject"], _reject(newest.pk))
+        # In the change table's own Status words.
+        for change, word in (("added", "New"), ("changed", "Changed"), ("removed", "Removed")):
+            (row,) = select(html, "data-change", change)
+            self.assertIn(word, row.words)
+        self.assertIn("Status", " ".join(element.words for element in elements(html, "th")))
+
+    def test_adopting_one_playbook_runs_only_it_from_the_new_commit_and_the_rest_still_wait(self):
+        from hq.platform.application.automation_adoption import judged, procedures
+        from hq.platform.core.example_estate import automation
+
+        newest = self.newest()
+        before = {procedure.id: procedure.revision for procedure in procedures()}
+        response = self.client.post(_adopt(newest.pk), {**_sent(), "playbook": automation.CACHE_FLUSH})
+        self.assertRedirects(response, reverse("control_plane:playbooks"), fetch_redirect_response=False)
+        from hq.platform.application.automation_adoption import catch_up
+
+        catch_up()
+        after = {procedure.id: procedure.revision for procedure in procedures()}
+        self.assertEqual(after[automation.CACHE_FLUSH], automation.WIDENED_REVISION)
+        self.assertEqual(
+            {key: value for key, value in after.items() if key != automation.CACHE_FLUSH},
+            {key: value for key, value in before.items() if key != automation.CACHE_FLUSH},
+        )
+        waiting = {change.key for change in judged(newest.pk).changes}
+        self.assertNotIn(automation.CACHE_FLUSH, waiting)
+        self.assertTrue(waiting, "the other changes still wait")
+        self.assertEqual(set(_decisions(self.page())), waiting)
+
+    def test_rejecting_one_playbook_keeps_it_as_adopted_and_waiting_no_more(self):
+        from hq.platform.application.automation_adoption import judged, procedures
+        from hq.platform.core.example_estate import automation
+
+        newest = self.newest()
+        response = self.client.post(_reject(newest.pk), {**_sent(), "playbook": automation.PACKAGE_UPGRADE})
+        self.assertRedirects(response, reverse("control_plane:playbooks"), fetch_redirect_response=False)
+        self.assertIn(automation.PACKAGE_UPGRADE, {procedure.id for procedure in procedures()})
+        self.assertNotIn(automation.PACKAGE_UPGRADE, {change.key for change in judged(newest.pk).changes})
+        self.assertNotIn(automation.PACKAGE_UPGRADE, _decisions(self.page()))
+        # Adopt all now takes what still waits, and the rejected playbook stays.
+        self.client.post(_adopt(newest.pk), _sent())
+        from hq.platform.application.automation_adoption import catch_up
+
+        catch_up()
+        self.assertIn(automation.PACKAGE_UPGRADE, {procedure.id for procedure in procedures()})
+        self.assertFalse(_decisions(self.page()))
+
+    def test_view_diff_opens_the_audit_entry_of_the_read_with_who_refreshed_both_commits_and_each_playbook_s_rows(
+        self,
+    ):
         from hq.platform.application.automation_adoption import plan
 
         newest = self.newest()
         planned = plan(newest.pk)
-        html = self.page(_scan_page(newest))
+        url = _scan_page(newest)
+        self.assertTrue(url.startswith(reverse("core:audit_list")), "View diff opens an audit entry")
+        html = self.page(url)
         said = text(html)
         adopted = AdoptedCatalog.objects.order_by("-pk").first()
-        for fact in ("Asked by", "Commit read", newest.revision[:12], "Commit adopted", adopted.revision[:12]):
+        for fact in ("Refreshed by", "Commit read", newest.revision[:12], "Commit adopted", adopted.revision[:12]):
             self.assertIn(fact, said)
         self.assertIn(newest.operation.requested_actor, said)
         table = within(html, "class", "data-table")
@@ -180,6 +265,12 @@ class PlaybooksPageTests(TestCase):
             self.assertIn(procedure.title, said)
             self.assertNotIn(named, rows)
         self.assertLessEqual({_adopt(newest.pk), _reject(newest.pk)}, _posts(html))
+        # Each change has its own Adopt and Reject there too, and a press comes back to it.
+        offered = _decisions(html)
+        self.assertEqual(set(offered), {change.key for change in planned.changes})
+        key = next(iter(offered))
+        response = self.client.post(_reject(newest.pk), {**_sent(), "playbook": key, "next": url})
+        self.assertRedirects(response, url, fetch_redirect_response=False)
 
     def test_a_commit_hq_cannot_adopt_offers_reject_all_and_says_each_problem_on_its_playbook_s_row(self):
         from hq.platform.application.automation_adoption import judged
@@ -192,9 +283,10 @@ class PlaybooksPageTests(TestCase):
         html = self.page()
         self.assertIn(_reject(newest.pk), _posts(html))
         self.assertNotIn(_adopt(newest.pk), _posts(html))
+        self.assertFalse([key for key, offered in _decisions(html).items() if "Adopt" in offered])
         scan = self.page(_scan_page(newest))
         self.assertNotIn(_adopt(newest.pk), _posts(scan))
-        rows = [element for element in within(scan, "class", "data-table") if element.tag == "tbody"]
+        rows = [element for element in within(scan, "class", "compact-table") if element.tag == "tbody"]
         problems = {
             shown["_summary"]["label"]: shown["problems"]
             for shown in planned.compared["after"]["procedures"].values()
@@ -316,9 +408,11 @@ class PlaybooksPageTests(TestCase):
         followed = self.client.get(answered["status"])
         self.assertEqual(followed.status_code, 200)
         self.assertEqual(json.loads(followed.content)["state"], "queued")
-        # A page loaded while it waits follows it too.
-        (ask,) = select(self.page(), "data-ask-status")
-        self.assertEqual(self.client.get(ask.attrs["data-ask-status"]).status_code, 200)
+        # A page loaded while it waits follows it too, the menu's copy of Refresh as well.
+        asks = select(self.page(), "data-ask-status")
+        self.assertTrue(asks)
+        for ask in asks:
+            self.assertEqual(self.client.get(ask.attrs["data-ask-status"]).status_code, 200)
 
     def test_a_status_hq_did_not_sign_is_not_found(self):
         status = reverse("control_plane:playbooks_status")

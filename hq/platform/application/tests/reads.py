@@ -169,6 +169,7 @@ def watching(declared: Reads) -> Iterator[Watch]:
     """Hold what runs inside to ``declared``, and fail on leaving it with each read that was outside."""
 
     watch = Watch(declared)
+    _load_translations()
     _install()
     _forget_templates()
     _watches.append(watch)
@@ -183,6 +184,22 @@ def watching(declared: Reads) -> Iterator[Watch]:
             "This test reads outside its @reads, so fast would skip it on a change that reaches it. Add a glob"
             " for each, or drop @reads so it runs on every change:\n  " + "\n  ".join(shown[:SHOWN]) + more
         )
+
+
+def _load_translations() -> None:
+    """Load Django's translation catalogs before watching: the process loads them once, probing every app's
+    locale directory, on whichever test first renders, so that probe belongs to the process, not the test."""
+
+    from django.apps import apps
+    from django.conf import settings
+    from django.utils.translation import get_language, trans_real
+
+    # A walk run in a process of its own (apart.py) has no apps loaded, and so no catalog to load.
+    if not apps.ready:
+        return
+    language = get_language() or settings.LANGUAGE_CODE
+    trans_real.translation(language)
+    trans_real.check_for_language(language)
 
 
 def _forget_templates() -> None:

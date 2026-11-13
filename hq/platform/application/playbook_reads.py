@@ -12,7 +12,6 @@ profile, which an ask is held to (``automation_runs.reached``).
 
 from typing import Annotated, Any, TypedDict, get_args
 
-lazy from hq.domains.control_plane.models import SourceProposal
 lazy from hq.domains.control_plane.provider_adapters.declarations import MACHINE_KIND
 
 from . import automation_adoption, automation_runs
@@ -68,6 +67,15 @@ class PlaybookRecord(PlaybookRow):
     ]
 
 
+class ScanChange(TypedDict):
+    playbook: Annotated[
+        str, Describe("The playbook by the key adopting or rejecting it alone takes: its id, or its sidecar.")
+    ]
+    title: Annotated[str, Describe("Its name in HQ.")]
+    change: Annotated[str, Describe("How the scan changes it: added, changed or removed.")]
+    refused: Annotated[list[str], Describe("Each reason HQ will not adopt its change; empty when it can.")]
+
+
 class ScanResult(TypedDict):
     id: Annotated[int, Describe("The scan result's id.")]
     revision: Annotated[str, Describe("The commit it read, by its full id.")]
@@ -75,7 +83,14 @@ class ScanResult(TypedDict):
     committer: Annotated[str, Describe("Who committed it, as GitHub names them; empty when it said no one.")]
     read_at: Annotated[str | None, Describe("When HQ read it, an ISO 8601 date-time.")]
     adopted: Annotated[
-        bool, Describe("Whether it is the commit HQ runs playbooks from now, so adopting it does nothing.")
+        bool,
+        Describe(
+            "Whether every playbook it holds is adopted as it reads it, or rejected, so adopting it does nothing."
+        ),
+    ]
+    changes: Annotated[
+        list[ScanChange],
+        Describe("Each playbook whose change waits, neither adopted nor rejected, in the order of their titles."),
     ]
     refused: Annotated[list[str], Describe("Each reason HQ will not adopt it; empty when it can.")]
     widens: Annotated[list[str], Describe("Each way adopting it lets a run do more than it may now.")]
@@ -128,7 +143,7 @@ def get_playbook(playbook_id: str, *, principal: Principal) -> dict[str, Any]:
     return {**row, "facts": [_fact(fact) for fact in automation_runs.about(manifest, principal).facts]}
 
 
-def _scan(reviewed: Reviewed, newest: bool) -> dict[str, Any]:
+def _scan(reviewed: Reviewed) -> dict[str, Any]:
     proposal = reviewed.proposal
     return {
         "id": proposal.pk,
@@ -137,18 +152,19 @@ def _scan(reviewed: Reviewed, newest: bool) -> dict[str, Any]:
         "committer": proposal.committer,
         "read_at": iso(proposal.created_at),
         "adopted": reviewed.adopted,
+        "changes": [
+            {"playbook": change.key, "title": change.title, "change": change.change, "refused": list(change.problems)}
+            for change in reviewed.changes
+        ],
         "refused": list(reviewed.refused),
         "widens": list(reviewed.widens),
-        "pending": newest and reviewed.pending,
+        "pending": reviewed.pending,
     }
 
 
 def _scanned(proposal: int | None) -> dict[str, Any] | None:
     sources = standing(proposal)
-    if sources.proposal is None:
-        return None
-    newest = proposal is None or not SourceProposal.objects.filter(pk__gt=proposal).exists()
-    return _scan(sources.proposal, newest)
+    return _scan(sources.proposal) if sources.proposal is not None else None
 
 
 def list_scans() -> dict[str, Any]:

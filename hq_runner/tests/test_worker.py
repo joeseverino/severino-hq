@@ -74,6 +74,18 @@ class SuccessTests(PassTestCase):
         self.assertNotIn("status", report)
         self.assertIsNone(self.journal.read())
 
+    def test_ansibles_own_check_of_a_roles_arguments_is_reported_only_when_it_fails(self):
+        bridge = fakes.Bridge(fakes.pending())
+
+        self.work(bridge, fakes.Runner(fakes.CHECKED, status="failed"))
+
+        passed, task, failed = (event["event_data"] for event in fakes.CHECKED)
+        self.assertEqual(
+            [(e["task"], e["outcome"]) for e in self.only_report(bridge)["events"]],
+            [(task["task"], "ok"), (failed["task"], "failed")],
+        )
+        self.assertEqual(passed["task"], failed["task"])
+
     def test_what_runs_is_the_installed_procedure_on_the_claimed_hosts_with_its_parameters(self):
         bridge = fakes.Bridge(fakes.pending(parameters={"service": "db"}))
         runner = fakes.Runner()

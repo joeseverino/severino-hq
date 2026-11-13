@@ -6,7 +6,7 @@ from django.utils.safestring import mark_safe
 
 from hq.platform.application.entity_links import EntityLink
 from hq.platform.application.printable import Unprintable
-from hq.platform.application.tests.markup import all_elements, links, text, texts, with_class
+from hq.platform.application.tests.markup import all_elements, links, select, text, texts, with_class
 from hq.platform.core.templatetags.value_tags import breakable, cell_line, code_spans, entity, or_empty, readout
 
 
@@ -309,6 +309,13 @@ class BreakableTests(SimpleTestCase):
         self.assertEqual(wholes(html), line.split(" · "))
         self.assertIn('href="/containers/x/"', html)
         self.assertNotIn("<a", str(cell_line(line)))
+
+    def test_a_cell_line_of_one_line_says_so_and_takes_no_other_count(self):
+        (one,) = select(str(cell_line("example-agent, over MCP", lines=1)), "data-lines", "1")
+        self.assertIn("cell-line", one.classes)
+        self.assertEqual(select(str(cell_line("example-agent, over MCP")), "data-lines"), [])
+        with self.assertRaises(ValueError):
+            cell_line("example-agent", lines=3)
 
     def test_a_readout_identifier_is_a_breakable_token(self):
         self.assertEqual(pieces(readout("app.example.com:443")), ["<code>app.", "example.com:", "443</code>"])

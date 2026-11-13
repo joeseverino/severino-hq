@@ -15,6 +15,7 @@ lazy from django.urls import reverse
 lazy from django.utils.text import slugify
 
 from hq.platform.application.roles import Role
+lazy from hq.platform.application.doors import Attribution
 lazy from hq.platform.application.labels import dotted, plural
 
 from .rules import Rule, one_of, singleton
@@ -241,6 +242,19 @@ class AuditLog(models.Model):
         if source := metadata.get("source"):
             return dotted("unauthenticated", source)
         return "system"
+
+    @property
+    def who(self) -> Attribution:
+        """Who did it, through which door, as whom, and who approved it."""
+
+        metadata = self.metadata or {}
+        return Attribution(
+            self.actor_label,
+            # The metadata ``interface`` is generated from, so a row not yet saved says it too.
+            str(metadata.get("interface") or ""),
+            acting_as=str(metadata.get("actor") or ""),
+            approved_by=str(metadata.get("approved_by") or ""),
+        )
 
     @property
     def summary(self) -> str:

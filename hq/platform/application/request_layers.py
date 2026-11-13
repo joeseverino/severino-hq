@@ -12,6 +12,7 @@ lazy from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
 from . import tailnet
+from .doors import approved_words
 from .moments import expiry_words
 from .request_channel import Channel
 from .request_identity import Identity
@@ -521,7 +522,7 @@ def _agent_device_layer(identity: Identity) -> Layer:
         evidence=dotted(
             identity.device_standing.capitalize(),
             f"device owner {identity.tailnet_user}" if identity.tailnet_user else "",
-            f"approved by {identity.approved_by}" if identity.approved_by else "",
+            approved_words(identity.approved_by),
         ),
         boundary="Identity correlation",
         mechanism="Device approval on the Agents page",

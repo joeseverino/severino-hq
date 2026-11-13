@@ -33,6 +33,7 @@ from hq.platform.application.security import Capability, could_hold
 from hq.platform.application.tests.markup import select, within
 from hq.platform.application.tests.writers import drawn_key
 from hq.platform.application.web_writes import RETRY_KEY_FIELD
+from hq.platform.core.attribution import operation_context
 from hq.platform.core.models import AgentAccess
 from hq_sdk.capabilities import StrictCommand
 
@@ -169,14 +170,16 @@ class EveryHeldRequestTests(TestCase):
         asked = [spec for spec in capability_registry().values() if spec.effect != "read" and agents_may_hold(spec)]
         for spec in asked:
             target = ("7" if spec.target_kind == "integer" else "example-target") if spec.target_kind else ""
-            held = ApprovalRequest.objects.create(
-                capability=spec.name,
-                target=target,
-                requested_actor="example-agent",
-                requested_interface="mcp",
-                content_fingerprint="0" * 64,
-                expires_at=timezone.now() + timedelta(hours=1),
-            )
+            # Held as an agent's call holds it, so its audit row names the agent.
+            with operation_context(interface="mcp", actor="example-agent", operation="example.hold"):
+                held = ApprovalRequest.objects.create(
+                    capability=spec.name,
+                    target=target,
+                    requested_actor="example-agent",
+                    requested_interface="mcp",
+                    content_fingerprint="0" * 64,
+                    expires_at=timezone.now() + timedelta(hours=1),
+                )
             with self.subTest(command=spec.name):
                 for said in self.said(held):
                     words = said.split()

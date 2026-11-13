@@ -12,9 +12,9 @@ are plain values rather than pydantic's ``Field``, so a module that declares
 a command loads no validation library at startup.
 """
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Annotated, Any, TypeAliasType, get_args, get_origin, get_type_hints
 
 from .describe import Describe
 
@@ -115,6 +115,52 @@ class Refers:
 
 
 @dataclass(frozen=True, slots=True)
+class AmongNow:
+    """A record-naming field whose form offers only the records ``values``
+    answers as the form is drawn, beside its ``Names`` and any ``Among``: what
+    the records' state allows at that moment (the machines a worker reaches)
+    rather than what the command's type declares. Never in the schema, since
+    the answer moves; the command's handler refuses any other on every path."""
+
+    values: Callable[[], Iterable[str]]
+
+
+def among_now(kind: type) -> dict[str, Callable[[], Iterable[str]]]:
+    """Each field of ``kind`` marked ``AmongNow``, to what answers its records."""
+
+    found = {name: _marker(hint, AmongNow) for name, hint in get_type_hints(kind, include_extras=True).items()}
+    return {name: marker.values for name, marker in found.items() if isinstance(marker, AmongNow)}
+
+
+@dataclass(frozen=True, slots=True)
+class ForAgents:
+    """A field a client sends and a person is never asked, such as an agent's
+    own id for an investigation a run belongs to: the web form leaves it out,
+    and every other door takes it. Only a field a command may be sent without
+    can be one."""
+
+
+def for_agents(kind: type) -> frozenset[str]:
+    """The fields of ``kind`` marked ``ForAgents``."""
+
+    hints = get_type_hints(kind, include_extras=True)
+    return frozenset(name for name, hint in hints.items() if _marker(hint, ForAgents) is not None)
+
+
+def _marker[T](hint: Any, marker: type[T]) -> T | None:
+    """The ``marker`` a field's type carries, in its own ``Annotated`` or an
+    alias it names, the nearest the field first."""
+
+    if isinstance(hint, TypeAliasType):
+        return _marker(hint.__value__, marker)
+    if get_origin(hint) is Annotated:
+        inner, *markers = get_args(hint)
+        held = [found for found in markers if isinstance(found, marker)]
+        return held[-1] if held else _marker(inner, marker)
+    return None
+
+
+@dataclass(frozen=True, slots=True)
 class Upload:
     """A field that is a file, sent in JSON as its ``name``, ``content_type``
     and base64 ``content``: the form offers a file to pick and sends it so
@@ -158,12 +204,16 @@ __all__ = [
     "REFERS",
     "UPLOAD",
     "Among",
+    "AmongNow",
     "Choices",
     "Describe",
+    "ForAgents",
     "Names",
     "Refers",
     "Upload",
     "among",
+    "among_now",
+    "for_agents",
     "is_upload",
     "named_records",
     "referred",

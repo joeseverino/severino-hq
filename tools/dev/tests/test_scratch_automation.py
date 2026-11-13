@@ -1,4 +1,4 @@
-"""The worker beside a scratch server reaches this machine alone, is given
+"""The worker beside a scratch server reaches the machine it runs on alone, is given
 nothing of HQ's own, starts when HQ rings, and stops with the server."""
 
 import os
@@ -11,6 +11,7 @@ from django.test import SimpleTestCase, tag
 
 from hq.platform.application.automation_adoption import REFUSED_KINDS
 from hq.platform.application.cadence import AUTOMATION_DOORBELL
+from hq.platform.application.machines import Machine
 from hq.platform.application.tests.reads import reads
 from hq_runner import catalog, connections
 from hq_runner.__main__ import Config
@@ -32,6 +33,12 @@ class ReachTests(SimpleTestCase):
         reached = connections.runner_targets(path, root / "ssh")
         self.assertEqual(set(reached), {(machine, profile) for machine in ("alpha", "beta") for profile in PROFILES})
         self.assertEqual({target.host for target in reached.values()}, {"127.0.0.1"})
+
+    def test_the_worker_reaches_the_machine_this_server_runs_on_alone(self):
+        catalog = [Machine("app.example.com"), Machine("dev.example.com", runs_hq=True), Machine("db.example.com")]
+
+        self.assertEqual(scratch_automation.here(catalog), ["dev.example.com"])
+        self.assertEqual(scratch_automation.here(catalog[:1]), [])
 
     def test_a_rewrite_replaces_the_document_the_worker_trusts(self):
         root = _directory(self)

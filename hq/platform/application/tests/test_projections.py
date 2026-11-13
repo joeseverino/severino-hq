@@ -19,6 +19,7 @@ from hq.platform.application.tests.host_only import host_only
 from ..cadence_chart import Cadence, CadenceMatrix, CadenceRow, CadenceWeek
 from ..card_items import Timeline, TimelineItem
 from ..dashboard import operating_snapshot
+from ..doors import Attribution
 from ..money import money
 from ..projection import projection_scope, read_once
 from ..resource_context import get_managed_resource
@@ -771,7 +772,7 @@ class OperationProjectionTests(TestCase):
             },
         )
 
-        result = operation_summary(operation)
+        result = operation_summary(operation, Attribution("example-controller", "controller"))
 
         self.assertEqual(result["headline"], "One consumer serves the previous certificate.")
         self.assertEqual(result["condition"]["reason"], "VerificationFailed")

@@ -28,11 +28,12 @@ from .entity_links import EntityLink, entity_link, kind_label
 from .moments import ago
 from .published_sites import projects_by_hostname
 from .ui import MISSING, PAGE_SECTION_ID, counted, ended
-lazy from . import machines
+lazy from . import history, machines
 lazy from .action_links import command_url
 lazy from .automation_runs import listed_with_actions
 lazy from .containers import standings_on
 lazy from .github_estate import repository_for
+lazy from .history import HistoryGroup
 lazy from .infrastructure import RESOURCE_TONES
 lazy from .npm_sections import access
 lazy from .pages import PageBadge, principal_opens
@@ -40,12 +41,13 @@ lazy from .path_dependencies import consequence_of
 lazy from .path_model import Route
 lazy from .paths import hq_path
 lazy from .reach import network_of
-lazy from .security import Principal
+lazy from .security import Capability, Principal
 lazy from .service_facets import CERTIFICATE_FACET
 lazy from .services import served_here
 lazy from .work_runs import WorkRun
 
 if TYPE_CHECKING:
+    from .history import HistoryLine
     from .pages import PageAction
     from .work_runs import RunEvidence
 
@@ -110,6 +112,10 @@ class ServiceSection:
     # order, drawn as the row's last cell (``{% row_actions %}``); left empty,
     # or with nothing in any, the table has no column for them.
     actions: tuple[tuple[PageAction, ...], ...] = ()
+    # Audit events, drawn in place of ``records`` by the row the audit log
+    # draws (``{% history_table %}``), who did each left out where ``hide_who``.
+    history: tuple[HistoryLine, ...] = ()
+    hide_who: bool = False
 
     def __post_init__(self) -> None:
         if not PAGE_SECTION_ID.fullmatch(self.id):
@@ -131,12 +137,24 @@ class ServiceSection:
             object.__setattr__(self, "records", tuple(tuple(row[i] for i in keep) for row in self.records))
 
     @property
+    def count(self) -> int:
+        """How many rows it holds."""
+
+        return len(self.history) or len(self.records)
+
+    @property
+    def groups(self) -> tuple[HistoryGroup, ...]:
+        """Its audit events as the one group of their table."""
+
+        return (HistoryGroup(self.history),) if self.history else ()
+
+    @property
     def spans_row(self) -> bool:
         """Whether it takes the whole row of the flow it is drawn in: a fold,
         or a table too wide to share one. A page writes these ahead of the
         short ones, which then collect to share rows."""
 
-        return self.folded or len(self.columns) >= ROW_COLUMNS
+        return self.folded or bool(self.history) or len(self.columns) >= ROW_COLUMNS
 
     @property
     def rows(self) -> tuple[tuple[tuple[Cell, ...], RunEvidence | None, tuple[PageAction, ...]], ...]:
@@ -167,7 +185,7 @@ def sections_for(service) -> tuple[ServiceSection, ...]:
     found = []
     for resolve in SECTIONS:
         section = resolve(service, project)
-        if section is not None and section.records:
+        if section is not None and section.count:
             found.append(section)
     return tuple(found)
 
@@ -188,34 +206,27 @@ def _activity(service, _project) -> ServiceSection | None:
     "what changed".
     """
 
-    return recent_changes([claim.resource_key for claim in service.claims], what="Resource", limit=6)
+    return recent_changes([claim.resource_key for claim in service.claims], limit=6)
 
 
-def recent_changes(keys: list[str], *, what: str, limit: int) -> ServiceSection | None:
-    """The latest audit entries on the records ``keys`` name, as a section; None
-    when there are none. The machine page asks the same of its declarations."""
+def recent_changes(keys: list[str], *, limit: int, principal: Principal | None = None) -> ServiceSection | None:
+    """The latest audit entries on the records ``keys`` name, as a section
+    drawn as the audit log draws its rows; None when there are none. The
+    machine page asks the same of its declarations. Who did each is shown
+    only to a ``principal`` who may read the audit log."""
 
     if not keys:
         return None
-    events = AuditLog.objects.filter(object_id__in=keys).order_by("-created_at")[:limit]
-    records = tuple(
-        (
-            Cell(
-                event.object_repr or event.object_id,
-                reverse("core:audit_detail", kwargs={"pk": event.pk}),
-            ),
-            Cell(event.get_action_display()),
-            Cell(ago(event.created_at), muted=True),
-        )
-        for event in events
-    )
-    if not records:
+    events = list(AuditLog.objects.filter(object_id__in=keys).select_related("user").order_by("-created_at")[:limit])
+    if not events:
         return None
     return ServiceSection(
         id="activity",
         label="Recent changes",
-        columns=(what, "Change", "Time"),
-        records=records,
+        columns=tuple(heading for heading, _css in history.COLUMNS),
+        records=(),
+        history=tuple(history.entries(events)),
+        hide_who=principal is None or not principal.permits(Capability.READ_AUDIT_LOG),
     )
 
 
@@ -271,7 +282,7 @@ def _run_record(run: WorkRun, *, by_machine: bool, opens: bool, shows: bool) -> 
     rest = (
         Cell(str(seconds(run.duration)) if run.duration is not None else ""),
         Cell(run.note),
-        Cell(run.by if shows else ""),
+        Cell(run.by.words if shows else ""),
     )
     state = Cell(run.word, tone=run.tone)
     if by_machine:

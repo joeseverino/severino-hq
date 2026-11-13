@@ -33,22 +33,25 @@ from pydantic import (
 
 lazy from hq.domains.control_plane import models
 lazy from hq.domains.control_plane.provider_adapters.automation import SOURCE_KIND
-lazy from hq.platform.core.audit import audit_operation
+lazy from hq.platform.core.audit import audit_operation, audited_labels
+lazy from hq.platform.core.models import AuditLog
 
 from .automation_manifest import DottedName, ProcedureTerms
 from .command_fields import Describe
 from .integration_specs import CapabilitySpec
 from .security import Capability, Principal
 from .ui import ended
-lazy from . import asks, automation_adoption
-lazy from .action_links import capability_action_link
+lazy from . import asks, automation_adoption, pages
+lazy from .action_links import capability_action_link, command_url
 lazy from .approval_review import grouped, marked
+lazy from .automation_runs import access_words, anywhere, capability_name
 lazy from .cadence import ring_automation_doorbell
+lazy from .capabilities import capability_words
 lazy from .findings import rule_for
 lazy from .idempotency import IdempotencyConflict
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
+lazy from .labels import effect_label
 lazy from .moments import ago
-lazy from .pages import PageAction
 lazy from .record_errors import RecordNotFound
 lazy from .resource_operations import OperationQueued, enqueue, serialize_operation
 lazy from .routes import reverse
@@ -64,6 +67,8 @@ if TYPE_CHECKING:
 
     from .approval_review import ChangePreview
     from .asks import Standing
+    from .automation_adoption import PlaybookChange
+    from .pages import PageAction
 
 REFRESH = "automation.source.refresh"
 # The page the source's and its playbooks' commands belong to.
@@ -248,12 +253,16 @@ def refresh(command: RefreshCommand, *, principal: Principal) -> OperationQueued
 
 @dataclass(frozen=True, slots=True)
 class Reviewed:
-    """One proposal as a person decides on it: what adopting it changes,
-    each way that lets a run do more, and every reason HQ will not adopt it."""
+    """One proposal as a person decides on it: each playbook it changes,
+    what adopting them changes, each way that lets a run do more, and every
+    reason HQ will not adopt it."""
 
     proposal: SourceProposal
-    # None when it is the commit adopted now.
+    # None when nothing of it waits.
     preview: ChangePreview | None
+    # Whether no scan result is newer, so it is the one there is to decide on.
+    newest: bool
+    changes: tuple[PlaybookChange, ...] = ()
     widens: tuple[str, ...] = ()
     # What no playbook's row of ``preview`` carries, said above it: the ways
     # it widens and the commit's own reasons HQ won't adopt it.
@@ -261,18 +270,23 @@ class Reviewed:
     unplaced: tuple[str, ...] = ()
     # Every reason HQ will not adopt it, each playbook's by its sidecar.
     refused: tuple[str, ...] = ()
-    # Whether it is the catalog adopted now, so adopting it changes nothing.
-    adopted: bool = False
 
     @property
     def revision(self) -> str:
         return self.proposal.revision[:SHORT_REVISION]
 
     @property
-    def pending(self) -> bool:
-        """Whether it waits for a person: neither adopted nor rejected."""
+    def adopted(self) -> bool:
+        """Whether every playbook of it is adopted as it reads, or rejected, so nothing of it waits."""
 
-        return not self.adopted and self.proposal.rejected_at is None
+        return not self.changes
+
+    @property
+    def pending(self) -> bool:
+        """Whether it waits for a person: the newest scan result, with a
+        change neither adopted nor rejected."""
+
+        return self.newest and not self.adopted and self.proposal.rejected_at is None
 
 
 @dataclass(frozen=True, slots=True)
@@ -340,8 +354,9 @@ def reviewed(proposal: SourceProposal) -> Reviewed:
     """``proposal`` as a person decides on it, compared with the catalog adopted now."""
 
     planned = automation_adoption.judged(proposal.pk)
-    if planned.digest == planned.current and not planned.refused:
-        return Reviewed(proposal, None, adopted=True)
+    newest = not models.SourceProposal.objects.filter(pk__gt=proposal.pk).exists()
+    if not planned.changes:
+        return Reviewed(proposal, None, newest)
     compared = planned.compared
     # A playbook HQ can't adopt is marked as one that widens is, its row
     # saying why.
@@ -352,6 +367,8 @@ def reviewed(proposal: SourceProposal) -> Reviewed:
     return Reviewed(
         proposal,
         shown,
+        newest,
+        changes=planned.changes,
         widens=planned.widens,
         unmarked=tuple(each for each in unmarked if each not in unadoptable),
         unplaced=planned.unplaced,
@@ -387,25 +404,152 @@ def standing(proposal: int | None = None) -> SourceStanding:
     )
 
 
+def adopted_revision() -> str:
+    """The commit of the newest adoption, by the characters a page names it by; empty before any."""
+
+    catalog = automation_adoption.adopted()
+    return catalog.revision[:SHORT_REVISION] if catalog else ""
+
+
+def entry_url(proposal: SourceProposal) -> str:
+    """The audit entry that records what a scan read, which says what it
+    changes and offers a person's decision on it; the scan's run page for
+    one read before its rows were kept."""
+
+    entry = (
+        AuditLog.objects.filter(
+            object_type=audited_labels()[models.SourceProposal],
+            object_id=str(proposal.pk),
+            action=AuditLog.Action.CREATED,
+        )
+        .values_list("pk", flat=True)
+        .first()
+    )
+    return reverse("core:audit_detail", args=[entry]) if entry else run_url(str(proposal.operation_id))
+
+
+def of_audit_entry(event: AuditLog) -> Reviewed | None:
+    """The scan result an audit row records being read, reviewed; None for any other row."""
+
+    if event.action != AuditLog.Action.CREATED or event.object_type != audited_labels()[models.SourceProposal]:
+        return None
+    found = models.SourceProposal.objects.filter(pk=int(event.object_id)).first() if event.object_id.isdigit() else None
+    return reviewed(found) if found is not None else None
+
+
+def _deciding(principal: Principal) -> tuple[bool, bool]:
+    """Whether ``principal`` may adopt, and whether they may reject."""
+
+    return (
+        capability_action_link(automation_adoption.ADOPT, principal=principal) is not None,
+        capability_action_link(automation_adoption.REJECT, principal=principal) is not None,
+    )
+
+
 def decisions(pending: Reviewed | None, principal: Principal, *, diff: bool) -> tuple[PageAction, ...]:
     """What a person may do about the commit waiting to be adopted, in the
-    order the Playbooks page and its scan's page draw them: View diff (on
-    the Playbooks page, ``diff``), Adopt all when HQ can adopt every
-    playbook, and Reject all. Nothing when no commit waits."""
+    order the Playbooks page and its scan's audit entry draw them: View diff
+    (on the Playbooks page, ``diff``, for a reader of the audit log), Adopt
+    all when HQ can adopt every change that waits, and Reject all. Nothing
+    when no commit waits."""
 
-    if pending is None:
+    if pending is None or not pending.pending:
         return ()
     proposal = pending.proposal
+    adopts, rejects = _deciding(principal)
     shown: list[PageAction] = []
-    if diff:
-        shown.append(PageAction("View diff", run_url(str(proposal.operation_id))))
-    if not pending.refused and capability_action_link(automation_adoption.ADOPT, principal=principal):
+    if diff and principal.permits(Capability.READ_AUDIT_LOG):
+        shown.append(pages.PageAction("View diff", entry_url(proposal)))
+    if not pending.refused and adopts:
         adopt = reverse("control_plane:playbooks_adopt", kwargs={"pk": proposal.pk})
-        shown.append(PageAction("Adopt all", adopt, method="post"))
-    if capability_action_link(automation_adoption.REJECT, principal=principal):
+        shown.append(pages.PageAction("Adopt all", adopt, method="post"))
+    if rejects:
         reject = reverse("control_plane:playbooks_reject", kwargs={"pk": proposal.pk})
-        shown.append(PageAction("Reject all", reject, method="post"))
+        shown.append(pages.PageAction("Reject all", reject, method="post"))
     return tuple(shown)
+
+
+@dataclass(frozen=True, slots=True)
+class PlaybookTableRow:
+    """One playbook as a table of the playbooks shows it: as adopted, or as
+    a waiting scan would bring it, how that scan changes it, and Adopt and
+    Reject while it waits."""
+
+    title: str
+    # Its command's page, while it is adopted.
+    url: str
+    effect: str
+    hosts: tuple[str, ...]
+    # Where it runs when it names no machine.
+    anywhere: str
+    access: str
+    # How a waiting scan changes it, as the change table's Status says it; empty when it stays.
+    change: str = ""
+    actions: tuple[PageAction, ...] = ()
+
+
+def playbook_rows(
+    adopted: tuple[Any, ...], review: Reviewed | None, principal: Principal, *, every: bool = True
+) -> tuple[PlaybookTableRow, ...]:
+    """Each playbook adopted (``every``) or only each one changed, and each
+    one a waiting scan (``review``) adds, in the order of their titles, with
+    what ``principal`` may do about each change."""
+
+    changes = {change.key: change for change in review.changes} if review is not None and review.pending else {}
+    adopts, rejects = _deciding(principal)
+    rows = [
+        _row(procedure, changes.get(procedure.id), review, adopts=adopts, rejects=rejects, adopted=True)
+        for procedure in adopted
+        if every or procedure.id in changes
+    ]
+    held = {procedure.id for procedure in adopted}
+    rows.extend(
+        _row(change.procedure, change, review, adopts=adopts, rejects=rejects, title=change.title)
+        for key, change in changes.items()
+        if key not in held
+    )
+    return tuple(sorted(rows, key=lambda row: row.title))
+
+
+def _row(
+    procedure: Any,
+    change: PlaybookChange | None,
+    review: Reviewed | None,
+    *,
+    adopts: bool,
+    rejects: bool,
+    adopted: bool = False,
+    title: str = "",
+) -> PlaybookTableRow:
+    """One playbook's row: ``procedure`` as adopted (``adopted``) or as the
+    scan brings it, None for one HQ can't adopt, which is its ``title`` alone."""
+
+    actions: list[PageAction] = []
+    if change is not None and review is not None:
+        sent = {"playbook": change.key}
+        if adopts and not change.problems and not review.unplaced:
+            adopt = reverse("control_plane:playbooks_adopt", kwargs={"pk": review.proposal.pk})
+            actions.append(
+                pages.PageAction(capability_words(automation_adoption.ADOPT), adopt, method="post", fields=sent)
+            )
+        if rejects:
+            reject = reverse("control_plane:playbooks_reject", kwargs={"pk": review.proposal.pk})
+            actions.append(
+                pages.PageAction(capability_words(automation_adoption.REJECT), reject, method="post", fields=sent)
+            )
+    kind = change.change if change is not None else ""
+    if procedure is None:
+        return PlaybookTableRow(title, "", "", (), "", "", kind, tuple(actions))
+    return PlaybookTableRow(
+        procedure.title,
+        command_url(capability_name(procedure.id)) if adopted else "",
+        effect_label(procedure.effect),
+        tuple(procedure.hosts),
+        anywhere(procedure.target_kinds),
+        access_words(procedure.privilege),
+        kind,
+        tuple(actions),
+    )
 
 
 def capability_specs() -> tuple[CapabilitySpec, ...]:

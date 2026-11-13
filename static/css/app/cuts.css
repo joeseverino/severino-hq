@@ -96,6 +96,8 @@
   vertical-align: top;
   -webkit-box-orient: vertical; overflow: hidden; -webkit-line-clamp: 2; line-clamp: 2;
 }
+/* A `.cell-line` of one line (`lines=1`, value_tags.cell_line) is cut once, so its row stays as tall as its neighbors. */
+.data-table td .cell-line[data-lines="1"] { --cut-lines: 1; -webkit-line-clamp: 1; line-clamp: 1; }
 /* The row's own name tells it from the next, and names share prefixes, so it is never cut: it wraps at its hyphens and the names beside it give way. */
 .data-table td strong > [data-entity],
 .data-table td strong > .cell-line { display: inline; overflow: visible; -webkit-line-clamp: none; line-clamp: none; }

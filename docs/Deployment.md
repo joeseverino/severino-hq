@@ -644,7 +644,9 @@ account cannot already reach Docker.
 
 HQ's own host has `hq-host` in its tree. HQ queues no upgrade to another
 machine: there the helper is installed and run by hand, with the plan's
-values.
+values. The plan's fetch step takes `hq-host` from the composed image HQ
+runs, by digest, after `cosign` verifies the compose workflow's signature,
+and stops if the image's platform is not the machine's.
 
 ## Verifying
 

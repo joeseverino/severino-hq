@@ -167,7 +167,9 @@ class ChangeKindTests(SimpleTestCase):
         last = {}
         for cell in (element for element in shown if element.tag == "td"):
             row = [around for around in cell.ancestors if around.tag == "tr"][-1]
-            last[id(row)] = (row, cell)
+            # A row's open line repeats its Status for a box too narrow to show the column.
+            if "row-detail" not in row.classes:
+                last[id(row)] = (row, cell)
         said, tones = {}, {}
         for row, status in last.values():
             if "data-folded" in row.attrs:

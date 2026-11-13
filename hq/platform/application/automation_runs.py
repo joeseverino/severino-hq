@@ -36,18 +36,19 @@ lazy from hq.platform.core.audit import audit_operation
 lazy from hq.platform.core.templatetags.value_tags import seconds
 
 from .automation_manifest import OperationManifest, OperationRegistry, sorted_unique
-from .command_fields import Among, Describe, Names
+from .command_fields import Among, AmongNow, Describe, ForAgents, Names
 from .integration_specs import IDEMPOTENCY_FIELD, CapabilitySpec, CommandAbout, CommandFact
 from .record_errors import PolicyError, RecordNotFound
 from .security import Capability, Principal
 lazy from . import approvals, automation_adoption, pages
 lazy from .action_links import command_url
-lazy from .approval_review import ChangePreview
+lazy from .approval_review import ChangePreview, asked_by
 lazy from .approvals import ApprovalSubject, every_call, measured_by, waits_for_a_person
 lazy from .automation_sources import PLAYBOOKS, SHORT_REVISION
 lazy from .cadence import ring_automation_doorbell
 lazy from .capabilities import capability_words
 lazy from .controller import release_lapsed
+lazy from .doors import NOBODY
 lazy from .entity_links import entity_link, kind_label
 lazy from .finding_model import FindingRemedy
 lazy from .findings import rule_for
@@ -137,6 +138,7 @@ type Correlation = Annotated[
     StrictStr,
     Field(max_length=CORRELATION_LONGEST, pattern=CORRELATION_PATTERN),
     Describe("", api="Your own id to find this run by later, kept with the run."),
+    ForAgents(),
 ]
 type Reason = Annotated[
     StrictStr, Field(max_length=300), Describe("", api="Why it is run, kept with the operation it queues.")
@@ -166,11 +168,14 @@ def command_type(manifest: OperationManifest) -> type[RunCommand]:
 
     parameters = manifest.input_type
     takes_none = not any(field.is_required() for field in parameters.model_fields.values())
-    fields: dict[str, Any] = {}
+    # Offered as a person's choices, the machines a run can reach now
+    # (``reachable``); ``reached`` refuses any other however it is asked.
+    now = AmongNow(partial(reachable, manifest))
+    fields: dict[str, Any] = {"hosts": (Annotated[Hosts, now, MACHINES], ...)}
     if manifest.hosts or MACHINE_KIND not in manifest.target_kinds:
-        # What ``resolved_hosts`` admits, offered as the only choices.
+        # What ``resolved_hosts`` admits, published as the only choices.
         admitted = manifest.hosts if MACHINE_KIND in manifest.target_kinds else ()
-        fields["hosts"] = (Annotated[Hosts, Among(admitted), MACHINES], ...)
+        fields["hosts"] = (Annotated[Hosts, Among(admitted), now, MACHINES], ...)
     fields |= {
         "parameters": (
             Annotated[parameters, Describe("The playbook's own inputs, as its manifest lists them.")],
@@ -263,6 +268,21 @@ def runner_reaches() -> frozenset[tuple[str, str]]:
 
     newest = SourceProposal.objects.values_list("reaches", flat=True).first()
     return frozenset((normalized_hostname(found["machine"]), found["profile"]) for found in newest or ())
+
+
+def reachable(manifest: OperationManifest) -> frozenset[str]:
+    """The machines a run of ``manifest`` can be asked on now, each by its
+    name in HQ: those it is written for that the worker has a login to as its
+    profile, by any name the machine is known by, as ``reached`` holds a run to."""
+
+    profile = login_profile(manifest)
+    reaches = runner_reaches()
+    return frozenset(
+        machine.name
+        for machine in machine_catalog()
+        if manifest.admits(MACHINE_KIND, normalized_hostname(machine.name))
+        and any((normalized_hostname(name), profile) in reaches for name in (machine.name, *machine.aliases))
+    )
 
 
 def reached(manifest: OperationManifest, hosts: tuple[str, ...]) -> None:
@@ -693,6 +713,8 @@ def _held_runs(manifest: OperationManifest, principal: Principal) -> ServiceSect
     ``principal`` may read, each linked to the request it is decided on; None
     when none waits."""
 
+    waiting = approvals.pending(principal=principal, capability=capability_name(manifest.id))
+    who = asked_by(waiting)
     records = tuple(
         (
             machines_cell([str(host) for host in held.baseline.get("hosts") or ()]),
@@ -702,9 +724,9 @@ def _held_runs(manifest: OperationManifest, principal: Principal) -> ServiceSect
                 tone="attention",
             ),
             Cell(ago(held.created_at), muted=True),
-            Cell(held.requested_actor),
+            Cell(who.get(str(held.pk), NOBODY).words),
         )
-        for held in approvals.pending(principal=principal, capability=capability_name(manifest.id))
+        for held in waiting
     )
     if not records:
         return None

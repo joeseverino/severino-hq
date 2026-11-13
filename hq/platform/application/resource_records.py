@@ -93,7 +93,7 @@ class OperationSummary(TypedDict):
     automatic: Annotated[bool, Describe("Whether the controller ran it on its own, unasked.")]
     requested_actor: RequestedActor
     requested_interface: RequestedInterface
-    by: Annotated[str, Describe("Who asked for it, as HQ shows it: `Automatic` for the controller.")]
+    by: Annotated[str, Describe("Who asked for it, through which door, and who approved it, as HQ's pages name them.")]
     approved_by: Annotated[str, Describe("Who agreed to a change a credential asked for; empty for anything else.")]
     created_at: AskedAt
     completed_at: CompletedAt

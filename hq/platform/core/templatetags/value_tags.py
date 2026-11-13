@@ -15,7 +15,7 @@ from django.utils.html import conditional_escape, format_html
 from django.utils.safestring import mark_safe
 lazy from django.conf import settings
 
-from hq.platform.application.doors import door_words as _door_words, interface_label as _interface_label
+from hq.platform.application.doors import interface_label as _interface_label
 from hq.platform.application.entity_links import (
     connection_anchor as anchor,
     declared_link as declared,
@@ -393,11 +393,13 @@ def entity(context, link, code=False, label="", mark=""):
 
 
 @register.simple_tag
-def cell_line(text, url=""):
+def cell_line(text, url="", *, lines=2):
     """One fact in a table cell written as a line (``.cell-line``), a link when
     ``url`` is given: its names held as ``breakable`` holds them. The line asks
     for its whole length around the box that cuts it (``.cut``, figures.css),
-    and a cut one reads whole as any cut value does (tables.js, ``markCut``)."""
+    and a cut one reads whole as any cut value does (tables.js, ``markCut``).
+    It takes two lines at most, or one (``lines=1``) for a fact that keeps its
+    row as tall as its neighbors."""
 
     drawn = breakable(text)
     # A name brings its own box and strut; words are cut by the line's box.
@@ -406,9 +408,12 @@ def cell_line(text, url=""):
         if drawn.startswith('<span class="token" data-sole')
         else format_html('<span class="cut">{}</span>', drawn)
     )
+    if lines not in (1, 2):
+        raise ValueError(f"A cell's line takes 1 or 2 lines, never {lines!r}.")
+    one = format_html(' data-lines="{}"', lines) if lines == 1 else ""
     if url:
-        return format_html('<a class="cell-line" href="{}">{}</a>', url, inside)
-    return format_html('<span class="cell-line">{}</span>', inside)
+        return format_html('<a class="cell-line"{} href="{}">{}</a>', one, url, inside)
+    return format_html('<span class="cell-line"{}>{}</span>', one, inside)
 
 
 def _viewer(context):
@@ -452,13 +457,6 @@ def interface_label(value):
     if isinstance(value, str):
         return _interface_label(value)
     return ", ".join(_interface_label(interface) for interface in value or ())
-
-
-@register.filter
-def door_words(interface):
-    """An interface in a sentence, beside who came through it: ``api`` reads "over the API"."""
-
-    return _door_words(str(interface or ""))
 
 
 @register.filter

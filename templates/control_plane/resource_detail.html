@@ -20,7 +20,7 @@ held request writes nothing and queues nothing by design.
 {% endcomment %}
 {% if awaiting_approval %}
   {% notice tone="warning" title=awaiting_approval|length|counted:"change waiting for your approval,changes waiting for your approval" %}
-    <p>Requested by {% for held in awaiting_approval %}<code>{{ held.requested_actor|breakable }}</code> {% with mark=forloop.last|then:".|," %}{{ held.requested_interface|door_words|breakable:mark }}{% endwith %}{% if not forloop.last %} {% endif %}{% endfor %} Nothing is written or queued yet.</p>
+    <p>Requested by {% for who in awaiting_approval %}{% with mark=forloop.last|then:".|;" %}{{ who.words|breakable:mark }}{% endwith %}{% if not forloop.last %} {% endif %}{% endfor %} Nothing is written or queued yet.</p>
     <p><a class="btn compact primary" href="{% url 'core:audit_list' %}?awaiting=1">Review and decide</a></p>
   {% endnotice %}
 {% endif %}

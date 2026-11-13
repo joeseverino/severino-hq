@@ -7,16 +7,43 @@
 {% section event_heading %}
   {% facts label="Event" %}
     {% fact "When" %}{{ event.created_at|when:"exact" }}{% endfact %}
-    {% fact "Who" %}{% if door %}{{ event.actor_label|breakable:"," }} {{ door|breakable }}{% else %}{{ event.actor_label|breakable }}{% endif %}{% if acting_as %} <span class="muted">as {{ acting_as|breakable }}</span>{% endif %}{% if approved_by %}{% dot %}approved by {{ approved_by|breakable }}{% endif %}{% endfact %}
+    {% fact "Who" value=event.who.words %}
     {% if event.object_type %}{% fact "Object" %}{{ event.object_repr|default:event.type_label|or_empty }}{% if event.object_id %} <span class="muted">#{{ event.object_id|breakable }}</span>{% endif %}{% endfact %}{% endif %}
-    {% if about %}{% fact "About" %}<a href="{{ about.1 }}">{{ about.0|breakable }}</a> <span class="muted">everything that happened to it</span>{% endfact %}{% endif %}
+    {% if about %}{% fact "About" %}<a href="{{ about.1 }}">{{ about.0|breakable }}</a>{% endfact %}{% endif %}
     {% if cause %}{% fact "Started by" %}<a href="{{ cause.1 }}">{{ cause.0|breakable }}</a>{% endfact %}{% endif %}
     {% if operation or operation_id %}{% fact "Operation" %}{{ operation|breakable }}{% if operation and operation_id %} {% endif %}{% if operation_id %}<code>{{ operation_id|breakable }}</code>{% endif %}{% endfact %}{% endif %}
     {% if event.message %}{% fact "Message" value=event.message %}{% endif %}
+    {% if scan %}
+      {% fact "Refreshed by" value=scan.proposal.operation.requested_actor|or_empty %}
+      {% fact "Commit read" %}{{ scan.revision|breakable }} on {{ scan.proposal.branch|breakable }}{% if scan.proposal.committer %} from {{ scan.proposal.committer|breakable }}{% endif %}{% endfact %}
+      {% fact "Commit adopted" value=adopted_revision|or_empty %}
+      {% if scan.proposal.rejected_at %}
+        {% fact "Rejected by" value=scan.proposal.rejected_by|or_empty %}
+        {% fact "Rejected" %}{{ scan.proposal.rejected_at|when:"exact" }}{% endfact %}
+      {% endif %}
+    {% endif %}
   {% endfacts %}
 {% endsection %}
 
 {% change_table changes %}
+{% if scan %}
+  {% if scan.unplaced %}
+    {% notice tone="error" %}
+      <ul>{% for reason in scan.unplaced %}<li>{{ reason|breakable }}</li>{% endfor %}</ul>
+    {% title %}HQ can't adopt this commit{% endnotice %}
+  {% endif %}
+  {% if scan.unmarked %}
+    {% notice tone="warning" title="More access" %}
+      <ul>{% for widening in scan.unmarked %}<li>{{ widening|breakable }}</li>{% endfor %}</ul>
+    {% endnotice %}
+  {% endif %}
+  {% if scan_rows %}
+    {% section "Playbooks" count=scan_rows|length %}
+      {% include "control_plane/_playbook_table.html" with rows=scan_rows deciding=True %}
+    {% endsection %}
+  {% endif %}
+  {% if scan.preview %}{% change_table scan.preview %}{% endif %}
+{% endif %}
 
 {% if extra %}
 {% section "Metadata" %}
@@ -30,25 +57,7 @@
 
 {% if other_events %}
 {% section "Other events" id=operation_list %}
-  {% table_region "Other events" %}
-    <table class="data-table compact-table">
-      <thead><tr>{% table_heading "Time" "status" local_sort=True gutter=True %}{% table_heading "Action" local_sort=True %}{% table_heading "Object" local_sort=True drop=3 %}{% table_heading "User" local_sort=True drop=2 %}{% table_heading "Message" local_sort=True drop=1 %}</tr></thead>
-      {% for label, rows, count, folds in other_events %}
-      <tbody>
-        {% row_group label count folds=folds %}
-        {% for row in rows %}
-        <tr{% if folds %} data-folded="{{ folds }}"{% endif %}>
-          <td><a href="{% url 'core:audit_detail' row.pk %}">{{ row.created_at|when }}</a></td>
-          <td>{{ row.get_action_display|breakable }}</td>
-          <td>{{ row.object_repr|default:row.type_label|or_empty }}</td>
-          <td>{{ row.actor_label|breakable }}</td>
-          <td class="cell-data">{% if row.message %}{{ row.message|truncatewords:12|breakable }}{% else %}{% empty_value %}{% endif %}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-      {% endfor %}
-    </table>
-  {% endtable_region %}
+  {% history_table "Other events" other_events %}
   {% include "partials/_pagination.html" %}
 {% endsection %}
 {% endif %}

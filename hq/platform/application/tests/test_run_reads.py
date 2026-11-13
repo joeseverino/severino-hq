@@ -5,6 +5,7 @@ grant, showing what Jobs shows of each run and nothing more."""
 from django.test import TestCase
 
 from hq.domains.control_plane.models import OperationRequest
+from hq.platform.core.models import AuditLog
 
 from ..controller import ControllerReport, claim_next_operation, report_operation
 from ..record_errors import RecordNotFound
@@ -64,7 +65,8 @@ class ReadOneRunTests(RunReadTestCase):
         self.assertEqual(run["state"], "succeeded")
         self.assertEqual(run["hosts"], [APP])
         self.assertEqual(run["correlation"], "example-investigation-7")
-        self.assertEqual(run["by"], "example-agent (agent)")
+        queued = AuditLog.objects.get(object_id=operation_id, action=AuditLog.Action.CREATED)
+        self.assertEqual((run["by"], run["approved_by"]), (queued.who.words, queued.who.approved_by))
         self.assertTrue(run["approved_by"])
         self.assertEqual(run["events"], [task])
         self.assertIsNotNone(run["finished_at"])

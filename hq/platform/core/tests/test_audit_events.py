@@ -45,7 +45,7 @@ class AuditEventPageTests(TestCase):
         response = self.page()
         (event,) = [line for line in response.context["events"] if not line.under]
         self.assertEqual(event.title, "Sweep the examples")
-        self.assertEqual((event.actor, event.action), (SCHEDULER, "done"))
+        self.assertEqual((event.who.actor, event.action), (SCHEDULER, "done"))
         self.assertEqual(len(event.items), 2)
         # The items are rows of the same table, folded under the event's own row.
         html = response.content.decode()

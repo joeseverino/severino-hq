@@ -145,8 +145,8 @@ The server serves the bridge as the image does (`SEVERINO_BRIDGE_SOCKET`), on
 a socket in a private directory under `$TMPDIR`, one per database, since the
 database's directory can be too long a path for one. `tools/dev/scratch_automation.py` stands
 where the host's automation units stand: on each automation doorbell, or 15
-minutes after the last worker ended, it writes a connections document from
-the database's machines and starts the worker from the runner group's
+minutes after the last worker ended, it writes a connections document for
+the machine the server runs on and starts the worker from the runner group's
 environment (`var/runner/venv`, which `smoke:runner` shares). It watches the
 reloader's own process, so a reload leaves it running and starts no second
 one, and each worker it starts runs the code as it stands then. It stops with
@@ -161,9 +161,12 @@ What it holds to:
 - Its repository is `tools/dev/scratch_playbooks/`, committed to a repository
   in an `automation/` directory beside the database at each start and fetched
   over git's file transport, whatever the database adopted before.
-- Every login reaches 127.0.0.1, whatever machines the database holds, and
-  every play there sets its connection to local, so a run acts on this Mac
-  alone.
+- Its one login is to the machine HQ's inventory says the server runs on
+  (the machine page's "runs HQ", matched by this host's addresses), so
+  Playbooks offers that machine alone and a run's page names where it ran.
+  With no such machine it has no login, and a run can't be asked. The login
+  reaches 127.0.0.1 and every play there sets its connection to local, so a
+  run acts on this Mac alone.
 
 What it cannot show: GitHub's word on a commit's signature, so the worker
 reports each commit it scans as verified; the renderer's real runner
@@ -456,8 +459,7 @@ worktree shares and which a re-signed commit keeps. It records one only when
 the run proves the tree: its base's tree has a record, so what the change left
 unselected had passed, or the run selected every test and quick gate. A wide
 change runs them all, so a branch whose history has no recorded tree records
-one on its first wide run, and each run after reads from it. The agent hooks
-hold a brief's base to a recorded pass.
+one on its first wide run, and each run after reads from it.
 
 ### What `check` runs
 

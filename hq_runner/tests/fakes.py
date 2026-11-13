@@ -96,6 +96,12 @@ def reach(host: str, profile: str) -> Target | None:
 # Every event of the recorded run, in order: tasks that were fine, changed
 # something, were hidden (no_log) and were skipped, then one that failed.
 RECORDED: list[dict[str, Any]] = json.loads(Path(__file__).with_name("recorded_events.json").read_text("utf-8"))
+# A role's argument checks as ansible-runner 2.4.3 recorded them, Ansible's
+# own before each role with an argument spec: one passed, the role's task,
+# then one failed (``recorded_validation_events.json``).
+CHECKED: list[dict[str, Any]] = json.loads(
+    Path(__file__).with_name("recorded_validation_events.json").read_text("utf-8")
+)
 # The run up to the task that failed, and its stats: a run that ends well.
 WELL = [event for event in RECORDED if event.get("event_data", {}).get("task") != "Fail"]
 # The stats event ansible-runner 2.4.3 recorded ending a real run whose play

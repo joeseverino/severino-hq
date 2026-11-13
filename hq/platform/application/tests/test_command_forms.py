@@ -187,6 +187,27 @@ class CapabilityCommandFormTests(SimpleTestCase):
         self.assertEqual(form["reviewed_on"].label, "Reviewed on")
         self.assertEqual(form["ttl"].label, "TTL in seconds")
 
+    def test_a_field_for_agents_is_left_off_the_form_and_one_it_must_be_sent_is_refused(self):
+        from typing import Annotated
+
+        from hq.platform.application.command_fields import ForAgents
+        from hq.platform.application.integration_specs import CapabilitySpec
+        from hq_sdk.capabilities import StrictCommand
+
+        class ExampleCommand(StrictCommand):
+            note: str = ""
+            trace: Annotated[str, ForAgents()] = ""
+
+        class ExampleAsked(StrictCommand):
+            trace: Annotated[str, ForAgents()]
+
+        def spec(command):
+            return CapabilitySpec("example.check", "Check it.", "local_write", "example.write", command, dict)
+
+        self.assertEqual(set(command_form_class(spec(ExampleCommand)).payload_names), {"note"})
+        with self.assertRaises(ValueError):
+            command_form_class(spec(ExampleAsked))
+
     def test_a_file_field_is_picked_as_a_file_and_sent_as_the_command_takes_it(self):
         from django.core.files.uploadedfile import SimpleUploadedFile
 

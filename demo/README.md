@@ -35,17 +35,23 @@ database that already holds records rather than merging into it.
 The example estate holds every state a page can draw, for development and the
 tests: failed scans and runs, held requests, findings. The demo's first glance
 is a healthy homelab, so `first_glance.py` has the estate's owner settle it
-after it is seeded and before a page is saved, through the same capabilities
-and controller reports HQ's pages and its controller use. A later Refresh reads
-the adopted commit, the agent's held requests other than its DNS change are
-declined, the worker finishes what waits, each playbook whose newest run did
-not finish runs again and finishes, the controller's next sweep finds the
-machine restarted for its updates, room on its root and the service systemd
-kept restarting fixed, the receipt dropped in is filed against its expense,
-and everything on Needs you but the four things left on purpose is
-dismissed. Their history stays: a failed run is still in Jobs and on its
-machine, and what was dismissed is under Dismissed on Needs you. Only the
-showcase and standard sets are settled, and only in the demo build.
+after it is seeded and before a page is saved, through the capabilities and
+controller reports HQ's own pages use. It:
+
+- adopts the commit a later Refresh reads;
+- declines the agent's held requests except its DNS change;
+- lets the worker finish what waits, and runs again each playbook whose newest
+  run did not finish;
+- has the controller's next sweep find the machine restarted, room on its root
+  and the failing service fixed;
+- files the dropped-in receipt against its expense;
+- dismisses everything on Needs you except four things left on purpose: an
+  image update, an image run by tag alone, a certificate to renew and the
+  agent's held DNS change.
+
+History stays: a failed run is still in Jobs and on its machine, and what was
+dismissed is under Dismissed on Needs you. Only the showcase and standard sets
+are settled, and only in the demo build.
 
 Everything in the seeds is `example.*` and private address ranges; tailnet
 addresses are derived from the range HQ declares, never written out.

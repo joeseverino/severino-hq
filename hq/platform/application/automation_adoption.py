@@ -1,5 +1,6 @@
-"""Adopting a proposal: one scanned commit of the automation source becomes
-the catalog HQ runs procedures from, once a person agrees.
+"""Adopting a proposal: what one scanned commit of the automation source
+changes becomes the catalog HQ runs procedures from, playbook by playbook or
+all at once, once a person agrees.
 
 A Refresh proposes (``automation_sources``); this adopts. The newest
 ``AdoptedCatalog`` row is the one declaration every procedure's command, its
@@ -22,6 +23,9 @@ Security properties:
   ``adopt_playbooks``, held only at the operator's own interfaces
   (``security.HELD_ONLY_AT``): an agent may refresh, and its adoption is
   refused, never held for approval.
+- Each procedure runs at the commit it was adopted from, which pins every
+  file a run checks out, so a file a newer commit changes (a role two
+  playbooks share) reaches only a playbook adopted from that commit.
 - Each input is closed: a text input has its choices or a sidecar's pattern
   and length, and a free-form type is refused, so a run's parameters can
   name no execution field (``automation_manifest._closed``).
@@ -59,7 +63,7 @@ from hq.domains.control_plane.models import AdoptedCatalog, SourceProposal
 lazy from hq.platform.core.audit import audit_operation
 
 from . import automation_sources
-from .automation_manifest import PLAYBOOK, OperationManifest, ProcedureTerms, Statement
+from .automation_manifest import PLAYBOOK, REVISION, OperationManifest, ProcedureTerms, Statement
 from .automation_sources import InputBound, ProcedureDeclaration
 from .command_fields import Describe
 from .integration_specs import CapabilitySpec
@@ -122,14 +126,23 @@ class AdoptedInput(BaseModel):
 
 class AdoptedProcedure(ProcedureTerms):
     """One procedure of an adopted catalog: what its sidecar declares, what
-    Ansible says of it, and the files it runs, each by its object id."""
+    Ansible says of it, the commit it runs at, and the files it runs and the
+    ones of that commit no playbook runs (``shared``), each by its object id."""
 
     playbook: Annotated[str, StringConstraints(pattern=PLAYBOOK)]
     title: Annotated[str, StringConstraints(max_length=200)]
     preconditions: tuple[Statement, ...]
     verification: tuple[Statement, ...]
     inputs: dict[Annotated[str, StringConstraints(pattern=INPUT_NAME.pattern)], AdoptedInput]
+    revision: Annotated[str, StringConstraints(pattern=REVISION)]
     files: dict[str, str]
+    shared: dict[str, str]
+
+    def same(self, other: AdoptedProcedure) -> bool:
+        """Whether ``other`` runs what this does: the commit apart, every
+        term and every file the same."""
+
+        return self.model_dump(exclude={"revision"}) == other.model_dump(exclude={"revision"})
 
 
 # ---------------------------------------------------------------- the catalog
@@ -245,15 +258,15 @@ def _load(digest: str) -> _Known:
         return _Known(digest, (), ())
     # As JSON, which the row is stored as: a list is a strict tuple there.
     rows = tuple(AdoptedProcedure.model_validate_json(json.dumps(row)) for row in catalog.procedures)
-    return _Known(digest, rows, tuple(manifest(row, catalog.revision) for row in rows))
+    return _Known(digest, rows, tuple(manifest(row) for row in rows))
 
 
-def manifest(procedure: AdoptedProcedure, revision: str) -> OperationManifest:
-    """The manifest HQ runs ``procedure`` from, at the adopted ``revision``."""
+def manifest(procedure: AdoptedProcedure) -> OperationManifest:
+    """The manifest HQ runs ``procedure`` from, at the commit it was adopted from."""
 
     return OperationManifest(
         **procedure.model_dump(include=set(ProcedureTerms.model_fields)),
-        revision=revision,
+        revision=procedure.revision,
         playbook=procedure.playbook,
         input_type=input_type(procedure.id, procedure.inputs),
         preconditions=procedure.preconditions,
@@ -387,19 +400,23 @@ def _procedures(proposal: SourceProposal) -> tuple[dict[str, AdoptedProcedure], 
     can't, by its sidecar."""
 
     objects = {entry["path"]: entry["object"] for entry in proposal.files}
+    used = {scanned["sidecar"]: _used(scanned, objects) for scanned in proposal.procedures}
+    # The files no playbook of the commit runs, which any of them may read.
+    every = {path for paths in used.values() for path in paths}
+    shared = {path: name for path, name in sorted(objects.items()) if path not in every}
     found: dict[str, AdoptedProcedure] = {}
     unadoptable: dict[str, _Unadoptable] = {}
     for scanned in proposal.procedures:
         name = scanned["sidecar"]
         declared = scanned["declaration"].get("id") if isinstance(scanned["declaration"], dict) else None
         problems = list(scanned["problems"])
-        procedure = None if problems else _procedure(proposal, scanned, objects, problems)
+        procedure = None if problems else _procedure(proposal, scanned, objects, used[name], shared, problems)
         if problems or procedure is None:
             unadoptable[name] = _Unadoptable(
                 declared if isinstance(declared, str) else name,
                 scanned["title"] or name,
                 tuple(problems),
-                frozenset(_used(scanned, objects)),
+                frozenset(used[name]),
             )
             continue
         found[procedure.id] = procedure
@@ -414,12 +431,16 @@ def _used(scanned: Mapping[str, Any], objects: Mapping[str, str]) -> set[str]:
 
 
 def _procedure(
-    proposal: SourceProposal, scanned: Mapping[str, Any], objects: Mapping[str, str], problems: list[str]
+    proposal: SourceProposal,
+    scanned: Mapping[str, Any],
+    objects: Mapping[str, str],
+    used: set[str],
+    shared: Mapping[str, str],
+    problems: list[str],
 ) -> AdoptedProcedure | None:
     """The playbook ``scanned`` as HQ would adopt it, with each problem that
     keeps it from being adopted added to ``problems``."""
 
-    used = _used(scanned, objects)
     try:
         declaration = ProcedureDeclaration.model_validate_json(json.dumps(scanned["declaration"]))
         inputs = _inputs(scanned, declaration.inputs, problems)
@@ -430,21 +451,16 @@ def _procedure(
             preconditions=tuple(scanned["preconditions"]),
             verification=tuple(scanned["verification"]),
             inputs=inputs,
+            revision=proposal.revision,
             files={path: objects[path] for path in sorted(used) if path in objects},
+            shared=dict(shared),
         )
-        manifest(procedure, proposal.revision)
+        manifest(procedure)
     except (ValidationError, ValueError) as exc:
         said = exc.errors(include_url=False)[0]["msg"] if isinstance(exc, ValidationError) else str(exc)
         problems.append(ended(said[:1].upper() + said[1:]))
         return None
     return procedure
-
-
-def _shared(files: Mapping[str, str], procedures: Iterable[AdoptedProcedure]) -> dict[str, str]:
-    """The files no procedure is known to run, which any of them may read."""
-
-    used = {path for procedure in procedures for path in procedure.files}
-    return {path: name for path, name in files.items() if path not in used}
 
 
 def _does(effect: str) -> str:
@@ -488,33 +504,33 @@ def _gains(before: AdoptedProcedure, after: AdoptedProcedure, named: str) -> lis
     # read anything its login can by a change no person looked at.
     if after.files != before.files:
         gained.append(f"{named} runs different files.")
+    moved = sorted(
+        path for path in {*before.shared, *after.shared} if before.shared.get(path) != after.shared.get(path)
+    )
+    if any(PurePosixPath(path).name == REQUIREMENTS for path in moved):
+        gained.append(f"{named} can use other Ansible collections.")
+    if any(PurePosixPath(path).name != REQUIREMENTS for path in moved):
+        gained.append(f"{named} can read changed files every playbook can read.")
     return gained
 
 
 def _widens(
-    before: Mapping[str, AdoptedProcedure],
-    after: Mapping[str, AdoptedProcedure],
-    shared_before: Mapping[str, str],
-    shared_after: Mapping[str, str],
+    before: Mapping[str, AdoptedProcedure], after: Mapping[str, AdoptedProcedure], keys: Iterable[str]
 ) -> list[str]:
-    """Each way adopting ``after`` over ``before`` lets a run do more."""
+    """Each way adopting the playbooks ``keys`` names, as ``after`` holds
+    them, over ``before`` lets a run do more."""
 
     widens = []
     called = titles(after)
-    for key, procedure in sorted(after.items()):
-        was = before.get(key)
+    for key in sorted(keys):
+        procedure, was = after.get(key), before.get(key)
+        if procedure is None:
+            continue
         if was is None:
             if procedure.effect != "read" or procedure.privilege is not None:
                 widens.append(ended(f"{called[key]} is new, and it {_does(procedure.effect)}"))
             continue
         widens.extend(_gains(was, procedure, called[key]))
-    for path in sorted(set(shared_before) | set(shared_after)):
-        if shared_before.get(path) == shared_after.get(path):
-            continue
-        if PurePosixPath(path).name == REQUIREMENTS:
-            widens.append(f"{path} changed. It sets which Ansible collections playbooks can use.")
-        else:
-            widens.append(f"{path} changed. Every playbook can read it.")
     return widens
 
 
@@ -544,32 +560,53 @@ def _shown(procedure: AdoptedProcedure, named: str) -> dict[str, Any]:
         "fixes": [found.title if (found := rule_for(rule)) else rule for rule in procedure.fixes],
         "inputs": [field_words(name) for name in procedure.inputs],
         "files": {path: name[:SHOWN_OBJECT] for path, name in procedure.files.items()},
+        "shared_files": {path: name[:SHOWN_OBJECT] for path, name in procedure.shared.items()},
     }
+
+
+type Change = Literal["added", "changed", "removed"]
+
+
+@dataclass(frozen=True, slots=True)
+class PlaybookChange:
+    """One playbook a scan changes against the catalog adopted now, waiting
+    for a person: the key its adoption and rejection name it by, its title,
+    how it changes, as the change table's Status says it, and each reason HQ
+    can't adopt it."""
+
+    key: str
+    title: str
+    change: Change
+    problems: tuple[str, ...] = ()
+    # The playbook as adopting it would make it; None for one removed or one HQ can't adopt.
+    procedure: AdoptedProcedure | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class AdoptionPlan:
-    """What adopting one proposal would do: the catalog it writes, how it
-    moves the one adopted now, and every reason HQ will not adopt it."""
+    """What adopting one proposal would do: each playbook it changes against
+    the catalog adopted now, how that compares, and every reason HQ will not
+    adopt it."""
 
     proposal: SourceProposal
     procedures: dict[str, AdoptedProcedure]
-    files: dict[str, str]
-    digest: str
-    current: str
+    # The catalog adopted now, by playbook.
+    before: dict[str, AdoptedProcedure]
+    # Each change that waits: neither adopted nor rejected, ordered by title.
+    changes: tuple[PlaybookChange, ...]
     widens: tuple[str, ...]
     compared: dict[str, Any]
-    # Every reason, the commit's own first, then each playbook's by its sidecar.
+    # Every reason, the commit's own first, then each waiting playbook's by its sidecar.
     refused: tuple[str, ...] = ()
     # The commit's own reasons, which no playbook's row of ``compared`` carries.
     unplaced: tuple[str, ...] = ()
-    # Each playbook HQ can't adopt, by the name its row of ``compared`` has.
+    # Each waiting playbook HQ can't adopt, by the name its row of ``compared`` has.
     unadoptable: tuple[str, ...] = ()
 
 
-def _digest(revision: str, procedures: Iterable[AdoptedProcedure]) -> str:
+def _digest(procedures: Iterable[AdoptedProcedure]) -> str:
     material = json.dumps(
-        {"revision": revision, "procedures": [procedure.model_dump(mode="json") for procedure in procedures]},
+        {"procedures": [procedure.model_dump(mode="json") for procedure in procedures]},
         sort_keys=True,
         separators=(",", ":"),
     )
@@ -590,24 +627,51 @@ def _commit_refusals(proposal: SourceProposal) -> list[str]:
     return refused
 
 
+def _changes(
+    before: Mapping[str, AdoptedProcedure],
+    after: Mapping[str, AdoptedProcedure],
+    unadoptable: Mapping[str, tuple[str, _Unadoptable]],
+    called_before: Mapping[str, str],
+    called_after: Mapping[str, str],
+) -> list[PlaybookChange]:
+    """Each playbook whose adopted version the scan changes: one new, one
+    changed, or one it no longer holds, and one HQ can't adopt by the key it
+    is compared by (``unadoptable``, each by its sidecar)."""
+
+    changes = [
+        PlaybookChange(key, called_after[key], "added" if key not in before else "changed", procedure=procedure)
+        for key, procedure in after.items()
+        if key not in before or not before[key].same(procedure)
+    ]
+    changes.extend(
+        PlaybookChange(
+            key,
+            called_after[key],
+            "changed" if key in before else "added",
+            tuple(f"{sidecar}: {problem}" for problem in found.problems),
+        )
+        for sidecar, (key, found) in unadoptable.items()
+    )
+    placed = {key for key, _found in unadoptable.values()}
+    changes.extend(
+        PlaybookChange(key, called_before[key], "removed") for key in before if key not in after and key not in placed
+    )
+    return sorted(changes, key=lambda change: (change.title, change.key))
+
+
 def judged(proposal_id: int) -> AdoptionPlan:
     """What adopting the proposal would do and how it compares with the
     catalog adopted now, each playbook HQ can't adopt on its own row with
-    its problems; RecordNotFound for a proposal HQ no longer holds."""
+    its problems, and a playbook a person rejected left as adopted;
+    RecordNotFound for a proposal HQ no longer holds."""
 
     proposal = SourceProposal.objects.filter(pk=proposal_id).first()
     if proposal is None:
         raise RecordNotFound("No scan result has that ID. Refresh to scan again.")
     unplaced = _commit_refusals(proposal)
     procedures, unadoptable = _procedures(proposal)
-    files = {entry["path"]: entry["object"] for entry in proposal.files}
     current = adopted()
     before = {row.id: row for row in _catalog(current.digest).procedures} if current else {}
-    files_before = {entry["path"]: entry["object"] for entry in current.files} if current else {}
-    own = {path for found in unadoptable.values() for path in found.files}
-    shared_before = _shared(files_before, before.values())
-    shared_after = {path: name for path, name in _shared(files, procedures.values()).items() if path not in own}
-    ordered = [procedures[named] for named in sorted(procedures)]
     # A playbook HQ can't adopt is compared by its id where it declares one
     # no other row has, so it lines up with the playbook it would replace.
     keys, placed = set(procedures), {}
@@ -621,9 +685,25 @@ def judged(proposal_id: int) -> AdoptionPlan:
             **{placed[sidecar]: found.title for sidecar, found in unadoptable.items()},
         }
     )
-    shown_after = {key: _shown(row, called_after[key]) for key, row in procedures.items()}
+    rejected = set(proposal.rejected_playbooks)
+    changes = tuple(
+        change
+        for change in _changes(
+            before,
+            procedures,
+            {sidecar: (placed[sidecar], found) for sidecar, found in unadoptable.items()},
+            called_before,
+            called_after,
+        )
+        if change.key not in rejected
+    )
+    # What is compared leaves out a rejected playbook, on both sides.
+    shown_before = {key: _shown(row, called_before[key]) for key, row in before.items() if key not in rejected}
+    shown_after = {key: _shown(row, called_after[key]) for key, row in procedures.items() if key not in rejected}
     for sidecar, found in unadoptable.items():
         key = placed[sidecar]
+        if key in rejected:
+            continue
         # The playbook it would replace, as it stands, so only its problems move.
         standing = _shown(before[key], called_after[key]) if key in before else {}
         shown_after[key] = {
@@ -631,45 +711,51 @@ def judged(proposal_id: int) -> AdoptionPlan:
             SUMMARY: {"label": called_after[key], "value": CANT_ADOPT},
             "problems": list(found.problems),
         }
+    waiting = {change.key for change in changes}
     return AdoptionPlan(
         proposal=proposal,
         procedures=procedures,
-        files=files,
-        digest=_digest(proposal.revision, ordered),
-        current=current.digest if current else "",
-        widens=tuple(_widens(before, procedures, shared_before, shared_after)),
+        before=before,
+        changes=changes,
+        widens=tuple(_widens(before, procedures, waiting)),
         compared={
             "before": {
                 "commit": current.revision[:SHOWN_OBJECT] if current else "",
                 "committer": current.committer if current else "",
-                "procedures": {key: _shown(row, called_before[key]) for key, row in sorted(before.items())},
-                "shared files": {path: name[:SHOWN_OBJECT] for path, name in sorted(shared_before.items())},
+                "procedures": dict(sorted(shown_before.items())),
             },
             "after": {
                 "commit": proposal.revision[:SHOWN_OBJECT],
                 "committer": proposal.committer,
                 "procedures": dict(sorted(shown_after.items())),
-                "shared files": {path: name[:SHOWN_OBJECT] for path, name in sorted(shared_after.items())},
             },
         },
         refused=(
             *unplaced,
-            *(f"{sidecar}: {problem}" for sidecar, found in unadoptable.items() for problem in found.problems),
+            *(
+                f"{sidecar}: {problem}"
+                for sidecar, found in unadoptable.items()
+                if placed[sidecar] in waiting
+                for problem in found.problems
+            ),
         ),
         unplaced=tuple(unplaced),
-        unadoptable=tuple(called_after[placed[sidecar]] for sidecar in unadoptable),
+        unadoptable=tuple(called_after[placed[sidecar]] for sidecar in unadoptable if placed[sidecar] in waiting),
     )
 
 
-def plan(proposal_id: int) -> AdoptionPlan:
+def plan(proposal_id: int, playbook: str = "") -> AdoptionPlan:
     """What adopting the proposal would do, or the refusal that lists every
-    reason HQ will not adopt it."""
+    reason HQ will not adopt it: of the commit, then of ``playbook`` when one
+    is named, else of every playbook whose change waits."""
 
     planned = judged(proposal_id)
-    if planned.refused:
+    named = next((change for change in planned.changes if change.key == playbook), None)
+    refused = (*planned.unplaced, *(named.problems if named else ())) if playbook else planned.refused
+    if refused:
         raise PolicyError(
-            "This commit can't be adopted; details.refused lists why. Fix it in the repository, then Refresh.",
-            details={"refused": list(planned.refused)},
+            "This can't be adopted; details.refused lists why. Fix it in the repository, then Refresh.",
+            details={"refused": list(refused)},
         )
     return planned
 
@@ -681,82 +767,129 @@ class Adopted(TypedDict):
     """What an adoption did: whether the adopted playbooks changed, and what runs may now do."""
 
     ok: Literal[True]
-    adopted: Annotated[bool, Describe("False when this scan result was already adopted.")]
+    adopted: Annotated[bool, Describe("False when nothing it names waited to be adopted.")]
     digest: Annotated[str, Describe("The digest that names the adopted playbooks.")]
     widened: Annotated[list[str], Describe("What runs may now do that they could not before.")]
 
 
+# A playbook as a change of a scan names it: its id, or its sidecar where two declare one id.
+PlaybookKey = Annotated[StrictStr, Field(min_length=1, max_length=200, title="Playbook")]
+
+
 class AdoptProposal(BaseModel):
-    """The scan result to adopt, and why."""
+    """The scan result to adopt, and the one playbook to adopt from it."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     proposal: Annotated[StrictInt, Field(ge=1, title="Scan result"), Describe("The scan result's ID.")]
-    reason: Annotated[StrictStr, Field(max_length=300), Describe("Why it is adopted, kept with the adoption.")] = ""
+    playbook: Annotated[
+        PlaybookKey | None,
+        Describe("The playbook whose change to adopt, by its id; left out, every change that waits is adopted."),
+    ] = None
 
 
 def _everyone(_principal: Principal) -> bool:
     return True
 
 
+def _decided(planned: AdoptionPlan, playbook: str | None) -> tuple[PlaybookChange, ...]:
+    """The changes a decision on ``playbook`` takes, or every one that waits
+    when it names none; RecordNotFound for a playbook the scan neither holds
+    nor removes, and a refusal for one a person rejected."""
+
+    if playbook is None:
+        return planned.changes
+    chosen = tuple(change for change in planned.changes if change.key == playbook)
+    if chosen:
+        return chosen
+    if playbook in planned.proposal.rejected_playbooks:
+        raise PolicyError("That playbook's change was rejected. Refresh to scan again.")
+    if playbook not in planned.procedures and playbook not in planned.before:
+        raise RecordNotFound("No playbook of this scan result has that id.")
+    return ()
+
+
 @transaction.atomic
 def adopt(command: AdoptProposal, *, principal: Principal) -> Adopted:
-    """Make the proposal the catalog HQ runs from, unless it already is."""
+    """Adopt the change the proposal makes to one playbook, or every change
+    that waits, so each runs from the proposal's commit; every other playbook
+    stays as it was adopted."""
 
     with audit_operation(operation=ADOPT, principal=principal):
-        planned = plan(command.proposal)
-        if planned.digest == planned.current:
-            return {"ok": True, "adopted": False, "digest": planned.digest, "widened": []}
+        planned = plan(command.proposal, command.playbook or "")
+        chosen = _decided(planned, command.playbook)
+        current = adopted()
+        if not chosen:
+            return {"ok": True, "adopted": False, "digest": current.digest if current else "", "widened": []}
+        catalog = dict(planned.before)
+        for change in chosen:
+            if change.procedure is None:
+                catalog.pop(change.key, None)
+            else:
+                catalog[change.key] = change.procedure
+        ordered = [catalog[key] for key in sorted(catalog)]
         proposal = planned.proposal
-        catalog = AdoptedCatalog.objects.create(
+        row = AdoptedCatalog.objects.create(
             proposal=proposal,
             branch=proposal.branch,
             revision=proposal.revision,
             committer=proposal.committer,
-            procedures=[planned.procedures[named].model_dump(mode="json") for named in sorted(planned.procedures)],
-            files=[{"path": path, "object": name} for path, name in sorted(planned.files.items())],
-            digest=planned.digest,
+            procedures=[procedure.model_dump(mode="json") for procedure in ordered],
+            digest=_digest(ordered),
         )
     # Every caller's commands moved: this process builds its own anew once
     # the row commits, every other at its next request (``generation``), and
     # a stream is told.
     transaction.on_commit(catch_up, robust=True)
     agent_registry.tools_changed(_everyone)
-    return {"ok": True, "adopted": True, "digest": catalog.digest, "widened": list(planned.widens)}
+    widened = _widens(planned.before, planned.procedures, (change.key for change in chosen))
+    return {"ok": True, "adopted": True, "digest": row.digest, "widened": widened}
 
 
 class Rejected(TypedDict):
-    """What a rejection did: whether the scan result waited to be decided until now."""
+    """What a rejection did: whether what it names waited to be decided until now."""
 
     ok: Literal[True]
-    rejected: Annotated[bool, Describe("False when this scan result was already rejected.")]
+    rejected: Annotated[bool, Describe("False when what it names was already rejected.")]
 
 
 class RejectProposal(BaseModel):
-    """The scan result to reject, and why."""
+    """The scan result to reject, and the one playbook to reject from it."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     proposal: Annotated[StrictInt, Field(ge=1, title="Scan result"), Describe("The scan result's ID.")]
-    reason: Annotated[StrictStr, Field(max_length=300), Describe("Why it is rejected, kept with the rejection.")] = ""
+    playbook: Annotated[
+        PlaybookKey | None,
+        Describe(
+            "The playbook whose change to reject, by its id, so it stays as adopted; "
+            "left out, the whole scan result is rejected."
+        ),
+    ] = None
 
 
 @transaction.atomic
 def reject(command: RejectProposal, *, principal: Principal) -> Rejected:
-    """Set a scan result aside, so nothing waits to be adopted until the next Refresh reads another."""
+    """Set aside the change a scan result makes to one playbook, which stays
+    as adopted, or the whole scan result, so nothing of it waits to be
+    adopted until the next Refresh reads another."""
 
     with audit_operation(operation=REJECT, principal=principal):
         proposal = SourceProposal.objects.select_for_update().filter(pk=command.proposal).first()
         if proposal is None:
             raise RecordNotFound("No scan result has that ID. Refresh to scan again.")
-        if proposal.rejected_at is not None:
+        if proposal.rejected_at is not None or command.playbook in proposal.rejected_playbooks:
             return {"ok": True, "rejected": False}
-        current = adopted()
-        if current is not None and current.proposal_id == proposal.pk:
-            raise PolicyError("This scan result is the commit HQ runs playbooks from, so there is nothing to reject.")
-        proposal.rejected_at = timezone.now()
-        proposal.rejected_by = principal.actor
-        proposal.save(update_fields=("rejected_at", "rejected_by", "updated_at"))
+        chosen = _decided(judged(proposal.pk), command.playbook)
+        if not chosen:
+            raise PolicyError("Nothing in this scan result waits to be adopted, so there is nothing to reject.")
+        if command.playbook is not None:
+            proposal.rejected_playbooks = [*proposal.rejected_playbooks, command.playbook]
+            proposal.save(update_fields=("rejected_playbooks", "updated_at"))
+        else:
+            proposal.rejected_at = timezone.now()
+            proposal.rejected_by = principal.actor
+            proposal.save(update_fields=("rejected_at", "rejected_by", "updated_at"))
     return {"ok": True, "rejected": True}
 
 
@@ -785,8 +918,9 @@ def capability_specs() -> tuple[CapabilitySpec, ...]:
         *automation_sources.capability_specs(),
         CapabilitySpec(
             ADOPT,
-            "Adopt a scanned commit as the playbooks HQ runs. A commit GitHub did not verify, or one "
-            "carrying an ansible.cfg or a plugins directory, is refused. Only a person adopts.",
+            "Adopt what a scanned commit changes in the playbooks HQ runs: one playbook's change, or every "
+            "change that waits. A commit GitHub did not verify, or one carrying an ansible.cfg or a plugins "
+            "directory, is refused. Only a person adopts.",
             "infrastructure_change",
             # Held only at the operator's own interfaces (security.HELD_ONLY_AT).
             Capability.ADOPT_PLAYBOOKS,
@@ -794,9 +928,9 @@ def capability_specs() -> tuple[CapabilitySpec, ...]:
             adopt,
             execution_notes=(
                 "Refuse a commit GitHub did not verify or one carrying an ansible.cfg or a plugins directory.",
-                "Refuse a commit with a playbook HQ can't run.",
+                "Refuse a playbook HQ can't run, and every change at once while one waits.",
                 "Compare it, playbook by playbook, with the adopted playbooks.",
-                "Every playbook run from now on uses this commit.",
+                "Each playbook adopted runs from this commit from now on; every other stays as adopted.",
                 "A run of a changed playbook that waits for approval can no longer be approved.",
             ),
             label="Adopt the playbooks",
@@ -805,15 +939,15 @@ def capability_specs() -> tuple[CapabilitySpec, ...]:
         ),
         CapabilitySpec(
             REJECT,
-            "Reject a scanned commit, so nothing waits to be adopted until a Refresh reads another. "
-            "Only a person rejects.",
+            "Reject what a scanned commit changes: one playbook's change, which stays as adopted, or the whole "
+            "commit, so nothing waits to be adopted until a Refresh reads another. Only a person rejects.",
             "remote_write",
             Capability.ADOPT_PLAYBOOKS,
             RejectProposal,
             reject,
             execution_notes=(
-                "Refuse the commit HQ runs playbooks from now.",
-                "Mark the scan result rejected, recorded under your name.",
+                "Refuse a scan result with nothing waiting to be adopted.",
+                "Mark the playbook's change or the scan result rejected, recorded under your name.",
             ),
             label="Reject a scanned commit",
             verb="Reject",

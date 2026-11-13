@@ -1,16 +1,17 @@
 """The Playbooks page: the playbooks HQ runs from, the commit they were
-adopted at, and, while a newer scanned commit waits, a person's decision on it.
+last adopted at, and, while a newer scanned commit waits, how it changes
+each playbook and a person's decision on each and on all of them.
 
 Every value is the catalog's or a scan's (``automation_sources.standing``);
 the host names no procedure, machine or repository, and the source's
 repository is the deployment's own configuration, so the page names a
-commit by its branch and id alone. What a scanned commit changes is its
-scan's own page (``jobs:run``), which View diff opens.
+commit by its branch and id alone. What a scanned commit changes is the
+audit entry that records the scan's read (``automation_sources.entry_url``),
+which View diff opens.
 """
 
-from dataclasses import dataclass
 from functools import cached_property
-from typing import Any, ClassVar, override
+from typing import ClassVar, override
 
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
@@ -20,19 +21,25 @@ from django.views import View
 from django.views.generic import TemplateView
 
 from hq.domains.control_plane.models import SourceProposal
-from hq.platform.application.action_links import capability_action_link, command_url
+from hq.platform.application.action_links import capability_action_link
 from hq.platform.application.automation_adoption import ADOPT, REJECT
-from hq.platform.application.automation_runs import access_words, anywhere, capability_name
-from hq.platform.application.automation_sources import REFRESH, SourceStanding, decisions, scan_standing, standing
+from hq.platform.application.automation_sources import (
+    REFRESH,
+    SourceStanding,
+    decisions,
+    entry_url,
+    playbook_rows,
+    scan_standing,
+    standing,
+)
 from hq.platform.application.pages import PageMixin
 from hq.platform.application.routes import reverse
-from hq.platform.application.security import web_principal
+from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.web_writes import execute_posted, refused
 lazy from hq.domains.jobs.models import JobState
 lazy from hq.platform.application.asks import FAILED, WATCH_LIMIT, Ask, Standing, answer, watch_token, watched
-lazy from hq.platform.application.labels import effect_label
 lazy from hq.platform.application.refusal_status import WANTS_A_GRANT, refusal_of
-lazy from hq.platform.application.work_runs import TONES, run_url
+lazy from hq.platform.application.work_runs import TONES
 lazy from hq.platform.core.templatetags.action_tags import MOST_BESIDE
 
 
@@ -40,18 +47,6 @@ def scan_status_url(operation_id: str) -> str:
     """Where a page follows one scan, signed so it reports on nothing else."""
 
     return f"{reverse('control_plane:playbooks_status')}?watch={watch_token({'scan': operation_id})}"
-
-
-@dataclass(frozen=True, slots=True)
-class CatalogRow:
-    """One procedure of the catalog adopted now, as its table row shows it."""
-
-    procedure: Any
-    url: str
-    effect: str
-    # Where it runs when it names no machine.
-    anywhere: str
-    access: str
 
 
 class PlaybooksView(PageMixin, TemplateView):
@@ -86,7 +81,7 @@ class PlaybooksView(PageMixin, TemplateView):
             if refresh is not None
             else None
         )
-        return (*((asked,) if asked else ()), *decisions(self.sources.pending, self.principal, diff=True))
+        return (*decisions(self.sources.pending, self.principal, diff=True), *((asked,) if asked else ()))
 
     @override
     def get_context_data(self, **kwargs):
@@ -94,7 +89,7 @@ class PlaybooksView(PageMixin, TemplateView):
         sources = self.sources
         context.update(
             page_aside="control_plane/_playbooks_read.html",
-            # Refresh, then View diff, Adopt all and Reject all side by side while a commit waits.
+            # View diff, Adopt all and Reject all, then Refresh, side by side while a commit waits.
             page_beside=MOST_BESIDE if sources.pending else "",
             failed_tone=(
                 TONES[JobState(sources.reached.seen)]
@@ -104,16 +99,7 @@ class PlaybooksView(PageMixin, TemplateView):
             sources=sources,
             # When HQ last reached the repository: a scan result is kept only by a read that succeeded.
             read_at=SourceProposal.objects.order_by("-pk").values_list("created_at", flat=True).first(),
-            adopted=[
-                CatalogRow(
-                    procedure,
-                    command_url(capability_name(procedure.id)),
-                    effect_label(procedure.effect),
-                    anywhere(procedure.target_kinds),
-                    access_words(procedure.privilege),
-                )
-                for procedure in sources.procedures
-            ],
+            rows=playbook_rows(sources.procedures, sources.pending, self.principal),
         )
         return context
 
@@ -155,9 +141,10 @@ class ScanStatusView(View):
 
 
 class ProposalDecisionView(View):
-    """Adopt or reject one scan result through its command, so a press is
-    authorized and recorded as the same call through the API. A refusal goes
-    back to the scan's page, which says what is wrong with the commit."""
+    """Adopt or reject one scan result, or one playbook's change in it,
+    through its command, so a press is authorized and recorded as the same
+    call through the API. A refusal goes back to the audit entry of the
+    scan's read, which says what is wrong with the commit."""
 
     http_method_names: ClassVar[list[str]] = ["post"]
     capability: ClassVar[str]
@@ -167,31 +154,34 @@ class ProposalDecisionView(View):
     done: ClassVar[tuple[str, str]]
 
     def post(self, request, pk: int):
-        result = execute_posted(request, self.capability, {"proposal": pk})
+        # One playbook's row sends its key, and the page it was pressed on to return to.
+        playbook = str(request.POST.get("playbook", ""))
+        payload = {"proposal": pk, **({"playbook": playbook} if playbook else {})}
+        result = execute_posted(request, self.capability, payload)
         if not result.get("ok") and refusal_of(result).code in WANTS_A_GRANT:
             raise PermissionDenied(refusal_of(result).message)
         if refused(request, result) is not None:
-            scan = SourceProposal.objects.filter(pk=pk).values_list("operation_id", flat=True).first()
-            return redirect(run_url(str(scan)) if scan else reverse("control_plane:playbooks"))
+            scan = SourceProposal.objects.filter(pk=pk).first()
+            return redirect(entry_url(scan) if scan else reverse("control_plane:playbooks"))
         changed, unchanged = self.done
         if result.get(self.result_field):
             messages.success(request, changed)
         else:
             messages.info(request, unchanged)
-        return redirect("control_plane:playbooks")
+        return redirect(safe_next(request, fallback=reverse("control_plane:playbooks")))
 
 
 class ProposalAdoptView(ProposalDecisionView):
-    """Adopt one scan result: its playbooks become the ones every playbook's command is built from."""
+    """Adopt one scan result's changes, or one playbook's: each becomes what its command is built from."""
 
     capability = ADOPT
     result_field = "adopted"
-    done = ("Adopted.", "That commit is already adopted.")
+    done = ("Adopted.", "Already adopted.")
 
 
 class ProposalRejectView(ProposalDecisionView):
-    """Reject one scan result, so nothing waits to be adopted."""
+    """Reject one scan result, or one playbook's change in it, so it waits no more."""
 
     capability = REJECT
     result_field = "rejected"
-    done = ("Rejected.", "That commit is already rejected.")
+    done = ("Rejected.", "Already rejected.")

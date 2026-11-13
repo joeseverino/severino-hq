@@ -161,6 +161,15 @@ CONTROL_HEIGHTS = (
 }"""
 )
 
+# Where a row's first line of words stands: the padding above it in the
+# row's first cell of words, a cell of controls taking some of its own out
+# for a control taller than a line.
+_ROW_WORDS = """
+const wordsOf = (cell) => [...cell.parentElement.children].find((other) => other !== cell
+  && other.matches('td, th') && !other.matches(CONTROL_CELL) && other.checkVisibility()) || cell;
+const lineOf = (style) => parseFloat(style.lineHeight) || 1.2 * parseFloat(style.fontSize);
+"""
+
 # Each control a row's actions cell holds on its first line whose middle is
 # off that line's middle, where the words in the cells beside it are set: a
 # button taller than a line, set on the line's top, sits lower than the row's
@@ -169,16 +178,17 @@ CONTROL_HEIGHTS = (
 ACTIONS_OFF_THE_LINE = (
     "() => {"
     + DESCRIBE
+    + f"const CONTROL_CELL = '{SELECTORS['row_actions_cell']}';"
+    + _ROW_WORDS
     + """
   const found = [];
   const pressed = 'a, button, form, [role="button"], [data-ask]';
-  for (const cell of document.querySelectorAll('"""
-    + SELECTORS["row_actions_cell"]
-    + """')) {
+  for (const cell of document.querySelectorAll(CONTROL_CELL)) {
     if (!cell.checkVisibility()) continue;
     const style = getComputedStyle(cell);
-    const line = parseFloat(style.lineHeight) || 1.2 * parseFloat(style.fontSize);
-    const middle = box(cell).top + parseFloat(style.borderTopWidth) + parseFloat(style.paddingTop) + line / 2;
+    const words = getComputedStyle(wordsOf(cell));
+    const line = lineOf(style);
+    const middle = box(cell).top + parseFloat(style.borderTopWidth) + parseFloat(words.paddingTop) + line / 2;
     const controls = [...cell.children].filter((el) => el.matches(pressed) && el.checkVisibility() && box(el).height >= 2);
     if (!controls.length) continue;
     const first = box(controls[0]);
@@ -189,6 +199,40 @@ ACTIONS_OFF_THE_LINE = (
       if (Math.abs(off) > 1.5) {
         found.push(`${describe(el)} sits ${Math.round(Math.abs(off))}px ${off > 0 ? 'below' : 'above'} its row's first line: ${el.textContent.trim().slice(0, 40)}`);
       }
+    }
+  }
+  return [...new Set(found)];
+}"""
+)
+
+# Each cell of a row's controls whose controls, on one line, make the row
+# taller than a line of words: a button taller than the line, set inside the
+# cell's whole padding, grows its row past the rows of words beside it. A cell
+# holding an ask keeps a line under its button for what the ask says
+# (tables.css), so it is left to its own check.
+ACTIONS_GROW_THE_ROW = (
+    "() => {"
+    + DESCRIBE
+    + f"const CONTROL_CELL = '{SELECTORS['row_actions_cell']}';"
+    + _ROW_WORDS
+    + """
+  const found = [];
+  const pressed = 'a, button, form, [role="button"]';
+  for (const cell of document.querySelectorAll(CONTROL_CELL)) {
+    if (!cell.checkVisibility() || cell.querySelector(':scope > [data-ask]')) continue;
+    const controls = [...cell.children].filter((el) => el.matches(pressed) && el.checkVisibility() && box(el).height >= 2);
+    if (!controls.length) continue;
+    const first = box(controls[0]);
+    const line = controls.map(box).filter((r) => r.top < first.bottom);
+    if (line.length < controls.length) continue;
+    const style = getComputedStyle(cell);
+    const words = getComputedStyle(wordsOf(cell));
+    const top = box(cell).top;
+    const needs = Math.max(...line.map((r) => r.bottom)) - top + parseFloat(style.paddingBottom) + parseFloat(style.borderBottomWidth);
+    const row = parseFloat(words.paddingTop) + lineOf(style) + parseFloat(words.paddingBottom)
+      + parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
+    if (needs > row + 1.5) {
+      found.push(`${describe(cell)} holds controls ${Math.round(needs - row)}px taller than its row's line of words: ${cell.textContent.trim().replace(/\\s+/g, ' ').slice(0, 40)}`);
     }
   }
   return [...new Set(found)];
@@ -286,6 +330,7 @@ CHOICES_AS_WIDE_AS_THEIR_OPTIONS = (
 # The survey checks these probes answer (`probes/__init__.py`).
 CHECKS = {
     "actions on the first line": ACTIONS_OFF_THE_LINE,
+    "actions no taller than the row": ACTIONS_GROW_THE_ROW,
     "row actions stacked with room": (
         ACTIONS_STACKED_WITH_ROOM,
         f"{SELECTORS['row_actions_cell']}, {SELECTORS['queue_actions_cell']}",

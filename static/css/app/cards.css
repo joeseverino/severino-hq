@@ -139,8 +139,9 @@ a.kpi, a.kpi:hover { text-decoration: none; color: inherit; }
 .attention-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-5); }
 
 /* Since when, and how old the reading behind it is: quiet while current, in
-   the attention tone once out of date. */
-.attention-meta { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-5); color: var(--muted); font-size: var(--text-xs); }
+   the attention tone once out of date, at the row's far edge as every list
+   row's date is. */
+.attention-meta { margin-inline-start: auto; display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-5); color: var(--muted); font-size: var(--text-xs); }
 .attention-meta > a { overflow-wrap: anywhere; }
 .reading-age.is-stale { color: var(--tone-caution-ink); }
 .attention-title { min-width: 0; max-width: 100%; font-size: var(--text-md); font-weight: 650; color: var(--ink); letter-spacing: -.005em; overflow-wrap: anywhere; }

@@ -1033,12 +1033,32 @@
         "data": {
           "adopted": false,
           "branch": "main",
+          "changes": [
+            {
+              "change": "changed",
+              "playbook": "example.cache_flush",
+              "refused": [],
+              "title": "Empty a cache"
+            },
+            {
+              "change": "added",
+              "playbook": "example.disk_cleanup",
+              "refused": [],
+              "title": "Free space on a mount"
+            },
+            {
+              "change": "removed",
+              "playbook": "example.package_upgrade",
+              "refused": [],
+              "title": "Upgrade packages"
+            }
+          ],
           "committer": "example-maintainer",
           "id": 3,
           "pending": true,
           "read_at": "2026-01-15T06:30:00+00:00",
           "refused": [],
-          "revision": "52889585fc55b53dd6aabcf75e024d74d94c2567",
+          "revision": "84a1356b06c87ff497625948f9dba7bed1e4dc1b",
           "widens": [
             "Empty a cache gains sudo (example.cache_admin).",
             "Free space on a mount is new, and it changes a live system."
@@ -1253,7 +1273,7 @@
       "200": {
         "data": {
           "approved_by": "",
-          "by": "example-agent (agent)",
+          "by": "example-agent, over MCP",
           "capability": "automation.example.package_upgrade.run",
           "correlation": "",
           "created_at": "2026-01-15T09:29:00+00:00",
@@ -2477,12 +2497,32 @@
             {
               "adopted": false,
               "branch": "main",
+              "changes": [
+                {
+                  "change": "changed",
+                  "playbook": "example.cache_flush",
+                  "refused": [],
+                  "title": "Empty a cache"
+                },
+                {
+                  "change": "added",
+                  "playbook": "example.disk_cleanup",
+                  "refused": [],
+                  "title": "Free space on a mount"
+                },
+                {
+                  "change": "removed",
+                  "playbook": "example.package_upgrade",
+                  "refused": [],
+                  "title": "Upgrade packages"
+                }
+              ],
               "committer": "example-maintainer",
               "id": 3,
               "pending": true,
               "read_at": "2026-01-15T06:30:00+00:00",
               "refused": [],
-              "revision": "52889585fc55b53dd6aabcf75e024d74d94c2567",
+              "revision": "84a1356b06c87ff497625948f9dba7bed1e4dc1b",
               "widens": [
                 "Empty a cache gains sudo (example.cache_admin).",
                 "Free space on a mount is new, and it changes a live system."
@@ -2775,21 +2815,21 @@
           "items": [
             {
               "approved_by": "",
-              "by": "joe",
-              "capability": "automation.example.cache_flush.run",
+              "by": "example-agent, over MCP",
+              "capability": "automation.example.package_upgrade.run",
               "correlation": "",
-              "created_at": "2026-01-15T09:27:00+00:00",
+              "created_at": "2026-01-15T09:29:00+00:00",
               "duration_seconds": null,
               "finished_at": null,
               "headline": "",
               "hosts": [
-                "docker-host-01"
+                "macbook-pro-16"
               ],
-              "operation_id": "69f54f70-cd66-5001-b486-bb8dbb36e914",
-              "playbook": "example.cache_flush",
-              "started_at": "2026-01-15T09:27:20+00:00",
-              "state": "running",
-              "state_label": "Running"
+              "operation_id": "330b177e-3075-5811-9fba-835493beb091",
+              "playbook": "example.package_upgrade",
+              "started_at": null,
+              "state": "queued",
+              "state_label": "Waiting"
             }
           ],
           "next": null,
@@ -3232,14 +3272,14 @@
             "capability": "project.create",
             "content_fingerprint": "6c9ba16f74000dd99ad2ac8841847ddd5d8537ac700937d8cae8327f35afbcfd",
             "expires_at": "2026-01-16T09:30:00+00:00",
-            "id": "7b4ba536-2791-576a-bd31-b1b2e598a61c",
+            "id": "69f54f70-cd66-5001-b486-bb8dbb36e914",
             "reason": "",
             "requested_actor": "example-automation",
             "requested_at": "2026-01-15T09:30:00+00:00",
             "requested_interface": "api",
             "resource_key": "",
             "resource_kind": "projects",
-            "review_url": "https://hq.example.com/audit/approval/7b4ba536-2791-576a-bd31-b1b2e598a61c/",
+            "review_url": "https://hq.example.com/audit/approval/69f54f70-cd66-5001-b486-bb8dbb36e914/",
             "state": "pending",
             "target": ""
           },

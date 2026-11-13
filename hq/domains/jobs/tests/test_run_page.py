@@ -77,7 +77,10 @@ class RunPageTests(TestCase):
         html = self.page(run_page(run.pk))
 
         said = facts(html)
-        self.assertEqual(said["Asked by"][0], f"{run.requested_actor} (agent)")
+        from hq.platform.core.models import AuditLog
+
+        queued = AuditLog.objects.get(object_id=str(run.pk), action=AuditLog.Action.CREATED)
+        self.assertEqual(said["Asked by"][0], queued.who.words)
         self.assertEqual(said["Result"][0], run.result["message"])
         self.assertEqual(said["Correlation"][0], CORRELATION)
         self.assertEqual(said["Machines"][1], reverse("control_plane:machine", kwargs={"name": MACHINE}))
@@ -86,6 +89,19 @@ class RunPageTests(TestCase):
         self.assertTrue(run.result["events"])
         for event in run.result["events"]:
             self.assertIn(event["task"], tasks)
+
+    def test_a_scan_s_page_names_the_command_that_asked_for_it_and_decides_nothing(self):
+        from hq.platform.application.automation_sources import REFRESH
+
+        scan = OperationRequest.objects.filter(action=OperationRequest.Action.SCAN).exclude(proposal=None).first()
+
+        html = self.page(run_page(scan.pk))
+
+        said = facts(html)
+        self.assertNotIn("Playbook", said, "a scan runs no playbook")
+        self.assertEqual(said["Command"][1], reverse("command", args=[REFRESH]))
+        posts = {element.attrs.get("formaction", "") for element in all_elements(html)}
+        self.assertFalse({path for path in posts if path.endswith(("/adopt/", "/reject/"))})
 
     def test_a_working_run_s_page_names_its_lease(self):
         run = OperationRequest.objects.get(action=OperationRequest.Action.RUN, state=OperationRequest.State.CLAIMED)
@@ -140,7 +156,9 @@ class ApprovedRunPageTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         entry = reverse("core:approval_entry", kwargs={"approval_id": held.pk})
-        self.assertEqual(facts(response.content.decode())["Approved by"], (APPROVER, entry))
+        said, url = facts(response.content.decode())["Asked by"]
+        self.assertEqual(url, entry)
+        self.assertIn(f"approved by {APPROVER}", said)
 
 
 class RunHereTests(TestCase):

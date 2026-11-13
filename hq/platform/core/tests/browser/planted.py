@@ -62,11 +62,16 @@ PLANTS = {
         '<span style="white-space: nowrap">Example value far wider than its box</span></div>'
     ),
     "cells": Plant(_TABLE.format('<div style="inline-size: 20rem">Example</div>')),
-    # A row's button set on its cell's top, as a button taller than a line is
-    # without the row's rule.
+    # A row's button moved off its row's first line.
     "actions on the first line": Plant(
         '<table class="data-table"><tbody><tr><td>Example</td><td class="row-actions">'
-        '<button type="button" class="btn compact" style="translate: none">Example</button></td></tr></tbody></table>'
+        '<button type="button" class="btn compact" style="translate: 0 0.5rem">Example</button></td></tr></tbody></table>'
+    ),
+    # A row's button set inside its cell's whole padding, as a button taller
+    # than a line is without the row's rule, so its row outgrows a row of words.
+    "actions no taller than the row": Plant(
+        '<table class="data-table"><tbody><tr><td>Example</td><td class="row-actions" style="padding-block: var(--row-pad)">'
+        '<button type="button" class="btn compact">Example</button></td></tr></tbody></table>'
     ),
     # A row's two buttons one above the other in a cell of a table with room
     # for them side by side.
@@ -371,6 +376,14 @@ _FLOWS = (
 # differs from, so a check that finds everything is caught as surely as one
 # that finds nothing.
 PASSES = {
+    # A row's two buttons as the row's rule sets them, beside a row of words
+    # alone: both rows a line of words tall.
+    "actions no taller than the row": Plant(
+        '<table class="data-table"><tbody><tr><td>Example</td><td class="row-actions">'
+        '<button type="button" class="btn compact">Example one</button>'
+        '<button type="button" class="btn compact">Example two</button></td></tr>'
+        '<tr><td>Example</td><td class="row-actions"></td></tr></tbody></table>'
+    ),
     # A primary button caught as its fill fades in, its ink already drawn:
     # it is read as it settles.
     "contrast": Plant(

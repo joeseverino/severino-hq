@@ -58,7 +58,7 @@ The Dependency Dashboard issue lists what is pending, held for age or
 blocked. A release still inside its 7 days is listed under Pending Status
 Checks, each with a box that opens its pull request at once. For a pin
 `mise outdated --bump` does not read (an npm tool, an image digest, a
-workflow's action, a regex pin), that list is where an update now starts. A
+workflow's action, a regex pin), that list is where an update starts. A
 Renovate pull request is worked like any other: push the code a major needs
 onto its branch. To vendor a new API reference bundle by hand,
 change `version:` in `static/vendor/scalar/UPSTREAM` and run

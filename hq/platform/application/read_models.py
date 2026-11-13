@@ -94,6 +94,8 @@ class ActivityEvent(TypedDict):
     action: str
     action_label: str
     actor: str
+    # Who started it, through which door, and who approved it, as the audit log says it.
+    by: str
     message: str
     created_at: str
     operation_id: str
@@ -144,7 +146,8 @@ def recent_activity(*, principal: Principal, limit: int = 25) -> RecentActivity:
             "title": line.title,
             "action": line.action,
             "action_label": line.action_label,
-            "actor": line.actor,
+            "actor": line.who.actor,
+            "by": line.who.words,
             "message": line.message,
             "created_at": _second(line.at),
             "operation_id": line.events[0].operation_id,

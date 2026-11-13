@@ -29,7 +29,7 @@ from .routes import reverse
 from .ui import ended
 lazy from . import cadence
 lazy from .cadence import every_sweep, read_request_lifetime
-lazy from .resource_operations import operation_summary
+lazy from .resource_operations import headline as operation_headline
 lazy from .security import safe_next
 lazy from .work_runs import LAPSED
 
@@ -323,5 +323,5 @@ def operation_standing(operation: Any) -> Standing:
 
     seen = JobState(operation.seen)
     lapsed = seen == JobState.LOST and operation.state == OperationState.CLAIMED
-    note = LAPSED if lapsed else operation_summary(operation)["headline"]
+    note = LAPSED if lapsed else operation_headline(operation)
     return Standing(_STANDS.get(seen, FAILED), note, since=operation.created_at, word=seen.label)

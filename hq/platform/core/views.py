@@ -16,7 +16,7 @@ from django.utils.text import capfirst
 from django.views.generic import TemplateView, View
 
 from hq.domains.contacts import inbox
-from hq.platform.application import agent_activity, agent_devices, capability_policy, fragments
+from hq.platform.application import agent_activity, agent_devices, capability_policy, fragments, history
 from hq.platform.application.agent_access import REMOVE_AGENT, SET_AGENT_ACCESS, SET_AGENT_BLOCK
 from hq.platform.application.agent_devices import APPROVE_AGENT_DEVICE, BLOCK_AGENT_DEVICE
 from hq.platform.application.appearance import SET_THEME
@@ -343,6 +343,16 @@ class AgentPolicyView(PageMixin, TemplateView):
             if standing.devices
         ]
         context["recent_days"] = agent_activity.RECENT.days
+        # Each agent's latest events, drawn as the audit log draws its rows.
+        context["agent_events"] = tuple(
+            history.HistoryGroup(
+                tuple(history.entries(list(standing.activity.latest))),
+                standing.identity.client_id,
+                len(standing.activity.latest),
+            )
+            for standing in standings
+            if standing.activity.latest
+        )
         context["offered"] = len(agent_grantable())
         context["client_setup"] = agent_activity.CLIENT_SETUP
         context["placement"] = agent_devices.placement_posture()

@@ -15,12 +15,11 @@ from hq.platform.application.web_writes import execute_posted
 lazy from hq.platform.application import outbound_work, work_runs
 lazy from hq.platform.application.asks import FAILED, Standing, answer, job_standing
 lazy from hq.platform.application.automation_runs import cancel_action, listed_with_actions, run_here_url
-lazy from hq.platform.application.automation_sources import decisions
 lazy from hq.platform.application.capabilities import capability_registry
 lazy from hq.platform.application.labels import lower_first
 lazy from hq.platform.application.outbound_work import SUBJECT_FIELD
 lazy from hq.platform.application.refusal_status import WANTS_A_GRANT
-lazy from hq.platform.application.run_pages import run_context, scan_context
+lazy from hq.platform.application.run_pages import run_context
 
 from .models import Job, JobState
 
@@ -111,9 +110,7 @@ class JobListView(PageMixin, TableListMixin, ListView):
 class RunView(PageMixin, TemplateView):
     """One run of a playbook, or one scan of its source: who asked, its
     approval, its lease, how it ended and each task's outcome
-    (``application.run_pages``), and for a scan the commit it read against
-    the one adopted, with Adopt all and Reject all while it waits. Jobs' own
-    page for a row, read as Jobs is."""
+    (``application.run_pages``). Jobs' own page for a row, read as Jobs is."""
 
     template_name = "jobs/run_detail.html"
     page_trail = (("Background jobs", reverse_lazy("jobs:list")),)
@@ -124,7 +121,6 @@ class RunView(PageMixin, TemplateView):
         if found is None:
             raise Http404("No run has that id.")
         self.run, self.operation = found
-        self.scan = scan_context(self.operation)
         return super().get(request, *args, **kwargs)
 
     @override
@@ -142,15 +138,13 @@ class RunView(PageMixin, TemplateView):
             if ended and playbook and capability_registry().get(self.run.kind)
             else ()
         )
-        pending = self.scan["scan"] if self.scan.get("scan_pending") else None
-        decided = decisions(pending, web_principal(self.request.user), diff=False)
-        return (*again, *((cancel,) if cancel is not None else ()), *decided)
+        return (*again, *((cancel,) if cancel is not None else ()))
 
     @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["page_badges"] = (PageBadge(self.run.word, self.run.tone),)
-        context.update(run_context(self.run, self.operation, user=self.request.user), **self.scan)
+        context.update(run_context(self.run, self.operation, user=self.request.user))
         return context
 
 

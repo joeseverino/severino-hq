@@ -26,7 +26,6 @@ class RunEvidenceTagTests(SimpleTestCase):
         drawn = _drawn(
             RunEvidence(
                 hosts=("example-01",),
-                approved_by="example-owner",
                 correlation="example-investigation-7",
                 worker="example-worker",
                 lease_until=datetime(2026, 3, 2, 9, 35, tzinfo=UTC),
@@ -36,8 +35,7 @@ class RunEvidenceTagTests(SimpleTestCase):
             )
         )
 
-        self.assertEqual(set(drawn), {"Machines", "Approved by", "Correlation", "Lease", "Tasks"})
-        self.assertIn("example-owner", drawn["Approved by"])
+        self.assertEqual(set(drawn), {"Machines", "Correlation", "Lease", "Tasks"})
         self.assertIn("example-investigation-7", drawn["Correlation"])
         self.assertIn("example-worker", drawn["Lease"])
         self.assertIn("Example task", drawn["Tasks"])

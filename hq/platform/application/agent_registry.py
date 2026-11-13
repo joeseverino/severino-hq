@@ -20,7 +20,7 @@ from hq.platform.core.audit import record_event
 from hq.platform.core.models import AgentIdentity, AgentSignIn, AuditLog
 
 from . import agent_devices
-from .doors import door_words
+from .doors import Attribution
 from .linked_accounts import SIGN_IN
 from .security import AGENT_SURFACES, Principal, agent_subject, subject_parts
 from .ui import counted
@@ -123,7 +123,7 @@ def _observe(principal: Principal) -> tuple[AgentIdentity, object]:
                 obj=row,
                 type_label=AUDIT_LABEL,
                 message=(
-                    f"First seen: {row}, {door_words(principal.interface)}, "
+                    f"First seen: {Attribution(str(row), principal.interface).asker}, "
                     f"granted {counted(len(granted), 'permission')}"
                 ),
                 metadata={

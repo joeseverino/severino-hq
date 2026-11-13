@@ -240,7 +240,7 @@ class TimeAndWhoTests(_Signed):
 
         shown = text(self.client.get(reverse("core:audit_list")))
 
-        self.assertIn("example-agent, approved by owner", shown)
+        self.assertIn("example-agent · approved by owner", shown)
 
     def test_a_row_its_actor_approved_names_them_once(self):
         AuditLog.objects.create(

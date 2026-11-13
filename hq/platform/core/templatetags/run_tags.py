@@ -2,7 +2,7 @@
 open line.
 
 ``{% run_evidence row.evidence %}`` draws ``partials/_run_evidence.html``
-from a ``work_runs.RunEvidence``: its machines, who approved it, its
+from a ``work_runs.RunEvidence``: its machines, its
 correlation id, its lease while a worker holds it, and each task's outcome,
 each a labeled ``row-below`` block. Jobs, a machine's page and a procedure's
 page draw a run's evidence through it.

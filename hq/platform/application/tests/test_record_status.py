@@ -9,13 +9,15 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.provider_adapters.github import COMPOSE_WORKFLOW, CURRENT, KIND
+from hq.platform.core.attribution import operation_context
 from hq_sdk.testing import plain
 
+from ..doors import NOBODY, door_words
 from ..entity_links import entity_link, record_name
 from ..inventory import confirm_observed
 from ..projection import projection_scope
 from ..resource_context import record_status
-from ..resource_operations import changes, operation_summary
+from ..resource_operations import changes, operation_summary, resource_history
 from .inventory_records import kind_read
 from .markup import all_elements, select, texts
 
@@ -300,25 +302,28 @@ class HistoryShowsChangesTests(TestCase):
         state: str = OperationRequest.State.SUCCEEDED,
     ) -> OperationRequest:
         self.count += 1
-        operation = OperationRequest.objects.create(
-            resource=self.resource,
-            action=OperationRequest.Action.RECONCILE,
-            state=state,
-            requested_actor="example-controller" if by == "controller" else "operator",
-            requested_interface=by,
-            idempotency_key=f"test:{self.count}",
-            completed_at=self.at + timedelta(minutes=self.count),
-            result={
-                "message": message,
-                "conditions": [{"type": condition, "status": True, "reason": reason, "message": message}],
-            },
-        )
+        actor = "example-controller" if by == "controller" else "operator"
+        with operation_context(interface=by, actor=actor, operation="example.ask"):
+            operation = OperationRequest.objects.create(
+                resource=self.resource,
+                action=OperationRequest.Action.RECONCILE,
+                state=state,
+                requested_actor=actor,
+                requested_interface=by,
+                idempotency_key=f"test:{self.count}",
+                completed_at=self.at + timedelta(minutes=self.count),
+                result={
+                    "message": message,
+                    "conditions": [{"type": condition, "status": True, "reason": reason, "message": message}],
+                },
+            )
         OperationRequest.objects.filter(pk=operation.pk).update(created_at=self.at + timedelta(minutes=self.count))
         return operation
 
     def listed(self, limit: int = 20) -> list[str]:
         return [
-            operation_summary(operation)["headline"] for operation in changes(self.resource.operations.all(), limit)
+            operation_summary(operation, NOBODY)["headline"]
+            for operation in changes(self.resource.operations.all(), limit)
         ]
 
     def test_a_check_that_keeps_finding_the_same_thing_is_one_row(self):
@@ -349,14 +354,26 @@ class HistoryShowsChangesTests(TestCase):
                 "Deploy reported.",
                 condition="Degraded",
                 reason="NotDelivered",
-            )
+            ),
+            NOBODY,
         )
 
         self.assertEqual((summary["tone"], summary["state_label"]), ("attention", "Problem found"))
         self.assertNotIn("guidance", summary)
         self.assertNotIn("No action is required", str(summary))
 
-    def test_who_asked_reads_as_a_person_would_say_it(self):
-        self.assertEqual(operation_summary(self.ran("Unchanged."))["by"], "Automatic")
-        self.assertEqual(operation_summary(self.ran("Unchanged.", by="web"))["by"], "operator")
-        self.assertEqual(operation_summary(self.ran("Unchanged.", by="mcp"))["by"], "operator (agent)")
+    def test_who_asked_is_what_the_audit_row_that_queued_it_says(self):
+        self.ran("Unchanged.")
+        self.ran("Unchanged.", by="web")
+        self.ran("Unchanged.", by="mcp")
+
+        said = [operation["by"] for operation in resource_history(self.resource)]
+
+        self.assertEqual(
+            said,
+            [
+                f"operator, {door_words('mcp')}",
+                f"operator, {door_words('web')}",
+                f"example-controller, {door_words('controller')}",
+            ],
+        )

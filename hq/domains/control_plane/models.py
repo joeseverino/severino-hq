@@ -626,6 +626,9 @@ class SourceProposal(TimestampedModel):
     # longer waits to be decided.
     rejected_at = models.DateTimeField(null=True, blank=True)
     rejected_by = models.CharField(max_length=150, blank=True)
+    # Each playbook whose change a person rejected on its own, by the key its
+    # change is named by, so it stays as adopted and waits no more.
+    rejected_playbooks = models.JSONField(default=list, blank=True)
 
     class Meta:
         ordering = ("-created_at",)
@@ -636,26 +639,26 @@ class SourceProposal(TimestampedModel):
 
 
 class AdoptedCatalog(TimestampedModel):
-    """The procedures HQ runs: one commit of the automation source, adopted
-    by a person from what a scan proposed.
+    """The procedures HQ runs, each adopted by a person from what a scan
+    proposed, each at the commit it was adopted from.
 
     The newest row is the catalog every procedure's command is built from;
-    each earlier one is what was adopted before it. Each row carries all it
-    pins, so a pruned proposal leaves it whole. Written by
-    ``automation_adoption.adopt``, its one writer.
+    each earlier one is what was adopted before it. The row names the commit
+    of the scan it was adopted from, and each procedure carries the commit it
+    runs at and every file it pins, so a pruned proposal leaves it whole.
+    Written by ``automation_adoption.adopt``, its one writer.
     """
 
     proposal = models.ForeignKey(SourceProposal, on_delete=models.SET_NULL, null=True, related_name="adoptions")
     branch = models.CharField(max_length=200)
     revision = models.CharField(max_length=40)
     committer = models.CharField(max_length=39, blank=True)
-    # Each procedure as adopted: its manifest's fields, its inputs and the
-    # files it runs; and every file of the commit, which the next adoption
-    # is compared against.
+    # Each procedure as adopted: its manifest's fields, its inputs, the
+    # commit it runs at, the files it runs and the files of that commit no
+    # playbook runs, which it may read.
     procedures = models.JSONField(default=list)
-    files = models.JSONField(default=list)
-    # Over the revision and the procedures: what every process builds its
-    # commands from, and so how it knows its own are current.
+    # Over the procedures: what every process builds its commands from, and
+    # so how it knows its own are current.
     digest = models.CharField(max_length=64)
 
     class Meta:

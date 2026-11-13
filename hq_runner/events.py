@@ -31,6 +31,12 @@ _OUTCOMES = {
     "runner_on_unreachable": "unreachable",
 }
 
+# The action of Ansible's own check of a role's arguments, which it runs
+# before every role that declares an argument spec. It is no task of the
+# playbook, so a run reports it only when it fails, which is why nothing of
+# the role ran.
+ARGUMENT_CHECK = "ansible.builtin.validate_argument_spec"
+
 # Shapes a secret has whoever wrote it: a private key, from its header to its
 # footer or the end of a text cut short, and a value given under a name that
 # says it is one (``password=...``, ``"token": "..."``).
@@ -95,11 +101,13 @@ def _one_line(value: Any) -> str:
 
 def from_ansible(event: Mapping[str, Any], secrets: Collection[str] = ()) -> Event | None:
     """The outcome one ansible-runner event reports, or None for an event that
-    is not a task's outcome on a machine."""
+    is not a playbook task's outcome on a machine."""
 
     outcome = _OUTCOMES.get(str(event.get("event", "")))
     data = event.get("event_data")
     if outcome is None or not isinstance(data, Mapping):
+        return None
+    if data.get("resolved_action") == ARGUMENT_CHECK and outcome != "failed":
         return None
     result = data.get("res")
     result = result if isinstance(result, Mapping) else {}

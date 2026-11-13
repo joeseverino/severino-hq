@@ -1,0 +1,22 @@
+{% comment %}
+A table of audit events, drawn by {% history_table label groups %}: each
+group (history.HistoryGroup) a tbody under its heading row where it has a
+label, and each of its lines with what it changed folded beneath it, every
+row drawn by the one row the audit log draws (_history_row.html). A group
+that starts folded away (`folds`) marks each of its rows as folded under its
+heading. Its headings are history.COLUMNS, without who did each where
+`hide_who` is set.
+{% endcomment %}
+{% table_region label room="shared" %}
+  <table class="data-table compact-table">
+    <thead><tr>{% for column in columns %}{% table_heading column.label css=column.css drop=column.drop gutter=forloop.first local_sort=True %}{% endfor %}</tr></thead>
+    {% for group in groups %}
+    <tbody>
+      {% if group.label %}{% row_group group.label group.count folds=group.folds %}{% endif %}
+      {% for event in group.lines %}{% for row in event.lines %}
+      <tr{% history_row_attributes row group.folds %}>{% include "partials/_history_row.html" %}</tr>
+      {% endfor %}{% endfor %}
+    </tbody>
+    {% endfor %}
+  </table>
+{% endtable_region %}

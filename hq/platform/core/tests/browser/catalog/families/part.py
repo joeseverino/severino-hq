@@ -609,7 +609,6 @@ _EXAMPLE_RUNS = (
         "Applying the example playbook.",
         RunEvidence(
             hosts=("example-01", "example-02"),
-            approved_by="example-owner",
             correlation="example-investigation-7",
             worker="example-automation-worker",
             lease_until=datetime(2026, 3, 2, 9, 35, tzinfo=UTC),
@@ -627,7 +626,6 @@ _EXAMPLE_RUNS = (
         "The example upgrade failed on one machine.",
         RunEvidence(
             hosts=(_LONG_HOST,),
-            approved_by="example-person-with-a-long-name@example.com",
             correlation="example-investigation-with-a-correlation-id-longer-than-a-phone-is-wide-0123456789",
             events=(
                 _event(

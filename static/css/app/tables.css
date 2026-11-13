@@ -121,6 +121,9 @@
 /* The table is as wide as its region, so the shares are of the region: a table of auto width grows until its field's own width is the fifth that is left. */
 .table-scroll.is-compare > .data-table { inline-size: 100%; }
 .table-scroll.is-compare > .data-table > tbody > tr > td[data-side] { inline-size: 40%; }
+/* Each side wraps at its words and nowhere inside one, so its words are its narrowest: a region too narrow for the table then lets its Status go to the row's line beneath (tables.js) rather than squeezing the two values to a letter wide. */
+.table-scroll.is-compare > .data-table > tbody > tr > td[data-side],
+.table-scroll.is-compare > .data-table > tbody > tr > td[data-side] .token { overflow-wrap: break-word; }
 /* A row that asks to be read first (`{% row_state emphasized=True %}`) is tinted, and its links weigh more, as an unread message does in a mail client. */
 .data-table > tbody > tr[data-emphasized] > * { background: var(--accent-tint); }
 .data-table > tbody > tr[data-emphasized] > * a:not(.btn) { font-weight: 650; }
@@ -208,6 +211,10 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 /* A row's actions (`{% row_actions %}`) end its line side by side, each with its middle on the middle of the row's first line, as the words beside it are set, however much taller than a line a button stands. `--row-line` carries the cell's line down to each control, whose own is its label's. */
 .data-table td.row-actions { --row-line: 1lh; text-align: right; white-space: nowrap; }
 .data-table td.row-actions > *, .data-table td.row-actions > [data-ask] > [data-ask-button] { translate: 0 calc(var(--row-line) / 2 - 50%); }
+/* A row's control (a compact button, as `{% row_actions %}` draws each, or an icon link) stands taller than the row's line by twice `--control-rise`, which its cell takes out of its padding above and below, so a row holding one is as tall as a row of words and the control's middle is still the line's. A row's controls that wrap stand a control apart, as they would anywhere. */
+.data-table :is(td.row-actions, tbody > tr > [data-kind="control"]):has(> :is(a, button, form, [role="button"])) { --control-rise: max(0px, (var(--control-compact) - var(--row-line)) / 2); padding-block-start: calc(var(--row-pad) - var(--control-rise)); }
+.data-table :is(td.row-actions, tbody > tr > [data-kind="control"]):has(> :is(a, button, form, [role="button"])):not(:has(> [data-ask])) { padding-block-end: calc(var(--row-pad) - var(--control-rise)); }
+.data-table :is(td.row-actions, tbody > tr > [data-kind="control"]):has(> :is(a, button, form, [role="button"])) > :is(a, button, form, [role="button"]) { vertical-align: top; translate: none; }
 .data-table td.row-actions > * + * { margin-inline-start: var(--space-4); }
 /* An ask's controls flow as words do in a cell (partials/_ask.html), so its own line there would break theirs and stand the next control under it. The cell keeps the line under all its controls instead, and what the ask says stands in it out of the flow, as wide as the cell and asking it for no width, so a press moves nothing. */
 .data-table td:has(> [data-ask]) { position: relative; padding-block-end: calc(var(--row-pad) + 1lh); }
@@ -300,8 +307,8 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 28px;
-  height: 28px;
+  min-width: var(--control-compact);
+  height: var(--control-compact);
   padding-inline: var(--space-3);
   white-space: nowrap;
   border: 1px solid var(--line);

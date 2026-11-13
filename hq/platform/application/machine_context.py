@@ -48,7 +48,7 @@ def sections_for(machine, *, principal: Principal) -> tuple[ServiceSection, ...]
     with projection_scope():
         for resolve in SECTIONS:
             section = resolve(machine, principal=principal) if resolve in _READ_BY else resolve(machine)
-            if section is not None and section.records:
+            if section is not None and section.count:
                 found.append(section)
     return tuple(found)
 
@@ -174,7 +174,7 @@ def _names(machine) -> ServiceSection | None:
     )
 
 
-def _activity(machine) -> ServiceSection | None:
+def _activity(machine, *, principal: Principal | None) -> ServiceSection | None:
     """What has recently happened to the things this machine holds.
 
     Audit entries name the object they changed, and the objects on a machine are
@@ -183,7 +183,7 @@ def _activity(machine) -> ServiceSection | None:
     "what changed".
     """
 
-    return recent_changes(list(machine.resources), what="What", limit=8)
+    return recent_changes(list(machine.resources), limit=8, principal=principal)
 
 
 def _runs(machine, *, principal: Principal | None) -> ServiceSection | None:
@@ -349,4 +349,4 @@ SECTIONS: tuple[Callable[..., ServiceSection | None], ...] = (
     _activity,
 )
 # The sections whose rows depend on who reads them, each handed the reader.
-_READ_BY = frozenset({_runs})
+_READ_BY = frozenset({_runs, _activity})

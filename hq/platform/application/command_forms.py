@@ -10,7 +10,7 @@ from django.core.validators import RegexValidator
 from django.utils.datastructures import MultiValueDict
 
 from .capabilities import CapabilitySpec
-from .command_fields import is_upload, named_records, referred
+from .command_fields import among_now, for_agents, is_upload, named_records, referred
 from .command_targets import CommandTargetOption
 from .describe import meanings
 from .forms import LinesField, UploadField
@@ -21,6 +21,9 @@ from .records import as_its_model_declares
 from .references import keeping_held, leave_off_unoffered
 from .ui import ended
 from .web_writes import RETRY_KEY_FIELD
+
+# What a choice of records offers when there are none to choose.
+NOTHING_TO_CHOOSE = "Nothing to choose from yet"
 
 
 class PrimitiveListField(LinesField):
@@ -129,10 +132,16 @@ def _record_choice(
 
     if effective.get("type") == "array":
         coerce = int if effective.get("items", {}).get("type") == "integer" else str
-        return forms.TypedMultipleChoiceField(choices=grouped_choices(offered), coerce=coerce, **options)
+        if not offered:
+            options["help_text"] = " ".join(part for part in (options["help_text"], ended(NOTHING_TO_CHOOSE)) if part)
+        # Every choice in sight at once, a box to each, as the form draws a
+        # group of choices (forms.css): a list box hides those past its edge.
+        return forms.TypedMultipleChoiceField(
+            choices=grouped_choices(offered), coerce=coerce, widget=forms.CheckboxSelectMultiple, **options
+        )
     empty = "Choose one…" if options["required"] else "None"
     if not offered:
-        empty = "Nothing to choose from yet"
+        empty = NOTHING_TO_CHOOSE
     return forms.TypedChoiceField(
         choices=(("", empty), *grouped_choices(offered)),
         coerce=int if effective.get("type") == "integer" else str,
@@ -381,16 +390,27 @@ def command_form_class(
     """
 
     schema = as_its_model_declares(spec.command_type, command_schema(spec.command_type))
-    # A command that keeps its retry key is handed the one key the form
-    # posts, which ``{% write_token %}`` draws (``web_writes``).
-    properties = {name: field for name, field in whole_fields(schema).items() if name != IDEMPOTENCY_FIELD}
     # What the command must be sent, which for an update is no field it keeps.
     required = frozenset(capability_schema(spec).get("required", ()))
+    agents_only = for_agents(spec.command_type)
+    if asked := sorted(agents_only & required):
+        raise ValueError(f"{spec.name} must be sent {', '.join(asked)}, so a person's form cannot leave it out.")
+    # A command that keeps its retry key is handed the one key the form
+    # posts, which ``{% write_token %}`` draws (``web_writes``).
+    properties = {
+        name: field
+        for name, field in whole_fields(schema).items()
+        if name != IDEMPOTENCY_FIELD and name not in agents_only
+    }
     offered = {
         name: (record_choices or {}).get(name)
         for name, field in properties.items()
         if named_records(field) is not None or referred(field) is not None
     }
+    for name, answer in among_now(spec.command_type).items():
+        if (listed := offered.get(name)) is not None:
+            allowed = frozenset(answer())
+            offered[name] = tuple(option for option in listed if option.value in allowed)
     nested: dict[str, tuple[tuple[str, bool], ...]] = {}
     fields = _own_controls(spec, schema, properties, required=required, offered=offered, nested=nested)
     if spec.target_kind:
@@ -399,7 +419,7 @@ def command_form_class(
             target_field = forms.IntegerField if spec.target_kind == "integer" else forms.CharField
             fields["__target"] = target_field(**options)
         else:
-            empty_label = "Choose one…" if target_options else "Nothing to choose from yet"
+            empty_label = "Choose one…" if target_options else NOTHING_TO_CHOOSE
             fields["__target"] = forms.ChoiceField(
                 choices=(("", empty_label), *grouped_choices(target_options)),
                 **options,

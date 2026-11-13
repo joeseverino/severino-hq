@@ -165,9 +165,10 @@ Every adopted playbook lists at `GET /v2/resources/playbooks/`: its id, the
 command that runs it (`automation.<id>.run`), its effect, and in `reachable`
 the machines a run of it may name now, the ones HQ's runner has a login to as
 the playbook needs. A read of one adds what its Run page states of it. The
-newest scan of the repository reads at `/v2/resources/playbook_scans/`: what
-HQ refuses in it, what adopting it widens, and whether it waits for a person,
-who adopts or rejects it in HQ; a token is refused both.
+newest scan of the repository reads at `/v2/resources/playbook_scans/`: each
+playbook it changes, what HQ refuses in it, what adopting it widens, and
+whether it waits for a person, who adopts or rejects each change or all of
+them in HQ; a token is refused both.
 
 A held call's `approval.id` reads where it stands at
 `GET /v2/resources/approvals/<id>/` (MCP: `get_resource` of `approvals`, or

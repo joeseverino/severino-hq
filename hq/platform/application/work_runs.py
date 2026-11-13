@@ -23,13 +23,16 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import OperationHost, OperationRequest, OperationState
 from hq.domains.jobs.models import HEARTBEAT_GRACE, Job, JobState
+lazy from hq.domains.jobs.runner import AUDIT_TYPE as JOB_AUDIT_TYPE
 
 from .asks import job_standing
 from .automation_runs import capability_name, resource_key, run_title
-from .resource_operations import operation_summary
+from .doors import NOBODY, Attribution
+from .resource_operations import asked_by, operation_summary
 from .routes import reverse
 lazy from .automation_adoption import playbook_titles
 lazy from .automation_sources import REFRESH, SOURCE_KEY, capability_specs
+lazy from .history import who_did
 lazy from .scheduled_work import job_names
 
 type Source = Literal["job", "run"]
@@ -86,19 +89,18 @@ _LISTED = (OperationRequest.Action.RUN, OperationRequest.Action.SCAN)
 @dataclass(frozen=True, slots=True)
 class RunEvidence:
     """What a run of automation shows for itself (``partials/_run_evidence.html``):
-    its machines, who agreed to it, its asker's correlation id, the worker
-    holding it and until when while it is claimed, and its tasks' outcomes
-    (each a ``RunEvent`` with its ``tone``)."""
+    its machines, its asker's correlation id, the worker holding it and until
+    when while it is claimed, and its tasks' outcomes (each a ``RunEvent``
+    with its ``tone``)."""
 
     hosts: tuple[str, ...] = ()
-    approved_by: str = ""
     correlation: str = ""
     worker: str = ""
     lease_until: datetime | None = None
     events: tuple[dict[str, Any], ...] = ()
 
     def __bool__(self) -> bool:
-        return bool(self.hosts or self.approved_by or self.correlation or self.worker or self.events)
+        return bool(self.hosts or self.correlation or self.worker or self.events)
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,7 +119,8 @@ class WorkRun:
     tone: str
     # What it is doing or how it ended, in a sentence.
     note: str
-    by: str
+    # Who asked for it, through which door, and who approved it, from its audit row.
+    by: Attribution
     created_at: datetime
     started: datetime | None
     finished: datetime | None
@@ -365,7 +368,7 @@ def playbook_runs(
     now: datetime | None = None,
 ) -> QuerySet:
     """The runs of a playbook that match, never a scan, each annotated with
-    how it is seen and what it is called, for ``run_row``.
+    how it is seen and what it is called, for ``run_rows``.
 
     ``playbook`` is a procedure's id, ``host`` a machine's canonical name,
     ``correlation`` the id its asker sent, and ``state`` a ``JobState`` value
@@ -388,10 +391,17 @@ def playbook_runs(
     return found
 
 
-def run_row(operation: OperationRequest, now: datetime | None = None) -> WorkRun:
-    """A run read through ``playbook_runs`` as the row every list of work draws."""
+def run_rows(operations: Iterable[OperationRequest], now: datetime | None = None) -> list[WorkRun]:
+    """Runs read through ``playbook_runs`` as the row every list of work
+    draws, who asked for each read in one query."""
 
-    return _run_row(operation, JobState(operation.seen), operation.title, now or timezone.now())
+    found = list(operations)
+    who = asked_by(found)
+    now = now or timezone.now()
+    return [
+        _run_row(operation, JobState(operation.seen), operation.title, now, who.get(str(operation.pk), NOBODY))
+        for operation in found
+    ]
 
 
 def run_of(operation_id: str, now: datetime | None = None) -> tuple[WorkRun, OperationRequest] | None:
@@ -407,7 +417,8 @@ def run_of(operation_id: str, now: datetime | None = None) -> tuple[WorkRun, Ope
     )
     if found is None:
         return None
-    return _run_row(found, JobState(found.seen), found.title, now), found
+    who = asked_by((found,)).get(str(found.pk), NOBODY)
+    return _run_row(found, JobState(found.seen), found.title, now, who), found
 
 
 def run_url(operation_id: str) -> str:
@@ -429,19 +440,22 @@ def hydrated(rows: Iterable[Sequence[Any]]) -> list[WorkRun]:
     ids: dict[str, list[Any]] = {JOB: [], RUN: []}
     for source, pk, *_rest in page:
         ids[source].append(pk)
-    jobs = Job.objects.select_related("requested_by").in_bulk(ids[JOB]) if ids[JOB] else {}
+    jobs = Job.objects.in_bulk(ids[JOB]) if ids[JOB] else {}
     runs = OperationRequest.objects.select_related("resource").in_bulk(ids[RUN]) if ids[RUN] else {}
+    # Who started each, from the audit row each wrote first.
+    who = {**who_did((JOB_AUDIT_TYPE,), ids[JOB]), **asked_by(runs.values())}
     now = timezone.now()
     built: list[WorkRun] = []
     for source, pk, seen, _created, title, _lead in page:
+        by = who.get(str(pk), NOBODY)
         if source == JOB:
-            built.append(_job_row(jobs[pk], title))
+            built.append(_job_row(jobs[pk], title, by))
         else:
-            built.append(_run_row(runs[pk], JobState(seen), title, now))
+            built.append(_run_row(runs[pk], JobState(seen), title, now, by))
     return built
 
 
-def _job_row(job: Job, title: str) -> WorkRun:
+def _job_row(job: Job, title: str, by: Attribution) -> WorkRun:
     standing = job_standing(job)
     return WorkRun(
         source=JOB,
@@ -452,7 +466,7 @@ def _job_row(job: Job, title: str) -> WorkRun:
         word=standing.label,
         tone=TONES[JobState(job.seen_state)],
         note=standing.note,
-        by=job.requested_by.get_username() if job.requested_by else "",
+        by=by,
         created_at=job.created_at,
         started=job.started_at,
         finished=job.finished_at,
@@ -460,8 +474,8 @@ def _job_row(job: Job, title: str) -> WorkRun:
     )
 
 
-def _run_row(operation: OperationRequest, seen: JobState, title: str, now: datetime) -> WorkRun:
-    summary = operation_summary(operation)
+def _run_row(operation: OperationRequest, seen: JobState, title: str, now: datetime, by: Attribution) -> WorkRun:
+    summary = operation_summary(operation, by)
     asked = operation.input or {}
     scan = operation.action == OperationRequest.Action.SCAN
     procedure = str(asked.get("operation") or "")
@@ -479,7 +493,7 @@ def _run_row(operation: OperationRequest, seen: JobState, title: str, now: datet
         tone=summary["tone"] if seen == JobState.SUCCEEDED else TONES[seen],
         # A run not yet ended says only its state, in the State column.
         note=LAPSED if lapsed else "" if operation.state in _UNENDED else summary["headline"],
-        by=summary["by"],
+        by=by,
         created_at=operation.created_at,
         started=started,
         finished=finished,
@@ -487,7 +501,6 @@ def _run_row(operation: OperationRequest, seen: JobState, title: str, now: datet
         duration=_seconds(started, finished or (operation.lease_expires_at if lapsed else now)),
         evidence=RunEvidence(
             hosts=tuple(asked.get("hosts") or ()),
-            approved_by=summary["approved_by"],
             correlation=str(asked.get("correlation") or ""),
             worker=operation.claimed_by if claimed else "",
             lease_until=operation.lease_expires_at if claimed else None,

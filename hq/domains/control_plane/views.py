@@ -9,8 +9,10 @@ from django.views import View
 from django.views.generic import DetailView, ListView
 
 from hq.platform.application.action_links import READ_NOW_CAPABILITY, command_url
+from hq.platform.application.approval_review import asked_by
 from hq.platform.application.approvals import DESTRUCTIVE_EFFECT
 from hq.platform.application.capabilities import capability_registry, capability_words
+from hq.platform.application.doors import NOBODY
 from hq.platform.application.entity_links import kind_label, record_name, web_url
 from hq.platform.application.infrastructure import (
     declared_machines,
@@ -44,9 +46,9 @@ from hq.platform.application.resource_context import (
 from hq.platform.application.resource_operations import (
     ACTION_CAPABILITY,
     HISTORY_WINDOW,
+    asked_by as operations_asked_by,
     changes,
     operation_summary,
-    requested_by,
     resource_history,
     supervision,
 )
@@ -267,15 +269,17 @@ class InfrastructureListView(PageMixin, ListView):
             # The name the row's link shows, and the line under it.
             resource.shown_name = record_name(resource.kind, resource.spec, resource.key)
             resource.summary = record_summary(resource, resource.shown_name)
+        listed = changes(OperationRequest.objects.select_related("resource")[:HISTORY_WINDOW], 12)
+        who = operations_asked_by(listed)
         context["changes"] = [
             {
                 "resource": operation.resource.key,
                 "action": operation.get_action_display(),
-                "summary": operation_summary(operation),
-                "by": requested_by(operation),
+                "summary": (summary := operation_summary(operation, who.get(str(operation.pk), NOBODY))),
+                "by": summary["by"],
                 "at": operation.created_at,
             }
-            for operation in changes(OperationRequest.objects.select_related("resource")[:HISTORY_WINDOW], 12)
+            for operation in listed
         ]
         context["provider_catalog"] = describe_providers()
         context["records"] = record_list(
@@ -487,7 +491,9 @@ class InfrastructureDetailView(PageMixin, DetailView):
         context["removal_pending"] = capabilities.removal_pending
         # A change a credential asked for that nobody has answered, said on the
         # page an operator opens when a declaration has not moved.
-        context["awaiting_approval"] = derived.awaiting_approval
+        # Each said as who asked for it, from the audit row that opened it.
+        asked = asked_by(derived.awaiting_approval)
+        context["awaiting_approval"] = tuple(asked.get(str(held.pk), NOBODY) for held in derived.awaiting_approval)
         # Nothing for a container: its panel is the sweep's answer and a
         # container declares identity and nothing else.
         context["readout_rows"] = (

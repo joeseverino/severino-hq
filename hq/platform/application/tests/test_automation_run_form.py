@@ -76,6 +76,36 @@ class RunFormTests(TestCase):
         self.assertFalse(form.is_valid())
         self.assertIn("hosts", form.errors)
 
+    def test_hosts_offer_only_the_machines_the_worker_reaches_as_the_procedure_s_profile(self):
+        self.supply(manifest(privilege="example.service_admin"))
+        self.supply.reach((APP, "example.service_admin"), (DB, "read"))
+
+        self.assertEqual(self.offered(), [APP])
+        form = self.form_class()({"hosts": [DB], "parameters.service": "web", **CONFIRMED})
+        self.assertFalse(form.is_valid())
+        self.assertIn("hosts", form.errors)
+
+    def test_hosts_are_a_box_to_each_machine_all_in_sight(self):
+        drawn = str(self.form_class()()["hosts"])
+
+        self.assertEqual(drawn.count('type="checkbox"'), 3)
+        self.assertNotIn("<select", drawn)
+
+    def test_a_worker_that_reaches_nothing_offers_nothing_and_says_so(self):
+        self.supply.reach()
+
+        field = self.form_class().base_fields["hosts"]
+        self.assertEqual(list(field.choices), [])
+        self.assertIn("Nothing to choose from yet", field.help_text)
+
+    def test_an_agent_s_correlation_is_never_asked_of_a_person(self):
+        form_class = self.form_class()
+
+        self.assertNotIn("correlation", form_class.base_fields)
+        form = form_class({"hosts": [APP], "parameters.service": "web", "correlation": "example-7", **CONFIRMED})
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertNotIn("correlation", form.command_payload)
+
     def test_a_procedure_written_for_no_machine_offers_none(self):
         self.supply(manifest(target_kinds=("example.appliance",)))
 

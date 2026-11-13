@@ -25,7 +25,7 @@ from .resource_records import AskedAt
 from .resources import BoundedQuery, one_of
 from .security import Capability
 from .ui import ended
-from .work_runs import WorkRun, operation_of, playbook_runs, run_row
+from .work_runs import WorkRun, operation_of, playbook_runs, run_rows
 
 RUNS = "runs"
 
@@ -55,7 +55,7 @@ class RunRow(TypedDict):
     state_label: Annotated[str, Describe("That state in the words HQ's pages say it in.")]
     headline: Annotated[str, Describe("What it is doing or how it ended, in a sentence.")]
     hosts: Annotated[list[str], Describe("The machines it acts on, each by its name in HQ.")]
-    by: Annotated[str, Describe("Who asked for it, as Jobs names them.")]
+    by: Annotated[str, Describe("Who asked for it, through which door, and who approved it, as Jobs names them.")]
     approved_by: Annotated[str, Describe("Who approved it; empty for a run that needed no approval.")]
     correlation: Annotated[str, Describe("The correlation id its asker sent; empty when it sent none.")]
     created_at: AskedAt
@@ -123,8 +123,8 @@ def _row(run: WorkRun) -> dict[str, Any]:
         "state_label": run.word,
         "headline": run.note,
         "hosts": list(run.evidence.hosts),
-        "by": run.by,
-        "approved_by": run.evidence.approved_by,
+        "by": run.by.words,
+        "approved_by": run.by.approved_by,
         "correlation": run.evidence.correlation,
         "created_at": iso(run.created_at),
         "started_at": iso(run.started),
@@ -159,7 +159,7 @@ def list_runs(
         playbook=playbook or "", host=machine or "", correlation=correlation or "", state=(state,) if state else ()
     )
     page = keyset_page(found, _ORDER, limit)
-    return {**page, "items": [_row(run_row(operation)) for operation in page["items"]]}
+    return {**page, "items": [_row(run) for run in run_rows(page["items"])]}
 
 
 def get_run(run_id: str) -> dict[str, Any]:
@@ -171,7 +171,7 @@ def get_run(run_id: str) -> dict[str, Any]:
         operation = None
     if operation is None:
         raise RecordNotFound("No run of a playbook has that id.")
-    return _record(run_row(operation))
+    return _record(run_rows((operation,))[0])
 
 
 def resources() -> tuple[ResourceSpec, ...]:

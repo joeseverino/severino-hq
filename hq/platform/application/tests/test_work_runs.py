@@ -17,6 +17,7 @@ from hq.platform.core.tests.estate_sizes import at_both_sizes
 
 from ..capabilities import run_capability
 from ..controller import ControllerReport, claim_next_operation, report_operation
+from ..doors import NOBODY
 from ..resource_operations import operation_summary
 from ..security import Capability, Principal
 from ..work_runs import (
@@ -100,8 +101,8 @@ class OneListTests(WorkRunsTestCase):
 
         (row,) = self.listed()
 
-        summary = operation_summary(run)
-        self.assertEqual((row.by, row.evidence.approved_by, row.note), (summary["by"], summary["approved_by"], "Done."))
+        summary = operation_summary(run, row.by)
+        self.assertEqual((row.by.words, row.by.approved_by, row.note), (summary["by"], summary["approved_by"], "Done."))
         self.assertEqual((row.word, row.tone), (JobState.SUCCEEDED.label, TONES[JobState.SUCCEEDED]))
         self.assertEqual(row.evidence.hosts, (APP, DB))
         self.assertEqual(row.evidence.correlation, "example-investigation-7")
@@ -115,7 +116,7 @@ class OneListTests(WorkRunsTestCase):
 
         (row,) = self.listed()
 
-        self.assertEqual((row.id, row.evidence.approved_by), (str(run.pk), APPROVER))
+        self.assertEqual((row.id, row.by.approved_by), (str(run.pk), APPROVER))
 
     def test_a_job_s_row_is_its_standing(self):
         from ..asks import job_standing
@@ -155,17 +156,17 @@ class SameWordsTests(WorkRunsTestCase):
         """``TONES`` and ``operation_summary`` give a run in each plain state one tone."""
 
         run = self.run_of(APP)
-        self.assertEqual(operation_summary(run)["tone"], TONES[JobState.QUEUED])
-        self.assertEqual(operation_summary(self.claimed(run))["tone"], TONES[JobState.RUNNING])
+        self.assertEqual(operation_summary(run, NOBODY)["tone"], TONES[JobState.QUEUED])
+        self.assertEqual(operation_summary(self.claimed(run), NOBODY)["tone"], TONES[JobState.RUNNING])
         report_operation(
             str(run.pk),
             ControllerReport(success=True, observed_generation=run.input["generation"], message="Done."),
             controller_id=WORKER,
         )
         run.refresh_from_db()
-        self.assertEqual(operation_summary(run)["tone"], TONES[JobState.SUCCEEDED])
+        self.assertEqual(operation_summary(run, NOBODY)["tone"], TONES[JobState.SUCCEEDED])
         failed = self.reported(self.run_of(DB, name=f"automation.{LOGS}.run"), success=False)
-        self.assertEqual(operation_summary(failed)["tone"], TONES[JobState.FAILED])
+        self.assertEqual(operation_summary(failed, NOBODY)["tone"], TONES[JobState.FAILED])
 
     def test_a_run_not_yet_ended_says_only_its_state(self):
         """Its State column says Waiting or Running; its Result has nothing yet."""

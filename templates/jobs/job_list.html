@@ -25,6 +25,6 @@ cancel it.
     {{ row.note|or_empty }}
     {% run_evidence row.evidence %}
   </td>
-  <td>{{ row.by|or_empty }}</td>
+  <td>{% if row.by %}{% cell_line row.by.words lines=1 %}{% else %}{{ row.by.words|or_empty }}{% endif %}</td>
   {% row_actions row.actions %}
 {% endblock %}

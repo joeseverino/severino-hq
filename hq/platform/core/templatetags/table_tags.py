@@ -21,10 +21,11 @@ from django import template
 from django.template.base import token_kwargs
 from django.template.loader import render_to_string
 from django.utils.html import escape, format_html
-from django.utils.safestring import mark_safe
+from django.utils.safestring import SafeString, mark_safe
 from django.utils.text import slugify
 
-from hq.platform.application.tables import check_drop, column_kind
+from hq.platform.application.page_parts import html_attributes
+from hq.platform.application.tables import TableColumn, check_drop, column_kind, ranked
 from hq.platform.core.table_cells import (
     SAYS_NOTHING,
     Cells,
@@ -33,6 +34,7 @@ from hq.platform.core.table_cells import (
     Position,
     Span,
 )
+lazy from hq.platform.application import history
 
 register = template.Library()
 
@@ -396,6 +398,40 @@ def row_group(
     record do more, whose words beside its name say why."""
 
     return {"label": label, "count": count, "folds": folds, "href": href, "attention": attention}
+
+
+@register.inclusion_tag("partials/_history_table.html", takes_context=True)
+def history_table(context: Any, label: str, groups: Any, *, hide_who: bool = False) -> dict[str, Any]:
+    """A table of audit events, each drawn by the row the audit log draws
+    (``partials/_history_row.html``): ``groups`` is a sequence of
+    ``history.HistoryGroup``. ``hide_who`` leaves out who did each, for a
+    reader who may not read the audit log."""
+
+    columns = ranked(
+        tuple(
+            TableColumn(heading, css=css)
+            for heading, css in history.COLUMNS
+            if not (hide_who and heading == history.WHO)
+        )
+    )
+    return {
+        "request": context.get("request"),
+        "label": label,
+        "groups": groups,
+        "columns": columns,
+        "hide_who": hide_who,
+    }
+
+
+@register.simple_tag
+def history_row_attributes(row: Any, folds: str = "") -> SafeString:
+    """The ``tr`` attributes of a line of history (``_history_row.html``): a
+    row in a group folded away (``folds``), or under its event, is folded
+    under it; an event that changed things holds the fold."""
+
+    if folds or row.under:
+        return html_attributes({"data-folded": folds or row.under})
+    return html_attributes({"id": row.fold, "data-folds": True}) if row.grouped else SafeString("")
 
 
 @register.inclusion_tag("partials/_row_actions.html")

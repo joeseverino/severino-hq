@@ -11,7 +11,7 @@ nothing in this template knows which fields those are.
   {% if field.widget_type == "checkbox" %}
     <label class="check-row">{{ field }} <span>{{ field.label|breakable }}{% if field.field.required %}&nbsp;*{% endif %}</span></label>
   {% else %}
-    <label for="{{ field.id_for_label }}"{% if field.auto_id %} id="{{ field.auto_id }}_label"{% endif %}>{{ field.label|breakable }}{% if field.field.required %}&nbsp;*{% endif %}</label>
+    <label{% if field.id_for_label %} for="{{ field.id_for_label }}"{% endif %}{% if field.auto_id %} id="{{ field.auto_id }}_label"{% endif %}>{{ field.label|breakable }}{% if field.field.required %}&nbsp;*{% endif %}</label>
     {{ field }}
   {% endif %}
   {% if field.help_text %}<p class="help"{% if field.auto_id %} id="{{ field.auto_id }}_helptext"{% endif %}>{{ field.help_text|breakable }}</p>{% endif %}

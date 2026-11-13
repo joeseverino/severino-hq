@@ -89,13 +89,6 @@ it is not blocked, since removal never lifts a block.
                 {% if standing.in_force %}<p>Permissions: {% for name in standing.in_force %}<code>{{ name|breakable }}</code> {% endfor %}</p>{% endif %}
                 {% if standing.beyond_role %}<p>Granted, but beyond {{ identity.person.get_username|breakable }}'s role: {% for name in standing.beyond_role %}<code>{{ name|breakable }}</code> {% endfor %}</p>{% endif %}
                 {% if standing.missing %}<p data-missing>Not granted: {% for name in standing.missing %}<code>{{ name|breakable }}</code> {% endfor %}</p><p data-missing>Grant {% if standing.missing|length == 1 %}it{% else %}them{% endif %} to <code>{{ identity.client_id|breakable }}</code> in your sign-in service, then sign it in again. {% entity client_setup|outside label="Client setup" %}</p>{% endif %}
-                {% if activity.latest %}
-                  {% stack_list data_label="Latest" %}
-                    {% for event in activity.latest %}
-                      <li class="prose"{% if event.action == "denied" %} data-refused{% endif %}><a href="{{ event.get_absolute_url }}">{{ event.summary|breakable }}</a>{% if event.metadata.count > 1 %} <span class="muted">{{ event.metadata.count|counted:"time" }}</span>{% endif %} <span class="muted">{{ event.created_at|when:"ago" }}</span></li>
-                    {% endfor %}
-                  {% endstack_list %}
-                {% endif %}
               </div>
             </th>
             <td data-sort="{{ standing.in_force|length }}">{{ standing.in_force|length|breakable }} of {{ identity.granted|length|breakable }}{% if standing.beyond_role %}<br><span class="muted">{{ standing.beyond_role|length|breakable }} beyond its person's role</span>{% endif %}{% if standing.missing %}<br>{% status standing.missing|length "not granted" tone="attention" pill=False %}{% endif %}</td>
@@ -124,6 +117,16 @@ and the client is the finest unit (agent_devices.placement_posture).
 {% endif %}
 {% endsection %}
 {% endwith %}{% endwith %}
+
+{% comment %}
+Each agent's latest events over the same window, under its name, each drawn
+as the audit log draws its rows.
+{% endcomment %}
+{% if agent_events %}
+{% section "Latest events" id="agent-events" %}
+  {% history_table "Latest events" agent_events %}
+{% endsection %}
+{% endif %}
 
 {% comment %}
 The one copy of the steps for adding an agent. docs/API.md links here, and

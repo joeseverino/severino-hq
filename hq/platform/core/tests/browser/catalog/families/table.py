@@ -49,6 +49,15 @@ ENTRIES = {
         "<tr><td><strong>example-02</strong></td><td>Another example note</td></tr></tbody></table>"
         "{% endtable_region %}{% endsection %}"
     ),
+    # A fact on one line ({% cell_line lines=1 %}), as Jobs says who asked for
+    # each run; a cut of one is measured, and opened, by tables.js.
+    "table/one-line": Entry(
+        '{% section "Example runs" %}{% table_region "Example runs" %}<table class="data-table"><thead><tr>'
+        '{% table_heading "Run" "identifier" gutter=True %}{% table_heading "Asked by" %}</tr></thead><tbody>'
+        '<tr><td><strong>example-01</strong></td><td>{% cell_line "example-owner, on the web" lines=1 %}</td></tr>'
+        '<tr><td><strong>example-02</strong></td><td>{% cell_line "example-agent, over MCP" lines=1 %}</td></tr>'
+        "</tbody></table>{% endtable_region %}{% endsection %}"
+    ),
     # A row's actions ({% row_actions %}): a POST and a destructive link side
     # by side, a link alone, one refused, and a row whose note takes several
     # lines, each set on its row's first line.

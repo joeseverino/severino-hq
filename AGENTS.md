@@ -212,7 +212,8 @@ shows also needs `mise run dev:look` on each page its templates draw.
 
 The whole-tree runs belong to the branch the work lands on. A change to what
 pages draw is followed there by `mise run dev:look --rule survey all` in
-WebKit and in Chromium (`--engine`), since a shared sheet or part reaches pages the change never named.
+WebKit and in Chromium (`--engine`), since a shared sheet or part reaches
+pages the change never named.
 The browser suite and the release check run once before the branch ships.
 
 That branch is ready when `mise run check --release` exits 0, or

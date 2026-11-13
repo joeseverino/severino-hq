@@ -127,9 +127,14 @@ class AdoptionTestCase(RefreshTestCase):
         self.assertEqual(answer.status, 200, answer.body)
         return OperationRequest.objects.get(pk=claimed["operation"]["id"]).result["proposal"]
 
-    def adopt(self, proposal: int, principal: Principal = OPERATOR, key: str = "example-adopt") -> dict[str, Any]:
+    def adopt(
+        self, proposal: int, principal: Principal = OPERATOR, key: str = "example-adopt", playbook: str = ""
+    ) -> dict[str, Any]:
+        named = {"playbook": playbook} if playbook else {}
         with self.captureOnCommitCallbacks(execute=True):
-            return run_capability(ADOPT, {"proposal": proposal}, principal=principal, idempotency_key=key).answer
+            return run_capability(
+                ADOPT, {"proposal": proposal, **named}, principal=principal, idempotency_key=key
+            ).answer
 
     def adopted(self) -> list[str]:
         from hq.domains.control_plane.models import AdoptedCatalog
@@ -377,6 +382,136 @@ class RejectTests(AdoptionTestCase):
 
         self.assertEqual(self.reject(adopted)["error"]["code"], "precondition")
         self.assertEqual(self.reject(adopted, READER, key="example-reader")["error"]["code"], "forbidden")
+
+
+def sharing(name: str, role: str = "common") -> dict[str, Any]:
+    """A procedure whose one role is ``role``, which another procedure may run too."""
+
+    found = procedure(name)
+    found["roles"][0]["role"] = role
+    return found
+
+
+class PlaybookByPlaybookTests(AdoptionTestCase):
+    """A person adopts or rejects each playbook a scan changes on its own:
+    each adopted playbook runs from the commit it was adopted from, and the
+    rest stay as adopted."""
+
+    ROLE = "roles/common/tasks/main.yml"
+
+    def reject(self, proposal: int, playbook: str, key: str = "example-reject") -> dict[str, Any]:
+        payload = {"proposal": proposal, "playbook": playbook}
+        return run_capability(REJECT, payload, principal=OPERATOR, idempotency_key=key).answer
+
+    def pinned(self) -> dict[str, Any]:
+        from ..automation_adoption import procedures
+
+        return {found.id: found for found in procedures()}
+
+    def waiting(self, proposal: int) -> dict[str, str]:
+        from ..automation_adoption import judged
+
+        return {change.key: change.change for change in judged(proposal).changes}
+
+    def asked_at(self, playbook: str) -> str:
+        """The commit a run of ``playbook`` asked now hands the worker."""
+
+        machines = patch("hq.platform.application.automation_runs.machine_catalog", return_value=(Machine(APP),))
+        with machines:
+            answer = run_capability(
+                f"automation.example.{playbook}.run",
+                {"hosts": [APP], "parameters": {}},
+                principal=OPERATOR,
+                idempotency_key=f"example-run-{playbook}",
+            ).answer
+        self.assertTrue(answer.get("queued"), answer)
+        return OperationRequest.objects.get(pk=answer["operation"]["id"]).input["revision"]
+
+    def test_a_shared_role_changed_in_a_newer_commit_reaches_only_the_playbook_adopted_from_it(self):
+        from ..automation_runs import operation_registry
+
+        self.adopt(self.proposed(catalog(sharing("check"), sharing("other"))))
+        newer = self.proposed(catalog(sharing("check"), sharing("other"), revision=SECOND, changed=self.ROLE))
+        self.assertEqual(self.waiting(newer), {"example.check": "changed", "example.other": "changed"})
+
+        answer = self.adopt(newer, key="example-adopt-check", playbook="example.check")
+
+        self.assertTrue(answer["adopted"], answer)
+        self.assertTrue(answer["widened"], "its new role files are said")
+        self.assertFalse([said for said in answer["widened"] if not said.startswith("The check procedure ")])
+        pinned = self.pinned()
+        self.assertEqual(
+            (pinned["example.check"].revision, pinned["example.check"].files[self.ROLE]), (SECOND, "b" * 40)
+        )
+        self.assertEqual(
+            (pinned["example.other"].revision, pinned["example.other"].files[self.ROLE]), (FIRST, "a" * 40)
+        )
+        self.assertEqual(operation_registry()["example.check"].revision, SECOND)
+        self.assertEqual(
+            self.asked_at("other"), FIRST, "the worker checks out the commit the playbook was adopted from"
+        )
+        self.assertEqual(self.waiting(newer), {"example.other": "changed"})
+
+    def test_a_rejected_playbook_stays_as_adopted_and_adopting_all_leaves_it(self):
+        from ..automation_sources import standing
+
+        self.adopt(self.proposed(catalog(sharing("check"), sharing("other"))))
+        newer = self.proposed(catalog(sharing("check"), sharing("other"), revision=SECOND, changed=self.ROLE))
+
+        self.assertTrue(self.reject(newer, "example.other")["rejected"])
+        self.assertFalse(self.reject(newer, "example.other", key="example-reject-again")["rejected"])
+        refused = self.adopt(newer, key="example-adopt-other", playbook="example.other")
+        self.assertEqual(refused["error"]["code"], "precondition", refused)
+
+        self.assertEqual(self.waiting(newer), {"example.check": "changed"})
+        self.adopt(newer, key="example-adopt-rest")
+        self.assertEqual(
+            {key: found.revision for key, found in self.pinned().items()},
+            {
+                "example.check": SECOND,
+                "example.other": FIRST,
+            },
+        )
+        self.assertIsNone(standing().pending, "nothing of it waits")
+
+    def test_adopting_a_removed_playbook_removes_it_and_leaves_the_rest(self):
+        self.adopt(self.proposed(catalog(procedure("check"), procedure("other"))))
+        newer = self.proposed(catalog(procedure("check"), revision=SECOND))
+        self.assertEqual(self.waiting(newer), {"example.other": "removed"})
+
+        self.adopt(newer, key="example-adopt-removal", playbook="example.other")
+
+        self.assertEqual({key: found.revision for key, found in self.pinned().items()}, {"example.check": FIRST})
+        self.assertNotIn("automation.example.other.run", capability_registry())
+
+    def test_a_playbook_hq_cannot_run_is_refused_alone_and_the_one_beside_it_is_adopted(self):
+        self.adopt(self.proposed(catalog(procedure("check"))))
+        unbounded = procedure("check")
+        unbounded["roles"][0]["argument_spec"]["options"]["service"] = {"type": "dict"}
+        newer = self.proposed(catalog(unbounded, procedure("fresh"), revision=SECOND))
+
+        every = self.adopt(newer, key="example-adopt-all")
+        alone = self.adopt(newer, key="example-adopt-check", playbook="example.check")
+        fresh = self.adopt(newer, key="example-adopt-fresh", playbook="example.fresh")
+
+        self.assertIn("playbooks/check.hq.yml", " ".join(every["error"]["details"]["refused"]))
+        self.assertIn("playbooks/check.hq.yml", " ".join(alone["error"]["details"]["refused"]))
+        self.assertTrue(fresh["adopted"], fresh)
+        self.assertEqual(
+            {key: found.revision for key, found in self.pinned().items()},
+            {
+                "example.check": FIRST,
+                "example.fresh": SECOND,
+            },
+        )
+
+    def test_a_playbook_the_scan_does_not_hold_is_not_found(self):
+        newer = self.proposed(catalog(procedure("check")))
+
+        answer = self.adopt(newer, playbook="example.missing")
+
+        self.assertEqual(answer["error"]["code"], "not_found", answer)
+        self.assertEqual(self.adopted(), [])
 
 
 class StaleRunTests(AdoptionTestCase):

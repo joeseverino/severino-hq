@@ -9,7 +9,7 @@ it was first seen. Read only from what is already stored; nothing here polls.
 
 from collections import Counter
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from hashlib import blake2s
 from typing import Any
@@ -39,6 +39,7 @@ lazy from hq.platform.core.audit import ROUTINE_EVENTS, audited_labels
 lazy from hq.platform.core.audit_words import words_of
 lazy from hq.platform.core.models import AuditLog, object_type_label, object_type_plural
 
+from .doors import Attribution
 from .entity_links import container_link
 from .facts import inventory_records
 from .labels import lower_first, plural
@@ -69,6 +70,12 @@ RUN = timedelta(minutes=15)
 # The id of the list on an event's page that holds every other row of its
 # operation, which the row counting what a fold leaves out opens.
 OPERATION_LIST = "rest-of-operation"
+
+# The columns of every table of history (``partials/_history_table.html``),
+# the audit log's among them: each heading and its column's css. ``WHO`` is
+# the column a reader who may not read the audit log is not shown.
+COLUMNS = (("Type", ""), ("Time", "date-col key-col"), ("User", "optional-col"), ("Action", ""), ("Message", ""))
+WHO = "User"
 
 # Where an entry was recorded, as the audit page filters by it.
 THROUGH_HQ = "hq"
@@ -328,27 +335,12 @@ class HistoryLine:
         return head.type_label if head is not None and head.object_repr else ""
 
     @property
-    def actor(self) -> str:
-        """Whoever started it: the actor of its first row."""
+    def who(self) -> Attribution:
+        """Whoever started it (its first row's), and who approved it where any row names someone else."""
 
-        return self.events[-1].actor_label
-
-    @property
-    def approved_by(self) -> str:
-        """Who allowed it, when someone other than its actor did (``metadata.approved_by``)."""
-
-        for event in self.events:
-            approver = str((event.metadata or {}).get("approved_by") or "")
-            if approver:
-                return "" if approver == self.actor else approver
-        return ""
-
-    @property
-    def who(self) -> str:
-        """Its actor, and who decided it where that was someone else: "claude-code, approved by joe"."""
-
-        approver = self.approved_by
-        return f"{self.actor}, approved by {approver}" if approver else self.actor
+        first = self.events[-1].who
+        approver = next((each.who.approved_by for each in self.events if each.who.approved_by), "")
+        return replace(first, approved_by=approver) if approver else first
 
     @property
     def action(self) -> str:
@@ -377,6 +369,18 @@ class HistoryLine:
             else counted(count, "event")
             for kind, count in self.counts
         )
+
+
+@dataclass(frozen=True, slots=True)
+class HistoryGroup:
+    """Lines of history under one heading of a table's rows, ``count`` of
+    them in all; ``folds`` is the row they start folded away under. A group
+    with no label is a table's only one."""
+
+    lines: tuple[HistoryLine, ...]
+    label: str = ""
+    count: int = 0
+    folds: str = ""
 
 
 def moments(*, since: datetime, until: datetime | None = None, limit: int = 200) -> tuple[Moment, ...]:
@@ -529,6 +533,29 @@ def recent(*, limit: int, reads: bool = False, quiet: bool = False) -> list[Hist
     return entries(page, within=rows)
 
 
+def who_did(object_types: Iterable[str], ids: Iterable[object], *, action: str = "") -> dict[str, Attribution]:
+    """Who did each act on the records ``ids`` name, of any of ``object_types``,
+    by id: the attribution of each record's first audit row (of ``action``,
+    given one), read in one query. A record no row is about is left out.
+
+    The act is written once, as its audit row; every page and read that says
+    who made a record says it from here rather than from a copy the record
+    keeps of its own.
+    """
+
+    wanted = {str(each) for each in ids}
+    rows = AuditLog.objects.filter(object_type__in=tuple(object_types))
+    # Asked about no record it still asks, so a page costs the same whether
+    # it names none or many.
+    rows = rows.filter(object_id__in=wanted) if wanted else rows.filter(pk__lt=0)
+    if action:
+        rows = rows.filter(action=action)
+    first = rows.annotate(
+        place=Window(RowNumber(), partition_by=F("object_id"), order_by=(F("created_at").asc(), F("pk").asc()))
+    ).filter(place=1)
+    return {row.object_id: row.who for row in first.select_related("user")}
+
+
 def changes(since: datetime, until: datetime):
     """The audit rows that changed something, as the history counts them."""
 
@@ -548,7 +575,7 @@ def _recorded(since: datetime, until: datetime) -> list[Moment]:
             event.created_at,
             "HQ",
             f"{event.get_action_display()} {event.object_repr or event.type_label}".strip(),
-            detail=event.actor_label,
+            detail=event.who.words,
         )
         for event in events
     ]

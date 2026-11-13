@@ -280,6 +280,9 @@
   /* Every square control in the header bar (the collapsed search button and
      the sections toggle), sized once so the two cannot drift apart. */
   --control-size: 34px;
+  /* A compact control's height (.btn.compact, .icon-link), which a row of a table takes
+     out of its padding so a row holding one is as tall as a row of words. */
+  --control-compact: 30px;
   /* The least a control is hit through, either way (WCAG 2.5.8): a hit area
      and a line of links one above another are sized from it. The browser
      gate holds it to the criterion's 24px. */

@@ -16,9 +16,11 @@ Its security properties:
 - Its repository is `scratch_playbooks/`, committed to a repository beside
   the server's database and fetched over git's file transport, with no token,
   so no fetch leaves this machine, whatever the database adopted before.
-- Every login it is given reaches 127.0.0.1, whatever machines the database
-  holds, and every play there runs with connection local, so no run reaches
-  another host.
+- It is given a login to one machine alone, the one HQ's inventory says
+  this server runs on (``runs_hq``), so a run is asked, and recorded, only
+  on the machine it really runs on; with no such machine it is given none.
+  That login reaches 127.0.0.1 and every play there runs with connection
+  local, so no run reaches another host.
 
 What it cannot show: GitHub's word on a commit's signature, since the
 repository is local, so `work` vouches for each commit it scans; the
@@ -159,11 +161,20 @@ def write_connections(path: Path, document: Mapping[str, Any]) -> None:
     written.replace(path)
 
 
+def here(catalog: Iterable[Any]) -> list[str]:
+    """The machine of ``catalog`` this server runs on, by its name, or none."""
+
+    return [machine.name for machine in catalog if machine.runs_hq]
+
+
 def write_reaches() -> None:
-    """The worker's connections from the server database's machines; run inside `manage.py shell`."""
+    """The worker's connections to the machine this server runs on; run inside `manage.py shell`."""
 
     state = State.of(settings.DATABASES["default"]["NAME"])
-    write_connections(state.connections, connections(machine.name for machine in machine_catalog()))
+    machines = here(machine_catalog())
+    if not machines:
+        print("automation: no machine in HQ's inventory holds an address of this host, so the worker reaches none")
+    write_connections(state.connections, connections(machines))
 
 
 def server_alive(pid: int) -> bool:

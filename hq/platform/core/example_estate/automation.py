@@ -216,8 +216,9 @@ def _renamed(procedure: dict[str, Any], name: str, **found: Any) -> dict[str, An
 
 
 _FLUSH, _REPORT, _UPGRADE = PROCEDURES
-# The newest commit: emptying a cache escalates now, and the disk role grows a
-# procedure that frees space, so adopting it widens what a run may do.
+# The newest commit: emptying a cache escalates now, the disk role grows a
+# procedure that frees space, so adopting it widens what a run may do, and
+# the upgrade leaves the repository; reading a mount's use stays as it is.
 WIDENED = (
     _moved(_FLUSH, declared={"privilege": "example.cache_admin"}),
     _REPORT,
@@ -239,9 +240,8 @@ WIDENED = (
             "options": {"mount": {"type": "path", "default": "/", "description": "The mount point to free space on."}},
         },
     ),
-    _UPGRADE,
 )
-WIDENED_REVISION = _commit("Escalate the cache flush; add a disk cleanup.")
+WIDENED_REVISION = _commit("Escalate the cache flush; add a disk cleanup; retire the upgrade.")
 # The commit before it, whose upgrade names a role the repository does not
 # hold, said as the worker's scan says it (``hq_runner.ansible.role_spec``).
 UNREADY = (
