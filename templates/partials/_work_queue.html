@@ -15,5 +15,5 @@ something else: its meaning waits in the opened line with the rest.
   </table>
 {% endtable_region %}
 {% else %}
-<p class="attention-clear">{{ empty|default:"Nothing needs you."|breakable }}</p>
+<p class="attention-clear">{% include "partials/_empty_state.html" with message=empty|default:"Nothing needs you." inline=True only %}</p>
 {% endif %}

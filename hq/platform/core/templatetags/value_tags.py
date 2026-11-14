@@ -88,7 +88,8 @@ def counted_phrases(phrases) -> tuple[str, str | None]:
 
 @register.simple_tag
 def empty_value():
-    """The mark for a value that is not there, where there is no value to test."""
+    """The mark for a value that is not there, where there is no value to test:
+    its one markup, which ``or_empty`` and ``entity`` draw too."""
     return format_html('<span class="empty-value" title="None">{}</span>', MISSING)
 
 
@@ -145,7 +146,7 @@ def or_empty(value):
     passes as it is; anything else is what ``breakable`` makes of it.
     """
     if value is None or value == "":
-        return format_html('<span class="empty-value" title="None">{}</span>', MISSING)
+        return empty_value()
     if not isinstance(value, bool) and isinstance(value, Number):
         return value
     return breakable(value)
@@ -375,9 +376,7 @@ def entity(context, link, code=False, label="", mark=""):
     (or a list's ``forloop``), held to it as ``breakable`` holds it.
     """
     if link is None:
-        return format_html('<span class="empty-value" title="None">{}</span>', MISSING) + conditional_escape(
-            mark_text(mark)
-        )
+        return empty_value() + conditional_escape(mark_text(mark))
     # A count of nothing is still a name to show.
     if label is not None and label != "":
         link = replace(link, label=str(label))
