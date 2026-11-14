@@ -1,36 +1,13 @@
 /* Tables: the data table and its regions, and allocation rows.
 
-   A table is a grid on the browser's own layout (docs/Design.md, A table fits
-   its box). The server writes its tracks, one per column from the column's
-   kind (`--tracks`, table_cells.TRACKS), and the widths its region gives way
-   at, each the sum of the floors of the columns it draws there (`--need-*`).
-   Each row is a subgrid of the table's tracks, so a column is one width down
-   the table, and opening a row moves no column: what it shows that its row
-   held back stands on lines of its own beneath the row's first, asking its
-   columns for no width. Nothing is measured: a value longer than its cell is
-   cut (cuts.css), whole in its title and in its open row. */
-
-/* Integers a style query reads: 1 while the region holds the floors of the
-   columns a rank keeps (`--keep-<rank>`), and while it holds every column the
-   table keeps with its controls beside its words (`--whole`); 0 once it is
-   narrower. A table that writes no width for one keeps it at 1. */
-@property --keep-1 { syntax: "<integer>"; inherits: true; initial-value: 1; }
-@property --keep-2 { syntax: "<integer>"; inherits: true; initial-value: 1; }
-@property --keep-3 { syntax: "<integer>"; inherits: true; initial-value: 1; }
-@property --keep-4 { syntax: "<integer>"; inherits: true; initial-value: 1; }
-@property --keep-5 { syntax: "<integer>"; inherits: true; initial-value: 1; }
-@property --keep-6 { syntax: "<integer>"; inherits: true; initial-value: 1; }
-@property --whole { syntax: "<integer>"; inherits: true; initial-value: 1; }
-/* What the server writes on a table (table_cells._layout), its own and no
-   table's inside it. */
-@property --tracks { syntax: "*"; inherits: false; }
-@property --need-0 { syntax: "*"; inherits: false; }
-@property --need-1 { syntax: "*"; inherits: false; }
-@property --need-2 { syntax: "*"; inherits: false; }
-@property --need-3 { syntax: "*"; inherits: false; }
-@property --need-4 { syntax: "*"; inherits: false; }
-@property --need-5 { syntax: "*"; inherits: false; }
-@property --need-6 { syntax: "*"; inherits: false; }
+   A table is laid out by the browser's own table layout (docs/Design.md, A
+   table fits its box): a column is as wide as its cells ask, a value that
+   keeps its line (a figure, a state, a row's controls) holds its column to
+   that line, and the rest wrap at their words. A column the server ranks
+   (`data-drop`) leaves at a set width of its region, one rule a rank, and the
+   line the server draws beneath each row (`tr.row-detail`) shows what the row
+   holds back. Nothing is measured, and opening a row changes none of its
+   cells. */
 
 @layer components {
 
@@ -54,34 +31,19 @@
   --heading-height: calc(var(--heading-line) + 2 * var(--row-pad));
   /* The room the row toggle stands in, at the start of the naming cell. */
   --row-gutter: calc(var(--space-6) + 1.5rem);
-  --keep-1: clamp(0, round(down, 100cqi / var(--need-1)), 1);
-  --keep-2: clamp(0, round(down, 100cqi / var(--need-2)), 1);
-  --keep-3: clamp(0, round(down, 100cqi / var(--need-3)), 1);
-  --keep-4: clamp(0, round(down, 100cqi / var(--need-4)), 1);
-  --keep-5: clamp(0, round(down, 100cqi / var(--need-5)), 1);
-  --keep-6: clamp(0, round(down, 100cqi / var(--need-6)), 1);
-  --whole: clamp(0, round(down, 100cqi / var(--need-0)), 1);
-  display: grid; grid-template-columns: var(--tracks); inline-size: 100%;
+  inline-size: 100%; border-collapse: collapse;
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-sm);
 }
-.data-table > :is(thead, tbody, tfoot) { display: contents; }
-/* A row draws the rule beneath it, so a cell as tall as its own lines (a clamped one) leaves the rule where the row ends. */
-.data-table > * > tr { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; border-bottom: 1px solid var(--line-2); }
-/* Each cell keeps its column's place on its row's first line whatever leaves beside it; a cell across the row (a group's heading, an empty row) spans every column. */
-/* Its column is its place among its row's cells: a column that leaves keeps its cells in the row, undrawn. */
-.data-table > * > tr > * { grid-row: 1; grid-column: sibling-index(); min-inline-size: 0; }
-/* A cell across the row (a group's heading, the line beneath a row) runs from where it stands to the row's end, beside a cell before it, and asks its columns for no width, so it never widens one a region let go. */
-.data-table > * > tr > [colspan] { grid-column: sibling-index() / -1; contain: inline-size; }
-.data-table th, .data-table td { padding: var(--row-pad) var(--space-6); text-align: left; font-size: var(--text-sm); overflow-wrap: break-word; }
+/* Every cell is set at the top, where the row's toggle stands, and draws the row's rule beneath it. */
+.data-table th, .data-table td { padding: var(--row-pad) var(--space-6); text-align: left; vertical-align: top; border-bottom: 1px solid var(--line-2); font-size: var(--text-sm); overflow-wrap: break-word; }
 .data-table thead th { background: var(--surface-2); font-size: var(--text-xs); line-height: var(--heading-line); color: var(--muted); font-weight: 600; }
 /* The heading sticks under the page's chrome while its rows scroll by; a pane's sticks to the pane's own top. Its fill is opaque, so the rows pass under it. */
-.data-table > thead > tr { position: sticky; z-index: 2; inset-block-start: calc(var(--site-header-height) + var(--page-nav-height)); }
-.data-table > thead > tr > th { box-shadow: inset 0 -1px 0 var(--line); }
+.data-table > thead > tr > th { position: sticky; z-index: 2; inset-block-start: calc(var(--site-header-height) + var(--page-nav-height)); border-bottom: 0; box-shadow: inset 0 -1px 0 var(--line); }
 /* A row a link lands on, or a control the keyboard reaches, is scrolled to below the heading that sticks over the rows. */
 .data-table:has(> thead) > tbody :is(tr, a, button, input, select, textarea, summary, [tabindex]) {
   scroll-margin-block-start: calc(var(--page-nav-height) + var(--heading-height));
 }
-.table-scroll:is([data-chart], .is-pane) > .data-table > thead > tr { inset-block-start: 0; }
+.table-scroll:is([data-chart], .is-pane) > .data-table > thead > tr > th { inset-block-start: 0; }
 /* A pane is the scroll container, as tall as its rows up to a fixed reading height, as a ledger is; scroll chaining is kept, so reaching its last row hands the wheel back to the page. */
 .table-scroll.is-pane:not([data-chart]) { max-block-size: 480px; overflow-y: auto; }
 .table-scroll.is-pane:not([data-chart]) .data-table:has(> thead) > tbody :is(tr, a, button, input, select, textarea, summary, [tabindex]) {
@@ -99,7 +61,8 @@
 }
 [aria-sort="ascending"] .sort-indicator { background: var(--accent); clip-path: polygon(50% 6.25%, 85% 34.4%, 57% 34.4%, 57% 93.75%, 43% 93.75%, 43% 34.4%, 15% 34.4%); }
 [aria-sort="descending"] .sort-indicator { background: var(--accent); clip-path: polygon(50% 93.75%, 85% 65.6%, 57% 65.6%, 57% 6.25%, 43% 6.25%, 43% 65.6%, 15% 65.6%); }
-.data-table tbody tr:last-child { border-bottom: 0; }
+/* A section's last row ends it with no rule, and so does a row joined by its open line. */
+.data-table > tbody > tr:is(:last-child, :has(+ .row-detail:last-child), .is-expanded:has(+ .row-detail)) > * { border-bottom: 0; }
 /* A heading row that opens a group of rows (a tbody per group), so grouped rows share one set of column widths. */
 .data-table .row-group > th { padding-top: var(--space-6); background: var(--surface-2); color: var(--ink-2); font-size: var(--text-xs); font-weight: 650; text-align: left; }
 /* A row or group a reader should weigh first (a row's `data-attention`, row_group attention=) is washed in the caution tone, and a group's words beside its name, which say why, are its ink. */
@@ -115,6 +78,8 @@
   font-weight: 650;
 }
 .data-table tbody tr:hover { background: var(--surface-2); }
+/* A column whose values keep their line (a state, a figure, a row's controls, a date) is as wide as its widest, and the columns that wrap share the rest. */
+.data-table > thead th:is([data-kind="status"], [data-kind="numeric"], [data-kind="control"]), .data-table .date-col { inline-size: 1px; }
 .data-table .date-col { white-space: nowrap; }
 /* Figures right-aligned on fixed digit widths compare by eye; the heading too, so the label sits over them. A cell is a figure by its heading's kind, which the region writes on it (table_tags). */
 .data-table > * > tr > [data-kind="numeric"] { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -123,7 +88,7 @@
 .data-table > tbody > tr[data-emphasized] > * a:not(.btn) { font-weight: 650; }
 /* A `th[scope=row]` table with no `thead` is a description list: its label column as wide as its longest label. */
 .data-table th[scope=row] { padding-right: var(--space-10); font-weight: 600; color: var(--muted); }
-.data-table:not(:has(> thead)) th[scope=row] { white-space: nowrap; }
+.data-table:not(:has(> thead)) th[scope=row] { inline-size: 1px; white-space: nowrap; }
 /* A value of several parts marks each one and wraps only between them: "1 week" broken from "Up" reads as another fact. */
 .data-table td .cell-part { white-space: nowrap; }
 .data-table input[type=checkbox] { inline-size: 16px; block-size: 16px; accent-color: var(--accent); }
@@ -169,19 +134,18 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 .switch a { display: inline-flex; align-items: center; gap: var(--space-2); border-radius: 999px; color: inherit; text-decoration: none; }
 .switch .scope-chip > [aria-hidden] { color: var(--accent); }
 .switch p { margin: var(--space-3) 0 0; }
-/* A row's controls (`{% row_actions %}`, or a cell of a column of kind `control`) stand on its first line side by side from their column's start, and wrap where the column is narrower than them: a column sized by another row's controls leaves its room after a row's own, never between them and the row's words. A control stands taller than a line of words by twice `--control-rise`, which its cell takes out of its padding, so a row holding one is as tall as a row of words and the control's middle is the line's. */
-.data-table > tbody > tr > [data-kind="control"] {
-  --control-rise: max(0px, (var(--control-compact) - 1lh) / 2);
-  display: flex; flex-wrap: wrap; align-items: flex-start; place-content: flex-start flex-start; gap: var(--space-3) var(--space-4);
-}
+/* A row's controls (`{% row_actions %}`, or a cell of a column of kind `control`) stand side by side on its first line, so their column is as wide as they are and the words beside them wrap first. A control stands taller than a line of words by twice `--control-rise`, which its cell takes out of its padding, so a row holding one is as tall as a row of words and the control's middle is the line's. */
+.data-table > tbody > tr > [data-kind="control"] { --control-rise: max(0px, (var(--control-compact) - 1lh) / 2); white-space: nowrap; }
+.data-table > tbody > tr > [data-kind="control"] > :is(.btn, .icon-link, form) { vertical-align: top; }
+.data-table > tbody > tr > [data-kind="control"] > * + * { margin-inline-start: var(--space-4); }
 .data-table > tbody > tr > [data-kind="control"]:has(> :is(.btn, .icon-link, form, [data-ask])) { padding-block: calc(var(--row-pad) - var(--control-rise)); }
-.data-table > * > tr > .select-column { justify-content: center; text-align: center; padding-inline: var(--space-4); }
-/* What a control cell says beside its controls wraps as words do. */
-.data-table > tbody > tr > [data-kind="control"] > :is(.muted, p) { flex: 1 1 100%; margin: 0; }
+.data-table > * > tr > .select-column { inline-size: 1px; text-align: center; padding-inline: var(--space-4); }
+/* What a control cell says beside its controls wraps as words do, on a line of its own. */
+.data-table > tbody > tr > [data-kind="control"] > :is(.muted, p) { display: block; margin: 0; white-space: normal; }
 /* A row with nothing to press gives its words the room the cell's padding would keep. */
 .data-table td.row-actions:not(:has(> *)) { padding-inline: 0; }
 /* What an ask says stands under its controls, out of their flow, as wide as the cell, so a press moves nothing (partials/_ask.html). */
-.data-table td:has(> [data-ask]), .data-table > tbody > tr > [data-kind="control"]:has(> [data-ask]) { position: relative; padding-block-end: calc(var(--row-pad) + 1lh); }
+.data-table td:has(> [data-ask]) { position: relative; padding-block-end: calc(var(--row-pad) + 1lh); }
 .data-table td > [data-ask] > :has(> [data-ask-note]) { position: absolute; inset-inline: var(--space-6); inset-block-end: var(--row-pad); }
 /* A row's first line (`row-line`) is its title, then the marks after it (an urgency's pill, a tip's target), each a box of its own, so a mark that no longer fits wraps under the title whole rather than sit inside a wrapped link's box, where it would be no target of its own ("small targets"). */
 .data-table .row-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-3); font-weight: 600; }
@@ -190,7 +154,7 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 /* A row's words fill each line they are given, as its title does: WebKit's `pretty` evens the rag of a whole paragraph, which in a cell's measure ends every line short of the room beside it. */
 .data-table > tbody > tr > * :is(p, li, dd) { text-wrap: wrap; }
 
-/* A pill fits the cell's line, so a row holding one is no taller than one without. */
+/* A pill fits the cell's line and keeps it, so a row holding one is no taller than one without. */
 .data-table td .pill { vertical-align: top; line-height: 1.4; }
 /* A state told by an icon and a value holds both on one line, so its column is as wide as the two and the icon never stands alone above what it marks. */
 .data-table > tbody > tr > [data-kind="status"] .toned:has(> .icon) { white-space: nowrap; }
@@ -198,7 +162,7 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 .data-table > tbody > tr > td[data-pill-only] .pill { display: flex; justify-content: center; text-align: center; }
 /* A time is one phrase; broken over two lines it doubles its row. */
 .data-table td time { white-space: nowrap; }
-/* A name's unseen copy (value_tags) holds nothing open in a table: a cell is cut at its column (cuts.css). */
+/* A name's unseen copy (value_tags) holds nothing open in a table. */
 .strut { display: none; }
 /* An identifier the row is read by, among many columns, wraps at its seams with a chip on each line. */
 .data-table td code.cell-whole { display: inline; white-space: normal; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
@@ -250,171 +214,112 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 .allocation-legend b { font-weight: 650; font-feature-settings: "tnum"; }
 .allocation-legend > * > span { color: var(--muted); }
 
+
 /* The classes a template may say about columns, named here since an extension's templates are held to this sheet; they carry no style. */
 .data-table :is(.key-col, .optional-col, .tight-col) { }
-/* A region's room (`table_region room=`) says how an identifier shares it; a cell is cut at its column, so it carries no style. */
-.table-scroll:is(.is-shared, .is-snug) { }
 /* A table of marks (`data-marks`): one row a thing, one column a period, a mark in each cell, read down a column against the rows around it (the cadence matrix). Every heading but the names stands centered over its column. Its cells stand closer where it shares a row with a chart (`data-marks="compact"`), and in a narrow box, where the marks are what is read. */
 .data-table[data-marks] > thead > tr > :not(:first-child) { text-align: center; }
 .data-table[data-marks="compact"] > * > tr > * { padding: var(--space-3) var(--space-2); }
 
-}
-
-@layer fit {
 /* ── How a table gives way ──────────────────────────────────────── */
 
-/* What a region draws and lets go is the `fit` layer's, after every
-   component's, so no way a part draws its cells (a control's flex, a
-   clamp) draws one its region let go. An open row draws what it held in
-   the cell's own way (`revert-layer`). */
-
-/* A ranked column (`data-drop`) leaves while its region is narrower than the
-   floors of the columns drawn with it (`--keep-<rank>`: 0), its rank 1 first;
-   its row's toggle shows what it held. An open row draws each such cell on a
-   line of its own under the row's first, under its column's name, asking its
-   column for no width (`contain`), so opening moves no column. */
-@container style(--keep-1: 0) {
+/* A ranked column (`data-drop`, table_cells: 1 for the last of a table's
+   columns to leave) leaves while its region is narrower than its rank's
+   width; its copy on each row's open line shows instead, and the row offers
+   its toggle. A column with nothing in any row is not drawn
+   (`data-blank-column`). */
+.data-table > * > tr > [data-blank-column] { display: none; }
+.row-columns > :is([data-drop], [data-narrow]) { display: none; }
+@container table-region (width < 24rem) {
   .data-table > * > tr > [data-drop="1"] { display: none; }
-  .data-table > tbody > tr.is-expanded > [data-drop="1"]:not([data-blank]) { display: revert-layer; grid-row: auto; grid-column: 1 / -1; contain: inline-size; padding-inline-start: var(--row-gutter); }
-  .data-table > tbody > tr.is-expanded > [data-drop="1"][data-label]:not([data-blank])::before { content: attr(data-label); }
-  .data-table > tbody > tr:has(> [data-drop="1"]:not([data-blank])) { --opens: 1; }
-  .data-table:has(> tbody > tr > [data-drop="1"]:not([data-blank])) > * > tr > .row-gutter { padding-inline-start: var(--row-gutter); }
+  :is(.row-columns > [data-drop="1"], .data-table > tbody > tr:has(+ .row-detail [data-drop="1"]) .row-expand) { display: grid; }
 }
-@container style(--keep-2: 0) {
+@container table-region (width < 32rem) {
   .data-table > * > tr > [data-drop="2"] { display: none; }
-  .data-table > tbody > tr.is-expanded > [data-drop="2"]:not([data-blank]) { display: revert-layer; grid-row: auto; grid-column: 1 / -1; contain: inline-size; padding-inline-start: var(--row-gutter); }
-  .data-table > tbody > tr.is-expanded > [data-drop="2"][data-label]:not([data-blank])::before { content: attr(data-label); }
-  .data-table > tbody > tr:has(> [data-drop="2"]:not([data-blank])) { --opens: 1; }
-  .data-table:has(> tbody > tr > [data-drop="2"]:not([data-blank])) > * > tr > .row-gutter { padding-inline-start: var(--row-gutter); }
+  :is(.row-columns > [data-drop="2"], .data-table > tbody > tr:has(+ .row-detail [data-drop="2"]) .row-expand) { display: grid; }
 }
-@container style(--keep-3: 0) {
+@container table-region (width < 40rem) {
   .data-table > * > tr > [data-drop="3"] { display: none; }
-  .data-table > tbody > tr.is-expanded > [data-drop="3"]:not([data-blank]) { display: revert-layer; grid-row: auto; grid-column: 1 / -1; contain: inline-size; padding-inline-start: var(--row-gutter); }
-  .data-table > tbody > tr.is-expanded > [data-drop="3"][data-label]:not([data-blank])::before { content: attr(data-label); }
-  .data-table > tbody > tr:has(> [data-drop="3"]:not([data-blank])) { --opens: 1; }
-  .data-table:has(> tbody > tr > [data-drop="3"]:not([data-blank])) > * > tr > .row-gutter { padding-inline-start: var(--row-gutter); }
+  :is(.row-columns > [data-drop="3"], .data-table > tbody > tr:has(+ .row-detail [data-drop="3"]) .row-expand) { display: grid; }
 }
-@container style(--keep-4: 0) {
+@container table-region (width < 48rem) {
   .data-table > * > tr > [data-drop="4"] { display: none; }
-  .data-table > tbody > tr.is-expanded > [data-drop="4"]:not([data-blank]) { display: revert-layer; grid-row: auto; grid-column: 1 / -1; contain: inline-size; padding-inline-start: var(--row-gutter); }
-  .data-table > tbody > tr.is-expanded > [data-drop="4"][data-label]:not([data-blank])::before { content: attr(data-label); }
-  .data-table > tbody > tr:has(> [data-drop="4"]:not([data-blank])) { --opens: 1; }
-  .data-table:has(> tbody > tr > [data-drop="4"]:not([data-blank])) > * > tr > .row-gutter { padding-inline-start: var(--row-gutter); }
+  :is(.row-columns > [data-drop="4"], .data-table > tbody > tr:has(+ .row-detail [data-drop="4"]) .row-expand) { display: grid; }
 }
-@container style(--keep-5: 0) {
+@container table-region (width < 56rem) {
   .data-table > * > tr > [data-drop="5"] { display: none; }
-  .data-table > tbody > tr.is-expanded > [data-drop="5"]:not([data-blank]) { display: revert-layer; grid-row: auto; grid-column: 1 / -1; contain: inline-size; padding-inline-start: var(--row-gutter); }
-  .data-table > tbody > tr.is-expanded > [data-drop="5"][data-label]:not([data-blank])::before { content: attr(data-label); }
-  .data-table > tbody > tr:has(> [data-drop="5"]:not([data-blank])) { --opens: 1; }
-  .data-table:has(> tbody > tr > [data-drop="5"]:not([data-blank])) > * > tr > .row-gutter { padding-inline-start: var(--row-gutter); }
+  :is(.row-columns > [data-drop="5"], .data-table > tbody > tr:has(+ .row-detail [data-drop="5"]) .row-expand) { display: grid; }
 }
-@container style(--keep-6: 0) {
+@container table-region (width < 64rem) {
   .data-table > * > tr > [data-drop="6"] { display: none; }
-  .data-table > tbody > tr.is-expanded > [data-drop="6"]:not([data-blank]) { display: revert-layer; grid-row: auto; grid-column: 1 / -1; contain: inline-size; padding-inline-start: var(--row-gutter); }
-  .data-table > tbody > tr.is-expanded > [data-drop="6"][data-label]:not([data-blank])::before { content: attr(data-label); }
-  .data-table > tbody > tr:has(> [data-drop="6"]:not([data-blank])) { --opens: 1; }
-  .data-table:has(> tbody > tr > [data-drop="6"]:not([data-blank])) > * > tr > .row-gutter { padding-inline-start: var(--row-gutter); }
+  :is(.row-columns > [data-drop="6"], .data-table > tbody > tr:has(+ .row-detail [data-drop="6"]) .row-expand) { display: grid; }
 }
-/* A ranked cell drawn under its row says its column's name above what it holds (its `content`, set where the column has left). */
-.data-table > tbody > tr.is-expanded > [data-drop][data-label]::before { display: block; margin-block-end: var(--space-1); color: var(--muted); font-size: var(--text-xs); font-weight: 400; }
 
-/* A narrow box (`--whole`: 0) is a region narrower than the floors of every
-   column the table keeps: a row's controls (`data-beneath`, table_cells)
-   stand on a line of their own beneath its words, in the same row, start
-   aligned with them and asking the table for no width, and the heading of
-   their column takes none. Rows get the room a control needs. */
-@container style(--whole: 0) {
+/* A narrow box: what a cell says only on a wide line (`narrow-more`) waits
+   for its row's open line, what stands in for the columns that left
+   (`narrow-only`, a few words in the naming cell) shows, what is on a page of
+   its own (`wide-only`, a table of marks' older periods) leaves outright,
+   and rows get the room a control needs. */
+.data-table .narrow-only { display: none; }
+@container table-region (width < 36rem) {
   .data-table > tbody { --row-pad: var(--space-6); }
-  .data-table > tbody > tr > [data-beneath] { grid-row: auto; grid-column: 1 / -1; contain: inline-size; justify-content: flex-start; padding-block-start: 0; }
-  .data-table > tbody > tr > [data-beneath] > :is(.muted, p) { text-align: start; }
-  /* A cell that says nothing has no line beneath to take. */
-  .data-table > tbody > tr > [data-beneath][data-blank] { display: none; }
-  /* A status there has no column to fill, so its pill is as wide as it says. */
-  .data-table > tbody > tr > td[data-pill-only][data-beneath] .pill { display: inline-flex; }
-  /* A field there is told by its column's name, which no heading shows above it now, and so are the words a column of controls holds where a row has no control and the words of a column set beneath (`beneath=True`). */
-  .data-table > tbody > tr > [data-beneath][data-label]:is(:has(select, textarea, input:not([type="hidden"])), [data-kind="control"]:not(:has(button, a[href])), [data-kind="prose"], [data-kind="identifier"])::before {
-    content: attr(data-label); align-self: center; margin-inline-end: var(--space-3); color: var(--muted); font-size: var(--text-xs);
-  }
-  .data-table:has(> tbody > tr > * > [data-row-toggle]) > tbody > tr:has(> .row-gutter) > [data-beneath] { padding-inline-start: var(--row-gutter); }
-  /* What a cell says only on a wide line (`narrow-more`) waits for its row to open, which offers to. */
-  .data-table > tbody > tr:not(.is-expanded) .narrow-more { display: none; }
-  /* Opened, it shows on a line of its own, asking its column for no width; outside a narrow box it stays on its line, so opening a row there changes no column's width. */
-  .data-table > tbody > tr.is-expanded .narrow-more { display: block; contain: inline-size; }
-  .data-table > tbody > tr.is-expanded .narrow-more > br:first-child { display: none; }
-  .data-table > tbody > tr:has(> * .narrow-more) { --opens: 1; }
-  .data-table:has(> tbody > tr > * .narrow-more) > * > tr > .row-gutter { padding-inline-start: var(--row-gutter); }
-  /* `wide-only`: what a narrow box lets go outright, since what it says is on a page of its own (a table of marks' older periods). */
-  .data-table .wide-only { display: none; }
+  .data-table [data-kind] .narrow-more, .data-table .wide-only { display: none; }
+  .data-table .narrow-only { display: inline; }  :is(.row-columns > [data-narrow], .data-table > tbody > tr:has(+ .row-detail [data-narrow]) .row-expand) { display: grid; }
   .data-table[data-marks] > * > tr > * { padding: var(--space-3) var(--space-1); }
 }
-/* `narrow-only`: a few words in the naming cell standing in for the columns a narrow box lets go; elsewhere they would say those words twice. */
-@container not style(--whole: 0) {
-  .data-table .narrow-only { display: none; }
-}
 
-/* A column with nothing in any row is not drawn: the server marks each cell that says nothing (`data-blank`) and every cell of a column where all do (`data-blank-column`), never the naming column. */
-.data-table > * > tr > [data-blank-column] { display: none; }
-}
-
-@layer components {
 /* ── A row's toggle and its open line ───────────────────────────── */
 
-/* The server draws a toggle in every row that can open; the stylesheet shows it only where the row holds something back now: a column the region let go (above), a part that waits for the row to open (`row-more`, `row-later`, a list's rest), a block kept beneath it (`data-below`), a value too long for its cell (`data-long`, table_cells), or an open row. */
-.data-table [data-row-toggle]:not([data-fold-toggle]) { display: none; }
-.data-table > tbody > tr { --opens: 0; }
-.data-table > tbody > tr:is(.is-expanded, [data-below], :has(> [data-long]), :has(> * :is(.row-more, .row-later, .line-rest))) { --opens: 1; }
-/* A row the server drew no toggle of its own in (one that folds its family is no such toggle) opens nowhere, whatever it holds. */
-.data-table > tbody > tr:not(.is-expanded):not(:has(> * > [data-row-toggle]:not([data-fold-toggle]))) { --opens: 0; }
-/* Whether a row opens is said once, on the row (`--opens`): its toggle shows by it, and its cells are cut by it (cuts.css), so no value is cut in a row that cannot show it whole. */
-@container style(--opens: 1) { .data-table > tbody > tr > * > [data-row-toggle]:not([data-fold-toggle]) { display: inline-grid; } }
-/* The gutter the toggle stands in is kept in every row and the heading of a table where any row opens, so names share one edge. */
-.data-table .row-gutter { position: relative; }
-.data-table:is(:has(> tbody > tr:is(.is-expanded, [data-below])), :has(> tbody > tr > [data-long]), :has(> tbody > tr > * :is(.row-more, .row-later, .line-rest)), :has(> tbody > tr > * > [data-fold-toggle])) > * > tr > .row-gutter { padding-inline-start: var(--row-gutter); }
+/* The server draws a toggle in every row that can open; it shows where the row holds something back: at any width (`data-below`, table_cells: a clamped value, a part the row never shows, a block or buttons moved to its open line), where a column of it has left or a narrow box has let a part go (above), and on an open row. */
+.data-table .row-expand { display: none; }
+.data-table > tbody > tr:is([data-below], .is-expanded) .row-expand { display: grid; }
+/* What a row shows only on its open line is never drawn on the row, and the face that stands in for it there (`row-less`) is not drawn on the line. */
+.data-table [data-kind] :is(.row-more, .line-rest), .row-detail .row-less { display: none; }
+/* The gutter the toggle stands in is kept in every row and the heading of a table where any row can open, so names share one edge. */
+.data-table > tbody > tr > .row-gutter { position: relative; }
+.data-table:has(> tbody > tr.row-detail, .row-fold) > * > tr > .row-gutter { padding-inline-start: var(--row-gutter); }
 .data-table .row-gutter > [data-row-toggle] { position: absolute; inset-inline-start: var(--space-3); inset-block-start: calc(var(--row-pad) - var(--space-1)); }
-/* What waits for its row to open shows there on a line of its own, asking its column for no width. */
-.data-table > tbody > tr:not(.is-expanded) .row-later { display: none; }
-.data-table > tbody > tr.is-expanded :is(.row-later, .row-more) { display: block; contain: inline-size; }
-.data-table > tbody > tr.is-expanded .row-more > br:first-child { display: none; }
-.data-table > tbody > tr.is-expanded .row-later { display: flex; flex: 1 1 100%; flex-wrap: wrap; justify-content: inherit; gap: inherit; }
-/* A column of a row's controls (`actions-col`, a public class) holds them on one line where they fit, from its start as a control column does; its width is its track's. */
+/* A column of a row's controls (`actions-col`, a public class) holds them on one line. */
 .actions-col { white-space: nowrap; }
-/* A row that heads a fold, or whose open line holds a block, joins its line beneath with no rule between. */
-.data-table > tbody > tr.is-expanded:has(+ .row-detail) { border-bottom: 0; }
-/* What a row keeps beneath itself (`row-below`, the row's editor), in the line the server drew under it (`table_tags._detail_row`), shown while the row is open. */
-/* Where a cell stands, for a part drawn in it to ask (`@container style(--cell: line)`) without naming the table: on its row's own line, or in the line beneath an open row (`open`). */
-.data-table > tbody > tr.row-detail { display: none; --cell: open; }
-.data-table > tbody > tr:not(.row-detail) > td { --cell: line; }
-.data-table > tbody > tr.is-expanded + tr.row-detail { display: grid; }
-/* It asks its columns for no width, so opening a row moves no column. */
-.data-table .row-detail > td { padding-block: 0 var(--row-pad); padding-inline-start: var(--row-gutter); contain: inline-size; }
-.row-detail > td > * { margin-block: 0 var(--row-pad); }
+/* The line the server draws under a row (`table_tags._detail_row`), shown while the row is open: what the row moves there, then an entry for each cell that holds something back, under its column's name. Where a cell stands, for a part drawn in it to ask (`@container style(--cell: line)`) without naming the table: on its row's own line, or on the open line (`open`). */
+.data-table td { --cell: line; }
+.data-table > tbody > tr.row-detail { display: none; }
+.data-table > tbody > tr.is-expanded + tr.row-detail { display: table-row; }
+.data-table .row-detail > td { --cell: open; padding-block: 0 var(--row-pad); padding-inline-start: var(--row-gutter); }
+/* What it holds asks its columns for no width, so opening a row moves no column. */
+.row-detail > td > * { contain: inline-size; margin-block: 0 var(--row-pad); }
 .row-detail .row-below + :is(.row-below, .row-columns) { margin-top: var(--space-5); }
 .data-table .row-detail:hover { background: none; }
-/* A labeled block: its label in one column, the block beside it, on a panel. */
+/* A row's buttons moved there stand side by side, wrapping as the line asks. */
+.row-detail .row-later { display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-4); }
+/* An entry: its label in one column, what it shows beside it, on a panel. */
 .row-columns {
   display: grid; grid-template-columns: 7rem minmax(0, 1fr); align-items: baseline; gap: var(--space-5) var(--space-6); margin: 0;
   padding: var(--space-5) var(--space-6); border-radius: var(--radius); background: var(--bg-tint); container: row-columns / inline-size;
 }
+.row-columns > * { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; align-items: inherit; }
 /* A value that opens with a wrapped inline block has its baseline on that block's last line where an engine has no `baseline-source`, so there a pair lines up by its top. */
 @supports not (baseline-source: first) {
   .row-columns { align-items: start; }
 }
-.row-columns > dt { color: var(--muted); font-size: var(--text-xs); }
-.row-columns > dd { min-width: 0; margin: 0; }
+.row-columns dt { color: var(--muted); font-size: var(--text-xs); }
+.row-columns dd { min-width: 0; margin: 0; }
+/* A part that opened its own line on the row starts the entry's. */
+.row-columns dd > :is(.row-more, .narrow-more) > br:first-child { display: none; }
 /* Beside its label a value on a narrow line has too little room to hold a word, so there each label stands above its value. */
 @container row-columns (width < 18rem) {
-  .row-columns > :is(dt, dd) { grid-column: 1 / -1; }
-  .row-columns > dt + dd { margin-block-start: calc(var(--space-1) - var(--space-5)); }
+  .row-columns dd, .row-columns dt { grid-column: 1 / -1; }
+  .row-columns dt + dd { margin-block-start: calc(var(--space-1) - var(--space-5)); }
 }
 /* A flat line (`data-line="flat"` on the table): what a row keeps beneath it, in one column on no panel. */
 .data-table[data-line="flat"] .row-detail .row-columns { padding: 0; background: none; }
-.data-table[data-line="flat"] .row-detail .row-columns > * { grid-column: 1 / -1; }
+.data-table[data-line="flat"] .row-detail .row-columns :is(dt, dd) { grid-column: 1 / -1; }
 
 /* Rows folded under the row that heads them (`data-folds`), shown while it is open; with no script every row shows. */
 @media (scripting: enabled) {
   .data-table tr[data-folded]:not([data-open]) { display: none; }
   /* The last row showing ends its section, as the last row does. */
-  .data-table tbody tr:has(~ tr[data-folded]):not(:has(~ tr:not([data-folded]:not([data-open])))) { border-bottom: 0; }
+  .data-table tbody tr:has(~ tr[data-folded]):not(:has(~ tr:not([data-folded]:not([data-open])))) > * { border-bottom: 0; }
 }
 /* Rows folded under a row rather than a group's heading are set in under it. */
 .data-table > tbody:not(:has(> .row-group[data-folds])) > tr[data-folded] > td.row-gutter,

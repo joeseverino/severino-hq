@@ -15,7 +15,7 @@
    the first paint (optional) and never swapped in after, so text never moves;
    cached a year, it is there from the second page on. */
 @font-face { font-family: Inter; font-style: normal; font-weight: 400 700; font-display: optional; src: url("../../fonts/inter/inter-variable-latin.woff2") format("woff2"); }
-@layer tokens, base, components, fit;
+@layer tokens, base, components;
 
 /* Markup a vendored script draws (`data-vendored` on its mount) is styled by
    its own sheets alone. HQ's words for its parts (`section`, `card`) are
@@ -38,15 +38,6 @@
   :where([data-vendored]) :not(#_):not(#_)::backdrop { all: revert-layer; }
 }
 @layer components {
-  :where([data-vendored]) :not(#_):not(#_),
-  :where([data-vendored]) :not(#_):not(#_)::before,
-  :where([data-vendored]) :not(#_):not(#_)::after,
-  :where([data-vendored]) :not(#_):not(#_)::marker,
-  :where([data-vendored]) :not(#_):not(#_)::placeholder,
-  :where([data-vendored]) :not(#_):not(#_)::selection,
-  :where([data-vendored]) :not(#_):not(#_)::backdrop { all: revert-layer; }
-}
-@layer fit {
   :where([data-vendored]) :not(#_):not(#_),
   :where([data-vendored]) :not(#_):not(#_)::before,
   :where([data-vendored]) :not(#_):not(#_)::after,

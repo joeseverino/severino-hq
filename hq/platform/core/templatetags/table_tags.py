@@ -31,6 +31,7 @@ from hq.platform.core.table_cells import (
     Point,
     Position,
     Span,
+    without_ids,
 )
 lazy from hq.platform.application import history
 
@@ -51,8 +52,10 @@ class _Markup:
         self.markup = markup
         self.lines = [0] + [found.end() for found in re.finditer("\n", markup)]
         # What is written into the markup at an offset wherever it is shown,
-        # on the row and in a copy on its open line.
+        # on the row and in a copy on its open line, and what is taken out of
+        # it everywhere but where it is moved to.
         self.marks: list[tuple[int, str]] = []
+        self.cuts: list[tuple[int, int]] = []
 
     def at(self, position: Position) -> int:
         row, column = position
@@ -76,12 +79,20 @@ class _Markup:
         return self.marked(self.at(span[0]), self.after(span[1]) if whole else self.at(span[1]))
 
     def marked(self, start: int, end: int) -> str:
-        """The markup from ``start`` to ``end``, with the marks written inside it."""
+        """The markup from ``start`` to ``end``, with the marks written inside
+        it and what was moved from inside it taken out."""
 
+        marks: list[tuple[int, int, Any]] = [(offset, 0, mark) for offset, mark in self.marks if start <= offset < end]
+        moved = [(a, 1, b) for a, b in self.cuts if start <= a and b <= end and (a, b) != (start, end)]
         parts, last = [], start
-        for offset, mark in self.marks:
-            if start <= offset < end:
-                parts += [self.markup[last:offset], mark]
+        for offset, moves, value in sorted(marks + moved):
+            if offset < last:
+                continue
+            parts.append(self.markup[last:offset])
+            if moves:
+                last = value
+            else:
+                parts.append(value)
                 last = offset
         parts.append(self.markup[last:end])
         return "".join(parts)
@@ -89,16 +100,22 @@ class _Markup:
 
 def _detail_row(markup: _Markup, width: int, blocks: list[Span], entries: list[LineEntry]) -> str:
     """A row's open line, drawn after it and shown while it is open: a cell
-    the table's width holding the blocks the row keeps beneath itself, then
-    each labeled block under its label."""
+    the table's width holding the blocks the row moves there, then each
+    entry under its label, each saying when it shows."""
 
     drawn = [markup.content(block, whole=True) for block in blocks]
     listed = [
-        f"<dt>{escape(entry.name)}</dt><dd data-label>{markup.content(entry.span, whole=True)}</dd>"
-        for entry in entries
+        f"<div{entry.marks}><dt>{escape(entry.name)}</dt><dd>{_entry(markup, entry)}</dd></div>" for entry in entries
     ]
     columns = f'<dl class="row-columns">{"".join(listed)}</dl>' if listed else ""
     return f'<tr class="row-detail" data-row-detail><td colspan="{width}">{"".join(drawn)}{columns}</td></tr>'
+
+
+def _entry(markup: _Markup, entry: LineEntry) -> str:
+    """What an entry shows: a block moved whole, or a copy of a cell's
+    content, which draws no id its row draws."""
+
+    return markup.content(entry.span, whole=True) if entry.whole else without_ids(markup.content(entry.span))
 
 
 def _unnamed(roles: list[tuple[int, str]]) -> list[tuple[int, str]]:
@@ -108,13 +125,12 @@ def _unnamed(roles: list[tuple[int, str]]) -> list[tuple[int, str]]:
 def mark_cells(markup: str, *, sorts: bool = True) -> str | None:
     """The region's tables with each cell marked for what the stylesheet reads.
 
-    The table is a grid: its tracks and the widths its region gives way at
-    are custom properties on it (``table_cells._layout``), and each row group,
-    drawn as `display: contents`, keeps its role. A blank body cell is
-    ``data-blank``, a cell of a column blank in every row ``data-blank-column``; a body cell says its column's
-    kind, rank and name, a cut one its whole value in its title, and a group's
-    heading row spans every declared column. After each row that keeps a block
-    beneath itself is its open line (``_detail_row``).
+    A blank body cell is ``data-blank``, a cell of a column blank in every
+    row ``data-blank-column``; a cell says the width its column leaves at
+    (``data-drop``), a body cell its column's kind and a cut one its whole
+    value in its title, a long one held to a few lines (``cell-clamp``), and
+    a group's heading row spans every declared column. After each row that
+    holds something back is its open line (``_detail_row``).
     What a part of a cell is, which decides how it wraps, is its ``data-cell``:
     ``name`` for what names the row, else the role its class declares
     (``table_cells.ROLE_CLASSES``), so the stylesheet never reads a cell's content.
@@ -131,6 +147,7 @@ def mark_cells(markup: str, *, sorts: bool = True) -> str | None:
         return markup
     text = _Markup(markup)
     cuts = sorted((text.point(start), text.point(end)) for start, end in cells.cuts)
+    text.cuts = cuts
     parts, last = [], 0
     # Nothing goes into what is taken out: a mark inside the editor a row's
     # line takes is written into its copy there.
@@ -158,6 +175,8 @@ def _inserts(cells: Cells, markup: str, text: _Markup) -> list[tuple[int, str]]:
     text.marks = sorted((offset, f' data-cell="{role}"') for offset, role in _unnamed(roles) if role)
     for point, mark in cells.gutters + cells.opened:
         inserts.append((after_name(point[0]) if point[1] is None else text.point(point), mark))
+    for opened, closed in cells.clamps:
+        inserts += [(text.at(opened), '<div class="cell-clamp">'), (text.at(closed), "</div>")]
     if cells.toggles:
         # A row drawn open (its editor open) says so on its toggle.
         toggles = {shown: render_to_string("partials/_row_toggle.html", {"open": shown}) for shown in (False, True)}
@@ -180,8 +199,8 @@ def _cut(markup: str, start: int, end: int, cuts: list[tuple[int, int]]) -> str:
     return "".join(parts)
 
 
-# The shares of its region an identifier may take, besides the whole row's
-# (`css/app/tables.css`, `--identifier-max`).
+# The values an extension's region still passes as ``room``, which says
+# nothing to a table laid out by the browser.
 _ROOMS = frozenset({"", "shared", "snug"})
 
 
@@ -203,7 +222,7 @@ def _region(
     """The region a table sits in: the box it fits, named by ``label``.
 
     A table fits its region by letting ranked columns go (docs/Design.md, A
-    table fits its box); ``room`` is accepted and says nothing more. A
+    table fits its box); ``room`` is accepted and draws nothing. A
     ``compare`` table sets two values side by side in each row, after the
     row's name. Only a ``pane`` (a box of its own height) and a ``chart``'s
     table scroll in it, and each is a stop for the keyboard. A chart's table
@@ -223,7 +242,6 @@ def _region(
         *([css] if css else []),
         *(["is-pane"] if pane else []),
         *(["is-compare"] if compare else []),
-        *([f"is-{room}"] if room else []),
     ]
     if filtered:
         nothing = {"message": "Nothing matches.", "action_url": clear, "action_label": "Clear filters"}
@@ -466,8 +484,8 @@ def row_state(*, emphasized: bool = False) -> str:
     return mark_safe(" data-emphasized") if emphasized else ""
 
 
-# How many of a line list's parts size its column and wrap with it, as any
-# value's words do; the rest show only as far as the line they end has room.
+# How many of a line list's parts show on its row, wrapping with its column
+# as any value's words do; the whole run shows on the row's open line.
 LINE_LEAD = 3
 
 
@@ -494,7 +512,7 @@ class LineListNode(template.Node):
         # Parts already rendered and escaped by their own template.
         parts = mark_safe(self._parts(context, lead))  # noqa: S308 - rendered and escaped already
         tail = mark_safe(self._parts(context, rest))  # noqa: S308 - rendered and escaped already
-        # The rest is the box that clips; its run lays the parts out.
+        # The rest shows only on the row's open line (table_cells._HELD).
         if css:
             more = format_html('<li class="line-rest"><ul class="{} line-run">{}</ul></li>', css, tail) if rest else ""
             return format_html('<ul class="{} line-list">{}{}</ul>', css, parts, more)
@@ -505,11 +523,10 @@ class LineListNode(template.Node):
 @register.tag("line_list")
 def line_list(parser: Any, token: Any) -> LineListNode:
     """``{% line_list row.tech_list as name %}{% status name chip=True %}{% endline_list %}``:
-    a run of short parts in a cell, each drawn by the body, as many on its
-    line as the line has room for; what does not fit waits for the row to
-    open, and only then does the row offer to (tables.js measures the cut).
-    ``list="dot-list"`` draws it as that list, the body drawing each ``li``.
-    No count decides what shows: the layout does (docs/Design.md)."""
+    a run of short parts in a cell, each drawn by the body: the first
+    ``LINE_LEAD`` on the row, wrapping with its column, and the whole run on
+    the row's open line, which the row offers once it holds more.
+    ``list="dot-list"`` draws it as that list, the body drawing each ``li``."""
 
     bits = token.split_contents()
     if len(bits) not in (4, 5) or bits[2] != "as":

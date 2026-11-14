@@ -33,7 +33,6 @@ from hq.platform.core.run_report import Cost, tally
 from hq.platform.core.speculation import rules_document
 from hq.platform.core.stalls import stall_watch
 from hq.platform.core.stylesheets import stylesheet
-from hq.platform.core.table_cells import sets_only_custom_properties
 from hq.platform.core.test_runner import browser_engine, browser_failures
 from hq.platform.core.tests.browser.probes.axe import rules_read
 from hq.platform.core.tests.browser.probes.palette import (
@@ -290,10 +289,7 @@ def lifted(body):
     declared = []
 
     def named(match):
-        style = unescape(match[2])
-        if sets_only_custom_properties(style):
-            return match[0]
-        declared.append(style)
+        declared.append(unescape(match[2]))
         return f'{match[1]} data-gate-style="{len(declared)}"'
 
     body = _STYLE_ATTRIBUTE.sub(named, body)

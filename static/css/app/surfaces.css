@@ -236,10 +236,6 @@
     vertical-align: middle;
   }
   :is(.row-expand, .row-fold):hover { border: 0; background: var(--line-2); color: var(--ink); }
-  /* What a row holds back until it is expanded, and the hint it replaces. A
-     cell moved to the line beneath an open row is open too. */
-  .data-table tr:not(.is-expanded, .row-detail) .row-more,
-  .data-table tr:is(.is-expanded, .row-detail) .row-less { display: none; }
   /* Its chevron is its own border, pointing at what it holds back and turned down when open, so a row carries no drawing for it. */
   :is(.row-expand, .row-fold)::before {
     content: ""; box-sizing: border-box; width: 6px; height: 6px; margin-inline-end: var(--space-1);
@@ -250,9 +246,6 @@
   @media (prefers-reduced-motion: reduce) { :is(.row-expand, .row-fold)::before { transition: none; } }
   /* With no script a fold cannot open or close, and every row it would fold shows (tables.css), so it is not drawn. */
   @media (scripting: none) { .row-fold { display: none; } }
-  /* An open row shows each value it cut whole, wrapping inside its column wherever it must, so nothing in it runs past its cell; a panel a cell shows is no part of the column. A column that holds its content (a state, a figure, controls) cuts nothing and takes its track from that content, so it wraps the same open and closed and opening moves no column. */
-  .data-table > tbody > tr.is-expanded > :is([data-kind="name"], [data-kind="prose"], [data-kind="identifier"]),
-  .data-table > tbody > tr.is-expanded > :is([data-kind="name"], [data-kind="prose"], [data-kind="identifier"]) *:not(.visually-hidden, .visually-hidden *, [popover], [popover] *) { white-space: normal; overflow-wrap: anywhere; }
 
   /* A band too narrow for two cells is a list, like every other summary:
      each fact one row, its label and its value at the right edge, the detail
