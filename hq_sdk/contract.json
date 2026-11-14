@@ -3496,7 +3496,9 @@
         "parameters": [
           "actions=",
           "*",
-          "gap="
+          "gap=",
+          "first=",
+          "put_away="
         ],
         "parts": []
       },

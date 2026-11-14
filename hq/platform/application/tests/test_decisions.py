@@ -10,18 +10,13 @@ from hq.platform.application.decisions import decision, urgency, workflow_parts
 from hq.platform.application.item_help import cannot_step, commands, do_step, run_step
 from hq.platform.application.workflow_contracts import ActionLink, WorkflowOutcome, WorkflowPlan, WorkflowStep
 
-from .markup import elements, hrefs, select, text, texts, with_class, within
+from .markup import elements, hrefs, select, text, texts, with_class
 
 
 def row_hrefs(html):
-    """Every link's target, leaving out the copy of a queue row's buttons a
-    narrow box draws beneath its words (`queue-beneath`) in place of their cell."""
+    """Every link's target."""
 
-    return [
-        link.attrs["href"]
-        for link in elements(html, "a")
-        if "href" in link.attrs and not any("queue-beneath" in above.classes for above in link.ancestors)
-    ]
+    return [link.attrs["href"] for link in elements(html, "a") if "href" in link.attrs]
 
 
 def card(item) -> str:
@@ -111,7 +106,7 @@ class DecisionTests(SimpleTestCase):
         self.assertEqual(shown["reason"], "Only the registrar can renew it.")
         self.assertEqual(shown["steps"], [])
         self.assertIn("Only the registrar can renew it.", texts(html, "p"))
-        self.assertEqual([step for step in within(html, "data-attention-item") if step.tag in {"ol", "li"}], [])
+        self.assertEqual(with_class(html, "resolution-workflow"), [])
         self.assertNotIn("Why HQ cannot", text(html))
 
     def test_one_command_stands_alone_and_several_are_numbered(self):
@@ -148,7 +143,7 @@ class DecisionTests(SimpleTestCase):
         html = card(self.item(actions=links))
 
         # The meaning is the row's own, under its title; nothing beneath repeats it.
-        (meaning,) = with_class(html, "attention-detail")
+        (meaning,) = select(html, "data-attention-detail")
         self.assertIn("What it means for the reader.", meaning.words)
         self.assertEqual(with_class(html, "row-below"), [])
         # Every button, the first two and those that wait, is in one cell.
@@ -156,7 +151,6 @@ class DecisionTests(SimpleTestCase):
             id(next(ancestor for ancestor in reversed(link.ancestors) if ancestor.tag == "td"))
             for link in elements(html, "a")
             if link.attrs.get("href", "").startswith("/example/")
-            and not any("queue-beneath" in above.classes for above in link.ancestors)
         }
         self.assertEqual(len(cells), 1)
         self.assertEqual(sorted(row_hrefs(html)), [f"/example/{n}/" for n in range(3)])

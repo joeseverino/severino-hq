@@ -41,13 +41,9 @@ ROLE_CLASSES = {"cell-data": "data", "cell-prose": "prose"}
 
 # The tags of a control: a cell holding one and no heading is named "Actions".
 _CONTROLS = frozenset({"a", "button", "select", "input"})
-# The input types a reader fills in, which a row's controls never copy: two of
-# one field would both be sent.
+# The input types that are no field a reader fills in: a cell holding a field
+# holds a value of the row (a choice of a rule), not what the row offers.
 _UNFILLED = frozenset({"hidden", "submit", "button"})
-# What a row marks for its controls to stand by in a narrow box: the row's
-# first line (`data-row-line`, in the cell that names the row), where its
-# put-away control (`data-put-away`, such as Dismiss) ends that line.
-_MARKED = {"data-row-line": "line", "data-put-away": "away"}
 # What a row holds back for its open line: a part of a column that stays in a
 # narrow box, a block kept beneath the row at any width, and the row's editor
 # (`{% row_editor %}`), which is moved there and opens the row.
@@ -119,10 +115,8 @@ class _Cell:
     # A heading's sort control, as the spans that take it off again.
     sort: list[tuple[Point, Point]] = field(default_factory=list)
     sort_mark: Position | None = None
-    # Whether it holds a field a reader fills in, and the elements it marks
-    # for a narrow box (``_MARKED``).
+    # Whether it holds a field a reader fills in.
     fields: bool = False
-    marked: list[_Part] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -136,19 +130,6 @@ class _Row:
     cells: list[_Cell] = field(default_factory=list)
     # Where its end tag is, after which its open line goes.
     end: tuple[int, int] | None = None
-
-
-@dataclass(slots=True)
-class Beneath:
-    """A row's controls copied for a narrow box: where the copy beneath the
-    words goes (before the naming cell's toggle, else its end tag), each
-    control cell's content with what it leaves out, and the row's first line
-    with the put-away controls that end it."""
-
-    at: Position
-    copies: list[tuple[Span, list[Span]]]
-    line: Position | None
-    away: list[Span]
 
 
 @dataclass(slots=True)
@@ -223,10 +204,6 @@ class Cells(HTMLParser):
         self.toggles: list[tuple[Position, bool]] = []
         # Where an open row's class gets `is-expanded`: a row whose editor is open.
         self.opened: list[tuple[Point, str]] = []
-        # Each row's controls copied beneath its words for a narrow box (``Beneath``).
-        self.beneath: list[Beneath] = []
-        # The depth in ``open`` of each element ``_MARKED`` that is open.
-        self.marking: list[int] = []
         # Whether the sort control being read has its mark open.
         self.sorting: bool = False
 
@@ -269,7 +246,7 @@ class Cells(HTMLParser):
             cell.sort.append(((cell.start, ready), (cell.start, ready + len(_SORT_READY))))
         self.rows[-1].cells.append(cell)
         # Its tag is no end tag's, so the cell stays the floor of ``open``.
-        self.open, self.firsts, self.children, self.marking = [], [], [], []
+        self.open, self.firsts, self.children = [], [], []
         self.unsaid, self.off_line, self.part = None, None, None
         self._role(cell.start, cell.attrs)
         self._open(cell, "", _classes(cell.attrs), {})
@@ -325,9 +302,6 @@ class Cells(HTMLParser):
             self.unsaid = depth
         if self.off_line is None and not _OFF_LINE.isdisjoint(classes):
             self.off_line = depth
-        if marked := next((kind for name, kind in _MARKED.items() if name in attrs), None):
-            cell.marked.append(_Part(marked, None, self.getpos()))
-            self.marking.append(depth)
         if self.part is None and depth and not _PARTS.isdisjoint(classes):
             self.part = depth
             kind = next((_PART_KINDS[name] for name in classes if name in _PART_KINDS), "narrow")
@@ -346,9 +320,6 @@ class Cells(HTMLParser):
                 if self.part is not None and self.part >= depth:
                     cell.parts[-1].end = self.getpos()
                     self.part = None
-                while self.marking and self.marking[-1] >= depth:
-                    self.marking.pop()
-                    next(part for part in reversed(cell.marked) if part.end is None).end = self.getpos()
                 return
 
     def handle_endtag(self, tag: str) -> None:
@@ -397,7 +368,7 @@ class Cells(HTMLParser):
     def _close(self) -> None:
         self.cell = None
         self.sorting = False
-        self.open, self.firsts, self.children, self.marking = [], [], [], []
+        self.open, self.firsts, self.children = [], [], []
         self.unsaid = self.off_line = self.part = None
 
     def _mark_table(self) -> None:
@@ -412,6 +383,8 @@ class Cells(HTMLParser):
         empty = _empty_columns(heads, named, records)
         width = _width(heads, records)
         names, drops, gutter = _columns(heads[-1] if heads else [])
+        # The columns of the row's controls, which stand beneath its words in
+        # a narrow box (tables.css) and so never leave for its open line.
         beneath = {place for row in records for place, _ in _row_controls(row, kinds, named)}
         if not (self.sorts and _sorts(records)):
             self.cuts += _sort_controls(heads)
@@ -428,31 +401,9 @@ class Cells(HTMLParser):
                     if cell := _at_place(row.cells, place):
                         self.marks.setdefault(cell.start, []).append(" data-beneath")
             if row.section == "tbody" and row.end:
-                self._beneath(row, kinds, named)
+                for _, cell in _row_controls(row, kinds, named):
+                    self.marks.setdefault(cell.start, []).append(" data-beneath")
                 self._detail(row, width, names, drops - empty - beneath)
-
-    def _beneath(self, row: _Row, kinds: dict[int, str], named: int) -> None:
-        """Copy the row's controls beneath the words of the cell that names it,
-        shown there in a narrow box, where their own column empties
-        (``data-beneath``): the words keep the row's width and what it offers
-        still shows. Its put-away control ends the row's first line instead,
-        where the naming cell marks one. What a cell holds back for the open
-        line stays there."""
-
-        name = _at_place(row.cells, named)
-        controls = _row_controls(row, kinds, named)
-        if name is None or not name.closed or not controls:
-            return
-        line = next((part.end for part in name.marked if part.kind == "line" and part.end), None)
-        copies: list[tuple[Span, list[Span]]] = []
-        away: list[Span] = []
-        for _, cell in controls:
-            self.marks.setdefault(cell.start, []).append(" data-beneath")
-            held = [(part.start, part.end) for part in cell.parts if part.end]
-            own = [(part.start, part.end) for part in cell.marked if part.kind == "away" and part.end] if line else []
-            away += own
-            copies.append(((cell.opened, cell.closed), held + own))
-        self.beneath.append(Beneath(name.toggle or name.closed, copies, line, away))
 
     def _open_row(self, row: _Row) -> None:
         """Mark the row open: its editor stands open on the line beneath it."""
@@ -589,14 +540,18 @@ def _row_controls(row: _Row, kinds: dict[int, str], named: int) -> list[tuple[in
     """Each cell of the row's controls, by its place: a row's actions or a
     cell of a column of controls, holding a control and no field a reader
     fills in (a choice of a rule is a value of the row, not what it offers).
-    Never the cell that names the row, nor a column of tick-boxes."""
+    Never the cell that names the row, nor a column of tick-boxes, nor the
+    reader's put-away control (`data-put-away`), which ends the row's first
+    line."""
 
     found, place = [], 0
     for cell in row.cells:
         at, kind = place, kinds.get(place)
         place += int(cell.attrs.get("colspan") or 1)
         classes = _classes(cell.attrs)
-        if at == named or "colspan" in cell.attrs or "select-column" in classes or not cell.closed:
+        if at == named or "colspan" in cell.attrs or "select-column" in classes or "data-put-away" in cell.attrs:
+            continue
+        if not cell.closed:
             continue
         controls = "control" in (kind, cell.attrs.get("data-kind")) or "row-actions" in classes
         if controls and cell.controls and not cell.fields:

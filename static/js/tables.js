@@ -435,7 +435,9 @@
   };
   const heldColumns = (table) => table.querySelector(":scope > colgroup[data-held]");
   const holdColumns = (table) => {
-    if ("rowsHeld" in table.dataset) return;
+    // A table whose rows stack in its narrow box (a column of controls,
+    // `data-beneath`, tables.css) shares no columns between its rows to hold.
+    if ("rowsHeld" in table.dataset || table.matches("[data-narrow]:has(> * > tr > [data-beneath])")) return;
     // A column that left draws no box, and a column of the group stands for
     // each column that is drawn, in order.
     /* eslint-disable no-restricted-syntax -- every column at the width the reader saw while a row is open */

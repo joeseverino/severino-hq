@@ -147,9 +147,7 @@ def mark_cells(markup: str, *, sorts: bool = True) -> str | None:
     cells.close()
     if cells.bodies and not any(cells.bodies):
         return None
-    if not any(
-        (cells.marks, cells.held, cells.details, cells.roles, cells.cuts, cells.gutters, cells.toggles, cells.beneath)
-    ):
+    if not any((cells.marks, cells.held, cells.details, cells.roles, cells.cuts, cells.gutters, cells.toggles)):
         return markup
     text = _Markup(markup)
     cuts = sorted((text.point(start), text.point(end)) for start, end in cells.cuts)
@@ -182,14 +180,6 @@ def _inserts(cells: Cells, markup: str, text: _Markup) -> list[tuple[int, str]]:
         inserts += [(text.at(opened), '<span class="kept-line">'), (text.at(closed), "</span>")]
     for point, mark in cells.gutters + cells.opened:
         inserts.append((after_name(point[0]) if point[1] is None else text.point(point), mark))
-    # Before the toggle at the same place, so the toggle stays last in its cell.
-    for beneath in cells.beneath:
-        if beneath.line and beneath.away:
-            away = "".join(text.content(span, whole=True) for span in beneath.away)
-            inserts.append((text.at(beneath.line), f'<span class="row-put-away narrow-only">{away}</span>'))
-        copied = "".join(text.content(span, cut) for span, cut in beneath.copies)
-        if _TAGS.search(copied):
-            inserts.append((text.at(beneath.at), f'<div class="row-beneath narrow-only">{copied}</div>'))
     # After the kept line's end at the same place, so the toggle stays the cell's own child.
     if cells.toggles:
         # A row drawn open (its editor open) says so on its toggle.
@@ -452,17 +442,24 @@ def history_row_attributes(row: Any, folds: str = "") -> SafeString:
 
 
 @register.inclusion_tag("partials/_row_actions.html")
-def row_actions(actions: Any = (), *, gap: Any = None) -> dict[str, Any]:
+def row_actions(actions: Any = (), *, gap: Any = None, first: int = 0, put_away: Any = None) -> dict[str, Any]:
     """The cell that ends a row with what can be done to its record: each of
     ``actions`` (a ``PageAction``, as a ``ListRow``'s are) a compact control
     drawn by ``_page_action.html``, so a row's buttons look like every other
     and only a destructive one differs. Under a heading of kind ``control``
     (``css="actions-col"``), so the region sizes the column to what it holds
-    and copies it beneath the row's words for a narrow box. ``gap``, an
+    and a narrow box sets it beneath the row's words. ``gap``, an
     ``adoption.WriteGap``, stands in for every action when the connection
-    cannot make the change."""
+    cannot make the change. Given ``first``, the actions past that many wait
+    in the row's open line. ``put_away``, a POST ``PageAction`` such as the
+    queue's Dismiss, is the reader's own way to set the row aside: a quiet
+    cell of its own that ends the row, and in a narrow box its first line
+    (docs/Design.md, A row's controls stand beneath its words in a narrow
+    box)."""
 
-    return {"actions": tuple(actions or ()), "gap": gap}
+    actions = tuple(actions or ())
+    shown, later = (actions[:first], actions[first:]) if first else (actions, ())
+    return {"actions": shown, "later": later, "gap": gap, "put_away": put_away}
 
 
 @register.inclusion_tag("partials/_row_toggle.html")

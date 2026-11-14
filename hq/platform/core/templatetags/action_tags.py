@@ -11,6 +11,7 @@ lazy from dataclasses import asdict, is_dataclass
 
 from django import template
 from django.middleware.csrf import get_token
+from django.urls import reverse
 from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
 
@@ -32,6 +33,23 @@ def row_value(item):
     """``{{ item|row_value }}``: what a queue row's own button names, from its one owner."""
 
     return action_items.row_value(item)
+
+
+@register.simple_tag
+def triage(item=None, *, sorts=True, family="", url=""):
+    """``{% triage item sorts=triage as away %}``: the reader's own way to sort
+    a queue row, Dismiss, or Restore once it is dismissed, posting the row's
+    key; none where the queue is not the reader's to sort (``sorts``). With
+    ``family`` and the part's dismiss ``url``, Dismiss of a whole family."""
+
+    if not sorts:
+        return None
+    if family:
+        return PageAction("Dismiss", f"{url}&family={family}", method="post")
+    restore = bool(item.get("aside"))
+    route = "action_items_bring_back" if restore else "action_items_set_aside"
+    label = "Restore" if restore else "Dismiss"
+    return PageAction(label, reverse(route), method="post", field="key", value=action_items.row_value(item))
 
 
 @register.filter

@@ -151,7 +151,7 @@ class DashboardQueueTests(TestCase):
         entries = gather_attention((("example.utility", "Example", lambda: (urgent,), ()),))
         with patch("hq.platform.application.dashboard.domain_attention_items", return_value=entries):
             dashboard = self.client.get("/")
-            (page,) = [title.attrs["href"] for title in with_class(dashboard, "attention-title")]
+            (page,) = [title.attrs["href"] for title in select(dashboard, "data-attention-title")]
             whole = self.client.get(page)
 
         self.assertContains(dashboard, "data-reading-age")

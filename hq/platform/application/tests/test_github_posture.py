@@ -21,7 +21,7 @@ from ..github_posture import (
     postures,
 )
 from ..standards import INTENDED, MET, UNAVAILABLE, UNMET
-from .markup import hrefs, with_class
+from .markup import hrefs, select
 from .test_github_estate import store
 from .test_item_help import COMMAND, item_help
 
@@ -200,7 +200,7 @@ class PostureViewTests(TestCase):
         self.assertContains(response, "6 of 8")
         self.assertContains(response, "HQ_IMAGE")
         # A failing check is titled by what is wrong, never by what passing is.
-        titles = [element.words for element in with_class(response, "attention-title")]
+        titles = [element.words for element in select(response, "data-attention-title")]
         self.assertEqual(titles, gaps)
         self.assertFalse(set(titles) & {check.label for check in STANDARD})
 

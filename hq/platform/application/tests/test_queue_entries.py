@@ -94,13 +94,13 @@ class DenseRowTests(SimpleTestCase):
     def test_a_dense_rows_meaning_waits_in_the_line_beneath(self):
         page = _drawn(self.REST, rest=[_item("a")])
 
-        details = [element for element in page if "attention-detail" in element.classes]
+        details = [element for element in page if "data-attention-detail" in element.attrs]
         self.assertTrue(details)
         self.assertTrue(all(_below(detail) for detail in details))
 
     def test_the_whole_queue_keeps_its_meaning_on_the_row(self):
         page = _drawn('{% include "partials/_work_queue.html" with items=items %}', items=[_item("a")])
 
-        details = [element for element in page if "attention-detail" in element.classes]
+        details = [element for element in page if "data-attention-detail" in element.attrs]
         self.assertTrue(details)
         self.assertFalse(any(_below(detail) for detail in details))

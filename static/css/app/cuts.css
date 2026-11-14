@@ -13,10 +13,9 @@
 
 @layer components {
 /* Page furniture: a label, a name or a note held to its line. */
-/* A queue row's buttons beneath its words in a narrow box (cards.css) keep
-   their labels on one line, each in a track the line's width: one longer than
-   the line is cut at its button's edge. */
-.queue-beneath > .attention-actions > * { overflow: hidden; }
+/* A row's controls beneath its words in a narrow box (tables.css) keep their
+   labels on one line: one longer than the line is cut at its button's edge. */
+.data-table > tbody > tr > [data-beneath] > * { overflow: hidden; }
 /* A head is one short line, and stays so: what one of its controls says is
    said over the head's reading line (ask.js, partials/_ask.html), in the room the words the
    server drew there keep, hidden and not removed, and cut to their width,

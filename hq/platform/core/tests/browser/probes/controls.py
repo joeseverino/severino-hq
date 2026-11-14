@@ -185,6 +185,9 @@ ACTIONS_OFF_THE_LINE = (
   const pressed = 'a, button, form, [role="button"], [data-ask]';
   for (const cell of document.querySelectorAll(CONTROL_CELL)) {
     if (!cell.checkVisibility()) continue;
+    // A row stacked in a narrow box sets its controls on a line of their own
+    // beneath its words (tables.css), where no words share their line.
+    if (wordsOf(cell) !== cell && box(cell).top >= box(wordsOf(cell)).bottom - 1) continue;
     const style = getComputedStyle(cell);
     const words = getComputedStyle(wordsOf(cell));
     const line = lineOf(style);
@@ -351,6 +354,10 @@ ACTIONS_BESIDE_SQUEEZED_WORDS = (
       .filter((other) => other !== cell && other.matches('td, th') && !other.matches(cells) && other.checkVisibility());
     if (!words.length) continue;
     const widest = words.reduce((most, other) => (box(other).width > box(most).width ? other : most));
+    // Controls on a line of their own beneath the words (a row stacked in a
+    // narrow box, tables.css) stand beside none of them, and the reader's
+    // one quiet put-away (`data-put-away`) shares the title's line by design.
+    if (cell.matches('[data-put-away]') || box(cell).top >= box(widest).bottom - 1) continue;
     const style = getComputedStyle(widest);
     const room = box(widest).width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
     const line = measureIn(widest);
@@ -417,11 +424,11 @@ CHECKS = {
     "actions no taller than the row": ACTIONS_GROW_THE_ROW,
     "row actions stacked with room": (
         ACTIONS_STACKED_WITH_ROOM,
-        f"{SELECTORS['row_actions_cell']}, {SELECTORS['queue_actions_cell']}",
+        SELECTORS["row_actions_cell"],
     ),
     "row actions beside squeezed words": (
         ACTIONS_BESIDE_SQUEEZED_WORDS,
-        [f"{SELECTORS['row_actions_cell']}, {SELECTORS['queue_actions_cell']}", ROW_WORDS],
+        [SELECTORS["row_actions_cell"], ROW_WORDS],
     ),
     "words swapped for a glyph": (WORDS_SWAPPED_FOR_A_GLYPH, SELECTORS["pressed"]),
     "control words on one line": (

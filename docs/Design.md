@@ -224,7 +224,9 @@ one already, often by the same name. *Gates:*
 `test_a_rows_controls_stay_in_its_card_and_a_table_that_cannot_fit_scrolls`,
 `test_a_section_and_the_table_in_it_are_one_landmark`. A pane (`pane=True`) is
 as tall as its rows up to a fixed reading height, as the topology ledger is,
-and scrolls past it. A table never stacks into cards and is not swiped through.
+and scrolls past it. A table never stacks into cards and is not swiped through:
+a row that offers controls sets them on a line beneath its words in a narrow
+box, each cell still a cell under its heading (below).
 
 A key/value table (row headers, no `thead`) sizes its label column to its
 longest label.
@@ -250,18 +252,19 @@ wrap only in a tight table, where every kept line does (*Gate:* the survey's
 `--row-words` (`data-words`), so a table without room for both takes its narrow
 box rather than wrap a few words a line.
 
-**A row's controls stand beneath its words in a narrow box.** The region copies
-the controls of a row's actions, or of a column of kind `control` holding no
-field a reader fills in, into the cell that names the row (`row-beneath`, a
-`narrow-only` copy, `table_cells.Beneath`), and their own column empties to no
-width there (`data-beneath`). They start where the words start, each as wide
-as its label, wrapping as the line needs. So a column of controls never leaves
-for the row's open line, whatever rank it is given, and a reader never opens a
-row to find what it offers. A row's one quiet put-away control
-(`data-put-away`, the queue's Dismiss) ends the row's first line instead,
-where the naming cell marks one (`data-row-line`): it shares the title's line
-in one look and never takes a line of its own. A choice (a select) is a value
-of the row and keeps its column. *Gates:* the survey's `row actions beside
+**A row's controls stand beneath its words in a narrow box.** The region marks
+the cells of a row's actions, or of a column of kind `control` holding no
+field a reader fills in, `data-beneath`; in a narrow box the row stacks, the
+stacked row of a responsive table: its words take the first line, and its
+controls, drawn once in their own cell, take the line beneath, starting where
+the words start, each as wide as its label. Only the row changes its display,
+so each cell stays a cell under its heading and the row's open line still
+spans the table. So a column of controls never leaves for the row's open
+line, whatever rank it is given, and a reader never opens a row to find what
+it offers. A row's one quiet put-away control (`row_actions put_away=`, the
+queue's Dismiss) is a cell of its own (`data-put-away`) that ends the row's
+first line: it shares the title's line in one look and never takes a line of
+its own. A choice (a select) is a value of the row and keeps its column. *Gates:* the survey's `row actions beside
 squeezed words` and `row actions behind the toggle`, and
 `test_row_controls.py`.
 
@@ -1236,22 +1239,27 @@ subject does not meet, the steps a request contradicts and a domain's own
 attention list all use one projection (`hq/platform/application/decisions.py`).
 They draw it as one table (`partials/_work_queue.html`, its rows
 `partials/_queue_rows.html`). A page never draws a list of its own (the
-`hand-drawn-findings` rule). A row reads, in order:
+`hand-drawn-findings` rule). A row is a table row as any other: its words in
+the cell that names it, what it offers in `{% row_actions %}`, so it stands at
+the table's own density and gives way as every table does. It reads, in
+order:
 
-- the title and, only when it is urgent, the word "Urgent" after it in its
-  tone (the words are `decisions.URGENCY`; a row that needs attention carries
-  no mark, its word kept for a screen reader). The title states what is wrong
-  and links to the thing it is about. It is what a reader presses, so it
-  leads; a domain's heading, a family's name and their counts
-  read below it;
-- since when, where its owner knows (`Insight(since=...)`), and never a guess;
-  how old the reading it is drawn from is (`Insight(observed_at=...)`). An
-  out-of-date reading never asserts a live condition: its owner says what was
-  read, in the past tense, as a notice;
+- its first line (`row-line`): the title and, only when it is urgent,
+  the word "Urgent" after it in its tone (the words are `decisions.URGENCY`; a
+  row that needs attention carries no mark, its word kept for a screen
+  reader). The title states what is wrong and links to the thing it is about.
+  It is what a reader presses, so it leads; a domain's heading, a family's
+  name and their counts read below it;
 - one line of what it means;
+- quiet under it, since when, where its owner knows (`Insight(since=...)`),
+  and never a guess, and how old the reading it is drawn from is
+  (`Insight(observed_at=...)`). An out-of-date reading never asserts a live
+  condition: its owner says what was read, in the past tense, as a notice.
+  These are words under the title, not a column: most rows have neither;
 - buttons: the owner's actions, the first step that can be taken now when the
   owner offered none, and the check that reads again. At most one is primary.
-  Where the reader sorts their own queue, Dismiss or Restore ends the row.
+  Where the reader sorts their own queue, Dismiss or Restore is the row's
+  put-away (`row_actions put_away=`), quiet and last.
 
 Closed, a row is those one or two lines. Everything taller is the row's
 `row-below`, opened by its toggle into the line beneath, from the title's edge
@@ -1270,10 +1278,10 @@ with no script every row shows all of it. The line beneath holds, in order:
 - the buttons past the first two, in one place under the rest.
 
 In a narrow box (a phone, or a narrow card on a wide screen) the row's
-buttons stand beneath its words, closed or open, sharing the line's width,
-and Dismiss or Restore ends that line in its word. A reader never opens a row
-to find what it offers. The survey holds both: "row actions behind the
-toggle" and "words swapped for a glyph".
+buttons stand beneath its words and Dismiss or Restore ends the title's line,
+as every table's row controls do (A row's controls stand beneath its words in
+a narrow box). A reader never opens a row to find what it offers. The survey
+holds both: "row actions behind the toggle" and "words swapped for a glyph".
 
 The word is `partials/_urgency_pill.html`. A Cmd- or Ctrl-click on it opens
 what raised it, read from the code rather than written down. That is the finding rule,
@@ -1294,9 +1302,9 @@ how bad, what kind and how many, which opens to their rows: on the queue page
 
 Problems drawn inside a section of a page about something else (a machine's
 containers, a container's checks, the request's path) are the row's dense form
-(`dense`). The title takes the table's own size and weight, its marks and its
-buttons share one line, and what it means comes first in the line beneath. So
-the section's own content stays what it is about. `partials/_problems.html`
+(`dense`): what it means comes first in the line beneath, so the row is
+its title, its marks and its buttons, and the section's own content stays what
+it is about. `partials/_problems.html`
 draws a thing's problems this way under its urgent box and in each part's card.
 
 A queue of three or fewer is read on the dashboard, under the greeting, as

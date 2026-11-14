@@ -129,7 +129,7 @@ document.addEventListener("change", (event) => {
 // header's follow. "Dismiss all" and a family's "Dismiss" stay ordinary
 // posts, since what they cover is the server's to say.
 document.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-triage] button[formaction]");
+  const button = event.target.closest("[data-put-away] button[formaction]");
   if (!button || event.defaultPrevented) return;
   const row = button.closest("[data-attention-item]");
   const form = document.getElementById(button.getAttribute("form"));
@@ -162,16 +162,15 @@ document.addEventListener("click", (event) => {
           badge.hidden = next === 0;
         });
       }
-      // The button becomes its opposite, posting to the other route, and so
-      // does its copy the row draws for a narrow box (_queue_rows.html).
-      if (dismissing) row.dataset.dismissed = `Dismissed: ${row.querySelector(".attention-title")?.textContent.trim() || ""}`;
+      // The button becomes its opposite, posting to the other route.
+      if (dismissing) row.dataset.dismissed = `Dismissed: ${row.querySelector("[data-attention-title]")?.textContent.trim() || ""}`;
       else delete row.dataset.dismissed;
       const routes = document.querySelector("[data-triage-routes]")?.dataset;
       const next = other || {
         action: dismissing ? routes?.restore : routes?.dismiss,
         label: dismissing ? "Restore" : "Dismiss",
       };
-      row.querySelectorAll("[data-triage] button[formaction]").forEach((copy) => {
+      row.querySelectorAll("[data-put-away] button[formaction]").forEach((copy) => {
         copy.dataset.other = JSON.stringify(was);
         copy.setAttribute("formaction", next.action);
         copy.textContent = next.label;

@@ -7,12 +7,8 @@ SELECTORS = {
     # A row's actions cell ({% row_actions %}) and any cell of a column of
     # controls, whose controls sit on the row's first line.
     "row_actions_cell": 'main td.row-actions, main td[data-kind="control"]',
-    # A table's row that offers controls: its actions, a column of controls,
-    # or the queue's cell of what a row offers.
-    "controls_row": '.data-table > tbody > tr:has(> :is(td.row-actions, td[data-kind="control"], td.queue-act))',
-    # The queue's cell of what a row offers and its dismiss
-    # (`partials/_queue_rows.html`), a table with no headings to name its kind.
-    "queue_actions_cell": "main td.queue-act",
+    # A table's row that offers controls: its actions or a column of controls.
+    "controls_row": '.data-table > tbody > tr:has(> :is(td.row-actions, td[data-kind="control"]))',
     # A device on the Agents page waiting for the reader's approval.
     "device_prompt": "[data-prompt]",
     # An agent's update streams: a full set warned of in its row's cell, and
@@ -61,14 +57,14 @@ SELECTORS = {
     "row_opener": "main [data-row-toggle]:not([data-fold-toggle])",
     # A table's own rows of records, the lines beneath them left out.
     "own_records": ":scope > tbody > tr:not(.row-detail)",
-    "decision_dismiss": "[data-triage] button",
-    "decision_title": ".attention-title",
+    "decision_dismiss": "[data-put-away] button",
+    "decision_title": "[data-attention-title]",
     "decision_steps": ".resolution-workflow",
     # What an item means: never cut.
-    "decision_detail": ".attention-detail",
+    "decision_detail": "[data-attention-detail]",
     # What an item says, and where its buttons are: the words run to the buttons.
-    "decision_words": "[data-attention-item] :is(.attention-head, .attention-detail)",
-    "decision_buttons": ".queue-act",
+    "decision_words": "[data-attention-item] > .row-gutter > :is(.row-line, [data-attention-detail])",
+    "decision_buttons": "td.row-actions",
     # Running text, and what an opened row shows beneath it: code in it is
     # never cut, since only a cell's own identifier is. The rest of a
     # `line_list` is no text but the parts its line has no room for, each
@@ -88,11 +84,11 @@ SELECTORS = {
     "kept_line": "main td > .kept-line",
     "line_icon": ".icon",
     "line_name": ".token",
-    "decision_actions": ".queue-act .attention-actions",
+    "decision_actions": "[data-attention-item] > td.row-actions",
     # The queue's table, and its cells of what is wrong and of its buttons.
-    "queue_table": ".queue-table",
-    "queue_what": "td.queue-what",
-    "queue_act": "td.queue-act",
+    "queue_table": ".data-table:has(> tbody > tr[data-attention-item])",
+    "queue_what": "[data-attention-item] > .row-gutter",
+    "queue_act": "[data-attention-item] > td.row-actions",
     # A list page's controls: its search, the button that opens a filter's
     # panel, the panel and a box in one, a toggle beside them, a heading that
     # sorts on the server, and the results they change: the rows, never the

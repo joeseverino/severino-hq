@@ -232,11 +232,17 @@ class EveryEmittedRemedyOpensReadyTests(TestCase):
 
     def test_a_box_of_remedies_holds_a_control(self):
         # A remedy left out because it leads to the page it is drawn on takes
-        # its box with it, never an empty band where controls would be.
+        # its box with it, never an empty band where controls would be: a row's
+        # actions left with none are a blank cell, which takes no room.
         boxes = 0
         for page in self.pages():
             drawn = all_elements(self.client.get(page))
-            held = {id(box) for box in drawn if "attention-actions" in box.classes}
+            held = {
+                id(box)
+                for box in drawn
+                if box.classes & {"attention-actions", "row-later"}
+                or ("row-actions" in box.classes and "data-blank" not in box.attrs)
+            }
             boxes += len(held)
             filled = {id(ancestor) for element in drawn if "btn" in element.classes for ancestor in element.ancestors}
             with self.subTest(page=page):

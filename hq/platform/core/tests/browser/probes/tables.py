@@ -59,9 +59,15 @@ TABLES = (
                  || getComputedStyle(head).position === 'absolute')) {
       found.push(`${name} hides its column headings`);
     }
-    // A row folded away is not drawn at all, which is not drawn as a card.
+    // A row folded away is not drawn at all, which is not drawn as a card. A
+    // row of a table with a column of controls (`data-beneath`) wraps them to
+    // a line beneath its words in a narrow box, each cell still a cell under
+    // its heading (tables.css), which is no card either.
+    const beneath = table.querySelector(':scope > * > tr > [data-beneath]');
     for (const row of table.querySelectorAll('tbody tr')) {
-      if (!['table-row', 'none'].includes(getComputedStyle(row).display)) {
+      const display = getComputedStyle(row).display;
+      if (beneath && display === 'flex' && row.matches('tr:has(> :nth-child(2))')) continue;
+      if (!['table-row', 'none'].includes(display)) {
         found.push(`${name} stacks its rows`); break;
       }
     }
