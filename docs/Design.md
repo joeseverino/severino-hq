@@ -1085,7 +1085,7 @@ muted text while keeping 4.5:1 against the surface, so color alone cannot do
 it. A link that is the whole of its line, row, item or chip is never underlined
 at rest; it reads by its color and underlines on hover and focus, as every link
 does. One rule in `base.css` draws it. Words are a `p`, a `small`, a `.muted`
-line, or a value or item marked `.prose` because it reads as a sentence (a name
+line, or a value, item or notice marked `.prose` because it reads as a sentence (a name
 followed by a note, a summary with a link in it). A link with a class of its
 own is a control, `.external-link` aside. A table cell's `prose` stays on its
 part when the column leaves for the row's open line. The survey's `links at

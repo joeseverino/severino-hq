@@ -42,8 +42,10 @@ FIXTURE_TASKS = {
     ("tools/tests/test_task_references.py", "of"),
     # The throwaway repository the heavy turn's suite builds: a holder, a quick
     # heavy task, one that runs it from inside, one that weighs its run, a
-    # measured run of tests, and a file task that takes the turn in its header.
+    # measured run of tests, a file task that takes the turn in its header, and
+    # one that passes the gate first.
     ("tests/shell/test-heavy.sh", "hold"),
+    ("tests/shell/test-heavy.sh", "gated"),
     ("tests/shell/test-heavy.sh", "quick"),
     ("tests/shell/test-heavy.sh", "outer"),
     ("tests/shell/test-heavy.sh", "weighed"),

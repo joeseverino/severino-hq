@@ -361,8 +361,22 @@ The tests it selects are:
 
 - the test modules that import a changed file, directly or through one module
   between;
-- every test of the changed Django apps, and every test that names one (its
-  URL namespace or app label);
+- every test that names a route whose view the change reaches, by its name
+  (`reverse("control_plane:detail")`) or by a path it answers
+  (`"/infrastructure/topology/"`, an f-string's field filling a converter),
+  each path resolved to the first route it fits, as Django resolves it: a test
+  that drives a view through the client imports its models, never its views.
+  A route is read from each URL module's `path()` calls, its prefix from the
+  call that mounts its module (`Mount("infrastructure/", "<module>")`,
+  `include()`) or from `ROOT_URLCONF`. A view is reached when the change
+  imports into its module, when its module imports a module that names a
+  changed file, or, for the module that names the file itself, when the view
+  (or a class it derives from) is the definition that names it. A template
+  reaches through every template that includes or extends it, and a tag
+  library through every template that loads it;
+- every test that names an app whose models the change reaches, by a model
+  label (`"projects.Project"`) or its app label; a migration reaches its app's
+  models;
 - every test that reads the tasks, when a task definition or a file a task's
   run names changed;
 - every module whose source names a changed file, and every test that
@@ -410,10 +424,10 @@ the map's tree, and runs whichever selection has fewer modules:
 
 - a Python file the map holds, changed only inside function bodies (a
   function's docstring aside), selects the test modules that ran it, and
-  not its app: such a change does nothing at import, and a test that ran
-  none of the file runs what it ran before until it reaches another changed
-  file, which selects it;
-- a changed test module touches no app either;
+  not the tests of its routes: such a change does nothing at import, and a
+  test that ran none of the file runs what it ran before until it reaches
+  another changed file, which selects it;
+- a changed test module reaches no route either;
 - every other path (a module-level line, a template, a migration, a file
   the map does not hold) selects by the rules above, and so does a test
   module the recording did not run.
@@ -456,7 +470,7 @@ turns](#heavy-gates-take-turns)): with one, fast takes the turn once, through
 the hidden task `turn`, for the tests and those gates together, and mise hands
 its lock down to every task under it, so a gate that takes the lock itself
 goes ahead at once, beside the rest. With none, the tests take the turn
-themselves when their run is heavy. Both runs' output is kept in
+themselves when their run is more than one process, and a share otherwise. Both runs' output is kept in
 `var/gate/fast.log` ([The gates](#the-gates)), and both run in the config
 environment `mise.fast.toml` sets: mise's summary output, where a gate that
 passed prints its `passed in` line as it ends and one that failed prints
@@ -680,8 +694,10 @@ first. The global pre-push hook runs it with git's refs on stdin.
 Two suites at once exhaust a small machine's memory. So every step that loads
 the machine (a suite, a browser, an image build, CodeQL) waits for one turn
 shared by every checkout and worktree, and a waiting task names the holder.
+A run of tests or a look of one process takes a share of the turn instead,
+and shares run side by side up to the machine's budget.
 
-A step of one process (a Django command, a linter, a serial test run) runs
+A step of one process that holds little (a Django command, a linter) runs
 beside the holder. A gate whose one process still loads the machine
 through most of a fast run (`lint:mypy` is one) carries the tag `heavy`, which only fast reads: fast
 runs it beside its tests in the turn it takes for them, never among its
@@ -716,19 +732,40 @@ mise polls. The command's own heavy tasks inherit the gate
 (`MISE_TASK_LOCKS`) and take turns on `heavy` among themselves.
 `test_landing.py` (`tools/gate/tests/`) runs that order against mise.
 
-A run of tests is narrow, and goes ahead outside the turn, when it runs in
-one process and no test it loads drives a browser (`tools/gate/turn.py`): it
-is serial (`--parallel 1`), or Django, which starts a worker for each test
-class up to the workers asked for, finds one class in what its labels name.
-So `mise run test <module>.<Class>` starts at once, and a parallel run of a
-module of several classes, or of fast's selection, waits for the turn. The
-decision weighs the arguments the run passes: a task hands it its run's own
-options before the labels (`test_arguments`), which `HeavyTaskTests` holds
-to the run. A task whose weight depends on what it is given (`test`, `fast`'s tests, `lint:source`, the composed suite,
-`dev:look`, `browser --linux`) runs its heavy runs through the hidden task
-`turn`, which holds the lock (`tools/lib/heavy-turn.sh` for a file task)
-under the gate's own bound, `HQ_TURN_BOUND`: `mise run --timeout` would count
-the wait too.
+A run of tests takes a share of a token for each process it runs tests in
+(`tools/gate/turn.py`): one when it is serial (`--parallel 1`), and
+otherwise as many as the workers Django starts, one for each test class up to
+the workers asked for. So `mise run test <module>.<Class>` takes a share of
+one, and a run across the cores (fast's selection, a module of many classes,
+the suite) waits for the whole turn. The decision weighs the arguments the
+run passes: a task hands it its run's own options before the labels
+(`test_arguments`), which `HeavyTaskTests` holds to the run. `dev:look` is
+one process whatever pages it names and declares its share
+(`turn_share=2`), save with `--base` or `--perf`, which run perf in the whole
+turn. A task whose weight depends on what it is given (`test`, `fast`'s
+tests, `lint:source`, the composed suite, `dev:look`, `browser --linux`) runs
+its whole runs through the hidden task `turn`, which holds the lock, and its
+shares through `python -m tools.gate.turn --share` (`tools/lib/heavy-turn.sh`
+for a file task), each under the gate's own bound: `mise run --timeout` would
+count the wait too.
+
+A share counts in tokens out of the machine's four (`CAPACITY`), each about
+a core and 600 MB: a process that runs tests takes one, one beside which a
+browser draws (a look, a survey) two, so two surveys or four test runs fit together beside
+the dev server and a browser on an 8 GB Mac. mise's task lock is one
+exclusive flock with no shared or counted mode
+([task_lock.rs](https://github.com/jdx/mise/blob/v2026.11.8/src/task/task_lock.rs)),
+so a share is the counting semaphore the kernel's flock(2) makes, as
+`flock -s` and GNU make's jobserver tokens do: it takes the lock `heavy` shared,
+which a whole run's exclusive lock waits for and keeps out, and its tokens
+from four slot files beside it, one share at a time behind a door, so a
+share of two is never starved by shares of one. A whole run waiting for the
+turn holds the gate while it waits (mise takes `gate`, then polls `heavy`),
+and a share passes the gate before it takes its tokens, so a waiting whole
+run lets the shares it waits for end and lets no new one start: no run
+starves. A run inside a share, like one inside the turn, goes ahead at once
+(`HQ_TURN_SHARE`). A share waits, names who holds what it waits for and gives
+up after `MISE_TASK_LOCK_TIMEOUT` as mise's own waits do.
 
 A task that waits for the turn without holding the lock (each of those, and
 an aggregate whose script runs `mise run` on one that waits) declares
@@ -765,12 +802,10 @@ wrapper that names it), its workers, and children under them such as a walk
 run apart. A worker's and a child's line also gives the most
 one process of its role held. The sampling's own CPU is stated last and kept
 out of the tree's. The template's `shell`, the line every heavy file task
-sources, and the `turn` task each run their command under it, and
+sources, the `turn` task and a share each run their command under it, and
 `HeavyTaskTests` holds every task that takes the lock to one of the three. A
-heavy run inside a measured one adds no line of its own, and a narrow `mise
-run test`, or a narrow run of a file task that weighs its tests (fast's, a
-labeled `lint:source`), runs again under it, so measuring one label is that
-one command.
+heavy run inside a measured one adds no line of its own, so measuring one
+label is that one command.
 
 The line is a report, never a check: load and the mix of tests move both
 memory and time, so nothing fails on them, and the command's exit status is

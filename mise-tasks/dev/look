@@ -53,17 +53,14 @@ if [ "${usage_composed:-}" = true ]; then
     kept_set=/composed
 fi
 
-# A look at the pages it names holds a fraction of a suite's memory, so it
-# runs beside other heavy work, as `mise run test` runs light labels; every
-# page, every page linked, a base or a measure takes the heavy turn.
-light_run=1
-[ -z "${usage_base:-}" ] && [ "${usage_perf:-}" != true ] && [ "${usage_deep:-}" != true ] || light_run=""
+# A look is one process however many pages it draws, a browser beside it,
+# so it takes a share of the heavy turn (tools/gate/turn.py, BROWSER); a base
+# or a measure runs perf, which takes the whole turn.
+turn_share=2
+[ -z "${usage_base:-}" ] && [ "${usage_perf:-}" != true ] || turn_share=""
 # mise hands the pages over shell-quoted, one word each.
 eval "set -- ${usage_pages:?}"
-for page do
-    case "${page}" in all | estate/all) light_run="" ;; esac
-done
-# What was asked is checked before the heavy turn, which may wait behind
+# What was asked is checked before the turn, which may wait behind
 # other runs: all but a record's page, found only in the estate the run draws.
 uv run --group browser python manage.py shell --no-imports -v 0 \
     -c 'from hq.platform.core.tests.look import refuse_early; refuse_early()'

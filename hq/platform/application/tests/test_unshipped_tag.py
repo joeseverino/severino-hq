@@ -17,6 +17,7 @@ from textwrap import dedent
 
 from django.test import SimpleTestCase, tag
 
+from .reads import reads
 from .tree import ROOT, runs_unshipped_untagged
 
 HELPER = """
@@ -133,6 +134,7 @@ def fixture() -> Iterator[Path]:
 
 
 @tag("source", "tree")
+@reads("**/*.py", "Dockerfile", "Dockerfile.dockerignore", "mise.toml")
 class UnshippedTagTests(SimpleTestCase):
     def test_a_test_the_image_ships_that_runs_a_program_the_image_lacks_carries_the_source_tag(self):
         self.assertEqual(

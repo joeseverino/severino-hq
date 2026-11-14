@@ -37,8 +37,8 @@ run = "uv run python manage.py makemigrations --check --dry-run"
 ["test:api-properties"]
 description = "Generated API cases through the real WSGI middleware"
 hide = true
-# One module in one process: a narrow run, outside the heavy turn (tools/gate/turn.py),
-# which fast still runs in the turn it holds for its tests (tools/gate/fast.py, HEAVY).
+# One module in one process, outside the heavy turn and its shares, which fast
+# still runs in the turn it holds for its tests (tools/gate/fast.py, HEAVY).
 tags = ["heavy"]
 extends = "django"
 run = "uv run --group fuzz python manage.py test tests.fuzz.api_properties --noinput --parallel 1"

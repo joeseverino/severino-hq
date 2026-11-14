@@ -71,12 +71,74 @@ class FastGateMappingTests(GateTestCase):
         self.assertEqual(importers["example.urls"], {"example.tests.test_mock"})
         self.assertLessEqual({"example.lazy", "example.tests.test_mock"}, importers["example"])
 
-    def test_an_app_change_selects_the_tests_that_use_the_app(self):
-        labels = self.labels("hq/domains/expenses/views.py")
-        self.assertIn("hq.platform.application.tests.test_domains", labels)
-        self.assertNotIn("hq.platform.mcp.tests", labels)
+    def routed(self, *changed: str) -> list[str]:
+        """The test modules of a fixture app ``changed`` selects: two views, one rendering a page that includes
+        a part, routed by name under a mount; a test reversing each route, one requesting each path, and one
+        importing the app's models alone."""
 
-    def test_a_model_change_selects_its_app_and_not_an_unrelated_domain(self):
+        modules = {
+            "example/__init__.py": "",
+            "example/models.py": "class Thing: ...\n",
+            "example/views.py": (
+                "class ListView:\n    template_name = 'example/list.html'\n"
+                "class DetailView:\n    template_name = 'example/detail.html'\n"
+                "class FilteredView(ListView): ...\n"
+            ),
+            "example/urls.py": (
+                "from django.urls import path\nfrom . import views\napp_name = 'example'\n"
+                "urlpatterns = [\n"
+                "    path('', views.ListView.as_view(), name='list'),\n"
+                "    path('filtered/', views.FilteredView.as_view(), name='filtered'),\n"
+                "    path('<slug:key>/', views.DetailView.as_view(), name='detail'),\n"
+                "]\n"
+            ),
+            "example/mounts.py": "MOUNTS = [Mount('things/', 'example.urls')]\n",
+            "example/tests/__init__.py": "",
+            "example/tests/test_list.py": "reverse('example:list')\n",
+            "example/tests/test_filtered.py": "client.get('/things/filtered/?q=a')\n",
+            "example/tests/test_detail.py": "reverse('example:detail', args=['a'])\n",
+            "example/tests/test_detail_path.py": "client.get(f'/things/{key}/')\n",
+            "example/tests/test_models.py": "from example.models import Thing\n",
+        }
+        templates = {
+            "templates/example/list.html": "{% include 'example/_row.html' %}\n",
+            "templates/example/detail.html": "",
+            "templates/example/_row.html": "",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for path, text in {**modules, **templates}.items():
+                (root / path).parent.mkdir(parents=True, exist_ok=True)
+                (root / path).write_text(text)
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            files = [Path(path) for path in modules]
+            with patch.object(fast_chain, "ROOT", root):
+                reached, touched = fast_select.affected(list(changed), [], files)
+                return fast_select.test_labels(files, reached, touched)[0]
+
+    def test_a_view_change_selects_the_tests_that_reverse_or_request_its_routes_alone(self):
+        self.assertEqual(
+            self.routed("example/views.py"),
+            [
+                "example.tests.test_detail",
+                "example.tests.test_detail_path",
+                "example.tests.test_filtered",
+                "example.tests.test_list",
+            ],
+        )
+
+    def test_a_template_selects_the_tests_of_the_routes_whose_views_render_it_through_what_includes_it(self):
+        """A part reaches the page that includes it, the page the view that names it and the view's heirs, and
+        those views their routes, by name or by a path a request spells; the detail route is another view's."""
+
+        for changed in ("templates/example/list.html", "templates/example/_row.html"):
+            with self.subTest(changed=changed):
+                self.assertEqual(self.routed(changed), ["example.tests.test_filtered", "example.tests.test_list"])
+
+    def test_a_model_change_reaches_no_route_by_its_app_alone(self):
+        self.assertEqual(self.routed("example/models.py"), ["example.tests.test_models"])
+
+    def test_a_model_change_selects_its_apps_tests(self):
         labels = self.labels("hq/domains/projects/models.py")
         own = [
             fast_select.module_name(p)
@@ -85,21 +147,22 @@ class FastGateMappingTests(GateTestCase):
         ]
         self.assertTrue(own)
         self.assertLessEqual(set(own), set(labels))
-        self.assertFalse([label for label in labels if label.startswith("hq.domains.receipts.")])
 
     def test_an_app_label_in_prose_is_not_a_reference(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             for name, text in {
-                "namespace": 'reverse("projects:list")',
+                "label": 'Project = "projects.Project"',
                 "model": 'apps.get_model("projects", "Project")',
                 "prose": '"""Covers the projects page and its core."""',
+                "route": 'reverse("projects:list")',
             }.items():
                 (root / f"test_{name}.py").write_text(text)
             files = sorted(Path(p.name) for p in root.iterdir())
             with patch.object(fast_chain, "ROOT", root):
                 chosen, _ = fast_select.test_labels(files, set(), {"projects"})
-            self.assertEqual(chosen, ["test_model", "test_namespace"])
+            # A route is reached by its view, never by the app whose models changed.
+            self.assertEqual(chosen, ["test_label", "test_model"])
 
     def reading(self, modules: dict[str, str], *changed: str) -> set[str]:
         """The modules of a fixture tree holding ``modules`` that ``changed`` reaches through what they read."""
@@ -283,9 +346,9 @@ class FastGateMappingTests(GateTestCase):
         self.assertIn("hq.platform.core.tests.test_security", labels)
         self.assertIn("hq.platform.application.tests.test_architecture", labels)
 
-    def test_a_template_belongs_to_its_app(self):
-        _, touched = fast_select.affected(["templates/expenses/list.html"], [], self.files)
-        self.assertEqual(touched, {"expenses"})
+    def test_a_migration_reaches_its_apps_models(self):
+        _, touched = fast_select.affected(["hq/domains/projects/migrations/0001_initial.py"], [], self.files)
+        self.assertEqual(touched, {"projects"})
 
     def test_a_deleted_module_selects_what_imported_it(self):
         reached, touched = fast_select.affected([], ["hq/domains/projects/models.py"], self.files)
@@ -400,9 +463,6 @@ class FastGateNestedLayoutTests(GateTestCase):
             with patch.object(fast_chain, "ROOT", root), everywhere("python_files", return_value=[path]):
                 apps = fast_select.django_apps()
             self.assertEqual(apps, {"hq/domains/example": "stable_label"})
-            self.assertEqual(fast_select.owner("hq/domains/example/views.py", apps), "stable_label")
-            self.assertEqual(fast_select.owner("templates/stable_label/list.html", apps), "stable_label")
-            self.assertEqual(fast_select.owner("static/stable_label/site.css", apps), "stable_label")
 
     def test_an_app_is_each_class_naming_one_in_an_apps_module_under_hq(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -476,7 +536,8 @@ class FastGateNestedLayoutTests(GateTestCase):
             "hq/domains/other/apps.py": 'class OtherConfig:\n    name = "hq.domains.other"\n',
             "deploy/old.yml": "example: true\n",
             "tests/__init__.py": "",
-            "tests/test_app.py": "from hq.domains.example.models import Thing\n",
+            # It imports the module by the path the rename leaves behind.
+            "tests/test_app.py": "from hq.domains.example.moved import VALUE\n",
             "tests/test_reads.py": 'PATH = "deploy/old.yml"\n',
             "tests/test_unrelated.py": "",
         }

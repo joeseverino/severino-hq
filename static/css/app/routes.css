@@ -126,16 +126,6 @@ kbd {
 /* On a saved copy, a line about the reader's connection is marked as an example. */
 span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-weight: 400; }
 .notice p { margin: var(--space-2) 0 0; }
-/* A notice is words, so a link in it differs from them by more than its
-   color (WCAG 1.4.1), as a link in a paragraph does (base.css). A link drawn
-   as a chip (a switch's choice) is a place to go, marked by its frame. */
-.notice a:where(:not([class]), .external-link):not(strong a, :has(> .scope-chip)) {
-  text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
-  text-decoration-thickness: 1px;
-  text-underline-offset: .18em;
-  &:is(:hover, :focus-visible) { text-decoration-color: currentColor; }
-}
 
 .pagination { display: flex; gap: var(--space-6); align-items: center; margin: var(--space-8) 0; font-size: var(--text-sm); }
 

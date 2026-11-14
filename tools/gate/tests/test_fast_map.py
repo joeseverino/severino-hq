@@ -20,22 +20,30 @@ from tools.gate.tests.fast_runs import Recorder, everywhere, run_main
 
 VIEWS = "hq/domains/example/views.py"
 OTHER = "hq/domains/other/helpers.py"
-# Two apps, each with a test module the map says ran a file of it, and one that ran none.
+# Two apps, each with a test module that imports a file the map says it ran, and one that ran
+# none: in the first, one that reverses the route of the view the map saw run.
 FILES = {
     "hq/__init__.py": "",
     "hq/domains/__init__.py": "",
     "hq/domains/example/__init__.py": "",
     "hq/domains/example/apps.py": 'class ExampleConfig:\n    name = "hq.domains.example"\n',
     "hq/domains/example/models.py": "class Thing: ...\n",
-    VIEWS: '"""The example pages."""\n\n\ndef page():\n    """The one page."""\n    return 1\n',
+    VIEWS: (
+        '"""The example pages."""\n\nfrom hq.domains.example.models import Thing\n\n\n'
+        'def page():\n    """The one page."""\n    return 1\n'
+    ),
+    "hq/domains/example/urls.py": (
+        "from django.urls import path\n\nfrom . import views\n\napp_name = 'example'\n"
+        "urlpatterns = [path('', views.page, name='page')]\n"
+    ),
     "hq/domains/example/tests/__init__.py": "",
-    "hq/domains/example/tests/test_views.py": "",
-    "hq/domains/example/tests/test_app.py": "",
+    "hq/domains/example/tests/test_views.py": "from hq.domains.example import views\n",
+    "hq/domains/example/tests/test_app.py": "reverse('example:page')\n",
     "hq/domains/other/__init__.py": "",
     "hq/domains/other/apps.py": 'class OtherConfig:\n    name = "hq.domains.other"\n',
     OTHER: "def helper():\n    return 1\n",
     "hq/domains/other/tests/__init__.py": "",
-    "hq/domains/other/tests/test_other.py": "",
+    "hq/domains/other/tests/test_other.py": "from hq.domains.other import helpers\n",
     "hq/domains/other/tests/test_other_app.py": "",
 }
 RAN_VIEWS = "hq.domains.example.tests.test_views"
@@ -81,7 +89,7 @@ class FastGateMapSelectionTests(GateTestCase):
                 self.assertEqual(fast_gate.main(Usage({"list": "true"})), 0)
         return out.getvalue().splitlines()
 
-    def test_a_change_inside_a_function_the_map_saw_run_selects_the_tests_that_ran_it_and_not_its_app(self):
+    def test_a_change_inside_a_function_the_map_saw_run_selects_the_tests_that_ran_it_and_not_its_routes(self):
         listed = self.listed({VIEWS: FILES[VIEWS].replace("return 1", "return 2")})
         self.assertIn(RAN_VIEWS, listed)
         self.assertNotIn(APP_TEST, listed)
