@@ -71,9 +71,8 @@
   min-height: 0;
   box-shadow: none;
   flex-flow: row-reverse wrap;
-  align-content: flex-start;
+  place-content: flex-start center;
   align-items: stretch;
-  justify-content: center;
   gap: 0 var(--space-3);
   height: var(--control-size);
   padding: 0 var(--space-5);

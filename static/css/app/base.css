@@ -210,9 +210,7 @@ pre ::selection { color: var(--code-ink); }
 .site-header {
   --header-user: minmax(var(--control-size), calc(4 * var(--control-size)));
   display: grid;
-  grid-template-areas: "brand nav demo search badge user";
-  grid-template-columns: auto auto 1fr minmax(150px, 210px) var(--control-size) var(--header-user);
-  grid-template-rows: var(--control-size);
+  grid-template: "brand nav demo search badge user" var(--control-size) / auto auto 1fr minmax(150px, 210px) var(--control-size) var(--header-user);
   align-items: center;
   column-gap: var(--space-7);
   padding: var(--space-5) var(--space-14);

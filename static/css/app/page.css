@@ -305,9 +305,8 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
   min-inline-size: 0;
   margin: 0;
   padding: 0 var(--space-1);
-  overflow-x: auto;
   /* stylelint-disable-next-line declaration-property-value-disallowed-list -- the nav scrolls sideways; a vertical scroll is clipped, not text */
-  overflow-y: clip;
+  overflow: auto clip;
   overscroll-behavior-inline: contain;
   scrollbar-width: none;
   list-style: none;

@@ -72,8 +72,8 @@ since `changed_tests` lists files with git.
 The `audit:` tasks measure without writing anything tracked, so a read-only
 auditor may run any of them. mise runs each in its OS sandbox (the `audit`
 template), where a write outside the temporary and Go build cache paths
-fails; `audit:memory` also writes `var/perf`. `audit:image` and `audit:mcp`
-write as they measure, so they run outside it. A `.venv` out of sync with
+fails; `audit:memory` also writes `var/perf`. `audit:image`, `audit:mcp`
+and `audit:css-usage` write as they measure, so they run outside it. A `.venv` out of sync with
 `uv.lock` fails an audit, since uv cannot sync it there: run `uv sync`.
 
 | Task | What it answers | Example |
@@ -94,6 +94,7 @@ write as they measure, so they run outside it. A `.venv` out of sync with
 | `audit:docs-readability` | each doc's Flesch-Kincaid grade, prose words, and longest paragraph and sentence, longest paragraph first (`tools/lint/vale/audit.ini`) | `mise run audit:docs-readability` |
 | `audit:bcd [feature]...` | each browser's first supporting version, from browser-compat-data, Safari first, and whether the browser floor (docs/Design.md, Browsers) has it; with none, every place the stylesheet writes a feature newer than the floor | `mise run audit:bcd css.properties.container-type` |
 | `audit:supports <engine> <condition>...` | what the browser gates' own WebKit and Chromium answer to `CSS.supports`, one line per engine per condition; reach for it over `audit:bcd` to know what the gates draw, since their WebKit is ahead of every Safari release | `mise run audit:supports gates 'selector(:heading)' 'color: alpha(from red / 50%)'` |
+| `audit:css-usage [pages]...` | each app stylesheet's bytes and the bytes of the rules no page `dev:look` draws matches, read in Chromium at every width in both themes with everything opened, then each unused rule as file:line: dead (a class or data attribute nothing writes), unreached (a state no seed raises) and apart (a media query, feature test or selector that never held); takes the heavy turn. Reach for it before and after any CSS cut, and in a UI pass's inventory | `mise run audit:css-usage all` |
 
 A path or glob narrows a count, and `!glob` leaves files out, so
 `mise run audit:ruff SLF001 '!**/tests/**'` and

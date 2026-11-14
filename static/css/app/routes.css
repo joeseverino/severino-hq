@@ -65,8 +65,8 @@
 /* Across, every hop is one equal column, centered: its icon on the line, its
    kind, then what it is. The icons fall evenly and the line runs first to last. */
 @container style(--across: 1) {
-  .request-path li { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto 1fr; justify-items: center; align-items: start; row-gap: var(--space-2); padding: 0; text-align: center; }
-  .request-path li::before { left: 50%; right: calc(-50% - var(--space-6)); top: 12px; bottom: auto; width: auto; height: 2px; }
+  .request-path li { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto 1fr; place-items: start center; row-gap: var(--space-2); padding: 0; text-align: center; }
+  .request-path li::before { inset: 12px calc(-50% - var(--space-6)) auto 50%; width: auto; height: 2px; }
   .request-path li:first-child::before { top: 12px; }
   .request-path li:last-child::before { display: none; }
   .request-path .hop-label { grid-column: 1; grid-row: 2; }

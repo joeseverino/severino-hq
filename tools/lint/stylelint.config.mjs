@@ -211,6 +211,17 @@ export default {
     // A selector's rule is written once per file and at-rule block. The test
     // beside StyleContractTests holds it across sheets and `@layer` blocks.
     "no-duplicate-selectors": true,
+    // A declaration says its value once: a second copy in the same block is
+    // a stale edit the first silently loses to, and longhands a shorthand
+    // says in one declaration are bytes and lines with nothing to add.
+    // no-descending-specificity stays off: it compares rules only within the
+    // nearest at-rule block, so it reads a sheet's `@layer` block as a media
+    // context and never compares across the sheets one layer spans, where the
+    // cascade HQ orders is.
+    "declaration-block-no-duplicate-properties": true,
+    "declaration-block-no-duplicate-custom-properties": true,
+    "declaration-block-no-redundant-longhand-properties": true,
+    "shorthand-property-no-redundant-values": true,
     // Color lives in tokens, so a theme is a set of token overrides; a literal
     // anywhere else stays a light-mode value on a dark page.
     "color-no-hex": true,

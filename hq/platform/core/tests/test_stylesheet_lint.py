@@ -179,7 +179,7 @@ PASSED = [
     ("static/css/app/page.css", ".btn.a-variant { color: var(--ink); }"),
     (CUTS, ".data-table td .btn > .token:not([data-sole]) > .whole { overflow: hidden; }"),
     (REFERENCE, ".scalar-app .section-header { color: var(--ink); }"),
-    (APP, ".a { overflow: auto; } .b { overflow-x: visible; overflow-y: scroll; }"),
+    (APP, ".a { overflow: auto; } .b { overflow-x: visible; } .c { overflow-y: scroll; }"),
     (APP, ".a { max-width: 100%; max-inline-size: 24rem; inline-size: 16ch; } .b { max-width: max-content; }"),
     (APP, f"{WHY} -- a frame's corners clip its fill */\n.a {{ overflow: hidden; }}"),
     (APP, ".a { grid-template-columns: repeat(3, minmax(0, 1fr)); }"),

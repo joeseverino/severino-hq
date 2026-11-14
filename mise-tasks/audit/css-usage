@@ -1,0 +1,31 @@
+#!/bin/sh
+#MISE description="Each app stylesheet's bytes and the bytes of the rules no page dev:look draws uses, then each unused rule as file:line, sorted into dead, unreached and apart, read in Chromium; reach for it before and after a CSS cut"
+#MISE hide=true
+#MISE extends="django"
+#MISE env={SEVERINO_WAITS_FOR_HEAVY_TURN="1"}
+#MISE depends=[{task="setup:browser", args=["chromium"]}, "setup:lint-tools"]
+#USAGE long_about "Every page dev:look's all names, each opened whole (every disclosure, fold and row), read at the phone, 820 and 1360 in both themes, with every element hovered, focused, active and targeted at once, and with each dialog it declares open. Chromium's rule-usage tracking says which rules matched (hq/platform/core/tests/css_usage.py says why that and not a static reader). A rule nothing matched is dead when it asks for a class or data attribute no template, script or Python module writes; unreached when all it asks for is written somewhere, so a state no seed raised; apart when it sits under a media query no page read matched (print, forced colors, a coarse pointer), a feature test Chromium fails, or a selector Chromium does not parse. A keyframe is no rule Chromium tracks, so none is counted.\n\nEvery page:\n  mise run audit:css-usage all\n\nThe pages one change draws, as dev:look names them:\n  mise run audit:css-usage estate/infrastructure/containers table/figures"
+#USAGE arg "[pages]" var=#true default="all" help="Pages as dev:look names them (mise run dev:look --help); all by default"
+#USAGE flag "--seed <name>" default="showcase" help="The data set the estate pages are drawn on, by its name in hq.platform.core.seeds"
+
+# A look of its own over dev:look's pages (hq/platform/core/tests/css_usage.py),
+# split among processes as a look is, on dev:look's kept test database.
+set -eu
+# shellcheck source=tools/lib/remote.sh
+. ./tools/lib/remote.sh
+
+# What was asked is checked before the turn; the last line is the share of it the look takes.
+weight="$(uv run --group browser python manage.py shell --no-imports -v 0 \
+    -c 'from hq.platform.core.tests.look import refuse_early; refuse_early()')"
+turn_share="$(printf '%s\n' "${weight}" | tail -n 1)"
+turn_bound=30m
+# shellcheck source=tools/lib/heavy-turn.sh
+. ./tools/lib/heavy-turn.sh
+
+# shellcheck source=tools/lib/look-database.sh
+. ./tools/lib/look-database.sh
+looked=0
+HQ_BROWSER_ENGINE=chromium uv run --group browser python manage.py test hq.platform.core.tests.css_usage.CssUsage.test_css_usage --no-buffer \
+    --noinput --parallel 1 ${keep} || looked=$?
+hand_back_look_database "${looked}"
+exit "${looked}"
