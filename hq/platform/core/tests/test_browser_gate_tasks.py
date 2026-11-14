@@ -140,6 +140,17 @@ class BrowserGateTaskTests(SimpleTestCase):
                         pages = [shards.share(range(50), test_id, (index, total)) for index in range(1, total + 1)]
                         self.assertEqual(sorted(page for share in pages for page in share), list(range(50)))
 
+    def test_a_browser_gate_runs_its_tests_under_a_verdict_of_its_own_name(self):
+        """CI runs a browser gate's share by the gate's own task, so the verdict
+        is what ends its log on the failed tests (GateVerdictTests)."""
+
+        for name, task in django_browser_tasks().items():
+            with self.subTest(task=name):
+                words = shlex.split(body(task))
+                verdict = words.index("tools.gate.verdict")
+                self.assertEqual(words[verdict - 1 : verdict + 2], ["-m", "tools.gate.verdict", "$MISE_TASK_NAME"])
+                self.assertLess(verdict, words.index("manage.py"))
+
     def test_a_browser_gate_s_template_restates_django_s_env(self):
         """A template extends none, so the browser gate template carries the
         env of ``django`` itself: a gate never
