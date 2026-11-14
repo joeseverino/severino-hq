@@ -147,7 +147,7 @@ a.kpi, a.kpi:hover { text-decoration: none; color: inherit; }
 .attention-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-4); }
 .attention-actions form { margin: 0; }
 /* The pages that help look into it: quiet links, the topology's as icons. */
-.attention-links { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); margin: var(--space-3) 0 0; padding: 0; list-style: none; font-size: var(--text-xs); }
+.attention-links { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); margin: var(--space-3) 0 0; font-size: var(--text-xs); }
 .attention-links .icon-link { min-width: 0; width: 1.6rem; height: 1.6rem; padding: 0; border: 0; background: none; box-shadow: none; color: var(--muted); }
 .attention-links .icon-link:is(:hover, :focus-visible) { color: var(--ink); background: var(--surface-2); }
 /* What raised an item, opened from its urgency: a small modal over the page,
@@ -178,7 +178,7 @@ a.kpi, a.kpi:hover { text-decoration: none; color: inherit; }
    of two. */
 .step-list {
   columns: 14rem 4; column-gap: var(--space-9);
-  margin: 0; padding: 0; list-style: none; font-size: var(--text-sm);
+  font-size: var(--text-sm);
 }
 .step-list li { display: flex; align-items: flex-start; gap: var(--space-5); break-inside: avoid; padding-bottom: var(--space-5); }
 /* Steps done in order ({% steps numbered=True %}) read down their columns,
@@ -204,7 +204,7 @@ a.kpi, a.kpi:hover { text-decoration: none; color: inherit; }
    width, so a path is not folded into a strip. A step's number
    is its label's, since a list laid out this way draws no markers. */
 .resolution-workflow {
-  margin: var(--space-3) 0 0; padding: 0; list-style: none;
+  margin: var(--space-3) 0 0;
   display: grid; gap: var(--space-2);
   font-size: var(--text-sm); color: var(--ink-2); counter-reset: step;
 }

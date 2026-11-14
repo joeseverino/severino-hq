@@ -96,9 +96,7 @@ select.toned:not(.toned-neutral) { border-color: currentColor; }
 /* Django renders errors as a plain `<ul class="errorlist">`, unstyled by
    default. */
 .errorlist {
-  list-style: none;
   margin: var(--space-2) 0 0;
-  padding: 0;
   display: grid;
   gap: var(--space-1);
   color: var(--danger);
@@ -182,7 +180,7 @@ select.toned:not(.toned-neutral) { border-color: currentColor; }
 .dropzone-title { font-weight: 600; font-size: var(--text-sm); color: var(--ink); }
 .dropzone-hint { font-size: var(--text-xs); color: var(--muted); }
 .dropzone-files {
-  list-style: none; margin: var(--space-4) 0 0; padding: 0;
+  margin: var(--space-4) 0 0;
   display: flex; flex-direction: column; gap: var(--space-1);
   font-size: var(--text-xs); color: var(--ink-2); font-feature-settings: "tnum";
 }

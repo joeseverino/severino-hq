@@ -172,13 +172,13 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
    graph is one click per hop. */
 .relation-list { display: grid; gap: var(--space-1); }
 .relation-list > .eyebrow { margin: var(--space-2) 0 0; }
-.relation-list > ul { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+.relation-list > ul { display: grid; gap: var(--space-1); }
 /* One edge: the link to the other end on its own line, then each value it
    carries on a line of its own with its kind and age. */
 .relation-list > ul > li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; }
 .relation-values {
   display: grid; gap: var(--space-2); flex: 1 1 100%; min-width: 0;
-  margin: 0 0 var(--space-2); padding: 0 0 0 var(--space-7); list-style: none; font-size: var(--text-xs);
+  margin: 0 0 var(--space-2); padding: 0 0 0 var(--space-7); font-size: var(--text-xs);
   overflow-wrap: anywhere;
 }
 .relation-values li { display: grid; gap: 1px; min-width: 0; }
@@ -208,7 +208,7 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 /* A row of links, each a chip (partials/_link_chips.html): a place to go, so
    it reads as a target by its frame, with no underline at rest. An outside
    one's arrow sits in the chip's gap, quieter than the name. */
-.link-chips { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
+.link-chips { display: flex; flex-wrap: wrap; gap: var(--space-3); }
 .link-chips a {
   display: inline-flex; align-items: center; gap: var(--space-3);
   padding: var(--space-2) var(--space-6);
@@ -326,7 +326,7 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .page-actions form { margin: 0; display: inline-flex; }
 
 /* A stack list ({% stack_list %}): items read down, each its parts inline. */
-.stack-list { display: grid; gap: var(--space-2); margin: var(--space-2) 0 0; padding: 0; list-style: none; }
+.stack-list { display: grid; gap: var(--space-2); margin: var(--space-2) 0 0; }
 /* A raw answer kept for the open row scrolls inside it rather than lengthening it. */
 .row-below > pre { max-block-size: 18rem; }
 
