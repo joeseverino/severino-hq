@@ -261,10 +261,9 @@ the words start, each as wide as its label. Only the row changes its display,
 so each cell stays a cell under its heading and the row's open line still
 spans the table. So a column of controls never leaves for the row's open
 line, whatever rank it is given, and a reader never opens a row to find what
-it offers. A row's one quiet put-away control (`row_actions put_away=`, the
-queue's Dismiss) is a cell of its own (`data-put-away`) that ends the row's
-first line: it shares the title's line in one look and never takes a line of
-its own. A choice (a select) is a value of the row and keeps its column. *Gates:* the survey's `row actions beside
+it offers. The reader's way to set a row aside (`row_actions put_away=`,
+the queue's Dismiss) is the last of its buttons, drawn as they are, so a row
+whose only control it is still offers it as a button beneath its words. A choice (a select) is a value of the row and keeps its column. *Gates:* the survey's `row actions beside
 squeezed words` and `row actions behind the toggle`, and
 `test_row_controls.py`.
 
@@ -312,8 +311,11 @@ first, then each part under its column's name (`dl.row-columns`).
   `tables.js` sets on it as on the cells), a narrow part in a narrow box, a
   labeled block always. A line with nothing to show is a blank row of no
   height.
-- The line holds a copy of what the row holds back, so the row's own cells
-  stay as they were.
+- The line holds a copy of a column or a narrow part, which the row's own
+  cells show at other widths, so those cells stay as they were. A
+  `row-below` block, which the row's line never shows, and the row's editor
+  are moved there instead, and a row holding a block says so on its `tr`
+  (`data-below`), which shows its toggle.
 - A narrow part also marked `row-later` waits in the line at any width, and
   its row opens at any width for it: a row's buttons past the first few.
 - A table whose line is the rest of what a row says and does
@@ -1258,8 +1260,8 @@ order:
   These are words under the title, not a column: most rows have neither;
 - buttons: the owner's actions, the first step that can be taken now when the
   owner offered none, and the check that reads again. At most one is primary.
-  Where the reader sorts their own queue, Dismiss or Restore is the row's
-  put-away (`row_actions put_away=`), quiet and last.
+  Where the reader sorts their own queue, Dismiss or Restore is the last of
+  them (`row_actions put_away=`).
 
 Closed, a row is those one or two lines. Everything taller is the row's
 `row-below`, opened by its toggle into the line beneath, from the title's edge

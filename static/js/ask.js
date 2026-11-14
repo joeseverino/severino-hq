@@ -147,8 +147,9 @@
   // hover: the row's open line says the word and the sentence, under the
   // button's label. The server draws it there (`data-ask-why`, _ask.html,
   // through table_tags._detail_row) when the work already stood somewhere;
-  // otherwise it is drawn here as that line draws it, and opens the row's
-  // toggle by being there (tables.css).
+  // otherwise it is drawn here as that line draws it, once, and the row is
+  // marked as holding a block there (`data-below`), which shows its toggle
+  // (tables.css).
   const sayBelow = (control, said) => {
     const row = control.closest(".data-table > tbody > tr:not(.row-detail)");
     const button = control.querySelector("[data-ask-button]");
@@ -163,6 +164,7 @@
         if (term?.matches("dt")) term.remove();
         (why.closest(".row-columns > dd") || why).remove();
       });
+      row.toggleAttribute("data-below", Boolean(detail?.querySelector(".row-below")));
       return;
     }
     if (copies.length) {
@@ -172,7 +174,7 @@
     const why = part("ask-why row-below", said);
     why.dataset.askWhy = key;
     why.dataset.label = button.textContent.trim();
-    control.append(why);
+    row.toggleAttribute("data-below", true);
     if (!detail) {
       detail = document.createElement("tr");
       detail.className = "row-detail";
@@ -192,7 +194,7 @@
     term.dataset.label = "";
     value.dataset.label = "";
     term.textContent = why.dataset.label;
-    value.append(why.cloneNode(true));
+    value.append(why);
     list.append(term, value);
   };
 

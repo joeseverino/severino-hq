@@ -12,19 +12,20 @@ _ROW = (
     '<tr><td><div class="row-line">Example title</div><p>Example words.</p></td>'
     '<td class="row-actions"><a class="btn compact" href="/example/open/" id="example-open">Open</a>'
     '<span class="btn compact" role="button" aria-disabled="true" tabindex="0">Refused</span>'
-    '<div class="narrow-more row-later"><a class="btn compact" href="/example/later/">Later</a></div></td>'
-    '<td class="row-actions" data-put-away><button class="btn compact ghost" form="example">Dismiss</button></td></tr>'
+    '<div class="narrow-more row-later"><a class="btn compact" href="/example/later/">Later</a></div></td></tr>'
 )
 
 
 def _table(
-    rows: str, head: str = '{% table_heading "Name" gutter=True %}{% table_heading "Do" "control" hidden=True drop=1 %}'
+    rows: str,
+    head: str = '{% table_heading "Name" gutter=True %}{% table_heading "Do" "control" hidden=True drop=1 %}',
+    **context,
 ) -> str:
     source = (
         '{% load table_tags %}{% table_region "Examples" %}<table class="data-table"><thead><tr>'
         f"{head}</tr></thead><tbody>{rows}</tbody></table>{{% endtable_region %}}"
     )
-    return Template(source).render(Context({}))
+    return Template(source).render(Context(context))
 
 
 def _marked(html: str) -> list:
@@ -41,11 +42,30 @@ class RowControlsTests(SimpleTestCase):
         self.assertEqual([each.words for each in page if "btn" in each.classes].count("Open"), 1)
         self.assertEqual(len([each for each in page if each.attrs.get("id") == "example-open"]), 1)
 
-    def test_the_put_away_control_keeps_the_rows_first_line(self):
-        html = _table(_ROW)
-        (away,) = [each for each in all_elements(html) if "data-put-away" in each.attrs]
-        self.assertEqual(away.tag, "td")
-        self.assertNotIn("data-beneath", away.attrs)
+    def test_the_put_away_is_the_last_of_the_rows_buttons(self):
+        """The reader's Dismiss is a button as the others are, read, reached and
+        drawn after them; a row whose only control it is stacks it the same."""
+
+        from hq.platform.application.pages import PageAction
+
+        row = (
+            '<tr><td><div class="row-line">Example title</div></td>{% row_actions actions first=1 put_away=away %}</tr>'
+        )
+        actions = [PageAction("Open", "/example/open/"), PageAction("Later", "/example/later/")]
+        away = PageAction("Dismiss", "/example/aside/", method="post", field="key", value="example")
+        for given in (actions, []):
+            with self.subTest(actions=len(given)):
+                html = _table(row, actions=given, away=away)
+                (cell,) = [each for each in _marked(html) if each.tag == "td"]
+                shown = [
+                    each.words
+                    for each in all_elements(html)
+                    if cell in each.ancestors
+                    and "btn" in each.classes
+                    and not each.beneath
+                    and not any("row-later" in ancestor.classes for ancestor in each.ancestors)
+                ]
+                self.assertEqual(shown, ["Open", "Dismiss"] if given else ["Dismiss"])
 
     def test_the_column_of_controls_never_leaves(self):
         """Its cells and heading are marked for the narrow box to stack, so no
@@ -54,8 +74,8 @@ class RowControlsTests(SimpleTestCase):
 
         html = _table(_ROW)
         self.assertEqual([each.tag for each in _marked(html)], ["th", "td"])
-        detail = [each for each in all_elements(html) if "data-row-detail" in each.attrs]
-        self.assertEqual([each.words for each in detail], ["Do Later"])
+        line = [each for each in all_elements(html) if "row-columns" in each.classes]
+        self.assertEqual([each.words for each in line], ["Do Later"])
 
     def test_a_column_of_choices_is_no_rows_controls(self):
         """A choice is a value the row holds, so it keeps its column."""

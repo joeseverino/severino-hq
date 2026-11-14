@@ -518,6 +518,21 @@ PRESS_FIRST_ROW_TOGGLE = """(scroll) => {
   return records.indexOf(toggle.closest('tr'));
 }"""
 
+# A row folded under its family (`data-folded`) is drawn only once its family
+# is opened (`data-open`), at every width: a rule that sets a row's display (a
+# row stacked in a narrow box) must leave a folded row folded. With no script
+# every row shows, so it holds once script runs.
+FOLDED_ROWS_SHOWN = (
+    "() => {"
+    + DESCRIBE
+    + """
+  if (!matchMedia('(scripting: enabled)').matches) return [];
+  return [...document.querySelectorAll('.data-table tr[data-folded]:not([data-open])')]
+    .filter((row) => row.checkVisibility())
+    .map((row) => `${describe(row)} is drawn while its family is folded: ${row.textContent.trim().replace(/\\s+/g, ' ').slice(0, 40)}`);
+}"""
+)
+
 # Nothing reaches past the content's side gutter: drawn there, it touches the
 # edge of the screen. `text` also holds every line of text to the box that
 # holds it.
@@ -799,6 +814,7 @@ CHECKS = {
     "cut beside room": Check((CUT_BESIDE_ROOM, SELECTORS["unseen"]), table=True),
     "cut and closed": Check((CUT_AND_CLOSED, SELECTORS["unseen"]), table=True),
     "cut when open": Check((CUT_WHEN_OPEN, SELECTORS["unseen"]), table=True),
+    "folded rows stay folded": Check(FOLDED_ROWS_SHOWN, table=True, scripted=True),
     # Every box and every line of text, not only a card's or code's.
     "gutter": (PAST_THE_GUTTER, ["*", True]),
 }

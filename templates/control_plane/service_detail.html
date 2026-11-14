@@ -32,7 +32,7 @@ is open.
 {% if gate_fixes and not read_only %}
   {% notice tone="warning" title="No sign-in" %}
     <p>Anyone on the internet can open this without signing in.</p>
-    <p>{% for fix in gate_fixes %}<a class="btn compact" href="{{ fix.url }}" title="{{ fix.reason }}">{{ fix.label|breakable }}</a> {% endfor %}</p>
+    <p>{% for fix in gate_fixes %}<a class="btn compact" href="{{ fix.url }}" title="{{ fix.reason }}">{{ fix.label|button_words }}</a> {% endfor %}</p>
   {% endnotice %}
 {% endif %}
 {% for route, parts in route_parts %}

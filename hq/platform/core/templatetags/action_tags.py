@@ -20,7 +20,7 @@ lazy from hq.platform.application.asks import Ask
 lazy from hq.platform.application.capabilities import capability_words
 lazy from hq.platform.application.dashboard import queue_item
 lazy from hq.platform.application.pages import PageAction, offered_now
-lazy from hq.platform.core.templatetags.value_tags import _request, breakable, is_this_page
+lazy from hq.platform.core.templatetags.value_tags import _request, button_words, is_this_page
 lazy from hq.platform.core.templatetags.write_tags import write_token
 
 register = template.Library()
@@ -140,7 +140,7 @@ def post_button(label, url, *, name="action", value="", css="btn", title="", dis
         format_html_join("", ' {}="{}"', ((key, val) for key, val in attributes.items() if val)),
         mark_safe(" data-hit") if hit else "",
         mark_safe(" disabled") if disabled else "",
-        breakable(label),
+        button_words(label),
     )
 
 
@@ -165,7 +165,7 @@ def post_form(context, action, extra=""):
             '<button type="submit" class="{}"{}>{}</button></form>',
             " ".join(part for part in (action.css, extra) if part),
             format_html_join("", ' {}="{}"', ((key, val) for key, val in attributes.items() if val)),
-            breakable(action.label),
+            button_words(action.label),
         )
     )
 
@@ -297,7 +297,7 @@ def ask_button(ask, extra=""):
         " ".join(part for part in (ask.css, extra) if part),
         format_html_join("", ' {}="{}"', ((key, val) for key, val in attributes.items() if val)),
         mark_safe(" disabled") if ask.disabled else "",
-        breakable(ask.label),
+        button_words(ask.label),
     )
 
 

@@ -130,7 +130,8 @@
   & > .part { overflow: hidden; text-overflow: ellipsis; }
 }
 /* A control's label is the control's to cut, as one line at its end; a part longer than the control is held to it and cut there, set on the line by its top since a box that clips takes its bottom edge as its baseline. */
-.data-table td .btn > .token:not([data-sole]) {
+.data-table td .btn > .button-words { min-width: 0; }
+.data-table td .btn > :is(.token, .button-words > .token):not([data-sole]) {
   max-width: 100%;
   & > .whole { vertical-align: top; overflow: hidden; text-overflow: ellipsis; }
 }

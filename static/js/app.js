@@ -129,7 +129,8 @@ document.addEventListener("change", (event) => {
 // header's follow. "Dismiss all" and a family's "Dismiss" stay ordinary
 // posts, since what they cover is the server's to say.
 document.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-put-away] button[formaction]");
+  // The row's own Dismiss or Restore posts the row's key (action_tags.triage).
+  const button = event.target.closest('[data-attention-item] .row-actions > button[name="key"][formaction]');
   if (!button || event.defaultPrevented) return;
   const row = button.closest("[data-attention-item]");
   const form = document.getElementById(button.getAttribute("form"));
@@ -170,11 +171,9 @@ document.addEventListener("click", (event) => {
         action: dismissing ? routes?.restore : routes?.dismiss,
         label: dismissing ? "Restore" : "Dismiss",
       };
-      row.querySelectorAll("[data-put-away] button[formaction]").forEach((copy) => {
-        copy.dataset.other = JSON.stringify(was);
-        copy.setAttribute("formaction", next.action);
-        copy.textContent = next.label;
-      });
+      button.dataset.other = JSON.stringify(was);
+      button.setAttribute("formaction", next.action);
+      button.textContent = next.label;
     })
     // Whatever went wrong, the plain form still works.
     .catch(() => { button.setAttribute("form", form.id); form.requestSubmit(button); })

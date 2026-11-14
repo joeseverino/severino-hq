@@ -238,9 +238,19 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 .data-table .row-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-3); font-weight: 600; }
 /* What the row says under its title stands as close to it as a line's own leading. */
 .data-table .row-line ~ :is(p, .dot-list) { margin: var(--space-1) 0 0; }
-/* In a narrow box a row that offers controls stacks, the stacked row of a responsive table: the cells drawn once each, its words (`data-words`, table_cells) taking the first line beside its other values and its put-away control (`data-put-away`, such as Dismiss), and its controls (`data-beneath`) the line beneath, start-aligned with the words, each as wide as its label. Only the row is a flex box: the table and its sections stay a table, so each cell is still a cell under its heading (WebKit keeps a table's semantics under a display change from Safari 17), and a row's open line, one cell across, still spans the table. The heading of the controls' column keeps its place on the first line at no width. */
+/* A row's words fill each line they are given, as its title does: WebKit's `pretty` evens the rag of a whole paragraph, which in a cell's measure ends every line short of the room beside it. */
+.data-table > tbody > tr > * :is(p, li, dd) { text-wrap: wrap; }
+/* A table whose rows are their words and their controls alone (the queue) shares no column between its rows: each row is a line of its own, its words taking what its own controls leave and its controls the line beneath where they would leave the words less than `--row-words`, set where the words start. A folded row stays folded. */
+@container not style(--box: narrow) {
+  .data-table:has(> * > tr > [data-beneath]):not(:has(> * > tr > :nth-child(3))) > * > tr:has(> :nth-child(2)):not([data-folded]:not([data-open])) { display: flex; flex-wrap: wrap; }
+  .data-table:has(> * > tr > [data-beneath]):not(:has(> * > tr > :nth-child(3))) > * > tr:has(> :nth-child(2)):not([data-folded]:not([data-open])) > * { min-width: 0; }
+  .data-table:has(> * > tr > [data-beneath]):not(:has(> * > tr > :nth-child(3))) > * > tr:has(> :nth-child(2)):not([data-folded]:not([data-open])) > :first-child { flex: 1 0 var(--row-words); box-sizing: content-box; }
+  .data-table:has(> * > tr > [data-beneath]):not(:has(> * > tr > :nth-child(3))) > * > tr:has(> :nth-child(2)):not([data-folded]:not([data-open])) > [data-beneath] { flex: none; width: auto; }
+  .data-table:has(> * > tr > [data-beneath]):not(:has(> * > tr > :nth-child(3))):has(> tbody > tr > * > [data-row-toggle]) > tbody > tr:has(> .row-gutter) > [data-beneath] { padding-inline-start: var(--row-gutter); }
+}
+/* In a narrow box a row that offers controls stacks, the stacked row of a responsive table: the cells drawn once each, its words (`data-words`, table_cells) taking the first line beside its other values, and its controls (`data-beneath`) the line beneath, start-aligned with the words, each as wide as its label. Only the row is a flex box: the table and its sections stay a table, so each cell is still a cell under its heading (WebKit keeps a table's semantics under a display change from Safari 17), and a row's open line, one cell across, still spans the table. The heading of the controls' column keeps its place on the first line at no width. */
 @container style(--box: narrow) {
-  .data-table:has(> * > tr > [data-beneath]) > * > tr:has(> :nth-child(2)) { display: flex; flex-wrap: wrap; align-items: flex-start; }
+  .data-table:has(> * > tr > [data-beneath]) > * > tr:has(> :nth-child(2)):not([data-folded]:not([data-open])) { display: flex; flex-wrap: wrap; align-items: flex-start; }
   .data-table:has(> * > tr > [data-beneath]) > * > tr:has(> :nth-child(2)) > * { flex: none; width: auto; min-width: 0; }
   .data-table:has(> * > tr > [data-beneath]) > tbody > tr:has(> [data-beneath]) > :not([data-beneath]) { border-bottom: 0; }
   .data-table:has(> * > tr > [data-beneath]) > * > tr:has(> :nth-child(2)) > :is([data-words], :first-child:not(.select-column)) { flex: 1 1 0; }
@@ -428,10 +438,10 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 /* The server draws a toggle in every row that can open; the stylesheet shows it only where the row holds something back now (a dropped column, a part, a cut value, or open already). */
 .data-table tr.is-expanded > * > [data-row-toggle],
 .data-table tr:has(> * .row-more) > * > [data-row-toggle],
-.data-table tr:has(> * .row-below) > * > [data-row-toggle] { display: inline-grid; }
+.data-table tr[data-below] > * > [data-row-toggle] { display: inline-grid; }
 /* The gutter the toggle stands in is kept in every row and the heading of a table where any row opens, so names share one edge; every rule reads only what the server drew and the box's width (`--gutter`), so nothing marked after paint moves a name. */
 .data-table .row-gutter { position: relative; }
-.data-table:is(:has(> tbody > tr.is-expanded), :has(> tbody > tr > * :is(.row-more, .line-rest)), :has(> tbody > tr > * .row-below), :has(> tbody > tr > * > [data-fold-toggle])) > * > tr > .row-gutter { padding-left: var(--row-gutter); --gutter: kept; }
+.data-table:is(:has(> tbody > tr.is-expanded), :has(> tbody > tr > * :is(.row-more, .line-rest)), :has(> tbody > tr[data-below]), :has(> tbody > tr > * > [data-fold-toggle])) > * > tr > .row-gutter { padding-left: var(--row-gutter); --gutter: kept; }
 /* A value found cut opens its row only where the gutter is already kept; elsewhere it reads whole on hover, by the title tables.js gives it (`markCut`). */
 @container style(--gutter: kept) {
   .data-table tr[data-cut] > .row-gutter > [data-row-toggle] { display: inline-grid; }
@@ -536,8 +546,7 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 .row-columns dd > .narrow-more:first-child > br:first-child { display: none; }
 /* Where a cell stands, for a part drawn in it to ask (`@container style(--cell: line)`) without naming the table: on its row's own line, or in the line beneath an open row (`open`, above). */
 .data-table > tbody > tr:not(.row-detail) > td { --cell: line; }
-/* What a row keeps for that line at any width (`row-below`): its tall parts, on the name's edge. */
-.data-table > tbody > tr:not(.row-detail) .row-below { display: none; }
+/* What a row keeps for that line at any width (`row-below`, which the server moves there and marks the row `data-below`): its tall parts, on the name's edge. */
 .row-detail .row-below + :is(.row-below, .row-columns) { margin-top: var(--space-5); }
 /* Rows folded under the row that heads them (`data-folds`), shown while it is open; with no script every row shows. In a whole box, rows folded under a row rather than a group's heading, and their open lines, are set in under it. */
 @container style(--box: whole) {

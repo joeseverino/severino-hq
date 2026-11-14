@@ -14,7 +14,7 @@ SELECTORS = {
     # An agent's update streams: a full set warned of in its row's cell, and
     # the streams it holds open under the cap said in the row's detail.
     "agent_streams": "tr[data-agent] > td [data-streams]",
-    "agent_streams_detail": "tr[data-agent] > th .row-below [data-streams]",
+    "agent_streams_detail": "tr[data-agent] + tr.row-detail .row-below [data-streams]",
     # The fragment primitive: a placeholder's failure line, the disclosure
     # holding one, and the calendar it pages in place.
     "fragment_failure": "main > [data-fragment-load] > .notice",
@@ -57,7 +57,7 @@ SELECTORS = {
     "row_opener": "main [data-row-toggle]:not([data-fold-toggle])",
     # A table's own rows of records, the lines beneath them left out.
     "own_records": ":scope > tbody > tr:not(.row-detail)",
-    "decision_dismiss": "[data-put-away] button",
+    "decision_dismiss": '[data-attention-item] .row-actions > button[name="key"]',
     "decision_title": "[data-attention-title]",
     "decision_steps": ".resolution-workflow",
     # What an item means: never cut.

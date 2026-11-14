@@ -881,6 +881,76 @@ _FACT_DETAIL = f"{SELECTORS['band_fact_cell']} > dd:not({SELECTORS['fact_value']
 # How far inside its frame a fact's words and mark stand at the least.
 FACT_INSET = 8
 
+# A row's words fill each line the row gives them: a line of a row's title or
+# of what it says that ends with room for the next word was broken short. The
+# room is the row's, measured to the row's next control on that line (a
+# column of buttons sized by another row leaves a gap the words' own box never
+# sees), else to the words' own box's edge (WebKit's `pretty`, a balanced rag,
+# breaks inside it). A run with no space in it (a name, a path) is one word,
+# however its pieces are drawn.
+LINES_SHORT_OF_THEIR_ROOM = (
+    "(unseen) => {"
+    + DESCRIBE
+    + """
+  const found = [];
+  const range = document.createRange();
+  const padding = (el, side) => parseFloat(getComputedStyle(el)[`padding${side}`]);
+  for (const block of document.querySelectorAll('.data-table > tbody > tr > * :is(p, dd, .row-line > *)')) {
+    if (!block.checkVisibility() || block.closest(unseen)) continue;
+    const style = getComputedStyle(block);
+    if (style.whiteSpace.startsWith('nowrap') || style.textWrapMode === 'nowrap') continue;
+    const own = block.getBoundingClientRect().right - parseFloat(style.paddingRight);
+    const cell = block.closest('td, th');
+    const left = block.getBoundingClientRect().left;
+    // What the row draws after the words' cell: each later cell's controls and words.
+    const after = [];
+    for (let other = cell.nextElementSibling; other; other = other.nextElementSibling) {
+      if (!other.checkVisibility()) continue;
+      const gap = padding(other, 'Left') + padding(cell, 'Right');
+      for (const part of other.querySelectorAll(':scope > *')) {
+        if (!part.checkVisibility()) continue;
+        for (const rect of part.getClientRects()) if (rect.width > 0 && rect.left > left) after.push([rect, gap]);
+      }
+    }
+    const edgeOf = (line) => {
+      const beside = after.filter(([rect]) => rect.top < line.bottom && rect.bottom > line.top);
+      return beside.length ? Math.min(...beside.map(([rect, gap]) => rect.left - gap)) : own;
+    };
+    // Each word's boxes, a word running on across the pieces it is drawn in.
+    const words = [];
+    let open = false;
+    const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (!node.parentElement.checkVisibility()) continue;
+      const text = node.textContent;
+      for (const match of text.matchAll(/\\S+/g)) {
+        range.setStart(node, match.index);
+        range.setEnd(node, match.index + match[0].length);
+        const rects = [...range.getClientRects()].filter((rect) => rect.width > 0);
+        if (!rects.length) continue;
+        if (open && match.index === 0 && words.length) words.at(-1).push(...rects);
+        else words.push(rects);
+        open = match.index + match[0].length === text.length;
+      }
+      if (/\\s$/.test(text) || text === '') open = false;
+    }
+    const space = parseFloat(style.fontSize) * 0.35;
+    for (let at = 0; at + 1 < words.length; at += 1) {
+      const last = words[at].at(-1);
+      const next = words[at + 1];
+      if (next[0].top < last.bottom - 1) continue;
+      const width = next.reduce((sum, rect) => sum + rect.width, 0);
+      const edge = edgeOf(last);
+      if (last.right + space + width < edge - 1) {
+        found.push(`${describe(block)} breaks before "${block.textContent.trim().slice(0, 24)}…" ${Math.round(edge - last.right)}px short of its row's room`);
+        break;
+      }
+    }
+  }
+  return found;
+}"""
+)
+
 # The survey checks these probes answer (`probes/__init__.py`).
 CHECKS = {
     "broken words": Check((BROKEN_WORDS, SELECTORS["identifier"]), table=True),
@@ -898,6 +968,7 @@ CHECKS = {
     "fact rows": FACT_ROWS_READ,
     "facts across their band": (FACTS_SHORT_OF_THEIR_BAND, [SELECTORS["fact_band"], SELECTORS["band_fact_cell"]]),
     "fact details in words": (DETAIL_WORDS_IN_ROWS, [_FACT_DETAIL, SELECTORS["unseen"]]),
+    "row words to the end of their line": (LINES_SHORT_OF_THEIR_ROOM, SELECTORS["unseen"]),
     # A link in a fact's detail, or a word there that opens its tip, sits on
     # the line of the words beside it, as a chip does.
     "links in a fact's detail": (

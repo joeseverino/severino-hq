@@ -204,6 +204,7 @@ class CommandView(View):
             "cancel_url": safe_next(self.request) or trail[-1][1],
             "resource_url": resource_url,
             "resource_label": resource.label if resource else "",
+            "resource_open": f"Open {resource.label}" if resource else "",
             "hydrates_target": bool(self.spec.target_initial_fields),
             "switch": self._switch(form),
             # A command that needs what one page hands it says to start there.

@@ -106,11 +106,11 @@ class AgentDeviceBrowserTests(BrowserGate):
         self.page.goto(f"{ORIGIN}{self.page_path}", wait_until="load")
 
         def drawn(selector):
-            # A row names its agent as client@person, so the client is what is compared.
+            # A row names its agent as client@person, so the client is what is
+            # compared; the row's open line is the row after it.
+            agent = "element => (element.closest('[data-agent]') ?? element.closest('tr').previousElementSibling)"
             return {
-                element.evaluate("element => element.closest('[data-agent]').dataset.agent").partition("@")[0]: (
-                    element.get_attribute("data-streams")
-                )
+                element.evaluate(f"{agent}.dataset.agent").partition("@")[0]: (element.get_attribute("data-streams"))
                 for element in self.page.locator(selector).all()
             }
 

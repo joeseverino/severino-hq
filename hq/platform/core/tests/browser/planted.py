@@ -401,6 +401,26 @@ PLANTS = {
         '<button type="button" class="btn compact example-glyph" style="font-size: 0">Example</button>',
         css='.example-glyph::before { content: "\\00d7" / ""; font-size: 1rem; }',
     ),
+    # A button's words drawn by `breakable` straight into its flex box.
+    "control words in one box": Plant(
+        '{% load value_tags %}<button type="button" class="btn compact">{{ words|breakable }}</button>',
+        values={"words": "Open example-host"},
+    ),
+    # A row's words balanced, every line ending short of the room beside it,
+    # and a row's words held to a column narrower than its button leaves them.
+    "row words to the end of their line": Plant(
+        '<table class="data-table"><tbody><tr><td><p style="inline-size: 20rem; text-wrap: balance">'
+        "Example words enough to run over two lines of a row with room to spare</p></td></tr>"
+        '<tr><td style="inline-size: 12rem"><p>Example words enough to run over lines of a row with room</p></td>'
+        '<td style="inline-size: 30rem; text-align: right"><button type="button" class="btn compact">Example</button></td></tr>'
+        "</tbody></table>"
+    ),
+    # A folded row a rule draws as a line of its own.
+    "folded rows stay folded": Plant(
+        '<table class="data-table"><tbody><tr id="example-family" data-folds><td>Example family</td></tr>'
+        '<tr data-folded="example-family" style="display: flex"><td>Example</td><td>Example</td></tr></tbody></table>',
+        scripted=True,
+    ),
     "contrast": Plant('<p style="color: #c8c8c8; background: #fff">Example words too faint to read</p>'),
     "fields": Plant(
         '<input type="text" aria-label="Example" style="border: 1px solid #fafafa; background: transparent">'
@@ -444,6 +464,25 @@ PASSES = {
         '<a class="btn compact" href="#example" style="font-size: 0">Example</a>'
         '<button type="button" class="btn compact example-glyph" aria-label="Example"></button>',
         css='.example-glyph::before { content: "\\00d7" / ""; font-size: 1rem; }',
+    ),
+    # The same words held in one box, and a button of one word box alone.
+    "control words in one box": Plant(
+        '{% load value_tags %}<button type="button" class="btn compact">{{ words|button_words }}</button>'
+        '<button type="button" class="btn compact">{{ name|breakable }}</button>',
+        values={"words": "Open example-host", "name": "example-host"},
+    ),
+    # A folded row and one its opened family draws.
+    "folded rows stay folded": Plant(
+        '<table class="data-table"><tbody><tr id="example-family" data-folds><td>Example family</td></tr>'
+        '<tr data-folded="example-family"><td>Example</td><td>Example</td></tr>'
+        '<tr data-folded="example-family" data-open><td>Example</td><td>Example</td></tr></tbody></table>',
+        scripted=True,
+    ),
+    # The same words filling each line, and a name that will not fit its line's end.
+    "row words to the end of their line": Plant(
+        '<table class="data-table"><tbody><tr><td><p style="inline-size: 20rem">'
+        "Example words enough to run over two lines of a row with room to spare</p>"
+        '<p style="inline-size: 20rem">Example words then an-example-name-too-long-for-the-end</p></td></tr></tbody></table>'
     ),
     # Three readings one to a line, an odd count going from one row to one a
     # line; and a row's two buttons beside words given their whole line.

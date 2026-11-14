@@ -133,11 +133,14 @@ class FindingCardTests(TestCase):
         self.client.force_login(user)
 
     def card(self):
-        """The first card's words, and what it holds in page order."""
+        """The first card's words, and what it holds in page order, the
+        blocks it keeps on its open line included."""
 
         page = self.client.get(reverse("control_plane:findings"))
         card = select(page, "data-attention-item")[0]
-        return card.words, [element for element in within(page, "data-attention-item") if card in element.ancestors]
+        held = [element for element in within(page, "data-attention-item") if element.inside(card)]
+        below = [element.words for element in held if "row-below" in element.classes]
+        return " ".join((card.words, *below)), held
 
     def test_the_specific_step_comes_first_and_the_generic_plan_is_gone(self):
         words, held = self.card()

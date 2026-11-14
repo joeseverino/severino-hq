@@ -293,6 +293,7 @@ def _approval(state, **decided):
             else (),
             "resource_url": "/example/",
             "resource_label": "Playbooks",
+            "resource_open": "Open Playbooks",
         }
     }
 

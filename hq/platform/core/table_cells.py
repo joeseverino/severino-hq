@@ -185,7 +185,7 @@ class Cells(HTMLParser):
         self.unsaid: int | None = None
         self.off_line: int | None = None
         self.part: int | None = None
-        # Where each cell starts, with what is written into it there.
+        # Where each cell or row starts, with what is written into it there.
         self.marks: dict[tuple[int, int], list[str]] = {}
         # Where each element or cell with a role starts, and its roles.
         self.roles: dict[tuple[int, int], set[str]] = {}
@@ -507,6 +507,7 @@ class Cells(HTMLParser):
         blocks: list[Span] = []
         entries: list[LineEntry] = []
         labeled: list[LineEntry] = []
+        held_below = False
         for index, cell in enumerate(row.cells):
             if "colspan" in cell.attrs or not cell.closed:
                 continue
@@ -514,11 +515,17 @@ class Cells(HTMLParser):
             editors = [span for _, span in _finished(cell, "editor")]
             self.cuts += [((start, 0), (end, None)) for start, end in editors]
             blocks[:0] = editors
+            # A block kept beneath the row is moved there too: the row's line
+            # never shows it, and the row says it holds one (`data-below`).
             below = _finished(cell, "below")
+            self.cuts += [((start, 0), (end, None)) for _, (start, end) in below]
+            held_below = held_below or bool(below)
             blocks += [span for label, span in below if not label]
             labeled += [LineEntry(label, [span], "label") for label, span in below if label]
             if entry := _column_entry(index, cell, (cell.opened, cell.closed), names, dropped=index in drops):
                 entries.append(entry)
+        if held_below:
+            self.marks.setdefault(row.start, []).append(" data-below")
         if blocks or entries or labeled:
             self.details.append((row.end, width, blocks, entries + labeled))
         if any(_finished(cell, "editor") for cell in row.cells):
@@ -540,16 +547,14 @@ def _row_controls(row: _Row, kinds: dict[int, str], named: int) -> list[tuple[in
     """Each cell of the row's controls, by its place: a row's actions or a
     cell of a column of controls, holding a control and no field a reader
     fills in (a choice of a rule is a value of the row, not what it offers).
-    Never the cell that names the row, nor a column of tick-boxes, nor the
-    reader's put-away control (`data-put-away`), which ends the row's first
-    line."""
+    Never the cell that names the row, nor a column of tick-boxes."""
 
     found, place = [], 0
     for cell in row.cells:
         at, kind = place, kinds.get(place)
         place += int(cell.attrs.get("colspan") or 1)
         classes = _classes(cell.attrs)
-        if at == named or "colspan" in cell.attrs or "select-column" in classes or "data-put-away" in cell.attrs:
+        if at == named or "colspan" in cell.attrs or "select-column" in classes:
             continue
         if not cell.closed:
             continue

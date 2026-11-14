@@ -8,7 +8,7 @@ seams and boxes they draw are this module's, read by the stylesheet's
 import re
 from html import unescape
 
-from django.utils.html import conditional_escape
+from django.utils.html import conditional_escape, format_html
 from django.utils.safestring import mark_safe
 
 from hq.platform.application.labels import DOT, DOT_MARKUP
@@ -199,6 +199,18 @@ def _short(word: str) -> str:
 
 # The tags that close a word's boxes, after its last letter.
 _CLOSING = re.compile(r"(?:</span>)*$")
+
+
+def button_words(value):
+    """A control's words as ``breakable`` draws them, in one box when they
+    are drawn in more than one piece: a control is a flex box (page.css,
+    Buttons), where each run of text and each token would be an item of its
+    own, set apart by its gap and not by the space between the words."""
+
+    words = breakable(value)
+    if "<" not in words:
+        return words
+    return format_html('<span class="button-words">{}</span>', words)
 
 
 def breakable(value, mark=""):

@@ -452,10 +452,8 @@ def row_actions(actions: Any = (), *, gap: Any = None, first: int = 0, put_away:
     ``adoption.WriteGap``, stands in for every action when the connection
     cannot make the change. Given ``first``, the actions past that many wait
     in the row's open line. ``put_away``, a POST ``PageAction`` such as the
-    queue's Dismiss, is the reader's own way to set the row aside: a quiet
-    cell of its own that ends the row, and in a narrow box its first line
-    (docs/Design.md, A row's controls stand beneath its words in a narrow
-    box)."""
+    queue's Dismiss, is the reader's own way to set the row aside: the last
+    of its buttons, drawn as they are, and never waiting in the open line."""
 
     actions = tuple(actions or ())
     shown, later = (actions[:first], actions[first:]) if first else (actions, ())

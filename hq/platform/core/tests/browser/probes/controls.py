@@ -355,9 +355,8 @@ ACTIONS_BESIDE_SQUEEZED_WORDS = (
     if (!words.length) continue;
     const widest = words.reduce((most, other) => (box(other).width > box(most).width ? other : most));
     // Controls on a line of their own beneath the words (a row stacked in a
-    // narrow box, tables.css) stand beside none of them, and the reader's
-    // one quiet put-away (`data-put-away`) shares the title's line by design.
-    if (cell.matches('[data-put-away]') || box(cell).top >= box(widest).bottom - 1) continue;
+    // narrow box, tables.css) stand beside none of them.
+    if (box(cell).top >= box(widest).bottom - 1) continue;
     const style = getComputedStyle(widest);
     const room = box(widest).width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
     const line = measureIn(widest);
@@ -389,6 +388,29 @@ WORDS_SWAPPED_FOR_A_GLYPH = (
       if (/\\p{L}/u.test(node.textContent) && parseFloat(getComputedStyle(node.parentElement).fontSize) > 0) shown = true;
     }
     if (!shown) found.push(`${describe(el)} draws "${el.textContent.trim().slice(0, 24)}" at no size behind a glyph`);
+  }
+  return found;
+}"""
+)
+
+
+# A control's words are one box: a control is a flex box (page.css, Buttons),
+# where each run of text and each word box `breakable` draws (a hyphenated
+# name, a path) is an item of its own, set apart by the gap instead of the
+# space between them. `button_words` holds them in one.
+CONTROL_WORDS_IN_ONE_BOX = (
+    "(selector) => {"
+    + DESCRIBE
+    + """
+  const found = [];
+  const piece = (node) => (node.nodeType === Node.TEXT_NODE
+    ? node.textContent.trim() !== '' : node.nodeType === Node.ELEMENT_NODE && node.matches('.token, .seam'));
+  for (const el of document.querySelectorAll(selector)) {
+    if (!el.checkVisibility() || !/flex|grid/.test(getComputedStyle(el).display)) continue;
+    const pieces = [...el.childNodes].filter(piece);
+    if (pieces.length > 1 && pieces.some((node) => node.nodeType === Node.ELEMENT_NODE)) {
+      found.push(`${describe(el)} draws "${el.textContent.trim().replace(/\\s+/g, ' ').slice(0, 32)}" as ${pieces.length} items`);
+    }
   }
   return found;
 }"""
@@ -431,6 +453,7 @@ CHECKS = {
         [SELECTORS["row_actions_cell"], ROW_WORDS],
     ),
     "words swapped for a glyph": (WORDS_SWAPPED_FOR_A_GLYPH, SELECTORS["pressed"]),
+    "control words in one box": (CONTROL_WORDS_IN_ONE_BOX, SELECTORS["pressed"]),
     "control words on one line": (
         WRAPPED_CONTROLS,
         [SELECTORS["pressed"], SELECTORS["choice"], SELECTORS["unseen"], SELECTORS["vendored"]],
