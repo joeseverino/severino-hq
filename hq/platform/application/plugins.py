@@ -851,7 +851,9 @@ def gather_attention(
         if provider is None:
             continue
         for item in source_attention(source_id, label, provider, read_capabilities):
-            if item.status not in ATTENTION_ORDER:
+            # Only what someone can act on now: never context, and never what
+            # waits on a fix that does not exist yet.
+            if item.status not in ATTENTION_ORDER or item.awaiting_fix:
                 continue
             gathered.append({"item": item, "source": label, "source_id": source_id})
     return ordered_attention(gathered)

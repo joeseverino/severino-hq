@@ -504,7 +504,10 @@ not establish freshness. The host never infers dates from a card label or
 recalculates an extension's totals.
 
 An attention provider emits `serious` or `attention` only for a decision that
-needs the operator, and `neutral` or `good` for observations. The title states
+needs the operator, and `neutral` or `good` for observations. An item whose
+only remedy does not exist yet (an advisory no release fixes) sets
+`awaiting_fix=True`, read from the source's own field, and the queue leaves it
+out while its own page still shows it. The title states
 what is wrong, with its count where it stands for several; the body says what
 it means. A domain whose items are also decided together on one page of its
 own names it in `PluginIntegration.attention_url`, and the Needs you page's

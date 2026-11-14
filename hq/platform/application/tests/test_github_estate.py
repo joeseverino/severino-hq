@@ -319,6 +319,19 @@ class UnmatchedAlertItemTests(TestCase):
         self.assertNotIn("update pull request", item.body)
         self.assertEqual((item.url, item.links), (f"{ALPHA}/security/dependabot", ()))
 
+    def test_alerts_no_version_fixes_yet_leave_the_queue_and_one_a_version_fixes_keeps_them_in_it(self):
+        def queued(*alerts):
+            store(
+                alerts={"dependabot": {alert["severity"]: 1 for alert in alerts}},
+                dependabot_alerts=list(alerts),
+            )
+            return [entry["key"] for entry in work_queue() if entry["key"].endswith("github-alerts:example/alpha")]
+
+        # Nobody can act on an alert no release fixes: its project's updates
+        # list it, with "no fixed version yet".
+        self.assertEqual(queued(UNANSWERED), [])
+        self.assertEqual(len(queued(UNANSWERED, ANSWERED)), 1)
+
     def test_serious_alerts_in_several_parts_link_each_parts_list_the_worst_first(self):
         store(alerts={"dependabot": {"high": 1}, "code_scanning": {"critical": 1}, "leaked_credentials": {"leaked": 1}})
 

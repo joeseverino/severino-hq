@@ -115,6 +115,10 @@ class Insight:
     # decided, so a reader can never set it aside, and a mark from before
     # does not hide it.
     held: bool = False
+    # Its only remedy does not exist yet: nothing it counts has a fixed
+    # release. Nobody can act on it, so the queue leaves it out and its own
+    # page shows it.
+    awaiting_fix: bool = False
     # What kind of matter this is, as its owner would head a list of them:
     # "Image advisories", "Tailscale updates". Several open items of one family
     # from one source are folded under that heading in the queue, so a dozen of

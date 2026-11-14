@@ -548,6 +548,11 @@ def _alerts(repo: Repository) -> list[tuple[Insight, str]]:
     one, many, body = _alerts_said(repo)
     alerts = counted(repo.serious_alerts, one, many)
     unmatched = sum(1 for alert in repo.unmatched_alerts if alert.get("severity") in SERIOUS_ALERTS)
+    unfixed = sum(
+        1
+        for alert in repo.record.get("dependabot_alerts") or ()
+        if alert.get("severity") in SERIOUS_ALERTS and not alert.get("first_patched_version")
+    )
     updates = _updates_url(repo) if unmatched else ""
     if unmatched:
         body += f" {counted(unmatched, 'has', 'have')} no update pull request."
@@ -573,6 +578,8 @@ def _alerts(repo: Repository) -> list[tuple[Insight, str]]:
         ),
         observed_at=repo.observed_at,
         reads=REPOSITORY_KIND,
+        # Every one a Dependabot alert no version fixes yet.
+        awaiting_fix=unfixed == repo.serious_alerts,
     )
     return [(item, f"{counted(repo.serious_alerts, f'{one} was', f'{many} were')} open in {repo.short}")]
 

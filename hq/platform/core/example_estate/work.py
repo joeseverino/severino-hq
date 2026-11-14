@@ -223,7 +223,8 @@ def _watched():
 
 
 def _updates(name):
-    """One update open with its checks passing, and an alert no update answers yet."""
+    """One update open with its checks passing, an alert no update answers
+    yet, and a serious one no version fixes yet, which the queue leaves out."""
 
     url = f"https://github.com/example/{name}"
     return {
@@ -285,7 +286,7 @@ def _updates(name):
                 "created_at": iso(timedelta(days=5)),
             },
         ],
-        "alerts": {"dependabot": {"medium": 1}},
+        "alerts": {"dependabot": {"high": 1, "medium": 1}},
         "dependabot_alerts": [
             {
                 "number": 7,
@@ -295,7 +296,16 @@ def _updates(name):
                 "severity": "medium",
                 "first_patched_version": "1.8.2",
                 "url": f"{url}/security/dependabot/7",
-            }
+            },
+            {
+                "number": 8,
+                "package": "example-tiff",
+                "ecosystem": "pip",
+                "manifest_path": "uv.lock",
+                "severity": "high",
+                "first_patched_version": None,
+                "url": f"{url}/security/dependabot/8",
+            },
         ],
     }
 
