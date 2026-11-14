@@ -73,6 +73,7 @@ PARTIALS: dict[str, str] = {
     "partials/_insight_grid.html": "Readings that need interpreting, each with its next step.",
     "partials/_job_progress.html": "A running job and what it is doing.",
     "partials/_kpi_grid.html": "Responsive linked or static figures.",
+    "partials/_reading_age.html": "When a reading was taken, `at` the moment, in the one wording every page uses.",
     "partials/_record_list.html": "A compact list of records, from `hq_sdk.ui.ListRow`.",
     "partials/_row_field.html": "One field of a form whose fields stand one to a row of a table, in its row.",
     "partials/_timeline.html": "Chronological linked events, from `hq_sdk.ui.Timeline`.",

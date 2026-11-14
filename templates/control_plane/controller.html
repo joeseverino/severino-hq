@@ -14,8 +14,8 @@ for it. Nothing here asks it anything.
     {% elif standing.silent %}<small>Last connected {{ standing.seen_at|when }}. Nothing has been read or changed since.</small>
     {% else %}<small>Last connected {{ standing.seen_at|when:"ago" }}.</small>{% endif %}
   {% endfact %}
-  {% fact "Last read" icon="eye" tone=controller.failing_tone %}
-    {% if controller.swept_at %}{{ controller.swept_at|when:"ago" }}{% else %}Never{% endif %}
+  {% fact "Reading" icon="eye" tone=controller.failing_tone %}
+    {% include "partials/_reading_age.html" with at=controller.swept_at only %}
   {% detail %}
     {% if controller.swept_at %}<small>{% if controller.failing %}{{ controller.failing|breakable }} of {{ controller.readings|length|counted:"reading" }} failed.{% else %}All {{ controller.readings|length|counted:"reading" }} are current.{% endif %}</small>
     {% else %}<small>Nothing has been read yet.</small>{% endif %}
@@ -75,13 +75,13 @@ arrived, from the unit HQ ships (deploy/systemd/severino-hq-controller.*).
   {% if controller.readings %}
   {% table_region "Readings" %}
     <table class="data-table">
-      <thead><tr>{% table_heading "Reading" gutter=True local_sort=True %}{% table_heading "Last tried" "status" drop=3 local_sort=True %}{% table_heading "Last succeeded" "status" drop=2 local_sort=True %}{% table_heading "Items" "numeric" drop=1 local_sort=True %}{% table_heading "Result" "status" css="key-col" local_sort=True %}</tr></thead>
+      <thead><tr>{% table_heading "Reading" gutter=True local_sort=True %}{% table_heading "Last tried" "status" drop=3 local_sort=True %}{% table_heading "Reading" "status" drop=2 local_sort=True %}{% table_heading "Items" "numeric" drop=1 local_sort=True %}{% table_heading "Result" "status" css="key-col" local_sort=True %}</tr></thead>
       <tbody>
         {% for reading in controller.readings %}
           <tr>
             <td><strong title="{{ reading.kind }}">{{ reading.label|breakable }}</strong></td>
             <td>{{ reading.attempted_at|when:"ago" }}</td>
-            <td>{{ reading.observed_at|when:"ago" }}</td>
+            <td>{% include "partials/_reading_age.html" with reading=reading.reading only %}</td>
             <td>{{ reading.records|breakable }}</td>
             <td>{% if reading.ok %}{% status reading.result tone="good" %}{% else %}{% status "Failed" tone="serious" %}{% endif %}{% if not reading.ok %}<br><span class="muted">{% cell_line reading.result %}</span>{% endif %}</td>
           </tr>

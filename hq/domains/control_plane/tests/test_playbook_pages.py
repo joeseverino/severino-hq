@@ -142,7 +142,7 @@ class PlaybooksPageTests(TestCase):
         (line,) = select(html, "data-adopted-commit")
         for said in (adopted.revision[:12], adopted.branch, f"from {adopted.committer}", "adopted"):
             self.assertIn(said, line.words)
-        self.assertFalse(select(html, "data-reading-age"))
+        self.assertFalse(any("data-reading-age" in shown.attrs for shown in within(html, "data-adopted-commit")))
 
     def test_the_title_says_in_one_line_why_the_newest_scan_failed_and_when_one_last_reached_it(self):
         newest = OperationRequest.objects.filter(action=OperationRequest.Action.SCAN).order_by("-created_at").first()
@@ -150,7 +150,7 @@ class PlaybooksPageTests(TestCase):
         html = self.page()
         (failed,) = select(html, "data-scan-failed")
         self.assertIn(newest.result["message"], failed.words)
-        self.assertIn("Last reached", failed.words)
+        self.assertTrue(any("data-reading-age" in shown.attrs for shown in within(html, "data-scan-failed")))
         # A Refresh still waiting leaves the failure said.
         self.client.post(reverse("control_plane:playbooks_refresh"), _sent(), **XHR)
         (still,) = select(self.page(), "data-scan-failed")

@@ -151,7 +151,7 @@ row in the flow.
   {% else %}
   {% table_region "Readings by connection" %}
     <table class="data-table">
-      <thead><tr>{% table_heading "Reading" local_sort=True gutter=True %}{% table_heading "State" "status" css="key-col" local_sort=True %}{% table_heading "Records" "numeric" local_sort=True drop=2 %}{% table_heading "Last read" "status" css="optional-col" local_sort=True drop=1 %}</tr></thead>
+      <thead><tr>{% table_heading "Reading" local_sort=True gutter=True %}{% table_heading "State" "status" css="key-col" local_sort=True %}{% table_heading "Records" "numeric" local_sort=True drop=2 %}{% table_heading "Reading" "status" css="optional-col" local_sort=True drop=1 %}</tr></thead>
       {% for provider, rows in sight.groups %}
       <tbody>
         {% row_group provider rows|length %}
@@ -163,7 +163,7 @@ row in the flow.
             </td>
             <td>{% if row.stale %}<strong>Out of date</strong>{% elif row.read and row.state == "readable" %}{{ row.state_label|breakable }}{% else %}<strong>{{ row.state_label|breakable }}</strong>{% endif %}</td>
             <td>{% if row.read %}{{ row.records|breakable }}{% else %}{% empty_value %}{% endif %}</td>
-            <td class="optional-col">{% if row.observed_at %}{{ row.observed_at|when:"ago" }}{% else %}{% empty_value %}{% endif %}</td>
+            <td class="optional-col">{% include "partials/_reading_age.html" with at=row.observed_at only %}</td>
           </tr>
         {% endfor %}
       </tbody>

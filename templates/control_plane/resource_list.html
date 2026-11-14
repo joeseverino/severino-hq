@@ -16,7 +16,7 @@ offers every type.
 {% table_region "Records" empty="No records yet." filtered=records.filtered clear=every_record %}
   <table class="data-table">
     <thead>
-      <tr>{% table_heading "Name" "identifier" gutter=True local_sort=True %}{% table_heading "State" "status" css="key-col" local_sort=True %}{% table_heading "Last read" "status" drop=1 local_sort=True %}</tr>
+      <tr>{% table_heading "Name" "identifier" gutter=True local_sort=True %}{% table_heading "State" "status" css="key-col" local_sort=True %}{% table_heading "Reading" "status" drop=1 local_sort=True %}</tr>
     </thead>
     {% for group in records.groups %}
     <tbody>
@@ -37,7 +37,7 @@ offers every type.
               {% if status.since %}<br><span class="muted">{{ status.since|when:"ago" }}</span>{% endif %}
             {% endwith %}
           </td>
-          <td class="muted date-col">{% if resource.last_observed_at %}{{ resource.last_observed_at|when:"ago" }}{% else %}{% empty_value %}{% endif %}</td>
+          <td class="muted date-col">{% include "partials/_reading_age.html" with at=resource.last_observed_at only %}</td>
         </tr>
       {% endfor %}
     </tbody>

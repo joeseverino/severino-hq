@@ -145,12 +145,12 @@ where it is saved and how it relates follow, short cards sharing rows.
         {% endif %}
         {% if container.running and container.standing %}
           {% if container.running.published %}{% fact "Publishes" value=container.running.published %}{% endif %}
-          {% fact "Seen" %}{{ container.running.observed_at|when:"ago" }}{% endfact %}
+          {% fact "Reading" %}{% include "partials/_reading_age.html" with at=container.running.observed_at only %}{% endfact %}
         {% elif container.running %}
           {% fact "State" %}{% status container.running.state|default:"unknown" tone=container.running.healthy|yesno:"reachable,unreachable" %}{% if container.running.status %} <span class="muted">{{ container.running.status|breakable }}</span>{% endif %}{% endfact %}
           {% fact "Image" %}<code>{{ container.running.image_label|breakable }}</code>{% endfact %}
           {% if container.running.published %}{% fact "Publishes" value=container.running.published %}{% endif %}
-          {% fact "Seen" %}{{ container.running.observed_at|when:"ago" }}{% endfact %}
+          {% fact "Reading" %}{% include "partials/_reading_age.html" with at=container.running.observed_at only %}{% endfact %}
         {% else %}
           {% fact "State" %}<span class="muted">Not read yet.</span>{% endfact %}
         {% endif %}

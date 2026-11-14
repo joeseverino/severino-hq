@@ -94,7 +94,7 @@ class ControllerPageTests(TestCase):
 
         reading = next(reading for reading in controller_page().readings if reading.kind == "tailscale.device")
 
-        self.assertIsNone(reading.observed_at)
+        self.assertEqual(reading.reading.state, "never")
         self.assertLess(reading.attempted_at, timezone.now() - timedelta(minutes=4))
 
     def test_it_says_when_the_next_sweep_is_due(self):

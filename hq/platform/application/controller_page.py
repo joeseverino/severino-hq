@@ -24,6 +24,7 @@ from .cadence import (
     sweep_due,
 )
 from .entity_links import kind_label
+from .freshness import Freshness, freshness
 from .moments import duration
 lazy from .facts import every_snapshot
 
@@ -35,8 +36,8 @@ class KindReading:
     kind: str
     label: str
     attempted_at: datetime
-    # None when no read has answered.
-    observed_at: datetime | None
+    # When a read last answered, and whether that is still current.
+    reading: Freshness
     records: int
     # "read", "not connected", or why the last attempt stored nothing new.
     result: str
@@ -101,7 +102,7 @@ def _reading(row: ProviderInventory) -> KindReading:
         kind=row.kind,
         label=kind_label(row.kind),
         attempted_at=attempted_at(row.observed_at, row.updated_at),
-        observed_at=row.observed_at,
+        reading=freshness(row.kind, row.observed_at),
         records=len(row.records) if isinstance(row.records, list) else 0,
         result=result,
         ok=ok,

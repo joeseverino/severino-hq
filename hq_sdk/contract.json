@@ -3228,6 +3228,14 @@
           "items"
         ]
       },
+      "partials/_reading_age.html": {
+        "about": "When a reading was taken, `at` the moment, in the one wording every page uses.",
+        "optional": [
+          "at",
+          "reading"
+        ],
+        "required": []
+      },
       "partials/_record_list.html": {
         "about": "A compact list of records, from `hq_sdk.ui.ListRow`.",
         "optional": [
