@@ -285,9 +285,9 @@
    one to a line are (figures.css). */
 .data-table td .line-list:has(a) { line-height: var(--target-min); }
 @media (scripting: enabled) {
-  /* Open, the rest keeps its box and its run wraps on lines of its own,
-     still asking for no width, so opening a row moves no column. */
-  .data-table > tbody > tr.is-expanded > td .line-rest { flex: 1 1 0; contain: inline-size; }
+  /* Open, the rest stands on lines of its own, as wide as its list, still
+     asking for no width, so opening a row moves no column. */
+  .data-table > tbody > tr.is-expanded > td .line-rest { contain: inline-size; }
   /* Only a row that opens clips its rest: one that cannot shows it on lines below, as without script. */
   .data-table > tbody > tr:not(.is-expanded, .row-detail):has(> * > [data-row-toggle]) > td .line-rest { flex: 1 1 0; inline-size: 0; max-block-size: calc(1lh + .5em); overflow: clip; }
   .data-table > tbody > tr:not(.is-expanded, .row-detail):has(> * > [data-row-toggle]) > td .line-run { flex: 1 1 0; row-gap: 1lh; overflow-x: clip; }
