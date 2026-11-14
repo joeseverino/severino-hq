@@ -827,21 +827,18 @@ class BrowserTestTests(SimpleTestCase):
 
         self.assertTrue(drives_a_browser(Drawn("test_it")))
 
-    def test_the_whole_suite_leaves_out_every_browser_gate_it_discovers(self):
+    def test_the_whole_suite_leaves_out_every_browser_gate_it_discovers_and_still_runs_across_workers(self):
         gate = type("Gate", (SimpleTestCase,), {"__module__": f"{BROWSER_TESTS}.catalog", "test_it": lambda self: None})
-
-        class Plain(SimpleTestCase):
-            def test_it(self):
-                pass
-
-        found = unittest.TestSuite([gate("test_it"), Plain("test_it")])
+        plain = [type(name, (SimpleTestCase,), {"test_it": lambda self: None}) for name in ("One", "Two")]
+        found = unittest.TestSuite([gate("test_it"), *(kind("test_it") for kind in plain)])
         with (
-            unittest.mock.patch.object(DiscoverRunner, "build_suite", return_value=found),
+            unittest.mock.patch.object(DiscoverRunner, "load_tests_for_label", return_value=found),
             unittest.mock.patch("hq.platform.core.test_runner.plugin_test_modules", return_value=[]),
         ):
-            suite = SeverinoTestRunner(verbosity=0).build_suite([])
+            suite = SeverinoTestRunner(verbosity=0, parallel=2).build_suite([])
 
-        self.assertEqual([type(test) for test in tests_in(suite)], [Plain])
+        self.assertCountEqual([type(test) for test in tests_in(suite)], plain)
+        self.assertIsInstance(suite, FileClonedParallelSuite)
 
 
 class BrowserFailureShotTests(SimpleTestCase):

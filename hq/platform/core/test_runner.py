@@ -852,10 +852,21 @@ class SeverinoTestRunner(DiscoverRunner):
         bind_test_arrangement()
         hypothesis_profiles()
 
+    def load_tests_for_label(self, label, discover_kwargs):
+        # Discovery loads a package's __init__ as well as its test files, so a
+        # browser gate declared there is found; the browser gates run by name.
+        # Left out here, as each label loads: Django then splits what is left
+        # across the workers, and a suite rebuilt after that runs in one process.
+        tests = super().load_tests_for_label(label, discover_kwargs)
+        if self.named:
+            return tests
+        return self.test_suite(test for test in tests_in(tests) if not drives_a_browser(test))
+
     def build_suite(self, test_labels=None, **kwargs):
         # A run with no labels is the whole suite: the host's and every
         # installed plugin's, so a composed run tests what it composes. Named
         # labels run what they name.
+        self.named = bool(test_labels)
         self.exclude_tags = excluded_tags(test_labels, self.tags, self.exclude_tags)
         if test_labels:
             suite = super().build_suite(test_labels, **kwargs)
@@ -864,9 +875,6 @@ class SeverinoTestRunner(DiscoverRunner):
             if self.installed_plugins and not modules:
                 raise RuntimeError("--installed-plugins: no plugin is installed.")
             suite = super().build_suite([*modules] if self.installed_plugins else [".", *modules], **kwargs)
-            # Discovery loads a package's __init__ as well as its test files, so a
-            # browser gate declared there is found; the browser gates run by name.
-            suite = self.test_suite(test for test in tests_in(suite) if not drives_a_browser(test))
             require_tests_from(suite, modules)
         if any(drives_a_browser(test) for test in tests_in(suite)):
             # Here, in the process that starts the run and before any worker
