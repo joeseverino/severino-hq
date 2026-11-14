@@ -2,14 +2,14 @@
 
 An action item is open until its owner stops raising it. A person who will not
 act on one now sets it aside: it leaves their queue and their counts and waits
-below until the revision set aside (``item_revision``) moves. Setting one aside
-never touches another.
+below until the revision set aside (``item_revision``) moves or it is raised
+again after clearing. Setting one aside never touches another.
 """
 
 import hashlib
 import json
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Annotated, Any, Literal, TypedDict
 
 from django.core.exceptions import ValidationError
@@ -22,6 +22,7 @@ from hq.platform.core.models import ActionItemRead, AuditLog
 from .command_fields import Describe
 from .projection import projection_scope
 from .security import Principal, person
+from .timestamps import moment
 lazy from . import dashboard
 lazy from .attention import readable_by
 lazy from .decisions import decision
@@ -29,8 +30,8 @@ lazy from .domains import attention_urls
 lazy from .findings import rule_of
 lazy from .routes import reverse
 
-# How long a set-aside mark outlives its item. Long enough that a finding which
-# clears and returns within a sweep or two is still recognized as set aside.
+# How long a set-aside mark outlives its item before it is deleted. A mark
+# never hides an item raised again after it (``with_aside_state``).
 FORGET_AFTER = timedelta(days=30)
 
 # The capabilities a person sets items aside, and brings them back, through.
@@ -86,12 +87,27 @@ def sortable(item: dict[str, Any]) -> bool:
 
 
 def with_aside_state(items: list[dict[str, Any]], user) -> list[dict[str, Any]]:
-    """The items, each with whether ``user`` set this revision of it aside. One query."""
+    """The items, each with whether ``user`` set it aside. One query.
 
-    aside = dict(
-        ActionItemRead.objects.filter(user=user, key__in=[item["key"] for item in items]).values_list("key", "revision")
-    )
-    return [{**item, "aside": sortable(item) and aside.get(item["key"]) == item["revision"]} for item in items]
+    A mark hides the revision it was made at, and only while the item stands
+    as it stood then: one raised anew since (its ``since`` after the mark,
+    which a cleared item's return moves) is back in the queue.
+    """
+
+    marks = {
+        key: (revision, read_at)
+        for key, revision, read_at in ActionItemRead.objects.filter(
+            user=user, key__in=[item["key"] for item in items]
+        ).values_list("key", "revision", "read_at")
+    }
+    return [{**item, "aside": sortable(item) and _hidden(item, marks.get(item["key"]))} for item in items]
+
+
+def _hidden(item: dict[str, Any], mark: tuple[str, datetime] | None) -> bool:
+    if mark is None or mark[0] != item["revision"]:
+        return False
+    since = moment(item.get("since") or "")
+    return since is None or since <= mark[1]
 
 
 def waiting_count(items: list[dict[str, Any]], user) -> int:

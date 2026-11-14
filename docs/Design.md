@@ -1386,8 +1386,9 @@ inside one (`tools/lint/stylelint-ground-cover.mjs`, in `lint:css`, holds it).
 
 **An item is open until its owner stops raising it.** Nobody closes one by
 looking at it. What a reader can do with one they are not acting on is dismiss
-it. It leaves their queue and their counts, stays reachable in a fold below,
-and comes back on its own when it gets worse or grows. The header and the
+it. It leaves their queue and their counts, stays reachable in a fold below
+while its owner still raises it, and comes back on its own when it gets worse,
+grows, or is raised again after clearing (its `since` after the dismissal). The header and the
 dashboard count what waits; a dashboard with only dismissed items says so and
 links to them, and never claims all is clear. A held request
 (`Insight(held=True)`) is decided by its Approve or Reject, never dismissed:

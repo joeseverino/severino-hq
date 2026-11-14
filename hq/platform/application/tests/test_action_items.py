@@ -164,6 +164,20 @@ class AsideStateTests(TestCase):
         )
         self.assertEqual(waiting_count([ITEM, held], self.user), 1)
 
+    def test_an_item_raised_again_after_it_cleared_is_back_and_one_still_open_stays_dismissed(self):
+        now = timezone.now()
+        still_open = {**ITEM, "since": (now - timedelta(days=3)).isoformat()}
+        set_aside(self.user, [ITEM["key"], OTHER["key"]], aside=True, current=[still_open, OTHER])
+        ActionItemRead.objects.update(read_at=now - timedelta(days=2))
+
+        # OTHER cleared after it was dismissed and is raised again, as it was.
+        returned = {**OTHER, "since": (now - timedelta(days=1)).isoformat()}
+
+        self.assertEqual(
+            [(item["key"], item["aside"]) for item in with_aside_state([still_open, returned], self.user)],
+            [(ITEM["key"], True), (OTHER["key"], False)],
+        )
+
     def test_bringing_back_undoes_setting_aside(self):
         set_aside(self.user, [ITEM["key"]], aside=True, current=[ITEM])
         set_aside(self.user, [ITEM["key"]], aside=False, current=[ITEM])
