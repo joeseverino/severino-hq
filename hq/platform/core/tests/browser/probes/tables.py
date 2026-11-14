@@ -514,13 +514,14 @@ CUT_WHEN_OPEN = (
 
 
 # A row offers its toggle only where opening it shows something: an open line
-# with nothing drawn is a chevron that does nothing.
+# with nothing drawn is a chevron that does nothing. A group's toggle opens
+# the rows folded under it, so its line may hold nothing.
 OPENS_NOTHING = (
     "() => {"
     + DESCRIBE
     + """
   const found = [];
-  for (const row of document.querySelectorAll('main table > tbody > tr.is-expanded')) {
+  for (const row of document.querySelectorAll('main table > tbody > tr.is-expanded:not(:has([data-fold-toggle]))')) {
     const line = row.nextElementSibling;
     if (!row.checkVisibility() || row.closest('details:not([open])') || !line?.matches('.row-detail')) continue;
     const drawn = [...line.querySelectorAll(':scope > td *')]

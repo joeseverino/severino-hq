@@ -98,6 +98,15 @@
 .cell-clamp:not(:has([data-cell])), .cell-clamp [data-cell]:not([data-cell] *) {
   -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; max-block-size: 3lh; overflow: hidden;
 }
+/* Words may break anywhere, so a string with no break in it (a hash, a key)
+   asks its column for no more than a letter: the table still gives each
+   column its whole line when the box holds it. A row's open line holds the
+   same values, so it breaks them the same way. */
+.data-table > tbody > tr > :is([data-kind="name"], [data-kind="prose"], [data-kind="identifier"]),
+.data-table > tbody > tr.row-detail > td {
+  overflow-wrap: anywhere;
+  & :is(code:not(.cell-whole), .token, .whole) { overflow-wrap: anywhere; }
+}
 /* A part of a run (`line_list`) is whole on its line while the line holds it (the run wraps between its parts); one longer than the line takes the line and wraps at its words. */
 .data-table > tbody > tr > td .line-list > :not(.line-rest) { min-inline-size: 0; }
 .data-table > tbody > tr > td .line-list > :not(.line-rest) > .cell-part { white-space: normal; }
