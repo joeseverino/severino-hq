@@ -110,7 +110,7 @@
   .kpi-trend { flex: 1 1 6rem; min-width: 0; max-width: 260px; height: 28px; margin-left: auto; overflow: visible; }
   .kpi-trend polyline { fill: none; stroke: var(--accent); stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
   .kpi-trend-hit { fill: transparent; }
-  .kpi-trend-dot { stroke: var(--accent); stroke-width: 7; stroke-linecap: round; vector-effect: non-scaling-stroke; opacity: 0; pointer-events: none; }
+  .kpi-trend-dot { stroke: var(--accent); opacity: 0; }
   .kpi-trend-dot.is-latest, .kpi-trend-hit:hover + .kpi-trend-dot { opacity: 1; }
   .kpi-grid.is-featured > :first-child .kpi-trend { height: 40px; }
 

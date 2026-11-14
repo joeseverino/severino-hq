@@ -991,6 +991,7 @@ Script hooks: `data-chart`, `data-sort`, `data-submit-busy`, `data-submit-label`
 | `hand-drawn-split-count` | A count split from its words, where the counted filter writes them as one. | Write {{ n\|counted:"thing" }}, the figure and its words as one, or `{% fact "Label" value=n %}`. |
 | `hand-drawn-split-figure` | A figure apart from its word, where a value filter writes them as one. | Write {{ n\|counted:"thing" }} for a count, or {{ x\|measured:"mi" }} for a unit or a word the count leaves alone ("more"), the figure and its word as one value. |
 | `hand-drawn-stack-list` | A stack list drawn by hand, where the stack list part draws it. | Write `{% stack_list %}``<li>`...`</li>``{% endstack_list %}`, with below="Label" for a list the open row shows. |
+| `hand-drawn-stretched-shape` | A round shape or text inside a stretched drawing, which distorts it. | Draw a dot as a zero-length line of class chart-dot, and a label in the unscaled svg.chart-labels layer. |
 | `hand-drawn-table` | A table drawn outside its region. | Write `{% table_region "Label" %}` around its `<table class="data-table">`. |
 | `hand-drawn-title-meta` | A title's line of facts drawn by hand, where the title meta part draws it. | Write `{% title_meta %}`parts`{% endtitle_meta %}`, with element="ul" for `<li>` parts. |
 | `hand-drawn-toned-value` | A toned value drawn by hand, where the status part draws it. | Write `{% status value tone=tone pill=False %}`. |

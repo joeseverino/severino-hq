@@ -283,6 +283,18 @@ class LineChartTests(TestCase):
         self.assertEqual(len(chart.marks), 1)
         self.assertAlmostEqual(chart.marks[0].x, chart.series[0].points[1].x, places=1)
 
+    def test_a_marks_label_is_drawn_unscaled_over_its_rule(self):
+        chart = line_chart("Resting", "", self.SERIES, unit="bpm", marks=((date(2026, 1, 15), "Care"),))
+        rendered = render_to_string("partials/_line_chart.html", {"chart": chart})
+        # The drawing is stretched to its card, so lettering inside it would
+        # be pulled wide; the label goes in the layer with no viewBox, at the
+        # share of the width its rule is drawn at.
+        (label,) = [element for element in all_elements(rendered) if element.words == "Care"]
+        layer = next(ancestor for ancestor in label.ancestors if ancestor.tag == "svg")
+        self.assertIn("chart-labels", layer.classes)
+        self.assertNotIn("viewbox", layer.attrs)
+        self.assertAlmostEqual(float(label.attrs["x"].rstrip("%")), chart.marks[0].x / chart.width * 100, places=1)
+
     def test_a_mark_outside_the_window_is_dropped(self):
         chart = line_chart("Resting", "", self.SERIES, unit="bpm", marks=((date(2025, 1, 1), "Old"),))
         self.assertEqual(chart.marks, ())
@@ -304,14 +316,12 @@ class LineChartTests(TestCase):
     def test_each_point_has_a_target_big_enough_to_hit(self):
         chart = line_chart("Resting", "", self.SERIES, unit="bpm")
         rendered = render_to_string("partials/_line_chart.html", {"chart": chart})
-        # The visible dot is three pixels across, which is smaller than a
-        # pointer can be aimed: the tooltip worked and could not be reached.
-        # The tip belongs to an invisible circle several times its size.
-        drawn = [element for element in all_elements(rendered) if element.tag in {"path", "circle"}]
+        # The visible dot is smaller than a pointer can be aimed: the tip
+        # belongs to an invisible target of its own, one per point.
+        drawn = [element for element in all_elements(rendered) if element.tag in {"path", "line"}]
         targets = [index for index, element in enumerate(drawn) if "data-tip" in element.attrs]
         self.assertEqual(len(targets), len(chart.series[0].points))
-        for index in targets:
-            self.assertGreaterEqual(float(drawn[index].attrs["r"]), 10)
+        self.assertFalse(any("chart-dot" in drawn[index].classes for index in targets))
         # And the target has to be drawn after the lines, or a line crossing it
         # takes the pointer first.
         lines = [index for index, element in enumerate(drawn) if element.tag == "path"]

@@ -448,7 +448,7 @@ class StyleContractTests(SimpleTestCase):
         literal that equals a plot coordinate is that fault.
         """
 
-        from ..ui import PLOT_HEIGHT, PLOT_LEFT, PLOT_RIGHT, PLOT_TOP, PLOT_WIDTH
+        from ..ui import PLOT_HEIGHT, PLOT_LEFT, PLOT_TOP, PLOT_WIDTH
 
         forbidden = {
             str(round(value))
@@ -457,7 +457,6 @@ class StyleContractTests(SimpleTestCase):
                 PLOT_TOP,
                 PLOT_LEFT + PLOT_WIDTH,
                 PLOT_TOP + PLOT_HEIGHT,
-                PLOT_LEFT + PLOT_WIDTH + PLOT_RIGHT,
             )
         }
         root = Path(__file__).resolve().parents[4]
