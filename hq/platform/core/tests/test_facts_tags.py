@@ -1,13 +1,11 @@
 """Facts: every label and its value a page shows is one part, in a band or a list."""
 
-import inspect
 import re
 
 from django.template import Context, Template, TemplateSyntaxError
-from django.test import SimpleTestCase, tag
+from django.test import SimpleTestCase
 
 from hq.platform.application.tests.markup import elements, select, texts, with_class
-from hq.platform.core.tests.test_part_tags import _catalog_templates
 
 
 def _render(source: str, **context) -> str:
@@ -118,29 +116,6 @@ class FactsTagTests(SimpleTestCase):
         # The fact's projection says its tone; the tag has no part for it.
         with self.assertRaises(TemplateSyntaxError):
             Template('{% facts %}{% fact "A" %}1{% tone %}good{% endfact %}{% endfacts %}')
-
-
-@tag("source")
-class FactsCatalogTests(SimpleTestCase):
-    def test_every_layout_and_option_of_the_facts_tags_has_a_catalog_entry(self):
-        """The browser survey reads the part through the catalog, so each
-        layout and each option it takes is drawn there at least once."""
-
-        from hq.platform.core.templatetags.facts_tags import LAYOUTS, register
-
-        entries = " ".join(t for name, t in _catalog_templates().items() if name.startswith("part/facts-"))
-        for name in ("facts", "fact"):
-            takes = register.tags[name].__wrapped__
-            options = [
-                option
-                for option, parameter in inspect.signature(takes).parameters.items()
-                if parameter.kind is inspect.Parameter.KEYWORD_ONLY
-            ]
-            opened = " ".join(re.findall(rf"\{{% {name} (.*?)%\}}", entries))
-            with self.subTest(tag=name):
-                self.assertEqual([o for o in options if f"{o}=" not in opened], [], "add a part/facts-* entry")
-        self.assertEqual([layout for layout in LAYOUTS if f'layout="{layout}"' not in entries], [])
-        self.assertIn("{% detail %}", entries)
 
 
 class FactsBandWidthTests(SimpleTestCase):

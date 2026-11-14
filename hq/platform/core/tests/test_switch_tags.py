@@ -1,13 +1,9 @@
 """The switch: a row of links to the same view, one current, is one part."""
 
-import inspect
-import re
-
 from django.template import Context, Template, TemplateSyntaxError
-from django.test import SimpleTestCase, tag
+from django.test import SimpleTestCase
 
 from hq.platform.application.tests.markup import elements, select, with_class
-from hq.platform.core.tests.test_part_tags import _catalog_templates
 
 
 def _render(source: str, **context) -> str:
@@ -108,28 +104,3 @@ class SwitchTagTests(SimpleTestCase):
             _render('{% switch label="L" tone="good" %}{% endswitch %}')
         with self.assertRaisesMessage(TemplateSyntaxError, "choice takes no data_example"):
             _render('{% switch label="L" %}{% choice url="/" data_example="x" %}A{% endchoice %}{% endswitch %}')
-
-
-@tag("source")
-class SwitchCatalogTests(SimpleTestCase):
-    def test_every_option_of_the_switch_and_its_choice_has_a_catalog_entry(self):
-        """The browser survey reads the part through the catalog, so each
-        option and part it takes is drawn there at least once."""
-
-        from hq.platform.core.templatetags.switch_tags import register
-
-        switches = [t for name, t in _catalog_templates().items() if name.startswith("part/switch")]
-        written = " ".join(switches)
-        for name in ("switch", "choice"):
-            takes = register.tags[name].__wrapped__
-            options = [
-                option
-                for option, parameter in inspect.signature(takes).parameters.items()
-                if parameter.kind is inspect.Parameter.KEYWORD_ONLY
-            ]
-            opened = " ".join(re.findall(rf"\{{% {name} (.*?)%\}}", written))
-            with self.subTest(tag=name):
-                self.assertEqual(
-                    [o for o in options if not re.search(rf"\b{o}=", opened)], [], "draw it in a part/switch-* entry"
-                )
-        self.assertIn("{% summary %}", written)

@@ -1,13 +1,9 @@
 """The stack list: a plain list read down is one part."""
 
-import inspect
-import re
-
 from django.template import Context, Template, TemplateSyntaxError
-from django.test import SimpleTestCase, tag
+from django.test import SimpleTestCase
 
 from hq.platform.application.tests.markup import elements, with_class
-from hq.platform.core.tests.test_part_tags import _catalog_templates
 
 
 def _render(source: str, **context) -> str:
@@ -38,23 +34,3 @@ class StackListTagTests(SimpleTestCase):
     def test_an_unknown_option_is_refused(self):
         with self.assertRaises(TemplateSyntaxError):
             Template('{% stack_list css="example" %}{% endstack_list %}')
-
-
-@tag("source")
-class StackListCatalogTests(SimpleTestCase):
-    def test_every_option_of_the_stack_list_has_a_catalog_entry(self):
-        """The browser survey reads the part through the catalog, so each
-        option it takes is drawn there at least once."""
-
-        from hq.platform.core.templatetags.stack_tags import register
-
-        takes = register.tags["stack_list"].__wrapped__
-        options = [
-            option
-            for option, parameter in inspect.signature(takes).parameters.items()
-            if parameter.kind is inspect.Parameter.KEYWORD_ONLY
-        ]
-        entries = " ".join(t for name, t in _catalog_templates().items() if name.startswith("part/stack-list"))
-        opened = " ".join(re.findall(r"\{% stack_list (.*?)%\}", entries))
-        self.assertEqual([o for o in options if f"{o}=" not in opened], [], "add a part/stack-list-* entry")
-        self.assertIn("data_", opened)

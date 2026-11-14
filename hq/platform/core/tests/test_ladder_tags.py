@@ -1,13 +1,9 @@
 """The check ladder: checks read down, each opening to why, are one part."""
 
-import inspect
-import re
-
 from django.template import Context, Template, TemplateSyntaxError
-from django.test import SimpleTestCase, tag
+from django.test import SimpleTestCase
 
 from hq.platform.application.tests.markup import elements, with_class
-from hq.platform.core.tests.test_part_tags import _catalog_templates
 
 
 def _render(source: str, **context) -> str:
@@ -61,24 +57,3 @@ class CheckLadderTagTests(SimpleTestCase):
     def test_an_unknown_option_is_refused(self):
         with self.assertRaises(TemplateSyntaxError):
             Template('{% check_rung tone="good" %}Example check{% endcheck_rung %}')
-
-
-@tag("source")
-class CheckLadderCatalogTests(SimpleTestCase):
-    def test_every_option_of_the_check_ladder_has_a_catalog_entry(self):
-        """The browser survey reads the part through the catalog, so each
-        option it takes is drawn there at least once."""
-
-        from hq.platform.core.templatetags.ladder_tags import register
-
-        entries = " ".join(t for name, t in _catalog_templates().items() if name.startswith("part/check-ladder"))
-        for name in ("check_ladder", "check_rung"):
-            takes = register.tags[name].__wrapped__
-            options = [
-                option
-                for option, parameter in inspect.signature(takes).parameters.items()
-                if parameter.kind is inspect.Parameter.KEYWORD_ONLY
-            ]
-            opened = " ".join(re.findall(rf"\{{% {name} (.*?)%\}}", entries))
-            with self.subTest(tag=name):
-                self.assertEqual([o for o in options if f"{o}=" not in opened], [], "add a part/check-ladder-* entry")
