@@ -206,8 +206,8 @@ timeout = "30m"
 shell = "tools/lib/measured sh -o errexit -c"
 
 # A browser gate: django's env inside a heavy turn, WebKit and the lint tools
-# (axe-core, which the survey runs) installed first, and the test classes its
-# task names in `vars.classes`, which mise renders from the extending task's own vars.
+# (axe-core, which the survey runs) installed first, and the test labels its
+# task names in `vars.labels`, which mise renders from the extending task's own vars.
 [task_templates.django-browser]
 env = { SEVERINO_DATABASE_PATH = false, SEVERINO_SANDBOX = "1", DJANGO_DEBUG = "1", DJANGO_TEMPLATE_CACHE = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false }
 lock = ["gate", "heavy"]
@@ -215,7 +215,7 @@ timeout = "30m"
 shell = "tools/lib/measured sh -o errexit -c"
 depends = [{ task = "setup:browser", args = ["webkit"] }, "setup:lint-tools"]
 usage = 'flag "--fallback-face" help="Draw every page in the system face, as a reader sees it before Inter loads"'
-run = "HQ_BROWSER_FACE=${usage_fallback_face:+fallback} uv run --group browser python manage.py test {{ vars.classes }} --noinput --parallel auto"
+run = "HQ_BROWSER_FACE=${usage_fallback_face:+fallback} uv run --group browser python manage.py test {{ vars.labels }} --noinput --parallel auto"
 
 # A read-only measurement (mise-tasks/audit.toml): mise runs it in its OS
 # sandbox (Seatbelt, Landlock), so whatever words it is handed, it writes only

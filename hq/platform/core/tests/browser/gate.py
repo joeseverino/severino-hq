@@ -55,6 +55,7 @@ from hq.platform.core.tests.browser.probes.tables import PRESS, TABLE_LAYOUT, UN
 from hq.platform.core.tests.browser.reading import _in_one_trip, taken
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import NONCE, ORIGIN, static_file
+from hq.platform.core.tests.browser.shards import share, sweeps
 from hq.platform.core.tests.browser.shots import shoot_page
 from hq.platform.core.tests.browser.survey import (
     AS_FINDINGS,
@@ -498,12 +499,30 @@ class BrowserGate(SimpleTestCase):
         self.context = None
         self.uncaught = None
         self.refusals = []
+        self.swept = False
+        self.addCleanup(self.read_its_share)
         self.start()
         self.addCleanup(self.close_context)
         self.addCleanup(self.capture_failure)
         # First out: a refusal no subtest took fails the test, while it can
         # still be shot.
         self.addCleanup(self.kept_the_policy)
+
+    def mine(self, items):
+        """This job's share of the pages a sweep reads (``shards.share``):
+        all of them unless CI split the gate."""
+
+        if not sweeps(self):
+            raise AssertionError(f"{self.id()} reads its pages through mine: mark it @sweep, so every share runs it")
+        self.swept = True
+        return share(items, self.id())
+
+    def read_its_share(self):
+        """A test marked ``@sweep`` that read no pages through ``mine`` would
+        run whole in every share."""
+
+        if sweeps(self) and not self.swept and not self.failed:
+            self.fail(f"{self.id()} is marked @sweep but read no pages through mine")
 
     def close_context(self):
         """Closes the context the test last started, if it has one, keeping

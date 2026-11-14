@@ -136,14 +136,14 @@ class RerunTests(GateTestCase):
             "check",
             [
                 "[lint] [lint:mise-format] exited with status 1",
-                "[browser] [browser:navigation] exited with status 1",
+                "[browser] [browser:webkit] exited with status 1",
                 "[lint] exited with status 1",
                 "[browser] exited with status 1",
             ],
         )
         failed = line.split(": ", 1)[1].split("; rerun: ")[0].split("; ")
-        self.assertEqual(failed, ["lint:mise-format", "browser:navigation"])
-        self.assertTrue(line.endswith("; rerun: mise run -c lint:mise-format ::: browser:navigation"), line)
+        self.assertEqual(failed, ["lint:mise-format", "browser:webkit"])
+        self.assertTrue(line.endswith("; rerun: mise run -c lint:mise-format ::: browser:webkit"), line)
 
     def test_a_line_a_tool_quotes_from_a_file_names_no_task(self):
         """As a formatter's diff of a test that holds mise's lines."""

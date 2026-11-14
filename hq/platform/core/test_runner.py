@@ -45,6 +45,7 @@ from hq.platform.core.stalls import stall_watch
 lazy from hq.platform.application import plugins, roles
 lazy from hq.platform.core import append_only
 lazy from hq.platform.core.attribution import bind_this_thread, bound, command_operation, from_the_shell
+lazy from hq.platform.core.tests.browser import shards
 
 
 def performance_cores() -> int | None:
@@ -285,6 +286,13 @@ def drives_a_browser(test: unittest.TestCase) -> bool:
     )
 
 
+def in_this_share(test: unittest.TestCase) -> bool:
+    """Whether a named test runs in this job's share of a split browser gate
+    (``shards``): a sweep runs in every share, reading its own pages."""
+
+    return not drives_a_browser(test) or shards.sweeps(test) or shards.runs_here(test.id())
+
+
 def browser_failures() -> Path:
     """Where a browser run keeps the shots of what failed: in the checkout,
     since they outlive the run, in a folder of the task that ran it, so each
@@ -362,7 +370,7 @@ class SeverinoTestRunner(DiscoverRunner):
         # across the workers, and a suite rebuilt after that runs in one process.
         tests = super().load_tests_for_label(label, discover_kwargs)
         if self.named:
-            return tests
+            return self.test_suite(test for test in tests_in(tests) if in_this_share(test))
         return self.test_suite(test for test in tests_in(tests) if not drives_a_browser(test))
 
     def build_suite(self, test_labels=None, **kwargs):
@@ -383,6 +391,9 @@ class SeverinoTestRunner(DiscoverRunner):
             # Here, in the process that starts the run and before any worker
             # shoots: the last run's shots of this task give way to this one's.
             shutil.rmtree(browser_failures(), ignore_errors=True)
+            index, total = shards.shard()
+            if total > 1:
+                print(f"Browser share {index}/{total}: {sum(1 for _ in tests_in(suite))} tests", file=sys.stderr)
         if self.tags and next(tests_in(suite), None) is None:
             # A gate that selects by tag and finds nothing has checked nothing.
             untagged = f" Their tests run with `mise run test {' '.join(test_labels)}`." if test_labels else ""

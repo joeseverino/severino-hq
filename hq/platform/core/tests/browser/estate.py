@@ -34,6 +34,7 @@ from hq.platform.core.tests.browser.probes.describe import TEXT_SHOWN
 from hq.platform.core.tests.browser.probes.settle import FONTS_READY, SETTLE
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import ORIGIN
+from hq.platform.core.tests.browser.shards import sweep
 from hq.platform.core.tests.browser.survey import geometry_probes
 from hq.platform.core.tests.browser.widths import PALETTE_AT, PHONE_SCREEN, WIDE, WIDTHS, viewport, with_wide_tables
 lazy from hq.platform.application import fragments
@@ -341,12 +342,13 @@ class ExampleEstateBrowserTests(ExampleEstateGate):
             found |= {f"{check}, with {label} shown": said for check, said in self.checked(probes).items()}
         return found
 
+    @sweep
     def test_every_navigation_page_keeps_the_layout_rules(self):
         """Each page keeps the layout rules and sends ``/csp-report/`` nothing."""
 
         self.assertGreater(len(self.navigation), 10, "the navigation led almost nowhere")
         webkit = self.browser.browser_type.name == "webkit"
-        for path in self.navigation:
+        for path in self.mine(self.navigation):
             for width in with_wide_tables(WIDTHS, self.draws_a_table) if webkit else SECOND_OPINION_AT:
                 with self.subTest(page=path, width=width):
                     self.visit(path, width)

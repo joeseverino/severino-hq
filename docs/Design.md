@@ -194,7 +194,7 @@ cells stand closer. Still wider, its identifiers break where they must
 one that does: the narrowest phone (320px) and every width above it hold every
 table of the example estate and of each derived list.
 `a_table_fits_its_box_at_every_width` over the derived lists and the example
-estate's `ExampleEstateTableFit` classes sweep each page from 320px up, reading it
+estate's `ExampleEstateTableFitTests` sweep each page from 320px up, reading it
 at the first width of each shape its layout and its tables take
 (`TABLE_LAYOUT`: the viewport queries, the boxes around each region, and how
 far each table has given way), where a table has the least room, with its

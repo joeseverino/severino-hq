@@ -699,8 +699,8 @@ the machine shares. A TOML task takes it by extending the `heavy` template in
 `mise.toml` (`django-browser`), a file task with `#MISE lock=["gate", "heavy"]` in its
 header and the line `. ./tools/lib/heavy-turn.sh` before its work; either
 declares a `timeout`, which mise starts once the task holds the lock, so
-heavy tasks asked together (`mise run browser:layout-1 :::
-browser:layout-2`) queue on the turn and each runs in full, and a hung holder
+heavy tasks asked together (`mise run browser:webkit :::
+browser:demo`) queue on the turn and each runs in full, and a hung holder
 is stopped. A heavy task started inside a turn runs at once, since mise hands
 the lock down (`MISE_TASK_LOCKS`), and a holder killed outright frees it.
 `HeavyTaskTests` (`tools/gate/tests/test_turn.py`) holds every task to its
@@ -885,8 +885,8 @@ palette at each and the dark at 402 and 1360 (in
 Chromium at 402 and 1360 only). A finding names its check, page, width and
 theme.
 
-Its tables are also read at every shape of the layout, in a leg of their own
-(`browser:table-fit`, `hq.platform.core.tests.browser.table_fit`): from 320
+Its tables are also read at every shape of the layout
+(`hq.platform.core.tests.browser.table_fit`): from 320
 pixels up, at each edge of the stylesheet's viewport queries and wherever a
 box around a table changes shape between two, every row a reader can open is
 opened and every table check is read, with what opening the rows moved. A
@@ -911,17 +911,24 @@ host name outside the reserved and shared ranges it names.
 | To run | Command |
 | --- | --- |
 | both estates in another engine | `HQ_BROWSER_ENGINE=chromium` or `firefox` |
-| the legs named | `mise run browser <leg>...` (`layout-1`, `demo`) |
+| the legs named | `mise run browser <leg>...` (`webkit`, `demo`) |
+| one CI share of a leg | `HQ_BROWSER_SHARD=2/7 mise run browser:webkit` |
 | one browser test | `mise run test <label>`, once `mise run setup:browser webkit` has installed the engine |
 | a failure only CI's Linux shows | `mise run browser --linux` with a leg (`chromium`) or test labels |
 
-CI runs the layout gate in two legs side by side (`browser:layout-1`,
-`browser:layout-2`). WebKit judges every leg, since HQ is read in Safari.
-Chromium is a second opinion in one leg, `browser:chromium`, which `mise run
-browser` leaves to CI: the catalog of shared parts, the example estate at a
-phone and a laptop, the planted proofs of every probe, and the layout shifts
-only Chromium records. Every test it runs is also run by a WebKit leg
+`browser:webkit` runs every browser test in WebKit, which judges, since HQ is
+read in Safari. Chromium is a second opinion, `browser:chromium`, which `mise
+run browser` leaves to CI: the catalog of shared parts, the example estate at
+a phone and a laptop, the planted proofs of every probe, and the layout shifts
+only Chromium records. Every test it runs is also run in WebKit
 (`test_browser_gate_tasks`).
+
+CI splits each of the two into shares that run side by side, `i/n` in the
+browser job's matrix. A sweep marked `@sweep` runs in every share and reads
+its share of the pages (`BrowserGate.mine`); any other test runs in the one
+share its id picks (`hq/platform/core/tests/browser/shards.py`). The shares
+together run the whole gate, which GateReferenceTests and
+`test_browser_gate_tasks` hold.
 
 `browser --linux` draws in Chromium unless `--engine` names another. It runs
 on this checkout inside the Playwright image `ci.yml` gives the browser job, as
@@ -941,6 +948,7 @@ What the browser gates read from the environment:
 | `HQ_BROWSER_ENGINE` | development | the browser gates' engine: `webkit` by default, `chromium` or `firefox` |
 | `HQ_BROWSER_CHANNEL` | development | a Playwright browser channel for that engine |
 | `HQ_BROWSER_FACE` | development | `fallback` draws the browser gates with Inter withheld, in the stack's next face (`--fallback-face`) |
+| `HQ_BROWSER_SHARD` | CI's browser matrix | `i/n` runs one share of a browser gate; unset, the whole gate |
 
 #### Policy, fonts and stalls
 
@@ -955,7 +963,7 @@ estate fails page by page, every other gate at the end of its test.
 
 The gates wait for Inter, but a reader whose copy is late is drawn in whatever
 face the platform has (`font-display: optional`), and each platform sets text
-at its own widths. `--fallback-face` on a layout leg, `browser:navigation` and
+at its own widths. `--fallback-face` on `browser:webkit` and
 `dev:look` (`HQ_BROWSER_FACE=fallback` for a `mise run test` label) withholds
 Inter's face. Every page is then drawn in the next face of the stylesheet's
 stack (`--font`), the platform's system face, and a layout that holds only at

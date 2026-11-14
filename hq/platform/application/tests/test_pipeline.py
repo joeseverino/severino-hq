@@ -854,11 +854,20 @@ class WorkflowSecrecyTests(SimpleTestCase):
 @tag("source")
 class GateReferenceTests(SimpleTestCase):
     def test_every_browser_gate_has_a_leg_and_every_leg_a_gate(self):
-        """The Browser job runs one ``browser:*`` gate per leg; a gate with no leg never runs in CI."""
-        legs = jobs(workflow("ci.yml"))["browser"]["strategy"]["matrix"]["gate"]
+        """The Browser job runs each ``browser:*`` gate, whole or in shares;
+        a gate with no leg never runs in CI, and a split gate runs each of its
+        shares, 1/n through n/n, once (``shards``)."""
+        browser = jobs(workflow("ci.yml"))["browser"]
+        legs = browser["strategy"]["matrix"]["include"]
+        (gate,) = [step for step in browser["steps"] if "GATE" in step.get("env", {})]
+        self.assertEqual(gate["env"].get("HQ_BROWSER_SHARD"), "${{ matrix.shard }}")
         self.assertEqual(
-            {f"browser:{leg}" for leg in legs}, {name for name in mise_tasks() if name.startswith("browser:")}
+            {f"browser:{leg['gate']}" for leg in legs}, {name for name in mise_tasks() if name.startswith("browser:")}
         )
+        for name in {leg["gate"] for leg in legs}:
+            said = [leg.get("shard") for leg in legs if leg["gate"] == name]
+            whole = [None] if said == [None] else [f"{index}/{len(said)}" for index in range(1, len(said) + 1)]
+            self.assertCountEqual(said, whole, name)
 
     def test_a_task_that_takes_arguments_says_what_they_are(self):
         """``mise run <task> --help`` prints a task's ``usage``. Once one is

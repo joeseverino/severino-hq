@@ -11,6 +11,7 @@ from hq.platform.core.tests.browser.catalog.common import Entry
 from hq.platform.core.tests.browser.catalog.families import chart, form, graph, part, status, table
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
 from hq.platform.core.tests.browser.selectors import SELECTORS
+from hq.platform.core.tests.browser.shards import sweep
 from hq.platform.core.tests.browser.widths import PHONE_SCREEN, SPARSE_WIDTHS
 
 
@@ -51,8 +52,9 @@ class CatalogLayoutTests(LayoutBrowserTests):
     def render(cls):
         return {name: entry.page(name) for name, entry in CATALOG.items()}
 
+    @sweep
     def test_every_entry_keeps_the_layout_rules_without_script(self):
-        for name in CATALOG:
+        for name in self.mine(CATALOG):
             for width in SPARSE_WIDTHS:
                 if not self.loaded(name, width):
                     continue
@@ -69,13 +71,14 @@ class CatalogLayoutTests(LayoutBrowserTests):
                         name, width, [self.open_every_disclosure, self.every_layout_check_holds], disclosures="open"
                     )
 
+    @sweep
     def test_every_drawing_is_drawn_on_a_phone(self):
         """A chart, a trend, a bar or a calendar is drawn wherever what holds
         it is: on a phone a drawing hidden for want of room is a figure that
         shows nothing, when the table beside it or the line under it has the
         room to show it."""
 
-        for name in CATALOG:
+        for name in self.mine(CATALOG):
             if not self.loaded(name, PHONE_SCREEN[0]):
                 continue
             with self.subTest(page=name):
