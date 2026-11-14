@@ -1249,13 +1249,25 @@ ENTRIES = {
         '{% section "Example month" %}{% include "calendars/_month_grid.html" %}{% endsection %}',
         {"calendar": _month_gone_by()},
     ),
-    # The same month compact, as the dashboard draws it beside other sections:
-    # where things are, each a dot or a sliver, the day opening the rest.
+    # The same month compact, as the dashboard draws it beside its recent
+    # projects: where things are, each a dot or a sliver, the day opening the
+    # rest.
     "part/month-compact": Entry(
         '<div class="section-flow">{% section "Example month" %}'
         '{% include "calendars/_month_grid.html" with compact=True %}{% endsection %}'
-        '{% section "Example notes" %}<p>An example line of prose in the frame.</p>{% endsection %}</div>',
-        {"calendar": _month_gone_by()},
+        '{% section "Example projects" %}{% include "partials/_record_list.html" %}{% endsection %}</div>',
+        {
+            "calendar": _month_gone_by(),
+            "rows": [
+                ListRow(
+                    f"Example project {number}",
+                    url=f"/example/project-{number}/",
+                    detail="Software",
+                    at=date(2026, 1, 20 - number),
+                )
+                for number in range(1, 7)
+            ],
+        },
     ),
     # A month as the calendar page draws it, the main of a `.split` beside a
     # flow of sections: the month takes the room, the sections keep their

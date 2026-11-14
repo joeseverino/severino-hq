@@ -91,11 +91,11 @@ declaration's machinery: the controller's actions are the buttons above, and
 {% endif %}
 
 {% comment %}
-The record's own card, what it is used by, where it is saved and how it
-relates: each a card as tall as what it holds, two to a row, so no short one
-stretches across the page.
+The record's own card heads the page on a row of its own, as the
+certificate's and the container's sections do: it is as long as its provider
+makes it, so beside it a short card would stretch empty. What it is used by,
+where it is saved and how it relates follow, short cards sharing rows.
 {% endcomment %}
-<div class="section-flow">
   {% comment %}
   One card for every kind that is not a certificate, rendered from what the
   provider says about itself rather than from markup that knows what a proxy
@@ -188,6 +188,8 @@ stretches across the page.
     {% endif %}
   {% endsection %}
   {% endif %}
+
+<div class="section-flow">
 {% comment %}
 A certificate from the side of what it serves: each service served with it,
 and the names on it nothing is served under. The service's own page names the
