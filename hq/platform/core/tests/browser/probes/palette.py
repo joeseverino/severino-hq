@@ -2,7 +2,7 @@
 
 from hq.platform.core.tests.browser.probes import Check
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE
-from hq.platform.core.tests.browser.probes.settle import settled
+from hq.platform.core.tests.browser.probes.settle import FINISH_TRANSITIONS, settled
 from hq.platform.core.tests.browser.selectors import SELECTORS
 
 # The least a fill may differ from the surface it sits on to show at all:
@@ -307,6 +307,27 @@ def lost_fills(steps, least, painted=None):
         fill = f"; fill: {painted[at]}" if painted and at in painted else ""
         found.append(f"{lost} loses {said}: {light:.2f}:1 in light, {dark:.2f}:1 in dark{fill}")
     return found
+
+
+# The page painted in a palette as the server paints an operator's chosen one:
+# `data-theme` on the root pins its `color-scheme`, which picks the half of
+# every `light-dark()` token (css/app/tokens.css). It is one style pass in the
+# page, where emulating the system's preference re-reads every media query
+# through the driver. A palette of none leaves the choice to the system again.
+# Its colors are finished rather than waited for: without script no animation
+# frame runs. The answer is the palette the page was painted in before.
+PAINT_IN = (
+    """(palette) => {
+  const root = document.documentElement;
+  const was = root.dataset.theme ?? null;
+  if (palette) root.dataset.theme = palette;
+  else delete root.dataset.theme;
+  ("""
+    + FINISH_TRANSITIONS
+    + """)();
+  return was;
+}"""
+)
 
 
 # Every color each element is painted in, and the element, in document order:

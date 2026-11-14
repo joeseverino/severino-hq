@@ -1090,7 +1090,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.assertGreater(self.page.locator(SELECTORS["table_filter"]).count(), 0)
         for palette in ("light", "dark"):
             with self.subTest(palette=palette):
-                self.page.emulate_media(color_scheme=palette)
+                self.in_scheme(palette)
                 self.assertEqual(self.page.evaluate(BUTTON_EDGES, SELECTORS["pressed"]), [])
         self.page.evaluate("""() => {
           const button = document.createElement('button');
@@ -2099,7 +2099,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
 
         def grown(scheme):
             self.page.evaluate("() => document.querySelector('main').prepend(document.createElement('p'))")
-            switch(scheme)
+            return switch(scheme)
 
         with mock.patch.object(self, "in_scheme", grown):
             fills = self.lost_fills()

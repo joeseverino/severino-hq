@@ -37,12 +37,12 @@ from hq.platform.core.tests.browser.probes.palette import (
     FILL_PAINTERS,
     FILL_STEPS,
     LINE_CONTRAST,
+    PAINT_IN,
     losses,
     lost_fills,
 )
 from hq.platform.core.tests.browser.probes.settle import (
     DEAF_WHILE_PROBED,
-    FINISH_TRANSITIONS,
     FONTS_READY,
     PAINTED,
     PUT_BACK,
@@ -968,10 +968,9 @@ class BrowserGate(SimpleTestCase):
         this load, each with what paints its fill in the palette that loses
         it; the page is left in the palette it was in."""
 
-        was = self.scheme()
-        reads = {}
+        reads, before = {}, []
         for palette in ("light", "dark"):
-            self.in_scheme(palette)
+            before.append(self.in_scheme(palette))
             reads[palette] = self.page.evaluate(FILL_STEPS, [SELECTORS["contrast_scope"], SELECTORS["vendored"]])
         # A box only one reading saw came or went between them.
         both = {str(at) for at in reads["light"]["seen"]} & {str(at) for at in reads["dark"]["seen"]}
@@ -983,15 +982,15 @@ class BrowserGate(SimpleTestCase):
             if places := [at for at, lost in losses(steps, LINE_CONTRAST) if lost == palette]:
                 self.in_scheme(palette)
                 painted |= self.read([(FILL_PAINTERS, [places, SELECTORS["vendored"]])])[0]
-        self.in_scheme(was)
+        self.in_scheme(before[0])
         return lost_fills(steps, LINE_CONTRAST, painted)
 
     def in_scheme(self, scheme):
-        """The same load in the other palette. Its colors are finished rather
-        than waited for: without script no animation frame runs."""
+        """The same load painted in ``scheme``'s palette (``PAINT_IN``), or as
+        the system asks when ``scheme`` is none; the answer is the palette it
+        was painted in before, to put back."""
 
-        self.page.emulate_media(color_scheme=scheme)
-        self.page.evaluate(FINISH_TRANSITIONS)
+        return self.page.evaluate(PAINT_IN, scheme)
 
     def draws_a_table(self):
         """Whether the page holds a table, shown or not at this width."""

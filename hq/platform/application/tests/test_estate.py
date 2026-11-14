@@ -22,7 +22,7 @@ from hq.platform.core.models import AuditLog
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from .. import readings
-from ..attention import infrastructure, tailnet
+from ..attention import infrastructure
 from ..command_center import command_center
 from ..connection_lifecycle import Lifecycle
 from ..estate import Estate, attention as estate_attention, cards, estate_reading, overview
@@ -519,63 +519,6 @@ class OldGlanceTests(TestCase):
 
 
 class ActionItemTests(TestCase):
-    def test_an_update_names_the_version_other_devices_run(self):
-        devices(
-            device("example-host", update_available=True, client_version="1.102.3-t0abc"),
-            device("example-laptop", client_version="1.102.4-t0def"),
-        )
-
-        (item,) = [item for item in tailnet() if item.key == "tailnet-update:example-host"]
-
-        self.assertIn("1.102.3", item.body)
-        self.assertIn("1.102.4", item.body)
-        self.assertEqual(item.subject.url, reverse("control_plane:machine", args=["example-host"]))
-
-    def test_every_tailnet_item_names_the_machine_as_its_page_does(self):
-        """A device the tailnet calls by its owner's label is one HQ lists
-        under its own name: the item is that machine's, key and links alike."""
-
-        declared("example-laptop", "machine", {"name": "example-laptop", "addresses": ["100.64.0.5"]})
-        devices(
-            device(
-                "Someone’s Laptop",
-                addresses=["100.64.0.5"],
-                update_available=True,
-                authorized=False,
-                lock_error="node key not signed",
-                advertised_routes=["192.0.2.0/24"],
-                key_expires=(timezone.now() + timedelta(days=3)).isoformat(),
-            )
-        )
-        page = reverse("control_plane:machine", args=["example-laptop"])
-
-        items = [item for item in tailnet() if item.key.startswith("tailnet-")]
-
-        self.assertEqual(machine("example-laptop").aliases, ("Someone’s Laptop",))
-        self.assertGreaterEqual(len(items), 3)
-        for item in items:
-            with self.subTest(item.key):
-                self.assertEqual(item.key.split(":", 1)[1], "example-laptop")
-                self.assertEqual(item.subject.url, page)
-                self.assertNotIn("Someone", item.title)
-
-    def test_a_release_with_a_trailing_zero_is_the_same_release(self):
-        devices(
-            device("example-host", update_available=True, client_version="1.80"),
-            device("example-laptop", client_version="1.80.0"),
-        )
-
-        (item,) = [item for item in tailnet() if item.key == "tailnet-update:example-host"]
-
-        self.assertNotIn("1.80.0", item.body)
-
-    def test_an_update_with_no_newer_device_says_what_runs(self):
-        devices(device("example-host", update_available=True, client_version="1.102.3"))
-
-        (item,) = [item for item in tailnet() if item.key == "tailnet-update:example-host"]
-
-        self.assertIn("1.102.3", item.body)
-
     def test_a_connection_that_does_not_answer_is_an_action_item(self):
         connection("example-ssh", reachable=False, detail="Timed out")
 

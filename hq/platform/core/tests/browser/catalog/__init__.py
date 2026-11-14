@@ -60,9 +60,9 @@ class CatalogLayoutTests(LayoutBrowserTests):
                 # A palette is a color per token, the same at every width, so
                 # the narrowest and widest read every part either draws.
                 if width in (SPARSE_WIDTHS[0], SPARSE_WIDTHS[-1]):
-                    self.in_scheme("dark")
+                    was = self.in_scheme("dark")
                     self.hold(name, width, [self.every_palette_check_holds], scheme="dark")
-                    self.in_scheme("light")
+                    self.in_scheme(was)
                 # With nothing closed to open, the page open is the page as read.
                 if self.page.evaluate(_CLOSED, SELECTORS["disclosure"]):
                     self.hold(

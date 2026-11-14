@@ -31,7 +31,7 @@ from hq.platform.core.tests.browser.gate import BrowserGate, answered, sent, tab
 from hq.platform.core.tests.browser.in_flight import InFlight
 from hq.platform.core.tests.browser.probes.boxes import SIDEWAYS
 from hq.platform.core.tests.browser.probes.describe import TEXT_SHOWN
-from hq.platform.core.tests.browser.probes.settle import FINISH_TRANSITIONS, FONTS_READY, SETTLE
+from hq.platform.core.tests.browser.probes.settle import FONTS_READY, SETTLE
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import ORIGIN
 from hq.platform.core.tests.browser.survey import geometry_probes
@@ -349,15 +349,13 @@ class ExampleEstateBrowserTests(ExampleEstateGate):
         for path in self.navigation:
             for width in with_wide_tables(WIDTHS, self.draws_a_table) if webkit else SECOND_OPINION_AT:
                 with self.subTest(page=path, width=width):
-                    self.page.emulate_media(color_scheme="light")
                     self.visit(path, width)
                     found = self.geometry(path, width)
                     for theme in THEMES if width in PALETTE_AT else ():
-                        self.page.emulate_media(color_scheme=theme)
+                        was = self.in_scheme(theme)
                         self.page.evaluate(SETTLE)
-                        self.page.evaluate(FINISH_TRANSITIONS)
                         found |= {f"{check} ({theme})": said for check, said in self.palette().items()}
-                    self.page.emulate_media(color_scheme="light")
+                        self.in_scheme(was)
                     found |= self.opened(path, width)
                     found["unanswered"], self.unanswered = self.unanswered, []
                     found["refused"] = self.refusals_so_far()

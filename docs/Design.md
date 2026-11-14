@@ -1164,6 +1164,10 @@ unit ("3 events", "2 left") among them.
 
 **Color comes from tokens.** No color literal outside `@layer tokens`, so a
 theme is a set of token values and dark mode is not a second stylesheet.
+`color-scheme` picks the palette, and no rule asks for `prefers-color-scheme`,
+so an operator's chosen theme reaches every rule, and so does the survey,
+which paints each palette the same way.
+*Gate:* `lint:css`.
 
 **Text never fades.** An opacity under 1 is for an inactive control
 (disabled, `aria-disabled`, `aria-busy`) or a mark that is not text. Text a

@@ -8,7 +8,6 @@ real work and its length is the number of areas needing attention.
 """
 
 from collections.abc import Iterable, Mapping
-from functools import cmp_to_key
 from typing import Any
 
 from django.db.models import BooleanField, Count, ExpressionWrapper, Q
@@ -29,23 +28,18 @@ from .entity_links import EntityLink, entity_link, kind_label
 from .estate import subject_link
 from .findings import estate_findings, finding_key, rule_for
 from .first_seen import dated
-from .images import compare, version
 from .infrastructure import enabled_resources, resource_health
-from .item_help import commands, finding_plan, instructions, remedy_link
+from .item_help import finding_plan, instructions, remedy_link
 from .labels import lower_first
-from .moments import ago, when_day
+from .moments import ago
 from .projection import read_once
 from .references import dangling
 from .security import cli_principal, internal_principal
 from .services import service_catalog
-from .timestamps import moment
 from .ui import counted, ended
-from .workflow_contracts import ActionLink, WorkflowPlan
+from .workflow_contracts import ActionLink
 lazy from .approval_review import asked, preview
 lazy from .approvals import pending, reads_every_hold
-lazy from .connections import machines_once
-lazy from .tailnet import policy as tailnet_policy
-lazy from .tailnet_presence import tailnet_presence
 
 # Reconciliation states that mean the declared world and the real one disagree.
 # "degraded" is a failure; the others are a resource HQ cannot currently vouch
@@ -247,238 +241,6 @@ def assets() -> tuple[Insight, ...]:
     return (*backlog, *dangling(Asset, principal=cli_principal()))
 
 
-# A node key lasts 180 days here, so a warning at 75 would sit in the queue for
-# more of the cycle than not, and a queue that is always non-empty is one nobody
-# reads. Forty-five days is several unhurried weekends; fourteen is the point at
-# which it stops being a plan and starts being a date.
-KEY_EXPIRY_ATTENTION_DAYS = 45
-KEY_EXPIRY_SERIOUS_DAYS = 14
-
-
-def _release(reported: str) -> str:
-    """The numeric release a client reports, "1.102.3-t0abc" as "1.102.3"."""
-
-    return ".".join(str(part) for part in version(reported))
-
-
-# Releases by number, so 1.80 and 1.80.0 are one release.
-_BY_RELEASE = cmp_to_key(lambda one, other: compare(version(one), version(other)))
-
-
-def _newest_client(presences) -> str:
-    """The newest client release any device reports."""
-
-    reported = [presence.client_version for _name, presence in presences if version(presence.client_version)]
-    return _release(max(reported, key=_BY_RELEASE, default=""))
-
-
-def _update_body(presence, newest: str) -> str:
-    if not presence.client_version:
-        return "Current version not reported."
-    running = _release(presence.client_version) or presence.client_version
-    if newest and compare(version(newest), version(running)) > 0:
-        return ended(f"Runs {running}; {newest} is out")
-    return ended(f"Runs {running}")
-
-
-def _machine_names() -> dict[str, str]:
-    """Each other name a machine is known by, to the name HQ lists it under:
-    the catalog's fold (``same_machine``), shared across the projection."""
-
-    return {alias: machine.name for machine in machines_once() for alias in machine.aliases}
-
-
-def tailnet() -> tuple[Insight, ...]:
-    """Tailnet facts with no symptom until somebody needs them.
-
-    A node key runs out on a date decided months earlier, and the machine,
-    still running, stops being reachable. A route advertised but never approved
-    is reported by the machine for as long as it runs and handed to nobody, so
-    it can be configured, documented, believed and dead.
-    """
-
-    # Everything shown here is on the tailnet reading itself, read once and
-    # asked twice. Each device goes under the name its machine page uses, so
-    # an item's key, title and links name one machine the way the rest of HQ
-    # does.
-    machine_name = _machine_names()
-    presences = sorted(
-        ((machine_name.get(name, name), presence) for name, presence in tailnet_presence().items()),
-        key=lambda pair: pair[0],
-    )
-    newest = _newest_client(presences)
-
-    items = []
-    for name, presence in presences:
-        days = presence.key_expiry_days
-        # A device with key expiry disabled has no date, so it is silent here.
-        if days is None or days > KEY_EXPIRY_ATTENTION_DAYS:
-            continue
-        expires = moment(presence.key_expires)
-        on = f" on {when_day(expires)}" if expires else ""
-        key = f"tailnet-expiry:{name}"
-        items.append(
-            Insight(
-                status="serious" if days <= KEY_EXPIRY_SERIOUS_DAYS else "attention",
-                eyebrow="Network",
-                family="Tailscale keys expiring",
-                key=key,
-                title=(
-                    f"{name} leaves the tailnet in {counted(days, 'day')}"
-                    if days > 0
-                    else f"{name} has left the tailnet"
-                ),
-                value=str(max(days, 0)),
-                body=ended(f"Its Tailscale key {'expires' if days > 0 else 'expired'}{on}"),
-                url=entity_link("machine", name).url,
-                subject=subject_link("machine", name),
-                observed_at=presence.observed_at,
-                since=expires if days <= 0 else None,
-                workflow=instructions(
-                    key,
-                    (
-                        f"Sign in to Tailscale again on {name}, or turn off key expiry "
-                        "for it in the Tailscale admin console."
-                        if days > 0
-                        else ended(f"Sign in to Tailscale again on {name}")
-                    ),
-                ),
-            )
-        )
-    # Tailnet lock, which is a fact about the tailnet rather than about any one
-    # machine's presence: a locked-out node is filtered out of the reading the
-    # loop below walks, so asking each machine would never find one.
-    read_policy = tailnet_policy()
-    items.extend(
-        Insight(
-            status="serious",
-            eyebrow="Network",
-            family="Tailnet lock",
-            key=f"tailnet-locked-out:{name}",
-            title=f"{name} is locked out of the tailnet",
-            value="1",
-            body=(f"Other machines ignore {name} because its key is not signed. Its own status still shows healthy."),
-            url=reverse("control_plane:tailnet"),
-            subject=subject_link("machine", name),
-            workflow=_sign_key(f"tailnet-locked-out:{name}", name),
-            observed_at=read_policy.observed_at,
-        )
-        for name in (machine_name.get(name, name) for name in read_policy.locked_out)
-    )
-    for name, presence in presences:
-        if not presence.authorized:
-            items.append(
-                Insight(
-                    status="serious",
-                    eyebrow="Network",
-                    family="Devices waiting for approval",
-                    key=f"tailnet-unauthorized:{name}",
-                    title=f"{name} is waiting for tailnet approval",
-                    value="1",
-                    body="It cannot reach anything yet.",
-                    url=entity_link("machine", name).url,
-                    subject=subject_link("machine", name),
-                    observed_at=presence.observed_at,
-                    workflow=instructions(
-                        f"tailnet-unauthorized:{name}",
-                        "Approve it in the Tailscale admin console, under Machines.",
-                    ),
-                )
-            )
-        if presence.lock_error:
-            items.append(
-                Insight(
-                    status="serious",
-                    eyebrow="Network",
-                    family="Tailnet lock",
-                    key=f"tailnet-lock-unsigned:{name}",
-                    title=f"{name} is not signed for tailnet lock",
-                    value="1",
-                    body=(
-                        f"Other machines ignore {name} because its key is not signed. "
-                        f"Tailscale says: {ended(presence.lock_error)}"
-                    ),
-                    url=entity_link("machine", name).url,
-                    subject=subject_link("machine", name),
-                    observed_at=presence.observed_at,
-                    workflow=_sign_key(f"tailnet-lock-unsigned:{name}", name),
-                )
-            )
-        if presence.update_available:
-            items.append(
-                Insight(
-                    status="attention",
-                    eyebrow="Network",
-                    family="Tailscale updates",
-                    key=f"tailnet-update:{name}",
-                    title=f"Tailscale update available for {name}",
-                    value="1",
-                    body=_update_body(presence, newest),
-                    url=entity_link("machine", name).url,
-                    subject=subject_link("machine", name),
-                    observed_at=presence.observed_at,
-                    workflow=commands(
-                        f"tailnet-update:{name}",
-                        ((f"On {name}, as an administrator", "tailscale update"),),
-                    ),
-                )
-            )
-        unapproved = presence.unapproved_routes
-        if not unapproved:
-            continue
-        items.append(
-            Insight(
-                status="attention",
-                eyebrow="Network",
-                family="Tailscale routes",
-                key=f"tailnet-routes:{name}",
-                title=(
-                    f"{name} offers "
-                    + counted(
-                        len(unapproved),
-                        "route that is not approved yet",
-                        "routes that are not approved yet",
-                    )
-                ),
-                value=str(len(unapproved)),
-                body=(
-                    f"Not approved: {ended(', '.join(unapproved))} "
-                    + (
-                        "It cannot be used as an exit node until its exit route is approved. "
-                        # The swept fact, not a second reading of the route
-                        # list: what makes a route an exit route is Tailscale's
-                        # to say, and the sweep already asked.
-                        if presence.offers_exit_node and not presence.exit_node_approved
-                        else ""
-                    )
-                    + "Approve the ones you want and stop offering the rest."
-                ),
-                url=entity_link("machine", name).url,
-                subject=subject_link("machine", name),
-                observed_at=presence.observed_at,
-                actions=_approve_routes(name),
-            )
-        )
-    return tuple(items)
-
-
-def _sign_key(key: str, name: str) -> WorkflowPlan:
-    """Signing takes a tailnet lock key, which only a signing machine holds."""
-
-    return commands(
-        key,
-        (("On a machine that can sign, list the keys waiting", "tailscale lock status"),),
-        then=ended(f"Then run tailscale lock sign with the key it lists for {name}"),
-    )
-
-
-def _approve_routes(name: str) -> tuple[ActionLink, ...]:
-    """The route approval the machine's own page offers, as a remedy."""
-
-    link = remedy_link("tailnet.routes.approve", name, url=entity_link("machine", name).url)
-    return (link,) if link else ()
-
-
 # A neutral finding is context, which the queue leaves out.
 _FINDING_STATUS = {"serious": "serious", "attention": "attention", "neutral": "neutral"}
 
@@ -500,7 +262,7 @@ def infrastructure() -> tuple[Insight, ...]:
     findings_url = reverse("control_plane:findings")
     items = [finding_insight(finding, findings_url) for finding in findings]
     items.extend(_resource_insights(resources, health_by_key, findings))
-    return tuple(items) + tailnet()
+    return tuple(items)
 
 
 def _findings_to_raise(resources, health_by_key: dict[str, dict[str, str]]) -> tuple[Any, ...]:

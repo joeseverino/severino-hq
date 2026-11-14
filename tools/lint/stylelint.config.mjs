@@ -193,6 +193,11 @@ export default {
     // anywhere else stays a light-mode value on a dark page.
     "color-no-hex": true,
     "color-named": "never",
+    // A palette is a `light-dark()` token picked by `color-scheme`. A rule
+    // under the system's preference skips an operator's chosen theme, and the
+    // browser gate paints each palette through `color-scheme`, so it would
+    // never read that rule either.
+    "media-feature-name-disallowed-list": ["prefers-color-scheme"],
     "function-disallowed-list": [`/^(${colorFunctions})$/i`],
     "declaration-property-value-disallowed-list": disallowedValues({
       ...literalFontSize,

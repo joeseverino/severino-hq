@@ -42,6 +42,7 @@ from . import (
     reference_findings,
     registration_findings,
     render_status_findings,
+    tailnet_device_findings,
     tailnet_findings,
     unit_findings,
 )
@@ -187,6 +188,7 @@ RULE_MODULES = (
     reference_findings,
     controller_findings,
     tailnet_findings,
+    tailnet_device_findings,
     dns_findings,
     contradiction_findings,
     posture_findings,

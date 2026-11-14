@@ -39,6 +39,12 @@ REFUSED = [
     (APP, ".a { color: #0a0a0a; }", "color-no-hex"),
     (APP, ".a { --tone: #fff; }", "color-no-hex"),
     (APP, ".a { fill: tomato; }", "color-named"),
+    (APP, "@media (prefers-color-scheme: dark) { .a { color: var(--ink); } }", "media-feature-name-disallowed-list"),
+    (
+        REFERENCE,
+        "@media (prefers-color-scheme: light) { .a { color: var(--ink); } }",
+        "media-feature-name-disallowed-list",
+    ),
     (APP, ".a { border-color: canvas; }", "declaration-property-value-disallowed-list"),
     (APP, ".a { background: oklch(0.5 0.1 200); }", "function-disallowed-list"),
     (APP, ".a { box-shadow: 0 1px RGBA(0, 0, 0, .2); }", "function-disallowed-list"),

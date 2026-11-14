@@ -100,7 +100,7 @@ def _on_controller(
     nodes[node_id] = replace(node, facts=node.facts + found)
 
 
-def _on_machine(
+def onto_machine(
     nodes: dict[str, TopologyNode], machine: Callable[[Any], str], ref: str, found: tuple[tuple[str, str], ...]
 ) -> None:
     """Put ``found`` on the machine the connection ``ref`` reaches, which an
@@ -130,7 +130,7 @@ def state_on_controller[R: FactRow](
         taken = ((TAKEN, f"{row.KIND}|{snapshot.observed_at.isoformat()}"),) if snapshot.observed_at else ()
         for ref, found in placed.items():
             if ref:
-                _on_machine(nodes, machine, ref, found + taken)
+                onto_machine(nodes, machine, ref, found + taken)
             else:
                 _on_controller(nodes, machine, snapshot.controller_id, found + taken)
 

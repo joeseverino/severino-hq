@@ -36,9 +36,9 @@ class UnscriptedLayoutTests(LayoutBrowserTests):
             for width in self.across(name, WIDTHS):
                 self.hold(name, width, self.unscripted_reads(name, width))
                 if width in PALETTE_AT:
-                    self.in_scheme("dark")
-                    self.hold(name, width, [self.text_reads_in_the_dark_theme])
-                    self.in_scheme("light")
+                    was = self.in_scheme("dark")
+                    self.hold(name, width, [self.every_palette_check_holds], scheme="dark")
+                    self.in_scheme(was)
                 if width == WIDE:
                     self.hold(name, width, [self.a_chosen_theme_paints_as_the_systems])
                 self.hold(name, width, self.unscripted_openings(name, width))
@@ -89,9 +89,9 @@ class ScriptedLayoutTests(LayoutBrowserTests):
                 self.page.evaluate(SETTLE)
                 if width in PALETTE_AT:
                     # Light is held by every layout check below.
-                    self.in_scheme("dark")
+                    was = self.in_scheme("dark")
                     self.hold(name, width, [self.every_palette_check_holds], script="on", scheme="dark")
-                    self.in_scheme("light")
+                    self.in_scheme(was)
                 self.hold(name, width, [self.every_layout_check_holds], script="on")
 
 

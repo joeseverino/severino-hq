@@ -373,10 +373,10 @@
             "rule": null,
             "schema_version": 2,
             "summary": {
-              "findings": 6,
-              "returned": 6,
+              "findings": 7,
+              "returned": 7,
               "severities": {
-                "attention": 3,
+                "attention": 4,
                 "neutral": 1,
                 "serious": 2
               },
@@ -1525,7 +1525,7 @@
       "listActionItemsV2OK": {
         "dataValue": {
           "data": {
-            "count": 11,
+            "count": 12,
             "items": [
               {
                 "action": "Review docs",
@@ -1538,7 +1538,7 @@
               }
             ],
             "next": null,
-            "total": 11,
+            "total": 12,
             "truncated": false
           },
           "ok": true
@@ -24132,6 +24132,12 @@
                 "empty-group-granted",
                 "grant-reaches-only-loopback",
                 "trusted-wider-than-tailnet",
+                "tailnet-key-expiring",
+                "tailnet-device-locked-out",
+                "tailnet-device-unapproved",
+                "tailnet-lock-unsigned",
+                "tailnet-client-update",
+                "tailnet-routes-unapproved",
                 "dns-protection-off",
                 "dns-filtering-off",
                 "dns-plain-upstream",

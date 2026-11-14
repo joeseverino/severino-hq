@@ -50,6 +50,9 @@ SETTINGS = {
     "httpsEnabled": True,
     "aclsExternallyManagedOn": True,
 }
+# The laptop's node key, signed in to months ago, runs out inside the window
+# HQ warns in: the one tailnet finding the estate raises.
+LAPTOP_KEY_LEFT = timedelta(days=30)
 # A domain that sends and takes no mail, and says so: a null MX, an SPF that
 # allows nobody, a DKIM key revoked for every selector and a DMARC policy that
 # rejects the rest. Beside that, what a zone gathers over a few years: a
@@ -287,6 +290,7 @@ def tailnet():
             direct_endpoint=f"{PUBLIC}:41641",
             rx_bytes=48_213_904,
             tx_bytes=6_120_448,
+            key_expires=(at + LAPTOP_KEY_LEFT).isoformat(),
         ),
         device(PHONE_NAME, "iOS", user=OWNER),
     )
