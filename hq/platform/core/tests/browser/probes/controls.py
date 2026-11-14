@@ -304,6 +304,66 @@ ACTIONS_STACKED_WITH_ROOM = (
 )
 
 
+# The narrowest line a row's words wrap to beside its controls, which the
+# stylesheet's `--row-words` is held to.
+ROW_WORDS = "30ch"
+
+# A row's words keep a line of ``measure`` (ROW_WORDS) beside its controls: a
+# cell of controls (``cells``) beside a widest cell of words whose room is
+# under that measure, resolved in the words' own font, some text of which runs
+# onto a second line. A row in that shape reads a few words to a line beside a
+# column of buttons, where its buttons belong in the line beneath (a narrow
+# box, tables.css).
+ACTIONS_BESIDE_SQUEEZED_WORDS = (
+    "([cells, measure]) => {"
+    + DESCRIBE
+    + """
+  const pressed = 'a[href], button, .btn, [role="button"], input:is([type=submit], [type=button])';
+  const found = [];
+  // What the stylesheet keeps the words to is the criterion's measure.
+  const token = getComputedStyle(document.documentElement).getPropertyValue('--row-words').trim();
+  if (token && token !== measure) found.push(`--row-words is ${token}, not ${measure}`);
+  const range = document.createRange();
+  const wraps = (cell) => {
+    const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (!node.textContent.trim() || !node.parentElement.checkVisibility()) continue;
+      range.selectNodeContents(node);
+      const tops = new Set([...range.getClientRects()].filter((r) => r.width > 0).map((r) => Math.round(r.top)));
+      if (tops.size > 1) return true;
+    }
+    return false;
+  };
+  const measureIn = (cell) => {
+    const ruler = document.createElement('span');
+    ruler.style.cssText = `position: absolute; visibility: hidden; inline-size: ${measure}`;
+    cell.append(ruler);
+    const width = box(ruler).width;
+    ruler.remove();
+    return width;
+  };
+  for (const cell of document.querySelectorAll(cells)) {
+    if (!cell.checkVisibility()) continue;
+    const controls = [...cell.querySelectorAll(pressed)]
+      .filter((el) => el.checkVisibility() && !el.parentElement.closest(pressed) && box(el).width >= 2);
+    if (!controls.length) continue;
+    const words = [...cell.parentElement.children]
+      .filter((other) => other !== cell && other.matches('td, th') && !other.matches(cells) && other.checkVisibility());
+    if (!words.length) continue;
+    const widest = words.reduce((most, other) => (box(other).width > box(most).width ? other : most));
+    const style = getComputedStyle(widest);
+    const room = box(widest).width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    const line = measureIn(widest);
+    if (room + 1 < line && wraps(widest)) {
+      const said = controls.map((el) => el.textContent.trim().replace(/\\s+/g, ' ').slice(0, 24)).join(' / ');
+      found.push(`${describe(cell)} stands "${said}" beside words wrapped in ${room.toFixed(1)}px, under their ${line.toFixed(1)}px line`);
+    }
+  }
+  return found;
+}"""
+)
+
+
 # A filter bar's choice (a select, a filter's menu, the sort) is as wide as
 # its options, never stretched over the bar: one drawn wider than it lays out
 # at its own width, the bar's room being its search's. One a bar too narrow
@@ -334,6 +394,10 @@ CHECKS = {
     "row actions stacked with room": (
         ACTIONS_STACKED_WITH_ROOM,
         f"{SELECTORS['row_actions_cell']}, {SELECTORS['queue_actions_cell']}",
+    ),
+    "row actions beside squeezed words": (
+        ACTIONS_BESIDE_SQUEEZED_WORDS,
+        [f"{SELECTORS['row_actions_cell']}, {SELECTORS['queue_actions_cell']}", ROW_WORDS],
     ),
     "control words on one line": (
         WRAPPED_CONTROLS,

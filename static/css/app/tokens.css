@@ -325,6 +325,11 @@
      past which a value is no easier to read whole. Left unresolved here: its
      `ch` is the identifier's own font, its `cqi` the region it sits in. */
   --identifier-max: clamp(28ch, 45cqi, 85ch);
+  /* The narrowest line a row's words wrap to beside its buttons, in the
+     words' own font (left unresolved here): a row with less waits its buttons
+     in the line beneath (cards.css). The survey's ROW_WORDS holds every row
+     of buttons to it (probes/controls.py). */
+  --row-words: 30ch;
   /* Track floors for a band of a fixed number of cells, so it lays out as a
      whole number of even rows at any width: 4, 2 or 1 columns (never 3+1),
      or 3 or 1. Read where they are used, so 100% is that grid's width.

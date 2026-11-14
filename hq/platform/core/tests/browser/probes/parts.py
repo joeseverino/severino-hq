@@ -71,6 +71,33 @@ READINGS = """(heads) => heads.map((head) => {
 })"""
 
 
+# A row of readings of an even count drawn one to a line, where two
+# to a row would hold every reading: laid out two to a row, no part of one runs
+# past its place (a lead is one line; quiet lines wrap inside it). An odd
+# count goes from one row to one a line (page.css), so it is left alone.
+READINGS_ONE_TO_A_LINE_WITH_ROOM = (
+    "(readings) => {"
+    + DESCRIBE
+    + """
+  const found = [];
+  const heads = (row) => [...row.querySelectorAll(readings)].filter((head) => head.checkVisibility());
+  const rows = new Set([...document.querySelectorAll(readings)].map((head) => head.closest('.readings')));
+  for (const row of rows) {
+    if (!row.checkVisibility()) continue;
+    const drawn = heads(row);
+    if (drawn.length < 2 || drawn.length % 2) continue;
+    if (new Set(drawn.map((head) => Math.round(box(head).top))).size < drawn.length) continue;
+    const before = row.style.cssText;
+    row.style.cssText += ';grid-template-columns: repeat(2, minmax(0, 1fr)) !important';
+    const fits = drawn.every((head) => [head, ...head.children].every((part) => part.scrollWidth <= part.clientWidth + 1));
+    row.style.cssText = before;
+    if (fits) found.push(`${describe(row)} stands its ${drawn.length} readings one to a line, where two to a row hold each`);
+  }
+  return found;
+}"""
+)
+
+
 def reading_problems(readings):
     """What a reader loses of the readings: a line drawn under its mark, or
     cut short."""
@@ -411,4 +438,5 @@ CHECKS = {
     "lists of facts": (WRAPPED_BESIDE_A_PAIR, [SELECTORS["fact_list"], SELECTORS["band_fact_cell"]]),
     "bare folds": (BARE_FOLDS, [SELECTORS["section_fold"], SELECTORS["drawn_when_opened"]]),
     "readings": Check((_READINGS_OF, SELECTORS["readings"]), findings=reading_problems),
+    "readings one to a line with room": (READINGS_ONE_TO_A_LINE_WITH_ROOM, SELECTORS["readings"]),
 }

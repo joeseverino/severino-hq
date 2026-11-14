@@ -351,6 +351,22 @@ PLANTS = {
         '<span class="reading-mark">x</span><span style="display: block">Example reading</span></div></div>',
         path="/",
     ),
+    # A row's two buttons in a column beside its words, which wrap a few to a
+    # line in a table too narrow for both.
+    "row actions beside squeezed words": Plant(
+        '<table class="data-table" style="inline-size: 16rem"><tbody><tr>'
+        f"<td>{_LINES}</td>"
+        '<td class="row-actions" style="white-space: nowrap"><button type="button" class="btn compact">Example one</button> '
+        '<button type="button" class="btn compact">Example two</button></td></tr></tbody></table>'
+    ),
+    # Two readings one to a line in a row wide enough for both side by side.
+    "readings one to a line with room": Plant(
+        '<div class="readings" style="inline-size: 40rem; grid-template-columns: 100%">'
+        + '<a class="reading reading-head" href="#example"><span class="reading-mark">x</span>'
+        '<span class="reading-lead"><strong>1</strong></span><span class="reading-lines"><span>Example</span></span></a>'
+        * 2
+        + "</div>"
+    ),
     "contrast": Plant('<p style="color: #c8c8c8; background: #fff">Example words too faint to read</p>'),
     "fields": Plant(
         '<input type="text" aria-label="Example" style="border: 1px solid #fafafa; background: transparent">'
@@ -376,6 +392,21 @@ _FLOWS = (
 # differs from, so a check that finds everything is caught as surely as one
 # that finds nothing.
 PASSES = {
+    # Three readings one to a line, an odd count going from one row to one a
+    # line; and a row's two buttons beside words given their whole line.
+    "readings one to a line with room": Plant(
+        '<div class="readings" style="inline-size: 40rem; grid-template-columns: 100%">'
+        + '<a class="reading reading-head" href="#example"><span class="reading-mark">x</span>'
+        '<span class="reading-lead"><strong>1</strong></span><span class="reading-lines"><span>Example</span></span></a>'
+        * 3
+        + "</div>"
+    ),
+    "row actions beside squeezed words": Plant(
+        '<table class="data-table" style="inline-size: 60rem"><tbody><tr>'
+        f"<td>{_LINES * 3}</td>"
+        '<td class="row-actions" style="white-space: nowrap"><button type="button" class="btn compact">Example one</button> '
+        '<button type="button" class="btn compact">Example two</button></td></tr></tbody></table>'
+    ),
     # A row's two buttons as the row's rule sets them, beside a row of words
     # alone: both rows a line of words tall.
     "actions no taller than the row": Plant(

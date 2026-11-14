@@ -172,7 +172,13 @@ a.kpi, a.kpi:hover { text-decoration: none; color: inherit; }
    of a page about something else: a line of the table's own size and weight,
    so the section's own rows stay what it is about. */
 .queue-table.is-dense .attention-title { font-size: var(--text-sm); font-weight: 500; }
-.queue-table .queue-what { min-width: 10rem; }
+/* The words keep a line of `--row-words` beside the buttons; a table that has
+   not that room is wider than its region, so it takes its narrow box, where
+   the buttons wait in the line beneath and the words keep the row. */
+.queue-table .queue-what { min-width: var(--row-words); }
+@container style(--box: narrow) {
+  .queue-table .queue-what { min-width: 10rem; }
+}
 .queue-table .queue-act { width: 1%; text-align: right; white-space: nowrap; padding-block-start: calc(var(--row-pad) - var(--space-1)); padding-inline-end: var(--space-4); }
 /* What a row offers, then the reader's own dismiss, side by side on one line whatever the cell's white-space says, so the column asks for that line and the other columns give way; the dismiss is one word and never gives way. */
 .queue-table .queue-buttons { display: inline-flex; gap: var(--space-3); vertical-align: top; text-align: start; }
