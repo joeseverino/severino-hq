@@ -1,0 +1,7 @@
+id: example.container_report
+target_kinds: [machine]
+effect: read
+timeout_seconds: 60
+retry: safe
+recovery:
+  - Nothing changes, so nothing needs recovering.

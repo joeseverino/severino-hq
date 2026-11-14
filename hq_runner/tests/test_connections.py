@@ -11,6 +11,7 @@ own private file.
 
 import json
 import shlex
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -174,6 +175,19 @@ class InventoryTests(DocumentTestCase):
             self.assertTrue(Path(envvars[name]).is_relative_to(private), name)
             self.assertNotIn(":", envvars[name], name)
         self.assertEqual(envvars["ANSIBLE_ROLES_PATH"], str(self.root / "project" / "roles"))
+
+    def test_ansible_finds_collections_only_where_the_worker_s_environment_installs_them(self):
+        """Not beside a project, in a home directory or on Python's path: a
+        repository cannot bring a collection of its own that way."""
+
+        from hq_runner.ansible import arguments
+
+        envvars = arguments(self.bound_run(), self.root / "run-example")["envvars"]
+
+        self.assertEqual(
+            envvars.get("ANSIBLE_COLLECTIONS_PATH"), str(Path(sys.prefix, "share", "ansible", "collections"))
+        )
+        self.assertEqual(envvars.get("ANSIBLE_COLLECTIONS_SCAN_SYS_PATH"), "False")
 
     def test_ansible_runner_ends_a_run_at_its_procedure_s_timeout(self):
         from hq_runner.ansible import arguments

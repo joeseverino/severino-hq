@@ -147,7 +147,9 @@ database's directory can be too long a path for one. `tools/dev/scratch_automati
 where the host's automation units stand: on each automation doorbell, or 15
 minutes after the last worker ended, it writes a connections document for
 the machine the server runs on and starts the worker from the runner group's
-environment (`var/runner/venv`, which `smoke:runner` shares). It watches the
+environment (`var/runner/venv`, which `smoke:runner` shares, with the
+collections `hq_runner/collections.yml` pins installed in it as the image
+installs them, by `tools/lib/runner-environment.sh`). It watches the
 reloader's own process, so a reload leaves it running and starts no second
 one, and each worker it starts runs the code as it stands then. It stops with
 the server and removes the socket's directory.
@@ -180,7 +182,8 @@ connections and identities; and the egress table and container confinement the
 host gives the worker. A run that names a commit the local repository does not
 hold, as the showcase's do, is ended as failed to fetch by the first pass that
 finds it waiting, and a database that adopted another commit shows the local
-one as pending. Adopting the local commit makes `example.disk_report` and
+one as pending. Adopting the local commit makes `example.disk_report`,
+`example.container_report` (a read through a shipped collection's module) and
 `example.note_write` its playbooks.
 
 An agent's path is walked on the same server with `hq_call --agent <client>

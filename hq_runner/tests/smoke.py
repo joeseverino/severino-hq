@@ -15,11 +15,15 @@ their first task hold ``recorded_stopped_events.json`` to what it says.
 
 It also holds the worker's copies of Ansible's own names to the ansible-core
 installed: the plugin paths it pins, the plugin directories a scan reports,
-and the role specs the tests' fake ansible-doc answers.
+the task keywords a scan reads as no module, and the role specs and modules
+the tests' fake ansible-doc answers; and the collections installed to the
+ones ``collections.yml`` pins.
 """
 
 import dataclasses
+import json
 import os
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -132,6 +136,51 @@ STOPPED_FILES = {
 STOPPED = {"broken_role": "playbooks/broken_role.yml", "missing_collection": "playbooks/missing_collection.yml"}
 
 
+# Three procedures the scan judges by the modules their tasks name: one from a
+# collection the worker ships, which is no problem and runs; the one above,
+# from a collection it does not ship; and one by a name with no collection.
+SHIPPED = "playbooks/container_facts.yml"
+MODULE_FILES = {
+    SHIPPED: """\
+- name: Say whether the worker runs in a container
+  hosts: all
+  gather_facts: false
+  vars:
+    ansible_connection: local
+  tasks:
+    - name: Read the container facts
+      community.docker.current_container_facts:
+    - name: State them
+      ansible.builtin.set_stats:
+        data:
+          result: "{{ {inventory_hostname: 'in a container' if ansible_module_running_in_container else 'not in a container'} }}"
+        per_host: false
+  post_tasks:
+    - name: The facts say whether it is in a container
+      ansible.builtin.assert:
+        that: ansible_module_running_in_container is boolean
+""",
+    "playbooks/container_facts.hq.yml": "id: example.container_facts\neffect: read\n",
+    "playbooks/missing_collection.hq.yml": "id: example.missing_collection\neffect: read\n",
+    "playbooks/unqualified_module.yml": """\
+- name: Name a module by its short name
+  hosts: all
+  gather_facts: false
+  collections: [community.docker]
+  tasks:
+    - name: Read the container facts
+      current_container_facts:
+""",
+    "playbooks/unqualified_module.hq.yml": "id: example.unqualified_module\neffect: read\n",
+}
+# What the scan says of each, by its sidecar: the module each problem names.
+REFUSED_MODULES = {
+    "playbooks/container_facts.hq.yml": [],
+    "playbooks/missing_collection.hq.yml": ["example.absent.compose_restart"],
+    "playbooks/unqualified_module.hq.yml": ["current_container_facts"],
+}
+
+
 def _recorded_stop(name: str) -> str | None:
     """What a run's report says of the recorded run ``name`` Ansible stopped."""
 
@@ -165,6 +214,8 @@ def _ansible_names() -> list[str]:
     """Where the worker's copies of Ansible's names differ from ansible-core's."""
 
     from ansible.config.manager import ConfigManager
+    from ansible.playbook.handler import Handler
+    from ansible.playbook.task import Task
     from ansible.plugins.loader import get_all_plugin_loaders
 
     definitions = ConfigManager().get_configuration_definitions()
@@ -180,6 +231,37 @@ def _ansible_names() -> list[str]:
         wrong.append(f"ansible.PLUGIN_PATHS is not ansible-core's plugin paths: {sorted(searched)}")
     if catalog.PLUGIN_DIRECTORIES - {"collections", "plugins"} != subdirs:
         wrong.append(f"catalog.PLUGIN_DIRECTORIES is not ansible-core's plugin directories: {sorted(subdirs)}")
+    # What parsing.mod_args.ModuleArgsParser reads as no module.
+    keywords = {*Task.fattributes, *Handler.fattributes, "local_action", "static"}
+    if keywords != catalog.TASK_KEYWORDS:
+        wrong.append(f"catalog.TASK_KEYWORDS is not ansible-core's task keywords: {sorted(keywords)}")
+    return wrong
+
+
+def _collections(root: Path) -> list[str]:
+    """Where the collections installed, and the modules ansible-doc lists
+    with them, differ from what collections.yml pins and the tests' fake
+    ansible-doc answers."""
+
+    galaxy = subprocess.run(
+        [Path(sys.executable).with_name("ansible-galaxy"), "collection", "list", "--format", "json"],
+        env={**os.environ, **ansible.environment(root / "galaxy", root / "galaxy")},
+        capture_output=True,
+        text=True,
+        timeout=ansible.DOC_TIMEOUT_SECONDS,
+        check=False,
+    )
+    try:
+        listed = json.loads(galaxy.stdout)
+    except ValueError:
+        return [f"ansible-galaxy listed no collections: {galaxy.stderr.strip()}"]
+    installed = {name: found["version"] for each in listed.values() for name, found in each.items()}
+    wrong = []
+    if installed != catalog.shipped():
+        wrong.append(f"the collections installed are {installed}, not the ones collections.yml pins")
+    (root / "doc").mkdir()
+    if missing := sorted(fakes.MODULES - set(ansible.modules(root / "doc")())):
+        wrong.append(f"ansible-doc lists no {missing}, which fakes.MODULES names")
     return wrong
 
 
@@ -188,15 +270,19 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="hq-runner-") as directory:
         root = Path(directory)
         remote = Remote(root / "remote")
-        revision = remote.commit({**project_files(), **ESCALATING_FILES, **TEMPLATED_FILES, **STOPPED_FILES})
-        run, escalating, templated, *stops = (
-            fakes.pending(revision=revision, effect="read", privilege="") for _ in range(3 + len(STOPPED))
+        wrong.extend(_collections(root))
+        revision = remote.commit(
+            {**project_files(), **ESCALATING_FILES, **TEMPLATED_FILES, **STOPPED_FILES, **MODULE_FILES}
+        )
+        run, escalating, templated, shipped, *stops = (
+            fakes.pending(revision=revision, effect="read", privilege="") for _ in range(4 + len(STOPPED))
         )
         for index, (asked, playbook) in enumerate(
             (
                 (run, "playbooks/host_health.yml"),
                 (escalating, ESCALATING),
                 (templated, TEMPLATED),
+                (shipped, SHIPPED),
                 *zip(stops, STOPPED.values(), strict=True),
             )
         ):
@@ -206,7 +292,7 @@ def main() -> int:
                 asked["operation"]["id"] = f"{index + 2:08d}-4444-4555-8666-777777777777"
         evaluated = root / "evaluated"
         templated["input"]["parameters"] = {"said": _templated(evaluated)}
-        bridge = fakes.Bridge(fakes.scan_pending(), run, escalating, templated, *stops)
+        bridge = fakes.Bridge(fakes.scan_pending(), run, escalating, templated, shipped, *stops)
         config = Config.read(_environment(root))
         # The one change from the configuration the environment gives: the
         # repository is this machine's, reached over git's file transport.
@@ -219,13 +305,25 @@ def main() -> int:
             wrong.append("the project's own ansible.cfg loaded a callback of the project's")
         if evaluated.exists():
             wrong.append("a parameter's template was evaluated on the worker")
-    scanned, ran, read, given, *stopped = [*bridge.reports, *({} for _ in range(4 + len(STOPPED)))][: 4 + len(STOPPED)]
+    reports = 5 + len(STOPPED)
+    scanned, ran, read, given, used, *stopped = [*bridge.reports, *({} for _ in range(reports))][:reports]
     for name, report in zip(STOPPED, stopped, strict=True):
         if report.get("success") is not False or report.get("message") != _recorded_stop(name):
             wrong.append(
                 f"the run of {STOPPED[name]} said {report.get('message')!r}, not {_recorded_stop(name)!r},"
                 " which recorded_stopped_events.json gives"
             )
+    if used.get("success") is not True:
+        wrong.append(f"a run of a shipped collection's module did not succeed: {used.get('message')}")
+    judged = {found["sidecar"]: found["problems"] for found in scanned.get("catalog", {}).get("procedures", [])}
+    for sidecar, modules in REFUSED_MODULES.items():
+        problems = judged.get(sidecar)
+        if (
+            problems is None
+            or len(problems) != len(modules)
+            or any(m not in p for p, m in zip(problems, modules, strict=True))
+        ):
+            wrong.append(f"the scan said {problems} of {sidecar}, not a problem naming each of {modules}")
     if given.get("success") is not True:
         wrong.append(f"a run given a template as a parameter did not take it as text: {given.get('message')}")
     specs = {
@@ -244,7 +342,7 @@ def main() -> int:
         wrong.append(
             f"the scan reported the logins {scanned.get('catalog', {}).get('reaches')}, not the one its connections hold"
         )
-    if worked != 4 + len(STOPPED) or scanned.get("success") is not True:
+    if worked != reports or scanned.get("success") is not True:
         wrong.append(f"wanted a scan that succeeded first, not {scanned}")
     elif specs != recorded:
         wrong.append(f"ansible-doc answered {specs}, not the role specs recorded_role_specs.json holds")

@@ -8,8 +8,9 @@ docs/Architecture.md, "The automation worker".
 import json
 import os
 import shlex
+import sys
 import tempfile
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Collection, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -55,6 +56,10 @@ PLUGIN_PATHS = (
     "ANSIBLE_TEST_PLUGINS",
     "ANSIBLE_VARS_PLUGINS",
 )
+# Where the collections ``collections.yml`` pins are installed: in the Python
+# environment the runner group is, so the image's copy of that environment
+# carries them and the smoke's own environment holds its own.
+COLLECTIONS = Path(sys.prefix, "share", "ansible", "collections")
 # Where a project's roles are, by Ansible's directory layout: ``roles/`` at its
 # root, beside ``playbooks/``.
 ROLES = "roles"
@@ -91,7 +96,9 @@ def _inventory(hosts: tuple[str, ...], targets: tuple[Target, ...]) -> dict[str,
 def environment(private_data_dir: Path, project_dir: Path) -> dict[str, str]:
     """What every Ansible program the worker starts is told, for a project at
     ``project_dir``: its configuration and every path it searches, all inside
-    ``private_data_dir`` but the project's own roles.
+    ``private_data_dir`` but the project's own roles and the collections the
+    worker ships, which are found nowhere else: not in a home directory and
+    not on Python's path.
 
     Writes the empty configuration file it names, since Ansible goes on to the
     working directory's ``ansible.cfg`` when the one ``ANSIBLE_CONFIG`` names
@@ -111,6 +118,8 @@ def environment(private_data_dir: Path, project_dir: Path) -> dict[str, str]:
         "ANSIBLE_SSH_CONTROL_PATH_DIR": str(private_data_dir / "cp"),
         "ANSIBLE_HOST_KEY_CHECKING": "True",
         "ANSIBLE_ROLES_PATH": str(project_dir / ROLES),
+        "ANSIBLE_COLLECTIONS_PATH": str(COLLECTIONS),
+        "ANSIBLE_COLLECTIONS_SCAN_SYS_PATH": "False",
         **dict.fromkeys(PLUGIN_PATHS, nothing),
     }
 
@@ -235,6 +244,34 @@ def role_spec(scratch: Path) -> RoleSpec:
                 timeout=DOC_TIMEOUT_SECONDS,
             )
         return entry_point(role, response)
+
+    return read
+
+
+# Every module the worker's Ansible finds, each by its full name. It may refuse.
+Modules = Callable[[], Collection[str]]
+
+
+def modules(scratch: Path) -> Modules:
+    """A reader of the modules ansible-doc lists (``ansible-doc -l -j -t
+    module``) with the pinned configuration: ansible.builtin's and each
+    shipped collection's, read in a directory of its own under ``scratch``."""
+
+    def read() -> frozenset[str]:
+        with tempfile.TemporaryDirectory(prefix="doc-", dir=scratch) as private:
+            response, _said = ansible_runner.get_plugin_list(
+                response_format="json",
+                plugin_type="module",
+                private_data_dir=private,
+                host_cwd=private,
+                envvars=environment(Path(private), Path(private)),
+                suppress_env_files=True,
+                quiet=True,
+                timeout=DOC_TIMEOUT_SECONDS,
+            )
+        if not isinstance(response, Mapping) or not response:
+            raise Refused("ModulesUnread", "Ansible didn't list the worker's modules. Refresh to try again.")
+        return frozenset(name for name in response if isinstance(name, str))
 
     return read
 

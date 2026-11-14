@@ -175,6 +175,35 @@ def role_spec(role: str, playbook_dir: Path, project_dir: Path) -> Any:
     return entry_point(role, {role: RECORDED_ROLE_SPECS[role]} if role in RECORDED_ROLE_SPECS else {})
 
 
+# Some of the modules ``ansible-doc -l -j -t module`` lists in the worker's
+# environment, each by its full name; the smoke holds each to that listing.
+MODULES = frozenset(
+    {
+        "ansible.builtin.assert",
+        "ansible.builtin.command",
+        "ansible.builtin.copy",
+        "ansible.builtin.debug",
+        "ansible.builtin.import_playbook",
+        "ansible.builtin.import_tasks",
+        "ansible.builtin.include_role",
+        "ansible.builtin.include_tasks",
+        "ansible.builtin.include_vars",
+        "ansible.builtin.set_fact",
+        "ansible.builtin.systemd_service",
+        "ansible.builtin.template",
+        "ansible.posix.sysctl",
+        "community.docker.current_container_facts",
+        "community.docker.docker_compose_v2",
+    }
+)
+
+
+def modules() -> frozenset[str]:
+    """The modules the worker's Ansible finds, as ansible-doc lists them."""
+
+    return MODULES
+
+
 def verified(revision: str) -> dict[str, Any]:
     """The verification GitHub reports of any commit: signed and valid."""
 

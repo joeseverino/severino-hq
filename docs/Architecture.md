@@ -1496,6 +1496,15 @@ sit in a private directory of the scratch space, removed when the run ends.
 Ansible reads the worker's own empty configuration through `ANSIBLE_CONFIG`,
 never a project's `ansible.cfg`, and every plugin and module path is pinned
 to a directory that does not exist; roles come from the project's `roles/`.
+Collections come from one directory of the worker's own Python environment
+(`ansible.COLLECTIONS`), never a home directory or Python's path. The image
+installs there the collections `hq_runner/collections.yml` pins, each to one
+release, in ansible-galaxy's requirements format: its runner-build stage runs
+`ansible-galaxy collection install -r` on that file, which checks each archive
+against the SHA-256 Galaxy publishes, as AWX bakes collections into its
+execution environment. So the image's signature and SBOM cover them, and a run
+fetches nothing. Renovate's ansible-galaxy manager moves each pin, and the
+smoke holds what is installed to the file.
 What Ansible loads from beside a playbook or inside a role, no setting turns
 off, so a scan reports each such directory. While it runs the worker renews
 the lease and stops when HQ answers stop or a renewal fails, and
@@ -1543,6 +1552,21 @@ reported as parsed, and what the worker cannot read (a file the playbook
 reaches, as a read's are walked, that does not parse, named with its line, or
 a role `ansible-doc` cannot find) is a problem of that playbook, while the rest
 of the report still arrives.
+
+Each task the plays reach names its module in full, from `ansible.builtin` or a
+collection the worker ships, and one ansible-doc lists in the worker
+(`ansible.modules`). Any other is a problem of that playbook naming the file,
+the task and the module (`catalog.unshipped`), so it is refused at the Refresh,
+before anything is offered for adoption. A short name is refused whatever a
+`collections:` keyword says, so the keyword resolves nothing the scan admits.
+`ansible.legacy` is refused, since Ansible looks for it beside the playbook
+first, and so is a name Ansible only redirects (`ansible.builtin.yum`). A
+module a repository carries in `library/`, an action in `action_plugins/` or a
+collection in `collections/`, which Ansible finds beside a playbook or in a
+role whatever its settings, is reported as a plugin directory, which adoption
+refuses, and no name a task could reach it by is admitted. A file the plays
+reach only by a name a template computes is not read; a module in it that no
+shipped collection provides stops the run before its first task.
 
 HQ holds each sidecar to `ProcedureDeclaration`
 (`hq/platform/application/automation_sources.py`), adds every way it falls

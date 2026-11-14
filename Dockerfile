@@ -120,12 +120,23 @@ RUN --mount=type=cache,target=/root/.cache/uv \
         --require-hashes --no-deps --only-binary :all: --no-binary pyyaml \
         --build-constraints /build/build-constraints.txt --require-build-hashes \
         -r /tmp/runner.txt
+# The Ansible collections hq_runner/collections.yml pins, by the ansible-galaxy
+# just installed: each archive is checked against the SHA-256 Galaxy publishes
+# for its release, and they land in the prefix the runner stage copies whole,
+# where the worker alone looks (hq_runner/ansible.py, COLLECTIONS). So the
+# image's signature and SBOM cover them, and a run fetches nothing.
+COPY hq_runner/collections.yml /build/
+RUN purelib=$(python -c 'import sysconfig; print(sysconfig.get_path("purelib", vars={"base": "/install"}))') \
+    && ANSIBLE_HOME=/tmp/ansible PYTHONPATH="$purelib" /install/bin/ansible-galaxy collection install \
+        --requirements-file /build/collections.yml --collections-path /install/share/ansible/collections \
+    && rm -rf /tmp/ansible
 
 
 # The automation worker (hq_runner), an image of its own: CI builds this
 # stage beside the web image, and a release pins it (deploy/automation/image).
-# It carries ansible-runner, the ansible-playbook it runs, and the ssh and git
-# a run's connections and checkout need, none of which the web image holds.
+# It carries ansible-runner, the ansible-playbook it runs, the collections it
+# ships, and the ssh and git a run's connections and checkout need, none of
+# which the web image holds.
 # hq-host runs it as the web account, which the bridge's peer check admits,
 # and ssh refuses to run for an account with no passwd entry. Its home is
 # /tmp, the scratch tmpfs and the one place its read-only root lets it write:

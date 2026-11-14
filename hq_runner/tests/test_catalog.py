@@ -50,6 +50,7 @@ class ScanTestCase(unittest.TestCase):
             scratch=self.root / "scratch",
             token="",
             role_spec=fakes.role_spec,
+            modules=fakes.modules,
             verify=fakes.verified,
             reaches=lambda: fakes.REACHES,
         )
@@ -148,6 +149,7 @@ class UnreadableTests(ScanTestCase):
             scratch=self.root / "scratch",
             token="",
             role_spec=role_spec,
+            modules=fakes.modules,
             verify=fakes.verified,
             reaches=lambda: fakes.REACHES,
         )["procedures"]
@@ -195,6 +197,7 @@ class EscalationTests(ScanTestCase):
             scratch=self.root / "scratch",
             token="",
             role_spec=lambda role, playbook_dir, project_dir: None,
+            modules=fakes.modules,
             verify=fakes.verified,
             reaches=lambda: fakes.REACHES,
         )["procedures"]
@@ -290,6 +293,146 @@ class EscalationTests(ScanTestCase):
         scanned = self.scan()
 
         self.assertEqual({(found["machine"], found["profile"]) for found in scanned["reaches"]}, set(fakes.REACHES))
+
+
+class ModuleTests(ScanTestCase):
+    """A task whose module the worker does not ship is a problem of its
+    procedure, naming the file, the task and the module, wherever the plays
+    reach it; so nothing unshipped is ever offered for a run."""
+
+    def problems(self, files: dict[str, str], sidecar: str = CHANGE) -> list[str]:
+        # A repository of its own each time, so no file of an earlier case stays.
+        remote = Remote(Path(tempfile.mkdtemp(dir=self.root)) / "remote")
+        remote.commit({"playbooks/check.hq.yml": sidecar, **files})
+        (found,) = catalog.scan(
+            procedures.Project(REPOSITORY, origin=remote.origin),
+            scratch=self.root / "scratch",
+            token="",
+            role_spec=lambda role, playbook_dir, project_dir: None,
+            modules=fakes.modules,
+            verify=fakes.verified,
+            reaches=lambda: fakes.REACHES,
+        )["procedures"]
+        return found["problems"]
+
+    def reached(self, task: str) -> dict[str, dict[str, str]]:
+        """``task`` in each place a playbook's tasks may sit, by the file it is in."""
+
+        indented = "".join(f"    {line}\n" for line in task.splitlines())
+        nested = "".join(f"        {line}\n" for line in task.splitlines())
+        play = "- name: Check\n  hosts: all\n"
+        return {
+            "the play's tasks": {"playbooks/check.yml": f"{play}  tasks:\n{indented}"},
+            "its handlers": {"playbooks/check.yml": f"{play}  handlers:\n{indented}"},
+            "a block's rescue": {
+                "playbooks/check.yml": f"{play}  tasks:\n    - name: Try\n      block: []\n      rescue:\n{nested}"
+            },
+            "a role it lists": {"playbooks/check.yml": f"{play}  roles: [look]\n", "roles/look/tasks/main.yml": task},
+            "a role's handlers": {
+                "playbooks/check.yml": f"{play}  roles: [look]\n",
+                "roles/look/handlers/main.yml": task,
+            },
+            "a file it imports": {
+                "playbooks/check.yml": f"{play}  tasks:\n    - ansible.builtin.import_tasks: tasks/look.yml\n",
+                "playbooks/tasks/look.yml": task,
+            },
+            "a playbook it imports": {
+                "playbooks/check.yml": f"{play}- ansible.builtin.import_playbook: other.yml\n",
+                "playbooks/other.yml": f"{play}  tasks:\n{indented}",
+            },
+        }
+
+    def test_ansible_builtin_s_modules_and_each_shipped_collection_s_are_no_problem(self):
+        shipped = sorted(name for name in fakes.MODULES if ".".join(name.split(".")[:2]) in catalog.shipped())
+        builtin = sorted(name for name in fakes.MODULES if name.startswith("ansible.builtin."))
+        self.assertTrue(shipped)
+        for module in (*shipped, *builtin[:2]):
+            for where, files in self.reached(f"- name: Use it\n  {module}: {{}}\n").items():
+                with self.subTest(module, where=where):
+                    self.assertEqual(self.problems(files), [])
+
+    def test_a_module_from_a_collection_the_worker_does_not_ship_is_a_problem_wherever_it_is(self):
+        for where, files in self.reached("- name: Restart the stack\n  example.absent.restart: {}\n").items():
+            with self.subTest(where):
+                problems = self.problems(files)
+
+                self.assertEqual(len(problems), 1, problems)
+                (path,) = [path for path in files if path != "playbooks/check.yml"] or ["playbooks/check.yml"]
+                for named in (path, "Restart the stack", "example.absent.restart"):
+                    self.assertIn(named, problems[0])
+
+    def test_the_collections_a_scan_admits_are_the_ones_collections_yml_pins(self):
+        listed = catalog.yaml.safe_load(catalog.COLLECTIONS.read_text(encoding="utf-8"))["collections"]
+
+        self.assertEqual(catalog.shipped(), {entry["name"]: str(entry["version"]) for entry in listed})
+        self.assertNotIn("example.absent", catalog.shipped())
+
+    def test_a_module_named_by_anything_but_a_shipped_module_s_full_name_is_a_problem(self):
+        cases = {
+            "an unqualified name": "- name: Look\n  debug: {msg: hi}\n",
+            "an unqualified name a collections keyword would resolve": (
+                "- name: Look\n  collections: [community.docker]\n  docker_compose_v2: {project_src: /srv}\n"
+            ),
+            "ansible.legacy, found beside the playbook first": "- name: Look\n  ansible.legacy.debug: {}\n",
+            "a module ansible.builtin lacks": "- name: Look\n  ansible.builtin.absent: {}\n",
+            "a module a shipped collection lacks": "- name: Look\n  community.docker.absent: {}\n",
+            "a module a template computes": "- name: Look\n  '{{ module }}': {}\n",
+            "the action keyword": "- name: Look\n  action: debug msg=hi\n",
+            "the local_action keyword": "- name: Look\n  local_action:\n    module: example.absent.restart\n",
+            "no module at all": "- name: Look\n  register: nothing\n",
+        }
+        for name, task in cases.items():
+            with self.subTest(name):
+                problems = self.problems(
+                    {
+                        "playbooks/check.yml": "- name: Check\n  hosts: all\n  roles: [look]\n",
+                        "roles/look/tasks/main.yml": task,
+                    }
+                )
+
+                self.assertEqual(len(problems), 1, problems)
+                self.assertIn("roles/look/tasks/main.yml", problems[0])
+                self.assertIn("'Look'", problems[0])
+
+    def test_a_module_the_repository_carries_is_never_admitted_by_name_and_its_directory_is_reported(self):
+        """Ansible finds a module in ``library/``, an action in
+        ``action_plugins/`` and a collection in ``collections/`` beside a
+        playbook or in a role, which no setting turns off: the scan reports
+        each directory, which adoption refuses, and refuses each name a task
+        could reach one by."""
+
+        carried = {
+            "playbooks/library/example_probe.py": "print('{}')\n",
+            "roles/look/action_plugins/example_act.py": "\n",
+            "playbooks/collections/ansible_collections/example/carried/plugins/modules/probe.py": "\n",
+        }
+        uses = {
+            "library/": "example_probe",
+            "library/ through ansible.legacy": "ansible.legacy.example_probe",
+            "action_plugins/": "example_act",
+            "collections/": "example.carried.probe",
+        }
+        for name, module in uses.items():
+            with self.subTest(name):
+                self.remote.commit(
+                    {
+                        "playbooks/check.hq.yml": CHANGE,
+                        "playbooks/check.yml": f"- name: Check\n  hosts: all\n  tasks:\n    - name: Probe\n      {module}: {{}}\n",
+                        **carried,
+                    }
+                )
+                scanned = self.scan()
+
+                ((problem,),) = [found["problems"] for found in scanned["procedures"]]
+                self.assertIn(module, problem)
+                self.assertEqual(
+                    {(found["path"], found["kind"]) for found in scanned["unpinned"]},
+                    {
+                        ("playbooks/library", "plugins"),
+                        ("roles/look/action_plugins", "plugins"),
+                        ("playbooks/collections", "plugins"),
+                    },
+                )
 
 
 class VerificationTests(unittest.TestCase):

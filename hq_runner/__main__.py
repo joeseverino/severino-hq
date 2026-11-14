@@ -110,6 +110,7 @@ def _scan(config: Config, scratch: Path, token: str) -> Scan:
         scratch=scratch,
         token=token,
         role_spec=ansible.role_spec(scratch),
+        modules=ansible.modules(scratch),
         verify=catalog.github_verify(config.project, token),
         reaches=lambda: _reaches(config),
     )

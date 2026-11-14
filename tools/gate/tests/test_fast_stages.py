@@ -63,7 +63,7 @@ class FastGateStageTests(GateTestCase):
     def test_the_tests_start_once_the_quick_gates_pass_and_hold_the_turn_once_with_every_heavy_gate(self):
         every = fast_gate.quick_gates()
         heavy = set(fast_gate.heavy_gates(every))
-        self.assertTrue({task for task in every if HEAVY_LOCK in locks(task)} <= heavy)
+        self.assertLessEqual({task for task in every if HEAVY_LOCK in locks(task)}, heavy)
         first, then = self.run_fast(every)
         self.assertEqual(set(first) & set(every), set(every) - heavy)
         self.assertNotIn(fast_gate.TESTS, first)

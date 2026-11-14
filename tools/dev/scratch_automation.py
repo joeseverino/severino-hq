@@ -305,6 +305,7 @@ def work(origin: str) -> int:
             scratch=scratch,
             token=token,
             role_spec=ansible.role_spec(scratch),
+            modules=ansible.modules(scratch),
             verify=lambda _revision: VOUCHED,
             reaches=lambda: reaches(config),
         )

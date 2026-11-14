@@ -192,9 +192,11 @@ cells stand closer. Still wider, its identifiers break where they must
 (`data-scrolls`), so no table runs past its card at any width. The gates fail
 one that does: the narrowest phone (320px) and every width above it hold every
 table the gates draw. `a_table_fits_its_box_at_every_width` and the example
-estate's `ExampleEstateTableFitTests` sweep each page from 320px up, reading it
-at the first width of each shape its layout takes (`TABLE_LAYOUT`), where a
-table has the least room.
+estate's `ExampleEstateTableFit` classes sweep each page from 320px up, reading it
+at the first width of each shape its layout and its tables take
+(`TABLE_LAYOUT`: the viewport queries, the boxes around each region, and how
+far each table has given way), where a table has the least room, with its
+rows as drawn, its folds open and every row opened.
 
 The region marks each body cell that says nothing (`data-blank`) and every
 cell of a column blank in every row (`data-blank-column`), which is not drawn.
