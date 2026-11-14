@@ -15,7 +15,6 @@ from .finding_model import (
     FindingRule,
     OperatorStep,
     Said,
-    built_findings,
     connections_carrying,
     per_connection,
 )
@@ -251,10 +250,6 @@ def _loopback_steps(item: LoopbackGrant) -> tuple[OperatorStep, ...]:
     return (edit, *last)
 
 
-def _trusted_wider_than_tailnet(estate: FindingEstate) -> tuple[Finding, ...]:
-    return built_findings(trusted_networks.wider_than_tailnet(estate))
-
-
 # The rules this module raises, beside the detectors that decide them.
 RULES: tuple[FindingRule, ...] = (
     FindingRule(
@@ -309,7 +304,7 @@ RULES: tuple[FindingRule, ...] = (
         "trusted-wider-than-tailnet",
         "Trusted networks wider than the tailnet",
         "neutral",
-        _trusted_wider_than_tailnet,
+        trusted_networks.wider_than_tailnet,
         operator_action=(
             "Narrow the trusted networks in HQ's settings to the addresses and routes the tailnet uses, then restart HQ."
         ),

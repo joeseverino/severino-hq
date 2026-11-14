@@ -3,8 +3,7 @@
 Read off the facts ``topology`` puts on each connection node from
 ``credential_mint.credential_fixes``. Each carries the one approved fix: an
 operator command that mints a replacement on the operator's machine. HQ offers
-it and never runs it. Rules return a ``Finding``'s fields; ``findings`` builds
-the finding, so this module does not import it.
+it and never runs it.
 """
 
 from typing import Any
@@ -19,7 +18,15 @@ lazy from hq.domains.control_plane.provider_spec import expiry_phrase
 
 from .connection_lifecycle import UNREPORTED_FACT
 from .derivations import reached
-from .finding_model import THEN_REFRESH, FindingRule, OperatorStep, built_findings, connections_carrying, fact_values
+from .finding_model import (
+    THEN_REFRESH,
+    Finding,
+    FindingEstate,
+    FindingRule,
+    OperatorStep,
+    connections_carrying,
+    fact_values,
+)
 from .timestamps import moment
 from .ui import counted, ended
 lazy from .credential_mint import address_fields
@@ -154,34 +161,34 @@ def _host(endpoint: str) -> str:
     return text.rsplit(":", 1)[0] if text.count(":") == 1 else text
 
 
-def missing_permissions(estate: Any) -> tuple[dict[str, Any], ...]:
+def missing_permissions(estate: FindingEstate) -> tuple[Finding, ...]:
     """A valid credential the provider refuses some readings, named by permission."""
 
     found = []
     for node, missing in connections_carrying(estate, MISSING):
         unseen = fact_values(node, UNSEEN)
         found.append(
-            {
-                "rule": "credential-missing-permissions",
-                "subject": node.id,
-                "title": f"{node.label}'s token is missing {counted(len(missing), 'permission')}",
-                "severity": "attention",
-                "explanation": (
+            Finding(
+                rule="credential-missing-permissions",
+                subject=node.id,
+                title=f"{node.label}'s token is missing {counted(len(missing), 'permission')}",
+                severity="attention",
+                explanation=(
                     f"The token works, but {_service(node)} will not let it read "
                     f"{ended(', '.join(unseen) or 'everything HQ asks for')} "
                     "Make a new token that includes them."
                 ),
-                "evidence": (
+                evidence=(
                     *(("Missing", name) for name in missing),
                     *(("Cannot read", label) for label in unseen),
                 ),
-                "steps": mint_steps(node),
-            }
+                steps=mint_steps(node),
+            )
         )
-    return tuple(sorted(found, key=lambda finding: finding["title"]))
+    return tuple(sorted(found, key=lambda finding: finding.title))
 
 
-def expiring(estate: Any) -> tuple[dict[str, Any], ...]:
+def expiring(estate: FindingEstate) -> tuple[Finding, ...]:
     """A credential inside its renewal window, or past it."""
 
     found = []
@@ -194,21 +201,21 @@ def expiring(estate: Any) -> tuple[dict[str, Any], ...]:
             continue
         expired = reached(when)
         found.append(
-            {
-                "rule": "credential-expiring",
-                "subject": node.id,
-                "title": f"{node.label}'s token {expiry_words(when)}",
-                "severity": "serious" if expired else "attention",
-                "explanation": (
+            Finding(
+                rule="credential-expiring",
+                subject=node.id,
+                title=f"{node.label}'s token {expiry_words(when)}",
+                severity="serious" if expired else "attention",
+                explanation=(
                     f"HQ cannot read anything through {node.label} until it is replaced."
                     if expired
                     else ended(f"After that HQ cannot read anything through {node.label}")
                 ),
-                "evidence": (("Expires", expiry_phrase(stamp)),),
-                "steps": mint_steps(node),
-            }
+                evidence=(("Expires", expiry_phrase(stamp)),),
+                steps=mint_steps(node),
+            )
         )
-    return tuple(sorted(found, key=lambda finding: finding["title"]))
+    return tuple(sorted(found, key=lambda finding: finding.title))
 
 
 _CANNOT_ISSUE = "HQ cannot issue a token."
@@ -219,7 +226,7 @@ RULES: tuple[FindingRule, ...] = (
         "credential-missing-permissions",
         "A token is missing permissions",
         "attention",
-        lambda estate: built_findings(missing_permissions(estate)),
+        missing_permissions,
         operator_action=(f"Make a new token with the command on the connection's page. {THEN_REFRESH}"),
         no_help_reason=_CANNOT_ISSUE,
     ),
@@ -227,7 +234,7 @@ RULES: tuple[FindingRule, ...] = (
         "credential-expiring",
         "A token is expiring",
         "attention",
-        lambda estate: built_findings(expiring(estate)),
+        expiring,
         operator_action=(f"Make a new token with the command on the connection's page. {THEN_REFRESH}"),
         no_help_reason=_CANNOT_ISSUE,
     ),

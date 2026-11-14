@@ -23,7 +23,7 @@ from tools.gate.turn import GATE, LOCK, lock_file
 PROJECT = f"""
 [tasks.hold]
 lock = ["{GATE}", "{LOCK}"]
-run = 'echo held > "$MARK"; read line < "$RELEASE"'
+run = 'echo held > "$MARK"; read line < "$RELEASE"; echo "$WHO" >> "$ORDER"'
 
 [tasks.step]
 lock = ["{GATE}", "{LOCK}"]
@@ -73,10 +73,10 @@ class LandingTests(GateTestCase):
 
         return self.start(*before, "mise", "run", name, **env)
 
-    def hold_the_turn(self) -> subprocess.Popen[str]:
-        """A heavy task in the turn, once it says so."""
+    def hold_the_turn(self, *before: str, **env: str) -> subprocess.Popen[str]:
+        """A heavy task in the turn, after ``before`` (the landing) when it is given, once it says so."""
 
-        held = self.task("hold")
+        held = self.task("hold", *before, **env)
         self.addCleanup(self.release)
         self.assertEqual((self.dir / "mark").read_text().strip(), "held")
         return held
@@ -124,3 +124,29 @@ class LandingTests(GateTestCase):
         self.assertEqual(landing.wait(), 0)
         self.assertEqual(worker.wait(), 0)
         self.assertEqual((self.dir / "order").read_text().split(), ["landing", "worker"])
+
+    def excludes(self, first: tuple[str, ...], second: tuple[str, ...]) -> None:
+        """The heavy task started after ``first`` holds the turn; the one after ``second`` waits
+        and runs once the first has ended."""
+
+        held = self.hold_the_turn(*first, WHO="first", PYTHONPATH=str(ROOT))
+        waiting = self.task("step", *second, WHO="second", PYTHONPATH=str(ROOT))
+        # At the gate or the turn, whichever the first holds by now.
+        self.waits_for(waiting, "")
+        self.release()
+        self.assertEqual(held.wait(), 0)
+        self.assertEqual(waiting.wait(), 0)
+        self.assertEqual((self.dir / "order").read_text().split(), ["first", "second"])
+
+    def test_a_heavy_run_waits_for_the_heavy_run_in_the_turn(self):
+        self.excludes((), ())
+
+    def test_a_landing_waits_for_the_heavy_run_in_the_turn(self):
+        # Its own heavy task holds the gate as inherited and waits for the turn.
+        self.excludes((), LANDING)
+
+    def test_a_heavy_run_waits_for_the_landing_in_the_turn(self):
+        self.excludes(LANDING, ())
+
+    def test_a_landing_waits_for_the_landing_in_the_turn(self):
+        self.excludes(LANDING, LANDING)

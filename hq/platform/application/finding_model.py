@@ -200,7 +200,7 @@ def fact_values(node, key: str) -> tuple[str, ...]:
     return tuple(value for fact, value in node.facts if fact == key and value)
 
 
-def connections_carrying(estate: Any, key: str) -> Iterator[tuple[TopologyNode, tuple[str, ...]]]:
+def connections_carrying(estate: FindingEstate, key: str) -> Iterator[tuple[TopologyNode, tuple[str, ...]]]:
     """Each connection that carries values under one fact key, with those values.
 
     The walk every connection-fact finding starts from: a connection whose
@@ -222,7 +222,7 @@ class Said(TypedDict):
 
 
 def per_connection(
-    estate: Any,
+    estate: FindingEstate,
     key: str,
     *,
     rule: str,

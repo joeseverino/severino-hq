@@ -716,11 +716,15 @@ mise polls. The command's own heavy tasks inherit the gate
 (`MISE_TASK_LOCKS`) and take turns on `heavy` among themselves.
 `test_landing.py` (`tools/gate/tests/`) runs that order against mise.
 
-A run of tests is narrow, and goes ahead outside the turn, when it is serial
-(`--parallel 1`) or each label names a module or something in one, and no
-test it loads drives a browser (`tools/gate/turn.py`). So
-`mise run test <module>` starts at once. A task whose weight depends on what
-it is given (`test`, `fast`'s tests, `lint:source`, the composed suite,
+A run of tests is narrow, and goes ahead outside the turn, when it runs in
+one process and no test it loads drives a browser (`tools/gate/turn.py`): it
+is serial (`--parallel 1`), or Django, which starts a worker for each test
+class up to the workers asked for, finds one class in what its labels name.
+So `mise run test <module>.<Class>` starts at once, and a parallel run of a
+module of several classes, or of fast's selection, waits for the turn. The
+decision weighs the arguments the run passes: a task hands it its run's own
+options before the labels (`test_arguments`), which `HeavyTaskTests` holds
+to the run. A task whose weight depends on what it is given (`test`, `fast`'s tests, `lint:source`, the composed suite,
 `dev:look`, `browser --linux`) runs its heavy runs through the hidden task
 `turn`, which holds the lock (`tools/lib/heavy-turn.sh` for a file task)
 under the gate's own bound, `HQ_TURN_BOUND`: `mise run --timeout` would count

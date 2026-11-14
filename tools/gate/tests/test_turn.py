@@ -1,5 +1,5 @@
-"""A run of tests takes the machine's heavy turn only when it runs everything
-or a whole tree of it in parallel, or a browser; a task that loads the machine
+"""A run of tests takes the machine's heavy turn only when it starts more than
+one process or a browser; a task that loads the machine
 whatever it is given always takes it, and no other task does."""
 
 import json
@@ -18,6 +18,8 @@ from tools.gate.tests.base import GateTestCase
 from tools.gate.turn import IN_TURN, LOCK, in_turn, narrow
 
 MODULE = "hq.platform.application.tests.test_pipeline"
+# One test class of it, which a parallel run starts one worker for.
+CLASS = "ActionPinTests"
 
 
 class InTurnTests(GateTestCase):
@@ -45,11 +47,24 @@ class NarrowRunTests(GateTestCase):
     def test_a_module_or_something_in_one_is_narrow(self):
         for argv in (
             [MODULE],
-            [f"{MODULE}.GateReferenceTests.test_every_task_a_workflow_runs_exists"],
-            ["--tag", "source", "--parallel", "auto", MODULE],
+            [f"{MODULE}.{CLASS}.test_every_docker_action_is_pinned_by_digest"],
+            ["--tag", "source", "--parallel", "auto", f"{MODULE}.{CLASS}"],
         ):
             with self.subTest(argv=argv):
                 self.assertTrue(narrow(argv))
+
+    def test_a_parallel_run_of_more_than_one_test_class_is_heavy_however_few_its_labels(self):
+        """Django starts a worker for each test class up to the workers asked for, so
+        a run of modules in parallel (fast's selection, `mise run test <module>`)
+        holds as much memory as a suite."""
+
+        for argv in (
+            ["--parallel", "auto", MODULE],
+            ["--parallel", "2", MODULE],
+            ["--tag", "source", "--parallel", "auto", MODULE, "tools.gate.tests.test_turn_mark"],
+        ):
+            with self.subTest(argv=argv):
+                self.assertFalse(narrow(argv))
 
     def test_a_serial_run_of_a_tree_is_narrow(self):
         self.assertTrue(narrow(["hq.platform.api", "hq.domains.contacts", "--parallel", "1"]))
@@ -100,6 +115,11 @@ class HeavyTaskTests(GateTestCase):
                     # Arguments of the run's own: the decision sees them before the turn is taken.
                     self.assertRegex(run, r'(?m)^test_arguments=".*\$\{usage_\w+:-\}"$')
                     self.assertLess(run.index("test_arguments="), sourced(run))
+                    # It weighs the run the task makes: every option the run passes, in its order.
+                    (weighed,) = re.findall(r'(?m)^test_arguments="(.*)"$', run)
+                    own = [word for word in words if word != "$@" and not word.startswith(("2>", ">"))]
+                    left = iter(shlex.split(weighed))
+                    self.assertTrue(all(word in left for word in own), f"weighs {weighed}, runs {' '.join(own)}")
                     continue
                 arguments = [word for word in words if not word.startswith(("2>", ">"))]
                 if re.search(r"(?m)^\s*light_run=", run):

@@ -9,7 +9,7 @@ already pulled onto the machine.
 """
 
 import shlex
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import replace
 from typing import Any
 
@@ -22,10 +22,11 @@ lazy from hq.platform.application.routes import reverse
 from .facts import inventory_records
 from .finding_model import (
     CANNOT_EDIT_COMPOSE,
+    Finding,
+    FindingEstate,
     FindingRemedy,
     FindingRule,
     OperatorStep,
-    built_findings,
     cannot_run_commands,
     machine_step,
 )
@@ -176,7 +177,7 @@ def _parts(value: str) -> tuple[str, ...]:
     return container, host, reference, running, tagged, service
 
 
-def unrecognized_containers(estate: Any) -> tuple[dict[str, Any], ...]:
+def unrecognized_containers(estate: FindingEstate) -> tuple[Finding, ...]:
     """A container a sweep found that no compose project declares.
 
     Every container that belongs on a machine is created by a compose project,
@@ -185,7 +186,7 @@ def unrecognized_containers(estate: Any) -> tuple[dict[str, Any], ...]:
     container nobody declared must never look like one somebody did.
     """
 
-    found: list[dict[str, Any]] = []
+    found: list[Finding] = []
     for node in estate.nodes():
         for key, value in node.facts:
             if key != "unrecognized-container":
@@ -202,23 +203,23 @@ def unrecognized_containers(estate: Any) -> tuple[dict[str, Any], ...]:
             except NoReverseMatch:
                 adopt_url = ""
             found.append(
-                {
-                    "rule": "unrecognized-container",
-                    "subject": node.id,
-                    "title": f"Unrecognized container {name} on {node.label}",
-                    "severity": "serious",
-                    "explanation": (
+                Finding(
+                    rule="unrecognized-container",
+                    subject=node.id,
+                    title=f"Unrecognized container {name} on {node.label}",
+                    severity="serious",
+                    explanation=(
                         "No compose project started it, so HQ is not tracking it. "
                         "Adopt it if you started it. Otherwise find what did and remove it."
                     ),
-                    "steps": machine_step(
+                    steps=machine_step(
                         f"If nothing needs it, remove it from {host or node.label}",
                         host or node.label,
                         f"docker rm -f {shlex.quote(name)}",
                     ),
-                    "part": name,
-                    "evidence": (("Container", name), ("Machine", node.label)),
-                    "remedies": (
+                    part=name,
+                    evidence=(("Container", name), ("Machine", node.label)),
+                    remedies=(
                         FindingRemedy(
                             capability="infrastructure.resource.create",
                             target=name,
@@ -228,77 +229,73 @@ def unrecognized_containers(estate: Any) -> tuple[dict[str, Any], ...]:
                             method="POST",
                         ),
                     ),
-                }
+                )
             )
-    return tuple(sorted(found, key=lambda finding: finding["title"]))
+    return tuple(sorted(found, key=lambda finding: finding.title))
 
 
-def images_behind(estate: Any) -> tuple[dict[str, Any], ...]:
+def _stated(estate: FindingEstate, key: str) -> Iterator[tuple[Any, ...]]:
+    """Each image fact under ``key``, as its node and then its ``_parts``."""
+
+    return ((node, *_parts(value)) for node in estate.nodes() for fact, value in node.facts if fact == key)
+
+
+def images_behind(estate: FindingEstate) -> tuple[Finding, ...]:
     """A container still running the image its tag named before the last pull."""
 
-    found = []
-    for node in estate.nodes():
-        for key, value in node.facts:
-            if key != IMAGE_BEHIND:
-                continue
-            container, host, reference, running, tagged, service = _parts(value)
-            found.append(
-                {
-                    "rule": "container-image-behind",
-                    "subject": node.id,
-                    "title": f"{container} on {node.label} runs an older {reference}",
-                    "severity": "attention",
-                    "explanation": (
-                        f"{reference} on this machine is now image {tagged}, and the "
-                        f"container still runs {ended(running)} Recreate it to run what "
-                        "was pulled."
-                    ),
-                    "part": container,
-                    "evidence": (
-                        ("Container", container),
-                        ("Image reference", reference),
-                        ("Running", running),
-                        ("Tagged now", tagged),
-                    ),
-                    "steps": _recreate(container, service, host or node.label),
-                }
-            )
-    return tuple(sorted(found, key=lambda item: item["title"]))
+    found = [
+        Finding(
+            rule="container-image-behind",
+            subject=node.id,
+            title=f"{container} on {node.label} runs an older {reference}",
+            severity="attention",
+            explanation=(
+                f"{reference} on this machine is now image {tagged}, and the "
+                f"container still runs {ended(running)} Recreate it to run what "
+                "was pulled."
+            ),
+            part=container,
+            evidence=(
+                ("Container", container),
+                ("Image reference", reference),
+                ("Running", running),
+                ("Tagged now", tagged),
+            ),
+            steps=_recreate(container, service, host or node.label),
+        )
+        for node, container, host, reference, running, tagged, service in _stated(estate, IMAGE_BEHIND)
+    ]
+    return tuple(sorted(found, key=lambda item: item.title))
 
 
-def images_untagged(estate: Any) -> tuple[dict[str, Any], ...]:
+def images_untagged(estate: FindingEstate) -> tuple[Finding, ...]:
     """A container running an image no tag names, so nothing says what it is."""
 
-    found = []
-    for node in estate.nodes():
-        for key, value in node.facts:
-            if key != IMAGE_UNTAGGED:
-                continue
-            container, host, reference, running, _tagged, service = _parts(value)
-            found.append(
-                {
-                    "rule": "container-image-untagged",
-                    "subject": node.id,
-                    "title": f"{container} on {node.label} runs an untagged image",
-                    "severity": "attention",
-                    "explanation": (
-                        "No tag on this machine names the image it runs, so its "
-                        "version cannot be told or reproduced. Pin a tag in its "
-                        "compose file and recreate it."
-                    ),
-                    "part": container,
-                    "evidence": (
-                        ("Container", container),
-                        ("Image", running),
-                        *((("Started from", reference),) if reference else ()),
-                    ),
-                    "steps": _recreate(container, service, host or node.label),
-                }
-            )
-    return tuple(sorted(found, key=lambda item: item["title"]))
+    found = [
+        Finding(
+            rule="container-image-untagged",
+            subject=node.id,
+            title=f"{container} on {node.label} runs an untagged image",
+            severity="attention",
+            explanation=(
+                "No tag on this machine names the image it runs, so its "
+                "version cannot be told or reproduced. Pin a tag in its "
+                "compose file and recreate it."
+            ),
+            part=container,
+            evidence=(
+                ("Container", container),
+                ("Image", running),
+                *((("Started from", reference),) if reference else ()),
+            ),
+            steps=_recreate(container, service, host or node.label),
+        )
+        for node, container, host, reference, running, _tagged, service in _stated(estate, IMAGE_UNTAGGED)
+    ]
+    return tuple(sorted(found, key=lambda item: item.title))
 
 
-def images_unpinned(estate: Any) -> tuple[dict[str, Any], ...]:
+def images_unpinned(estate: FindingEstate) -> tuple[Finding, ...]:
     """A container started by tag alone from an image it could be pinned to.
 
     The reference is the whole judgment: a tag can later name a different
@@ -306,43 +303,34 @@ def images_unpinned(estate: Any) -> tuple[dict[str, Any], ...]:
     always names the same one.
     """
 
-    found = []
-    for node in estate.nodes():
-        for key, value in node.facts:
-            if key != IMAGE_UNPINNED:
-                continue
-            container, host, reference, _running, pin, service = _parts(value)
-            found.append(
-                {
-                    "rule": "container-image-unpinned",
-                    "subject": node.id,
-                    "title": f"{container} on {node.label} runs {reference} by tag alone",
-                    "severity": "attention",
-                    "explanation": "A tag can later name a different build. Pin it by digest.",
-                    "part": container,
-                    "evidence": (
-                        ("Container", container),
-                        ("Image reference", reference),
-                        ("Pin it as", pin),
-                    ),
-                    "steps": (
-                        _step(label=f"In the compose file that runs {container}, set its image to {pin}"),
-                        *_recreate(container, service, host or node.label),
-                    ),
-                }
-            )
-    return tuple(sorted(found, key=lambda item: item["title"]))
+    found = [
+        Finding(
+            rule="container-image-unpinned",
+            subject=node.id,
+            title=f"{container} on {node.label} runs {reference} by tag alone",
+            severity="attention",
+            explanation="A tag can later name a different build. Pin it by digest.",
+            part=container,
+            evidence=(
+                ("Container", container),
+                ("Image reference", reference),
+                ("Pin it as", pin),
+            ),
+            steps=(
+                OperatorStep(label=f"In the compose file that runs {container}, set its image to {pin}"),
+                *_recreate(container, service, host or node.label),
+            ),
+        )
+        for node, container, host, reference, _running, pin, service in _stated(estate, IMAGE_UNPINNED)
+    ]
+    return tuple(sorted(found, key=lambda item: item.title))
 
 
-def _step(**fields: Any) -> Any:
-    return OperatorStep(**fields)
-
-
-def _recreate(container: str, service: str, host: str) -> tuple:
+def _recreate(container: str, service: str, host: str) -> tuple[OperatorStep, ...]:
     """Recreate the compose service, run in the project's directory on the machine."""
 
     return (
-        _step(
+        OperatorStep(
             label=f"On {host}, in the compose project that runs {container}, recreate it",
             command=f"docker compose up -d --force-recreate {service}".rstrip(),
         ),
@@ -355,7 +343,7 @@ RULES: tuple[FindingRule, ...] = (
         "unrecognized-container",
         "Container started outside compose",
         "serious",
-        lambda estate: built_findings(unrecognized_containers(estate)),
+        unrecognized_containers,
         operator_action=("Adopt it if you started it. Otherwise remove it on its machine."),
         no_help_reason=("HQ cannot remove a container it did not start."),
     ),
@@ -363,7 +351,7 @@ RULES: tuple[FindingRule, ...] = (
         "container-image-behind",
         "Container runs an older image than its tag",
         "attention",
-        lambda estate: built_findings(images_behind(estate)),
+        images_behind,
         operator_action=("Recreate the container from its compose project so it runs the image its tag names now."),
         no_help_reason=cannot_run_commands(),
     ),
@@ -371,7 +359,7 @@ RULES: tuple[FindingRule, ...] = (
         "container-image-untagged",
         "Container runs an untagged image",
         "attention",
-        lambda estate: built_findings(images_untagged(estate)),
+        images_untagged,
         operator_action=("Pin a tag for the image in the container's compose file and recreate it."),
         no_help_reason=CANNOT_EDIT_COMPOSE,
     ),
@@ -379,7 +367,7 @@ RULES: tuple[FindingRule, ...] = (
         "container-image-unpinned",
         "Container runs an image by tag alone",
         "attention",
-        lambda estate: built_findings(images_unpinned(estate)),
+        images_unpinned,
         operator_action=("Pin the image by digest in the container's compose file and recreate it."),
         no_help_reason=CANNOT_EDIT_COMPOSE,
     ),
