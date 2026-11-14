@@ -323,8 +323,11 @@ class LayoutBrowserTests(BrowserGate):
         never runs past the card or stacks into cards."""
 
         self.assertEqual(tables["found"], [])
+        # The probe counts the tables it skips as undrawn (in a closed
+        # disclosure) by its own test, so a page whose every table is in one
+        # is told apart from a page whose tables it failed to find.
         if "<table" in (self.pages.get(name) or self.page.content()):
-            self.assertGreater(tables["seen"], 0, "the probe measured nothing")
+            self.assertGreater(tables["seen"] + tables["undrawn"], 0, "the probe found no table")
 
     @reads(OVERLAPS)
     def nothing_overlaps(self, _name, found):

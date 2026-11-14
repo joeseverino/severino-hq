@@ -15,8 +15,8 @@ lazy from hq.domains.control_plane.providers import PROVIDERS
 from . import tailnet
 from .doors import approved_words
 from .moments import expiry_words
-from .request_channel import Channel
-from .request_identity import Identity
+from .request_channel import UNTRUSTED_FORWARDER, Channel, encryption
+from .request_identity import SSO_LINK, Identity
 from .timestamps import moment
 from .ui import counted, ended
 lazy from .zones import public_answers_for
@@ -54,6 +54,16 @@ class Layer:
         if not self.conclusive:
             return "unknown"
         return "holds" if self.holds else "does-not"
+
+
+# A request whose Host is an address names nothing public DNS could answer for.
+ADDRESS_HOST = "This request used an address."
+
+
+def owned_by(device: tailnet.Device) -> str:
+    """Whose a tailnet device is, as the tailnet reports it."""
+
+    return f"owned by {device.user}" if device.user else "no reported owner"
 
 
 @dataclass(frozen=True, slots=True)
@@ -159,7 +169,7 @@ def _name_layer(request) -> Layer:
             "name",
             "The name is not in public DNS",
             holds=False,
-            detail="This request used an address.",
+            detail=ADDRESS_HOST,
             evidence=host,
             boundary="Exposure",
             mechanism="Public DNS records",
@@ -425,7 +435,7 @@ def _device_layer(device: tailnet.Device | None, *, read: bool, current: bool) -
         "device",
         "The tailnet knows this device",
         holds=True,
-        detail=f"{device.label} is on the tailnet, owned by {device.user or 'no reported owner'}, and approved.{expiry}",
+        detail=f"{device.label} is on the tailnet, {owned_by(device)}, and approved.{expiry}",
         evidence=device.dns_name or device.name,
         boundary="Device identity",
         mechanism="The tailnet device list",
@@ -560,13 +570,14 @@ def _identity_agreement_layer(identity: Identity) -> Layer:
             mechanism="The session and the tailnet device owner",
             conclusive=False,
         )
+    linked = identity.agreement_basis == SSO_LINK
     return Layer(
         "identity-agreement",
         "You own this device",
         holds=identity.corroborated,
         detail=(
             "You signed in with your Tailscale account, and Tailscale says that account owns this device."
-            if identity.agreement_basis == "SSO-signed principal link"
+            if linked
             else "The tailnet account that owns this device is the account signed in to HQ."
             if identity.corroborated
             else "A different tailnet account owns this device. Check who owns the device and who is signed in."
@@ -577,14 +588,12 @@ def _identity_agreement_layer(identity: Identity) -> Layer:
                 f"single sign-on {identity.provider_principal}",
                 f"signed in as {session_principal or 'unnamed session'}",
             )
-            if identity.agreement_basis == "SSO-signed principal link"
+            if linked
             else f"{identity.tailnet_user} ↔ {session_principal or 'unnamed session'}"
         ),
         boundary="Identity correlation",
         mechanism=(
-            "Single sign-on and the tailnet device owner"
-            if identity.agreement_basis == "SSO-signed principal link"
-            else "The session and the tailnet device owner"
+            "Single sign-on and the tailnet device owner" if linked else "The session and the tailnet device owner"
         ),
     )
 
@@ -595,7 +604,7 @@ def _forwarder_layer(device: tailnet.Device | None, *, trusted: bool, peer: str)
             "forwarder",
             "HQ trusts the proxy that forwarded this",
             holds=False,
-            detail="Not a trusted proxy, so HQ ignores the address it forwarded.",
+            detail=UNTRUSTED_FORWARDER,
             evidence=peer,
             boundary="Forwarding identity",
             mechanism="HQ's list of trusted proxies",
@@ -881,22 +890,18 @@ def _transport_layer(request, channel: Channel) -> Layer:
     tailnet = channel.id == "tailnet"
     if tailnet and tls:
         detail = "WireGuard encrypts the link, and TLS encrypts the request inside it."
-        evidence = "WireGuard + TLS"
     elif tailnet:
         detail = "WireGuard encrypts this request. There is no TLS inside it."
-        evidence = "WireGuard only"
     elif tls:
         detail = "TLS encrypts this request. The caller is not on the tailnet."
-        evidence = "TLS"
     else:
         detail = "This request reached HQ without TLS."
-        evidence = "Encryption not confirmed"
     return Layer(
         "transport",
         "The connection is encrypted",
         holds=tls or tailnet,
         detail=detail,
-        evidence=evidence,
+        evidence=encryption(channel, tls),
         boundary="Transport",
         mechanism="WireGuard and TLS",
     )

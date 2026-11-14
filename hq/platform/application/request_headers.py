@@ -53,6 +53,12 @@ REDACTED = {"Cookie", "Authorization", "X-Csrftoken", "Proxy-Authorization"}
 _CREDENTIAL_WORDS = ("auth", "token", "secret", "key", "jwt", "assertion", "session", "cookie", "password")
 
 
+def redacted(value: str) -> str:
+    """How a header HQ never shows is shown: that it came, and its length."""
+
+    return f"present, {len(value)} characters"
+
+
 def is_redacted(name: str) -> bool:
     lowered = name.lower()
     return name in REDACTED or any(word in lowered for word in _CREDENTIAL_WORDS)
@@ -120,14 +126,14 @@ def headers_of(request) -> tuple[Header, ...]:
         # when the request sent none, so an empty value is a header never carried.
         if value == "":
             continue
-        redacted = is_redacted(name)
+        hidden = is_redacted(name)
         found.append(
             Header(
                 name=name,
-                value=(f"present, {len(str(value))} characters" if redacted else str(value)),
+                value=redacted(str(value)) if hidden else str(value),
                 purpose=HEADERS_READ.get(name, ""),
                 declined=HEADERS_DECLINED.get(name, ""),
-                redacted=redacted,
+                redacted=hidden,
             )
         )
     # Acted on first, then deliberately declined, then everything else.

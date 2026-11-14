@@ -139,11 +139,12 @@
       holdColumns(table);
       open.forEach((row) => row.classList.add("is-expanded"));
     }
-    // A table that arrives, changes or comes into sight is measured for cuts
-    // as it is fitted, a fragment's for one; one in a disclosure just opened
-    // is measured as it opens (`toggle`, below). A window resized measures them once it settles (`markTablesSoon`), and
-    // what the parser draws is measured once the page has loaded.
-    if (document.readyState !== "loading" && (changed || !before)) markCut(table);
+    // A table is measured for cuts as it is fitted, in the frame its fit is
+    // drawn in: one that arrives, changes, comes into sight or has its width
+    // changed, so no frame draws a cut whose row neither opens nor titles it.
+    // One in a disclosure just opened is measured as it opens (`toggle`,
+    // below), and what the parser draws once the page has loaded.
+    if (document.readyState !== "loading") markCut(table);
   };
   const refit = (table) => {
     if (table?.parentElement?.matches(REGION)) fitIn(table.parentElement, true);
