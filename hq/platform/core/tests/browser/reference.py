@@ -43,16 +43,13 @@ REFERENCE = "api/docs"
 
 REFERENCE_DARK = "api/docs/dark"
 
-# The viewer is one large script: parsing it takes longer than a page's load.
-REFERENCE_READY = 30_000
-
 _REFERENCE_MOUNTED = "() => document.querySelector('main main h1') !== null"
 
 
 def wait_for_reference(page):
     """Until the viewer has drawn the reference."""
 
-    page.wait_for_function(_REFERENCE_MOUNTED, timeout=REFERENCE_READY)
+    page.wait_for_function(_REFERENCE_MOUNTED)
 
 
 # The viewer draws an entry once it nears the view and holds the place of one

@@ -88,10 +88,9 @@ def failure_name(params):
     return re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-")[:150] or "subtest"
 
 
-# A failure's shot of a long page, the opened API reference above all, is a
-# capture the browser lays the whole page out for, past an action's 5 s; it is
-# given a navigation's 30 s, the failure it shows being already decided.
-_FAILURE_SHOT_WITHIN = 30_000
+# How long a test waits on the page for anything it asks: an action, a
+# navigation, a failure's shot of a long page.
+_ACTION_WITHIN = 30_000
 # A browser that never comes up fails its class rather than holding the heavy
 # turn for Playwright's own three minutes.
 _LAUNCH_WITHIN = 30_000
@@ -627,11 +626,12 @@ class BrowserGate(SimpleTestCase):
         # Scripts asked for while this is a list wait in it, unanswered.
         self.held = None
         self.context = self.browser.new_context(**options)
-        self.context.set_default_timeout(5000)
-        # A page's load waits on the server, which a loaded machine slows;
-        # how fast the server answers is perf's question, so a navigation
-        # gets Playwright's own 30 s while an action keeps 5 s.
-        self.context.set_default_navigation_timeout(30_000)
+        # A loaded machine slows the server and the engine alike, and an
+        # action waits on both: a press that posts waits for its answer to
+        # commit, and every press for its element to hold still over two
+        # frames. How fast either goes is perf's question, so an action gets
+        # a navigation's 30 s.
+        self.context.set_default_timeout(_ACTION_WITHIN)
         # Playwright's record of what the test did, each step with the page as
         # it stood, kept beside a failure's screenshot (``shoot``).
         if self.traced:
@@ -940,7 +940,7 @@ class BrowserGate(SimpleTestCase):
             tracing.stop_chunk(path=trace)
             tracing.start_chunk()
             print(f"Browser failure trace: {trace}")
-        cut = shoot_page(self.page, path, timeout=_FAILURE_SHOT_WITHIN)
+        cut = shoot_page(self.page, path)
         print(f"Browser failure screenshot: {path}" + (f" ({cut})" if cut else ""))
 
     def subtest_failed(self, params):

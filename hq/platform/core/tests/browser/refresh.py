@@ -165,8 +165,6 @@ _MARK = "() => { window.probeDrawn = true; }"
 _STILL_DRAWN = "() => window.probeDrawn === true"
 _BUSY = "() => !!document.querySelector('[data-ask][aria-busy=\"true\"]')"
 _IDLE = "() => !document.querySelector('[data-ask][aria-busy=\"true\"]')"
-# The work's end is polled for at the pace ask.js keeps, well inside this.
-_LANDS_WITHIN_MS = 30_000
 
 
 def _head_asks(pages):
@@ -242,7 +240,7 @@ class PressedRefreshBrowserTests(ExampleEstateGate):
                     self.settle()
                     self.assertEqual(self.page.evaluate(BOXES, BOXES_ARGS), drawn, "moved while under way")
 
-                    self.page.wait_for_function(_IDLE, timeout=_LANDS_WITHIN_MS)
+                    self.page.wait_for_function(_IDLE)
                     self.in_flight.settle(f"{path} at {width}px, landed")
                     self.settle()
                     self.assertTrue(self.page.evaluate(_STILL_DRAWN), "loaded the page again")

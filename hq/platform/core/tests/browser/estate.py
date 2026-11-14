@@ -589,7 +589,7 @@ class ExampleEstateControlTests(BrowserGate):
           return table.offsetWidth <= table.parentElement.clientWidth
             && [...table.tHead.rows[0].cells].some((heading) => !heading.checkVisibility());
         }"""
-        self.page.wait_for_function(fits, arg=SELECTORS["table_scroll"], timeout=5_000)
+        self.page.wait_for_function(fits, arg=SELECTORS["table_scroll"])
 
     def test_a_list_sorted_on_a_phone_draws_no_column_it_had_dropped(self):
         """The table a sort swaps in is laid out by the stylesheet in its first
