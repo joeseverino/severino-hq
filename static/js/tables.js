@@ -31,10 +31,12 @@
   // nothing moves once a page is drawn.
   const REGION = ".table-scroll";
   const headingsOf = (table) => [...table.querySelectorAll(":scope > thead > tr:last-child > th")];
-  // The order the table's columns leave in, by place.
+  // The order the table's columns leave in, by place. A column of a row's
+  // controls never leaves: in a narrow box they stand beneath the row's words
+  // (`data-beneath`, table_cells), so a reader never opens a row to find them.
   const dropOrder = (table) => headingsOf(table)
     .map((heading, place) => [Number(heading.dataset.drop) || 0, place, heading])
-    .filter(([rank, , heading]) => rank && !heading.hasAttribute("data-blank-column"))
+    .filter(([rank, , heading]) => rank && !heading.matches("[data-blank-column], [data-beneath]"))
     .sort((left, right) => left[0] - right[0] || right[1] - left[1])
     .map(([, place]) => place);
   // How far each table has given way: how many of its columns have left, one

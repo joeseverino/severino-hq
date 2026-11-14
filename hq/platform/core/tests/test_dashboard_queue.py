@@ -294,11 +294,11 @@ class EmptyQueueClaimTests(TestCase):
         self.addCleanup(empty.stop)
 
     def status(self, seen_at):
-        from hq.platform.application.cadence import ControllerStanding
+        from hq.platform.application.cadence import WorkerStanding
 
         with patch(
             "hq.platform.core.dashboard_views.controller_standing",
-            return_value=ControllerStanding(seen_at=seen_at, silent=False),
+            return_value=WorkerStanding(seen_at=seen_at, silent=False),
         ):
             return self.client.get("/")
 

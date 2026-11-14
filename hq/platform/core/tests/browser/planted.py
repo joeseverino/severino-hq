@@ -388,11 +388,11 @@ PLANTS = {
         * 2
         + "</div>"
     ),
-    # A queue row in a narrow box whose button shows only in a whole box, so
-    # in the narrow one it waits behind the row's toggle.
-    "queue actions behind the toggle": Plant(
-        '<table class="data-table queue-table" style="--box: narrow"><tbody><tr class="queue-row">'
-        '<td class="queue-what">Example</td><td class="queue-act">'
+    # A row in a narrow box whose button shows only in a whole box, so in the
+    # narrow one it waits behind the row's toggle.
+    "row actions behind the toggle": Plant(
+        '<table class="data-table" style="--box: narrow"><tbody><tr>'
+        '<td>Example</td><td class="row-actions">'
         '<button type="button" class="btn compact example-held">Example</button></td></tr></tbody></table>',
         css="@container style(--box: narrow) { .example-held { display: none; } }",
     ),
@@ -426,12 +426,12 @@ _FLOWS = (
 # differs from, so a check that finds everything is caught as surely as one
 # that finds nothing.
 PASSES = {
-    # A queue row in a narrow box whose button leaves its cell and shows in
-    # the words' cell instead, as the queue row draws it beneath its words.
-    "queue actions behind the toggle": Plant(
-        '<table class="data-table queue-table" style="--box: narrow"><tbody><tr class="queue-row">'
-        '<td class="queue-what">Example<div class="example-beneath">'
-        '<button type="button" class="btn compact">Example</button></div></td><td class="queue-act">'
+    # A row in a narrow box whose button leaves its cell and shows in the
+    # words' cell instead, as the region copies it beneath the row's words.
+    "row actions behind the toggle": Plant(
+        '<table class="data-table" style="--box: narrow"><tbody><tr>'
+        '<td>Example<div class="example-beneath">'
+        '<button type="button" class="btn compact">Example</button></div></td><td class="row-actions">'
         '<button type="button" class="btn compact example-held">Example</button></td></tr></tbody></table>',
         css=(
             "@container style(--box: narrow) { .example-held { display: none; } }"
@@ -657,6 +657,18 @@ _UNEVENED = (
     '{% card label="Example taller chart" %}' + "<p>Example</p>" * 6 + "{% endcard %}</div>"
 )
 
+# A card of a few facts stretched beside a section of many lines, its frame
+# left mostly empty below them, as the Starred page once drew your profile
+# beside your account's facts; then two lists of one kind, one shorter by its
+# data, which is like beside like.
+_STRETCH = "planted/stretched"
+_STRETCHED = (
+    '<div class="section-flow">{% card label="Example" %}{% facts %}{% fact "Example" value="One" %}'
+    '{% endfacts %}{% endcard %}{% section "Example tall" %}' + "<p>Example</p>" * 12 + "{% endsection %}</div>"
+    '<div class="section-flow">{% section "Example short list" %}<ul><li>Example</li></ul>{% endsection %}'
+    '{% section "Example long list" %}<ul>' + "<li>Example</li>" * 12 + "</ul>{% endsection %}</div>"
+)
+
 # A run of parts whose rest asks its column for nothing and shows one line
 # (`line_list`, written out so it stands without the stylesheet): one held
 # short of the room its cell has by a box around it, which is cut beside
@@ -757,6 +769,7 @@ class PlantedBrowserTests(LayoutBrowserTests):
             _LEFT: probe(_LEFT_BEHIND),
             _CAPS: probe(_CAPPED),
             _UNEVEN: probe(_UNEVENED),
+            _STRETCH: probe(_STRETCHED),
             _RESTS: probe(_RESTED),
             _FOLDED: probe(_FOLDED_TABLE),
             **{name: probe(markup) for name, markup in _SHIFTS.items()},
@@ -805,6 +818,10 @@ class PlantedBrowserTests(LayoutBrowserTests):
     def test_a_flow_member_that_ends_above_its_row_s_tallest_is_found(self):
         found = self.found(_UNEVEN, Plant("")).get("flows share their rows", [])
         self.assertEqual(len([said for said in found if "px above" in said]), 2, found)
+
+    def test_a_flow_member_stretched_far_past_what_it_holds_is_found(self):
+        found = self.found(_STRETCH, Plant("")).get("flows share their rows", [])
+        self.assertEqual(len([said for said in found if "is stretched" in said]), 1, found)
 
     def test_a_rest_that_asks_for_nothing_is_cut_beside_its_own_cell_s_room_only(self):
         found = self.found(_RESTS, Plant("")).get("cut beside room", [])

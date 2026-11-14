@@ -1431,6 +1431,15 @@ also name the repository its playbooks come from, whose root is an Ansible
 project, and the file holding the token that repository is fetched with.
 Nothing in a claim names any of them.
 
+HQ knows the worker is there by its claims. Each claim of nothing but its
+work records its arrival (`cadence.note_automation`), so a worker that finds
+nothing to take still counts as seen, and never as the controller. One never
+seen, or not seen within two of its timer's floors while it holds no run's
+lease, is absent (`cadence.automation_standing`). Refresh and every
+playbook's run are then refused with the reason, a run or scan already
+waiting reads "Not started", and the finding `automation-worker-absent` says
+how to set one up.
+
 What runs is the procedure its claim names, at the claim's reviewed revision
 (`hq_runner/procedures.py`). Each pass fetches that one commit into a fresh
 directory of its scratch space (`git fetch --depth 1` by the commit's id, then

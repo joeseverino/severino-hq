@@ -6,8 +6,11 @@ approval it ran under), its lease
 while a runner holds it, how it ended, the kinds of reading its playbook
 stated, and each task's outcome, drawn as
 every registry-driven table is. Its state is the badge beside its title.
+While it has not started because no worker reports, the problem that says
+so, with how to set one up, stands above it (`problems`).
 {% endcomment %}
 {% block page %}
+{% include "partials/_problems.html" with problems=problems %}
 <div class="section-flow">
 {% section "Run" %}
   {% facts label="Run" %}

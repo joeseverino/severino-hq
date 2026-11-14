@@ -1,5 +1,5 @@
 {
-  "api_version": 12,
+  "api_version": 13,
   "modules": {
     "audit": {
       "AuditAction": {
@@ -182,7 +182,8 @@
           "observation=",
           "connection=",
           "redact_for=",
-          "subject="
+          "subject=",
+          "required="
         ]
       },
       "seeded_by_hand": {
@@ -395,6 +396,24 @@
         "fields": [],
         "kind": "dataclass",
         "members": {}
+      },
+      "InputError": {
+        "bases": [
+          "HostRefusal",
+          "ValueError"
+        ],
+        "constructor": [
+          "reason",
+          "*",
+          "details="
+        ],
+        "kind": "class",
+        "members": {
+          "code": {
+            "kind": "attribute",
+            "type": "str"
+          }
+        }
       },
       "Names": {
         "bases": [],

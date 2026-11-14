@@ -12,6 +12,7 @@ Each step runs the way a verified token's call does in production, so the
 Agents page and the approvals queue read what HQ itself records.
 """
 
+from contextlib import contextmanager
 from dataclasses import replace
 from datetime import timedelta
 
@@ -35,7 +36,8 @@ from hq.platform.application.agent_access import SET_AGENT_BLOCK
 from hq.platform.application.agent_devices import APPROVE_AGENT_DEVICE, BLOCK_AGENT_DEVICE
 from hq.platform.application.agent_limits import RATE_LIMITED, Slot
 from hq.platform.application.approvals import is_held
-from hq.platform.application.capabilities import run_capability
+from hq.platform.application.capabilities import capability_registry, run_capability
+from hq.platform.application.capability_policy import SET_POLICY, set_rule
 from hq.platform.application.linked_accounts import sign_in_subject
 from hq.platform.application.own_devices import SET_OWN_DEVICE
 from hq.platform.application.security import (
@@ -48,7 +50,8 @@ from hq.platform.application.security import (
     web_principal,
 )
 from hq.platform.application.tokens import token_principal
-from hq.platform.core.audit import stamped
+from hq.platform.core.attribution import from_the_shell, signing_in
+from hq.platform.core.audit import audit_operation, stamped
 from hq.platform.core.models import AgentDevice, AgentIdentity, LinkedAccount, OwnDevice, PersonRole
 
 from . import doors
@@ -147,7 +150,7 @@ def lately(owner=None):
     first_seen, blocked_at, registered_at = (now() - timedelta(days=days) for days in (FIRST_SEEN, 1, REGISTERED))
     # The assistant acts for the owner, so their sign-in names them first; with no owner it is refused.
     if owner is not None:
-        with _on(first_seen), doors.page(doors.SIGN_IN):
+        with _on(first_seen), doors.page(doors.SIGN_IN), signing_in(owner.get_username()):
             linked_accounts.bind_sign_in(owner, sign_in_subject(settings.OIDC_ISSUER, PERSON))
         LinkedAccount.objects.filter(user=owner, provider=linked_accounts.SIGN_IN).update(updated_at=first_seen)
     if owner is not None:
@@ -294,7 +297,7 @@ def _viewer(moment):
     sign-in names them and their role."""
 
     viewer = get_user_model().objects.create_user(username=VIEWER_USERNAME, password=None)
-    with _on(moment), doors.page(doors.SIGN_IN):
+    with _on(moment), doors.page(doors.SIGN_IN), signing_in(viewer.get_username()):
         roles.assign(viewer, roles.Role.VIEWER)
         linked_accounts.bind_sign_in(viewer, sign_in_subject(settings.OIDC_ISSUER, VIEWER_PERSON))
     LinkedAccount.objects.filter(user=viewer, provider=linked_accounts.SIGN_IN).update(updated_at=moment)
@@ -315,8 +318,30 @@ def _first_call(interface):
 
 
 def _decide(owner):
-    for capability, rule in RULES:
-        CapabilityRule.objects.create(subject=AGENT, capability=capability, rule=rule, changed_by=owner)
+    """The owner's rules for the agent, set when it was first seen."""
+
+    with _on(now() - timedelta(days=FIRST_SEEN)):
+        for capability, rule in RULES:
+            ruled(owner, capability, rule)
+
+
+def ruled(owner, capability, rule):
+    """The owner's rule for the agent on ``capability``, set as the Agents page sets it."""
+
+    with _deciding(owner):
+        set_rule(subject=AGENT, spec=capability_registry()[capability], rule=rule, user=owner)
+
+
+@contextmanager
+def _deciding(owner):
+    """The owner's rules for an agent, set on the Agents page; the shell's with no owner."""
+
+    if owner is None:
+        with from_the_shell(SET_POLICY):
+            yield
+        return
+    with doors.page("agent_policy"), audit_operation(operation=SET_POLICY, principal=web_principal(owner)):
+        yield
 
 
 def _expect(answer, met, meant):

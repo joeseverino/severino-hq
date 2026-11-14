@@ -447,11 +447,11 @@ class CleanPageTests(TestCase):
 
         from django.urls import reverse
 
-        from ..cadence import ControllerStanding
+        from ..cadence import WorkerStanding
 
         with mock.patch(
             "hq.platform.application.cadence.controller_standing",
-            return_value=ControllerStanding(seen_at=seen_at, silent=False),
+            return_value=WorkerStanding(seen_at=seen_at, silent=False),
         ):
             return self.client.get(reverse("control_plane:findings"))
 

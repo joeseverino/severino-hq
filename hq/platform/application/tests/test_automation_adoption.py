@@ -251,6 +251,7 @@ class RegistryTests(AdoptionTestCase):
 
 class AgentAdoptionTests(AdoptionTestCase):
     def setUp(self):
+        super().setUp()
         # An agent whose grant names adopting too, as a token could.
         self.agent = Principal("example-agent", MCP_INTERFACE, OPERATOR.capabilities)
 

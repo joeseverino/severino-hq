@@ -29,9 +29,10 @@ A `records` declaration yields:
 Its web views take `RecordFormMixin` (create, update) and `RecordDeleteMixin`
 from `hq/platform/application/writes.py` and name only their `ModelForm`.
 
-The form saves through `hq.platform.application.records.save_form`, which runs
-the model's `full_clean` exactly as the command does. So put a field rule on
-the model (a validator or a constraint), never on the form or the service.
+The form sends its values to the domain's create or update capability
+through `run_posted`, as every other door does, and the save runs the model's
+`full_clean`. So put a field rule on the model (a validator or a constraint),
+never on the form or the service.
 
 ## Steps
 
@@ -45,7 +46,7 @@ this page in the same commit as the rule.
 
 | Do | Enforced by |
 |---|---|
-| Views never call `.save()`, `.delete()` or a manager's or queryset's bulk write. They reach a domain write only through `execute_posted` (a form mixin's through `write_once`). The rule reads the module of every routed view and its bases, whatever the module is called | `hq/platform/application/tests/test_view_writes.py` |
+| Views never call `.save()`, `.delete()` or a manager's or queryset's bulk write. They reach a domain write only through `run_posted` (or `execute_posted`, its answer alone), and none takes `ServiceWriteMixin` or `CommandFormMixin`, which run a service that is no capability outside the runner. The rule reads the module of every routed view and its bases, whatever the module is called | `hq/platform/application/tests/test_view_writes.py` |
 | A view with `paginate_by` takes `TableListMixin` | `DeliveryAdapterArchitectureTests.test_paginated_list_views_use_the_shared_table_engine` |
 | `hq/platform/mcp/services.py` stays free of models and `.objects`; expose reads through `hq/platform/application/resources.py` and read models | `lint:ast-grep` (`tools/lint/ast-grep/rules/mcp-services-reach-no-model.yml`) |
 | Keep the workflow layering: `workflow_contracts.py` imports nothing of HQ, `ui.py` never reaches `workflows`, `workflows.py` never reaches `action_links` | `lint:imports`, the contracts in `pyproject.toml`'s `[tool.importlinter]` |

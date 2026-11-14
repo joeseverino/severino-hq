@@ -147,7 +147,9 @@ def mark_cells(markup: str, *, sorts: bool = True) -> str | None:
     cells.close()
     if cells.bodies and not any(cells.bodies):
         return None
-    if not any((cells.marks, cells.held, cells.details, cells.roles, cells.cuts, cells.gutters, cells.toggles)):
+    if not any(
+        (cells.marks, cells.held, cells.details, cells.roles, cells.cuts, cells.gutters, cells.toggles, cells.beneath)
+    ):
         return markup
     text = _Markup(markup)
     cuts = sorted((text.point(start), text.point(end)) for start, end in cells.cuts)
@@ -180,6 +182,14 @@ def _inserts(cells: Cells, markup: str, text: _Markup) -> list[tuple[int, str]]:
         inserts += [(text.at(opened), '<span class="kept-line">'), (text.at(closed), "</span>")]
     for point, mark in cells.gutters + cells.opened:
         inserts.append((after_name(point[0]) if point[1] is None else text.point(point), mark))
+    # Before the toggle at the same place, so the toggle stays last in its cell.
+    for beneath in cells.beneath:
+        if beneath.line and beneath.away:
+            away = "".join(text.content(span, whole=True) for span in beneath.away)
+            inserts.append((text.at(beneath.line), f'<span class="row-put-away narrow-only">{away}</span>'))
+        copied = "".join(text.content(span, cut) for span, cut in beneath.copies)
+        if _TAGS.search(copied):
+            inserts.append((text.at(beneath.at), f'<div class="row-beneath narrow-only">{copied}</div>'))
     # After the kept line's end at the same place, so the toggle stays the cell's own child.
     if cells.toggles:
         # A row drawn open (its editor open) says so on its toggle.
@@ -448,7 +458,7 @@ def row_actions(actions: Any = (), *, gap: Any = None) -> dict[str, Any]:
     drawn by ``_page_action.html``, so a row's buttons look like every other
     and only a destructive one differs. Under a heading of kind ``control``
     (``css="actions-col"``), so the region sizes the column to what it holds
-    and a narrow box moves it to the row's open line. ``gap``, an
+    and copies it beneath the row's words for a narrow box. ``gap``, an
     ``adoption.WriteGap``, stands in for every action when the connection
     cannot make the change."""
 

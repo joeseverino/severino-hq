@@ -16,8 +16,8 @@ from django.utils import timezone
 from hq.domains.control_plane.models import OperationRequest, ProviderInventory, attempted_at
 
 from .cadence import (
-    ControllerStanding,
     ForcedRead,
+    WorkerStanding,
     controller_standing,
     every_sweep,
     forced_reads,
@@ -53,7 +53,7 @@ class QueuedWork:
 
 @dataclass(frozen=True, slots=True)
 class ControllerPage:
-    standing: ControllerStanding
+    standing: WorkerStanding
     swept_at: datetime | None
     sweep_due: bool
     next_sweep_at: datetime | None

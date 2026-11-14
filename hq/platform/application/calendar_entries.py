@@ -387,13 +387,6 @@ def get_entry(uid: str) -> dict[str, Any]:
     return serialize_entry(found(Entry, _ENTRY, {"uid": uid}))
 
 
-def entry_command(values: dict[str, Any]) -> EntryCommand:
-    """A form's cleaned values as the command every surface writes with."""
-
-    fields = EntryCommand.__dataclass_fields__
-    return EntryCommand(**{name: value for name, value in values.items() if name in fields})
-
-
 def upcoming(entry: Entry, *, count: int = 5, today: date | None = None) -> tuple[date, ...]:
     """The next days the entry falls on, from today."""
 

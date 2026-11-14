@@ -16,6 +16,7 @@ lazy from django.utils.http import url_has_allowed_host_and_scheme
 lazy from hq.platform.application import roles, tokens
 lazy from hq.platform.application.avatars import SESSION_KEY, remember_avatar
 lazy from hq.platform.application.linked_accounts import SIGN_IN, bind_sign_in, record_claimed_accounts, sign_in_subject
+lazy from hq.platform.core.attribution import signing_in
 lazy from hq.platform.core.audit import record_event
 lazy from hq.platform.core.models import AuditLog
 lazy from hq.platform.core.outbound import allowed
@@ -151,12 +152,12 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
         user = super().get_or_create_user(access_token, id_token, payload)
         if user is None:
             return None
-        self._remember_picture(user, access_token)
-
-        bind_sign_in(user, self._subject_key(payload))
-        record_claimed_accounts(user, payload)
-        if self._role:
-            roles.assign(user, self._role)
+        with signing_in(user.get_username()):
+            self._remember_picture(user, access_token)
+            bind_sign_in(user, self._subject_key(payload))
+            record_claimed_accounts(user, payload)
+            if self._role:
+                roles.assign(user, self._role)
         # authenticate() holds the callback's request, whose session the library reads too.
         session = self.request.session
         session.setdefault(SIGNED_IN_SESSION_KEY, timezone.now().isoformat())

@@ -47,9 +47,20 @@ FLOWS_IN_READING_ORDER = (
 # frame of its own (a stack of cards) ends where the lowest of what it holds
 # does, so a row that packs its members at the start, or a stack whose cards
 # stop short of the row, is found at whatever width it happens.
+# Ending together is a stretch, so a member much shorter than the tallest of
+# its row is left mostly empty (Design, "Dense, never empty"): a member
+# sharing a row that the row stretches ``STRETCHED_TALL`` px and
+# ``STRETCHED_PART`` of its height or more past its own height was put beside
+# a taller one instead of short ones. A row of like members (each
+# the same frame holding the same kind of part, as a page's ranked lists are)
+# is like beside like, one shorter by its data alone.
+STRETCHED_TALL = 120
+STRETCHED_PART = 0.4
+
 FLOWS_SHARE_THEIR_ROWS = (
     "(flow) => {"
     + DESCRIBE
+    + f"const STRETCHED_TALL = {STRETCHED_TALL}, STRETCHED_PART = {STRETCHED_PART};"
     + """
   const found = [];
   for (const el of document.querySelectorAll(flow)) {
@@ -93,6 +104,21 @@ FLOWS_SHARE_THEIR_ROWS = (
       if (Math.abs(apart) > 1) {
         const [short, tall] = apart > 0 ? [m, peer] : [peer, m];
         found.push(`${describe(short.member)} ends ${Math.round(Math.abs(apart))}px above ${describe(tall.member)} on its row in ${describe(el)}`);
+      }
+    });
+    const held = 'ul, ol, dl, table, figure, form, svg, canvas';
+    const shape = (member) => `${describe(member)} ${member.querySelector(held) ? describe(member.querySelector(held)) : ''}`;
+    members.forEach((m) => {
+      const row = members.filter((o) => o !== m && Math.abs(o.r.top - m.r.top) <= 1);
+      if (!row.length || row.some((o) => shape(o.member) === shape(m.member))) return;
+      // Its own height, read with the row's stretch lifted for that one read.
+      const was = m.member.style.alignSelf;
+      m.member.style.alignSelf = 'flex-start';
+      const own = m.member.getBoundingClientRect().height;
+      m.member.style.alignSelf = was;
+      const stretched = m.r.height - own;
+      if (stretched >= STRETCHED_TALL && stretched >= m.r.height * STRETCHED_PART) {
+        found.push(`${describe(m.member)} is stretched to its row in ${describe(el)}, ${Math.round(stretched)}px of its ${Math.round(m.r.height)}px past what it holds`);
       }
     });
   }

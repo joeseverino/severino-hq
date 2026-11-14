@@ -3,20 +3,24 @@
 Every audit row is written inside one of these bindings (``audit.record_event``
 refuses a row written outside them), so the binding is made where a caller
 arrives: the web's request middleware, the MCP and bridge mounts, the job
-runner, and ``manage.py`` for every command. Held apart from ``audit`` so a door
-can bind before Django's applications are loaded.
+runner, ``manage.py`` for every command, and a sign-in for what it keeps.
+Held apart from ``audit`` so a door can bind before Django's applications are
+loaded.
 """
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any
 from uuid import uuid7
 
-lazy from hq.platform.application.security import CLI_ACTOR, CLI_INTERFACE
+lazy from hq.platform.application.security import CLI_ACTOR, CLI_INTERFACE, WEB_INTERFACE
 
 from . import tracing
+
+# The operation a sign-in's writes are named by where no request bound one.
+SIGN_IN_OPERATION = "sign_in"
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +34,9 @@ class OperationContext:
     the operation that started this one, empty for one that started itself.
     ``approved_by`` is who agreed to the act where one had to
     (``Principal.approved_by``), so each row of it says who allowed it.
+    ``person`` finds the account an agent's call acts for, whom each row names
+    as its user beside the agent as its actor. It is asked when a row is
+    written, since a binding may open on an event loop, where no query runs.
     """
 
     interface: str
@@ -39,6 +46,7 @@ class OperationContext:
     device: str = ""
     cause: str = ""
     approved_by: str = ""
+    person: Callable[[], Any] | None = None
 
 
 _operation_context: ContextVar[OperationContext | None] = ContextVar("hq_operation_context", default=None)
@@ -64,6 +72,7 @@ def operation_context(
     device: str = "",
     cause: str = "",
     approved_by: str = "",
+    person: Callable[[], Any] | None = None,
     rebinds: bool = False,
 ) -> Iterator[None]:
     """Attach adapter-neutral attribution to audit events in this operation.
@@ -102,6 +111,7 @@ def operation_context(
     same_caller = outer is not None and outer.actor == actor
     device = device or (outer.device if same_caller else "")
     approved_by = approved_by or (outer.approved_by if same_caller else "")
+    person = person or (outer.person if same_caller else None)
     with _operation_context.set(
         OperationContext(
             interface=interface,
@@ -111,6 +121,7 @@ def operation_context(
             device=device,
             cause=cause,
             approved_by=approved_by,
+            person=person,
         )
     ):
         yield
@@ -189,6 +200,17 @@ def from_the_shell(operation: str) -> AbstractContextManager[None]:
     """
 
     return operation_context(interface=CLI_INTERFACE, actor=CLI_ACTOR, operation=operation)
+
+
+def signing_in(username: str) -> AbstractContextManager[None]:
+    """A sign-in's door once it knows who signed in, before the session holds
+    them: what it keeps of what the provider said (a role, an account, a
+    picture) is that person's doing, under the request's operation."""
+
+    outer = bound()
+    return operation_context(
+        interface=WEB_INTERFACE, actor=username, operation=outer.operation if outer else SIGN_IN_OPERATION
+    )
 
 
 def command_operation(argv: list[str]) -> str:

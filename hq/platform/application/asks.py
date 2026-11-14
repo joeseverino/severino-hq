@@ -52,9 +52,6 @@ REFRESHING = "Refreshing…"
 REFRESHED = "Refreshed just now."
 NEWER_READING = "A newer reading is in."
 SHOW_NEWER = "Show the reading"
-# What a read asked of the controller says when none is arriving to take it;
-# while one is on its way, it says REFRESHING.
-READ_UNTAKEN = "Cannot refresh: {absent}"
 # What a saved change says of when it reaches the live system.
 APPLIES_SHORTLY = "HQ applies it shortly."
 
@@ -229,16 +226,13 @@ def _untried(asked: datetime) -> Standing:
     """How a read asked for at ``asked``, and not yet answered, stands: under
     way once the controller has arrived since, waiting while one is due, and
     failed when none is arriving to take it. Readings in a database copied from
-    elsewhere are no controller of this HQ's (``ControllerStanding.here``)."""
+    elsewhere are no controller of this HQ's (``WorkerStanding.here``)."""
 
     controller = cadence.controller_standing()
-    if controller.seen_at is None or not controller.here:
-        return Standing(FAILED, ended(READ_UNTAKEN.format(absent="no controller reports to this HQ")), since=asked)
-    if controller.seen_at > asked:
+    if controller.here and controller.seen_at is not None and controller.seen_at > asked:
         return Standing(RUNNING, REFRESHING, since=asked)
-    if controller.silent:
-        silence = duration(timezone.now() - controller.seen_at)
-        return Standing(FAILED, ended(READ_UNTAKEN.format(absent=f"no controller seen in {silence}")), since=asked)
+    if untaken := controller.cannot("refresh", now=timezone.now()):
+        return Standing(FAILED, untaken, since=asked)
     return Standing(QUEUED, REFRESHING, since=asked)
 
 

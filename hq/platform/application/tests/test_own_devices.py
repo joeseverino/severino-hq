@@ -51,7 +51,7 @@ class RegistrationTests(TestCase):
         self.assertFalse(registered(PHONE, self.key))
         events = AuditLog.objects.filter(metadata__operation=SET_OWN_DEVICE).order_by("id")
         self.assertEqual([event.action for event in events], [AuditLog.Action.CREATED, AuditLog.Action.DELETED])
-        self.assertEqual({event.user for event in events}, {self.person})
+        self.assertEqual({event.actor_label for event in events}, {self.person.get_username()})
 
     def test_a_client_the_provider_could_not_have_registered_is_refused(self):
         for client in ("https://agent.example.com/client.json", "two words", ""):

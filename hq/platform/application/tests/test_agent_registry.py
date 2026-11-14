@@ -8,9 +8,10 @@ from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
+from hq.platform.core.audit import audited_labels
 from hq.platform.core.models import AgentIdentity, AuditLog
 
-from ..agent_registry import AUDIT_LABEL, observe
+from ..agent_registry import observe
 from ..security import Capability, Principal
 
 
@@ -19,7 +20,11 @@ def agent(*granted, interface="mcp", actor="example-agent"):
 
 
 def _events():
-    return list(AuditLog.objects.filter(object_type=AUDIT_LABEL).order_by("id").values_list("message", flat=True))
+    return list(
+        AuditLog.objects.filter(object_type=audited_labels()[AgentIdentity])
+        .order_by("id")
+        .values_list("message", flat=True)
+    )
 
 
 class LearningTests(TestCase):

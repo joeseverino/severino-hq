@@ -45,7 +45,7 @@ lazy from .action_links import command_url
 lazy from .approval_review import ChangePreview, asked_by
 lazy from .approvals import ApprovalSubject, every_call, measured_by, waits_for_a_person
 lazy from .automation_sources import PLAYBOOKS, SHORT_REVISION
-lazy from .cadence import ring_automation_doorbell
+lazy from .cadence import automation_standing, ring_automation_doorbell
 lazy from .capabilities import capability_words
 lazy from .controller import release_lapsed
 lazy from .doors import NOBODY
@@ -459,6 +459,11 @@ def request_run(
         ):
             raise IdempotencyConflict("That retry key was already used for a different request.")
         return {"ok": True, "queued": False, "operation": serialize_operation(existing)}
+    # A run no worker will take would wait for nothing: the finding that says
+    # so (``automation_findings``) carries how to set one up.
+    untaken = automation_standing().cannot("run", now=timezone.now())
+    if untaken:
+        raise PolicyError(untaken)
     with audit_operation(operation="automation.run.request", principal=principal):
         resource = _record(manifest, principal=principal)
         if not resource.enabled:

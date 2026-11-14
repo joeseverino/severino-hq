@@ -24148,7 +24148,8 @@
                 "gate-guards-nothing",
                 "split-horizon-disagrees",
                 "published-port-unfronted",
-                "posture-unmet"
+                "posture-unmet",
+                "automation-worker-absent"
               ],
               "type": "string"
             }

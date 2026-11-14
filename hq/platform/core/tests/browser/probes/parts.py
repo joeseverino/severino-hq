@@ -98,11 +98,11 @@ READINGS_ONE_TO_A_LINE_WITH_ROOM = (
 )
 
 
-# A closed row of the queue in a narrow box shows every control it shows in a
-# whole box: what waits on a person stands in the row (beneath its words, on
-# a phone), never only behind the row's toggle. The row's own table is drawn
-# in a whole box for a moment to read what it offers there.
-QUEUE_ACTIONS_BEHIND_THE_TOGGLE = (
+# A closed row of a table in a narrow box shows every control it shows in a
+# whole box: what a row offers stands in the row (beneath its words, on a
+# phone), never only behind its toggle. The row's own table is drawn in a
+# whole box for a moment to read what it offers there.
+ROW_ACTIONS_BEHIND_THE_TOGGLE = (
     "([rows, pressed]) => {"
     + DESCRIBE
     + """
@@ -470,8 +470,8 @@ CHECKS = {
     "bare folds": (BARE_FOLDS, [SELECTORS["section_fold"], SELECTORS["drawn_when_opened"]]),
     "readings": Check((_READINGS_OF, SELECTORS["readings"]), findings=reading_problems),
     "readings one to a line with room": (READINGS_ONE_TO_A_LINE_WITH_ROOM, SELECTORS["readings"]),
-    "queue actions behind the toggle": (
-        QUEUE_ACTIONS_BEHIND_THE_TOGGLE,
-        [f"main {SELECTORS['queue_table']} > tbody > tr:is(.queue-row, .queue-family)", SELECTORS["pressed"]],
+    "row actions behind the toggle": (
+        ROW_ACTIONS_BEHIND_THE_TOGGLE,
+        [f"main {SELECTORS['controls_row']}", SELECTORS["pressed"]],
     ),
 }

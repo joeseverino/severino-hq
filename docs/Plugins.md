@@ -34,7 +34,7 @@ plugin = PluginManifest(
     distribution="example-notes",
     source_repository="example/example-notes",
     source_workflow=".github/workflows/admit-plugin.yml",
-    api_version=12,
+    api_version=13,
     integration_provider="example_notes.plugin:integration",
     django_apps=("example_notes",),
     url_prefix="notes/",
@@ -173,7 +173,12 @@ operation as its row's `cause`, so a chain of operations is followed from
 either end. A model whose rows are about another record (an operation on a
 declaration, a decision on one) passes `register_audit(..., subject=...)`, a
 function returning that record's key, so one indexed read of the log's
-`subject` is the record's whole story.
+`subject` is the record's whole story. A change to a row is written by its
+model's registration alone: the code saving it sets `audit_said` on the row
+(`audit_gone` before a delete) for the sentence its row says, and
+`register_audit(..., required=True)` fails the save when its row cannot be
+written. `record_event` is for an act that changes no row: a sign-in, an
+export, a refusal.
 
 Every extension's `.github/workflows/admit-plugin.yml` is the same, because it
 names nothing about the extension:
@@ -910,6 +915,10 @@ the refusal, whose `status` the view answers with, or None when the write ran.
 A post no page is drawn for answers `refusal_response(answer)`: the refusal's
 sentence at its status. A form view whose write is a service call of
 its own inherits `hq_sdk.writes`' mixins, which run it once under the same key.
+A service refuses in words the person reads by raising
+`hq_sdk.capabilities.InputError(sentence)`, a sentence the extension wrote
+(`PLUGIN_API_VERSION` 13); any other exception's text stays in the log, and
+the person reads that the capability could not be executed.
 A test that posts a form without opening its page first sends
 `hq_sdk.testing.form_keyed(data)`.
 

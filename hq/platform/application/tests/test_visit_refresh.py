@@ -287,7 +287,7 @@ class VisitRefreshTests(TestCase):
 
         self.assertFalse(stalled.live)
         self.assertEqual(stalled.state, "failed")
-        self.assertIn("no controller", stalled.note)
+        self.assertIn("controller last reported", stalled.note)
 
     def test_a_read_waiting_in_a_copied_database_says_no_controller_takes_it(self):
         """Readings stored a moment ago, with no heartbeat beside them, came

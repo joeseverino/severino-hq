@@ -25,13 +25,14 @@ from hq.domains.control_plane.models import OperationHost, OperationRequest, Ope
 from hq.domains.jobs.models import HEARTBEAT_GRACE, Job, JobState
 lazy from hq.domains.jobs.runner import AUDIT_TYPE as JOB_AUDIT_TYPE
 
-from .asks import job_standing
+from .asks import FAILED, Standing, job_standing
 from .automation_runs import capability_name, resource_key, run_title
 from .doors import NOBODY, Attribution
 from .resource_operations import asked_by, operation_summary
 from .routes import reverse
 lazy from .automation_adoption import playbook_titles
 lazy from .automation_sources import REFRESH, SOURCE_KEY, capability_specs
+lazy from .cadence import automation_standing
 lazy from .history import who_did
 lazy from .scheduled_work import job_names
 
@@ -60,8 +61,12 @@ OUTCOME_TONES = {
 }
 # What a claimed run whose lease ran out says until the next claim ends it.
 LAPSED = "The run stopped reporting, so HQ can't tell whether it finished."
+# What a run or scan that waits says while no worker will take it, in the
+# tone of something to look at: it is neither under way nor waiting its turn.
+NOT_STARTED = "Not started"
+NOT_STARTED_TONE = "attention"
 # The states of a run that has no outcome to say yet.
-_UNENDED = frozenset({OperationState.QUEUED, OperationState.CLAIMED})
+UNENDED = frozenset({OperationState.QUEUED, OperationState.CLAIMED})
 # A kind of work whose latest run ended so is one to look at.
 ENDED_BADLY = (JobState.FAILED, JobState.LOST)
 
@@ -392,6 +397,28 @@ def playbook_runs(
     return found
 
 
+def untaken() -> str:
+    """What a run or scan that waits is waiting for, in a sentence, while no
+    playbook worker reports to take it; "" while one does."""
+
+    return automation_standing().cannot("", now=timezone.now())
+
+
+def not_started(standing: Standing) -> Standing | None:
+    """A queued run's or scan's ``standing`` as one that will not start,
+    while no playbook worker reports: ended, so no page follows it as work
+    under way, and saying what it waits for. None while a worker reports."""
+
+    said = untaken()
+    return Standing(FAILED, said, since=standing.since, word=NOT_STARTED) if said else None
+
+
+def _untaken_of(seen: Iterable[JobState]) -> str:
+    """``untaken``, asked only where a run waits."""
+
+    return untaken() if JobState.QUEUED in seen else ""
+
+
 def run_rows(operations: Iterable[OperationRequest], now: datetime | None = None) -> list[WorkRun]:
     """Runs read through ``playbook_runs`` as the row every list of work
     draws, who asked for each read in one query."""
@@ -399,8 +426,11 @@ def run_rows(operations: Iterable[OperationRequest], now: datetime | None = None
     found = list(operations)
     who = asked_by(found)
     now = now or timezone.now()
+    said = _untaken_of(JobState(operation.seen) for operation in found)
     return [
-        _run_row(operation, JobState(operation.seen), operation.title, now, who.get(str(operation.pk), NOBODY))
+        _run_row(
+            operation, JobState(operation.seen), operation.title, now, who.get(str(operation.pk), NOBODY), untaken=said
+        )
         for operation in found
     ]
 
@@ -419,7 +449,8 @@ def run_of(operation_id: str, now: datetime | None = None) -> tuple[WorkRun, Ope
     if found is None:
         return None
     who = asked_by((found,)).get(str(found.pk), NOBODY)
-    return _run_row(found, JobState(found.seen), found.title, now, who), found
+    seen = JobState(found.seen)
+    return _run_row(found, seen, found.title, now, who, untaken=_untaken_of((seen,))), found
 
 
 def run_url(operation_id: str) -> str:
@@ -446,13 +477,14 @@ def hydrated(rows: Iterable[Sequence[Any]]) -> list[WorkRun]:
     # Who started each, from the audit row each wrote first.
     who = {**who_did((JOB_AUDIT_TYPE,), ids[JOB]), **asked_by(runs.values())}
     now = timezone.now()
+    said = _untaken_of(JobState(seen) for source, _pk, seen, *_rest in page if source == RUN)
     built: list[WorkRun] = []
     for source, pk, seen, _created, title, _lead in page:
         by = who.get(str(pk), NOBODY)
         if source == JOB:
             built.append(_job_row(jobs[pk], title, by))
         else:
-            built.append(_run_row(runs[pk], JobState(seen), title, now, by))
+            built.append(_run_row(runs[pk], JobState(seen), title, now, by, untaken=said))
     return built
 
 
@@ -475,13 +507,19 @@ def _job_row(job: Job, title: str, by: Attribution) -> WorkRun:
     )
 
 
-def _run_row(operation: OperationRequest, seen: JobState, title: str, now: datetime, by: Attribution) -> WorkRun:
+def _run_row(
+    operation: OperationRequest, seen: JobState, title: str, now: datetime, by: Attribution, *, untaken: str = ""
+) -> WorkRun:
+    """One run or scan as the row every list of work draws; one that waits
+    while no worker will take it (``untaken``) says it has not started, and why."""
+
     summary = operation_summary(operation, by)
     asked = operation.input or {}
     scan = operation.action == OperationRequest.Action.SCAN
     procedure = str(asked.get("operation") or "")
     claimed = operation.state == OperationState.CLAIMED
     lapsed = seen == JobState.LOST and claimed
+    stuck = seen == JobState.QUEUED and bool(untaken)
     started, finished = operation.claimed_at, operation.completed_at
     return WorkRun(
         source=RUN,
@@ -489,11 +527,12 @@ def _run_row(operation: OperationRequest, seen: JobState, title: str, now: datet
         title=title,
         kind=REFRESH if scan else capability_name(procedure),
         state=seen.value,
-        word=seen.label,
+        word=NOT_STARTED if stuck else seen.label,
         # A run that finished and found a problem says so in its tone.
-        tone=summary["tone"] if seen == JobState.SUCCEEDED else TONES[seen],
-        # A run not yet ended says only its state, in the State column.
-        note=LAPSED if lapsed else "" if operation.state in _UNENDED else summary["headline"],
+        tone=NOT_STARTED_TONE if stuck else summary["tone"] if seen == JobState.SUCCEEDED else TONES[seen],
+        # A run not yet ended says only its state, in the State column, unless
+        # it will not start.
+        note=untaken if stuck else LAPSED if lapsed else "" if operation.state in UNENDED else summary["headline"],
         by=by,
         created_at=operation.created_at,
         started=started,

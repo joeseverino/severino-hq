@@ -268,7 +268,6 @@ class PageTests(TestCase):
                 metadata__operation=github_profile.READ_NOW,
                 metadata__interface="web",
                 metadata__actor="operator",
-                metadata__login="example-user",
             ).exists()
         )
 

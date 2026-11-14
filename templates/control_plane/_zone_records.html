@@ -57,7 +57,7 @@ value under its name (`record.summary`), so the two still read as two.
         {% table_heading "Type" "identifier" css="key-col" local_sort=True %}
         {% table_heading "Value" "identifier" drop=4 local_sort=True %}
         {% if zone.ttl_set %}{% table_heading "TTL" "status" drop=3 local_sort=True %}{% endif %}
-        {% if zone.managed %}{% table_heading "State" "status" drop=2 local_sort=True %}{% table_heading "Actions" css="actions-col" drop=1 hidden=True %}{% endif %}
+        {% if zone.managed %}{% table_heading "State" "status" drop=2 local_sort=True %}{% table_heading "Actions" css="actions-col" hidden=True %}{% endif %}
       </tr>
     </thead>
     <tbody>

@@ -64,7 +64,7 @@ class WhoMayPullItTests(TestCase):
 
     def test_the_change_does_not_happen_without_its_record(self):
         with (
-            mock.patch("hq.platform.application.agent_access.record_event", side_effect=RuntimeError("audit down")),
+            mock.patch.object(AuditLog.objects, "create", side_effect=RuntimeError("audit down")),
             self.assertRaises(RuntimeError),
         ):
             set_agents_paused(AgentAccessCommand(paused=True), principal=web_principal(self.user))

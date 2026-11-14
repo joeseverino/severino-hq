@@ -27,6 +27,7 @@ lazy from hq.domains.control_plane.observations import OBSERVATIONS
 lazy from hq.domains.control_plane.provider_adapters.declarations import MACHINE_KIND
 
 from . import (
+    automation_findings,
     certificate_expiry,
     connection_findings,
     contradiction_findings,
@@ -192,6 +193,7 @@ RULE_MODULES = (
     dns_findings,
     contradiction_findings,
     posture_findings,
+    automation_findings,
 )
 RULES: tuple[FindingRule, ...] = tuple(rule for module in RULE_MODULES for rule in module.RULES)
 
@@ -401,12 +403,13 @@ def read_gate(finding: Finding, subject: TopologyNode | None) -> tuple[str, ...]
     """What a reader must hold to be told ``finding``; None when it cannot be derived.
 
     The union of its subject node's gate, each scope's and what its detector
-    carried for the evidence it names. A subject that names no node, or a
-    scope no resource reads, leaves it underivable.
+    carried for the evidence it names, which alone gates a claim about none
+    of them. A subject that names no node, a scope no resource reads, or a
+    claim about nothing that carries no gate leaves it underivable.
     """
 
     scopes = _finding_scopes(finding)
-    if (finding.subject and subject is None) or not (subject or scopes):
+    if (finding.subject and subject is None) or not (subject or scopes or finding.read_capabilities):
         return None
     gates = [finding.read_capabilities]
     if subject is not None:

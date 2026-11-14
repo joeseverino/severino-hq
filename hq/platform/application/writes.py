@@ -1,23 +1,30 @@
-"""Form views whose write is one application service call.
+"""Form views whose write is one capability, run through ``web_writes.run_posted``.
 
-The write side of what ``TableListMixin`` is for the read side: create, update
-and delete share the same steps (command, service call, reload, announce,
-redirect), so they are declared once and a plugin adding a domain inherits
-them. A view declares only which service, which record and what it is called;
-a plain ``Records`` domain's view names only its form.
+The write side of what ``TableListMixin`` is for the read side: a record's
+create, update and delete share the same steps (its capability run under the
+key its form posted, reload, announce, redirect), so they are declared once.
+A view names its capabilities (``CapabilityFormMixin``,
+``CapabilityDeleteMixin``), or for a plain ``Records`` domain only its form,
+and the runner authorizes, audits and runs the write once per drawing of the
+form.
 
-Each writes once per drawing of its form (``web_writes.write_once``), and
-answers a resend with what the first post's answer kept, so that answer holds
-everything a replay stands on: the service's result, which ``reload`` is
-handed either way, or the record's identity, a label, the sentence it said.
+A resend is answered from the first post's answer before the form is
+validated again (``web_writes.posted_answer``), so that answer holds what a
+replay stands on: the record as the capability answered it.
+
+``ServiceCreateMixin``, ``ServiceUpdateMixin``, ``ServiceDeleteMixin`` and
+``CommandFormMixin`` are the shapes ``hq_sdk.writes`` publishes, kept for one
+``PLUGIN_API_VERSION``: each runs the capability its declared service is
+registered as. Only a view whose service is no capability's, or which writes
+in a ``run`` of its own, goes ``outside_the_runner``.
 """
 
 from collections.abc import Callable, Mapping
 from typing import Any, override
 
-from django.apps import apps
 from django.contrib import messages
-from django.core.exceptions import ImproperlyConfigured, ValidationError
+from django.core.exceptions import ImproperlyConfigured
+from django.http import Http404
 from django.shortcuts import redirect
 lazy from django.forms import BaseForm
 lazy from django.http import HttpResponse
@@ -27,14 +34,15 @@ from hq.platform.application.routes import reverse
 from .contracts import route_url
 from .deletion import DeleteCommand
 from .domains import load
+from .integration_specs import command_adapter
 from .labels import SAVE_CHANGES
 from .record_errors import RecordConflict, RecordNotFound
-from .records import delete_instance, described, display_noun, records_for, save_form
-from .refusal_status import refusal_of
+from .records import described, display_noun, records_for
 from .security import web_principal
 from .ui import ended
-from .web_writes import posted_answer, refused, write_once
-lazy from .capabilities import capability_registry, capability_words
+from .web_writes import form_payload, posted_answer, refused, run_posted, write_once
+lazy from .capabilities import Ran, capability_registry, capability_words
+lazy from .domains import Records
 lazy from .integrations import integration_graph
 lazy from .security import Principal
 
@@ -62,20 +70,29 @@ class WriteMessages:
 class PostedOnce:
     """A form view whose write acts once per drawing of its form.
 
-    A resend of a post that already wrote is answered from that first answer
-    before the form is validated again, since what the first post wrote can
-    make its own resend invalid (a slug now taken, a record now gone).
+    A resend the form still takes runs again under its key, which answers it
+    as the first post was answered, or refuses it as a different request. One
+    the first post made impossible (a slug now taken, a record now gone) is
+    answered from that first answer instead of refused.
     """
 
     def post(self, request, *args: Any, **kwargs: Any) -> HttpResponse:
-        answer = posted_answer(request, self._write)
-        if answer is not None:
+        try:
+            return super().post(request, *args, **kwargs)
+        except Http404:
+            answer = posted_answer(request)
+            if answer is None:
+                raise
             return self._replay(answer)
-        return super().post(request, *args, **kwargs)
+
+    def form_invalid(self, form: BaseForm) -> HttpResponse:
+        if not getattr(self, "_refusing", False) and (answer := posted_answer(self.request)) is not None:
+            return self._replay(answer)
+        return super().form_invalid(form)
 
     @property
     def _write(self) -> str:
-        """What the key names: this view's write, wherever its service or ``run`` is declared."""
+        """What a write outside the runner is named by: this view's."""
 
         return f"{type(self).__module__}.{type(self).__qualname__}"
 
@@ -87,17 +104,266 @@ class PostedOnce:
     def _refuse(self, form: BaseForm, answer: dict[str, Any]) -> HttpResponse:
         """The form again, carrying why the write was refused, with the refusal's status."""
 
-        refused(self.request, answer, form=form)
+        refusal = refused(self.request, answer, form=form)
+        self._refusing = True
         response = self.form_invalid(form)
-        response.status_code = refusal_of(answer).status
+        response.status_code = refusal.status
         return response
 
     def _answered(self, form: BaseForm, answer: dict[str, Any]) -> HttpResponse:
         return self._replay(answer) if answer["ok"] else self._refuse(form, answer)
 
 
+def outside_the_runner(request, write: str, operation: Callable[[], dict[str, Any]]) -> Ran:
+    """A published form mixin's write that is no capability, run once under its posted key.
+
+    The one way left around ``run_posted``, for an extension's view until it
+    names a capability: its write is neither authorized nor held by the
+    runner. No view of the host's reaches it (``test_view_writes``).
+    """
+
+    return write_once(request, write, operation)
+
+
+def _registered(service: Callable[..., Any] | None, *, targeted: bool) -> str:
+    """The capability ``service`` runs as, with or without a target, or "" for none."""
+
+    return next(
+        (
+            spec.name
+            for spec in capability_registry().values()
+            if spec.handler is service and bool(spec.target_kind) == targeted
+        ),
+        "",
+    )
+
+
+def _command_payload(name: str, command: Any) -> dict[str, Any]:
+    """A built command as capability ``name``'s payload, the JSON every door sends."""
+
+    adapter = command_adapter(capability_registry()[name].command_type)
+    return adapter.dump_python(adapter.validate_python(command), mode="json")
+
+
+class _RecordWrite(PostedOnce, WriteMessages):
+    """What a record's write declares: what it is called, and how an answer names it.
+
+    ``result_key`` is where the answer nests the record, ``identity_attr`` the
+    model field its capabilities target it by, and ``identity_result_key``
+    that identity in the answer where it is named otherwise.
+    """
+
+    noun = ""
+    result_key = ""
+    identity_attr = ""
+    identity_result_key = ""
+
+    @property
+    def record_model(self) -> Any:
+        return self.model
+
+    def stored_identity(self) -> Any:
+        """The record's identity as stored, which a form being saved may already have
+        changed, as a target is sent: a number, or text (a UUID's)."""
+
+        identity = getattr(self.get_object(), self.identity_attr)
+        return identity if isinstance(identity, int) else str(identity)
+
+    def reload(self, answer: Mapping[str, Any]) -> Any:
+        """The saved record, as a model instance the URL can be taken from."""
+
+        key = self.identity_result_key or self.identity_attr
+        return self.record_model._default_manager.get(**{self.identity_attr: answer[self.result_key][key]})
+
+    def _went_to(self, answer: dict[str, Any], template: str) -> HttpResponse:
+        self.object = self.reload(answer)
+        announce(self.request, template, self.noun, self.object)
+        return redirect(self.object.get_absolute_url())
+
+
+class CapabilityFormMixin(_RecordWrite):
+    """Create or update a record from its ``ModelForm`` through its capabilities.
+
+    For ``CreateView`` and ``UpdateView``: ``creates`` and ``updates`` name
+    them, the update targeted at the record as stored. The form's values are
+    sent as the command's payload (``form_payload``), and a refusal's field
+    problems land beside their fields.
+    """
+
+    creates = ""
+    updates = ""
+
+    def capability(self, form: BaseForm) -> str:
+        """The capability this post runs."""
+
+        return self.creates if self.adding else self.updates
+
+    @property
+    def adding(self) -> bool:
+        return getattr(self, "object", None) is None
+
+    def form_valid(self, form: BaseForm) -> HttpResponse:
+        name = self.capability(form)
+        payload = form_payload(form, capability_registry()[name].command_type)
+        target = None if self.adding else self.stored_identity()
+        return self._answered(form, run_posted(self.request, name, payload, target=target).answer)
+
+    def _replay(self, answer: dict[str, Any]) -> HttpResponse:
+        return self._went_to(answer, self.created_message if answer["created"] else self.updated_message)
+
+
+class CapabilityDeleteMixin(_RecordWrite):
+    """Delete a record through its capability (``deletes``), confirmed by its own identity.
+
+    For ``DeleteView``. The label comes from the answer rather than from the
+    object, because by the time there is something to announce the record is gone.
+    """
+
+    deletes = ""
+
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        return _confirmed(self, super().get_context_data(**kwargs))
+
+    def form_valid(self, form: BaseForm) -> HttpResponse:
+        identity = self.stored_identity()
+        ran = run_posted(self.request, self.deletes, {"confirm": str(identity)}, target=identity)
+        return self._answered(form, ran.answer)
+
+    def _replay(self, answer: dict[str, Any]) -> HttpResponse:
+        announce(self.request, self.deleted_message, self.noun, answer["deleted"]["label"])
+        return redirect(self.success_url)
+
+    @override
+    def _refuse(self, form: BaseForm, answer: dict[str, Any]) -> HttpResponse:
+        return _refused_delete(self, form, answer, super()._refuse)
+
+
+def _confirmed(view: Any, context: dict[str, Any]) -> dict[str, Any]:
+    """What confirm_page.html needs: one button that posts here, and a way
+    back to the record being deleted."""
+
+    # Django leaves get_absolute_url for a model to define or not.
+    back = getattr(view.object, "get_absolute_url", None)
+    context["confirm"] = {
+        "url": view.request.path,
+        "label": "Delete",
+        "cancel_url": back() if back else view.success_url,
+    }
+    return context
+
+
+def _refused_delete(view: Any, form: BaseForm, answer: dict[str, Any], refuse: Callable[..., HttpResponse]):
+    # The confirmation page draws no form of its own to carry an error.
+    refused(view.request, answer)
+    return refuse(form, answer)
+
+
+class _Records:
+    """A plain record domain's capabilities, noun and identity, read off its ``Records`` declaration."""
+
+    @property
+    def records(self) -> Records:
+        return records_for(self.get_form_class()._meta.model if self.model is None else self.model)
+
+    @property
+    def record_model(self) -> Any:
+        return load(self.records.model)
+
+    @property
+    def noun(self) -> str:
+        return display_noun(self.records)
+
+    @property
+    def result_key(self) -> str:
+        return self.records.noun
+
+    @property
+    def identity_attr(self) -> str:
+        return self.records.lookup
+
+    @property
+    def identity_result_key(self) -> str:
+        return "id" if self.records.lookup == "pk" else ""
+
+
+class RecordFormMixin(_Records, CapabilityFormMixin):
+    """Create or update a plain record domain's record from its ``ModelForm``.
+
+    For ``CreateView`` and ``UpdateView``, through the create and update
+    capabilities its declaration derives. ``created_message`` and
+    ``updated_message`` may reword the announcement. Its help, its verb and
+    its way back come from the declaration too, so it reads as the command's
+    page does, and its page is the form page frame.
+    """
+
+    template_name = "form_page.html"
+
+    @property
+    def creates(self) -> str:
+        return f"{self.records.noun}.create"
+
+    @property
+    def updates(self) -> str:
+        return f"{self.records.noun}.update"
+
+    def get_form(self, form_class: Any = None) -> Any:
+        form = super().get_form(form_class)
+        return described(form, load(records_for(form._meta.model).command))
+
+    def get_form_verb(self, form: Any) -> str:
+        """What makes a new one: its create command's words."""
+
+        return capability_words(f"{records_for(form._meta.model).noun}.create")
+
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        context = super().get_context_data(**kwargs)
+        form = context["form"]
+        listed = route_url(integration_graph().resources[records_for(form._meta.model).resource].web_route)
+        return {**context, **form_close(self.object, self.get_form_verb(form), listed)}
+
+
+class RecordDeleteMixin(_Records, CapabilityDeleteMixin):
+    """Delete a plain record domain's record through its declared delete capability.
+
+    For ``DeleteView``; ``deleted_message`` may reword the announcement.
+    """
+
+    @property
+    def deletes(self) -> str:
+        return f"{self.records.noun}.delete"
+
+
+class CommandFormPage:
+    """A record's form whose create goes through a named command (``creates``)
+    rather than its domain's declaration: its help is that command's, and it
+    closes with its words, or Save changes, and Cancel (``listed_route`` for a
+    new one), on the form page frame."""
+
+    template_name = "form_page.html"
+    creates = ""
+    listed_route = ""
+
+    def get_form(self, form_class: Any = None) -> Any:
+        return described(super().get_form(form_class), capability_registry()[self.creates].command_type)
+
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        context = super().get_context_data(**kwargs)
+        adds = capability_words(self.creates)
+        return {**context, **form_close(self.object, adds, reverse(self.listed_route))}
+
+
+def form_close(stored: Any, adds: str, listed: str) -> dict[str, str]:
+    """What a record's form closes with (partials/_form_actions.html): ``adds``
+    and Cancel to ``listed`` for a new one, Save changes and Cancel back to
+    ``stored``, the record as stored, which a refused edit's form does not hold."""
+
+    if stored is None:
+        return {"form_verb": adds, "cancel_url": listed}
+    return {"form_verb": SAVE_CHANGES, "cancel_url": stored.get_absolute_url()}
+
+
 class ServiceWriteMixin(PostedOnce, WriteMessages):
-    """Shared spine for a view whose mutation is one service call.
+    """Shared spine for a view whose mutation is one service call, run as the capability it is registered as.
 
     A subclass declares ``service`` (wrapped in ``staticmethod``), ``noun``
     (``"Content item"``), ``result_key`` (where the service nests its record),
@@ -153,20 +419,37 @@ class ServiceWriteMixin(PostedOnce, WriteMessages):
         announce(self.request, template, self.noun, target)
 
     def _went_to(self, answer: dict[str, Any], template: str) -> HttpResponse:
-        self.object = self.reload(answer["record"])
+        self.object = self.reload(answer)
         self.announce(template, self.object)
         return redirect(self.object.get_absolute_url())
+
+    # Whether the service's capability takes a target: an update's and a delete's do.
+    _targeted = False
+
+    @classmethod
+    def _capability(cls) -> str:
+        """The capability the view's service is, or "" for one that is none, which runs ``outside_the_runner``."""
+
+        return _registered(cls.service, targeted=cls._targeted)
+
+    def _served(self, command: Any, identity: dict[str, Any] | None = None) -> dict[str, Any]:
+        """The service's answer to ``command``: its capability's, or its own run ``outside_the_runner``."""
+
+        name = self._capability()
+        if name:
+            target = next(iter(identity.values())) if identity else None
+            return run_posted(self.request, name, _command_payload(name, command), target=target).answer
+        principal = self.write_principal()
+        return outside_the_runner(
+            self.request, self._write, lambda: dict(self.service(command, principal=principal, **(identity or {})))
+        ).answer
 
 
 class ServiceCreateMixin(ServiceWriteMixin):
     """Create through a service, then go to what was created."""
 
     def form_valid(self, form: BaseForm) -> HttpResponse:
-        command = self.command_from_cleaned_data(form.cleaned_data)
-        ran = write_once(
-            self.request, self._write, lambda: {"record": self.service(command, principal=self.write_principal())}
-        )
-        return self._answered(form, ran.answer)
+        return self._answered(form, self._served(self.command_from_cleaned_data(form.cleaned_data)))
 
     def _replay(self, answer: dict[str, Any]) -> HttpResponse:
         return self._went_to(answer, self.created_message)
@@ -179,15 +462,11 @@ class ServiceUpdateMixin(ServiceWriteMixin):
     a rename changes the slug, and redirecting to the old one 404s.
     """
 
+    _targeted = True
+
     def form_valid(self, form: BaseForm) -> HttpResponse:
         command = self.command_from_cleaned_data(form.cleaned_data)
-        identity = {self.identity_kwarg: self.current_identity()}
-        ran = write_once(
-            self.request,
-            self._write,
-            lambda: {"record": self.service(command, principal=self.write_principal(), **identity)},
-        )
-        return self._answered(form, ran.answer)
+        return self._answered(form, self._served(command, {self.identity_kwarg: self.current_identity()}))
 
     def _replay(self, answer: dict[str, Any]) -> HttpResponse:
         return self._went_to(answer, self.updated_message)
@@ -200,172 +479,29 @@ class ServiceDeleteMixin(ServiceWriteMixin):
     time there is something to announce the record is gone.
     """
 
+    _targeted = True
+
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
-        # What confirm_page.html needs: one button that posts here, and a way
-        # back to the record being deleted.
-        context = super().get_context_data(**kwargs)
-        # Django leaves get_absolute_url for a model to define or not.
-        back = getattr(self.object, "get_absolute_url", None)
-        context["confirm"] = {
-            "url": self.request.path,
-            "label": "Delete",
-            "cancel_url": back() if back else self.success_url,
-        }
-        return context
+        return _confirmed(self, super().get_context_data(**kwargs))
 
     def form_valid(self, form: BaseForm) -> HttpResponse:
         identity = self.current_identity()
-        ran = write_once(
-            self.request,
-            self._write,
-            lambda: _deleted(
-                self.service(
-                    DeleteCommand(confirm=str(identity)),
-                    principal=self.write_principal(),
-                    **{self.identity_kwarg: identity},
-                )
-            ),
-        )
-        return self._answered(form, ran.answer)
+        command = DeleteCommand(confirm=str(identity))
+        return self._answered(form, self._served(command, {self.identity_kwarg: identity}))
 
     def _replay(self, answer: dict[str, Any]) -> HttpResponse:
-        self.announce(self.deleted_message, answer["label"])
+        self.announce(self.deleted_message, answer["deleted"]["label"])
         return redirect(self.success_url)
 
     @override
     def _refuse(self, form: BaseForm, answer: dict[str, Any]) -> HttpResponse:
-        # The confirmation page draws no form of its own to carry an error.
-        refused(self.request, answer)
-        return super()._refuse(form, answer)
-
-
-def _deleted(result: Mapping[str, Any]) -> dict[str, Any]:
-    """What a resend of a delete says: the label, since the record is gone."""
-
-    return {"label": result["deleted"]["label"]}
-
-
-def _show_on_form(form, error: ValidationError) -> None:
-    """Put a model's refusal beside the field it names, or above the form."""
-
-    for field, errors in error.update_error_dict({}).items():
-        form.add_error(field if field in form.fields else None, errors)
-
-
-class RecordFormMixin(PostedOnce, WriteMessages):
-    """Create or update a plain record domain's record from its ``ModelForm``.
-
-    For ``CreateView`` and ``UpdateView``; saved through
-    ``application.records.save_form``, so noun, permission and target come
-    from the domain's declaration. ``created_message`` and ``updated_message``
-    may reword the announcement. Its help, its verb and its way back come
-    from the declaration too, so it reads as the command's page does, and
-    its page is the form page frame.
-    """
-
-    template_name = "form_page.html"
-
-    def get_form(self, form_class: Any = None) -> Any:
-        form = super().get_form(form_class)
-        return described(form, load(records_for(form._meta.model).command))
-
-    def get_form_verb(self, form: Any) -> str:
-        """What makes a new one: its create command's words."""
-
-        return capability_words(f"{records_for(form._meta.model).noun}.create")
-
-    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
-        context = super().get_context_data(**kwargs)
-        form = context["form"]
-        listed = route_url(integration_graph().resources[records_for(form._meta.model).resource].web_route)
-        return {**context, **form_close(self.object, self.get_form_verb(form), listed)}
-
-    def form_valid(self, form: BaseForm) -> HttpResponse:
-        adding = form.instance._state.adding
-        try:
-            ran = write_once(
-                self.request,
-                self._write,
-                lambda: _saved(save_form(form, principal=web_principal(self.request.user)), adding=adding),
-            )
-        except ValidationError as error:
-            _show_on_form(form, error)
-            return self.form_invalid(form)
-        return self._answered(form, ran.answer)
-
-    def _replay(self, answer: dict[str, Any]) -> HttpResponse:
-        self.object = apps.get_model(answer["model"])._default_manager.get(pk=answer["pk"])
-        template = self.created_message if answer["adding"] else self.updated_message
-        noun = display_noun(records_for(type(self.object)))
-        announce(self.request, template, noun, self.object)
-        return redirect(self.object.get_absolute_url())
-
-
-class CommandFormPage:
-    """A record's form whose create goes through a named command (``creates``)
-    rather than its domain's declaration: its help is that command's, and it
-    closes with its words, or Save changes, and Cancel (``listed_route`` for a
-    new one), on the form page frame."""
-
-    template_name = "form_page.html"
-    creates = ""
-    listed_route = ""
-
-    def get_form(self, form_class: Any = None) -> Any:
-        return described(super().get_form(form_class), capability_registry()[self.creates].command_type)
-
-    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
-        context = super().get_context_data(**kwargs)
-        adds = capability_words(self.creates)
-        return {**context, **form_close(self.object, adds, reverse(self.listed_route))}
-
-
-def form_close(stored: Any, adds: str, listed: str) -> dict[str, str]:
-    """What a record's form closes with (partials/_form_actions.html): ``adds``
-    and Cancel to ``listed`` for a new one, Save changes and Cancel back to
-    ``stored``, the record as stored, which a refused edit's form does not hold."""
-
-    if stored is None:
-        return {"form_verb": adds, "cancel_url": listed}
-    return {"form_verb": SAVE_CHANGES, "cancel_url": stored.get_absolute_url()}
-
-
-def _saved(instance: Any, *, adding: bool) -> dict[str, Any]:
-    """What a resend of a record's form reloads it from, and whether it was made."""
-
-    return {"model": instance._meta.label, "pk": instance.pk, "adding": adding}
-
-
-class RecordDeleteMixin(ServiceDeleteMixin):
-    """Delete a plain record domain's record through its declared deleter.
-
-    For ``DeleteView``; ``deleted_message`` may reword the announcement. Takes
-    only the confirmation page from ``ServiceDeleteMixin``: the service, noun
-    and target come from the declaration.
-    """
-
-    @override
-    def form_valid(self, form: BaseForm) -> HttpResponse:
-        noun = display_noun(records_for(type(self.object)))
-        ran = write_once(
-            self.request,
-            self._write,
-            lambda: {
-                **_deleted(delete_instance(self.object, principal=web_principal(self.request.user))),
-                "noun": noun,
-            },
-        )
-        return self._answered(form, ran.answer)
-
-    @override
-    def _replay(self, answer: dict[str, Any]) -> HttpResponse:
-        announce(self.request, self.deleted_message, answer["noun"], answer["label"])
-        return redirect(self.success_url)
+        return _refused_delete(self, form, answer, super()._refuse)
 
 
 class CommandFormMixin(PostedOnce):
     """A plain form whose submit is one service call: a *command* (adjust a
-    threshold, open a period) posted from a page that then shows itself again.
+    threshold, open a period) posted from a page that then shows itself again,
+    run as the capability the service is registered as.
 
     A domain's refusal becomes a form error beside its field rather than a 500.
     Subclasses declare ``service`` (as a ``staticmethod``), ``command`` (the
@@ -377,9 +513,10 @@ class CommandFormMixin(PostedOnce):
     command: type[Any] | None = None
     success_url_name = ""
     success_message = ""
-    # Which exceptions mean "the domain said no" rather than "HQ broke". Kept
-    # narrow and overridable: catching more than this turns a real fault into a
-    # form error and hides it.
+    # Which exceptions mean "the domain said no" rather than "HQ broke", for a
+    # write outside the runner, which answers every other one itself. Kept
+    # narrow and overridable: catching more than this turns a real fault into
+    # a form error and hides it.
     domain_errors: tuple[type[Exception], ...] = (ValueError, RecordNotFound, RecordConflict)
 
     def build_command(self, form: BaseForm) -> Any:
@@ -396,10 +533,21 @@ class CommandFormMixin(PostedOnce):
             raise ImproperlyConfigured(f"{type(self).__name__} declares no service.")
         return self.service(command, principal=web_principal(self.request.user))
 
+    @classmethod
+    def _capability(cls) -> str:
+        """The capability the view's service is, or "" for a service that is none or a
+        write of the view's own (a ``run`` that overrides), which runs ``outside_the_runner``."""
+
+        return "" if cls.run is not CommandFormMixin.run else _registered(cls.service, targeted=False)
+
     def form_valid(self, form: BaseForm) -> HttpResponse:
+        name = self._capability()
+        if name:
+            answer = run_posted(self.request, name, _command_payload(name, self.build_command(form))).answer
+            return self._answered(form, answer)
         try:
-            ran = write_once(
-                self.request, self._write, lambda: {"message": self._said(self.run(self.build_command(form)))}
+            ran = outside_the_runner(
+                self.request, self._write, lambda: {_SAID: self._said(self.run(self.build_command(form)))}
             )
         except self.domain_errors as error:
             form.add_error(None, str(error))
@@ -412,12 +560,19 @@ class CommandFormMixin(PostedOnce):
         return str(self.get_success_message(result) or "")
 
     def _replay(self, answer: dict[str, Any]) -> HttpResponse:
-        if answer["message"]:
-            messages.success(self.request, answer["message"])
+        said = self._said(answer) if self._capability() else answer[_SAID]
+        if said:
+            messages.success(self.request, said)
         return redirect(self.get_success_url())
 
 
+# Where a write outside the runner keeps what it said, for a resend to say again.
+_SAID = "said"
+
+
 __all__ = [
+    "CapabilityDeleteMixin",
+    "CapabilityFormMixin",
     "CommandFormMixin",
     "RecordDeleteMixin",
     "RecordFormMixin",
@@ -426,4 +581,5 @@ __all__ = [
     "ServiceUpdateMixin",
     "ServiceWriteMixin",
     "WriteMessages",
+    "outside_the_runner",
 ]

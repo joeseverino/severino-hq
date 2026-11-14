@@ -16,9 +16,10 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 from django.test import SimpleTestCase, TestCase, override_settings
 
-from hq.domains.control_plane.models import ApprovalRequest, CertificateMaterial, ManagedResource
+from hq.domains.control_plane.models import ApprovalRequest, CertificateMaterial, ManagedResource, SealedSecret
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core import secrets
+from hq.platform.core.audit import audited_labels
 from hq.platform.core.models import AuditLog
 from hq.platform.core.tests.test_seal import SUITE, ciphertext, private_key, public_bytes
 
@@ -159,9 +160,11 @@ class StorageTests(TestCase):
         self._store()
         self._store()
 
-        events = AuditLog.objects.filter(metadata__slot=KEY_SLOT).order_by("pk")
-        self.assertEqual([event.metadata["version"] for event in events], [1, 2])
-        self.assertEqual([event.metadata["change"] for event in events], ["set", "replaced"])
+        events = AuditLog.objects.filter(
+            object_type=audited_labels()[SealedSecret], subject=self.resource.key, message__contains=KEY_SLOT
+        ).order_by("pk")
+        self.assertEqual([event.action for event in events], [AuditLog.Action.CREATED, AuditLog.Action.UPDATED])
+        self.assertEqual(events[1].metadata["changes"]["version"], [1, 2])
         sealed = self.resource.sealed_secrets.get().sealed
         for event in events:
             recorded = f"{event.message} {event.metadata} {event.object_repr}"

@@ -17,10 +17,12 @@ class ControlPlaneConfig(AppConfig):
         from .models import (
             AdoptedCatalog,
             ApprovalRequest,
+            CapabilityRule,
             ManagedResource,
             NotManaged,
             OperationRequest,
             ReadRequest,
+            SealedSecret,
             SourceProposal,
         )
 
@@ -50,6 +52,16 @@ class ControlPlaneConfig(AppConfig):
         register_audit(SourceProposal, "Playbook scan result", subject=lambda proposal: proposal.operation.resource.key)
         # Which commit of it became the catalog HQ runs from, and who adopted it.
         register_audit(AdoptedCatalog, "Adopted playbooks", subject=_source_key)
+        # An operator's rule for what one agent may run.
+        register_audit(CapabilityRule, "Capability policy", required=True)
+        # A secret handed to one resource: that it was set, never what it holds.
+        register_audit(
+            SealedSecret,
+            "Sealed secret",
+            redact=("sealed",),
+            subject=lambda secret: secret.resource.key,
+            required=True,
+        )
 
 
 def _source_key(_catalog) -> str:

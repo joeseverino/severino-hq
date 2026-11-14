@@ -18,7 +18,7 @@ from hq.domains.expenses.models import Expense
 from hq.domains.jobs import runner
 from hq.domains.jobs.models import Job
 from hq.domains.projects.models import Project
-from hq.platform.application import agent_registry, analytics, approval_review, approvals, github_profile, own_devices
+from hq.platform.application import analytics, approval_review, approvals, github_profile
 from hq.platform.application.automation_adoption import ADOPT
 from hq.platform.application.capability_policy import RULE_LABELS
 from hq.platform.application.findings import findings
@@ -27,7 +27,7 @@ from hq.platform.application.security import WEB_INTERFACE, cli_principal, web_p
 from hq.platform.application.tests.markup import all_elements, elements, select, with_class, within
 from hq.platform.application.topology import derive_topology
 from hq.platform.core import seeds
-from hq.platform.core.audit import ANONYMOUS
+from hq.platform.core.audit import ANONYMOUS, audited_labels
 from hq.platform.core.example_estate import automation
 from hq.platform.core.example_estate.agents import AGENT, NOT_CARRIED, REWRITE
 from hq.platform.core.example_estate.testing import sign_in, throwaway_media
@@ -134,14 +134,15 @@ class ExampleEstateTests(TestCase):
     def test_each_agent_and_device_event_is_dated_as_its_record_says(self):
         # The Agents page reads the record and the audit log reads the event;
         # both say when it happened.
+        labels = audited_labels()
         said = {}
         for identity in AgentIdentity.objects.all():
-            said[(agent_registry.AUDIT_LABEL, identity.pk, AuditLog.Action.CREATED)] = identity.first_seen
+            said[(labels[AgentIdentity], identity.pk, AuditLog.Action.CREATED)] = identity.first_seen
             if identity.blocked_at:
-                said[(agent_registry.AUDIT_LABEL, identity.pk, AuditLog.Action.UPDATED)] = identity.blocked_at
+                said[(labels[AgentIdentity], identity.pk, AuditLog.Action.UPDATED)] = identity.blocked_at
         for device in OwnDevice.objects.all():
-            said[(own_devices.AUDIT_LABEL, device.pk, AuditLog.Action.CREATED)] = device.registered_at
-        self.assertTrue(any(key[0] == own_devices.AUDIT_LABEL for key in said), "the estate registers a device")
+            said[(labels[OwnDevice], device.pk, AuditLog.Action.CREATED)] = device.registered_at
+        self.assertTrue(any(key[0] == labels[OwnDevice] for key in said), "the estate registers a device")
         for (label, pk, action), moment in said.items():
             with self.subTest(label=label, pk=pk, action=action):
                 events = AuditLog.objects.filter(object_type=label, object_id=str(pk), action=action)

@@ -95,7 +95,7 @@ class ThemeServiceTests(TestCase):
 
     def test_the_choice_does_not_happen_without_its_record(self):
         with (
-            mock.patch("hq.platform.application.appearance.record_event", side_effect=RuntimeError("audit down")),
+            mock.patch.object(AuditLog.objects, "create", side_effect=RuntimeError("audit down")),
             self.assertRaises(RuntimeError),
         ):
             set_theme(ThemeCommand("dark"), principal=self.person)

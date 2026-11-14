@@ -246,7 +246,26 @@ middle on the first line's. A page never draws a button in a cell (*Gate:* the
 survey's `actions on the first line`, and the `hand-drawn-row-actions` rule). A
 row's controls stand side by side on one line, which their column asks for, and
 wrap only in a tight table, where every kept line does (*Gate:* the survey's
-`row actions stacked with room`). A status said by one pill alone fills its
+`row actions stacked with room`). Beside them the row's words keep a line of
+`--row-words` (`data-words`), so a table without room for both takes its narrow
+box rather than wrap a few words a line.
+
+**A row's controls stand beneath its words in a narrow box.** The region copies
+the controls of a row's actions, or of a column of kind `control` holding no
+field a reader fills in, into the cell that names the row (`row-beneath`, a
+`narrow-only` copy, `table_cells.Beneath`), and their own column empties to no
+width there (`data-beneath`). They start where the words start, each as wide
+as its label, wrapping as the line needs. So a column of controls never leaves
+for the row's open line, whatever rank it is given, and a reader never opens a
+row to find what it offers. A row's one quiet put-away control
+(`data-put-away`, the queue's Dismiss) ends the row's first line instead,
+where the naming cell marks one (`data-row-line`): it shares the title's line
+in one look and never takes a line of its own. A choice (a select) is a value
+of the row and keeps its column. *Gates:* the survey's `row actions beside
+squeezed words` and `row actions behind the toggle`, and
+`test_row_controls.py`.
+
+A status said by one pill alone fills its
 column, as wide as its widest pill, so the pills down a column share both
 edges (`data-pill-only`, marked by the region). *Gates:*
 `a_table_fits_its_box_at_every_width`,
@@ -736,7 +755,8 @@ row with a gulf in it, is a layout to redesign. Short facts go across the frame
 much shorter than its peers shares a row with short ones, never with a tall
 one. *Gate:* `frames filled` in the layout survey fails a frame whose lines
 stack down its start, each ending short of two fifths of its width, for long
-enough to matter.
+enough to matter, and `flows share their rows` a member of a flow its row
+stretches far past what it holds beside a member unlike it.
 
 **The content column is drawn by `{% page_main %}`.** base.html draws every
 page's content in it (`partials/_page_main.html`), and the component catalog
@@ -911,7 +931,10 @@ id, so a ticked box leaves its menu open. No script places or closes it.
 **An account is named by `partials/_identity.html`.** It draws its picture (a
 `data:` URI or an HQ path, never another host's address) and its name, with a
 state beside it drawn by `{% status %}`. Its handle leads to it, then a line in
-its own words, as the Starred page names your GitHub profile above its counts.
+its own words. In a card followed by a band of counts (`{% facts
+layout="band" %}`), the two share one line once the card holds the identity
+beside four counts across, as the Starred page heads with your GitHub
+profile, and the band takes the line below when narrower.
 *Catalog:* `part/identity`.
 
 **The user menu says whose session it is first.** It shows the person's
@@ -1249,7 +1272,7 @@ with no script every row shows all of it. The line beneath holds, in order:
 In a narrow box (a phone, or a narrow card on a wide screen) the row's
 buttons stand beneath its words, closed or open, sharing the line's width,
 and Dismiss or Restore ends that line in its word. A reader never opens a row
-to find what it offers. The survey holds both: "queue actions behind the
+to find what it offers. The survey holds both: "row actions behind the
 toggle" and "words swapped for a glyph".
 
 The word is `partials/_urgency_pill.html`. A Cmd- or Ctrl-click on it opens
@@ -1525,7 +1548,7 @@ somebody opens it, or a reading its queue is drawn from is due (below).
 **A page about one thing asks for that thing's readings.** A machine's page, a
 service's page and a record's page name which page they are as `page_visit`
 (`visit_refresh.page_visit`). They do so only where a controller will read what
-it asks for (`cadence.ControllerStanding.takes_reads`): one whose heartbeat
+it asks for (`cadence.WorkerStanding.takes_reads`): one whose heartbeat
 says it reports to this HQ, and is not silent. Where none will, the page draws
 no ask and no note, so it never promises a refresh that cannot come.
 `page.html` draws the ask (`partials/_visit_refresh.html`), and its note says

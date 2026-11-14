@@ -107,6 +107,10 @@
    as its longest line, so on a phone its content wraps inside it rather than
    pushing it past the screen's edge. */
 .card { min-inline-size: 0; }
+/* A card of an account's identity (partials/_identity.html) and its band of counts heads with both on one line once it holds the identity beside four counts across: the account at the start, its counts after it. Narrower, the band takes the line below, as wide as the card. */
+.card:has(> .identity + .facts-band:last-child) { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-8) var(--space-20); }
+.card > .identity:has(+ .facts-band:last-child) { flex: 1 1 16rem; margin: 0; }
+.card > .identity + .facts-band:last-child { flex: 1 1 calc(48rem + 3 * var(--space-20)); margin: 0; }
 /* A card holding nothing but a line of facts (`{% facts layout="inline" %}`)
    is a strip of counts: a narrower inset than a card of content, its words a
    size under its values. A section's body under its head is the section's,

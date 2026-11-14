@@ -194,7 +194,10 @@ class ContactViewTests(TestCase):
         self.assertEqual(ManagedResource.objects.get(kind=inbox.DECLARATION).spec["reviews"][0]["status"], "read")
         self.assertTrue(
             AuditLog.objects.filter(
-                metadata__operation=REVIEW, metadata__interface="web", metadata__actor="joe", metadata__id=1
+                metadata__operation=REVIEW,
+                metadata__interface="web",
+                metadata__actor="joe",
+                message="Asked for contact submission #1 to be reviewed.",
             ).exists()
         )
 
@@ -249,7 +252,9 @@ class ContactViewTests(TestCase):
         self.assertEqual(ManagedResource.objects.get(kind=inbox.DECLARATION).spec["deletions"], [1])
         self.assertTrue(
             AuditLog.objects.filter(
-                action=AuditLog.Action.DELETED, metadata__operation=DELETE, metadata__actor="joe"
+                metadata__operation=DELETE,
+                metadata__actor="joe",
+                message="Asked for contact submission #1 to be deleted.",
             ).exists()
         )
 

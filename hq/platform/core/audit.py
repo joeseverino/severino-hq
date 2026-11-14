@@ -12,6 +12,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
+from functools import cache
 from logging import getLogger
 from typing import Any, Literal, overload
 from uuid import UUID
@@ -28,6 +29,7 @@ lazy from django.utils import timezone
 from hq.platform.application import request_context
 from hq.platform.application.payload_words import changed_words
 lazy from hq.platform.application.request_identity import signed_in
+lazy from hq.platform.application.security import person_of
 
 from . import speculation
 from .attribution import OperationContext, bound, operation_context
@@ -231,9 +233,19 @@ def audit_operation(
         device=getattr(principal, "device", None) or "",
         cause=cause,
         approved_by=getattr(principal, "approved_by", None) or "",
+        person=_acted_for(principal),
         rebinds=rebinds,
     ):
         yield
+
+
+def _acted_for(principal: object | None) -> Callable[[], AbstractBaseUser | None] | None:
+    """How to find the account a token's principal acts for, which no session
+    names (``security.person_of``), looked up once, by the first row that asks."""
+
+    if not getattr(principal, "person_key", ""):
+        return None
+    return cache(lambda: person_of(principal))
 
 
 @contextmanager
@@ -314,6 +326,7 @@ def register_audit(
     connection: Callable[[Any], str] | None = None,
     redact_for: Callable[[Any], Iterable[str]] | None = None,
     subject: Callable[[Any], str] | None = None,
+    required: bool = False,
 ) -> None:
     """Register a model so create/update/delete events land in the audit log.
 
@@ -324,6 +337,8 @@ def register_audit(
     goes through; `observation` names fields that only record HQ looking.
     `subject` returns the key of the record an instance's rows are about, so
     one query on the row's `subject` reads that record's whole story.
+    `required` fails the save with its row, for a model whose change must not
+    commit unrecorded (a person's access or an agent's standing).
     """
 
     if model in _AUDITED_MODELS:
@@ -377,6 +392,7 @@ def register_audit(
             message=str(instance.__dict__.pop("audit_said", "") or "") or changes_said(changes),
             metadata={"changes": changes} if changes else None,
             connection=_connection_of(connection, instance),
+            required=required,
         )
         # Re-armed for the next save in the same request: without this, a
         # second save would re-report the first one's changes.
@@ -392,6 +408,7 @@ def register_audit(
             type_label=type_label,
             message=str(getattr(instance, "audit_gone", "") or ""),
             connection=_connection_of(connection, instance),
+            required=required,
         )
 
 
@@ -491,7 +508,7 @@ def record_event(
     # asgiref compares a variable's values when it restores a context
     # (``asgiref.sync._restore_context``), and comparing the lazy user would
     # load it from the session on the event loop's thread.
-    user = user or signed_in(request_context.current())
+    user = user or signed_in(request_context.current()) or (context.person() if context.person else None)
     if user is not None and not user.is_authenticated:
         user = None
 

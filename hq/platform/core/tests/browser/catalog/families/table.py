@@ -64,7 +64,7 @@ ENTRIES = {
     "table/row-actions": Entry(
         '{% section "Example messages" %}{% table_region "Example messages" %}<table class="data-table"><thead><tr>'
         '{% table_heading "From" "identifier" gutter=True %}{% table_heading "Note" %}'
-        '{% table_heading "Actions" css="actions-col" hidden=True drop=1 %}</tr></thead><tbody>'
+        '{% table_heading "Actions" css="actions-col" hidden=True %}</tr></thead><tbody>'
         "{% for row in rows %}<tr><td><strong>{{ row.0 }}</strong></td><td>{{ row.1 }}</td>"
         "{% row_actions row.2 %}</tr>{% endfor %}</tbody></table>{% endtable_region %}{% endsection %}",
         {

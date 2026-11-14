@@ -232,6 +232,18 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 .data-table > tbody > tr > [data-kind="control"] > :is(a, button, .btn, form),
 .data-table > tbody > tr > [data-kind="control"] > [data-ask] > [data-ask-button] { vertical-align: top; translate: 0 calc(var(--row-line) / 2 - 50%); }
 .data-table > tbody > tr > [data-kind="control"] > :is(a, button, .btn, form) + :is(a, button, .btn, form) { margin-inline-start: var(--space-4); }
+/* A row's first line (`data-row-line`) is its words, then the room a put-away control (`data-put-away`, such as Dismiss) takes at its end in a narrow box: the words wrap beside it and never under it. */
+.data-table .row-line { display: flex; align-items: baseline; gap: var(--space-5); }
+.data-table .row-line > :first-child { flex: 1 1 auto; min-width: 0; }
+/* In a narrow box a row's controls stand beneath its words (`row-beneath`, the region's `narrow-only` copy in the cell that names the row, table_cells.Beneath), each as wide as its label, starting where the words start; the put-away control ends the row's first line, and the cells the controls stood in (`data-beneath`) empty to no width. Each stays a cell, so a row opened, whose columns tables.js holds as it measured them, keeps its columns. */
+@container style(--box: narrow) {
+  .data-table > * > tr > [data-beneath] { width: 0; padding-inline: 0; }
+  .data-table > tbody > tr > [data-beneath] > * { display: none; }
+  .data-table .row-beneath { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-3); margin-block-start: var(--space-4); white-space: normal; }
+  .data-table .row-beneath > * { min-width: 0; max-width: 100%; margin: 0; }
+  .data-table .row-put-away { display: flex; flex: none; gap: var(--space-3); margin-inline-start: auto; }
+  .data-table .row-put-away > * { margin: 0; }
+}
 
 /* A pill fits the cell's line, so a row holding one is no taller than one without. */
 .data-table td .pill { vertical-align: top; line-height: 1.4; }

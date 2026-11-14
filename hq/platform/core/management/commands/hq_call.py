@@ -129,14 +129,15 @@ def answered_as(text: str, principal: Principal) -> Any:
     if isinstance(asked, dict):
         return asked
     tool, arguments = asked
-    admitted = agent_admission.admitted(principal, source=LOOPBACK)
 
     async def call() -> Any:
         async with Client(mcp.server) as client:
             return await client.call_tool(tool.name, arguments)
 
-    # Bound as the MCP door binds an admitted caller, outside the shell's own
-    # operation, whose rows are the operator's.
+    # Admitted and bound as the MCP door admits and binds a caller, outside the
+    # shell's own operation, whose rows are the operator's.
+    with outside_every_door():
+        admitted = agent_admission.admitted(principal, source=LOOPBACK)
     with (
         outside_every_door(),
         agent_admission.carrying(admitted) as caller,

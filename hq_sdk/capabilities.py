@@ -10,6 +10,7 @@ from hq.platform.application.capabilities import (
 )
 from hq.platform.application.command_fields import Choices, Describe, Names, Refers
 from hq.platform.application.integration_specs import ON_ITS_PAGE, CommandAbout, CommandFact
+from hq.platform.application.record_errors import InputError
 from hq.platform.application.security import (
     AuthorizationError,
     Capability,
@@ -36,6 +37,7 @@ __all__ = [
     "CommandAbout",
     "CommandFact",
     "Describe",
+    "InputError",
     "Names",
     "Principal",
     "Refers",

@@ -13,7 +13,8 @@ from hq.platform.api.tests.tokens import ISSUER, _serving
 from hq.platform.application import roles
 from hq.platform.application.linked_accounts import bind_sign_in, sign_in_subject
 from hq.platform.application.security import Capability, web_principal
-from hq.platform.core.models import AuditLog
+from hq.platform.core.audit import audited_labels
+from hq.platform.core.models import AuditLog, PersonRole
 from hq.platform.core.oidc import SSO_FAILURE_SESSION_KEY, HQOIDCAuthenticationBackend
 from hq.platform.core.test_runner import no_default_role
 from hq.platform.core.tests.test_id_token import CLIENT, NONCE, _id_token
@@ -98,11 +99,10 @@ class ResolvedRoleTests(TestCase):
         _signed_in({**claims, "groups": ["family"]})
 
         self.assertEqual(_role(user), "viewer")
-        changed = AuditLog.objects.get(object_type=roles.AUDIT_LABEL, action=AuditLog.Action.UPDATED)
+        changed = AuditLog.objects.get(object_type=audited_labels()[PersonRole], action=AuditLog.Action.UPDATED)
         # The person is named in the row itself, so it outlives their account.
         self.assertEqual(
-            {key: changed.metadata.get(key) for key in ("role", "was", "actor")},
-            {"role": "viewer", "was": "operator", "actor": "joe"},
+            (changed.metadata["changes"]["role"], changed.metadata["actor"]), (["operator", "viewer"], "joe")
         )
 
 

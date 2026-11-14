@@ -7,6 +7,9 @@ SELECTORS = {
     # A row's actions cell ({% row_actions %}) and any cell of a column of
     # controls, whose controls sit on the row's first line.
     "row_actions_cell": 'main td.row-actions, main td[data-kind="control"]',
+    # A table's row that offers controls: its actions, a column of controls,
+    # or the queue's cell of what a row offers.
+    "controls_row": '.data-table > tbody > tr:has(> :is(td.row-actions, td[data-kind="control"], td.queue-act))',
     # The queue's cell of what a row offers and its dismiss
     # (`partials/_queue_rows.html`), a table with no headings to name its kind.
     "queue_actions_cell": "main td.queue-act",

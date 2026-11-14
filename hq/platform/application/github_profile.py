@@ -15,8 +15,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.observations.github import PROFILE_EVERY, PROFILE_KIND as KIND
-from hq.platform.core.audit import record_event
-from hq.platform.core.models import AuditLog, LinkedAccount
+from hq.platform.core.models import LinkedAccount
 
 from .asks import Standing, read_standing
 from .command_fields import Describe
@@ -157,11 +156,4 @@ def request_read(command: ProfileReadCommand, *, principal: Principal) -> Profil
     if command.login not in accounts():
         raise RecordNotFound("No sign-in names that GitHub account.")
     request_reads((KIND,))
-    record_event(
-        action=AuditLog.Action.UPDATED,
-        type_label="GitHub profile",
-        message=f"Asked for @{command.login}'s GitHub profile to be read now.",
-        metadata={"login": command.login},
-        required=True,
-    )
     return {"ok": True, "login": command.login, "asked_at": (asked_at() or timezone.now()).isoformat()}

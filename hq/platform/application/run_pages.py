@@ -7,12 +7,14 @@ from typing import Any
 from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
 
 from .action_links import command_url
+from .automation_findings import worker_problems
 from .capabilities import capability_registry
 from .entity_links import entity_link
 from .pages import offered
 from .routes import reverse
+from .security import web_principal
 from .service_context import Cell, ServiceSection
-from .work_runs import WorkRun
+from .work_runs import NOT_STARTED, WorkRun
 
 
 def approval_of(operation: OperationRequest) -> ApprovalRequest | None:
@@ -48,7 +50,8 @@ def tasks_section(run: WorkRun) -> ServiceSection | None:
 def run_context(run: WorkRun, operation: OperationRequest, *, user: Any) -> dict[str, Any]:
     """The run page's context for ``user``, who may open Jobs: the run, the
     page of the command it is run through, the approval it ran under where
-    they may read the audit log, and its tasks."""
+    they may read the audit log, its tasks, and, while it has not started
+    because no worker reports, the problem that says how to set one up."""
 
     approval = approval_of(operation)
     approval_url = reverse("core:approval_entry", kwargs={"approval_id": approval.pk}) if approval else ""
@@ -62,4 +65,5 @@ def run_context(run: WorkRun, operation: OperationRequest, *, user: Any) -> dict
         "playbook_url": command_url(run.kind) if capability_registry().get(run.kind) else "",
         "approval_url": approval_url if approval_url and offered(user, approval_url) else "",
         "sections": (tasks,) if tasks else (),
+        "problems": worker_problems(web_principal(user)) if run.word == NOT_STARTED else (),
     }

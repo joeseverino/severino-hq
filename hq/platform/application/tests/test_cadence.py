@@ -479,7 +479,7 @@ class BootTests(TestCase):
         self.assertEqual(request_boot_reads(), ())
 
 
-class ControllerStandingTests(TestCase):
+class WorkerStandingTests(TestCase):
     """Whether the controller is still arriving, which no record of a sweep can say."""
 
     def setUp(self):
@@ -608,14 +608,20 @@ class PassDueTests(TestCase):
 
 @tag("source")
 class ControllerTimerTests(SimpleTestCase):
-    def test_the_floor_is_the_controller_timers(self):
-        timer = Path(settings.BASE_DIR) / "deploy/systemd/severino-hq-controller.timer"
-        declared = dict(
-            line.split("=", 1) for line in timer.read_text().splitlines() if "=" in line and not line.startswith("#")
-        )
-
-        self.assertEqual(declared["OnUnitInactiveSec"], f"{int(cadence.CONTROLLER_FLOOR.total_seconds() // 60)}min")
-        self.assertGreater(cadence.CONTROLLER_SILENT_AFTER, cadence.CONTROLLER_FLOOR)
+    def test_each_workers_floor_is_its_timers_and_it_is_silent_only_past_it(self):
+        for unit, floor, silent in (
+            ("severino-hq-controller.timer", cadence.CONTROLLER_FLOOR, cadence.CONTROLLER_SILENT_AFTER),
+            ("severino-hq-automation.timer", cadence.AUTOMATION_FLOOR, cadence.AUTOMATION_SILENT_AFTER),
+        ):
+            with self.subTest(unit=unit):
+                timer = Path(settings.BASE_DIR) / "deploy/systemd" / unit
+                declared = dict(
+                    line.split("=", 1)
+                    for line in timer.read_text().splitlines()
+                    if "=" in line and not line.startswith("#")
+                )
+                self.assertEqual(declared["OnUnitInactiveSec"], f"{int(floor.total_seconds() // 60)}min")
+                self.assertGreater(silent, floor)
 
     def test_each_doorbell_is_the_one_its_path_unit_waits_on(self):
         """HQ is told only where the controller's doorbell is, and rings the
