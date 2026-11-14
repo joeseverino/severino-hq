@@ -13,7 +13,7 @@ from hq.platform.application.decisions import decision, urgency, workflow_parts
 from hq.platform.application.item_help import cannot_step, commands, do_step, run_step
 from hq.platform.application.workflow_contracts import ActionLink, WorkflowOutcome, WorkflowPlan, WorkflowStep
 
-from .markup import elements, hrefs, select, text, texts, with_class
+from .markup import all_elements, elements, hrefs, select, text, texts, with_class
 
 
 def row_hrefs(html):
@@ -204,14 +204,15 @@ class DecisionTests(SimpleTestCase):
         (meaning,) = select(html, "data-attention-detail")
         self.assertIn("What it means for the reader.", meaning.words)
         self.assertEqual(with_class(html, "row-below"), [])
-        # Every button, the first two and those that wait, is in one cell.
-        cells = {
-            id(next(ancestor for ancestor in reversed(link.ancestors) if ancestor.tag == "td"))
-            for link in elements(html, "a")
-            if link.attrs.get("href", "").startswith("/example/")
-        }
+        # The first buttons are in one cell, and those that wait stand
+        # together on the row's open line (beside the first ones' copy there).
+        buttons = [link for link in all_elements(html) if link.attrs.get("href", "").startswith("/example/")]
+        shown = [link for link in buttons if not link.beneath]
+        cells = {id(next(ancestor for ancestor in reversed(link.ancestors) if ancestor.tag == "td")) for link in shown}
         self.assertEqual(len(cells), 1)
-        self.assertEqual(sorted(row_hrefs(html)), [f"/example/{n}/" for n in range(3)])
+        later = [link for link in buttons if link.beneath and any("row-later" in up.classes for up in link.ancestors)]
+        self.assertTrue(later)
+        self.assertEqual(sorted(link.attrs["href"] for link in shown + later), [f"/example/{n}/" for n in range(3)])
 
     def test_the_title_goes_to_the_thing_and_the_named_next_step_is_a_link(self):
         subject = asdict(ActionLink("subject", "example-host", "read", "/machines/example-host/"))

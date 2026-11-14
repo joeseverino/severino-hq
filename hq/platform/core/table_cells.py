@@ -411,6 +411,10 @@ class Cells(HTMLParser):
         kept |= {at for at, cell in enumerate(heads[-1] if heads else []) if "data-stacks" in cell.attrs}
         controls = {place for row in records for place, _ in _row_controls(row, kinds, named)}
         kept |= controls
+        # A column of the rows' controls leaves a narrow box for a copy on
+        # each row's open line, unless a row fills in a field there: a copy
+        # of a field would send its value twice.
+        leaving = controls - {place for row in records for place, cell in _placed(row) if cell.fields}
         ranked = {at: rank for at, rank in drops.items() if at not in kept | empty}
         # Each rank is a width of the region (tables.css), counted from the
         # widest: a table's first rank leaves at the widest, and its others
@@ -427,12 +431,12 @@ class Cells(HTMLParser):
             if row.group:
                 self._span(row, width)
                 continue
-            self._mark_cells(row, kinds, named, empty, levels, controls)
+            self._mark_cells(row, kinds, named, empty, levels, leaving)
             self._name(row, kinds, named)
             if gutter is not None and row.section != "thead":
                 self._gutter(row, gutter)
             if row.section == "tbody" and row.end:
-                self._detail(row, width, kinds, named, names, levels)
+                self._detail(row, width, leaving, names, levels)
 
     def _open_row(self, row: _Row) -> None:
         """Mark the row open: its editor stands open on the line beneath it."""
@@ -464,7 +468,7 @@ class Cells(HTMLParser):
         self.toggles.append((cell.closed, any(_finished(each, "editor") for each in row.cells)))
 
     def _mark_cells(
-        self, row: _Row, kinds: dict[int, str], named: int, empty: set[int], levels: dict[int, int], controls: set[int]
+        self, row: _Row, kinds: dict[int, str], named: int, empty: set[int], levels: dict[int, int], leaving: set[int]
     ) -> None:
         """What each cell says of itself: blank, its whole column blank, the
         width its column leaves at (a column of the rows' controls leaves in
@@ -477,7 +481,7 @@ class Cells(HTMLParser):
             if "colspan" not in cell.attrs:
                 marks += [" data-blank-column"] if at in empty else []
                 marks += [f' data-drop="{levels[at]}"'] if at in levels else []
-                marks += [" data-narrow"] if at in controls else []
+                marks += [" data-narrow"] if at in leaving else []
                 if row.section != "thead":
                     marks += self._body_marks(cell, _kind_at(at, kinds, named), body=body)
             self.marks.setdefault(cell.start, []).extend(marks)
@@ -508,9 +512,9 @@ class Cells(HTMLParser):
                 self.roles.setdefault(start, set()).add("name")
 
     def _detail(
-        self, row: _Row, width: int, kinds: dict[int, str], named: int, names: list[str], levels: dict[int, int]
+        self, row: _Row, width: int, leaving: set[int], names: list[str], levels: dict[int, int]
     ) -> None:
-        """The row's open line: the blocks it moves there (its editor first,
+        """The row's open line: its controls where they leave the row, the blocks it moves there (its editor first,
         then each block it keeps beneath itself and its buttons past the
         first few), then an entry for each cell that holds something back,
         under its column's name. A cell's entry is a copy of what it says:
@@ -521,13 +525,12 @@ class Cells(HTMLParser):
         blocks: list[Span] = []
         entries: list[LineEntry] = []
         always = False
-        controls = dict(_row_controls(row, kinds, named))
         for at, cell in _placed(row):
             if "colspan" in cell.attrs or not cell.closed:
                 continue
             # The row's controls leave it in a narrow box, as a column does,
             # for a copy on its open line.
-            if at in controls:
+            if at in leaving and not cell.says_nothing:
                 entries.insert(0, LineEntry(None, (cell.opened, cell.value_end), whole=False, marks=" data-narrow"))
             # The row's editor leads its line, moved there: its ids are its own.
             editors = [span for _, span in _finished(cell, "editor")]
@@ -536,10 +539,14 @@ class Cells(HTMLParser):
             self.cuts += [((start, 0), (end, None)) for start, end in [*editors, *(span for _, span in moved)]]
             blocks += [span for label, span in moved if not label]
             always = always or bool(moved)
-            shown = cell.clamped or bool(cell.holds & {"row-more", "line-rest"})
-            if not cell.says_nothing and (shown or at in levels or "narrow-more" in cell.holds):
+            # A clamped value is whole in its title on a wide line, where words
+            # mostly fit; a narrow box, where its clamp holds, shows it whole
+            # here, so a row offers its toggle only where opening shows more.
+            shown = bool(cell.holds & {"row-more", "line-rest"})
+            narrow = cell.clamped or "narrow-more" in cell.holds
+            if not cell.says_nothing and (shown or at in levels or narrow):
                 when = "" if shown else f' data-drop="{levels[at]}"' if at in levels else ""
-                when += "" if shown or "narrow-more" not in cell.holds else " data-narrow"
+                when += " data-narrow" if narrow and not shown else ""
                 label = names[at] if 0 <= at < len(names) else ""
                 entries.append(LineEntry(label, (cell.opened, cell.value_end), whole=False, marks=when))
                 always = always or shown

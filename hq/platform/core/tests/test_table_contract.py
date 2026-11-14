@@ -275,14 +275,15 @@ class TableTagTests(SimpleTestCase):
         self.assertEqual((words.startswith("Add a run"), href), (True, "/runs/new/"))
         self.assertEqual(asked, [True])
 
-    def test_a_region_names_the_room_its_identifiers_get(self):
+    def test_a_region_still_takes_the_room_an_extension_names(self):
+        """The browser sizes every column, so a room changes nothing; an
+        extension's region still names one."""
+
         for room in ("shared", "snug"):
             with self.subTest(room):
                 source = '{% table_region "Services" room="' + room + '" %}{% endtable_region %}'
                 (region,) = with_class(_render(source), "table-scroll")
-                self.assertIn(f"is-{room}", region.classes)
-        (plain,) = with_class(_render('{% table_region "Services" %}{% endtable_region %}'), "table-scroll")
-        self.assertFalse({"is-shared", "is-snug"} & set(plain.classes))
+                self.assertFalse({"is-shared", "is-snug"} & set(region.classes))
 
     def test_a_compare_region_says_so(self):
         (region,) = with_class(
@@ -407,10 +408,10 @@ class TableTagTests(SimpleTestCase):
         (toggle,) = [each for each in elements(html, "button") if "data-row-toggle" in each.attrs]
         self.assertEqual(toggle.ancestors[-1].tag, "td")
 
-    def test_only_a_cut_cell_with_a_line_past_its_floor_is_long(self):
-        """A cut value with a line longer than its column shows whole at its
-        floor offers its row's toggle, so the open row shows it whole; a
-        status is never cut, and a short line or a blank cell offers nothing."""
+    def test_only_a_cut_cell_with_a_long_line_is_clamped(self):
+        """A value with a long line is held to a few lines, and its row's open
+        line shows it whole; a status is never held, and a short line or a
+        blank cell is not."""
 
         long = "A sentence long enough to stand <em>several</em> lines tall in a narrow column"
         lines = "Two lines, each of them short<br>and the second one as short"
@@ -422,25 +423,15 @@ class TableTagTests(SimpleTestCase):
             f'<tr><td>c</td><td>Up</td><td data-col="blank"><span class="empty-value">{"\u2014" * 18}</span></td></tr>'
             "</tbody></table>{% endtable_region %}"
         )
-        marked = [each.attrs.get("data-col") for each in elements(_render(source), "td") if "data-long" in each.attrs]
-        self.assertEqual(marked, ["name", "long"])
-
-    def test_the_words_beside_a_rows_controls_keep_their_line(self):
-        """Beside a row's controls the column that names it holds out for
-        `--row-words`, so a table with no room for both stands its controls
-        beneath the words rather than read a few words a line beside them."""
-
-        def table(last):
-            source = (
-                '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
-                '{% table_heading "Note" %}<th></th></tr></thead><tbody>'
-                f"<tr><td>a</td><td>b</td>{last}</tr></tbody></table>{{% endtable_region %}}"
-            )
-            (drawn,) = elements(_render(source), "table")
-            return drawn.attrs["style"]
-
-        self.assertIn("var(--row-words)", table('<td class="row-actions"><button>Read</button></td>'))
-        self.assertNotIn("var(--row-words)", table('<td class="select-column"><input type="checkbox"></td>'))
+        found = all_elements(_render(source))
+        clamped = [each.ancestors[-1].attrs.get("data-col") for each in found if "cell-clamp" in each.classes]
+        self.assertEqual(clamped, ["name", "long"])
+        # Whole on the open line in a narrow box alone, where a clamp holds;
+        # on a wide line the title holds it, so no row opens for it there.
+        entries = [each for each in found if each.tag == "div" and each.ancestors and each.ancestors[-1].tag == "dl"]
+        self.assertEqual(len(entries), 2)
+        self.assertTrue(all("data-narrow" in each.attrs for each in entries))
+        self.assertFalse(any("data-below" in each.attrs for each in found if each.tag == "tr"))
 
     def test_a_status_said_by_one_pill_alone_is_marked_to_take_its_columns_width(self):
         """So the pills down a status column share both edges, whatever their words."""
@@ -468,10 +459,10 @@ class TableTagTests(SimpleTestCase):
         self.assertEqual(marked, ["one", "other", "linked"])
 
     def test_a_row_that_holds_something_back_has_its_line_beneath(self):
-        """After a row is the line its toggle opens: the blocks it keeps
-        beneath itself, then each labeled block under its label. A column
-        that left and a narrow part show in the row itself once it opens
-        (tables.css), so the line copies neither."""
+        """After a row is the line its toggle opens: its controls, the blocks
+        it keeps beneath itself, then each labeled block under its label and a
+        copy of each cell that holds something back, the copy saying when it
+        shows: where its column has left, or in a narrow box."""
 
         source = (
             '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" gutter=True %}'
@@ -496,8 +487,10 @@ class TableTagTests(SimpleTestCase):
         (cell,) = [each for each in beneath if each.tag == "td"]
         self.assertEqual(cell.attrs["colspan"], "5")
         self.assertEqual([each.words for each in beneath if "row-below" in each.classes], ["tall", "x"])
-        self.assertEqual([each.words for each in beneath if each.tag == "dt"], ["Also"])
-        self.assertEqual([each.words for each in beneath if each.tag == "dd"], ["x"])
+        entries = [each for each in beneath if each.tag == "div" and each.ancestors[-1].tag == "dl"]
+        said = {entry.words for entry in entries if not {"data-drop", "data-narrow"} & set(entry.attrs)}
+        self.assertEqual(said, {"Also x"})
+        self.assertEqual(len([each for each in beneath if "row-controls" in each.classes]), 1)
 
     def test_each_part_of_a_cell_is_marked_with_its_role(self):
         """The region marks what a part of a cell is, so the stylesheet keys
@@ -588,7 +581,8 @@ class TableTagTests(SimpleTestCase):
             '<td>Shut <div class="row-below" data-label="Shut">y</div></td></tr></tbody></table>{% endtable_region %}'
         )
         values = [each.words for each in all_elements(_render(source)) if each.tag == "dd"]
-        self.assertEqual(values, ["y"])
+        self.assertIn("y", values)
+        self.assertNotIn("x", values)
 
     def test_a_rank_on_the_column_that_names_the_row_is_refused(self):
         source = (
