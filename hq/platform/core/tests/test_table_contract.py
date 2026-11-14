@@ -255,6 +255,29 @@ class TableTagTests(SimpleTestCase):
                 self.assertEqual(len(elements(html, "table")), 1)
                 self.assertEqual(select(html, "data-empty-state"), [])
 
+    def test_what_would_fill_a_region_is_asked_only_when_it_is_empty(self):
+        """A remedy may read the database (`page.remedy`), so a region with
+        rows, which never shows one, never asks for it."""
+
+        asked = []
+
+        class Page:
+            @property
+            def remedy(self):
+                asked.append(True)
+                return {"label": "Add a run", "url": "/runs/new/"}
+
+        source = (
+            '{% table_region "Runs" empty="No runs yet." remedy=page.remedy %}<table class="data-table"><thead><tr>'
+            '{% table_heading "Name" "identifier" %}</tr></thead>'
+            "<tbody>{% for row in rows %}<tr><td>{{ row }}</td></tr>{% endfor %}</tbody></table>{% endtable_region %}"
+        )
+        _render(source, {"rows": ["a"], "page": Page()})
+        self.assertEqual(asked, [])
+        ((words, href),) = links(_render(source, {"rows": [], "page": Page()}))
+        self.assertEqual((words.startswith("Add a run"), href), (True, "/runs/new/"))
+        self.assertEqual(asked, [True])
+
     def test_a_region_names_the_room_its_identifiers_get(self):
         for room in ("shared", "snug"):
             with self.subTest(room):

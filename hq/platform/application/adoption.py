@@ -18,7 +18,7 @@ lazy from django.core.exceptions import ValidationError
 lazy from django.utils import timezone
 lazy from django.utils.text import get_text_list
 
-from hq.domains.control_plane.models import ManagedResource, NotManaged, ProviderConnection, ProviderInventory
+from hq.domains.control_plane.models import ManagedResource, NotManaged, ProviderConnection
 from hq.domains.control_plane.names import normalized_hostname
 from hq.domains.control_plane.providers import PROVIDERS, record_spec, registry_label, service_facets
 lazy from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS, connection_credential
@@ -32,6 +32,7 @@ lazy from .connection_catalog import EVIDENCE_DETAILS, PROVEN_EVIDENCE, grant_ev
 lazy from .connection_contracts import ConnectionAbility, ConnectionInstance
 lazy from .connection_setup import MANAGES_FIELD
 lazy from .connections import connection_rows
+lazy from .facts import every_snapshot
 lazy from .infrastructure import (
     ManagedResourceCommand,
     save_managed_resource,
@@ -334,7 +335,7 @@ def unmanaged() -> tuple[Unmanaged, ...]:
 
     manages = manages_through()
     found: list[Unmanaged] = []
-    for snapshot in ProviderInventory.objects.all():
+    for snapshot in every_snapshot():
         provider = PROVIDERS.get(snapshot.kind)
         if provider is None or provider.from_record is None:
             continue

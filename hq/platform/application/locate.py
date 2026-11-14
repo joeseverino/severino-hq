@@ -15,12 +15,11 @@ from urllib.parse import urlsplit
 
 from hq.domains.control_plane.names import normalized_hostname
 from hq.platform.core.network import split_host_port
-lazy from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
 lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 lazy from hq.domains.control_plane.providers import PROVIDERS, read_record
 
 lazy from .connections import connection_rows
-lazy from .facts import snapshots_of
+lazy from .facts import every_snapshot, snapshots_of
 lazy from .infrastructure import declared_machines
 
 
@@ -253,7 +252,7 @@ def _record_observed_answers(found: dict[str, set[str]], names: tuple, addresses
             found.setdefault(label, set()).update(answered)
 
 
-def observed_answers(snapshots=None) -> dict[str, tuple[str, ...]]:
+def observed_answers() -> dict[str, tuple[str, ...]]:
     """Every address each hostname is *seen* answering at.
 
     Observed rather than declared: a record HQ has written down but not yet
@@ -262,9 +261,7 @@ def observed_answers(snapshots=None) -> dict[str, tuple[str, ...]]:
     """
 
     found: dict[str, set[str]] = {}
-    # ``snapshots`` is every stored reading, from a caller that already holds
-    # them; without it they are read here.
-    for snapshot in ProviderInventory.objects.all() if snapshots is None else snapshots:
+    for snapshot in every_snapshot():
         # Driven by the provider registry rather than a list of DNS kinds: a
         # provider that reads its records back and says what a record answers
         # with resolves names, whatever it is called, so a DNS provider added
@@ -326,7 +323,7 @@ def names_by_connection() -> dict[str, tuple[str, ...]]:
         return index.resolve(host) or host
 
     found: dict[str, tuple[str, ...]] = {}
-    for connection in ProviderConnection.objects.all():
+    for connection in connection_rows():
         ref = connection.connection_ref.strip()
         placed = place(connection.endpoint)
         if ref and placed:

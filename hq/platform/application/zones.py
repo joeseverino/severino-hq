@@ -35,7 +35,7 @@ from .record_errors import PolicyError, RecordNotFound
 from .resource_records import ManagedResourceItem
 from .security import Principal
 lazy from . import adoption, plugins
-lazy from .facts import snapshots_of
+lazy from .facts import snapshots_of, stored_snapshots
 lazy from .projection import read_once
 lazy from .resource_context import shared_names, value_summary
 
@@ -394,9 +394,7 @@ def _zone_catalog(pinned: frozenset[str]) -> tuple[Zone, ...]:
         for resource in ManagedResource.objects.filter(kind=ZONE_KIND, enabled=True)
         if resource.spec.get("zone")
     }
-    snapshots = {
-        snapshot.kind: snapshot for snapshot in ProviderInventory.objects.filter(kind__in=(ZONE_KIND, RECORD_KIND))
-    }
+    snapshots = {kind: rows[0] for kind, rows in stored_snapshots().items() if kind in (ZONE_KIND, RECORD_KIND)}
     seen = _sweep_entries(snapshots.get(ZONE_KIND))
     # One pass over the unmanaged set, shared by the zones and their records.
     # Called twice it would run the whole inventory diff twice for one page.

@@ -274,14 +274,18 @@ class RegionNode(template.Node):
         self.options = options
 
     def render(self, context: Any) -> str:
-        region = _region(
-            self.label.resolve(context), **{name: value.resolve(context) for name, value in self.options.items()}
-        )
+        label = self.label.resolve(context)
+        # What would fill an empty table (`page.remedy` reads the database) is
+        # asked only of a table with no rows, which is the only one to show it.
+        options = {name: value.resolve(context) for name, value in self.options.items() if name != "remedy"}
+        region = _region(label, **options)
         content = mark_cells(self.nodelist.render(context), sorts=not region["chart"])
         if content is None:
             # A table with no rows would draw its headings over nothing, so the
             # region says it has nothing instead (docs/Design.md, Nothing empty
             # takes space).
+            if "remedy" in self.options:
+                region = _region(label, **options, remedy=self.options["remedy"].resolve(context))
             return render_to_string("partials/_empty_state.html", region["empty"])
         # A box that scrolls is a stop for the keyboard, named so the stop says
         # what it holds. Without script any region may scroll, so every one is
