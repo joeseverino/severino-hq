@@ -196,6 +196,62 @@ class DashboardQueueTests(TestCase):
         self.assertNotContains(response, "data-attention-item")
         self.assertEqual(response.context["action_queue_count"], 4)
 
+    def test_a_held_request_is_read_in_place_whatever_else_is_open(self):
+        from django.urls import reverse
+
+        from hq.domains.control_plane.models import CapabilityRule
+        from hq.platform.application.attention import waiting_for_approval
+        from hq.platform.application.capabilities import execute_capability
+        from hq.platform.application.security import Capability, Principal
+        from hq.platform.application.tests.writers import keyed
+
+        CapabilityRule.objects.create(subject="example-agent", capability="documentation.sync", rule="approve")
+        agent = Principal("example-agent", "mcp", frozenset({Capability.READ, Capability.SYNC_DOCUMENTATION}))
+        held = execute_capability(
+            "documentation.sync", keyed({"manifest": [{"doc_id": "rb-example", "title": "Example"}]}), principal=agent
+        )["approval"]["id"]
+        approve = reverse("control_plane:approval_decide", kwargs={"approval_id": held, "decision": "approve"})
+
+        def dashboard(findings, reader=None):
+            serious = tuple(
+                Insight("serious", "Review", f"Example finding {n}", "1", "Inspect it.", key=f"example-{n}")
+                for n in range(findings)
+            )
+            entries = gather_attention(
+                (
+                    ("example.utility", "Example", lambda: serious, ()),
+                    ("example.approvals", "Waiting for approval", waiting_for_approval, ()),
+                )
+            )
+            # The queue is replaced, not written: derive with the store bypassed.
+            with patch("hq.platform.application.dashboard.domain_attention_items", return_value=entries), uncached():
+                if reader is None:
+                    return self.client.get("/")
+                with patch("hq.platform.core.dashboard_views.web_principal", return_value=reader):
+                    return self.client.get("/")
+
+        # Beside more findings than fit, the held request is read in place with its buttons;
+        # the findings stay behind the count.
+        crowded = dashboard(5)
+        self.assertEqual(len(select(crowded, "data-attention-item")), 1)
+        self.assertTrue(select(crowded, "formaction", approve))
+        self.assertNotContains(crowded, "Example finding")
+        self.assertIn("/action-items/", hrefs(crowded))
+
+        # A reader who may not see another caller's held request is not shown it in place.
+        stranger = Principal("example-other", "mcp", frozenset({Capability.READ}))
+        hidden = dashboard(5, reader=stranger)
+        self.assertFalse(select(hidden, "formaction", approve))
+        self.assertNotContains(hidden, "data-attention-item")
+
+        # A short queue is read whole, the held request first.
+        short = dashboard(2)
+        rows = select(short, "data-attention-item")
+        self.assertEqual(len(rows), 3)
+        (button,) = select(short, "formaction", approve)
+        self.assertTrue(button.inside(rows[0]))
+        self.assertContains(short, "Example finding 1")
+
     def test_search_includes_the_recommended_action(self):
         response = self.client.get("/action-items/", {"q": "Reconcile the bill"})
         self.assertContains(response, "Check the reading")

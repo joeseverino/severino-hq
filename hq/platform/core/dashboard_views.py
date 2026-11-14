@@ -43,7 +43,8 @@ lazy from hq.platform.application.pins import CHOOSE, DASHBOARD_LINK
 from .forms import DashboardLinksForm, DashboardSettingsForm
 
 # A queue of this many or fewer is read on the dashboard itself, each card
-# with its button; a longer one is a count and a link to its page.
+# with its button; a longer one is a count and a link to its page, beneath
+# the held requests, which are read there at any length.
 NEEDS_YOU_IN_PLACE = 3
 
 
@@ -142,14 +143,17 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
         queue = queue_state.with_aside_state(snapshot["priority"], self.request.user)
         doing, told = queue_state.split_waiting(queue)
         action_queue_count = len(doing)
-        # Only what is serious, and what an agent waits on this person to
-        # decide, is shown in place, and only while it is short enough to read
-        # there. Everything else is the count above it and in the header.
-        serious = [
-            item
-            for item in doing
-            if item["status"] == "serious" or item["key"].partition(":")[2].startswith(APPROVAL_KEY)
-        ]
+        # What an agent waits on this person to decide is always shown in
+        # place, first: nothing is written until they do. What is serious
+        # joins it only while the whole stays short enough to read there.
+        # Everything else is the count above it and in the header.
+        held, serious = [], []
+        for item in doing:
+            if item["key"].partition(":")[2].startswith(APPROVAL_KEY):
+                held.append(item)
+            elif item["status"] == "serious":
+                serious.append(item)
+        needs_you = [*held, *serious] if len(held) + len(serious) <= NEEDS_YOU_IN_PLACE else held
         hour = timezone.localtime().hour
         greeting = "Good morning" if hour < 12 else "Good afternoon" if hour < 18 else "Good evening"
         if name := self.request.user.first_name:
@@ -216,7 +220,7 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
             projects_needing_output=snapshot["kpis"]["projects_needing_output"],
             draft_content_count=snapshot["kpis"]["draft_content"],
             action_queue_count=action_queue_count,
-            needs_you=serious if len(serious) <= NEEDS_YOU_IN_PLACE else [],
+            needs_you=needs_you,
             # The setup steps a new HQ has left; empty once they are done.
             # Every step while any is left, the done ones marked, so the row
             # shows how far a new HQ has come.

@@ -1267,7 +1267,8 @@ draws a thing's problems this way under its urgent box and in each part's card.
 
 A queue of three or fewer is read on the dashboard, under the greeting, as
 the queue's own rows (`glance`), under no heading of their own. A longer one
-is a count and a link to its page. There a row is its title, what it means,
+is a count and a link to its page, except the held requests, which are read
+there first at any length. There a row is its title, what it means,
 its age and its buttons, holding nothing beneath; its title opens the row on
 the page that shows the rest, steps included, or a held request's own page.
 

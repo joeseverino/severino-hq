@@ -27,8 +27,9 @@ you, the line drawn here as `status`.
 {% comment %}
 Serious items show here as the queue's own cards, fix button included, with no
 heading row: the greeting above says what they are, and the card is named for
-assistive tech. Anything else, or more than NEEDS_YOU_IN_PLACE, is only the
-count above and in the header.
+assistive tech. Held requests are always here, first. Anything else, or
+serious items past NEEDS_YOU_IN_PLACE, is only the count above and in the
+header.
 {% endcomment %}
 {% if needs_you %}
 {% url 'action_items_set_aside' as set_aside_url %}{% url 'action_items_bring_back' as bring_back_url %}
