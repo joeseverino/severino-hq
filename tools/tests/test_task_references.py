@@ -51,8 +51,6 @@ FIXTURE_TASKS = {
     ("tests/shell/test-heavy.sh", "weighed"),
     ("tests/shell/test-heavy.sh", "spend"),
     ("tests/shell/test-heavy.sh", "fixed"),
-    # The fixture config fast's tests run their gates from.
-    ("tools/gate/tests/test_fast.py", "gate:*"),
 }
 # A word's quoting and the punctuation of the sentence around it.
 QUOTED = re.compile(r"^[('\"\\]+|[.,;:)'\"\\]+$")

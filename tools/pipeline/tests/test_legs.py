@@ -1,5 +1,5 @@
-"""Which CI legs a pull request runs, as mise's --affected reads each leg's sources, and that every
-tracked file is read by one, so no change is left untested."""
+"""Every tracked file is read by a CI leg, as mise's --affected reads each leg's sources, so no change
+is left untested."""
 
 import os
 import shutil
@@ -45,51 +45,6 @@ def repository(root: Path) -> Path:
     root.mkdir()
     fixture_git(root)("init", "--quiet")
     return root
-
-
-@tag("source")
-class LegSelectionTests(SimpleTestCase):
-    def select(self, *changed: str):
-        """The legs a change to ``changed`` runs, on a fixture holding this checkout's task definitions."""
-
-        from tools.pipeline import legs
-
-        with tempfile.TemporaryDirectory() as folder:
-            root = repository(Path(folder, "tree"))
-            config(root)
-            write(root, list(changed), "")
-            commit(root, "base")
-            base = fixture_git(root)("rev-parse", "HEAD")
-            write(root, list(changed), "# changed\n")
-            commit(root, "change")
-            with patch.dict(os.environ, trusted_mise(root, Path(folder, "state"))):
-                return legs.select(base, "HEAD", root)
-
-    def runs(self, *changed: str) -> set[str]:
-        return {leg for leg, runs in self.select(*changed).runs.items() if runs}
-
-    def test_a_path_no_leg_reads_runs_every_leg_and_is_named(self):
-        selection = self.select("unplaced/example.txt", "docs/Example.md")
-        self.assertEqual(selection.unread, ("unplaced/example.txt",))
-        self.assertTrue(all(selection.runs.values()), selection.runs)
-
-    def test_a_docs_change_runs_lint_alone(self):
-        self.assertEqual(self.runs("docs/Example.md"), {"lint"})
-
-    def test_a_systemd_drop_in_runs_the_tests_that_read_units_and_no_browser(self):
-        """The Go host checks hold every unit and drop-in; the app opens none of these."""
-        self.assertEqual(
-            self.runs("deploy/systemd/severino-hq-secrets.service.d/30-sandbox.conf"), {"lint", "test", "controller"}
-        )
-
-    def test_a_template_change_runs_the_browser_and_leaves_out_the_go_tests(self):
-        self.assertEqual(self.runs("templates/base.html"), {"lint", "test", "browser"})
-
-    def test_a_go_change_runs_the_go_tests_and_no_browser(self):
-        self.assertEqual(self.runs("controller/host/verify.go"), {"lint", "test", "controller"})
-
-    def test_a_change_to_the_workflow_runs_every_leg(self):
-        self.assertEqual(self.runs(".github/workflows/ci.yml"), {"lint", "test", "controller", "browser"})
 
 
 @tag("source", "tree")

@@ -432,7 +432,7 @@ that reaches inside one (`.data-table` and a combinator, a cell, `.row-detail`,
 `.row-columns`). Only the table primitive's sheets may set them (`base.css`,
 `cuts.css`, `figures.css`, `tables.css`, `surfaces.css`). *Gates:* `cells` and
 `cell labels` in the layout survey, read with rows open by `dev:look --expand`;
-`test_stylesheet_lint`.
+`lint:css`.
 
 An intrinsic size (`max-content`, `min-content`) goes on an element inside a
 cell, never on the `td`. Chromium ignores it on a table cell and WebKit does

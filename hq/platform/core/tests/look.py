@@ -129,8 +129,7 @@ GATE_TREE = "HQ_GATE_TREE"
 # seed, probe or this look reads, since a path missed by an exclusion costs a
 # rerun while a path missed by an inclusion keeps a survey that should run
 # again. The Go controller is a separate program; its JSON contracts, which
-# pages read, stay in. Every module the look and the pages load is held inside
-# by test_look_survey_record.py.
+# pages read, stay in.
 SURVEY_INPUTS = (
     ".",
     ":(exclude)docs",

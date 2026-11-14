@@ -354,8 +354,8 @@ status=0
 said="$(MISE_TASK_LOCK_TIMEOUT=1s mise -C "${second}" run weighed 2>&1)" || status=$?
 [ "${status}" -ne 0 ] || fail "a share of every token ran beside the holder"
 names_holder "${said}" "a share of every token that gave up waiting"
-for task in "test hq.platform.core.tests.test_test_runner.BrowserTestTests" \
-    "lint:source tools.gate.tests.test_turn.WeightTests" "test hq.platform.core.tests" lint:source; do
+for task in "test tools.dev.tests.test_serve" \
+    "lint:source tools.tests.test_task_files.TaskFileFilterTests" "test hq.platform.core.tests" lint:source; do
     status=0
     # shellcheck disable=SC2086  # the task and its label, as typed
     said="$(MISE_TASK_LOCK_TIMEOUT=1s mise -C "${repo}" run -q ${task} 2>&1)" || status=$?
@@ -438,6 +438,6 @@ case "${said}" in
 esac
 
 # This checkout's narrow run of source tests takes its share and ends with one line.
-MISE_TASK_LOCK_TIMEOUT=5s mise -C "${repo}" run -q lint:source tools.gate.tests.test_turn.WeightTests \
+MISE_TASK_LOCK_TIMEOUT=5s mise -C "${repo}" run -q lint:source tools.tests.test_task_files.TaskFileFilterTests \
     >"${work}/light" 2>&1 || { cat "${work}/light" >&2; fail "a narrow source test run failed"; }
 one_line "${work}/light" "a narrow source test run, in its share,"

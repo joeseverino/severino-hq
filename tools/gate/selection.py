@@ -419,8 +419,7 @@ def reading(paths: list[str], files: list[Path]) -> set[str]:
     """The modules a change reaches through the files their source names
     (docs/Development.md, What `fast` runs, says how a path is named), so a
     test that reads a workflow, a template or a doc as text runs when it
-    changes. The guard in test_fast.py holds this to every path a test module
-    builds (``hq.platform.application.tests.tree.Named``)."""
+    changes."""
 
     index = Naming(named(chain.ROOT, tuple(files)))
     paths = rendering(paths)

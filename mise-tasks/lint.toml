@@ -6,9 +6,8 @@
 # fast. Its sources are the files it reads, then the dependencies, tool pins
 # and task definitions every gate reads; `!` takes out a path its tool never
 # reads, as the tool's own config says. outputs = [] keeps mise from skipping
-# it as up to date. tools/gate/tests/test_fast_selection.py holds all of it,
-# and tools/tests/test_drift_sources.py holds a drift gate's sources to every
-# file of the checkout its run opens.
+# it as up to date. tools/tests/test_drift_sources.py holds a drift gate's
+# sources to every file of the checkout its run opens.
 
 ["lint:ruff"]
 description = "Ruff lints the Python and holds it to its format"

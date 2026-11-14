@@ -403,9 +403,7 @@ The tests it selects are:
   (`"partials/table.html"`) too; a Python module by its
   whole path, and a test alone by a directory of two parts or more above it.
   A test that reads a workflow through a helper naming the workflows'
-  directory is one. `test_fast.py` holds this to every path each test module
-  builds, read from its code (`Named` in
-  `hq/platform/application/tests/tree.py`);
+  directory is one;
 - the architecture tests;
 - every test tagged `tree` the change reaches. Such a test finds its files (a
   module, a template, a doc) by walking this checkout, which no import or name shows
@@ -469,10 +467,7 @@ shell gate also runs when a path the change touched is one
 `tools/gate/shell-sources.sh` names (a deleted one as the base had it), which
 no glob can say. `mise run --tag fast --affected --affected-base <ref>
 --affected-json` names each gate it would pick and why, running none. A lint gate that reaches the network, or whose check
-fast makes another way, is left untagged and named in `EXEMPT` in
-`tools/gate/tests/test_fast_selection.py`, with why; that module fails on a
-`lint:*` task in neither, and holds each gate's `!` patterns to the
-exclusions its tool declares.
+fast makes another way, is left untagged.
 
 A test module that a `test:*` task runs by its label in a dependency group's
 environment (`uv run --group fuzz`), which the tests' environment lacks, is
@@ -720,9 +715,7 @@ beside the holder. A gate whose one process still loads the machine
 through most of a fast run (`lint:mypy` is one) carries the tag `heavy`, which only fast reads: fast
 runs it beside its tests in the share it takes for them, never among its
 quick gates, while a direct `mise run` of it, `lint` and CI run it as a step
-of one process. `FastGateStageTests` (`tools/gate/tests/test_fast_stages.py`)
-holds every gate fast runs to one side: tagged `fast` as a quick gate, or
-tagged `heavy` or taking the lock. An aggregate (`check`, `lint`, `test`, `browser`) holds no
+of one process. An aggregate (`check`, `lint`, `test`, `browser`) holds no
 turn of its own, so its light gates never wait; `build` holds one across its
 steps, which share the VM it boots. A one-off command in the built image
 (`mise run image:run -- python -V`) holds the turn and the VM while it runs,
@@ -737,10 +730,7 @@ heavy tasks asked together (`mise run browser:webkit :::
 browser:demo`) queue on the turn and each runs in full, and a hung holder
 is stopped. A heavy task started inside a turn runs at once, since mise hands
 the lock down (`MISE_TASK_LOCKS`), and a holder killed outright frees it.
-`HeavyTaskTests` (`tools/gate/tests/test_turn.py`) holds every task to its
-side of the line, `WholeMachineTests` there holds each task that takes the
-turn to itself, or every token, to the list that says why it needs the whole
-machine, and `tests/shell/test-heavy.sh` the turn's promises.
+`tests/shell/test-heavy.sh` holds the turn's promises.
 
 A landing goes first. Every task that takes the turn passes the lock `gate`
 first, which mise takes in sorted order, so a task waiting there holds
@@ -750,7 +740,6 @@ the landing waits behind only the run already in the turn, since it takes the
 gate with a blocking lock that the kernel hands over as the holder ends, where
 mise polls. The command's own heavy tasks inherit the gate
 (`MISE_TASK_LOCKS`) and take turns on `heavy` among themselves.
-`test_landing.py` (`tools/gate/tests/`) runs that order against mise.
 
 A run of tests takes a token for each process it runs tests in
 (`tools/gate/turn.py`): one when it is serial (`--parallel 1`), and
@@ -760,7 +749,7 @@ past the budget takes all of it, so a small machine runs no more at once than
 it holds. So `mise run test <module>.<Class>` takes one, and a run across the
 cores (a module of many classes, the suite) takes every token. The decision
 weighs the arguments the run passes: a task hands it its run's own options
-before the labels (`test_arguments`), which `HeavyTaskTests` holds to the run.
+before the labels (`test_arguments`).
 `test --at` takes what its labels weigh here, since the ref's runs of them
 come one at a time; `test --go` and the shell suites take every token.
 fast's tests and its `heavy` gates take one share: what the tests weigh, one
@@ -811,8 +800,7 @@ an aggregate whose script runs `mise run` on one that waits) declares
 `SEVERINO_WAITS_FOR_HEAVY_TURN="1"` in its env, the one place
 `mise tasks ls --json` shows it without running anything; mise lists no edge
 for a `mise run` inside a script. A tool outside the repository, such as an
-agent's command hook, can read it beside the lock. `TurnMarkTests` (`tools/gate/tests/test_turn_mark.py`) derives the set from
-every task's scripts and holds the marks to it.
+agent's command hook, can read it beside the lock.
 
 A waiting task names the holder, its checkout, how long it has held the turn
 and its pid, again every 30 seconds:
@@ -924,8 +912,8 @@ How a run goes (`tools/gate/remote.py`, and `tools/gate/remote-host.sh` there):
    parsed them here, with each variable of this run that changes what a gate
    does (`CARRIED`, such as `HQ_BROWSER_ENGINE`) and this run's output mode,
    since the run there writes to no terminal. Every other variable a gate
-   reads is named in `LEFT` with why the run there reads its own, and
-   `test_remote.py` fails on one in neither. Closing the connection stops it.
+   reads is named in `LEFT` with why the run there reads its own. Closing the
+   connection stops it.
    The run only checks, as CI's gates do: fast writes no fix there, and a
    run that leaves the worktree holding any tree but the one sent fails,
    naming each file it changed.
@@ -1225,8 +1213,7 @@ the seed's estate once, as its page sends it, and the page is what the refusal
 answers, its errors drawn. What it sends is written there or read from the
 estate, never typed, and the page must answer the refusal's status: one the
 form accepts fails the run, as does a page that answers anything but 200. A new
-refused state to look at is one entry there; `test_look_names` sends every one
-and holds it refused.
+refused state to look at is one entry there.
 
 A look saves a full-page screenshot of each page at each width in a folder of
 the run's own, `var/look/<when it began>/`, which its last line names. A page

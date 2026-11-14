@@ -310,7 +310,7 @@ SOURCE = "HQ_FAST_SOURCE"
 def heavy_gates(tasks: tuple[str, ...]) -> tuple[str, ...]:
     """Those of ``tasks`` that run in the heavy turn: tagged HEAVY, or taking
     the turn's lock themselves. Every task that takes the lock declares a
-    timeout (HeavyTaskTests), so only those are asked for their locks, which
+    timeout, so only those are asked for their locks, which
     mise reports one task a call."""
 
     listed = mise_tasks()

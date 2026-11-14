@@ -50,8 +50,7 @@ CARRIED = (
     *("HQ_BROWSER_CHANNEL", "HQ_BROWSER_ENGINE", "HQ_BROWSER_FACE", "HQ_BROWSER_SHARD", "HQ_GATE_OUTPUT"),
     *("HQ_LOCAL_PLUGINS", "HQ_TEST_STALL_SECONDS", "HYPOTHESIS_PROFILE", "REQUIRE_COMPOSED", "TEST_PYTHONS"),
 )
-# Every other variable a gate reads, by why the run there reads its own; test_remote.py holds the two lists
-# to what the gates read.
+# Every other variable a gate reads, by why the run there reads its own.
 LEFT = {
     "a gate sets it for what it runs, there as here": (
         "HQ_TEST_WEIGHED",
