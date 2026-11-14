@@ -106,6 +106,7 @@ class _Asked(Context):
 
 
 HEAD = "partials/_page_head.html"
+COLOR_SCHEME = "partials/_color_scheme.html"
 MAIN = "partials/_page_main.html"
 
 
@@ -118,6 +119,6 @@ def part_page(name, markup, before="", after=""):
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
-        f"<title>{escape(name)}</title>{stylesheets()}</head>"
+        f"{render_to_string(COLOR_SCHEME)}<title>{escape(name)}</title>{stylesheets()}</head>"
         f"<body>{before}{main}{after}</body></html>"
     )

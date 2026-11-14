@@ -259,6 +259,15 @@ class FastGateFixTests(GateTestCase):
                 gate.restart.assert_not_called()
                 self.assertEqual(fix.called, bool(first.tasks))
 
+    def test_a_run_sent_from_another_machine_fixes_nothing(self):
+        """Its fixes would stay on that machine while its verdict passed the tree they made, so it only checks."""
+
+        with (
+            everywhere("subprocess", SimpleNamespace(run=self.fail)),
+            patch.dict("os.environ", {"HQ_GATE_SENT": "1" * 40}),
+        ):
+            self.assertEqual(fast_gate.fix(("lint:toml", "lint:file")), [])
+
     def test_no_selected_fix_mode_runs_nothing(self):
         with everywhere("subprocess", SimpleNamespace(run=self.fail)):
             self.assertEqual(fast_gate.fix(("lint:check",)), [])

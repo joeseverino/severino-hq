@@ -286,6 +286,24 @@ def drives_a_browser(test: unittest.TestCase) -> bool:
     )
 
 
+def browser_engine() -> str:
+    """The engine a browser run draws in: HQ_BROWSER_ENGINE, WebKit unless it says otherwise."""
+
+    engine = os.environ.get("HQ_BROWSER_ENGINE", "webkit")
+    if engine not in {"chromium", "firefox", "webkit"}:
+        raise ValueError("HQ_BROWSER_ENGINE must be chromium, firefox, or webkit.")
+    return engine
+
+
+def install_browser() -> None:
+    """The engine this run draws in, installed by setup:browser at the release
+    the locked Playwright pins: a run of browser tests by label is a task
+    that names no browser to depend on, and costs nothing once it is installed."""
+
+    command = ["mise", "run", "--quiet", "setup:browser", browser_engine()]
+    subprocess.run(command, cwd=settings.BASE_DIR, check=True)  # noqa: S603 - the engine is one of three names
+
+
 def in_this_share(test: unittest.TestCase) -> bool:
     """Whether a named test runs in this job's share of a split browser gate
     (``shards``): a sweep runs in every share, reading its own pages."""
@@ -391,6 +409,7 @@ class SeverinoTestRunner(DiscoverRunner):
             # Here, in the process that starts the run and before any worker
             # shoots: the last run's shots of this task give way to this one's.
             shutil.rmtree(browser_failures(), ignore_errors=True)
+            install_browser()
             index, total = shards.shard()
             if total > 1:
                 print(f"Browser share {index}/{total}: {sum(1 for _ in tests_in(suite))} tests", file=sys.stderr)

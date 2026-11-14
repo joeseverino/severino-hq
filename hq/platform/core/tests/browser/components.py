@@ -1606,6 +1606,25 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 self.page.evaluate("() => document.querySelector('main [popover]').showPopover()")
                 self.assertEqual(self.page.evaluate(CUT_AND_CLOSED, SELECTORS["unseen"]), [])
 
+    def test_a_menu_is_judged_beside_its_button_and_one_wider_than_the_screen_still_fails(self):
+        """A menu's panel is judged shown as a reader opens it, its button in
+        view: one that fits beside its button passes, wherever on a long page
+        the button lies, and one wider than the screen fails, named."""
+
+        menu = (
+            '<p class="example-tall"></p><div data-menu><button type="button" popovertarget="example-panel">More'
+            '</button><div id="example-panel" popover><a href="/example/">An example action</a></div></div>'
+            '<p class="example-tall"></p>'
+        )
+        self.pages = {**self.pages, "menu-probe": probe(menu)}
+        self.open("menu-probe", 402)
+        add_css(self.page, ".example-tall { block-size: 4000px; } #example-panel { inline-size: 340px; }")
+        self.every_anchored_popover_keeps_the_layout_rules("menu-probe")
+        add_css(self.page, "#example-panel { inline-size: 480px; }")
+        with self.assertRaises(AssertionError) as failed:
+            self.every_anchored_popover_keeps_the_layout_rules("menu-probe")
+        self.assertIn("with #example-panel shown", str(failed.exception))
+
     @with_script
     def test_a_wide_table_fits_a_phone_and_opening_a_row_moves_nothing(self):
         """A table of four columns or more keeps the column that names each row
@@ -1804,7 +1823,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
         for width in WIDTHS:
             with self.subTest(width=width):
                 self.open("dense/dashboard", width)
-                self.page.locator(SELECTORS["ask_note"]).wait_for(state="visible")
+                self.page.locator(SELECTORS["page_note"]).wait_for(state="visible")
                 self.assertEqual(self.page.evaluate(OVERLAPPING_TEXT, SELECTORS["floating"]), [])
 
     def test_the_map_scrolls_with_the_page_and_draws_no_empty_lane(self):

@@ -42,8 +42,8 @@ controller reports HQ's own pages use. It:
 - declines the agent's held requests except its DNS change;
 - lets the worker finish what waits, and runs again each playbook whose newest
   run did not finish;
-- has the controller's next sweep find the machine restarted, room on its root
-  and the failing service fixed;
+- has the controller's next sweep find the machine restarted, room on its
+  root, the failing service fixed and the laptop's tailnet key renewed;
 - files the dropped-in receipt against its expense;
 - dismisses everything on Needs you except four things left on purpose: an
   image update, an image run by tag alone, a certificate to renew and the

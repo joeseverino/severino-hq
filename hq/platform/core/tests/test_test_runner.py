@@ -379,9 +379,29 @@ class BrowserTestTests(SimpleTestCase):
 
 
 class BrowserFailureShotTests(SimpleTestCase):
-    def built(self, *tests):
-        with unittest.mock.patch.object(DiscoverRunner, "build_suite", return_value=unittest.TestSuite(tests)):
+    def built(self, *tests) -> list[list[str]]:
+        """Build a run of ``tests``, and say each command it ran on the way."""
+
+        with (
+            unittest.mock.patch.object(DiscoverRunner, "build_suite", return_value=unittest.TestSuite(tests)),
+            unittest.mock.patch("hq.platform.core.test_runner.subprocess.run") as ran,
+        ):
             SeverinoTestRunner(verbosity=0).build_suite(["example"])
+        return [call.args[0] for call in ran.call_args_list]
+
+    def test_a_run_of_browser_tests_installs_the_engine_it_draws_in_and_no_other_run_installs_one(self):
+        """A test run by label names no browser task to depend on, so the run itself installs its engine
+        the way that task's dependency does, and the second machine draws in the locked release too."""
+
+        gate = type("Gate", (SimpleTestCase,), {"__module__": f"{BROWSER_TESTS}.gate", "test_it": lambda self: None})
+        plain = type("Plain", (SimpleTestCase,), {"test_it": lambda self: None})
+        with tempfile.TemporaryDirectory() as checkout, override_settings(BASE_DIR=checkout):
+            self.assertEqual([command for command in self.built(plain("test_it")) if "setup:browser" in command], [])
+            for engine in ("webkit", "chromium"):
+                with self.subTest(engine=engine), unittest.mock.patch.dict(os.environ, {"HQ_BROWSER_ENGINE": engine}):
+                    installed = [command for command in self.built(gate("test_it")) if "setup:browser" in command]
+                    self.assertEqual([command[-1] for command in installed], [engine])
+                    self.assertEqual(installed[0][:2], ["mise", "run"])
 
     def test_a_browser_run_replaces_its_tasks_shots_in_the_checkout_and_no_other_run_does(self):
         gate = type("Gate", (SimpleTestCase,), {"__module__": f"{BROWSER_TESTS}.gate", "test_it": lambda self: None})

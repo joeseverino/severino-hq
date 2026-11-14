@@ -12,12 +12,13 @@ import re
 import subprocess
 import sys
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
 from unittest import mock
 
 from django.test import SimpleTestCase, tag
 
-from hq.platform.application.tests.facts import TOP, grouped, scan
+from hq.platform.application.tests.facts import TOP, Found, grouped, imports, package_of, scan
 from hq.platform.application.tests.reads import reads
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -232,36 +233,116 @@ RULES = {
 }
 
 
-def names_read(*paths: Path) -> set[str]:
-    """Every environment variable the modules under ``paths`` read by name,
-    directly or through a function of their own that is handed it."""
+def outside_tests(path: Path) -> bool:
+    return "tests" not in path.parts
 
-    found = grouped(each for each in scan(RULES, *paths) if "tests" not in each.path.parts)
+
+def environment_reads(
+    *paths: Path, kept: Callable[[Path], bool] = outside_tests
+) -> tuple[dict[str, set[Path]], list[Found]]:
+    """Every environment variable the modules under ``paths`` that ``kept``
+    keeps read by name, directly or through a function of their own that is
+    handed it, with the modules that read it; and each read whose name none
+    of them spells, so a guard over the names fails on it rather than reading
+    past it. A name is spelled by a literal, a constant of the module, or a
+    constant of the module it is imported from."""
+
+    found = grouped(each for each in scan(RULES, *paths) if kept(each.path))
     constants = {(each.path, each.captured["NAME"]): each.value("VALUE") for each in found.get("constant", [])}
-    reads = [*found.get("read", []), *_forwarded_reads(_forwarders(found.get("forwarded", [])))]
-    names = set()
+    forwarders, handed = _forwarders(found.get("forwarded", []))
+    reads = [
+        *(
+            each
+            for each in found.get("read", [])
+            if (each.path, each.start) not in handed and not _handed_on(each, forwarders, found.get("forwarded", []))
+        ),
+        *_forwarded_reads(forwarders),
+    ]
+    names: dict[str, set[Path]] = {}
+    unnamed = []
     for each in reads:
         key = each.captured["KEY"]
-        name = constants.get((each.path, key)) if key.isidentifier() else each.value("KEY")
-        if isinstance(name, str):
-            names.add(name)
-            if each.captured.get("READER") == "env_secret":
-                names.add(f"{name}_FILE")
-    return {name for name in names if not name.startswith(TASK_ARGUMENT)}
+        name = each.value("KEY")
+        if not isinstance(name, str):
+            name = constants.get((each.path, key)) if key.isidentifier() else None
+        if not isinstance(name, str):
+            name = _imported_constant(each.path, key)
+        if not isinstance(name, str):
+            unnamed.append(each)
+            continue
+        spelled = [name, f"{name}_FILE"] if each.captured.get("READER") == "env_secret" else [name]
+        for one in spelled:
+            if not one.startswith(TASK_ARGUMENT):
+                names.setdefault(one, set()).add(each.path)
+    return names, unnamed
 
 
-def _forwarders(forwarded) -> dict[tuple[Path, str], int]:
+def _imported_constant(path: Path, key: str) -> object:
+    """The value of the constant ``key`` names through an import of ``path``'s
+    (``turn.SHARE``, or ``DATABASE`` from ``from hq.config.sandbox import
+    DATABASE``), or None."""
+
+    bound, _, attribute = key.partition(".")
+    if not bound.isidentifier() or (attribute and not attribute.isidentifier()) or "." in attribute:
+        return None
+    for each in imports(path):
+        if bound not in each.bound():
+            continue
+        source = each.source
+        if source is not None and source.startswith("."):
+            if not path.is_relative_to(REPO_ROOT):
+                continue
+            source = each.modules(package_of(path))[0]
+        for name, alias in each.names:
+            if (alias or name.partition(".")[0]) != bound:
+                continue
+            if source is None:
+                module, constant = name, attribute
+            elif attribute:
+                module, constant = f"{source}.{name}", attribute
+            else:
+                module, constant = source, name
+            if not constant:
+                continue
+            for source in (
+                REPO_ROOT / f"{module.replace('.', '/')}.py",
+                REPO_ROOT / module.replace(".", "/") / "__init__.py",
+            ):
+                if source.is_file():
+                    for found in scan({"constant": RULES["constant"]}, source):
+                        if found.captured["NAME"] == constant:
+                            return found.value("VALUE")
+    return None
+
+
+def _forwarders(forwarded) -> tuple[dict[tuple[Path, str], int], set[tuple[Path, int]]]:
     """Each function of a module's own that hands one of its parameters to a
-    read, by its module and name, to that parameter's position."""
+    read, by its module and name, to that parameter's position; and where each
+    such read is, which names no variable until the function is called."""
 
-    forwarders = {}
+    forwarders, handed = {}, set()
     for each in forwarded:
         (signature,) = ast.parse(f"def _{each.captured['PARAMETERS']}: pass").body
         assert isinstance(signature, ast.FunctionDef)
         parameters = [argument.arg for argument in signature.args.args]
         if each.captured["P"] in parameters:
             forwarders[each.path, each.captured["NAME"]] = parameters.index(each.captured["P"])
-    return forwarders
+            handed.add((each.path, each.start))
+    return forwarders, handed
+
+
+def _handed_on(read: Found, forwarders: dict[tuple[Path, str], int], forwarded) -> bool:
+    """Whether ``read`` names its variable by an f-string of a forwarder's
+    parameters (env_secret's ``f"{name}_FILE"``), which its calls spell."""
+
+    key = read.captured["KEY"]
+    fields = re.findall(r"\{([^}!:]+)", key)
+    parameters = {
+        each.captured["P"]
+        for each in forwarded
+        if each.path == read.path and (each.path, each.captured["NAME"]) in forwarders
+    }
+    return key[:1] in "fF" and bool(fields) and set(fields) <= parameters
 
 
 def _forwarded_reads(forwarders: dict[tuple[Path, str], int]) -> list:
@@ -305,11 +386,12 @@ class ConfigurationTableTests(SimpleTestCase):
     def test_the_table_lists_exactly_what_hq_reads(self):
         rows = table_rows(TABLE.read_text(encoding="utf-8"))
         listed = [name for name, _ in rows]
-        read = names_read(*(REPO_ROOT / root for root in SOURCE_ROOTS))
+        read, unnamed = environment_reads(*(REPO_ROOT / root for root in SOURCE_ROOTS))
 
         self.assertIn("DJANGO_SECRET_KEY", read)
+        self.assertEqual([f"{each.path}:{each.line} {each.text}" for each in unnamed], [])
         self.assertEqual(
-            drift(read, set(listed)),
+            drift(set(read), set(listed)),
             {"read but not in the table": set(), "in the table but read nowhere": set()},
         )
         self.assertEqual(sorted(name for name in listed if listed.count(name) > 1), [])
@@ -318,7 +400,14 @@ class ConfigurationTableTests(SimpleTestCase):
     def test_a_variable_missing_from_the_table_or_left_in_it_fails(self):
         source = (
             "import os\n"
+            "from hq.config import sandbox\n"
+            "from hq.config.sandbox import DATABASE\n"
             "_NAMED = 'EXAMPLE_CONSTANT'\n"
+            "IMPORTED = os.environ.get(DATABASE)\n"
+            "ATTRIBUTE = os.environ.get(sandbox.RUN)\n"
+            "def _picked(pick):\n"
+            "    chosen = pick()\n"
+            "    return os.environ.get(chosen)\n"
             "def _read(variable):\n"
             "    return os.environ.get(variable)\n"
             "SECRET = env_secret('EXAMPLE_SECRET')\n"
@@ -337,6 +426,7 @@ class ConfigurationTableTests(SimpleTestCase):
             "| `EXAMPLE_INDEXED` | installer | read by its key |\n"
             "| `EXAMPLE_FORWARDED` | platform | read through a helper |\n"
             "| `EXAMPLE_CONSTANT` | development | named by a constant |\n"
+            "| `SEVERINO_DATABASE_PATH`, `SEVERINO_TEST_RUN` | development | named by an imported constant |\n"
             "| `EXAMPLE_STALE` | installer | read by nothing |\n"
             "\n## Next\n\n| `EXAMPLE_ELSEWHERE` | installer | another section's table |\n"
         )
@@ -344,10 +434,12 @@ class ConfigurationTableTests(SimpleTestCase):
         with tempfile.TemporaryDirectory() as directory:
             module = Path(directory) / "example.py"
             module.write_text(source)
-            found = drift(names_read(module), {name for name, _ in table_rows(table)})
+            read, unnamed = environment_reads(module)
+            found = drift(set(read), {name for name, _ in table_rows(table)})
 
         self.assertEqual(found["read but not in the table"], {"EXAMPLE_UNLISTED"})
         self.assertEqual(found["in the table but read nowhere"], {"EXAMPLE_STALE"})
+        self.assertEqual([each.text for each in unnamed], ["os.environ.get(chosen)"])
 
 
 @tag("source")

@@ -102,6 +102,29 @@ ROW_ACTIONS_BEHIND_THE_TOGGLE = (
 )
 
 
+# An ask drawn beside a table whose rows hold the same ask: the row's button
+# again, outside every row, which reads as a control nothing in the table
+# owns.
+ASKS_OUTSIDE_THEIR_ROWS = (
+    "() => {"
+    + DESCRIBE
+    + """
+  const found = [];
+  const asked = (button) => button.getAttribute('formaction');
+  for (const table of document.querySelectorAll('table')) {
+    const rows = new Set([...table.querySelectorAll('tbody [data-ask] [data-ask-button]')].map(asked));
+    if (!rows.size) continue;
+    const scope = table.closest('section, main') ?? document.body;
+    for (const button of scope.querySelectorAll('[data-ask] [data-ask-button]')) {
+      if (button.closest('table') || !rows.has(asked(button)) || !button.checkVisibility()) continue;
+      found.push(`${describe(button)} asks what a row of the table beside it asks, outside every row`);
+    }
+  }
+  return [...new Set(found)];
+}"""
+)
+
+
 def reading_problems(readings):
     """What a reader loses of the readings: a line drawn under its mark, or
     cut short."""
@@ -284,6 +307,9 @@ CHECKS = {
         (_READINGS_OF, SELECTORS["readings"]),
         findings=reading_problems,
         reader_sees="a reading's line cut short or pushed under its mark",
+    ),
+    "asks outside their rows": Check(
+        ASKS_OUTSIDE_THEIR_ROWS, reader_sees="a row's button drawn again beside its table, owned by no row"
     ),
     "row actions behind the toggle": Check(
         (

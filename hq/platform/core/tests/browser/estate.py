@@ -63,42 +63,23 @@ _NOT_HQS_MARKUP = {"api_reference:reference"}
 # Reached from the header on every page rather than from the navigation.
 _HEADER = ("action_items",)
 _REDIRECTS = frozenset({301, 302, 303, 307, 308})
-# Each popover's kind: its classes and the table and column it sits in. Popovers
-# of one kind are drawn by one partial in one place, so one of them stands for
-# all, and a pass over them costs a run per kind rather than per record.
-POPOVER_KINDS = """() => {
-  const tables = [...document.querySelectorAll('table')];
-  return [...document.querySelectorAll('[popover]')].map((popover) => {
-    const table = popover.closest('table');
-    return [popover.className, tables.indexOf(table), popover.closest('td, th')?.cellIndex ?? -1].join(' ');
-  });
-}"""
-# The popover at a place in the page shown, what names it in a finding and
-# what names its shot; nothing for one that will not show.
-SHOW_POPOVER = """(place) => {
-  const popover = document.querySelectorAll('[popover]')[place];
-  try {
-    popover.showPopover();
-  } catch {
-    return null;
-  }
-  return popover.id ? [`#${popover.id}`, popover.id] : [`popover ${place + 1}`, `${place + 1}`];
-}"""
-HIDE_POPOVER = "(place) => document.querySelectorAll('[popover]')[place].hidePopover()"
 # The checks a shown popover's own boxes and lines are held to: its rows are
 # laid out by the same primitives as the page's, over whatever lies beneath.
 _IN_A_POPOVER = ("overlaps", "overlapping text", "touching text")
 
 
-_PICTURE = re.compile(r'<img\b[^>]*\ssrc="(/[^"/][^"]*)"')
+_EMBEDDED = re.compile(r'<(?:img|iframe)\b[^>]*\ssrc="(/[^"/][^"]*)"')
 
 
-def pictures_of(pages, ask):
-    """Each picture ``pages`` draw from HQ's own records (a receipt's file),
-    by its address, as the server answers it: a browser asks for it as the
-    page loads."""
+def embedded_of(pages, ask):
+    """Each picture ``pages`` draw from HQ's own records (a receipt's file)
+    and each document of HQ's own they frame (the Design page's gallery), by
+    its address, as the server answers it: a browser asks for it as the page
+    loads."""
 
-    addresses = {url for page in pages for url in _PICTURE.findall(page) if not url.startswith(settings.STATIC_URL)}
+    addresses = {
+        unescape(url) for page in pages for url in _EMBEDDED.findall(page) if not url.startswith(settings.STATIC_URL)
+    }
     asked = {url: ask(url) for url in sorted(addresses)}
     return {(url, ""): answered(response) for url, response in asked.items() if response.status_code == 200}
 
@@ -239,7 +220,7 @@ def render_estate():
                 raise AssertionError(f"{path} answered {response.status_code}")
             answers[path, ""] = answered(response)
             fragments_of(client, path, answers[path, ""], answers, ask)
-        answers |= pictures_of(list(answers.values()), lambda url: ask(client, url))
+        answers |= embedded_of(list(answers.values()), lambda url: ask(client, url))
     return paths, answers
 
 
@@ -294,24 +275,6 @@ class ExampleEstateGate(BrowserGate):
                 f"{address} {part}".strip() + ": never pre-rendered; fragments.regions found no such region"
             )
             route.fulfill(status=404, body="Not in the example estate")
-
-    def each_popover_kind(self):
-        """Each kind of popover on the page shown on its own in turn, as a
-        reader shows one: what names it in a finding and in a shot, and how
-        many more of its kind it stands for. Shown all at once they would lie
-        over one another, which no reader sees, and where each lands would
-        hang on which drew last."""
-
-        kinds = self.page.evaluate(POPOVER_KINDS)
-        judged = set()
-        for place, kind in enumerate(kinds):
-            if kind in judged or (shown := self.page.evaluate(SHOW_POPOVER, place)) is None:
-                continue
-            judged.add(kind)
-            try:
-                yield shown, kinds.count(kind) - 1
-            finally:
-                self.page.evaluate(HIDE_POPOVER, place)
 
     def visit(self, path, width):
         self.page.set_viewport_size(viewport(width))

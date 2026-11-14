@@ -23,7 +23,7 @@ from hq.platform.core.tests.task import RefError, Usage, commit_of, git
 from tools.gate import chain, testmap
 from tools.gate.tree import working_tree
 from tools.gate.turn import inside
-from tools.gate.verdict import TREE_LINE
+from tools.gate.verdict import OUTPUT, TREE_LINE, shows_all
 
 ROOT = chain.ROOT
 # Where it runs, as git names a repository over SSH: <host>:<HQ's checkout there>.
@@ -34,8 +34,42 @@ HERE = 75
 STAYS = {"open", "docs", "linux", "image"}
 # Arguments that name a commit: resolved here, since a branch there is not this one, and sent with the tree.
 REFS = {"base", "at"}
+# Tasks that run the composed suite themselves when their change calls for it (fast's extension suites).
+COMPOSING = {"fast"}
 # What this run sets that changes what a gate does, handed to the run there.
-CARRIED = ("REQUIRE_COMPOSED", "TEST_PYTHONS")
+CARRIED = (
+    *("HQ_BROWSER_CHANNEL", "HQ_BROWSER_ENGINE", "HQ_BROWSER_FACE", "HQ_BROWSER_SHARD", "HQ_GATE_OUTPUT"),
+    *("HQ_LOCAL_PLUGINS", "HQ_TEST_STALL_SECONDS", "HYPOTHESIS_PROFILE", "REQUIRE_COMPOSED", "TEST_PYTHONS"),
+)
+# Every other variable a gate reads, by why the run there reads its own; test_remote.py holds the two lists
+# to what the gates read.
+LEFT = {
+    "a gate sets it for what it runs, there as here": (
+        *("HQ_API_RECORD_EXAMPLES_TO", "HQ_EXTENSIONS_SAID", "HQ_FAST_SOURCE", "HQ_GATE_DETAIL", "HQ_GATE_HERE"),
+        *("HQ_GATE_RERUN", "HQ_GATE_TREE", "HQ_GATE_VERDICTS", "HQ_LOOK_SHARE", "HQ_LOOK_SHARES", "HQ_MEASURED"),
+        *("HQ_TEST_MARKS", "HQ_TEST_REPORTS", "HQ_TURN_BOUND", "HQ_TURN_SHARE", "MCP_PROBE_DEFER_BUILD"),
+        *("MEMORY_AFTER", "MEMORY_PAGES", "MEMORY_SEED", "MEMORY_SESSION", "MEMORY_TIMED", "PERF_HOST_ALONE_BECAUSE"),
+        *("PERF_PAGES", "PERF_USER", "PYTHONPATH", "SANDBOX_WRITES", "SEVERINO_DATABASE_PATH"),
+        *("SEVERINO_HQ_PLUGINS", "UV_PROJECT_ENVIRONMENT", "UV_PYTHON"),
+    ),
+    "remote-host.sh names it to the run there": ("HQ_GATE_SENT",),
+    "mise, or mise.toml's env, sets it for the task that reads it": (
+        *("HQ_DEV_ACCOUNT", "MISE_CONFIG_ROOT", "MISE_STATE_DIR", "MISE_TASK_LOCKS", "MISE_TASK_LOCK_TIMEOUT"),
+        *("MISE_TASK_NAME", "PYTHON_VERSIONS"),
+    ),
+    "the machine's own: its shell, home and folders": (
+        *("COLIMA_HOME", "HOME", "IFS", "PWD", "TMPDIR", "XDG_CACHE_HOME", "XDG_STATE_HOME"),
+    ),
+    # A run that composes sends this machine's extension checkout by path (send); the set's manifests are carried.
+    "a path on this machine: each machine's own extension checkout and second machine": (
+        *("HQ_GATE_REMOTE", "HQ_LOCAL_PYTHONPATH"),
+    ),
+    "read by a run that never goes there: check, the image, CI": (
+        *("CHECK_RELEASE_BASE_REF", "CHECK_REMOTE_POLL", "CHECK_REMOTE_TIMEOUT", "CI", "DJANGO_STATIC_ROOT"),
+        *("GITHUB_EVENT_NAME", "GITHUB_EVENT_PATH", "GITHUB_STEP_SUMMARY", "IMAGE", "RUNNER_IMAGE"),
+        *("SEVERINO_FAILURE_LOG_IDENTITY", "SEVERINO_HQ_DEPLOY_HOST"),
+    ),
+}
 # One connection carries every step; no agent or display reaches a gate run.
 SSH = [
     *("ssh", "-a", "-x", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "-o", "ControlMaster=auto"),
@@ -146,6 +180,13 @@ class Sent(NamedTuple):
     packages: str
 
 
+def composes(task: str, values: dict[str, str]) -> bool:
+    """Whether the run may compose the extension set: the composed suite, and fast, which runs it when a change
+    reaches the extensions."""
+
+    return task in COMPOSING or values.get("composed") == "true"
+
+
 def send(task: str, host: str, checkout: str, values: dict[str, str]) -> Sent:
     """Send this checkout's tree, and the commits its arguments name, and make it ready there."""
 
@@ -159,9 +200,10 @@ def send(task: str, host: str, checkout: str, values: dict[str, str]) -> Sent:
         values["base"] = chain.fast_base(None)[0]
     remote = f"{host}:{checkout}"
     push(ROOT, remote, [f"{sha}:{ref}" for ref, sha in refs.items()])
-    # A composed run composes this machine's extension checkout, sent as the tree is, from its clone beside HQ's there.
+    # A run that composes composes this machine's extension checkout, sent as the tree is, from its clone beside
+    # HQ's there; one that cannot be sent leaves the run here, never composing that machine's own.
     extension, packages = [], ""
-    if values.get("composed") == "true" and (paths := os.environ.get("HQ_LOCAL_PYTHONPATH", "")):
+    if composes(task, values) and (paths := os.environ.get("HQ_LOCAL_PYTHONPATH", "")):
         top = Path(git("rev-parse", "--show-toplevel", root=Path(paths.split(":")[0]))[0])
         packages = ":".join(str(Path(path).relative_to(top)) for path in paths.split(":"))
         extension = [str(PurePosixPath(checkout).parent / top.name), working_tree(top)]
@@ -191,8 +233,12 @@ def send(task: str, host: str, checkout: str, values: dict[str, str]) -> Sent:
 def run_there(task: str, host: str, checkout: str, values: dict[str, str]) -> int:
     sent = send(task, host, checkout, values)
     print(f"[{task}] runs on {host}, tree {sent.tree[:9]}", file=sys.stderr, flush=True)
-    carried = [f"{name}={os.environ[name]}" for name in CARRIED if name in os.environ]
-    command = host_half(host, "run", sent.tree, sent.extension, sent.packages, "env", *carried, "mise", "run", task)
+    # The run there writes to no terminal, so it is told how this run shows a gate's output.
+    carried = {OUTPUT: "all" if shows_all(sys.stdout) else "short"} | {
+        name: value for name, value in os.environ.items() if name in CARRIED
+    }
+    handed = [f"{name}={value}" for name, value in carried.items()]
+    command = host_half(host, "run", sent.tree, sent.extension, sent.packages, "env", *handed, "mise", "run", task)
     # Its input closing is what stops the run there.
     stream = subprocess.Popen(
         [*command, *sent.argv], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT

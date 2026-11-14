@@ -7,7 +7,7 @@ from unittest import mock
 from django.test import SimpleTestCase, tag
 
 from . import look, look_report
-from .browser import estate
+from .browser import gate
 
 
 class _Popovers:
@@ -19,14 +19,14 @@ class _Popovers:
         self.kinds = kinds or ids
 
     def evaluate(self, script, place=None):
-        if script == estate.POPOVER_KINDS:
+        if script == gate.POPOVER_KINDS:
             return list(self.kinds)
         popover = self.ids[place]
-        if script == estate.SHOW_POPOVER:
+        if script == gate.SHOW_POPOVER:
             if popover in self.refused:
                 return None
             self.shown.add(popover)
-            return [f"#{popover}", popover]
+            return [f"#{popover}", popover, True]
         self.shown.discard(popover)
         return None
 
@@ -36,7 +36,8 @@ class _Lens:
     beneath, one inside a popover, and two popovers lying over each other."""
 
     with_each_popover = look.Look.with_each_popover
-    each_popover_kind = estate.ExampleEstateGate.each_popover_kind
+    each_popover_kind = gate.BrowserGate.each_popover_kind
+    popover_shown = gate.BrowserGate.popover_shown
     # A look given no --eval runs no script.
     script = ""
     shots_into = "var/look"

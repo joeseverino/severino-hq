@@ -134,9 +134,12 @@ class CatalogLayoutTests(LayoutBrowserTests):
                     self.in_scheme(was)
                 # With nothing closed to open, the page open is the page as read.
                 if self.page.evaluate(_CLOSED, SELECTORS["disclosure"]):
-                    self.hold(
-                        name, width, [self.open_every_disclosure, self.every_layout_check_holds], disclosures="open"
-                    )
+                    opened = [
+                        self.open_every_disclosure,
+                        self.every_layout_check_holds,
+                        self.every_anchored_popover_keeps_the_layout_rules,
+                    ]
+                    self.hold(name, width, opened, disclosures="open")
 
     @sweep
     def test_every_drawing_is_drawn_on_a_phone(self):

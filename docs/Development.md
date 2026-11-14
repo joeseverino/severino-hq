@@ -865,25 +865,34 @@ How a run goes (`tools/gate/remote.py`, and `tools/gate/remote-host.sh` there):
    names (fast's base, `--at`), which are resolved here: a branch there is
    not this one. fast's default base is resolved here too, from this
    checkout's chain of passed trees, which is also synced there with its maps,
-   so it selects what it would select here. A composed run sends the
-   extension checkout `HQ_LOCAL_PYTHONPATH` names the same way, to the clone
-   of the same name beside HQ's there.
+   so it selects what it would select here. A run that may compose (the
+   composed suite, fast) sends the extension checkout `HQ_LOCAL_PYTHONPATH`
+   names the same way, to the clone of the same name beside HQ's there, with
+   `HQ_LOCAL_PLUGINS`; one that cannot send it runs here.
 2. There, the tree gets a detached worktree of its own under
    `~/.cache/hq-gates`, holding the files `.worktreeinclude` names as that
    checkout has them, and the pushed refs are removed. A file under `var/`
    that an argument names (a `--eval` probe) goes with it. A worktree
    untouched for a day is removed as the next one is made.
 3. The same `mise run <task> <arguments>` runs in it, the arguments as mise
-   parsed them here. Closing the connection stops it.
+   parsed them here, with each variable of this run that changes what a gate
+   does (`CARRIED`, such as `HQ_BROWSER_ENGINE`) and this run's output mode,
+   since the run there writes to no terminal. Every other variable a gate
+   reads is named in `LEFT` with why the run there reads its own, and
+   `test_remote.py` fails on one in neither. Closing the connection stops it.
+   The run only checks, as CI's gates do: fast writes no fix there, and a
+   run that leaves the worktree holding any tree but the one sent fails,
+   naming each file it changed. A tree sent again finds its worktree reset
+   to that tree first.
 4. What it wrote comes back: each `var/gate/` verdict that names the tree
    sent (any other is left there, and said so), the logs and `var/look/`.
    A pass fast recorded there is recorded here only then, its file naming the
    machine it ran on.
 
 One SSH connection carries every step (`ControlMaster`), with no agent or
-display forwarded. The machine needs mise, the checkouts (the extension
-clone only for a composed run) and the browsers the browser gates draw in,
-and nothing that writes to GitHub or reaches production.
+display forwarded. The machine needs mise and the checkouts (the extension
+clone for fast and the composed suite), and nothing that writes to GitHub or reaches
+production; a run of browser tests installs the engine it draws in.
 
 ### What the gates need
 
@@ -1021,7 +1030,7 @@ host name outside the reserved and shared ranges it names.
 | both estates in another engine | `HQ_BROWSER_ENGINE=chromium` or `firefox` |
 | the legs named | `mise run browser <leg>...` (`webkit`, `demo`) |
 | one CI share of a leg | `HQ_BROWSER_SHARD=2/7 mise run browser:webkit` |
-| one browser test | `mise run test <label>`, once `mise run setup:browser webkit` has installed the engine |
+| one browser test | `mise run test <label>`, which installs the engine first |
 | a failure only CI's Linux shows | `mise run browser --linux` with a leg (`chromium`) or test labels |
 
 `browser:webkit` runs every browser test in WebKit, which judges, since HQ is

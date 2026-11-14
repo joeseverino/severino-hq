@@ -69,6 +69,12 @@ _OPEN_READINGS = (
 
 _TABLE = '<table class="data-table" style="table-layout: fixed; inline-size: 10rem"><tbody><tr><td>{}</td></tr></tbody></table>'
 
+# An ask as partials/_ask.html draws one, asking for the work at its address.
+_ASK = (
+    '<span class="ask" data-ask><button type="submit" formaction="{}" class="btn compact" data-ask-button>'
+    "Example</button></span>"
+)
+
 # Each check of the survey, by name, and its smallest defect.
 PLANTS = {
     # A box that hides what it holds past its edge, as clipped-content finds a card.
@@ -230,6 +236,12 @@ PLANTS = {
         '<td class="row-actions" style="white-space: nowrap"><button type="button" class="btn compact">Example one</button> '
         '<button type="button" class="btn compact">Example two</button></td></tr></tbody></table>'
     ),
+    # A row's ask drawn again under its table, outside every row.
+    "asks outside their rows": Plant(
+        '<section><table class="data-table"><tbody><tr><td>Example</td>'
+        f"<td>{_ASK.format('/example/read/')}</td></tr></tbody></table>"
+        f"<p>{_ASK.format('/example/read/')}</p></section>"
+    ),
     # A row in a narrow box whose button shows only in a whole box, so in the
     # narrow one it waits behind the row's toggle.
     "row actions behind the toggle": Plant(
@@ -283,6 +295,13 @@ _FLOWS = (
 # differs from, so a check that finds everything is caught as surely as one
 # that finds nothing.
 PASSES = {
+    # An ask of the section's own under a table of row asks, asking for
+    # other work than any row does.
+    "asks outside their rows": Plant(
+        '<section><table class="data-table"><tbody><tr><td>Example</td>'
+        f"<td>{_ASK.format('/example/read/')}</td></tr></tbody></table>"
+        f"<p>{_ASK.format('/example/read-all/')}</p></section>"
+    ),
     # A row in a narrow box whose button leaves its cell and shows in the
     # words' cell instead, as the region copies it beneath the row's words.
     "row actions behind the toggle": Plant(
@@ -514,6 +533,10 @@ _LOOK_WITHIN = 900
 # arguments, the gate's record of failed tests, the engine and database the
 # look sets for itself.
 _RUN_OWN = ("usage_", "HQ_", "SEVERINO_TEST_", "MISE_TASK_", "DJANGO_")
+# What it does inherit of those: the heavy turn or share the run holds
+# (tools/gate/turn.py's HELD and SHARE), which the look would otherwise wait
+# on for as long as the run holds it.
+_TURN = ("MISE_TASK_LOCKS", "HQ_TURN_SHARE")
 
 
 def _said(finding):
@@ -726,7 +749,7 @@ class PlantedBrowserTests(LayoutBrowserTests):
 
         argv = shlex.split(command)
         self.assertEqual(argv[:3], ["mise", "run", "dev:look"])
-        env = {name: value for name, value in os.environ.items() if not name.startswith(_RUN_OWN)}
+        env = {name: value for name, value in os.environ.items() if name in _TURN or not name.startswith(_RUN_OWN)}
         ran = subprocess.run(
             argv, cwd=settings.BASE_DIR, env=env, capture_output=True, text=True, timeout=_LOOK_WITHIN, check=False
         )

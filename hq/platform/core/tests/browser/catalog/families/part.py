@@ -1777,7 +1777,7 @@ ENTRIES = {
     # In a row's cell, where its word alone stands and its sentence opens
     # under the row: one that failed with a long sentence.
     "part/ask-in-a-row": Entry(
-        '{% section "Example connections 2" %}{% table_region "Example connections 2" %}<table class="data-table">'
+        '{% section "Example connections 1" %}{% table_region "Example connections 1" %}<table class="data-table">'
         '<thead><tr>{% table_heading "Name" "identifier" %}{% table_heading "Read" "control" %}</tr></thead>'
         '<tbody><tr><td>example-main</td><td>{% include "partials/_ask.html" with ask=ask %}</td></tr>'
         "</tbody></table>{% endtable_region %}{% endsection %}",
@@ -1795,12 +1795,12 @@ ENTRIES = {
         },
     ),
     # Waiting its turn, given a sentence that only says its word again: the
-    # word alone, in the cell and in the head, and no line under the row.
+    # word alone in the cell, and no line under the row.
     "part/ask-waiting": Entry(
-        '{% section "Example connections 3" %}{% table_region "Example connections 3" %}<table class="data-table">'
+        '{% section "Example feeds 1" %}{% table_region "Example feeds 1" %}<table class="data-table">'
         '<thead><tr>{% table_heading "Name" "identifier" %}{% table_heading "Read" "control" %}</tr></thead>'
         '<tbody><tr><td>example-main</td><td>{% include "partials/_ask.html" with ask=ask %}</td></tr>'
-        '</tbody></table>{% endtable_region %}<p>{% include "partials/_ask.html" with ask=ask %}</p>{% endsection %}',
+        "</tbody></table>{% endtable_region %}{% endsection %}",
         {
             "ask": Ask(
                 "Read now",

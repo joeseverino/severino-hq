@@ -106,6 +106,8 @@ def _quick_tasks(root: Path) -> dict[str, dict[str, Any]]:
 # A quick gate whose tool fixes what it finds declares this flag, which writes
 # the fixes instead of checking (mise-tasks/lint.toml); fast runs it first.
 FIX = re.compile(r'^flag "--fix"', re.MULTILINE)
+# The tree a run on the second machine was sent, which tools/gate/remote-host.sh names to it.
+SENT = "HQ_GATE_SENT"
 # A file task declares its usage in its own header, which mise's listing leaves out.
 FILE_USAGE = re.compile(r"^#USAGE (.*)$", re.MULTILINE)
 
@@ -146,7 +148,9 @@ def fix(tasks: tuple[str, ...]) -> list[str]:
     formatting never fails a run. What a fixer still finds, its gate reports."""
 
     fixing = fixers(tasks)
-    if not fixing:
+    # A run sent from another machine only checks, as CI does: a fix written there never reaches the checkout
+    # that sent it, and the run would pass on a tree it changed (tools/gate/remote-host.sh).
+    if not fixing or os.environ.get(SENT):
         return []
     before = dirty()
     words = [word for task in fixing for word in (":::", task, "--fix")][1:]

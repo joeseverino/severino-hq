@@ -8,7 +8,7 @@ from typing import override
 
 lazy from playwright.sync_api import TimeoutError as LoadTimeout
 
-from hq.platform.core.tests.browser.gate import RULE_COSTS, BrowserGate, answered_as
+from hq.platform.core.tests.browser.gate import RULE_COSTS, SET_ASIDE, BrowserGate, answered_as, signature
 from hq.platform.core.tests.browser.probes.axe import contrast_read
 from hq.platform.core.tests.browser.probes.boxes import (
     ANY_SCROLLER,
@@ -204,7 +204,10 @@ class LayoutBrowserTests(BrowserGate):
 
         rules = [self.open_every_disclosure]
         if name in PAGES and width in SPARSE_WIDTHS:
-            rules.append(self.nothing_escapes_the_page_sideways_with_every_disclosure_open)
+            rules += [
+                self.nothing_escapes_the_page_sideways_with_every_disclosure_open,
+                self.nothing_escapes_the_page_sideways_with_each_anchored_popover_shown,
+            ]
         if width in WIDTHS:
             rules += [
                 self.only_a_table_scrolls_sideways_with_every_disclosure_open,
@@ -229,21 +232,42 @@ class LayoutBrowserTests(BrowserGate):
         self.assertEqual(found, [])
 
     def open_every_disclosure(self, _name):
-        """Every disclosure and popover open, for the rules that follow."""
+        """Every disclosure open, for the rules that follow. A popover is
+        shown alone beside its opener instead (``each_popover_kind``),
+        as a reader opens one."""
 
-        # A popover placed against an anchor in the page (a filter's panel) can
-        # escape it, so it opens with the disclosures; a centered one, a
-        # modal, covers the page by design and is held by the dialog checks.
-        # An auto popover closes the others as it opens, so each is held
-        # manual to stay shown beside the rest.
-        self.as_a_reader("""() => {
-          document.querySelectorAll('details').forEach((d) => { d.open = true; });
-          document.querySelectorAll('[popover]:not(:popover-open)').forEach((p) => {
-            if (['auto', 'none', 'normal', undefined].includes(getComputedStyle(p).positionAnchor)) return;
-            p.popover = 'manual';
-            p.showPopover();
-          });
-        }""")
+        self.as_a_reader("() => document.querySelectorAll('details').forEach((d) => { d.open = true; })")
+
+    def every_anchored_popover_keeps_the_layout_rules(self, name):
+        """Every check the layout rules make, with each popover hung from an
+        anchor shown in turn beside its opener."""
+
+        width = self.page.viewport_size["width"]
+        if found := self.with_each_anchored_popover(lambda: self.findings(name, width)):
+            self.fail(json.dumps(found, indent=1))
+
+    def nothing_escapes_the_page_sideways_with_each_anchored_popover_shown(self, _name):
+        probes = self.nothing_escapes_the_page_sideways.probes
+        self.assertEqual(self.with_each_anchored_popover(lambda: {"sideways": self.read(probes)[0]}), {})
+
+    def with_each_anchored_popover(self, read):
+        """What ``read`` finds, by check, with one popover of each kind hung
+        from an anchor shown beside its opener (``each_popover_kind``), past
+        what it finds with that popover alone hidden again, the view left
+        where its opener brought it: a sticky bar there lies over what
+        scrolled beneath it, which is the page's and judged at the top."""
+
+        found = {}
+        for (label, _slug), _alike in self.each_popover_kind(anchored=True):
+            # Finished rather than waited for: a page without script runs no frame.
+            self.page.evaluate(FINISH_TRANSITIONS)
+            shown = read()
+            self.page.evaluate(SET_ASIDE)
+            beneath = {signature(check, line) for check, lines in read().items() for line in lines}
+            for check, lines in shown.items():
+                if added := [line for line in lines if signature(check, line) not in beneath]:
+                    found[f"{check}, with {label} shown"] = added
+        return found
 
     def as_a_reader(self, script, arg=None):
         """``script`` run as a reader's press: a script's click is no input

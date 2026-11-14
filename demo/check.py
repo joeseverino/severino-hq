@@ -154,7 +154,7 @@ def _sample() -> list[str]:
 
     seen: set[str] = set()
     picked = []
-    for page in sorted(page for page in OUT.rglob("index.html") if "__fragments__" not in page.parts):
+    for page in sorted(page for page in _pages("index.html") if "__fragments__" not in page.parts):
         text = page.read_text(encoding="utf-8")
         if 'http-equiv="refresh"' in text:
             continue
@@ -226,6 +226,23 @@ def _exists(path: str) -> bool:
     return target.is_file() or (target / "index.html").is_file()
 
 
+_FRAMED = re.compile(r'<iframe\b[^>]*\ssrc="(/[^"#?]*)"')
+
+
+def _pages(pattern: str) -> list[Path]:
+    """The saved files matching ``pattern`` that are the demo's pages: a
+    document a page frames (the Design page's gallery) is HQ's examples, whose
+    links lead nowhere by design, and is held only to loading in its frame."""
+
+    files = list(OUT.rglob(pattern))
+    framed = {
+        (OUT / unescape(address).lstrip("/") / "index.html").resolve()
+        for file in files
+        for address in _FRAMED.findall(file.read_text(encoding="utf-8", errors="replace"))
+    }
+    return [file for file in files if file.resolve() not in framed]
+
+
 def _visible_lines(page: str) -> list[str]:
     """The text a reader sees in ``<main>``, one line per block."""
 
@@ -253,7 +270,7 @@ class DemoSiteTests(unittest.TestCase):
 
     def test_every_address_a_page_names_is_in_the_demo(self):
         missing = set()
-        for page in OUT.rglob("*.html"):
+        for page in _pages("*.html"):
             for address in _ADDRESS.findall(page.read_text(encoding="utf-8")):
                 if not _exists(unescape(address)):
                     missing.add(f"{page.relative_to(OUT)} -> {address}")
@@ -265,7 +282,7 @@ class DemoSiteTests(unittest.TestCase):
         copies it, and 'strict-dynamic' beside no nonce admits nothing."""
 
         wrong = []
-        for page in sorted(OUT.rglob("*.html")):
+        for page in sorted(_pages("*.html")):
             text = page.read_text(encoding="utf-8")
             scripts = _SCRIPT.findall(text)
             if not scripts:
@@ -355,9 +372,13 @@ class DemoSiteTests(unittest.TestCase):
                 with self.subTest(path=path):
                     page.goto(self.origin + path, wait_until="networkidle")
                     choice = page.locator("[data-table-toolbar] input[type=checkbox]").first
-                    panel = choice.locator("xpath=ancestor::*[@popover]")
-                    if panel.count():
-                        page.locator(f'[popovertarget="{panel.get_attribute("id")}"]').click()
+                    # Each panel the choice is folded into, outermost first: the
+                    # bar's Filters, where its row has no room, then its own.
+                    panels = choice.locator("xpath=ancestor::*[@popover]")
+                    for at in range(panels.count()):
+                        opener = page.locator(f'[popovertarget="{panels.nth(at).get_attribute("id")}"]')
+                        if opener.is_visible():
+                            opener.click()
                     name, value = choice.get_attribute("name"), choice.get_attribute("value")
                     choice.check()
                     page.wait_for_url(re.compile(rf"[?&]{re.escape(name)}="))
@@ -366,10 +387,12 @@ class DemoSiteTests(unittest.TestCase):
                     ticked = page.locator(f'[data-table-toolbar] input[name="{name}"][value="{value}"]')
                     self.assertTrue(ticked.is_checked(), "the copy shows the filter it answers")
                     page.goto(self.origin + path, wait_until="networkidle")
-                    page.locator("[data-table-toolbar] input[type=search]").press_sequentially("example", delay=40)
+                    # The search the reader types in, not the unseen copy the bar measures its room with.
+                    search = page.locator("[data-table-toolbar] input[type=search] >> visible=true")
+                    search.press_sequentially("example", delay=40)
                     page.wait_for_timeout(400)
                     self.assertEqual(page.url, self.origin + path, "typing reloads nothing")
-                    self.assertEqual(page.locator("[data-table-toolbar] input[type=search]").input_value(), "example")
+                    self.assertEqual(search.input_value(), "example")
                     self.assertIn("Find anything", page.locator("#content > .messages").inner_text())
             browser.close()
 
@@ -382,7 +405,7 @@ class DemoSiteTests(unittest.TestCase):
         variants = saved["variants"]
         answers = json.loads((OUT / "__fragments__" / "index.json").read_text(encoding="utf-8"))
         first: set[str] = {key for key in variants if key.startswith("/search/?")}
-        for file in OUT.rglob("index.html"):
+        for file in _pages("index.html"):
             if "__q" not in file.parts:
                 text = file.read_text(encoding="utf-8")
                 first |= _queries_linked(_shown_at(file, text), text)
@@ -400,9 +423,8 @@ class DemoSiteTests(unittest.TestCase):
         self.assertEqual(refused[:20], [], "a linked address HQ refused is never offered")
 
     def test_asking_for_a_reading_again_says_the_demo_cannot(self):
-        # A row's Refresh says so where it was pressed, never that the
-        # request failed; the dashboard's Refresh says so as a message, and
-        # never that something would have been saved.
+        # A row's Refresh and a dashboard panel's say so where each was
+        # pressed, never that the request failed or as a message.
         from playwright.sync_api import sync_playwright
 
         with sync_playwright() as playwright:
@@ -416,13 +438,15 @@ class DemoSiteTests(unittest.TestCase):
             self.assertIn("demo", note.inner_text())
             self.assertEqual(page.locator("#content > .messages").count(), 0, "said once, in the row")
             page.goto(self.origin + "/", wait_until="networkidle")
-            refresh = page.locator("button[form=glance-refresh]").first
+            refresh = page.locator("[data-glance] [data-ask]").first
             panel = refresh.locator("xpath=ancestor::*[@popover][1]")
             page.locator(f'[popovertarget="{panel.get_attribute("id")}"]').click()
-            refresh.click()
-            said = page.locator("#content > .messages")
-            said.wait_for()
-            self.assertIn("demo can't read", said.inner_text())
+            # Held, since the strip is drawn again once the ask is answered.
+            note = refresh.locator("[data-ask-note]").element_handle()
+            refresh.locator("[data-ask-button]").click()
+            page.wait_for_function("note => note.textContent.trim()", arg=note)
+            self.assertIn("demo", note.text_content())
+            self.assertEqual(page.locator("#content > .messages").count(), 0, "said once, at the panel")
             browser.close()
 
     def test_a_list_s_next_page_is_saved(self):
@@ -430,7 +454,7 @@ class DemoSiteTests(unittest.TestCase):
         # pages demo/build.py keeps.
         variants = json.loads((OUT / "__fragments__" / "variants.json").read_text(encoding="utf-8"))["variants"]
         missing = set()
-        for file in (page for page in OUT.rglob("index.html") if "__fragments__" not in page.parts):
+        for file in (page for page in _pages("index.html") if "__fragments__" not in page.parts):
             text = file.read_text(encoding="utf-8")
             shown = re.search(r'name="hq-demo-address" content="([^"]+)"', text)
             saved = file.parent.relative_to(OUT).as_posix()
@@ -460,9 +484,9 @@ class DemoSiteTests(unittest.TestCase):
         # One of them is the change the example agent asked for, held for a person.
         self.assertEqual(len([row for row in rows if 'href="/audit/approval/' in row]), 1)
         for row in rows:
-            title = re.search(r'class="attention-title[^"]*"[^>]*>([^<]*)', row)
-            with self.subTest(item=title.group(1) if title else row[:80]):
-                actions = re.search(r'class="attention-actions[^"]*">(.*?)</div>', row, re.DOTALL)
+            title = re.search(r"data-attention-title>(.*?)</(?:a|span)>", row, re.DOTALL)
+            with self.subTest(item=re.sub(r"<[^>]+>", "", title.group(1)) if title else row[:80]):
+                actions = re.search(r'<td\b[^>]*\sclass="row-actions"[^>]*>(.*?)</td>', row, re.DOTALL)
                 self.assertTrue(actions and re.search(r"<(?:a|button)\b", actions.group(1)))
 
     def test_what_describes_the_reader_says_it_is_an_example(self):
@@ -474,7 +498,7 @@ class DemoSiteTests(unittest.TestCase):
 
     def test_no_separator_is_left_with_nothing_after_it(self):
         dangling = set()
-        for page in OUT.rglob("index.html"):
+        for page in _pages("index.html"):
             for line in _visible_lines(page.read_text(encoding="utf-8")):
                 if line.endswith("·"):
                     dangling.add(f"{page.parent.relative_to(OUT)}: {line[:80]}")
@@ -482,7 +506,7 @@ class DemoSiteTests(unittest.TestCase):
 
     def test_the_agents_page_shows_an_agent_at_work(self):
         page = (OUT / "agents" / "index.html").read_text(encoding="utf-8")
-        agents = re.findall(r"<tr data-agent=.*?</tr>", page, re.DOTALL)
+        agents = re.findall(r"<tr\b[^>]*\sdata-agent=.*?</tr>", page, re.DOTALL)
         self.assertTrue(agents, "an agent is listed")
         # A moment is a line of its own: the last-seen cell, never an event's time beside its summary.
         lately = re.compile(r"\d+ (?:second|minute)s? ago|just now")
@@ -497,7 +521,7 @@ class DemoSiteTests(unittest.TestCase):
     def test_every_page_is_drawn_in_the_reader_s_scheme(self):
         # A page without it is painted white first, a flash in dark mode.
         plain = []
-        for page in OUT.rglob("*.html"):
+        for page in _pages("*.html"):
             text = page.read_text(encoding="utf-8")
             # A document, not a saved answer such as the liveness check's JSON.
             if "__fragments__" in page.parts or not text.lstrip().lower().startswith("<!doctype html"):
@@ -791,9 +815,11 @@ class DemoSiteTests(unittest.TestCase):
             browser = _engine(playwright).launch()
             page = browser.new_page()
             page.goto(self.origin + "/action-items/", wait_until="load")
-            row = page.locator("[data-attention-item]:has([data-triage] button)").first
-            key = row.locator("[data-triage] button").get_attribute("value")
-            row.locator("[data-triage] button").click()
+            # The row's own Dismiss (action_tags.triage), the last of its actions.
+            dismiss = '.row-actions > button[name="key"]'
+            row = page.locator(f"[data-attention-item]:has({dismiss})").first
+            key = row.locator(dismiss).get_attribute("value")
+            row.locator(dismiss).click()
             page.reload(wait_until="load")
             kept = page.locator(f'[data-attention-item]:has(button[value="{key}"])').first
             self.assertIsNotNone(kept.get_attribute("data-dismissed"))
