@@ -513,6 +513,25 @@ CUT_WHEN_OPEN = (
 )
 
 
+# A row offers its toggle only where opening it shows something: an open line
+# with nothing drawn is a chevron that does nothing.
+OPENS_NOTHING = (
+    "() => {"
+    + DESCRIBE
+    + """
+  const found = [];
+  for (const row of document.querySelectorAll('main table > tbody > tr.is-expanded')) {
+    const line = row.nextElementSibling;
+    if (!row.checkVisibility() || row.closest('details:not([open])') || !line?.matches('.row-detail')) continue;
+    const drawn = [...line.querySelectorAll(':scope > td *')]
+      .some((part) => part.checkVisibility() && part.getClientRects().length && box(part).height > 0);
+    if (!drawn) found.push(`${describe(row)} opens a line with nothing drawn`);
+  }
+  return found;
+}"""
+)
+
+
 UNSEEN_COLUMNS = (
     "(scroll) => {"
     + DESCRIBE
@@ -931,6 +950,7 @@ CHECKS = {
     "cut when open": Check(
         (CUT_WHEN_OPEN, SELECTORS["unseen"]), table=True, reader_sees="a value still cut in its opened row"
     ),
+    "opens nothing": Check(OPENS_NOTHING, table=True, reader_sees="a row's toggle that opens nothing"),
     "folded rows stay folded": Check(
         FOLDED_ROWS_SHOWN, table=True, scripted=True, reader_sees="a folded row drawn while its group is closed"
     ),
