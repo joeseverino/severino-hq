@@ -21,8 +21,7 @@ def _declared() -> dict[str, Check]:
 
     found: dict[str, Check] = {}
     for module in sorted(info.name for info in pkgutil.iter_modules(probes.__path__)):
-        for check, declared in getattr(importlib.import_module(f"{probes.__name__}.{module}"), "CHECKS", {}).items():
-            found[check] = declared if isinstance(declared, Check) else Check(declared)
+        found |= getattr(importlib.import_module(f"{probes.__name__}.{module}"), "CHECKS", {})
     return found
 
 

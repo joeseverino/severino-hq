@@ -295,9 +295,8 @@
    when its body is one table region (or head="above" says so), its head on
    the page and its body the frame. What
    draws its own edges, cells or fill reaches the frame's sides, as a card's
-   flush list group does in Bootstrap: the frame names each such part, and the
-   survey's "inset in the frame" finds one it does not name. Anything else
-   sits in the frame's padding. A section inside a section is part of the
+   flush list group does in Bootstrap: the frame names each such part.
+   Anything else sits in the frame's padding. A section inside a section is part of the
    outer frame: its body adds no inset, and what fills it reaches the outer
    frame's sides, and its foot when it ends the outer frame. */
 /* The landmark never pads itself: whatever a page's css= names on it, its

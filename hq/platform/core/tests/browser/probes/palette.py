@@ -355,6 +355,12 @@ PAINT = (
 
 # The survey checks these probes answer (`probes/__init__.py`).
 CHECKS = {
-    "fields": Check((FIELD_EDGES, [SELECTORS["fillable"], FIELD_CONTRAST, SELECTORS["pressed"]]), palette=True),
-    "button edges": Check((BUTTON_EDGES, SELECTORS["pressed"]), palette=True),
+    "fields": Check(
+        (FIELD_EDGES, [SELECTORS["fillable"], FIELD_CONTRAST, SELECTORS["pressed"]]),
+        palette=True,
+        reader_sees="a field whose edge is too faint to find",
+    ),
+    "button edges": Check(
+        (BUTTON_EDGES, SELECTORS["pressed"]), palette=True, reader_sees="a button whose edge is too faint to find"
+    ),
 }

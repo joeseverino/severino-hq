@@ -16,7 +16,6 @@ from hq.platform.core.tests.browser.probes.boxes import (
     INTO_A_NEIGHBOR,
     NARROW_FRAMES,
     OVERLAPS,
-    SHORT_OF_ITS_BUTTONS,
     SIDEWAYS,
 )
 from hq.platform.core.tests.browser.probes.palette import PAINT
@@ -31,10 +30,7 @@ from hq.platform.core.tests.browser.probes.tables import (
 )
 from hq.platform.core.tests.browser.probes.text import (
     BROKEN_WORDS,
-    CHANGES_READ,
-    CHIPS_READ,
     CUT_DECISIONS,
-    FACT_ROWS_READ,
     PAST_THE_CLAMP,
 )
 from hq.platform.core.tests.browser.reading import reads, taken
@@ -195,10 +191,6 @@ class LayoutBrowserTests(BrowserGate):
             self.nothing_a_summary_names_is_hidden,
             self.a_clamped_box_shows_only_its_lines,
             self.what_an_item_means_is_never_cut,
-            self.an_items_words_run_to_its_buttons,
-            self.a_change_reads_on_one_line_and_baseline,
-            self.a_chip_sits_on_the_baseline_of_its_line,
-            self.a_bands_values_share_their_rows_baseline,
             self.code_and_cards_keep_inside_the_gutter,
             self.nothing_is_drawn_into_its_neighbor,
             self.the_chrome_is_as_tall_as_its_insets_say,
@@ -218,8 +210,6 @@ class LayoutBrowserTests(BrowserGate):
                 self.only_a_table_scrolls_sideways_with_every_disclosure_open,
                 self.a_checks_evidence_follows_its_statement,
                 self.nothing_a_summary_names_is_hidden,
-                self.a_change_reads_on_one_line_and_baseline,
-                self.a_chip_sits_on_the_baseline_of_its_line,
                 self.a_fill_shows_in_both_palettes,
             ]
         return rules
@@ -442,30 +432,6 @@ class LayoutBrowserTests(BrowserGate):
         if found := self.findings(name, self.page.viewport_size["width"]):
             self.fail(json.dumps(found, indent=1))
 
-    @reads(CHANGES_READ)
-    def a_change_reads_on_one_line_and_baseline(self, _name, found):
-        """A value and the one it changes into share a baseline with each
-        other, their arrow and the words before them wherever they share a
-        line, and the arrow is on the line of the new value: a narrow line
-        breaks between the two values, never after the arrow."""
-
-        self.assertEqual(found, [])
-
-    @reads(CHIPS_READ)
-    def a_chip_sits_on_the_baseline_of_its_line(self, _name, found):
-        """A chip (an identifier, a tag) set in a line sits on the baseline
-        of the words, pills and links around it, on the line it starts on and
-        the line it ends on."""
-
-        self.assertEqual(found, [])
-
-    @reads(FACT_ROWS_READ)
-    def a_bands_values_share_their_rows_baseline(self, _name, found):
-        """The facts of a band that share a row stand on one baseline, a
-        zero beside a linked count alike."""
-
-        self.assertEqual(found, [])
-
     @reads(PAST_THE_CLAMP)
     def a_clamped_box_shows_only_its_lines(self, _name, found):
         self.assertEqual(found, [])
@@ -474,13 +440,6 @@ class LayoutBrowserTests(BrowserGate):
     def what_an_item_means_is_never_cut(self, _name, found):
         """What a queue item means, an approval's change among them, wraps
         rather than being cut, at every width."""
-
-        self.assertEqual(found, [])
-
-    @reads((SHORT_OF_ITS_BUTTONS, [SELECTORS["decision_words"], SELECTORS["decision_buttons"]]))
-    def an_items_words_run_to_its_buttons(self, _name, found):
-        """A queue item's title and meaning fill the room up to its buttons:
-        no empty band between what it says and what can be pressed."""
 
         self.assertEqual(found, [])
 

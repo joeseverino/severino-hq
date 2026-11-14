@@ -122,16 +122,39 @@ class PlantTests(SimpleTestCase):
         self.assertEqual(sorted(check for check, source in sources.items() if not source.startswith(first)), [])
 
 
-def _declared_names(path: Path) -> list[str]:
-    """The check names a module's ``CHECKS`` literal declares, a repeated key
-    included, which the dict it builds keeps once."""
+def _declared(path: Path) -> list[tuple[str, ast.expr]]:
+    """Each check a module's ``CHECKS`` literal declares and what it declares
+    it as, a repeated key included, which the dict it builds keeps once."""
 
     for node in ast.parse(path.read_text(encoding="utf-8")).body:
         if isinstance(node, ast.Assign) and [getattr(t, "id", None) for t in node.targets] == ["CHECKS"]:
             if not isinstance(node.value, ast.Dict):
                 raise AssertionError(f"{path.name}'s CHECKS is not a dict literal")
-            return [key.value for key in node.value.keys if isinstance(key, ast.Constant)]
+            return [
+                (key.value, value)
+                for key, value in zip(node.value.keys, node.value.values, strict=True)
+                if isinstance(key, ast.Constant)
+            ]
     return []
+
+
+def _every_declared() -> list[tuple[str, ast.expr]]:
+    folder = Path(probe_package.__file__).parent
+    return [
+        entry
+        for module in pkgutil.iter_modules(probe_package.__path__)
+        for entry in _declared(folder / f"{module.name}.py")
+    ]
+
+
+def _reader_sees(declared: ast.expr) -> str:
+    """What a ``Check(...)`` says a reader sees when it fails, written out as
+    a string; empty for anything else."""
+
+    if not (isinstance(declared, ast.Call) and getattr(declared.func, "id", None) == "Check"):
+        return ""
+    said = next((word.value for word in declared.keywords if word.arg == "reader_sees"), None)
+    return said.value.strip() if isinstance(said, ast.Constant) and isinstance(said.value, str) else ""
 
 
 @tag("source")
@@ -140,14 +163,21 @@ class CheckRegistryTests(SimpleTestCase):
     its probe module and planted.py and never to the survey."""
 
     def test_no_check_is_declared_twice(self):
-        folder = Path(probe_package.__file__).parent
-        declared = Counter(
-            name
-            for module in pkgutil.iter_modules(probe_package.__path__)
-            for name in _declared_names(folder / f"{module.name}.py")
-        )
+        declared = Counter(name for name, _declared in _every_declared())
         self.assertIn("sideways", declared)
         self.assertEqual(sorted(name for name, times in declared.items() if times > 1), [])
+
+    def test_every_check_says_what_a_reader_sees_when_it_fails(self):
+        """A check holds only what a reader would see break (docs/Design.md),
+        so each is a ``Check`` whose ``reader_sees`` says what that is, written
+        where its author declares it."""
+
+        self.assertEqual(_reader_sees(ast.parse('Check(P, reader_sees="text cut off")').body[0].value), "text cut off")
+        self.assertEqual(_reader_sees(ast.parse("(P, A)").body[0].value), "")
+        self.assertEqual(_reader_sees(ast.parse('Check(P, reader_sees="")').body[0].value), "")
+        declared = _every_declared()
+        self.assertIn("sideways", dict(declared))
+        self.assertEqual(sorted(name for name, entry in declared if not _reader_sees(entry)), [])
 
     def test_the_survey_names_no_check(self):
         source = Path(survey.__file__).read_text(encoding="utf-8")

@@ -19,12 +19,6 @@ SELECTORS = {
     # holding one, and the calendar it pages in place.
     "fragment_failure": "main > [data-fragment-load] > .notice",
     "fragment_fold": "details:has(> [data-fragment-load]) > summary",
-    # A folded section, and a part of one drawn only once it opens.
-    "section_fold": "details.section-fold",
-    "drawn_when_opened": "[data-fragment-load]",
-    # A kicker over a group, the one label drawn in capitals, and a quiet
-    # link ("Change", "All projects").
-    "kicker": ".eyebrow",
     # A form's closing row (a long form's save bar is one), the section frame
     # it ends, and a control a row of the form chooses with.
     "save_bar": ".form-actions",
@@ -35,7 +29,6 @@ SELECTORS = {
     "question_button": ".form-actions > button",
     "section_frame": ".section",
     "choice": "select",
-    "quiet_link": ".subtle-link",
     # A service's favorite star (control_plane/_service_pin.html), a control
     # smaller than a finger that hangs its hit area beside it.
     "favorite_star": ".pin-toggle",
@@ -62,9 +55,6 @@ SELECTORS = {
     "decision_steps": ".resolution-workflow",
     # What an item means: never cut.
     "decision_detail": "[data-attention-detail]",
-    # What an item says, and where its buttons are: the words run to the buttons.
-    "decision_words": "[data-attention-item] > .row-gutter > :is(.row-line, [data-attention-detail])",
-    "decision_buttons": "td.row-actions",
     # Running text, and what an opened row shows beneath it: code in it is
     # never cut, since only a cell's own identifier is. The rest of a
     # `line_list` is no text but the parts its line has no room for, each
@@ -127,13 +117,6 @@ SELECTORS = {
     "fillable": "input:not([type=checkbox], [type=radio], [type=hidden], [type=range], [type=color], [type=submit], [type=button], [type=reset], [type=image]), select, textarea",
     # A link that goes somewhere.
     "link": "a[href]",
-    # A status tag (`{% status %}`), which says a state beside a name.
-    "tag": ".pill",
-    # The mark a sentence puts after a name (`breakable`'s).
-    "mark": ".mark",
-    # A select; the probes that judge one that opens to its choices leave out a
-    # list box (multiple or sized), which Django's widgets mark, not a template.
-    "dropdown": "select, .table-filter-menu > button",
     # A control pressed or picked from rather than typed into: a button, a
     # disclosure's handle, a label drawn around a select or a checkbox.
     "pressed": (
@@ -206,14 +189,9 @@ SELECTORS = {
     "palette_hint": ".command-center-enter-hint",
     # The header's sections, an entry or a group's handle.
     "nav_entry": ".primary-nav > a, .nav-group > button",
-    # A value and the one it changes into, its arrow, and what the arrow points at.
-    "change": "main .change",
     # A chip set in a line: an identifier, wherever it is not a block of code, or a tag.
     "chip": "main :is(code:not(pre *), .tag)",
-    "change_arrow": ".change-arrow",
-    "change_to": ".change-to",
-    # A page head's controls, its menu, and the box of what the menu holds.
-    "head_actions": ".page-head > .page-actions",
+    # A page head's menu, and the box of what the menu holds.
     "head_menu": ".overflow-menu",
     "head_menu_panel": ".overflow-menu-panel",
     # The steps of a page's trail, and a figure's value.
@@ -251,23 +229,14 @@ SELECTORS = {
     # it opens a dialog and names it.
     # The flow of sibling sections or cards, and of charts (layout.css).
     "flow": ".section-flow, .domain-charts",
-    # A section's heading (partials/_section_head.html).
-    "section_head": ".section-head",
-    # A section's body, the frame what it holds is drawn in (partials/_part_section.html).
-    "section_body": ".section-body",
-    # A fact whose value is a list of names (partials' .code-list, .address-list).
-    "fact_list": "main .facts-list .fact-value:has(> :is(.code-list, .address-list) > :nth-child(2))",
-    # A list of facts, label beside value (partials/_facts.html), and the
-    # frames one is drawn in: a card or a section.
+    # A list of facts, label beside value (partials/_facts.html).
     "facts_list": ".facts-list",
-    "list_frame": ".card, .section",
     # What keeps its line wherever it is drawn: the count of planned days kept
     # beside a calendar's legend.
     "one_line": ".calendar-legend > .count",
     # One fact of a band, and the label that names its value.
     "band_fact": ".facts-band > .fact",
     "band_label": ".fact-label",
-    "fact_band": ".facts-band",
     "band_fact_cell": ".fact",
     "fact_value": ".fact-value",
     "fact_label": ".fact-label",

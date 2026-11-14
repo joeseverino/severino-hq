@@ -24,12 +24,17 @@ stylesheet reads it through that list.
 Each rule names its gate where one enforces it. A lower-case gate without
 `test_` is a rule of `LayoutBrowserTests` (`hq/platform/core/tests/browser/layout.py`), held on
 every page at every width it applies to, each a subtest named for the rule,
-the page and the width. The browser gate judges what a reader would lose:
-text out of its box or on other text, content out of reach, a page wider than
-the screen, an unreadable color, a page that jumps. A rule with no gate is a
-matter of taste, held by review and by looking (`mise run dev:look`), never by
-a number; [Held by eye](#held-by-eye) collects the ones a gate is most
-tempted to measure.
+the page and the width. The browser gate holds only what a reader would see
+break: content past its box or the page's edge, content cut or out of reach,
+one thing drawn over another, text touching text, an accessibility or focus
+failure, a color too faint to read, a control too small or unlabeled,
+something moving once it is drawn. Alignment, evenness, placement and
+proportion are taste, held by review and by looking (`mise run dev:look`),
+never by a number; [Held by eye](#held-by-eye) collects the ones a gate is
+most tempted to measure. So each check of the layout survey (`CHECKS` in
+`hq/platform/core/tests/browser/probes/`) says in its `reader_sees` what a
+reader sees when it fails, and one whose failure is only uneven does not
+belong there (`CheckRegistryTests`).
 
 ## Rules
 
@@ -245,10 +250,9 @@ at the top, and no page sets its table's cells otherwise. What can be done to a
 row's record ends the row as `{% row_actions actions %}`, under a heading of
 kind `control`. Each is a `PageAction` drawn as a compact control with its
 middle on the first line's. A page never draws a button in a cell (*Gate:* the
-survey's `actions on the first line`, and the `hand-drawn-row-actions` rule). A
-row's controls stand side by side on one line, which their column asks for, and
-wrap only in a tight table, where every kept line does (*Gate:* the survey's
-`row actions stacked with room`). Beside them the row's words keep a line of
+`hand-drawn-row-actions` rule). A row's controls stand side by side on one
+line, which their column asks for, and wrap only in a tight table, where every
+kept line does. Beside them the row's words keep a line of
 `--row-words` (`data-words`), so a table without room for both takes its narrow
 box rather than wrap a few words a line.
 
@@ -490,8 +494,7 @@ free text, a preview and a context line wrap as they always do.
 
 A box set in a line that cuts what it holds (an inline block whose overflow is
 not visible) takes its bottom edge as its baseline, so its words ride above the
-line's. So it is set by its top (`vertical-align: top`). *Gate:* `raised text`
-in the layout survey.
+line's. So it is set by its top (`vertical-align: top`).
 
 A row's opening is its only disclosure. What is shown only once a row is open
 is marked `.row-more` (a word, a list item), or `.row-below` for a block,
@@ -518,8 +521,7 @@ its width in equal tracks, as many to a row as keep each at least `--fact-min`
 wide. So a few facts spread across a wide card rather than collecting at its
 start beside an empty end, and past that they wrap. That floor lets a narrow
 band hold fewer facts to a row, and the facts of a row still share their lines.
-Four facts are one row or two of two, never three beside one alone. *Gate:*
-`facts across their band` in the layout survey. Standing alone the band is a
+Four facts are one row or two of two, never three beside one alone. Standing alone the band is a
 surface with its own inset. In a card or a section, the frame's padding is its
 inset. Under 27.5rem it reads as a list, each fact laying out its own rows.
 
@@ -758,10 +760,7 @@ detail on demand, like beside like in a row. A card that is mostly empty, or a
 row with a gulf in it, is a layout to redesign. Short facts go across the frame
 (`{% facts %}` does it), and a short list beside what it describes. A card
 much shorter than its peers shares a row with short ones, never with a tall
-one. *Gate:* `frames filled` in the layout survey fails a frame whose lines
-stack down its start, each ending short of two fifths of its width, for long
-enough to matter, and `flows share their rows` a member of a flow its row
-stretches far past what it holds beside a member unlike it.
+one.
 
 **The content column is drawn by `{% page_main %}`.** base.html draws every
 page's content in it (`partials/_page_main.html`), and the component catalog
@@ -804,8 +803,7 @@ draws its own edges, cells or fill fills the frame with no inset and no second
 border, as a card's flush list group does in Bootstrap. That is a table's
 region, a band of facts, a row of metrics, a month's grid, or a list whose rows
 carry their own padding. Prose, facts and the empty line sit in the frame's
-padding. *Gate:* `section asides` and `inset in the frame` in the layout
-survey. With no body it draws its empty part as the empty state's line,
+padding. With no body it draws its empty part as the empty state's line,
 followed by the link that fills it when `remedy_label` and `remedy_url` name
 one (`{% section "Receipts" remedy_label="Upload one" remedy_url=url %}{% empty
 %}No receipts.{% endsection %}`), and with neither it draws nothing.
@@ -953,7 +951,7 @@ turned when open. A section that folds (`section-fold`) uses its heading as the
 toggle, with its count beside it; never a separate "Show all". What it holds
 sits on a panel like its neighbors: a fold of one table has the table's
 region, and any other fold is a folded `{% section %}`, its body in the
-section's frame (the survey's "bare folds").
+section's frame.
 
 **About text opens in a dialog.** Long reference text a page explains itself
 with (a server's instructions to its clients, a reading's method) sits behind
@@ -1023,8 +1021,7 @@ select. `test_filter_tags.FilterBarUseTests` reads every `{%
 filter_bar %}` in the templates. It refuses an empty option written by hand,
 `every=` on a view or an order, a count written in the summary, a narrowing bar
 with no count, a control beside a search outside `{% choices %}`, and a search
-inside it. The survey's "filter choices
-as wide as their options" finds a choice stretched over its bar.
+inside it.
 
 **One switch.** `{% switch label=... %}{% choice url=... current=... %}...{% endchoice %}{% summary %}...{% endswitch %}`
 (`switch_tags.py`, drawn by `partials/_switch.html`): a row of links to the
@@ -1094,10 +1091,7 @@ a name (`breakable`'s `mark`, `{% entity link mark="," %}`) keeps to the
 name's last line inside the link, and `base.css` draws it clear of the
 underline. A separator between items (a dot list's dot, the meta line's) is
 drawn in front of an item that holds the link, never on the link itself, and
-a status tag sits beside a link, never inside it. The survey's
-`lined past the name` check reads every link on every page and names one
-whose drawn text ends in a sentence's mark, begins or ends with a separator,
-or holds a tag.
+a status tag sits beside a link, never inside it.
 
 An external link's arrow (`.external-link`) is joined to its last word by a
 no-break space. A link whose name is one box (a cut token, a chip in a table)
@@ -1117,8 +1111,7 @@ fixes it) is `{% include "partials/_change.html" with from=… to=… %}`, with
 `code=True` for identifiers and `url` to link the new value. Old value, arrow
 and new value share one baseline. A narrow line breaks only between the two
 values, with the arrow kept beside the new one, and a reader hears "1.2.3 to
-1.3.0" rather than an arrow. *Gate:* the `changes` layout check
-(`a_change_reads_on_one_line_and_baseline`).
+1.3.0" rather than an arrow.
 
 **A mark drawn by CSS is not read.** Generated content (`content:`) says what
 a reader hears after a slash: `"›" / ""` for a chevron, a separator or an
@@ -1353,8 +1346,7 @@ row is one target and its markup stays a link around a name.
 
 A pair whose value is a list of names (`.address-list`, or a `.code-list` of
 two or more) takes a row of its own. So it never wraps beside another pair and
-leaves that pair's row a gap; the layout gates' `lists of facts` fails one
-that does.
+leaves that pair's row a gap.
 
 A value goes under its label only where the box cannot hold both on one line.
 The same holds for a node key beside its machine and a piece of evidence beside
@@ -1377,7 +1369,6 @@ section's `more_label` and `more_url` draw it.
 A section's heading that follows a form, a table or a list in the same box
 starts a section of its own. `.section-head` clears what is above it by the
 stack gap, so it is never closer to what came before than to what it heads.
-*Gate:* `section heads` in the layout survey.
 
 **Sibling sections flow.** A run of sibling sections or cards (the sections
 that close a thing's page, the connection panel's identity, link and route, a
@@ -1403,7 +1394,7 @@ section whose rows are the latest of more names the rest as its `more_label`
 and `more_url`, the heading's quiet link. A command's page draws what the
 command says of itself (`CapabilitySpec.about`, a `CommandAbout` of facts and
 sections) under its form through the same parts. *Gate:* `flows in reading
-order` and `flows share their rows` in the layout survey. No page writes an
+order` in the layout survey. No page writes an
 auto-fit grid of its own for this: `lint:css` refuses `repeat(auto-fit` and
 `repeat(auto-fill` outside the parts that lay out something else inside
 themselves, each of which says so in its disable comment.
@@ -1815,9 +1806,11 @@ Alignment:
   from the first stop's mark to the last's, each mark holding its glyph in its
   middle.
 - Sections and cards that share a row start their frames together, whatever
-  their heads hold (the survey's `frames in a row`), and in a flow they end
-  together too, the dashboard's included (`flows share their rows`). Each
-  holds its contents at its top and its foot at its bottom.
+  their heads hold, and in a flow they end together too, the dashboard's
+  included. Each holds its contents at its top and its foot at its bottom.
+- A chip, a change's two values and a band's facts sit on the baseline of the
+  line they share, and a box set in a line that cuts what it holds is set by
+  its top.
 - A band of readings or choices lays out as whole even rows, and each of its
   cells keeps its padding; so does any filled box. A band of facts shares
   its width in equal tracks.

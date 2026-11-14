@@ -312,7 +312,7 @@ def _script(given: str) -> str:
 
 def _probe(given: str) -> tuple[str, str]:
     """``--probe`` as its name and the source it names, ``<module>:<NAME>`` of
-    a probe module (``boxes:ASIDES_WRAPPED_WITH_ROOM``); a name that is none
+    a probe module (``boxes:OVERLAPS``); a name that is none
     is refused with those its module offers."""
 
     if not given:

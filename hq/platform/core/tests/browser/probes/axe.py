@@ -134,6 +134,6 @@ def rules_read():
 # when it runs: a tree without the lint tools (the image, the composed suite's
 # copy) names them all the same.
 CHECKS = {
-    "axe": rules_read,
-    "contrast": Check(contrast_read, palette=True),
+    "axe": Check(rules_read, reader_sees="a part a screen reader or the keyboard cannot use"),
+    "contrast": Check(contrast_read, palette=True, reader_sees="text too faint to read"),
 }
