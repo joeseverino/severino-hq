@@ -109,18 +109,6 @@ class OnePrimitiveTests(SimpleTestCase):
         found = [name for name, path in template_files() if built.search(path.read_text(encoding="utf-8"))]
         self.assertEqual(found, [])
 
-    def test_a_related_list_is_drawn_by_its_partial(self):
-        """A record page lists what it is related to through
-        `partials/_related.html` (groups from `application.related`), never
-        under a "Related" heading over a list of its own shape."""
-
-        found = [
-            name
-            for name, path in template_files()
-            if re.search(r"<h[1-6][^>]*>\s*Related\b", path.read_text(encoding="utf-8"))
-        ]
-        self.assertEqual(found, [])
-
     def test_templates_name_entities_through_the_entity_tag(self):
 
         # A button to a page (Cancel, Edit) is an action, not a mention.

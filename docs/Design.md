@@ -620,8 +620,8 @@ answered in another region's place gives that region's id as `in_place`. A
 toggle that posts is a `post_button` with `pressed`; the calendar's sources are
 a list of them, each in its series color (`partials/_calendar_sources.html`,
 *Catalog:* `part/calendar-sources`). *Catalog:* `form/write-gap`. *Gate:*
-`hq/platform/core/tests/test_form_actions.py`, which reads every form template,
-and `test_form_page.py`, which holds every routed create and edit view to the
+`lint:ast-grep` (`hand-drawn-form.yml`), which holds every form that writes to
+the form part, and `test_form_page.py`, which holds every routed create and edit view to the
 frame and the card to it alone.
 
 A form that asks one question is one visible field of a line (words, a number,
