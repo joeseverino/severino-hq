@@ -13,6 +13,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit
 
+from demo.examples import own, split
 from demo.serve import serving
 from hq.platform.core.tests.browser.uncaught import Uncaught
 from hq.platform.core.tests.browser.widths import PHONE_SCREEN, WIDTHS
@@ -154,7 +155,7 @@ def _sample() -> list[str]:
 
     seen: set[str] = set()
     picked = []
-    for page in sorted(page for page in _pages("index.html") if "__fragments__" not in page.parts):
+    for page in sorted(page for page in OUT.rglob("index.html") if "__fragments__" not in page.parts):
         text = page.read_text(encoding="utf-8")
         if 'http-equiv="refresh"' in text:
             continue
@@ -173,7 +174,7 @@ def _queries_linked(here: str, page: str) -> set[str]:
     whatever its query."""
 
     keys = set()
-    for href in re.findall(r'href="((?:/[^"#?]*)?\?[^"#]*)"', page):
+    for href in re.findall(r'href="((?:/[^"#?]*)?\?[^"#]*)"', own(page)):
         address = urlsplit(urljoin(here, unescape(href)))
         pairs = sorted((name, value) for name, value in parse_qsl(address.query) if value)
         asked = dict(pairs)
@@ -198,7 +199,7 @@ def _pages_linked(here: str, page: str) -> list[str]:
     ``here``, links under its list, up to the pages the build keeps."""
 
     keys = []
-    for nav in re.findall(r'<nav class="pagination">.*?</nav>', page, re.DOTALL):
+    for nav in re.findall(r'<nav class="pagination">.*?</nav>', own(page), re.DOTALL):
         for href in re.findall(r'href="([^"]+)"', nav):
             address = urlsplit(urljoin(here, unescape(href)))
             pairs = sorted((name, value) for name, value in parse_qsl(address.query) if value)
@@ -208,11 +209,12 @@ def _pages_linked(here: str, page: str) -> list[str]:
 
 
 def _script_sources(page: str) -> list[str]:
-    """The script-src of the policy ``page`` carries, empty when it has none."""
+    """The script-src of the policy ``page`` carries, empty when it has none.
+    An empty directive (a trailing ``;``) is skipped, as a browser skips it."""
 
     policy = _POLICY.search(page)
     directives = (directive.split() for directive in unescape(policy[1] if policy else "").split(";"))
-    return next((sources for name, *sources in directives if name == "script-src"), [])
+    return next((sources for name, *sources in filter(None, directives) if name == "script-src"), [])
 
 
 def _suggested(placeholder: str | None) -> list[str]:
@@ -224,23 +226,6 @@ def _suggested(placeholder: str | None) -> list[str]:
 def _exists(path: str) -> bool:
     target = OUT / path.lstrip("/")
     return target.is_file() or (target / "index.html").is_file()
-
-
-_FRAMED = re.compile(r'<iframe\b[^>]*\ssrc="(/[^"#?]*)"')
-
-
-def _pages(pattern: str) -> list[Path]:
-    """The saved files matching ``pattern`` that are the demo's pages: a
-    document a page frames (the Design page's gallery) is HQ's examples, whose
-    links lead nowhere by design, and is held only to loading in its frame."""
-
-    files = list(OUT.rglob(pattern))
-    framed = {
-        (OUT / unescape(address).lstrip("/") / "index.html").resolve()
-        for file in files
-        for address in _FRAMED.findall(file.read_text(encoding="utf-8", errors="replace"))
-    }
-    return [file for file in files if file.resolve() not in framed]
 
 
 def _visible_lines(page: str) -> list[str]:
@@ -262,6 +247,8 @@ def _lines(markup: str) -> list[str]:
 
 
 class DemoSiteTests(unittest.TestCase):
+    maxDiff = None
+
     @classmethod
     def setUpClass(cls):
         if not (OUT / "index.html").is_file():
@@ -269,9 +256,14 @@ class DemoSiteTests(unittest.TestCase):
         cls.origin = cls.enterClassContext(serving(OUT))
 
     def test_every_address_a_page_names_is_in_the_demo(self):
+        # An example the Design page draws in a shadow root links where it
+        # links in HQ, nowhere for its synthetic addresses; what it loads (a
+        # sheet, an image) is held as the page's own addresses are.
         missing = set()
-        for page in _pages("*.html"):
-            for address in _ADDRESS.findall(page.read_text(encoding="utf-8")):
+        for page in OUT.rglob("*.html"):
+            mine, examples = split(page.read_text(encoding="utf-8"))
+            loaded = [address for address in _ADDRESS.findall(examples) if address.startswith("/static/")]
+            for address in [*_ADDRESS.findall(mine), *loaded]:
                 if not _exists(unescape(address)):
                     missing.add(f"{page.relative_to(OUT)} -> {address}")
         self.assertEqual(sorted(missing)[:20], [])
@@ -282,7 +274,7 @@ class DemoSiteTests(unittest.TestCase):
         copies it, and 'strict-dynamic' beside no nonce admits nothing."""
 
         wrong = []
-        for page in sorted(_pages("*.html")):
+        for page in sorted(OUT.rglob("*.html")):
             text = page.read_text(encoding="utf-8")
             scripts = _SCRIPT.findall(text)
             if not scripts:
@@ -405,7 +397,7 @@ class DemoSiteTests(unittest.TestCase):
         variants = saved["variants"]
         answers = json.loads((OUT / "__fragments__" / "index.json").read_text(encoding="utf-8"))
         first: set[str] = {key for key in variants if key.startswith("/search/?")}
-        for file in _pages("index.html"):
+        for file in OUT.rglob("index.html"):
             if "__q" not in file.parts:
                 text = file.read_text(encoding="utf-8")
                 first |= _queries_linked(_shown_at(file, text), text)
@@ -454,7 +446,7 @@ class DemoSiteTests(unittest.TestCase):
         # pages demo/build.py keeps.
         variants = json.loads((OUT / "__fragments__" / "variants.json").read_text(encoding="utf-8"))["variants"]
         missing = set()
-        for file in (page for page in _pages("index.html") if "__fragments__" not in page.parts):
+        for file in (page for page in OUT.rglob("index.html") if "__fragments__" not in page.parts):
             text = file.read_text(encoding="utf-8")
             shown = re.search(r'name="hq-demo-address" content="([^"]+)"', text)
             saved = file.parent.relative_to(OUT).as_posix()
@@ -498,7 +490,7 @@ class DemoSiteTests(unittest.TestCase):
 
     def test_no_separator_is_left_with_nothing_after_it(self):
         dangling = set()
-        for page in _pages("index.html"):
+        for page in OUT.rglob("index.html"):
             for line in _visible_lines(page.read_text(encoding="utf-8")):
                 if line.endswith("·"):
                     dangling.add(f"{page.parent.relative_to(OUT)}: {line[:80]}")
@@ -521,7 +513,7 @@ class DemoSiteTests(unittest.TestCase):
     def test_every_page_is_drawn_in_the_reader_s_scheme(self):
         # A page without it is painted white first, a flash in dark mode.
         plain = []
-        for page in _pages("*.html"):
+        for page in OUT.rglob("*.html"):
             text = page.read_text(encoding="utf-8")
             # A document, not a saved answer such as the liveness check's JSON.
             if "__fragments__" in page.parts or not text.lstrip().lower().startswith("<!doctype html"):
