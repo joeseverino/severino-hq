@@ -2135,12 +2135,12 @@
           "count": 6,
           "items": [
             {
-              "detail": "of 3",
+              "detail": "of 2",
               "id": "hq.estate.machines",
               "label": "Machines online",
               "status": "",
               "url": "/infrastructure/machines/",
-              "value": "3"
+              "value": "2"
             },
             {
               "detail": "",
@@ -2458,7 +2458,7 @@
               "role": "",
               "roles": [],
               "runs_hq": false,
-              "state": "online",
+              "state": "away",
               "url": "/infrastructure/machines/iphone-16-pro/"
             },
             {

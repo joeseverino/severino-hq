@@ -253,8 +253,8 @@ def lock_key(name):
 
 
 def tailnet():
-    """The host, the laptop the demo is read from, and a phone; the policy and
-    lock, which the phone and the host can sign for."""
+    """The host, the laptop the demo is read from, and a phone that is away;
+    the policy and lock, which the phone and the laptop sign for."""
 
     at = now()
 
@@ -300,7 +300,8 @@ def tailnet():
             tx_bytes=6_120_448,
             key_expires=(at + LAPTOP_KEY_LEFT).isoformat(),
         ),
-        device(PHONE_NAME, "iOS", user=OWNER),
+        # Off the tailnet since yesterday, so the machines list says it is away.
+        device(PHONE_NAME, "iOS", user=OWNER, online=False, last_seen=(at - timedelta(days=1)).isoformat()),
     )
     store(
         "tailscale.policy",
