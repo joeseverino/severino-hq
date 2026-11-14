@@ -33,7 +33,7 @@ utils:
   name-value:
     regex: '\{\{\s*(?:\w+\.)*(?:get_username|host|kind|label|name|risk|status|title|username)\s*(?:\|[^}]*)?\}\}(?:\s+[A-Za-z%]|$)'
   worded-value:
-    regex: '\|(?:ago|ago_short|bytes|capfirst|counted|day|door_words|expiry|interface_label|kind_label|lower|measured|money|readable|seconds|signed_in|span|title|upper|when|yesno)(?::(?:"[^"]*"|''[^'']*''|[\w.-]+))?\s*\}\}(?:\s+[A-Za-z%]|$)'
+    regex: '\|(?:bytes|capfirst|counted|door_words|expiry|interface_label|kind_label|lower|measured|money|readable|seconds|signed_in|span|title|upper|when|when_text|yesno)(?::(?:"[^"]*"|''[^'']*''|[\w.-]+))?\s*\}\}(?:\s+[A-Za-z%]|$)'
   function-word:
     regex: '(?:\}\}|\d)\s+(?:a|across|after|an|and|are|as|at|be|because|been|before|beyond|but|by|can|cannot|could|did|do|does|for|from|had|has|have|he|her|his|if|in|into|is|it|its|itself|may|might|must|nor|not|now|of|on|once|only|or|over|per|she|should|since|so|still|than|that|the|their|them|then|these|they|this|those|through|to|under|until|was|we|were|when|where|which|while|who|will|with|within|without|would|yet|you)\b'
   # A number inside a template tag ({% if n > 1 %}), which no reader sees.

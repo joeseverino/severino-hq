@@ -81,21 +81,20 @@ class PublicEndpointTests(TestCase):
         self.assertNotContains(response, "2001:db8:0:1::a1")
 
 
-class AgoFilterTests(TestCase):
+class WhenTextFilterTests(TestCase):
     def render(self, value):
-        return Template("{% load value_tags %}{{ value|ago }}").render(Context({"value": value}))
+        return Template('{% load value_tags %}{{ value|when_text:"ago" }}').render(Context({"value": value}))
 
     def test_a_moment_and_a_stamp_read_as_ui_ago(self):
         from datetime import timedelta
 
         from ..moments import ago
-        from ..ui import MISSING
 
         moment = timezone.now() - timedelta(hours=3)
 
         self.assertEqual(self.render(moment), ago(moment))
         self.assertEqual(self.render(moment.isoformat()), ago(moment))
-        self.assertEqual(self.render(""), MISSING)
+        self.assertEqual(self.render(""), "")
 
 
 class SelfLinkTests(TestCase):

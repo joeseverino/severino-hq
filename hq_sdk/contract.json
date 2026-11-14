@@ -3017,17 +3017,11 @@
       ]
     },
     "filters": {
-      "ago": {
-        "argument": "none"
-      },
       "breakable": {
         "argument": "optional"
       },
       "counted": {
         "argument": "required"
-      },
-      "day": {
-        "argument": "none"
       },
       "measured": {
         "argument": "required"
@@ -3051,6 +3045,9 @@
         "argument": "none"
       },
       "when": {
+        "argument": "optional"
+      },
+      "when_text": {
         "argument": "optional"
       }
     },

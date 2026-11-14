@@ -1,6 +1,6 @@
 {% extends "page.html" %}
 {% block page %}
 {% section "Written" id="example-note" %}
-  <p>{{ note.written_on|day }}</p>
+  <p>{{ note.written_on|when_text:"day" }}</p>
 {% endsection %}
 {% endblock %}

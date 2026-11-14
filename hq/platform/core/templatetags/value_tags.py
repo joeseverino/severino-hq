@@ -26,10 +26,7 @@ from hq.platform.application.entity_links import (
 from hq.platform.application.labels import DOT_MARKUP, human_bytes
 from hq.platform.application.moments import (
     WHEN_FORMS as _WORDS_FORMS,
-    ago as _ago,
-    elapsed as _elapsed,
     span as said,
-    when_day as _when_day,
     when_exact as _when_exact,
 )
 from hq.platform.application.money import money as _money
@@ -229,25 +226,18 @@ def last_read(value):
 
 
 @register.filter
-def ago(value):
-    """``{{ moment|ago }}``: an age as bare words, for a sentence or an attribute.
+def when_text(value, form=""):
+    """``{{ moment|when_text:"ago" }}``: the words ``when`` writes in a form,
+    as plain text, where a ``<time>`` cannot stand: an attribute, or a line
+    in a table cell, which sorts on the first ``<time>`` it holds. Nothing for
+    a missing moment or text that names none."""
 
-    A datetime or an ISO stamp, in ``application.ui``'s phrasing. On its own
-    in a cell or a readout, ``{{ moment|when:"ago" }}`` says the same words
-    and keeps the exact moment behind them.
-    """
-
-    if isinstance(value, datetime):
-        return _ago(value)
-    return _elapsed(str(value or ""))
-
-
-@register.filter
-def day(value):
-    """``{{ moment|day }}``: the day ``when:"day"`` names, as bare words, for
-    a day written where only text may go."""
-
-    return _when_day(value)
+    if form not in _WORDS_FORMS:
+        raise template.TemplateSyntaxError(
+            f"when_text takes {', '.join(repr(name) for name in _WORDS_FORMS if name)} or nothing; got {form!r}."
+        )
+    found = _instant(value)
+    return _WORDS_FORMS[form](found) if found is not None else ""
 
 
 @register.filter
@@ -305,15 +295,6 @@ def expiry(value):
     """``{{ not_after|expiry }}``: "22 Dec 2026 · 87 days", the one phrasing HQ uses for an end date."""
 
     return held(expiry_phrase(str(value or "")))
-
-
-@register.filter
-def ago_short(value):
-    """``ago``, saying nothing rather than the missing mark when there is no moment."""
-
-    # A datetime, or an ISO stamp as a provider wrote it, like ``ago``.
-    found = value if isinstance(value, datetime) else moment(str(value or ""))
-    return _ago(found) if found else ""
 
 
 @register.filter

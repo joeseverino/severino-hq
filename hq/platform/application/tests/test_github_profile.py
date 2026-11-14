@@ -383,17 +383,6 @@ class ShortAgeTests(TestCase):
         self.assertEqual(ago(timezone.now() - timedelta(days=5, hours=15)), "5\xa0days ago")
 
 
-class ShortAgeFilterTests(TestCase):
-    def test_an_iso_stamp_reads_like_a_datetime(self):
-        from datetime import timedelta
-
-        from hq.platform.core.templatetags.value_tags import ago_short
-
-        stamp = (timezone.now() - timedelta(days=3)).isoformat()
-        self.assertEqual(ago_short(stamp), "3\xa0days ago")
-        self.assertEqual(ago_short(""), "")
-
-
 class AppProofTests(TestCase):
     def test_the_app_reading_your_repositories_is_a_second_proof(self):
         from hq.domains.control_plane.models import ProviderInventory

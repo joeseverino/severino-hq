@@ -77,9 +77,9 @@ part's heading shows only when there is more than one.
             {% endcomment %}
             <td class="tight-col">
               {% status row.state_label tone=row.lifecycle.tone dot=True %}
-              {% if row.read_requested_at %}<span class="muted narrow-more"><br>Read asked {{ row.read_requested_at|ago }}</span>
+              {% if row.read_requested_at %}<span class="muted narrow-more"><br>Read asked {{ row.read_requested_at|when_text:"ago" }}</span>
               {% elif row.state_line %}<span class="muted {% if row.state_line_quiet %}row-more{% else %}narrow-more{% endif %}"><br>{% if row.state_line_tone %}{% status row.state_line tone=row.state_line_tone pill=False %}{% else %}{{ row.state_line|breakable }}{% endif %}</span>
-              {% elif row.changes_only and connection.instance.observed_at %}<span class="muted narrow-more"><br>Checked {{ connection.instance.observed_at|ago }}</span>
+              {% elif row.changes_only and connection.instance.observed_at %}<span class="muted narrow-more"><br>Checked {{ connection.instance.observed_at|when_text:"ago" }}</span>
               {% elif not row.sight.sights and connection.instance.observed_at %}<span class="muted narrow-more"><br>{% include "partials/_reading_age.html" with at=connection.instance.observed_at only %}</span>{% endif %}
               {% if row.problems %}<br>{% status row.problems|counted:"problem" tone="attention" pill=False href=row.problems_url %}{% endif %}
             </td>

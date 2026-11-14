@@ -2,7 +2,8 @@
 
 One owner for the words, so a page, a chart tip and an extension all say a
 time the same way. ``hq_sdk.ui`` hands these to extensions, and
-``core.templatetags.value_tags`` owns the one filter that puts them in a page.
+``core.templatetags.value_tags`` owns the filters that put them in a page,
+``when`` and its plain-text twin ``when_text``.
 """
 
 from datetime import UTC, date, datetime, timedelta
@@ -252,7 +253,7 @@ def _ago_or_day(value: date) -> str:
     return ago(value) if isinstance(value, datetime) else when_day(value)
 
 
-# What the ``when`` filter can be asked for, and the words each form writes.
+# What the ``when`` and ``when_text`` filters can be asked for, and the words each form writes.
 # A new form is added here and in docs/Design.md's table, nowhere else.
 WHEN_FORMS = {
     "": when,  # "Oct 3, 9:29 AM"; a date reads "Oct 3"

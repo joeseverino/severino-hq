@@ -108,10 +108,8 @@ TAGS = (
     "write_token",
 )
 FILTERS = (
-    "ago",
     "breakable",
     "counted",
-    "day",
     "measured",
     "money",
     "or_empty",
@@ -119,6 +117,7 @@ FILTERS = (
     "readout",
     "span",
     "when",
+    "when_text",
     "web_url",
 )
 
@@ -225,17 +224,15 @@ STYLED = ("data-chart",)
 # where a line could break inside it (value_tags, through line_breaks.held).
 # The hand-drawn-split-figure rule leaves each alone (test_template_values).
 WORDED_FIGURES = {
-    "ago": "an age in words",
-    "ago_short": "an age in words",
     "bytes": "a byte count",
     "counted": "a count and the words for it",
-    "day": "a day in words",
     "expiry": "a date and a count of days",
     "measured": "a figure and its unit",
     "money": "an amount",
     "seconds": "a run time",
     "signed_in": "an age in words",
     "span": "a length of time",
+    "when_text": "a moment in words",
 }
 
 # Read by every template through the host's context processors and Django's
