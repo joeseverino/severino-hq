@@ -77,7 +77,7 @@ NOTHING_ASKED = {"ok": True, **Standing().as_json(), "requested": [], "status": 
 def followed(status: str) -> Standing:
     """How the read behind a status address stands, as its resource would say."""
 
-    from ..timestamps import moment
+    from ..moments import moment
 
     found = watched(status.partition("watch=")[2])
     return read_standing(found["read"], moment(found["asked"]), connection_ref=found["ref"])

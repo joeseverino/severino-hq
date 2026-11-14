@@ -15,7 +15,7 @@ from .action_links import ActionLink as TopologyAction
 from .answer_fields import ObservedAt
 from .describe import Describe, listed
 from .entity_links import EntityLink
-from .timestamps import moment
+from .moments import moment
 from .ui import ended
 
 if TYPE_CHECKING:

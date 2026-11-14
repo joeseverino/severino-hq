@@ -14,8 +14,7 @@ from typing import Annotated, Any, Literal
 from pydantic import Field, StrictInt
 from pydantic.json_schema import SkipJsonSchema
 
-lazy from hq.platform.application.moments import when
-lazy from hq.platform.application.timestamps import moment
+lazy from hq.platform.application.moments import moment, when
 
 from ..permissions import GitHub
 from .contract import ObservationRecord, ObservationSpec, ReadingPart, Stamp

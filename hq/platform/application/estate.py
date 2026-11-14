@@ -28,11 +28,10 @@ from .entity_links import entity_link
 from .expiry import DEFAULT_RENEWAL_WINDOW_DAYS, days_until, renewal_window
 from .first_seen import dated
 from .item_help import cannot_help
-from .moments import ago, when_day
+from .moments import ago, moment, when_day
 from .projection import read_once
 from .security import Principal
 from .service_health import UNKNOWN
-from .timestamps import moment
 from .ui import DomainOverview, counted, ended
 from .workflow_contracts import ActionLink
 lazy from . import connections, services, zones

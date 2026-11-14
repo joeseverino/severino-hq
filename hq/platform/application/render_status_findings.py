@@ -30,9 +30,8 @@ from .finding_model import (
     journal_step,
     machine_step,
 )
-from .moments import ago, duration, when
+from .moments import ago, duration, moment, when
 from .reading_facts import FactRow, rows_of, state_on_controller, stated, taken_at, too_old, unjudged
-from .timestamps import moment
 from .topology_model import TopologyNode
 from .ui import ended
 

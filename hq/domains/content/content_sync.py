@@ -15,7 +15,7 @@ from django.utils.text import Truncator
 from hq.domains.content.models import ContentItem
 from hq.domains.projects.models import Project
 from hq.platform.application.http_read import UNREACHABLE, fetch, redirect_target
-from hq.platform.application.timestamps import moment
+from hq.platform.application.moments import moment
 
 
 class ContentSyncError(RuntimeError):

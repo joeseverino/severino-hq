@@ -23,7 +23,7 @@ from .linked_accounts import GITHUB
 from .record_errors import RecordNotFound
 from .security import Principal
 lazy from .cadence import asked_at, request_reads
-lazy from .timestamps import moment
+lazy from .moments import moment
 
 # GitHub's allowance is by the hour, so a read that failed is tried again after one.
 RETRY_AFTER = timedelta(hours=1)

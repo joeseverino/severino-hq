@@ -22,10 +22,9 @@ from hq.platform.application.contact_submissions import (
     list_contact_submissions,
 )
 from hq.platform.application.labels import dotted
-from hq.platform.application.moments import when
+from hq.platform.application.moments import moment, when
 from hq.platform.application.pages import PageAction, page_context
 from hq.platform.application.security import safe_next
-from hq.platform.application.timestamps import moment
 from hq.platform.application.ui import counted, ended
 from hq.platform.application.web_writes import execute_posted, refused
 

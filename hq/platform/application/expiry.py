@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from .derivations import holds_until, present
-from .timestamps import moment
+from .moments import moment
 
 DEFAULT_RENEWAL_WINDOW_DAYS = 30
 

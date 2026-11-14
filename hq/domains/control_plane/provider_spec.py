@@ -28,7 +28,7 @@ from hq.platform.application.moments import span, when_day
 from hq.platform.application.record_errors import Sentence
 from hq.platform.application.routes import reverse
 lazy from hq.platform.application.expiry import days_until
-lazy from hq.platform.application.timestamps import moment
+lazy from hq.platform.application.moments import moment
 
 from .names import in_zone
 from .observations.contract import ReadingPart

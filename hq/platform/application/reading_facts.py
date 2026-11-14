@@ -33,8 +33,7 @@ from .finding_model import (
     fact_values,
 )
 from .freshness import LAST_READ
-from .moments import when
-from .timestamps import moment
+from .moments import moment, when
 from .topology_model import TopologyNode, derived_id
 from .ui import ended
 lazy from .facts import snapshots_of

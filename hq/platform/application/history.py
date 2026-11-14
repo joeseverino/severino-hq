@@ -43,8 +43,8 @@ from .doors import Attribution
 from .entity_links import container_link, web_url
 from .facts import inventory_records
 from .labels import lower_first, plural
+from .moments import moment
 from .routes import reverse
-from .timestamps import moment
 from .ui import counted
 lazy from .inventory import READING_AUDIT_TYPE
 

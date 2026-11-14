@@ -27,7 +27,7 @@ from .finding_model import (
     connections_carrying,
     fact_values,
 )
-from .timestamps import moment
+from .moments import moment
 from .ui import counted, ended
 lazy from .credential_mint import address_fields
 lazy from .moments import expiry_words

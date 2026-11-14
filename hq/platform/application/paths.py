@@ -33,8 +33,8 @@ lazy from .expiry import days_until
 lazy from .hq_self import hq_service, scoped_served_at, scoped_served_port
 lazy from .inventory import record_identity
 lazy from .known_hosts import operator
+lazy from .moments import moment
 lazy from .services import CONTAINER_KIND
-lazy from .timestamps import moment
 lazy from .ui import counted
 lazy from .whereabouts import locate, machine_link, whereabouts
 

@@ -13,7 +13,7 @@ from typing import Any
 from pydantic.json_schema import SkipJsonSchema
 
 from hq.platform.application.labels import dotted
-lazy from hq.platform.application.timestamps import moment
+lazy from hq.platform.application.moments import moment
 
 from ..permissions import Portainer
 from .contract import ObservationRecord, ObservationSpec, Stamp, container_key

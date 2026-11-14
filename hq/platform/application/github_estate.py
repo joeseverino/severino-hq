@@ -29,9 +29,8 @@ from .entity_links import web_url
 from .expiry import days_until
 from .freshness import Freshness, freshness
 from .item_help import cannot_help, commands
-from .moments import ago, duration
+from .moments import ago, duration, moment
 from .projection import read_once
-from .timestamps import moment
 from .ui import counted, severity_tone
 from .workflow_contracts import ActionLink
 lazy from .facts import snapshots_of

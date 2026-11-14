@@ -12,8 +12,8 @@ from hq.domains.control_plane.observations.host import RENDER_STATUS_KIND, UNIT_
 lazy from hq.domains.jobs.models import Job as JobRow
 
 from ..drawings import Dot, Dots
+from ..moments import moment
 from ..projection import read_once
-from ..timestamps import moment
 from ..ui import counted
 from .tones import ATTENTION, GOOD, NEUTRAL, SERIOUS, iso
 lazy from .. import outbound_work, scheduled_work

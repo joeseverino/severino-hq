@@ -24,8 +24,8 @@ from .derivations import passed
 from .entity_links import kind_label
 from .freshness import stale_after
 from .locate import host_of
+from .moments import moment
 from .projection import read_once
-from .timestamps import moment
 from .ui import ended
 
 _INVENTORY_KEY = "facts.inventory"

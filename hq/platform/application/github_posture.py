@@ -21,8 +21,8 @@ from .card_items import Insight
 from .derivations import passed
 from .github_estate import REPOSITORY_KIND, Repository, attention as repository_attention, repositories
 from .item_help import cannot_help, do_step, run_step, steps
+from .moments import moment
 from .standards import UNMET, Check as _Check, Measurement, measure
-from .timestamps import moment
 from .ui import counted, ended
 lazy from .projects import repository_key
 

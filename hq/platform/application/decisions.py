@@ -15,9 +15,8 @@ lazy from .approvals import APPROVE, REJECT
 lazy from .entity_links import web_url
 lazy from .findings import rule_origin
 lazy from .freshness import cadence, freshness
-lazy from .moments import duration
+lazy from .moments import duration, moment
 lazy from .routes import reverse
-lazy from .timestamps import moment
 lazy from .ui import ended
 
 # How urgent, in the words a card's pill says.

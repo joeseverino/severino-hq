@@ -45,9 +45,9 @@ lazy from .dependency_updates import last_run
 lazy from .entity_links import EntityLink, entity_link
 lazy from .github_estate import Repository, repositories, repository_for
 lazy from .github_posture import STANDARD, posture_of
+lazy from .moments import moment
 lazy from .plugins import installed_plugins
 lazy from .record_answers import DependencyUpdatesSet
-lazy from .timestamps import moment
 
 # A project's fields as its command writes them and its row reads them back, each said once.
 type ProjectName = Annotated[str, Describe("What the project is called.")]

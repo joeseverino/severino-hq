@@ -16,9 +16,8 @@ from typing import Any
 from hq.domains.control_plane.observations.host import EDGE_REBOOT_KIND, REBOOT_KIND
 
 from .finding_model import Finding, FindingEstate, FindingRule, OperatorStep, cannot_run_commands, machine_step
-from .moments import when
+from .moments import moment, when
 from .reading_facts import FactRow, OnEachMachine, rows_of, state_on_controller, taken_at
-from .timestamps import moment
 from .topology_model import TopologyNode
 
 REBOOT_STATE = "reboot-state"

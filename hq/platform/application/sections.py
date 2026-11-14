@@ -25,7 +25,7 @@ from .projection import read_once
 from .ui import counted
 lazy from .github_estate import repository_for
 lazy from .github_profile import accounts, profile, profiles
-lazy from .timestamps import moment
+lazy from .moments import moment
 
 # The display projection of a reading, in the shape an extension emits, so the
 # dashboard renders host and extension cards through one loop and a new section

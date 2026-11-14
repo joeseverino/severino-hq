@@ -25,9 +25,8 @@ from .finding_model import (
     journal_step,
     machine_step,
 )
-from .moments import ago, duration
+from .moments import ago, duration, moment
 from .reading_facts import FactRow, OnEachMachine, rows_of, state_on_controller, stated, unjudged
-from .timestamps import moment
 from .topology_model import TopologyNode
 from .ui import counted, ended
 

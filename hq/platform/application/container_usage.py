@@ -9,7 +9,7 @@ from typing import Any
 
 from hq.domains.control_plane.observations.portainer import MEMORY_BASES
 
-from .timestamps import moment
+from .moments import moment
 
 
 @dataclass(frozen=True, slots=True)

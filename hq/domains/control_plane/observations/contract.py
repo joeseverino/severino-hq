@@ -9,7 +9,7 @@ from pydantic import BaseModel, BeforeValidator, ConfigDict, PlainSerializer, Va
 
 from hq.platform.core.digests import digest
 lazy from hq.platform.application.json_schemas import json_schema
-lazy from hq.platform.application.timestamps import moment
+lazy from hq.platform.application.moments import moment
 
 from ..permissions import Permission
 lazy from . import OBSERVATIONS

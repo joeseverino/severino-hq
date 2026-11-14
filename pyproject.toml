@@ -336,7 +336,7 @@ check-typed-exception = true
 # It runs cPanel's uapi by name, as an argument list.
 "deploy/targets/severino-hq-cpanel-controller" = ["UP", "SIM", "PTH", "PERF", "FURB", "B", "RUF", "C4", "S603"]
 # Naive datetimes are the input moment() is tested on.
-"hq/platform/application/tests/test_timestamps.py" = ["DTZ001", "DTZ901"]
+"hq/platform/application/tests/test_moment_reading.py" = ["DTZ001", "DTZ901"]
 
 [tool.ruff.lint.isort]
 combine-as-imports = true

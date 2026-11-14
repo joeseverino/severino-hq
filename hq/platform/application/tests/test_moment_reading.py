@@ -12,7 +12,7 @@ from django.test import SimpleTestCase
 
 from hq.platform.application.tests.markup import text
 
-from ..timestamps import moment
+from ..moments import moment
 
 try:
     from hypothesis import example, given, strategies as st
@@ -99,6 +99,26 @@ class MomentProperties(SimpleTestCase):
             if read is not None:
                 self.assertIsInstance(read, datetime)
                 self.assertTrue(mode == "keep" or read.tzinfo is not None, read)
+
+
+class StampDayTests(SimpleTestCase):
+    """A day is read from a date, a datetime's own day, or ISO text, and
+    anything else is no day."""
+
+    def test_a_day_is_read_from_each_form_that_names_one(self):
+        from ..moments import stamp_day
+
+        day = date(2036, 5, 2)
+        for value in (day, datetime(2036, 5, 2, 23, 59, tzinfo=UTC), "2036-05-02", " 2036-05-02\n"):
+            with self.subTest(value):
+                self.assertEqual(stamp_day(value), day)
+
+    def test_anything_else_is_no_day(self):
+        from ..moments import stamp_day
+
+        for value in ("", None, "2036-02-30", "May 2", object()):
+            with self.subTest(value):
+                self.assertIsNone(stamp_day(value))
 
 
 class CorrectedCallSiteTests(SimpleTestCase):

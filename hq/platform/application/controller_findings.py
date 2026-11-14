@@ -39,7 +39,7 @@ from .topology_lenses import _STALE_AFTER
 from .topology_model import TopologyNode
 from .ui import counted, ended
 lazy from .facts import inventory_records
-lazy from .timestamps import moment
+lazy from .moments import moment
 
 # The background job that runs the controller on its machine (deploy/systemd).
 CONTROLLER_UNIT = "severino-hq-controller.service"

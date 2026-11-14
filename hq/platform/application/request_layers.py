@@ -14,10 +14,9 @@ lazy from hq.domains.control_plane.providers import PROVIDERS
 
 from . import tailnet
 from .doors import approved_words
-from .moments import expiry_words
+from .moments import expiry_words, moment
 from .request_channel import UNTRUSTED_FORWARDER, Channel, encryption
 from .request_identity import SSO_LINK, Identity
-from .timestamps import moment
 from .ui import counted, ended
 lazy from .zones import public_answers_for
 

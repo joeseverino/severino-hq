@@ -31,9 +31,9 @@ from .ui import ended
 lazy from . import cadence
 lazy from .cadence import every_sweep, read_request_lifetime
 lazy from .capabilities import command_spec
+lazy from .moments import moment
 lazy from .refusal_status import refusal_of
 lazy from .security import safe_next
-lazy from .timestamps import moment
 lazy from .web_writes import execute_posted
 lazy from .work_runs import standing_tone, standing_word
 

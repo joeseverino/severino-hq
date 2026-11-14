@@ -1,26 +1,90 @@
-"""How HQ writes a moment, a day and an age.
+"""How HQ reads a stamp someone else wrote, and writes a moment, a day and an age.
 
-One owner for the words, so a page, a chart tip and an extension all say a
-time the same way. ``hq_sdk.ui`` hands these to extensions, and
-``core.templatetags.value_tags`` owns the filters that put them in a page,
-``when`` and its plain-text twin ``when_text``.
+One owner for both, so every reader agrees on a stamp's edges and a page, a
+chart tip and an extension all say a time the same way. ``hq_sdk.ui`` hands the
+words to extensions, and ``core.templatetags.value_tags`` owns the filters that
+put them in a page, ``when`` and its plain-text twin ``when_text``.
+
+A stamp that is unparseable, empty or missing reads as ``None``: a reading is a
+fact about the world, and a caller for whom that is an error raises its own.
+The edges where callers differ (a naive stamp, Go's zero time) are parameters,
+so a caller states which answer it needs.
 """
 
 from datetime import UTC, date, datetime, timedelta
+from typing import Literal
 
 lazy from django.utils import dateformat, timezone
 lazy from django.utils.timesince import timesince
 
-from .timestamps import moment as _stamp
 lazy from .derivations import reached, since, this_year
 lazy from .expiry import days_until
 lazy from .ui import MISSING, counted
+
+# How a stamp without an offset is read: "utc" is what every provider that
+# omits one means; "keep" leaves it naive, for a caller comparing it only with
+# stamps from the same source; "refuse" answers None, for one that must not guess.
+Naive = Literal["utc", "keep", "refuse"]
+
+
+def moment(
+    stamp: object,
+    *,
+    naive: Naive = "utc",
+    zero_is_never: bool = True,
+) -> datetime | None:
+    """``stamp`` as a datetime, or ``None`` when it does not name an instant."""
+
+    # A datetime is taken as given, and the naive and zero-time rules still
+    # apply to it.
+    found = stamp if isinstance(stamp, datetime) else _parsed(stamp)
+    # Go (and so Tailscale) writes ``0001-01-01T00:00:00Z`` for "never", which
+    # read as an instant looks like a bug rather than a fact. No source HQ
+    # reads uses year 1 for anything else.
+    if found is None or (zero_is_never and found.date() == date.min):
+        return None
+    if found.tzinfo is not None or naive == "keep":
+        return found
+    if naive == "refuse":
+        return None
+    return found.replace(tzinfo=UTC)
+
+
+def _parsed(stamp: object) -> datetime | None:
+    text = str(stamp or "").strip()
+    if not text:
+        return None
+    try:
+        # A trailing ``Z`` needs no rewriting: fromisoformat accepts it on
+        # every Python HQ supports.
+        return datetime.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+def stamp_day(value: object) -> date | None:
+    """``value`` as a calendar day: a date (a datetime's own day), or an ISO
+    ``YYYY-MM-DD``; ``None`` when it names neither."""
+
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    try:
+        return date.fromisoformat(str(value or "").strip())
+    except ValueError:
+        return None
+
+
+# ``ago`` names its argument ``moment``, as the SDK states it, which hides the
+# parser inside it.
+_moment = moment
 
 
 def elapsed(stamp: str) -> str:
     """A provider's timestamp as an age, or as the fact that there is none."""
 
-    found = _stamp(stamp)
+    found = moment(stamp)
     if found is None:
         return MISSING
     if not reached(found):
@@ -38,7 +102,7 @@ def ago(moment: date | str, now: datetime | None = None) -> str:
     parse is "never". ``now`` is the instant a derivation was made at.
     """
 
-    found = _stamp(moment) if isinstance(moment, str) else moment
+    found = _moment(moment) if isinstance(moment, str) else moment
     if found is None:
         return "never"
     if isinstance(found, datetime):

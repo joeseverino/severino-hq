@@ -26,11 +26,10 @@ from .derivations import passed, present
 from .reach import NETWORKS, network_of
 lazy from . import tailnet
 lazy from .inventory import record_inventory
-lazy from .moments import ago
+lazy from .moments import ago, moment
 lazy from .request_channel import channel_for_request, forwarded_chain
 lazy from .security import internal_principal
 lazy from .tailnet_presence import tailnet_presence
-lazy from .timestamps import moment
 
 logger = logging.getLogger(__name__)
 

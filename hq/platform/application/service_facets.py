@@ -14,9 +14,9 @@ from .containers import Running
 from .entity_links import EntityLink, entity_link, kind_label
 from .facts import Joined
 from .labels import dotted, lower_first
+from .moments import moment
 from .projection import read_once
 from .service_declarations import Claim
-from .timestamps import moment
 lazy from .connections import connection_rows
 lazy from .naming import public_zones_declared
 

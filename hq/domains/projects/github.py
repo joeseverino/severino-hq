@@ -8,7 +8,7 @@ GitHub publishes to anyone.
 from datetime import datetime
 
 from hq.platform.application.github_public import GitHubReadError, get, github_repository
-from hq.platform.application.timestamps import moment
+from hq.platform.application.moments import moment
 
 
 class GitHubMetadataError(RuntimeError):

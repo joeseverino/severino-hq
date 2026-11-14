@@ -12,9 +12,8 @@ from ..cadence import slowest_sweep_interval
 from ..derivation_testing import frozen, uncached
 from ..findings import derive_findings
 from ..inventory_testing import store
-from ..moments import when
+from ..moments import moment, when
 from ..projection import projection_scope
-from ..timestamps import moment
 from ..topology import derive_topology
 from .test_tailnet_posture import EVERYTHING, raised, tailnet_connection
 

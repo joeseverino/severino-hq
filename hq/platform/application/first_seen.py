@@ -15,9 +15,9 @@ from typing import Any
 
 from django.utils import timezone
 
+from .moments import moment
 from .projection import read_once
 from .readings import record, stored
-from .timestamps import moment
 
 READING_KEY = "attention.first-seen"
 # How often a report is followed by a look. A look derives the whole queue,

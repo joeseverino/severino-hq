@@ -56,13 +56,12 @@ lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
 lazy from .json_schemas import fields as whole_fields, json_schema
 lazy from .labels import effect_label, lower_first
 lazy from .machines import machine_catalog
-lazy from .moments import ago, when
+lazy from .moments import ago, moment, when
 lazy from .payload_words import ChangeRow, field_words, value_words
 lazy from .resource_operations import OperationQueued, enqueue, serialize_operation
 lazy from .routes import reverse
 lazy from .run_reads import RUNS
 lazy from .service_context import Cell, ServiceSection, machines_cell, recent_work
-lazy from .timestamps import moment
 lazy from .ui import ended
 lazy from .work_runs import RUN, WorkRun, operation_of, recent_runs, run_url
 

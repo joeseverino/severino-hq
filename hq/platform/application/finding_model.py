@@ -19,7 +19,7 @@ from hq.domains.control_plane.providers import PROVIDERS
 from .action_links import ActionLink
 from .command_fields import Describe
 from .core_capabilities import CONTROLLER_REFRESH
-from .timestamps import moment
+from .moments import moment
 from .topology_model import Topology, TopologyNode
 from .ui import ended
 from .workflows import WorkflowPlan

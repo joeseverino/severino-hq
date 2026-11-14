@@ -14,7 +14,7 @@ from typing import Any
 
 from django.utils import timezone
 
-from .timestamps import moment
+from .moments import moment
 
 
 def _condition_types() -> dict[str, str]:

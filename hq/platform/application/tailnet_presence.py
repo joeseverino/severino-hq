@@ -13,9 +13,8 @@ from .tailnet import TAILNET_KIND, snapshots
 lazy from .arrivals import arrivals
 lazy from .expiry import days_until
 lazy from .locate import container_hosts, host_of
-lazy from .moments import elapsed, expiry_words
+lazy from .moments import elapsed, expiry_words, moment
 lazy from .reach import is_public, network_of
-lazy from .timestamps import moment
 
 
 @dataclass(frozen=True, slots=True)

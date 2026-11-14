@@ -22,7 +22,7 @@ from hq.platform.application.calendar_entries import (
 from hq.platform.application.capabilities import capability_title, capability_words
 from hq.platform.application.card_items import ListRow
 from hq.platform.application.entity_links import web_url
-from hq.platform.application.moments import when_day
+from hq.platform.application.moments import stamp_day, when_day
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.references import ReferencePickerMixin, reference_of
 from hq.platform.application.security import Capability, safe_next, web_principal
@@ -40,13 +40,6 @@ DELETE = "calendar.entry.delete"
 CALENDAR_TRAIL = (("Calendar", reverse_lazy("calendar:month")),)
 
 
-def _day(value: str) -> date | None:
-    try:
-        return date.fromisoformat(value)
-    except ValueError:
-        return None
-
-
 class CalendarView(PageMixin, TemplateView):
     # The calendar is personal, so reading it is a grant of its own, never READ.
     required_capability = Capability.READ_CALENDAR
@@ -54,7 +47,7 @@ class CalendarView(PageMixin, TemplateView):
     page_title = "Calendar"
 
     def _selected(self) -> date | None:
-        return _day(self.request.GET.get("day", ""))
+        return stamp_day(self.request.GET.get("day", ""))
 
     @override
     def get_page_actions(self):
@@ -238,7 +231,7 @@ class EntryCreateView(EntryFormPage, CreateView):
 
     @override
     def get_initial(self):
-        on = _day(self.request.GET.get("on", ""))
+        on = stamp_day(self.request.GET.get("on", ""))
         return {"starts_on": on or timezone.localdate()}
 
 

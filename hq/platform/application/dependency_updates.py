@@ -28,8 +28,8 @@ from .projection import iso, read_once
 from .refusal_status import RefusalEnvelope, refuse
 from .security import Principal
 lazy from .cadence import asked_at as read_asked_at, request_reads
+lazy from .moments import moment
 lazy from .projects import repository_key
-lazy from .timestamps import moment
 lazy from .work_runs import TONES
 
 RUN_NOW = "project.dependency_updates.run"

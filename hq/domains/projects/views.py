@@ -21,6 +21,7 @@ from hq.platform.application.action_links import capability_action_link, command
 from hq.platform.application.capabilities import capability_words, command_spec
 from hq.platform.application.documentation import related_documents
 from hq.platform.application.entity_links import web_url
+from hq.platform.application.moments import moment
 from hq.platform.application.pages import PageAction, PageBadge, PageMixin
 from hq.platform.application.projects import (
     DEPENDENCY_UPDATES,
@@ -38,7 +39,6 @@ from hq.platform.application.tables import (
     TableSort,
     TableToggle,
 )
-from hq.platform.application.timestamps import moment
 from hq.platform.application.where_it_runs import where_it_runs
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
 lazy from hq.platform.application.asks import Ask, AskMixin, Standing, Took, read_standing, read_status_url

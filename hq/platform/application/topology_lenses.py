@@ -4,7 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import timedelta
 
-from .timestamps import moment
+from .moments import moment
 from .topology_model import JOINED_KINDS, Topology, TopologyTrace
 
 TRACE_DIRECTIONS = ("inbound", "outbound", "both")

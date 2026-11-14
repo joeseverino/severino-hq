@@ -24,8 +24,8 @@ from hq.domains.control_plane.observations import OBSERVATIONS
 lazy from hq.domains.control_plane.connection_shapes import projections
 lazy from hq.domains.control_plane.provider_spec import expiry_phrase
 
+from .moments import moment
 from .projection import read_once
-from .timestamps import moment
 lazy from .connections import connection_rows
 lazy from .credential_findings import fix_steps
 lazy from .credential_sight import credential_sight

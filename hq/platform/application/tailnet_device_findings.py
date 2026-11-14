@@ -20,9 +20,8 @@ from hq.domains.control_plane.consoles import tailscale_machine
 from .expiry import days_until
 from .finding_model import TAILNET_CARD, Finding, FindingEstate, FindingRemedy, FindingRule, OperatorStep, fact_values
 from .images import compare, version
-from .moments import when_day
+from .moments import moment, when_day
 from .reading_facts import onto_machine
-from .timestamps import moment
 from .topology_model import TopologyNode
 from .ui import counted, ended
 lazy from .tailnet import policy

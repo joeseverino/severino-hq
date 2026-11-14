@@ -26,9 +26,9 @@ from .connections import ConnectionAbility, ConnectionInstance, ConnectionLink, 
 from .drawings import StripTile
 from .freshness import DASHBOARD_GLANCE, freshness
 from .labels import dotted
+from .moments import moment
 from .record_errors import InputError, PolicyError
 from .security import Capability, Principal
-from .timestamps import moment
 lazy from .capabilities import capability_words, command_spec
 lazy from .projection import read_once
 

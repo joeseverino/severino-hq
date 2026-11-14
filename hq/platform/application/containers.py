@@ -31,8 +31,8 @@ from .container_words import UP_TO_DATE, UPDATE_AVAILABLE, ImageStandingWords
 from .display_words import display
 from .github_public import github_repository
 from .images import ImageRef, affected, compare, newer, version
+from .moments import moment
 from .projection import projection_scope, read_once
-from .timestamps import moment
 from .ui import counted
 lazy from . import connections
 lazy from .attestations import github_source

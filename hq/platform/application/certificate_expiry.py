@@ -22,8 +22,7 @@ from .expiry import days_until
 from .facts import Joined, inventory_records
 from .finding_model import THEN_CHECK_AGAIN, Finding, FindingEstate, FindingRemedy, FindingRule, fact_values, opens
 from .labels import lower_first
-from .moments import expiry_words
-from .timestamps import moment
+from .moments import expiry_words, moment
 from .ui import ended
 lazy from .estate import managed_certificates
 

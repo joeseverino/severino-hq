@@ -16,8 +16,8 @@ from hq.domains.control_plane.observations import OBSERVATIONS
 
 from .entity_links import EntityLink, entity_link, node_link
 from .facts import readings, unreadable_labels
+from .moments import moment
 from .security import Principal
-from .timestamps import moment
 from .topology import relation_graph
 from .topology_model import RELATIONS, TopologyEdge, relation_rank
 lazy from .action_links import topology_url

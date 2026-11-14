@@ -37,9 +37,9 @@ lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_
 from .facts import Subject, inventory_records, readings, record_read_at
 from .locate import host_of
 from .lookup import HOSTNAME, allocation_of, entity_name
+from .moments import moment
 from .reach import is_public, public_label
 from .security import Capability, Principal
-from .timestamps import moment
 lazy from . import osv, services, zones
 lazy from .attestations import reduce
 lazy from .containers import containers

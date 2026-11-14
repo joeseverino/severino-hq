@@ -30,11 +30,10 @@ lazy from .entity_links import entity_link
 lazy from .facts import snapshots_of
 lazy from .infrastructure import declared_machines, enabled_resources
 lazy from .machine_roles import role_context, roles_of
-lazy from .moments import when_day
+lazy from .moments import moment, when_day
 lazy from .projection import read_once
 lazy from .reach import network_of
 lazy from .service_facets import connected_kinds
-lazy from .timestamps import moment
 lazy from .whereabouts import locate, whereabouts
 
 

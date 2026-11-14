@@ -26,13 +26,14 @@ from hq.platform.application.entity_links import (
 from hq.platform.application.labels import DOT_MARKUP, human_bytes
 from hq.platform.application.moments import (
     WHEN_FORMS as _WORDS_FORMS,
+    moment,
     span as said,
+    stamp_day,
     when_exact as _when_exact,
 )
 from hq.platform.application.money import money as _money
 from hq.platform.application.page_parts import html_attributes
 from hq.platform.application.printable import admitted
-from hq.platform.application.timestamps import moment
 from hq.platform.application.ui import MISSING, STATUS_VALUES, counted as _counted
 from hq.platform.core.templatetags.line_breaks import breakable, button_words, code_spans, held, mark_text
 lazy from hq.domains.control_plane.provider_spec import expiry_phrase
@@ -156,12 +157,7 @@ def _instant(value) -> date | datetime | None:
         return value
     text = str(value or "").strip()
     found = moment(text) if "T" in text or " " in text else None
-    if found is not None:
-        return found
-    try:
-        return date.fromisoformat(text)
-    except ValueError:
-        return None
+    return found if found is not None else stamp_day(text)
 
 
 def _dated_mark(value: date):

@@ -27,9 +27,8 @@ lazy from .entity_links import entity_link
 lazy from .hq_self import hq_machine, hq_service, own_addresses, served_at
 lazy from .infrastructure import declared_machines
 lazy from .locate import index_of
-lazy from .moments import ago
+lazy from .moments import ago, moment
 lazy from .tailnet_presence import tailnet_presence
-lazy from .timestamps import moment
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,7 +1,7 @@
 """The dashboard: its glance panels, their settings, the contacts panel and the links an operator pins."""
 
 from collections.abc import Callable
-from datetime import date, timedelta
+from datetime import timedelta
 from typing import Any, ClassVar, override
 
 from django.contrib import messages
@@ -30,11 +30,11 @@ from hq.platform.application.glance import (
     dashboard_configuration,
     glance_context,
 )
+from hq.platform.application.moments import moment, stamp_day
 from hq.platform.application.outward_links import link_choices, outward_links
 from hq.platform.application.pages import PageVisit, page_context
 from hq.platform.application.request_path import request_path
 from hq.platform.application.security import safe_next, web_principal
-from hq.platform.application.timestamps import moment
 from hq.platform.application.visit_refresh import worth_asking
 from hq.platform.application.web_writes import execute_posted, refused
 lazy from hq.platform.application.pins import CHOOSE, DASHBOARD_LINK
@@ -135,8 +135,7 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
         for collection in (snapshot["draft_content"], snapshot["recent_published"]):
             for item in collection:
                 item["updated_at"] = moment(item["updated_at"], naive="keep")
-                if item["published_at"]:
-                    item["published_at"] = date.fromisoformat(item["published_at"])
+                item["published_at"] = stamp_day(item["published_at"])
         # What waits on this person, counted as the header's count endpoint
         # counts it: everything open that they have not set aside.
         queue = queue_state.with_aside_state(snapshot["priority"], self.request.user)

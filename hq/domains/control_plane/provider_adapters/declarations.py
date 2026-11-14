@@ -7,7 +7,6 @@ about the place that no provider reports.
 
 from typing import Any, Literal
 lazy import ipaddress
-lazy from datetime import date
 
 from django.urls.converters import StringConverter
 from pydantic import Field, field_validator, model_validator
@@ -15,7 +14,7 @@ from pydantic import Field, field_validator, model_validator
 from hq.platform.application.labels import dotted
 from hq.platform.application.ui import ended
 lazy from hq.platform.application.expiry import days_until
-lazy from hq.platform.application.timestamps import moment
+lazy from hq.platform.application.moments import moment, stamp_day
 
 from ..connection_shapes import SERVICE_ACCOUNT, SSH_TRANSPORT
 from ..provider_spec import (
@@ -122,13 +121,8 @@ class CertificateAuthoritySpec(ProviderModel):
     @field_validator("expires_on")
     @classmethod
     def a_real_date(cls, value: str) -> str:
-        if not value:
-            return value
-
-        try:
-            date.fromisoformat(value)
-        except ValueError as exc:
-            raise ValueError("Use an ISO date, e.g. 2036-05-02.") from exc
+        if value and stamp_day(value) is None:
+            raise ValueError("Use an ISO date, e.g. 2036-05-02.")
         return value
 
 

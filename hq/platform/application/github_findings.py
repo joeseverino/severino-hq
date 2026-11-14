@@ -10,8 +10,7 @@ passes ``OTHERS_SPENT_ATTENTION`` (``observations.github``).
 from hq.domains.control_plane.observations.github import OTHERS_SPENT, OTHERS_SPENT_ATTENTION
 
 from .finding_model import Finding, FindingEstate, FindingRule, OperatorStep, connections_carrying
-from .moments import when
-from .timestamps import moment
+from .moments import moment, when
 
 RULE = "github-others-spent"
 
