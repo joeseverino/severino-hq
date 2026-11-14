@@ -29,7 +29,7 @@ def get(path: str, *, accept: str = JSON, missing_ok: bool = False) -> Any:
     """``path`` from GitHub's API. A redirect is followed, as GitHub answers
     for a renamed repository."""
 
-    headers = {"Accept": accept, "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "Severino-HQ"}
+    headers = {"Accept": accept, "X-GitHub-Api-Version": "2022-11-28"}
     try:
         response, body = fetch(
             "GET",

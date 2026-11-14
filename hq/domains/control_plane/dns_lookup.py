@@ -162,7 +162,7 @@ def _get(url: str, *, timeout: int | None = None, accept: str) -> dict:
         response, raw = fetch(
             "GET",
             url,
-            headers={"Accept": accept, "User-Agent": "severino-hq"},
+            headers={"Accept": accept},
             timeout=seconds,
             limit=MAX_ANSWER_BYTES,
             follow_redirects=True,

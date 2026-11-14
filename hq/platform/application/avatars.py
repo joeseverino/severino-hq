@@ -19,7 +19,7 @@ from django.utils import timezone
 
 from hq.platform.core.models import Avatar
 
-from .http_read import at_most
+from .http_read import UNREACHABLE, fetch
 lazy from .entity_links import web_url
 
 logger = logging.getLogger("severino.auth")
@@ -74,13 +74,10 @@ def fetch_picture(url: str, *, access_token: str = "") -> tuple[str, bytes] | No
 
     headers = {"Authorization": f"Bearer {access_token}"} if access_token else {}
     try:
-        with httpx2.stream("GET", url, headers=headers, timeout=_TIMEOUT, follow_redirects=False) as response:
-            if response.status_code != 200:
-                return None
-            image = at_most(response.iter_bytes(), MAX_BYTES + 1)
-    except httpx2.HTTPError, httpx2.InvalidURL, httpx2.StreamError, OSError, ValueError:
+        response, image = fetch("GET", url, headers=headers, timeout=_TIMEOUT, limit=MAX_BYTES)
+    except (*UNREACHABLE, ValueError):
         return None
-    if not image or len(image) > MAX_BYTES:
+    if response.status_code != 200 or not image or len(image) > MAX_BYTES:
         return None
     kind = _kind(image)
     return (kind, image) if kind else None

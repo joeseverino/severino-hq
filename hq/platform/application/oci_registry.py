@@ -215,7 +215,7 @@ def _get(
 def _request(
     url: str, token: str, accept: str = "application/json", method: str = "GET", limit: int = MAX_RESPONSE_BYTES
 ) -> tuple[httpx2.Response, bytes]:
-    headers = {"Accept": accept, "User-Agent": "Severino-HQ"}
+    headers = {"Accept": accept}
     if token:
         headers["Authorization"] = f"Bearer {token}"
     try:
