@@ -11,7 +11,8 @@ from pathlib import Path
 from django.test import SimpleTestCase
 
 from hq.config import imports
-from hq.platform.core.test_runner import ClassTimedSuite, CompositionTextResult, FileClonedParallelSuite
+from hq.platform.core.run_report import ClassTimedSuite, CompositionTextResult
+from hq.platform.core.test_runner import FileClonedParallelSuite
 
 
 class _Held:

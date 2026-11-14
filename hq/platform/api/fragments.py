@@ -6,6 +6,8 @@ That the document says each described fragment once is held by
 
 import re
 
+from django.utils.text import capfirst
+
 
 class OpenAPIError(RuntimeError):
     """A route the document cannot describe; fails the build, not the client."""
@@ -14,4 +16,4 @@ class OpenAPIError(RuntimeError):
 def pascal(name: str) -> str:
     """``name``'s words run together, each capitalized: ``asset.create`` is ``AssetCreate``."""
 
-    return "".join(part[:1].upper() + part[1:] for part in re.split(r"[^0-9A-Za-z]+", name) if part)
+    return "".join(capfirst(part) for part in re.split(r"[^0-9A-Za-z]+", name) if part)

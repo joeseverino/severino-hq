@@ -200,15 +200,17 @@ jobs:
 
   # Real-browser layout invariants over synthetic example.* pages
   # (hq/platform/core/tests/browser/). Every request the page makes is answered in
-  # process; the browser reaches nothing. One job per browser:* gate, side by
-  # side. Named without the matrix: GitHub appends each leg's gate itself, and
-  # a job skipped before its matrix expands shows its name as written.
+  # process; the browser reaches nothing. Each browser:* gate is a leg, an
+  # engine's gate split into shares side by side, each its `shard` of the
+  # pages and tests (hq/platform/core/tests/browser/shards.py). Named without
+  # the matrix: GitHub appends each leg's gate and share itself, and a job
+  # skipped before its matrix expands shows its name as written.
   browser:
     name: Browser
     needs: [proven, legs]
     if: ${{ !cancelled() && needs.proven.outputs.gates != 'passed' && needs.legs.outputs.browser != 'false' }}
     runs-on: ubuntu-26.04
-    timeout-minutes: 25
+    timeout-minutes: 15
     # Playwright's image for the release uv.lock pins carries its browsers and
     # their system libraries, so a leg installs nothing from apt or a browser
     # CDN (BrowserInstallTests holds the two versions together). As its CI
@@ -220,7 +222,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        gate: [layout-1, layout-2, layout-chromium-1, layout-chromium-2, navigation, table-fit, demo, demo-chromium]
+        # GateReferenceTests holds the gates to those mise-tasks/browser.toml
+        # declares, and each split gate's shares to 1/n through n/n.
+        include:
+          - { gate: webkit, shard: 1/7 }
+          - { gate: webkit, shard: 2/7 }
+          - { gate: webkit, shard: 3/7 }
+          - { gate: webkit, shard: 4/7 }
+          - { gate: webkit, shard: 5/7 }
+          - { gate: webkit, shard: 6/7 }
+          - { gate: webkit, shard: 7/7 }
+          - { gate: chromium, shard: 1/2 }
+          - { gate: chromium, shard: 2/2 }
+          - { gate: demo }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -230,10 +244,10 @@ jobs:
           # Every browser gate installs tools/lint's npm project for axe-core.
           npm: true
       - name: Browser
-        # This leg's browser:* gate. GateReferenceTests holds the legs to the
-        # gates mise-tasks/browser.toml declares, so the matrix cannot fall behind it.
+        # This leg's browser:* gate, and its share of it.
         env:
           GATE: browser:${{ matrix.gate }}
+          HQ_BROWSER_SHARD: ${{ matrix.shard }}
         run: mise run "$GATE"
       # A failed rule saves the page as it stood (tests/browser/gate.py writes each
       # into the checkout's var/browser-failures/).
@@ -241,7 +255,7 @@ jobs:
         if: ${{ failure() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: browser-failures-${{ matrix.gate }}
+          name: browser-failures-${{ matrix.gate }}-${{ strategy.job-index }}
           path: var/browser-failures/
           if-no-files-found: ignore
 

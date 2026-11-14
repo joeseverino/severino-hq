@@ -123,8 +123,10 @@ class Insight:
     # guesses a start is worse than one that gives none.
     since: datetime | None = None
     # When the reading this item is drawn from was taken, where it is drawn
-    # from one: a card says how old what it claims is.
+    # from one, and its kind, whose cadence says when it is out of date: a
+    # card says how old what it claims is only then.
     observed_at: datetime | None = None
+    reads: str = ""
     # What was read that shows it, as (label, value) pairs: "Device address",
     # "192.0.2.10". A card draws each label once with its values beside it.
     facts: tuple[tuple[str, str], ...] = ()

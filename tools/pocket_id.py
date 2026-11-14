@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from typing import IO, Any
 from urllib.parse import urlencode
 
+from django.utils.text import capfirst
 lazy import django
 
 from hq.platform.core.tests.task import Usage
@@ -53,7 +54,7 @@ def in_words(key: str) -> str:
     """``manage_infrastructure`` as "Manage infrastructure"."""
 
     words = re.sub(r"[._]+", " ", key).strip()
-    return words[:1].upper() + words[1:]
+    return capfirst(words)
 
 
 def described(titles: Sequence[str]) -> str:

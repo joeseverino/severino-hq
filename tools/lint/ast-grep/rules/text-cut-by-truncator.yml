@@ -1,0 +1,36 @@
+# Django's Truncator(text).chars(limit) cuts a text to at most limit
+# characters, the ellipsis counted, and leaves a text that fits as it is. A
+# slice followed by an ellipsis cuts it a second way. hq_runner is out of
+# scope: the automation worker ships without Django.
+id: text-cut-by-truncator
+language: python
+severity: error
+message: Python cuts a text and adds an ellipsis by hand.
+note: >-
+  Write Truncator(text).chars(limit) from django.utils.text, with
+  truncate="..." where three dots are wanted.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+  - "tools/**"
+ignores:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/migrations/**"
+rule:
+  any:
+    - kind: binary_operator
+      all:
+        - has:
+            field: left
+            kind: subscript
+            has:
+              field: subscript
+              kind: slice
+              regex: '^\s*:'
+        - has:
+            field: right
+            kind: string
+            regex: '^.(…|\.\.\.).$'
+    - kind: string
+      regex: '\[\s*:[^\[\]]*\]\}(…|\.\.\.)'

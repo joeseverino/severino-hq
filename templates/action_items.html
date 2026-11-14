@@ -3,6 +3,7 @@
 {% url 'action_items' as every_item %}
 {% filter_bar filtered=action_filtered clear=every_item shown=action_shown total=action_total %}
   <input type="search" name="q" value="{{ action_query }}" placeholder="Filter what needs you" aria-label="Filter what needs you">
+  {% choices %}
   {% select "status" action_urgencies chosen=action_status label="Urgency" every="urgency" %}
   {% select "source" action_sources chosen=action_source label="Area" every="area" %}
   {% if action_about %}<input type="hidden" name="about" value="{{ action_about }}">{% endif %}

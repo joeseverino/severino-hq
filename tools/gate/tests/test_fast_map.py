@@ -14,28 +14,36 @@ from unittest.mock import patch
 from django.test import tag
 
 from hq.platform.core.tests.task import Usage
-from tools.gate import fast as fast_gate
+from tools.gate import chain as fast_chain, fast as fast_gate
 from tools.gate.tests.base import GateTestCase, fixture_git
-from tools.gate.tests.fast_runs import Recorder, run_main
+from tools.gate.tests.fast_runs import Recorder, everywhere, run_main
 
 VIEWS = "hq/domains/example/views.py"
 OTHER = "hq/domains/other/helpers.py"
-# Two apps, each with a test module the map says ran a file of it, and one that ran none.
+# Two apps, each with a test module that imports a file the map says it ran, and one that ran
+# none: in the first, one that reverses the route of the view the map saw run.
 FILES = {
     "hq/__init__.py": "",
     "hq/domains/__init__.py": "",
     "hq/domains/example/__init__.py": "",
     "hq/domains/example/apps.py": 'class ExampleConfig:\n    name = "hq.domains.example"\n',
     "hq/domains/example/models.py": "class Thing: ...\n",
-    VIEWS: '"""The example pages."""\n\n\ndef page():\n    """The one page."""\n    return 1\n',
+    VIEWS: (
+        '"""The example pages."""\n\nfrom hq.domains.example.models import Thing\n\n\n'
+        'def page():\n    """The one page."""\n    return 1\n'
+    ),
+    "hq/domains/example/urls.py": (
+        "from django.urls import path\n\nfrom . import views\n\napp_name = 'example'\n"
+        "urlpatterns = [path('', views.page, name='page')]\n"
+    ),
     "hq/domains/example/tests/__init__.py": "",
-    "hq/domains/example/tests/test_views.py": "",
-    "hq/domains/example/tests/test_app.py": "",
+    "hq/domains/example/tests/test_views.py": "from hq.domains.example import views\n",
+    "hq/domains/example/tests/test_app.py": "reverse('example:page')\n",
     "hq/domains/other/__init__.py": "",
     "hq/domains/other/apps.py": 'class OtherConfig:\n    name = "hq.domains.other"\n',
     OTHER: "def helper():\n    return 1\n",
     "hq/domains/other/tests/__init__.py": "",
-    "hq/domains/other/tests/test_other.py": "",
+    "hq/domains/other/tests/test_other.py": "from hq.domains.other import helpers\n",
     "hq/domains/other/tests/test_other_app.py": "",
 }
 RAN_VIEWS = "hq.domains.example.tests.test_views"
@@ -73,15 +81,15 @@ class FastGateMapSelectionTests(GateTestCase):
                 (root / path).parent.mkdir(parents=True, exist_ok=True)
                 (root / path).write_text(text)
             with (
-                patch.object(fast_gate, "ROOT", root),
-                patch.object(fast_gate, "passed_ancestor", return_value=None),
-                patch.object(fast_gate, "merge_base", return_value=base),
+                patch.object(fast_chain, "ROOT", root),
+                everywhere("passed_ancestor", return_value=None),
+                everywhere("merge_base", return_value=base),
                 patch("sys.stdout", new_callable=io.StringIO) as out,
             ):
                 self.assertEqual(fast_gate.main(Usage({"list": "true"})), 0)
         return out.getvalue().splitlines()
 
-    def test_a_change_inside_a_function_the_map_saw_run_selects_the_tests_that_ran_it_and_not_its_app(self):
+    def test_a_change_inside_a_function_the_map_saw_run_selects_the_tests_that_ran_it_and_not_its_routes(self):
         listed = self.listed({VIEWS: FILES[VIEWS].replace("return 1", "return 2")})
         self.assertIn(RAN_VIEWS, listed)
         self.assertNotIn(APP_TEST, listed)
@@ -114,14 +122,15 @@ class FastGateMapSelectionTests(GateTestCase):
 class FastGateMapRecordTests(GateTestCase):
     def test_the_whole_run_measures_the_map_and_a_narrow_one_does_not(self):
         suite = [f"hq.example.tests.test_{n}" for n in range(10)]
-        for share, whole in ((7, True), (2, False)):
+        for whole in (True, False):
             with self.subTest(whole=whole):
                 recorder = Recorder()
                 run_main(
                     ("hq/example.py",),
                     step=recorder,
+                    asked={"whole": "true"} if whole else {},
                     affected=(set(), set()),
-                    test_labels=(suite[:share], len(suite)),
+                    test_labels=(suite[:2], len(suite)),
                     whole_suite=suite,
                     record_pass=None,
                     touches_shared_ui=False,
@@ -145,7 +154,7 @@ class FastGateMapRecordTests(GateTestCase):
 
 class FastGateMapContextTests(GateTestCase):
     def test_a_test_modules_class_fixtures_and_tests_run_in_its_context(self):
-        from hq.platform.core.test_runner import ClassTimedSuite
+        from hq.platform.core.run_report import ClassTimedSuite
 
         measuring = SimpleNamespace(context=None, get_option={"run:core": "ctrace"}.get)
         measuring.switch_context = lambda name: setattr(measuring, "context", name)

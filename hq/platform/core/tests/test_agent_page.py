@@ -167,7 +167,8 @@ class MissingPermissionTests(TestCase):
         self.assertIn("sign it in again", said)
         hrefs = [element.attrs["href"] for element in inside if element.tag == "a"]
         self.assertTrue(any(href.endswith(CLIENT_SETUP) for href in hrefs), hrefs)
-        self.assertTrue(all(any(a.attrs.get("data-agent") == AGENT for a in each.ancestors) for each in shown))
+        on_its_row = within(page, "data-agent", AGENT)
+        self.assertTrue(all(each in on_its_row for each in shown))
 
     def test_an_agent_missing_nothing_shows_nothing_more(self):
         page = self.signed_in(agent_grantable())

@@ -3,7 +3,7 @@
 from hq.domains.control_plane.providers import PROVIDERS
 
 from .action_links import command_action, command_url
-from .container_attention import UPDATE_CAPABILITY
+from .container_findings import UPDATE_CAPABILITY
 from .workflow_contracts import ActionLink
 
 

@@ -31,10 +31,12 @@
   // nothing moves once a page is drawn.
   const REGION = ".table-scroll";
   const headingsOf = (table) => [...table.querySelectorAll(":scope > thead > tr:last-child > th")];
-  // The order the table's columns leave in, by place.
+  // The order the table's columns leave in, by place. A column of a row's
+  // controls never leaves: in a narrow box they stand beneath the row's words
+  // (`data-beneath`, table_cells), so a reader never opens a row to find them.
   const dropOrder = (table) => headingsOf(table)
     .map((heading, place) => [Number(heading.dataset.drop) || 0, place, heading])
-    .filter(([rank, , heading]) => rank && !heading.hasAttribute("data-blank-column"))
+    .filter(([rank, , heading]) => rank && !heading.matches("[data-blank-column], [data-beneath]"))
     .sort((left, right) => left[0] - right[0] || right[1] - left[1])
     .map(([, place]) => place);
   // How far each table has given way: how many of its columns have left, one
@@ -97,6 +99,23 @@
     }
   };
   const tableIn = (region) => region.querySelector(":scope > .data-table");
+  // The server draws every region as a named stop for the keyboard, since
+  // without script any of them may scroll (table_tags). Fitted, a region is
+  // one only while its table scrolls; a pane or a chart's always is. An
+  // attribute moves nothing on the page.
+  const stopNames = new WeakMap();
+  const holdStop = (region, scrolls) => {
+    if (region.matches(".is-pane, [data-chart]")) return;
+    if (!stopNames.has(region)) stopNames.set(region, region.getAttribute("aria-label"));
+    const name = stopNames.get(region);
+    if (scrolls && name) {
+      region.setAttribute("role", "group");
+      region.setAttribute("aria-label", name);
+      region.setAttribute("tabindex", "0");
+    } else {
+      ["role", "aria-label", "tabindex"].forEach((attribute) => region.removeAttribute(attribute));
+    }
+  };
   // The width each region was last fitted at.
   const regionWidths = new WeakMap();
   // A region's table fitted at the width the region has now. One whose
@@ -117,15 +136,17 @@
     const open = [...table.querySelectorAll(":scope > tbody > tr.is-expanded")];
     open.forEach((row) => row.classList.remove("is-expanded"));
     fit(table, changed || before === undefined || width > before);
+    holdStop(region, table.hasAttribute("data-scrolls"));
     if (open.length) {
       holdColumns(table);
       open.forEach((row) => row.classList.add("is-expanded"));
     }
-    // A table that arrives, changes or comes into sight is measured for cuts
-    // as it is fitted, a fragment's for one; one in a disclosure just opened
-    // is measured as it opens (`toggle`, below). A window resized measures them once it settles (`markTablesSoon`), and
-    // what the parser draws is measured once the page has loaded.
-    if (document.readyState !== "loading" && (changed || !before)) markCut(table);
+    // A table is measured for cuts as it is fitted, in the frame its fit is
+    // drawn in: one that arrives, changes, comes into sight or has its width
+    // changed, so no frame draws a cut whose row neither opens nor titles it.
+    // One in a disclosure just opened is measured as it opens (`toggle`,
+    // below), and what the parser draws once the page has loaded.
+    if (document.readyState !== "loading") markCut(table);
   };
   const refit = (table) => {
     if (table?.parentElement?.matches(REGION)) fitIn(table.parentElement, true);
@@ -414,7 +435,11 @@
   };
   const heldColumns = (table) => table.querySelector(":scope > colgroup[data-held]");
   const holdColumns = (table) => {
-    if ("rowsHeld" in table.dataset) return;
+    // A table whose rows stack in its narrow box (a column of controls,
+    // `data-beneath`, tables.css), or whose rows are their words and their
+    // controls alone, shares no columns between its rows to hold.
+    const lines = ":has(> * > tr > [data-beneath]):is([data-narrow], :not(:has(> * > tr > :nth-child(3))))";
+    if ("rowsHeld" in table.dataset || table.matches(lines)) return;
     // A column that left draws no box, and a column of the group stands for
     // each column that is drawn, in order.
     /* eslint-disable no-restricted-syntax -- every column at the width the reader saw while a row is open */

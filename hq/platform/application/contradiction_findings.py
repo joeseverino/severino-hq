@@ -6,11 +6,11 @@ what each side says, so the fix is a choice between them, and offers the
 declaration HQ can change to make them agree.
 """
 
-import json
 import shlex
 from collections.abc import Iterable, Mapping
 from typing import Any
-lazy from dataclasses import replace
+
+from django.utils.text import Truncator
 
 from hq.domains.control_plane.names import in_zone, normalized_hostname
 from hq.domains.control_plane.providers import PROVIDERS
@@ -26,10 +26,13 @@ from .finding_model import (
     FindingRemedy,
     FindingRule,
     OperatorStep,
+    carried,
+    carry,
     fact_values,
     on_machine,
+    opens,
 )
-from .ui import ended
+from .ui import counted, ended
 lazy from . import exposure, zones
 lazy from .containers import containers
 lazy from .facts import inventory_records
@@ -38,12 +41,9 @@ lazy from .path_model import Route
 lazy from .paths import path_to, routed_names
 lazy from .services import find_service
 
-# The fact a contradiction travels on, from the topology to the rule reading it.
-# Contradictions are found while the topology is derived, which may read, so
-# the rules only read this fact and deriving findings costs no query.
-FACT = "contradiction"
-
 UPDATE_CAPABILITY = "infrastructure.resource.update"
+# A service's wiring fault (``services._faults``), one fact per fault on its node.
+SERVICE_FAULT = "service-fault"
 
 
 def _update(key: str, *, intent: str) -> FindingRemedy:
@@ -361,7 +361,7 @@ def _served_not_held() -> tuple[Finding, ...]:
                 evidence=tuple(
                     (
                         str(item.get("consumer") or item.get("domain") or ""),
-                        f"serves {str(item.get('fingerprint_sha256', ''))[:12]}…",
+                        f"serves {Truncator(item.get('fingerprint_sha256', '')).chars(13)}",
                     )
                     for item in wrong
                 ),
@@ -388,71 +388,37 @@ _DETECTORS = (
 
 
 def add_contradiction_facts(nodes) -> None:
-    """Find every contradiction and carry each on its subject's node.
+    """Find every contradiction and carry each on its subject's node."""
 
-    A subject with no node of its own (a name only a gate mentions) rides on
-    the first node: the rules read every node, so where it rides only has to
-    exist.
-    """
-
-    if not nodes:
-        return
-    fallback = next(iter(nodes))
-    for detect in _DETECTORS:
-        for finding in detect():
-            anchor = finding.subject if finding.subject in nodes else fallback
-            node = nodes[anchor]
-            nodes[anchor] = replace(node, facts=(*node.facts, (FACT, _encoded(finding))))
+    carry(nodes, (finding for detect in _DETECTORS for finding in detect()))
 
 
-def _encoded(finding: Finding) -> str:
-    return json.dumps(
-        {
-            "rule": finding.rule,
-            "subject": finding.subject,
-            "title": finding.title,
-            "severity": finding.severity,
-            "explanation": finding.explanation,
-            "evidence": [list(pair) for pair in finding.evidence],
-            "remedies": [
-                [remedy.capability, remedy.target, remedy.intent, remedy.variant, remedy.url]
-                for remedy in finding.remedies
-            ],
-            "steps": [[step.label, step.command, list(step.notes)] for step in finding.steps],
-        }
+def _fault_title(hostname: str, faults: tuple[str, ...]) -> str:
+    """What is wrong with ``hostname``, by its first fault's first sentence; the explanation says all of each."""
+
+    first = faults[0].split(". ", 1)[0].rstrip(".")
+    more = len(faults) - 1
+    return f"{hostname}: {first}" + (f", and {counted(more, 'more problem', 'more problems')}" if more else "")
+
+
+def _wiring_incomplete(estate: FindingEstate) -> tuple[Finding, ...]:
+    """A name whose declarations no single resource can see disagree: a name
+    answered with no certificate covering it, a proxy pointing at a host HQ
+    does not know, or two declarations of one kind for one name. Whether a
+    resource reconciled is its own rule's, so one problem is never raised twice."""
+
+    return tuple(
+        Finding(
+            rule="service-wiring-incomplete",
+            subject=node.id,
+            severity="attention",
+            title=_fault_title(node.label, faults),
+            explanation=" ".join(faults),
+            primary=opens("Open service", node.url) if node.url else None,
+        )
+        for node in estate.nodes()
+        if node.kind == "service" and (faults := fact_values(node, SERVICE_FAULT))
     )
-
-
-def _decoded(value: str) -> Finding:
-    item = json.loads(value)
-    return Finding(
-        rule=item["rule"],
-        subject=item["subject"],
-        title=item["title"],
-        severity=item["severity"],
-        explanation=item["explanation"],
-        evidence=tuple(tuple(pair) for pair in item["evidence"]),
-        remedies=tuple(
-            FindingRemedy(capability=capability, target=target, intent=intent, variant=variant, url=url)
-            for capability, target, intent, variant, url in item["remedies"]
-        ),
-        steps=tuple(
-            OperatorStep(label=label, command=command, notes=tuple(notes)) for label, command, notes in item["steps"]
-        ),
-    )
-
-
-def _raised(rule: str):
-    def detect(estate: FindingEstate) -> tuple[Finding, ...]:
-        found = {}
-        for node in estate.nodes():
-            for value in fact_values(node, FACT):
-                finding = _decoded(value)
-                if finding.rule == rule:
-                    found.setdefault((finding.subject, finding.title), finding)
-        return tuple(found[key] for key in sorted(found))
-
-    return detect
 
 
 RULES: tuple[FindingRule, ...] = (
@@ -460,7 +426,7 @@ RULES: tuple[FindingRule, ...] = (
         "served-certificate-not-held",
         "A site is serving a different certificate",
         "serious",
-        _raised("served-certificate-not-held"),
+        carried("served-certificate-not-held"),
         operator_action="Install HQ's certificate again, or point the site at it.",
         no_help_reason="HQ cannot tell why the site is serving another certificate.",
     ),
@@ -468,7 +434,7 @@ RULES: tuple[FindingRule, ...] = (
         "public-name-served-by-nothing",
         "A public name that leads nowhere",
         "attention",
-        _raised("public-name-served-by-nothing"),
+        carried("public-name-served-by-nothing"),
         operator_action="Remove the public record, or add the proxy route that should serve the name.",
         no_help_reason="HQ cannot tell whether the name should still exist.",
     ),
@@ -476,7 +442,7 @@ RULES: tuple[FindingRule, ...] = (
         "route-to-stopped-container",
         "A route to a container that is not running",
         "serious",
-        _raised("route-to-stopped-container"),
+        carried("route-to-stopped-container"),
         operator_action="Start the container, or point the proxy route at what replaced it.",
         no_help_reason="HQ cannot start containers.",
     ),
@@ -484,7 +450,7 @@ RULES: tuple[FindingRule, ...] = (
         "gate-guards-nothing",
         "Access rule for a name that no longer exists",
         "neutral",
-        _raised("gate-guards-nothing"),
+        carried("gate-guards-nothing"),
         operator_action="Remove the name from the rule.",
         no_help_reason="HQ cannot edit Access applications or access lists.",
     ),
@@ -492,7 +458,7 @@ RULES: tuple[FindingRule, ...] = (
         "split-horizon-disagrees",
         "One name, two different machines",
         "attention",
-        _raised("split-horizon-disagrees"),
+        carried("split-horizon-disagrees"),
         operator_action="Point the internal and public records at the same machine.",
         no_help_reason="HQ cannot tell which one is right.",
     ),
@@ -500,8 +466,16 @@ RULES: tuple[FindingRule, ...] = (
         "published-port-unfronted",
         "A container is open to the internet",
         "serious",
-        _raised("published-port-unfronted"),
+        carried("published-port-unfronted"),
         operator_action="Bind the published ports to 127.0.0.1, or put a proxy route in front of them.",
         no_help_reason=CANNOT_EDIT_COMPOSE,
+    ),
+    FindingRule(
+        "service-wiring-incomplete",
+        "A service not fully set up",
+        "attention",
+        _wiring_incomplete,
+        operator_action="Change the service's records on its page so they agree.",
+        no_help_reason="HQ cannot tell which of the records is meant.",
     ),
 )

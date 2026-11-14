@@ -1,5 +1,7 @@
 {% comment %}
 A row's actions, from `{% row_actions %}` (table_tags.row_actions): one cell,
-each action a compact control. The stylesheet sets each on the row's first
-line (tables.css, A row's actions).
-{% endcomment %}<td class="row-actions">{% if gap %}{% include "partials/_write_gap.html" with gap=gap only %}{% else %}{% for action in actions %}{% include "partials/_page_action.html" with action=action extra="compact" only %}{% endfor %}{% endif %}</td>
+each action a compact control, the reader's own way to set the row aside
+(`put_away`, the queue's Dismiss) the last of them, and those past the first
+few waiting in the row's open line (`row-later`). The stylesheet sets each on
+the row's first line (tables.css, A row's actions).
+{% endcomment %}<td class="row-actions">{% if gap %}{% include "partials/_write_gap.html" with gap=gap only %}{% else %}{% for action in actions %}{% include "partials/_page_action.html" with action=action extra="compact" only %}{% endfor %}{% endif %}{% if put_away %}{% include "partials/_page_action.html" with action=put_away extra="compact" only %}{% endif %}{% if later and not gap %}<div class="narrow-more row-later">{% for action in later %}{% include "partials/_page_action.html" with action=action extra="compact" only %}{% endfor %}</div>{% endif %}</td>

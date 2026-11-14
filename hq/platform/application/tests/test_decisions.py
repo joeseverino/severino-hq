@@ -10,7 +10,13 @@ from hq.platform.application.decisions import decision, urgency, workflow_parts
 from hq.platform.application.item_help import cannot_step, commands, do_step, run_step
 from hq.platform.application.workflow_contracts import ActionLink, WorkflowOutcome, WorkflowPlan, WorkflowStep
 
-from .markup import elements, hrefs, select, text, texts, with_class, within
+from .markup import elements, hrefs, select, text, texts, with_class
+
+
+def row_hrefs(html):
+    """Every link's target."""
+
+    return [link.attrs["href"] for link in elements(html, "a") if "href" in link.attrs]
 
 
 def card(item) -> str:
@@ -54,7 +60,7 @@ class DecisionTests(SimpleTestCase):
         self.assertEqual(shown["actions"], [asdict(action)])
         self.assertEqual([step["phase"] for step in shown["workflow"]["steps"]], ["verify"])
         html = card(item)
-        self.assertEqual(hrefs(html).count("/example/review/"), 1)
+        self.assertEqual(row_hrefs(html).count("/example/review/"), 1)
         (recheck,) = select(html, "formaction", "/example/check/")
         self.assertEqual(recheck.attrs["form"], "hq-post")
         self.assertEqual(elements(html, "form"), [])
@@ -92,6 +98,56 @@ class DecisionTests(SimpleTestCase):
 
         self.assertEqual(shown["actions"], [asdict(own), asdict(check)])
 
+    def test_the_fix_and_the_named_page_stand_on_the_row_before_a_check(self):
+        fix = ActionLink("remedy", "Renew certificate", "remote_write", "/commands/renew/", recommended=True)
+        check = ActionLink("verify", "Check again", "read", "/example/check/")
+        shown = decision(
+            self.item(
+                url="/certificates/example/",
+                action="Open certificate",
+                steps=(
+                    WorkflowStep("act", "Renew", "", "recommended", (fix,)),
+                    WorkflowStep("verify", "Check again", "", "available", (check,)),
+                ),
+            )
+        )
+
+        self.assertEqual(
+            [action["label"] for action in shown["actions"]], ["Renew certificate", "Open certificate", "Check again"]
+        )
+
+    def test_a_row_says_how_old_its_reading_is_only_once_it_is_out_of_date(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from hq.platform.application.freshness import cadence
+
+        kind = "github.repository"
+        late = timezone.now() - cadence(kind).stale_after - timedelta(minutes=5)
+        for at, shown in ((timezone.now(), False), (late, True)):
+            with self.subTest(shown=shown):
+                html = card(self.item(key="example:read", reads=kind, observed_at=at.isoformat()))
+
+                self.assertEqual(bool(select(html, "data-reading-age")), shown)
+                self.assertEqual("Read every" in text(html), shown)
+        unknown = card(self.item(key="example:read", observed_at=late.isoformat()))
+        self.assertFalse(select(unknown, "data-reading-age"))
+
+    def test_the_named_page_leads_when_nothing_else_is_recommended(self):
+        check = ActionLink("verify", "Check again", "read", "/example/check/")
+        shown = decision(
+            self.item(
+                url="/example/plan/",
+                action="Upgrade plan for example",
+                steps=(WorkflowStep("verify", "Check again", "", "available", (check,)),),
+            )
+        )
+
+        self.assertEqual(
+            [action["label"] for action in shown["actions"] if action["recommended"]], ["Upgrade plan for example"]
+        )
+
     def test_a_reason_is_a_sentence_and_never_a_numbered_step(self):
         item = self.item(steps=(cannot_step("Only the registrar can renew it."),))
         shown = decision(item)
@@ -100,7 +156,7 @@ class DecisionTests(SimpleTestCase):
         self.assertEqual(shown["reason"], "Only the registrar can renew it.")
         self.assertEqual(shown["steps"], [])
         self.assertIn("Only the registrar can renew it.", texts(html, "p"))
-        self.assertEqual([step for step in within(html, "data-attention-item") if step.tag in {"ol", "li"}], [])
+        self.assertEqual(with_class(html, "resolution-workflow"), [])
         self.assertNotIn("Why HQ cannot", text(html))
 
     def test_one_command_stands_alone_and_several_are_numbered(self):
@@ -137,7 +193,7 @@ class DecisionTests(SimpleTestCase):
         html = card(self.item(actions=links))
 
         # The meaning is the row's own, under its title; nothing beneath repeats it.
-        (meaning,) = with_class(html, "attention-detail")
+        (meaning,) = select(html, "data-attention-detail")
         self.assertIn("What it means for the reader.", meaning.words)
         self.assertEqual(with_class(html, "row-below"), [])
         # Every button, the first two and those that wait, is in one cell.
@@ -147,7 +203,7 @@ class DecisionTests(SimpleTestCase):
             if link.attrs.get("href", "").startswith("/example/")
         }
         self.assertEqual(len(cells), 1)
-        self.assertEqual(sorted(hrefs(html)), [f"/example/{n}/" for n in range(3)])
+        self.assertEqual(sorted(row_hrefs(html)), [f"/example/{n}/" for n in range(3)])
 
     def test_the_title_goes_to_the_thing_and_the_named_next_step_is_a_link(self):
         subject = asdict(ActionLink("subject", "example-host", "read", "/machines/example-host/"))
@@ -222,13 +278,15 @@ class OriginTests(SimpleTestCase):
     def test_a_finding_says_its_rule_and_the_line_it_is_declared_at(self):
         from hq.platform.application.findings import RULES
 
-        rule = RULES[0]
-        found = decision({"key": f"hq.example:finding:{rule.name}:node:1", "source": "Example", "status": "serious"})
+        for rule in RULES:
+            with self.subTest(rule=rule.name):
+                key = f"hq.example:finding:{rule.name}:node:1"
+                found = decision({"key": key, "source": "Example", "status": "serious"})
 
-        self.assertEqual((found["origin"]["rule"], found["origin"]["title"]), (rule.name, rule.title))
-        path, _, line = found["origin"]["where"].rpartition(":")
-        self.assertTrue(path.startswith("hq/") and path.endswith(".py"), path)
-        self.assertTrue(line.isdigit())
+                self.assertEqual((found["origin"]["rule"], found["origin"]["title"]), (rule.name, rule.title))
+                path, _, line = found["origin"]["where"].rpartition(":")
+                self.assertTrue(path.startswith("hq/") and path.endswith(".py"), path)
+                self.assertTrue(line.isdigit())
 
     def test_anything_else_says_where_it_came_from(self):
         found = decision({"key": "example.domain:Renewals:Passport", "source": "Example", "status": "attention"})

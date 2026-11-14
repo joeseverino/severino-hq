@@ -6,9 +6,11 @@ docs/Architecture.md, "The automation worker".
 """
 
 import json
+import os
 import shlex
+import sys
 import tempfile
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Collection, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -54,11 +56,19 @@ PLUGIN_PATHS = (
     "ANSIBLE_TEST_PLUGINS",
     "ANSIBLE_VARS_PLUGINS",
 )
+# Where the collections ``collections.yml`` pins are installed: in the Python
+# environment the runner group is, so the image's copy of that environment
+# carries them and the smoke's own environment holds its own.
+COLLECTIONS = Path(sys.prefix, "share", "ansible", "collections")
 # Where a project's roles are, by Ansible's directory layout: ``roles/`` at its
 # root, beside ``playbooks/``.
 ROLES = "roles"
 # The variable that says whether a task escalates, above each keyword.
 BECOME = "ansible_become"
+# The file a run's extra vars are handed over in, inside its private directory.
+EXTRAVARS = "extravars.yml"
+# Ansible's tag for text it must never read as a template.
+UNSAFE = "!unsafe"
 # How long ansible-doc may take to read one role's argument spec.
 DOC_TIMEOUT_SECONDS = 60
 
@@ -86,7 +96,9 @@ def _inventory(hosts: tuple[str, ...], targets: tuple[Target, ...]) -> dict[str,
 def environment(private_data_dir: Path, project_dir: Path) -> dict[str, str]:
     """What every Ansible program the worker starts is told, for a project at
     ``project_dir``: its configuration and every path it searches, all inside
-    ``private_data_dir`` but the project's own roles.
+    ``private_data_dir`` but the project's own roles and the collections the
+    worker ships, which are found nowhere else: not in a home directory and
+    not on Python's path.
 
     Writes the empty configuration file it names, since Ansible goes on to the
     working directory's ``ansible.cfg`` when the one ``ANSIBLE_CONFIG`` names
@@ -106,6 +118,8 @@ def environment(private_data_dir: Path, project_dir: Path) -> dict[str, str]:
         "ANSIBLE_SSH_CONTROL_PATH_DIR": str(private_data_dir / "cp"),
         "ANSIBLE_HOST_KEY_CHECKING": "True",
         "ANSIBLE_ROLES_PATH": str(project_dir / ROLES),
+        "ANSIBLE_COLLECTIONS_PATH": str(COLLECTIONS),
+        "ANSIBLE_COLLECTIONS_SCAN_SYS_PATH": "False",
         **dict.fromkeys(PLUGIN_PATHS, nothing),
     }
 
@@ -127,6 +141,34 @@ def extravars(run: Run) -> dict[str, Any]:
     return found
 
 
+def as_data(value: Any) -> str:
+    """``value`` as YAML in which every text is tagged ``!unsafe``.
+
+    Ansible reads an extra var's text as a template, lookups included, which
+    run on the worker. A run's parameters are data from whoever asked, so each
+    text is tagged as the one thing Ansible never templates. JSON is YAML, so
+    each scalar is written as JSON, and a tag before it is YAML's own.
+    """
+
+    if isinstance(value, str):
+        return f"{UNSAFE} {json.dumps(value)}"
+    if isinstance(value, Mapping):
+        return "{" + ", ".join(f"{json.dumps(str(key))}: {as_data(each)}" for key, each in value.items()) + "}"
+    if isinstance(value, (list, tuple)):
+        return "[" + ", ".join(as_data(each) for each in value) + "]"
+    return json.dumps(value)
+
+
+def write_extravars(run: Run, private_data_dir: Path) -> Path:
+    """The run's extra vars as the file ``arguments`` names, the worker's alone to read."""
+
+    path = private_data_dir / EXTRAVARS
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        handle.write(as_data(extravars(run)) + "\n")
+    return path
+
+
 def arguments(run: Run, private_data_dir: Path) -> dict[str, Any]:
     """What ansible-runner is called with for ``run``, callbacks aside."""
 
@@ -137,7 +179,9 @@ def arguments(run: Run, private_data_dir: Path) -> dict[str, Any]:
         "project_dir": str(run.procedure.project_dir),
         "playbook": run.procedure.playbook,
         "inventory": _inventory(run.hosts, run.targets),
-        "extravars": extravars(run),
+        # A file (``write_extravars``), never a mapping: ansible-runner puts a
+        # mapping on the command line as JSON, where no text can be tagged.
+        "extravars": str(private_data_dir / EXTRAVARS),
         "envvars": environment(private_data_dir, run.procedure.project_dir),
         # ansible-runner's own job timeout: past it, the run is killed and
         # ends as ``timeout``.
@@ -163,6 +207,7 @@ def runner(scratch: Path) -> Callable[..., str]:
                 # report is the only record of a run that leaves the worker.
                 return False
 
+            write_extravars(run, Path(private))
             thread, started = ansible_runner.run_async(
                 **arguments(run, Path(private)),
                 event_handler=event_handler,
@@ -199,6 +244,34 @@ def role_spec(scratch: Path) -> RoleSpec:
                 timeout=DOC_TIMEOUT_SECONDS,
             )
         return entry_point(role, response)
+
+    return read
+
+
+# Every module the worker's Ansible finds, each by its full name. It may refuse.
+Modules = Callable[[], Collection[str]]
+
+
+def modules(scratch: Path) -> Modules:
+    """A reader of the modules ansible-doc lists (``ansible-doc -l -j -t
+    module``) with the pinned configuration: ansible.builtin's and each
+    shipped collection's, read in a directory of its own under ``scratch``."""
+
+    def read() -> frozenset[str]:
+        with tempfile.TemporaryDirectory(prefix="doc-", dir=scratch) as private:
+            response, _said = ansible_runner.get_plugin_list(
+                response_format="json",
+                plugin_type="module",
+                private_data_dir=private,
+                host_cwd=private,
+                envvars=environment(Path(private), Path(private)),
+                suppress_env_files=True,
+                quiet=True,
+                timeout=DOC_TIMEOUT_SECONDS,
+            )
+        if not isinstance(response, Mapping) or not response:
+            raise Refused("ModulesUnread", "Ansible didn't list the worker's modules. Refresh to try again.")
+        return frozenset(name for name in response if isinstance(name, str))
 
     return read
 

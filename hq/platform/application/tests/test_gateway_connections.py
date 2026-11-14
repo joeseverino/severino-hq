@@ -8,10 +8,10 @@ from hq.domains.control_plane.models import (
     ManagedResource,
     ProviderConnection,
     ProviderInventory,
-    WeatherObservation,
 )
 from hq.domains.projects.models import Project
 
+from .. import readings
 from ..capabilities import capability_registry, execute_capability
 from ..field_masks import WHOLE_RECORD
 from ..integrations import integration_graph
@@ -63,9 +63,9 @@ class GatewayConnectionTests(TestCase):
         ProviderConnection.objects.create(
             connection_ref="example-cloudflare", provider="cloudflare_api", manages=True, observed_at=timezone.now()
         )
-        WeatherObservation.objects.create(
-            point="41.8781,-87.6298",
-            payload={"summary": "Chicago, IL", "metrics": []},
+        readings.record(
+            readings.weather("41.8781,-87.6298"),
+            {"summary": "Chicago, IL", "metrics": []},
             observed_at=timezone.now(),
         )
 

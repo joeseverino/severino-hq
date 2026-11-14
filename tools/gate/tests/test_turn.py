@@ -1,6 +1,6 @@
-"""A run of tests takes the machine's heavy turn only when it runs everything
-or a whole tree of it in parallel, or a browser; a task that loads the machine
-whatever it is given always takes it, and no other task does."""
+"""A run of tests takes the machine's whole heavy turn when it starts more than
+one process, and a share of it otherwise; a task that loads the machine
+whatever it is given always takes the turn, and no other task does."""
 
 import json
 import os
@@ -15,9 +15,11 @@ from django.test import tag
 from hq.platform.core.test_runner import BROWSER_TESTS
 from tests.mise_tasks import HEAVY_LOCK, ROOT, SOURCES_THE_TURN, body, locks, mise_tasks, runs, takes_the_turn
 from tools.gate.tests.base import GateTestCase
-from tools.gate.turn import IN_TURN, LOCK, in_turn, narrow
+from tools.gate.turn import BROWSER, CAPACITY, IN_TURN, LOCK, ONE, in_turn, weigh
 
 MODULE = "hq.platform.application.tests.test_pipeline"
+# One test class of it, which a parallel run starts one worker for.
+CLASS = "ActionPinTests"
 
 
 class InTurnTests(GateTestCase):
@@ -36,47 +38,72 @@ class InTurnTests(GateTestCase):
         self.assertEqual(json.loads(ran.stdout), given)
 
 
+class WaitWordsTests(GateTestCase):
+    def test_a_wait_names_the_lock_and_its_holder_only_when_one_has_said_who_it_is(self):
+        from tools.gate import turn
+
+        with mock.patch.object(turn, "holder", return_value=""):
+            self.assertEqual(turn.on(LOCK), f"lock {LOCK}")
+        with mock.patch.object(turn, "holder", return_value="held by example"):
+            self.assertEqual(turn.on(LOCK), f"lock {LOCK}, held by example")
+
+
 # A run's view of mise's parse.
 PRINT_PARSE = "import json, os; print(json.dumps({k: v for k, v in os.environ.items() if k.startswith('usage_')}))"
 
 
 @tag("source")
-class NarrowRunTests(GateTestCase):
-    def test_a_module_or_something_in_one_is_narrow(self):
+class WeightTests(GateTestCase):
+    def test_a_module_or_something_in_one_takes_a_share_of_one(self):
+        """Django starts a worker for each test class up to the workers asked for, so one class is one process."""
+
         for argv in (
             [MODULE],
-            [f"{MODULE}.GateReferenceTests.test_every_task_a_workflow_runs_exists"],
-            ["--tag", "source", "--parallel", "auto", MODULE],
+            [f"{MODULE}.{CLASS}.test_every_docker_action_is_pinned_by_digest"],
+            ["--tag", "source", "--parallel", "auto", f"{MODULE}.{CLASS}"],
         ):
             with self.subTest(argv=argv):
-                self.assertTrue(narrow(argv))
+                self.assertEqual(weigh(argv), ONE)
 
-    def test_a_serial_run_of_a_tree_is_narrow(self):
-        self.assertTrue(narrow(["hq.platform.api", "hq.domains.contacts", "--parallel", "1"]))
+    def test_a_parallel_run_takes_a_token_for_each_worker_and_the_whole_turn_past_the_budget(self):
+        """Django starts a worker for each test class up to the workers asked for: a run of two takes two,
+        and a run of modules across the cores (fast's selection, `mise run test <module>`) holds as much
+        memory as a suite."""
 
-    def test_a_test_database_does_not_make_a_run_heavy(self):
-        self.assertTrue(narrow(["hq.platform.core.tests.test_audit_retention", "--parallel", "1"]))
+        self.assertEqual(weigh(["--parallel", "2", MODULE]), 2)
+        with mock.patch("tools.gate.turn.get_max_test_processes", return_value=CAPACITY):
+            for argv in (
+                ["--parallel", "auto", MODULE],
+                ["--tag", "source", "--parallel", "auto", MODULE, "tools.gate.tests.test_turn_mark"],
+            ):
+                with self.subTest(argv=argv):
+                    self.assertIsNone(weigh(argv))
 
-    def test_everything_or_a_whole_tree_is_heavy(self):
+    def test_a_serial_run_of_a_tree_takes_a_share(self):
+        self.assertEqual(weigh(["hq.platform.api", "hq.domains.contacts", "--parallel", "1"]), ONE)
+
+    def test_a_test_database_does_not_make_a_run_whole(self):
+        self.assertEqual(weigh(["hq.platform.core.tests.test_audit_retention", "--parallel", "1"]), ONE)
+
+    def test_everything_or_a_whole_tree_takes_the_whole_turn(self):
         for argv in ([], ["--tag", "source"], ["hq.platform.application.tests"], ["hq/platform/application"]):
             with self.subTest(argv=argv):
-                self.assertFalse(narrow(argv))
+                self.assertIsNone(weigh(argv))
 
-    def test_a_browser_is_heavy_wherever_its_test_is_declared(self):
+    def test_a_serial_browser_run_takes_a_browsers_share_wherever_its_test_is_declared(self):
         # look.py lives outside the browser package and draws through it.
         for label in (f"{BROWSER_TESTS}.estate", "hq.platform.core.tests.look.Look.test_look"):
             with self.subTest(label=label):
-                self.assertFalse(narrow([label]))
-                self.assertFalse(narrow([label, "--parallel", "1"]))
+                self.assertEqual(weigh([label, "--parallel", "1"]), BROWSER)
 
-    def test_a_serial_run_of_a_label_that_does_not_import_is_narrow_and_a_parallel_one_is_heavy(self):
+    def test_a_serial_run_of_a_label_that_does_not_import_takes_a_share_and_a_parallel_one_the_turn(self):
         label = f"{MODULE}.GateReferenceTests"
         with mock.patch("django.test.runner.DiscoverRunner.build_suite", side_effect=ImportError("example")):
-            self.assertTrue(narrow([label, "--parallel", "1"]))
-            self.assertFalse(narrow([label, "--parallel", "auto"]))
+            self.assertEqual(weigh([label, "--parallel", "1"]), ONE)
+            self.assertIsNone(weigh([label, "--parallel", "auto"]))
 
-    def test_a_run_manage_py_refuses_is_heavy(self):
-        self.assertFalse(narrow(["--example-no-such-option", MODULE]))
+    def test_a_run_manage_py_refuses_takes_the_whole_turn(self):
+        self.assertIsNone(weigh(["--example-no-such-option", MODULE]))
 
 
 @tag("source")
@@ -100,13 +127,18 @@ class HeavyTaskTests(GateTestCase):
                     # Arguments of the run's own: the decision sees them before the turn is taken.
                     self.assertRegex(run, r'(?m)^test_arguments=".*\$\{usage_\w+:-\}"$')
                     self.assertLess(run.index("test_arguments="), sourced(run))
+                    # It weighs the run the task makes: every option the run passes, in its order.
+                    (weighed,) = re.findall(r'(?m)^test_arguments="(.*)"$', run)
+                    own = [word for word in words if word != "$@" and not word.startswith(("2>", ">"))]
+                    left = iter(shlex.split(weighed))
+                    self.assertTrue(all(word in left for word in own), f"weighs {weighed}, runs {' '.join(own)}")
                     continue
                 arguments = [word for word in words if not word.startswith(("2>", ">"))]
-                if re.search(r"(?m)^\s*light_run=", run):
-                    # dev:look's weight is the pages it names, which it weighs itself before the turn.
+                if re.search(r"(?m)^\s*turn_share=", run):
+                    # dev:look's run is one process whatever pages it names, and declares its share.
                     self.assertTrue(takes_the_turn(task))
                     continue
-                self.assertEqual(takes_the_turn(task), not narrow(arguments), " ".join(arguments))
+                self.assertEqual(takes_the_turn(task), weigh(arguments) is None, " ".join(arguments))
 
     def test_a_task_that_loads_the_machine_whatever_it_is_given_takes_the_heavy_turn(self):
         """An image build or container, CodeQL's database, Go's tests and every
@@ -216,7 +248,7 @@ LOADS = re.compile(
 )
 # What may hold the turn: a command that loads the machine, the VM a task boots
 # for its run, a browser, a run of tests, or a look that weighs its own pages.
-HEAVY = re.compile(rf"(?m){LOADS.pattern}|\bimage:docker start\b|--group browser\b|\bmanage\.py test\b|^light_run=")
+HEAVY = re.compile(rf"(?m){LOADS.pattern}|\bimage:docker start\b|--group browser\b|\bmanage\.py test\b|^turn_share=")
 
 
 def sourced(run: str) -> int:

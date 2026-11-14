@@ -1,0 +1,9 @@
+id: provider-tables-read-once
+valid:
+  - 'rows = every_snapshot()'
+  - 'rows = connection_rows()'
+  - 'row = ProviderInventory.objects.filter(kind=kind).first()'
+  - 'held = ProviderConnection.objects.filter(controller_id=controller_id)'
+invalid:
+  - 'for snapshot in ProviderInventory.objects.all(): pass'
+  - 'rows = tuple(ProviderConnection.objects.all())'

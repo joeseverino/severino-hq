@@ -103,7 +103,7 @@ last done to it is read before its parts.
     {% if machine.presence.advertised_routes or machine.presence.offers_exit_node %}
       {% fact "Exit node" %}{% if not machine.presence.offers_exit_node %}Not offered{% elif machine.presence.exit_node_approved %}Offered and approved{% else %}<strong>Offered, not approved</strong>{% endif %}{% endfact %}
       {% fact "Routes" %}
-        {% for route in machine.presence.advertised_routes %}<code>{{ route|breakable }}</code>{% if route in machine.presence.enabled_routes %} approved{% else %} <strong>not approved</strong>{% endif %}{% if not forloop.last %}<br>{% endif %}{% empty %}None advertised{% endfor %}
+        {% stack_list %}{% for route in machine.presence.advertised_routes %}<li><code>{{ route|breakable }}</code>{% if route in machine.presence.enabled_routes %} approved{% else %} <strong>not approved</strong>{% endif %}</li>{% empty %}<li>None advertised</li>{% endfor %}{% endstack_list %}
         {% comment %}
         The verb where the fact is. Approval takes the whole advertised
         set, so there is one control rather than one per route, and it

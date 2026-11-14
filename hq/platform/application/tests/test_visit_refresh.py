@@ -287,7 +287,7 @@ class VisitRefreshTests(TestCase):
 
         self.assertFalse(stalled.live)
         self.assertEqual(stalled.state, "failed")
-        self.assertIn("no controller", stalled.note)
+        self.assertIn("controller last reported", stalled.note)
 
     def test_a_read_waiting_in_a_copied_database_says_no_controller_takes_it(self):
         """Readings stored a moment ago, with no heartbeat beside them, came
@@ -492,7 +492,11 @@ class VisitRefreshViewTests(TestCase):
         store(FAST, age=OLD)
 
     def post(self, client=None, **body):
-        return (client or self.client).post(self.url, form_keyed({"subject": "example", "name": "known", **body}))
+        return (client or self.client).post(
+            self.url,
+            form_keyed({"subject": "example", "name": "known", **body}),
+            headers={"X-Requested-With": "XMLHttpRequest"},
+        )
 
     def test_it_needs_a_session(self):
         with page(FAST):
@@ -517,25 +521,24 @@ class VisitRefreshViewTests(TestCase):
         with page(FAST):
             found = self.post().json()
 
-        self.assertEqual(found["requested"], [FAST])
+        self.assertEqual(asked(), {FAST})
         self.assertTrue(found["live"])
         self.assertEqual(self.client.get(found["status"]).json()["state"], found["state"])
         row = AuditLog.objects.get(object_type="Read request")
         self.assertEqual((row.metadata["actor"], row.metadata["operation"]), (self.user.username, VISIT_REFRESH))
 
-    def test_a_refusal_in_a_code_hq_does_not_hold_is_answered_as_operation_failed(self):
+    def test_a_refusal_in_a_code_hq_does_not_hold_fails_naming_nothing_it_held(self):
         self.client.force_login(self.user)
         raw = {"ok": False, "error": {"code": "example_unlisted", "details": "/srv/example/raw-detail"}}
 
         with (
             page(FAST),
-            patch("hq.domains.control_plane.visit_views.execute_posted", return_value=raw),
+            patch("hq.platform.application.asks.execute_posted", return_value=raw),
             self.assertLogs("severino.capabilities", "ERROR"),
         ):
             response = self.post()
 
-        self.assertEqual(response.status_code, 500)
-        self.assertEqual(response.json()["error"]["code"], "operation_failed")
+        self.assertEqual(response.json()["state"], "failed")
         self.assertNotIn(b"raw-detail", response.content)
 
     def test_opening_or_prefetching_the_address_reads_nothing(self):
@@ -574,18 +577,13 @@ class VisitRefreshViewTests(TestCase):
                     self.assertEqual(self.post(**body).status_code, 404)
         self.assertEqual(asked(), set())
 
-    def test_a_refusal_answers_with_the_status_the_api_gives_its_code(self):
-        """A read the state refuses for now, or one that failed, is a conflict,
-        as the API answers the same codes, never a request somebody was
-        forbidden to make."""
-
+    def test_a_refusal_is_failed_work_in_its_own_sentence(self):
         self.client.force_login(self.user)
 
-        for raised, code in ((PolicyError("The example is busy."), "precondition"), (ValueError(), "rejected")):
-            with self.subTest(code=code), page(FAST), patch.object(visit_refresh, "request_reads", side_effect=raised):
-                response = self.post()
-                self.assertEqual(response.json()["error"]["code"], code)
-                self.assertEqual(response.status_code, 409)
+        with page(FAST), patch.object(visit_refresh, "request_reads", side_effect=PolicyError("The example is busy.")):
+            found = self.post().json()
+
+        self.assertEqual((found["state"], found["note"]), ("failed", "The example is busy."))
 
     def test_the_service_page_carries_the_form(self):
         self.client.force_login(self.user)
@@ -611,7 +609,7 @@ class VisitRefreshViewTests(TestCase):
                 with self.subTest(address=address):
                     self.assertNotContains(self.client.get(address), "data-ask-auto")
             with page(FAST):
-                self.assertEqual(self.post().json()["requested"], [])
+                self.assertFalse(self.post().json()["live"])
         self.assertEqual(asked(), set())
 
     def test_the_note_is_swapped_with_the_content_and_the_ask_is_not(self):

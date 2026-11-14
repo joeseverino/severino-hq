@@ -1,21 +1,24 @@
 """Every finding carries its fix: an operation through the gated queue, or the
 exact thing a person does."""
 
+import inspect
 import json
+import typing
 
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings, tag
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq_sdk.testing import plain
 
 from ..capabilities import execute_capability
-from ..finding_model import FindingRule
+from ..finding_model import Finding, FindingEstate, FindingRule
 from ..findings import RULES
 from ..inventory_testing import store
 from ..policy_fixes import policy_without_empty_groups, request_empty_groups_removal
 from ..record_errors import PolicyError, RecordNotFound
 from ..security import cli_principal, mcp_principal
+from .facts import ROOT, scan
 from .markup import elements, links, with_class
 from .test_approvals import POLICY_KEY, an_operator, declare_policy
 from .test_tailnet_posture import policy, raised, tailnet_connection
@@ -53,6 +56,17 @@ class EveryRuleSaysHowTests(TestCase):
             self.assertTrue(rule.operator_action.strip(), rule.name)
             self.assertNotIn("\u2014", rule.operator_action, rule.name)
 
+    def test_every_rule_detects_through_a_function_that_builds_findings(self):
+        """One way to build a finding: a detector declared to take the estate and
+        return ``Finding``s, never a lambda turning a dict of its fields into one."""
+
+        for rule in RULES:
+            with self.subTest(rule=rule.name):
+                self.assertTrue(
+                    _detects_findings(rule.detect),
+                    f"{rule.name}'s detect is a function annotated (estate: FindingEstate) -> tuple[Finding, ...]",
+                )
+
     def test_a_finding_without_its_own_action_carries_the_rules(self):
         tailnet_connection()
         policy(settings={"devicesApprovalOn": False})
@@ -61,6 +75,90 @@ class EveryRuleSaysHowTests(TestCase):
 
         self.assertIn("Device approval", steps_text(finding))
         self.assertEqual(finding["remedies"], [])
+
+
+def _detects_findings(detect) -> bool:
+    """Whether a detector, a function or a callable declaration, is annotated to
+    take the estate and return findings. A lambda carries no annotations."""
+
+    called = detect if inspect.isfunction(detect) else type(detect).__call__
+    hints = typing.get_type_hints(called)
+    (estate, *rest) = inspect.signature(detect).parameters
+    return not rest and hints.get(estate) is FindingEstate and hints.get("return") == tuple[Finding, ...]
+
+
+# Where code builds an ``Insight`` that is no finding, and why that is right:
+# work in HQ's own records, a person's decision, a source that could not be
+# read, a request judged as it is served. A problem detected on the
+# infrastructure is never one of these; it is a ``FindingRule``.
+NOT_A_FINDING = {
+    # The queue's card for a finding: the one place a finding becomes an Insight.
+    "hq/platform/application/attention.py:finding_insight": "the rule runner's card",
+    "hq/platform/application/attention.py:_backlog": "a record domain's backlog",
+    "hq/platform/application/attention.py:waiting_for_approval": "a held request a person decides",
+    "hq/platform/application/attention.py:_deploying": "a deploy on its way to production, no fault",
+    "hq/platform/application/plugins.py:source_attention": "a source HQ could not read",
+    "hq/platform/application/references.py:_dangling_item": "a record linking to nothing",
+    "hq/platform/application/request_path.py:finding_rows": "one request, judged as it is served",
+}
+
+# Infrastructure problems still built by hand. A detector moved to a
+# ``FindingRule`` leaves this list; nothing joins it.
+BUILT_BY_HAND = frozenset(
+    {
+        "hq/platform/application/estate.py:_offline",
+        "hq/platform/application/github_estate.py:_alerts",
+        "hq/platform/application/github_estate.py:_failing",
+        "hq/platform/application/github_estate.py:_lapsing",
+        "hq/platform/application/github_estate.py:_unverified",
+        "hq/platform/application/github_estate.py:_waiting",
+        "hq/platform/application/github_posture.py:attention",
+        "hq/platform/application/mail_policy.py:insights",
+        "hq/platform/application/standards.py:_row",
+    }
+)
+
+
+# A function or method that builds an Insight, by its own name: the outermost
+# one, so a helper nested inside is its enclosing function's.
+BUILDS_INSIGHT = {
+    "kind": "function_definition",
+    "not": {"inside": {"kind": "function_definition", "stopBy": "end"}},
+    "has": {"field": "name", "pattern": "$NAME"},
+    "all": [
+        {
+            "has": {
+                "stopBy": "end",
+                "kind": "call",
+                "has": {"field": "function", "regex": r"(^|\.)Insight$"},
+            }
+        }
+    ],
+}
+
+
+@tag("source", "tree")
+class OneWayToRaiseAProblemTests(SimpleTestCase):
+    def test_an_infrastructure_problem_is_raised_by_a_finding_rule(self):
+        """A problem built as an ``Insight`` reaches the queue alone: never
+        ``get_findings``, the API or a machine's page. Declare a ``FindingRule``
+        beside the others in ``findings.RULE_MODULES``."""
+
+        found = {
+            f"{site.path.relative_to(ROOT).as_posix()}:{site.captured['NAME']}"
+            for site in scan({"builds-insight": BUILDS_INSIGHT}, "hq")
+            if "tests" not in site.path.parts and not site.path.name.startswith("test_")
+        }
+
+        self.assertTrue(set(NOT_A_FINDING) <= found, "a site named in NOT_A_FINDING is gone; take it out")
+        self.assertEqual(
+            sorted(found - set(NOT_A_FINDING) - BUILT_BY_HAND),
+            [],
+            "builds an infrastructure problem as an Insight; declare it as a FindingRule",
+        )
+        self.assertEqual(
+            sorted(BUILT_BY_HAND - found), [], "no longer builds one by hand; take it out of BUILT_BY_HAND"
+        )
 
 
 class PolicyAmendmentTests(TestCase):
@@ -343,11 +441,11 @@ class CleanPageTests(TestCase):
 
         from django.urls import reverse
 
-        from ..cadence import ControllerStanding
+        from ..cadence import WorkerStanding
 
         with mock.patch(
             "hq.platform.application.cadence.controller_standing",
-            return_value=ControllerStanding(seen_at=seen_at, silent=False),
+            return_value=WorkerStanding(seen_at=seen_at, silent=False),
         ):
             return self.client.get(reverse("control_plane:findings"))
 

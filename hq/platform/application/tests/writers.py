@@ -36,15 +36,23 @@ CHOKEPOINTS = frozenset(
     }
 )
 
+# The one way around the runner, handed the write itself as a lambda it runs
+# under the posted key, and the one module whose lambdas it keys: the
+# published form mixins, for an extension's view whose service is no
+# capability. An extension's view reaching it is listed in its own repository;
+# a view of the host's reaching it is a write outside the runner.
+KEYED_LAMBDAS = {"hq.platform.application.writes.outside_the_runner": "hq.platform.application.writes"}
+
+# What a host view's write run through ``outside_the_runner`` is said to call.
+OUTSIDE = "outside the runner"
+# What a view method's call is said to be when the walk cannot follow it and it hands
+# over a principal, which only a write or the chokepoint takes from a view.
+UNFOLLOWED = "a call it cannot follow, handed principal="
+
 # Rows that record who called, not what they changed: an audit event, a
 # refusal (an audit event, coalesced) and an identity observation (when an
 # agent was last seen). None is a domain write, so a function reaching only
 # these does not write, and anything may reach them.
-# A chokepoint handed the write itself, as a lambda it runs under the posted
-# key, and the one module whose lambdas it keys: the form mixins, whose write
-# is a declared service rather than a capability. A view handing it a write of
-# its own is still a write outside the capability chokepoint.
-KEYED_LAMBDAS = {"hq.platform.application.web_writes.write_once": "hq.platform.application.writes"}
 
 # What a call to a view's declared service resolves to.
 DECLARED_SERVICE = "a declared service"
@@ -73,6 +81,8 @@ class _Function:
     # What it calls inside a lambda a keyed chokepoint runs, under the posted key.
     keyed_calls: set[str] = field(default_factory=set)
     writes: bool = False
+    # Whether it hands ``principal=`` to a call the walk cannot follow.
+    hands_principal: bool = False
 
 
 def _module_name(root: Path, path: Path, packages: Sequence[Path] = ()) -> str:
@@ -243,6 +253,8 @@ def _read(
         found.writes = found.writes or _writes_directly(call)
         if name:
             found.calls.add(name)
+        elif any(keyword.arg == "principal" for keyword in call.keywords):
+            found.hands_principal = True
     return found
 
 
@@ -337,11 +349,25 @@ def _view_writes(root: str, view_modules: list[str], packages: list[str]) -> lis
 def _found(root: Path, view_modules: list[Path], packages: list[Path]) -> list[ViewWrite]:
     functions, writing, classes = writers(root, view_modules, packages)
     view_names = {_module_name(root, path, packages) for path in view_modules}
-    keyed = _keyed(functions, classes)
+    # An installed extension's views, which alone may still write outside the runner.
+    extension_names = {
+        _module_name(root, path, packages) for path in view_modules if any(map(path.is_relative_to, packages))
+    }
+    entered, keyed = _keyed(functions, classes)
     found = []
     for name, function in sorted(functions.items()):
-        if function.module not in view_names or name in keyed:
+        if function.module not in view_names or name in KEYED_LAMBDAS:
             continue
+        if name in keyed:
+            if (
+                name in entered
+                and function.module not in extension_names
+                and function.module not in KEYED_LAMBDAS.values()
+            ):
+                found.append(ViewWrite(function.module, name.removeprefix(f"{function.module}."), OUTSIDE))
+            continue
+        if function.hands_principal and function.owner:
+            found.append(ViewWrite(function.module, name.removeprefix(f"{function.module}."), UNFOLLOWED))
         if function.writes:
             found.append(ViewWrite(function.module, name.removeprefix(f"{function.module}."), DIRECT))
         for service in sorted(function.calls & writing):
@@ -353,10 +379,13 @@ def _found(root: Path, view_modules: list[Path], packages: list[Path]) -> list[V
     return found
 
 
-def _keyed(functions: dict[str, _Function], classes: dict[str, set[str]]) -> set[str]:
-    """The functions that run under the posted key: those a keyed lambda calls,
-    a subclass's override of one (a form view's ``run``), and what they call.
+def _keyed(functions: dict[str, _Function], classes: dict[str, set[str]]) -> tuple[set[str], set[str]]:
+    """The functions a write under the posted key enters by (those a keyed lambda
+    calls, and a subclass's override of one, a form view's ``run``), and those
+    with everything they call.
 
+    A write outside the runner is said at the function it enters by: a host
+    helper an extension's write happens to call is that extension's write.
     One is still a write when a view calls it outside such a lambda, which
     ``view_writes`` reports at that caller.
     """
@@ -367,13 +396,14 @@ def _keyed(functions: dict[str, _Function], classes: dict[str, set[str]]) -> set
             f"{base}.{function.name}" in keyed for base in _ancestors(f"{function.module}.{function.owner}", classes)
         ):
             keyed.add(name)
+    entered = set(keyed)
     pending = list(keyed)
     while pending:
         for called in functions[pending.pop()].calls:
             if called in functions and called not in keyed:
                 keyed.add(called)
                 pending.append(called)
-    return keyed
+    return entered, keyed
 
 
 def _ancestors(name: str, classes: dict[str, set[str]]) -> set[str]:

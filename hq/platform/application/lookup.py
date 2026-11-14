@@ -19,7 +19,6 @@ from django.utils.timezone import now
 from hq.domains.control_plane.dns_lookup import LookupUnavailable, registry, resolve
 from hq.domains.control_plane.names import normalized_hostname
 from hq.platform.core.outbound import allowed
-lazy from hq.domains.control_plane.models import AddressReading
 
 from .answer_fields import ObservedAt
 from .command_fields import Describe
@@ -27,6 +26,7 @@ from .projection import iso
 from .reach import is_documentation, is_public, network_of
 from .record_errors import InputError
 from .security import Capability, Principal
+lazy from . import readings
 
 # A hostname, conservatively. The value becomes a query parameter on a URL the
 # gateway owns, so it cannot change the shape of the request, but a name that
@@ -253,9 +253,9 @@ def _address_answer(command: AddressCommand, *, principal: Principal) -> tuple[A
             "hostnames": [],
             "note": _unrouted(str(parsed)),
         }
-    stored = AddressReading.objects.filter(address=str(parsed)).first()
+    stored = readings.stored(readings.public_address(str(parsed)))
     if stored is not None:
-        return parsed, {**stored.reading, "observed_at": iso(stored.observed_at)}
+        return parsed, {**stored.value, "observed_at": iso(stored.observed_at)}
     return parsed, None
 
 
@@ -345,8 +345,6 @@ def look_up_address(
     # Written even when a registry failed. A partial answer is still worth not
     # asking for again a second later, and `refresh` is how an operator says
     # the stored one is not good enough.
-    AddressReading.objects.update_or_create(
-        address=str(parsed),
-        defaults={"reading": reading, "observed_at": now()},
-    )
-    return {**reading, "observed_at": now().isoformat()}
+    observed_at = now()
+    readings.record(readings.public_address(str(parsed)), reading, observed_at=observed_at)
+    return {**reading, "observed_at": observed_at.isoformat()}

@@ -9,7 +9,6 @@ from hq.domains.control_plane.models import (
     DashboardConfiguration,
     DashboardMachine,
     ManagedResource,
-    WeatherObservation,
 )
 from hq.platform.application import readings
 from hq.platform.application.labels import dotted
@@ -348,9 +347,9 @@ def _weather():
         for index, (degrees, chance, forecast) in enumerate(_HOURS)
     ]
     temperatures = [degrees for degrees, _chance, _forecast in _HOURS]
-    WeatherObservation.objects.create(
-        point=point,
-        payload={
+    readings.record(
+        readings.weather(point),
+        {
             "status": "good",
             "summary": "Fairview, IL",
             "metrics": [

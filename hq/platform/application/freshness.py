@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
 
 from .derivations import reached
+from .moments import ago
 lazy from .cadence import slowest_sweep_interval, ssh_probe_interval
 lazy from .public_registry import read_every
 
@@ -19,6 +20,16 @@ CURRENT = "current"
 DUE = "due"
 STALE = "stale"
 NEVER = "never"
+
+# What every page calls the moment its reading was taken.
+LAST_READ = "Last read"
+
+
+def last_read(at: datetime | str) -> str:
+    """When a reading was taken, as a sentence in plain text."""
+
+    return f"{LAST_READ} {ago(at)}"
+
 
 # Cadence names for readings that are not observation kinds.
 DASHBOARD_GLANCE = "dashboard.glance"

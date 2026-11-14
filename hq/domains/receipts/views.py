@@ -27,18 +27,15 @@ from django.views.generic import (
 
 from hq.domains.expenses.models import Expense
 from hq.platform.application.capabilities import capability_words
-from hq.platform.application.deletion import DeleteCommand
 from hq.platform.application.labels import dotted, dotted_html, human_bytes
 from hq.platform.application.moments import when
 from hq.platform.application.money import money
 from hq.platform.application.pages import PageAction, PageMixin
-from hq.platform.application.receipts import REPLACE, UPDATE, UPLOAD, receipt_payload, serialize_receipt
-from hq.platform.application.records import deleter
-from hq.platform.application.security import web_principal
+from hq.platform.application.receipts import REPLACE, UPDATE, UPLOAD, serialize_receipt
 from hq.platform.application.tables import TableColumn, TableListMixin, TableToggle
 from hq.platform.application.ui import ended
 from hq.platform.application.web_writes import execute_posted, refused
-from hq.platform.application.writes import CommandFormPage
+from hq.platform.application.writes import CapabilityFormMixin, CommandFormPage, RecordDeleteMixin
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
 from hq.platform.core.templatetags.value_tags import breakable
@@ -245,18 +242,32 @@ class ReceiptMatchView(ReceiptPage, TemplateView):
 FORM_PAGE = {"form_fields": "receipts/_receipt_fields.html"}
 
 
-class ReceiptFormPage(CommandFormPage, ReceiptPage):
-    """A receipt's form, said as the upload command's page says it."""
+class ReceiptFormPage(CommandFormPage, ReceiptPage, CapabilityFormMixin):
+    """A receipt's form, said as the upload command's page says it: a new file
+    is the upload's or the replace capability's, details alone the record's update."""
 
     creates = UPLOAD
+    updates = UPDATE
     listed_route = "receipts:list"
     extra_context = FORM_PAGE
+    model = Receipt
+    form_class = ReceiptUploadForm
+    noun = "Receipt"
+    result_key = "receipt"
+    identity_attr = "pk"
+    identity_result_key = "id"
+    created_message = "Receipt uploaded."
+    updated_message = "Receipt updated."
+
+    @override
+    def capability(self, form):
+        if not self.adding and is_new_upload(form.cleaned_data.get("file")):
+            return REPLACE
+        return super().capability(form)
 
 
 class ReceiptCreateView(ReceiptFormPage, CreateView):
     page_title = "New receipt"
-    model = Receipt
-    form_class = ReceiptUploadForm
 
     @override
     def get_initial(self):
@@ -268,57 +279,18 @@ class ReceiptCreateView(ReceiptFormPage, CreateView):
             initial["related_expense"] = int(asked)
         return initial
 
-    @override
-    def form_valid(self, form):
-        result = execute_posted(self.request, UPLOAD, receipt_payload(form.cleaned_data, form.cleaned_data["file"]))
-        if refusal := refused(self.request, result, form=form):
-            response = self.form_invalid(form)
-            response.status_code = refusal.status
-            return response
-        self.object = Receipt.objects.get(pk=result["receipt"]["id"])
-        messages.success(self.request, "Receipt uploaded.")
-        return redirect(self.object.get_absolute_url())
-
 
 class ReceiptUpdateView(ReceiptFormPage, UpdateView):
     page_title = "Edit receipt"
-    model = Receipt
-    form_class = ReceiptUploadForm
-
-    @override
-    def form_valid(self, form):
-        upload = form.cleaned_data.get("file")
-        # A new file is the replace capability's; details alone are the record's update.
-        name, upload = (REPLACE, upload) if is_new_upload(upload) else (UPDATE, None)
-        result = execute_posted(
-            self.request, name, receipt_payload(form.cleaned_data, upload), target=self.get_object().pk
-        )
-        if refusal := refused(self.request, result, form=form):
-            response = self.form_invalid(form)
-            response.status_code = refusal.status
-            return response
-        self.object = Receipt.objects.get(pk=result["receipt"]["id"])
-        messages.success(self.request, "Receipt updated.")
-        return redirect(self.object.get_absolute_url())
 
 
-class ReceiptDeleteView(ReceiptPage, DeleteView):
+class ReceiptDeleteView(ReceiptPage, RecordDeleteMixin, DeleteView):
     page_title = "Delete receipt?"
     model = Receipt
     template_name = "receipts/receipt_confirm_delete.html"
     success_url = reverse_lazy("receipts:list")
     context_object_name = "receipt"
-
-    @override
-    def form_valid(self, form):
-        receipt_id = self.get_object().pk
-        deleter("receipts")(
-            DeleteCommand(confirm=str(receipt_id)),
-            principal=web_principal(self.request.user),
-            current_id=receipt_id,
-        )
-        messages.success(self.request, "Receipt deleted.")
-        return redirect(self.success_url)
+    deleted_message = "Receipt deleted."
 
 
 def stored_file(receipt: Receipt) -> Path | None:

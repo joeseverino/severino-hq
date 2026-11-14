@@ -321,11 +321,7 @@ class SourcesChosen(TypedDict):
 
 @transaction.atomic
 def choose_source(command: SourceChoiceCommand, *, principal: Principal) -> SourcesChosen:
-    """Check or uncheck one source for the signed-in person.
-
-    Not audited: a view preference is the person arranging their own page,
-    not a change to anything HQ holds.
-    """
+    """Check or uncheck one source for the signed-in person."""
 
     user = person(principal)
     if command.source not in {source.id for _group, source in calendar.calendar_sources()}:
@@ -385,13 +381,6 @@ def list_agenda(*, start: date | None = None, days: int = 14, limit: int = 200) 
 
 def get_entry(uid: str) -> dict[str, Any]:
     return serialize_entry(found(Entry, _ENTRY, {"uid": uid}))
-
-
-def entry_command(values: dict[str, Any]) -> EntryCommand:
-    """A form's cleaned values as the command every surface writes with."""
-
-    fields = EntryCommand.__dataclass_fields__
-    return EntryCommand(**{name: value for name, value in values.items() if name in fields})
 
 
 def upcoming(entry: Entry, *, count: int = 5, today: date | None = None) -> tuple[date, ...]:

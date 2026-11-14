@@ -158,9 +158,10 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
   --own: 0;
   --held: 0;
   --readings: calc(var(--own) + var(--held));
-  /* The narrowest a reading stands beside another: under it, a phone's half
-     row, a line would wrap past the lines a reading holds. */
-  --reading: 12rem;
+  /* The narrowest a reading stands beside another, inside a phone's half row
+     so two stand to a row there: under it, a line would wrap past the lines a
+     reading holds. */
+  --reading: 11rem;
   /* A reading's lead, and one of its quiet lines with the gap it leaves
      before the next. */
   --reading-lead: 26px;
@@ -194,7 +195,7 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 .readings:has(> :not(.reading) > .reading:nth-child(5 of .reading)) { --held: 5; }
 .readings:has(> :not(.reading) > .reading:nth-child(6 of .reading)) { --held: 6; }
 .page-head:has(.readings) { align-items: center; }
-.reading { min-width: 0; max-width: 100%; }
+.reading { container: reading / inline-size; min-width: 0; max-width: 100%; }
 a.reading, a.reading:hover { color: inherit; text-decoration: none; }
 /* A reading is the link or the button that opens it, drawn as the reading:
    the text's own face and color, the whole width of its place. One shape for
@@ -223,6 +224,10 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
   text-align: start;
   white-space: normal;
   cursor: pointer;
+}
+/* Under 12rem its subject and its parts may each take a second line, so a reading there holds the room of four quiet lines, and one that lands saying more still moves nothing. */
+@container reading (width < 12rem) {
+  .reading-head { min-block-size: calc(2 * var(--space-3) + var(--reading-lead) + 4 * var(--quiet-line)); }
 }
 .reading-head:hover, .reading-head:has(+ :popover-open) { background: var(--bg-tint); }
 .reading-head > :not(.reading-mark) { grid-column: 2; }
@@ -356,7 +361,9 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
 /* ── Buttons ────────────────────────────────────────────────────── */
 
 .btn, button {
-  display: inline-flex; align-items: center; gap: var(--space-3);
+  /* A button its box stretches (a line of a row's buttons on a phone) keeps
+     its label at its center. */
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--space-3);
   padding: var(--space-3) var(--space-6);
   border: 1px solid var(--line);
   background: var(--surface);
@@ -382,17 +389,20 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
 /* An icon inside a button is a glyph, not a block: it must not stretch the
    box or shrink when the row runs out of room. */
 .btn > svg, button > svg { flex: none; width: 1.15em; height: 1.15em; }
-.btn:hover, button:hover { border-color: var(--line-strong); background: var(--surface-2); text-decoration: none; }
+/* A button tints under a pointer that hovers: a touch screen keeps the
+   last button touched hovered, so it would stay tinted beside its
+   neighbors after a tap. */
+@media (hover: hover) { .btn:hover, button:hover { border-color: var(--line-strong); background: var(--surface-2); text-decoration: none; } }
 .btn.primary, button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); box-shadow: none; }
-.btn.primary:hover, button.primary:hover { background: var(--accent-2); border-color: var(--accent-2); }
+@media (hover: hover) { .btn.primary:hover, button.primary:hover { background: var(--accent-2); border-color: var(--accent-2); } }
 .btn.danger, button.danger { background: var(--danger); color: var(--accent-ink); border-color: var(--danger); }
 /* A quiet control: words only until hovered. */
 .btn.ghost { background: transparent; border-color: transparent; color: var(--muted); box-shadow: none; }
-.btn.ghost:hover { color: var(--ink); background: var(--bg-tint); border-color: transparent; }
+@media (hover: hover) { .btn.ghost:hover { color: var(--ink); background: var(--bg-tint); border-color: transparent; } }
 /* A destructive action that should not be the loudest thing in its row: the
    same surface and lift as its neighbors, in red. */
 .btn.ghost.danger { background: var(--surface); border-color: color-mix(in srgb, var(--danger) 35%, var(--line)); color: var(--danger); box-shadow: var(--shadow-sm); }
-.btn.ghost.danger:hover { background: color-mix(in srgb, var(--danger) 8%, var(--surface)); color: var(--danger); }
+@media (hover: hover) { .btn.ghost.danger:hover { background: color-mix(in srgb, var(--danger) 8%, var(--surface)); color: var(--danger); } }
 /* A control in a row or a head among words, a line's height rather than a
    form's. */
 .btn.compact { min-height: var(--control-compact); padding: var(--space-2) var(--space-4); font-size: var(--text-xs); }

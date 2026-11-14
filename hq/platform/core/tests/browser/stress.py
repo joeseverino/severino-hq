@@ -30,7 +30,7 @@ def stress_pages(asked):
     derived = {name: page for name, page in derived_pages().items() if name in asked}
     pages: dict[str, str] = {}
     # Drawn with a controller reporting here, so a page about one thing
-    # draws the note it keeps in its head (cadence.ControllerStanding.here).
+    # draws the note it keeps in its head (cadence.WorkerStanding.here).
     with tempfile.TemporaryDirectory() as directory:
         heartbeat = Path(directory) / "controller-heartbeat"
         heartbeat.touch()

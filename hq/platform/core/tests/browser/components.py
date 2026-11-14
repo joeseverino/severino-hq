@@ -20,7 +20,7 @@ from hq.platform.application.asks import Ask, Standing
 from hq.platform.application.money import money
 from hq.platform.application.ui import ActivityCalendar, CalendarDay, ChartSeries, line_chart
 from hq.platform.core.stylesheets import DIRECTORY, stylesheet
-from hq.platform.core.tests.browser.gate import add_css, served_sheet, tab_key, with_script
+from hq.platform.core.tests.browser.gate import add_css, served_sheet, tab_key, unfold, with_script
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
 from hq.platform.core.tests.browser.probes.boxes import ANY_SCROLLER, MAP, SIDEWAYS, SMALL_TARGETS
 from hq.platform.core.tests.browser.probes.palette import BUTTON_EDGES
@@ -334,7 +334,8 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 opened = 0
                 for row in rows.all():
                     self.assertTrue(row.locator(SELECTORS["decision_title"]).is_visible())
-                    self.assertTrue(row.locator(SELECTORS["decision_dismiss"]).is_visible())
+                    # One Dismiss is shown: at the row's end, or beneath its words in a narrow box.
+                    self.assertEqual(row.locator(f"{SELECTORS['decision_dismiss']} >> visible=true").count(), 1)
                     # The row's steps are in its line beneath, drawn by the server.
                     if not row.locator(SELECTORS["decision_steps"]).count():
                         continue
@@ -1085,10 +1086,11 @@ class ComponentLayoutTests(LayoutBrowserTests):
         given the field's edge is found."""
 
         self.open("projects", WIDE)
+        unfold(self.page)
         self.assertGreater(self.page.locator(SELECTORS["table_filter"]).count(), 0)
         for palette in ("light", "dark"):
             with self.subTest(palette=palette):
-                self.page.emulate_media(color_scheme=palette)
+                self.in_scheme(palette)
                 self.assertEqual(self.page.evaluate(BUTTON_EDGES, SELECTORS["pressed"]), [])
         self.page.evaluate("""() => {
           const button = document.createElement('button');
@@ -1538,7 +1540,9 @@ class ComponentLayoutTests(LayoutBrowserTests):
         """tables.js titles a cut value where its row's toggle does not show,
         and takes the title away once the value is whole (its box widened)
         and once its row opens, so no title outlives its cut; closed again,
-        the row's value is titled again."""
+        the row's value is titled again. A window resized is measured as its
+        tables are fitted, so the frames that draw the new width carry the
+        titles it needs, with no wait for the resizing to settle."""
 
         self.pages = {**self.pages, "titled-probe": probe(TITLED_CUTS)}
         self.open("titled-probe", PHONE_SCREEN[0])
@@ -1546,7 +1550,8 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.assertIn("narrows", self.page.evaluate(TITLED_ROWS))
 
         self.page.set_viewport_size(viewport(WIDE))
-        self.page.wait_for_function(f"() => ({TITLED_ROWS})().join() === 'opens'")
+        self.page.evaluate(SETTLE)
+        self.assertEqual(self.page.evaluate(TITLED_ROWS), ["opens"])
 
         toggle = self.page.locator("main " + SELECTORS["row_toggle"])
         toggle.evaluate("(button) => button.click()")
@@ -1695,7 +1700,8 @@ class ComponentLayoutTests(LayoutBrowserTests):
                     self.page.evaluate(SETTLE)
                     columns = [SELECTORS["queue_table"], SELECTORS["queue_act"]]
                     closed = self.page.evaluate(_QUEUE_COLUMNS, columns)
-                    self.assertTrue(closed["acts"])
+                    # In a narrow box the buttons stand beneath the words and their column leaves.
+                    self.assertTrue(closed["acts"] or closed["narrow"])
                     if how == "toggle":
                         self.page.locator(toggles).evaluate_all(PRESS_EVERY_SHOWN)
                         self.assertTrue(self.page.locator(toggles + '[aria-expanded="true"]').count())
@@ -1858,6 +1864,12 @@ class ComponentLayoutTests(LayoutBrowserTests):
         region = "(probe) => getComputedStyle(document.querySelector(`[data-probe=${probe}]`).parentElement).overflowX"
         self.assertEqual(self.page.evaluate(region, "unfittable"), "auto")
         self.assertEqual(self.page.evaluate(region, "actions"), "visible")
+        # The server draws each region as a stop for the keyboard; the one
+        # that scrolls stays one, by its name, and the one that fits is none.
+        stop = """(probe) => ['role', 'aria-label', 'tabindex'].map((attribute) =>
+          document.querySelector(`[data-probe=${probe}]`).parentElement.getAttribute(attribute))"""
+        self.assertEqual(self.page.evaluate(stop, "unfittable"), ["group", "Unfittable", "0"])
+        self.assertEqual(self.page.evaluate(stop, "actions"), [None, None, None])
         self.assertEqual(self.page.evaluate(SIDEWAYS, SELECTORS["sideways"]), [])
         self.assertEqual(self.page.evaluate(HEADING_DROP, "unfittable"), 0)
 
@@ -2087,7 +2099,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
 
         def grown(scheme):
             self.page.evaluate("() => document.querySelector('main').prepend(document.createElement('p'))")
-            switch(scheme)
+            return switch(scheme)
 
         with mock.patch.object(self, "in_scheme", grown):
             fills = self.lost_fills()

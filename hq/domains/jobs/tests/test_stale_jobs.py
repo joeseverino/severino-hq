@@ -4,15 +4,17 @@ next job of its kind is not held up by it."""
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import RequestFactory, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from hq.platform.application import request_context
 from hq.platform.application.tests.markup import text
+from hq.platform.core.attribution import operation_context
 from hq.platform.core.models import AuditLog
 
 from ..models import HEARTBEAT_GRACE, Job
-from ..runner import run
+from ..runner import reap, run
 
 
 def stopped(kind: str = "example.gone") -> Job:
@@ -62,3 +64,17 @@ class StaleJobSlotTests(TestCase):
         self.assertEqual(ran.state, Job.State.SUCCEEDED)
         job.refresh_from_db()
         self.assertEqual(job.state, Job.State.LOST)
+
+    def test_a_job_found_lost_in_someone_else_s_request_ends_as_its_requester_s(self):
+        users = get_user_model()
+        asker = users.objects.create_user("asker", "asker@example.test", "pw")
+        job = stopped("example.work")
+        Job.objects.filter(pk=job.pk).update(requested_by=asker, actor="asker")
+        request = RequestFactory().get("/")
+        request.user = users.objects.create_user("passer", "passer@example.test", "pw")
+
+        with request_context.bind(request), operation_context(interface="web", actor="passer", operation="example"):
+            self.assertEqual(reap("example.work"), 1)
+
+        ended = AuditLog.objects.get(object_id=str(job.pk), action=AuditLog.Action.FAILED)
+        self.assertEqual((ended.user, ended.metadata["actor"], ended.operation_id), (asker, "asker", str(job.pk)))

@@ -28,6 +28,10 @@
     "description": "The runner image's hashed build constraints, compiled by uv pip compile from the .in beside them; Renovate runs the command their header records.",
     "managerFilePatterns": ["/^hq_runner/build-constraints\\.txt$/"]
   },
+  "ansible-galaxy": {
+    "description": "The Ansible collections the worker image ships, in ansible-galaxy's requirements format under a name the manager's default patterns miss.",
+    "managerFilePatterns": ["/^hq_runner/collections\\.yml$/"]
+  },
   "postUpdateOptions": ["gomodTidy"],
   "packageRules": [
     {
@@ -154,15 +158,7 @@
       "datasourceTemplate": "git-refs"
     },
     {
-      "description": "The Renovate image the workflow runs, by version and digest.",
-      "customType": "regex",
-      "managerFilePatterns": ["/^\\.github/workflows/renovate\\.yml$/"],
-      "matchStrings": ["renovate-image: (?<depName>[^:\\s]+):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[0-9a-f]{64})"],
-      "datasourceTemplate": "docker",
-      "versioningTemplate": "docker"
-    },
-    {
-      "description": "The Renovate image the host runs for every opted-in repository, by version and digest.",
+      "description": "The Renovate image the workflow and the host both run, by version and digest.",
       "customType": "regex",
       "managerFilePatterns": ["/^deploy/renovate/image$/"],
       "matchStrings": ["^(?<depName>[^:\\s]+):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[0-9a-f]{64})"],

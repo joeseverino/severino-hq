@@ -17,12 +17,12 @@ WIDE = 1360
 # A phone, a tablet held upright, a laptop: the screens every sweep reads.
 WIDTHS = (PHONE_SCREEN[0], 820, WIDE)
 
+# A palette is a color per token, the same at every width, so the narrowest
+# and widest of WIDTHS read every part either palette draws.
+PALETTE_AT = (WIDTHS[0], WIDTHS[-1])
+
 # The narrowest phone a page must still fit.
 NARROWEST = 320
-
-# The widest window the gates read, past every viewport query and past where
-# a table region stops growing on most pages.
-WIDEST = 1680
 
 # The widest window a sweep reads, far past where any page stops changing
 # shape: past the last viewport query a region only grows.
@@ -78,8 +78,21 @@ def first_viewports(css, region):
 
 
 # The laptop windows where a table region has only just become 1000px wide,
-# where a wide table has the least room, are read besides WIDTHS.
+# where a wide table has the least room, are read besides WIDTHS on a page
+# that draws a table.
 _, WIDE_TABLES = wide_tables(stylesheet(), 1000)
+
+
+def with_wide_tables(widths, draws_a_table):
+    """Each of ``widths`` and WIDE_TABLES, narrowest first, a WIDE_TABLES
+    width only where ``draws_a_table()``, asked of the page the last width
+    left loaded, says so: a table is in a page at every width, so the phone
+    it is first read at knows."""
+
+    for width in sorted({*widths, *WIDE_TABLES}):
+        if width in WIDE_TABLES and not draws_a_table():
+            continue
+        yield width
 
 
 def viewport_queries(css):

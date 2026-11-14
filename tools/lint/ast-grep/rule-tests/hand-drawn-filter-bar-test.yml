@@ -2,6 +2,10 @@ id: hand-drawn-filter-bar
 valid:
   - '{% filter_bar filtered=filtered clear=clear %}A{% endfilter_bar %}'
   - '<form class="filters"></form>'
+  - '<form method="get"><input type="search" name="q"></form>'
+  - '<form method="post"><select name="kind"></select></form>'
 invalid:
   - '<form class="filter-bar"></form>'
   - '<div class="toolbar filter-bar"></div>'
+  - '<form method="get"><input type="search" name="q"><select name="kind"></select></form>'
+  - '<form class="filters" method="get"><div><select name="kind"></select></div></form>'

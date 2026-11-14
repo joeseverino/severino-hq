@@ -1,7 +1,6 @@
-# The Browser job: each browser:* gate is one leg of it, the classes split for
-# balance. A new browser test class is named in one of them
-# (test_browser_gate_tasks). Layout's sweeps are classes of their own so one
-# leg runs them side by side: Django gives a parallel worker a whole class.
+# The Browser job: each browser:* gate is a leg of it. CI splits an engine's
+# gate into shares that run side by side (HQ_BROWSER_SHARD, set by the job's
+# matrix; hq/platform/core/tests/browser/shards.py), and run here it is whole.
 
 ["browser:demo"]
 description = "Build the demo and check it in WebKit"
@@ -10,109 +9,29 @@ depends = [{ task = "setup:browser", args = ["webkit"] }, "demo:build"]
 extends = "heavy"
 run = "uv run --group browser python -m unittest demo.check -v"
 
-# The public demo in Chromium, the engine most of its visitors read it in. A
-# CI leg, which mise run browser leaves out, as the Chromium layout legs.
-["browser:demo-chromium"]
-description = "browser:demo in Chromium: a CI leg, which mise run browser leaves out"
+# Every browser test, in WebKit, which judges, as HQ is read in Safari: the
+# whole package, whose modules are not named test*.py so the plain suite
+# leaves them out. The pattern skips `__init__.py`, which discovery already
+# loads as its package: matched again, a package's tests would run twice.
+["browser:webkit"]
+description = "Every real-browser test, over the stress estate, the example estate and the catalog, in WebKit"
 hide = true
+extends = "django-browser"
+vars.labels = "hq.platform.core.tests.browser --pattern '[!_]*.py'"
+
+# A second engine, so a break WebKit happens not to show still fails, over
+# the narrow set that says it: every shared part, the example estate at a phone
+# and a laptop (`estate.SECOND_OPINION_AT`), every probe proven able to fail, and
+# the layout shifts only Chromium records (`probes/shifts.py`).
+# `mise run browser` leaves this leg to CI.
+["browser:chromium"]
+description = "The second-engine set in Chromium: a CI leg, which mise run browser leaves out"
+hide = true
+extends = "django-browser"
 env = { HQ_BROWSER_ENGINE = "chromium" }
-depends = [{ task = "setup:browser", args = ["chromium"] }, "demo:build"]
-extends = "heavy"
-run = "uv run --group browser python -m unittest demo.check -v"
-
-# The layout invariants over the stress estate, in two legs that CI runs side
-# by side, the classes split so each leg holds about half their time in CI,
-# in WebKit and in Chromium.
-["browser:layout-1"]
-description = "Real-browser layout invariants over the stress estate, leg 1 of 2, in WebKit"
-hide = true
-extends = "django-browser"
-vars.classes = """\
-  hq.platform.core.tests.browser.sweeps.ScriptedSparseLayoutTests \
-  hq.platform.core.tests.browser.components.ComponentLayoutTests \
-  hq.platform.core.tests.browser.folds.FoldBrowserTests \
-  hq.platform.core.tests.browser.page_navigation.PageNavigationBrowserTests \
+depends = [{ task = "setup:browser", args = ["chromium"] }, "setup:lint-tools"]
+vars.labels = """\
   hq.platform.core.tests.browser.catalog.CatalogLayoutTests \
-  hq.platform.core.tests.browser.accessibility.AccessibilityBrowserTests \
-  hq.platform.core.tests.browser.sweeps.UnscriptedDenseLayoutTests"""
-
-["browser:layout-2"]
-description = "Real-browser layout invariants over the stress estate, leg 2 of 2, in WebKit"
-hide = true
-extends = "django-browser"
-vars.classes = """\
-  hq.platform.core.tests.browser.sweeps.ScriptedDenseFirstLayoutTests \
-  hq.platform.core.tests.browser.sweeps.ScriptedDenseSecondLayoutTests \
-  hq.platform.core.tests.browser.sweeps.UnscriptedSparseLayoutTests \
-  hq.platform.core.tests.browser.sweeps.LongestValueLayoutTests \
-  hq.platform.core.tests.browser.page_errors.PageErrorBrowserTests \
-  hq.platform.core.tests.browser.head_strip.HeadAndStripBrowserTests \
-  hq.platform.core.tests.browser.planted.PlantedBrowserTests"""
-
-# The layout legs in Chromium, so a break WebKit happens not to show still
-# fails. CI runs them as legs of their own; `mise run browser` leaves them out,
-# since HQ is read in Safari. Each runs its WebKit leg, so the two name one set
-# of classes, and installs Chromium and the lint tools as steps rather than as
-# dependencies, which a skipped task would still run.
-["browser:layout-chromium-1"]
-description = "browser:layout-1 in Chromium: a CI leg, which mise run browser leaves out"
-hide = true
-env = { HQ_BROWSER_ENGINE = "chromium", SEVERINO_WAITS_FOR_HEAVY_TURN = "1" }
-run = [
-  { task = "setup:browser", args = [
-    "chromium",
-  ] },
-  { task = "setup:lint-tools" },
-  "mise run --skip-deps browser:layout-1",
-]
-
-["browser:layout-chromium-2"]
-description = "browser:layout-2 in Chromium: a CI leg, which mise run browser leaves out"
-hide = true
-env = { HQ_BROWSER_ENGINE = "chromium", SEVERINO_WAITS_FOR_HEAVY_TURN = "1" }
-run = [
-  { task = "setup:browser", args = [
-    "chromium",
-  ] },
-  { task = "setup:lint-tools" },
-  "mise run --skip-deps browser:layout-2",
-]
-
-["browser:navigation"]
-description = "Real-browser invariants over the example estate, the frame around a page and its fragments, in WebKit, the reference also in Chromium"
-hide = true
-extends = "django-browser"
-# The template's, and Chromium, which the reference is also opened in.
-depends = [
-  { task = "setup:browser", args = [
-    "webkit",
-  ] },
-  { task = "setup:browser", args = [
-    "chromium",
-  ] },
-  "setup:lint-tools",
-]
-vars.classes = """\
   hq.platform.core.tests.browser.estate.ExampleEstateBrowserTests \
-  hq.platform.core.tests.browser.estate.ExampleEstateControlTests \
-  hq.platform.core.tests.browser.reports.PolicyReportBrowserTests \
-  hq.platform.core.tests.browser.reports.WebKitSelectCanaryTests \
-  hq.platform.core.tests.browser.reference.ReferenceBrowserTests \
-  hq.platform.core.tests.browser.fragments.FragmentBrowserTests \
-  hq.platform.core.tests.browser.refresh.RefreshLandingBrowserTests \
-  hq.platform.core.tests.browser.refresh.PressedRefreshBrowserTests \
-  hq.platform.core.tests.browser.current_state.CurrentStateBrowserTests \
-  hq.platform.core.tests.browser.command_forms.CommandFormBrowserTests \
-  hq.platform.core.tests.browser.agent_devices.AgentDeviceBrowserTests"""
-
-# The sweep of every table at every shape of the layout with its rows open, a
-# leg of its own: it reads each page at every width a table's room changes.
-["browser:table-fit"]
-description = "Real-browser table checks over the example estate at every shape of the layout, rows open, in WebKit"
-hide = true
-extends = "django-browser"
-vars.classes = """\
-  hq.platform.core.tests.browser.table_fit.ExampleEstateTableFitFirstTests \
-  hq.platform.core.tests.browser.table_fit.ExampleEstateTableFitSecondTests \
-  hq.platform.core.tests.browser.table_fit.ExampleEstateTableFitThirdTests \
-  hq.platform.core.tests.browser.table_fit.TableSweepPlantedTests"""
+  hq.platform.core.tests.browser.planted.PlantedBrowserTests \
+  hq.platform.core.tests.browser.components.ComponentLayoutTests.test_opening_every_row_a_reader_can_open_moves_nothing_they_did_not_ask_for"""

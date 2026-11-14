@@ -12,9 +12,10 @@ from django.test import TestCase
 from django.urls import reverse
 
 from hq.domains.control_plane.models import AdoptedCatalog, ApprovalRequest, OperationRequest, SourceProposal
-from hq.platform.application.tests.markup import elements, select, text, within
+from hq.platform.application.tests.markup import elements, select, text, with_class, within
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.testing import throwaway_media
+from hq.platform.core.models import AuditLog
 
 XHR = {"HTTP_X_REQUESTED_WITH": "XMLHttpRequest"}
 
@@ -356,49 +357,131 @@ class PlaybooksPageTests(TestCase):
         self.assertNotIn(reverse("control_plane:playbooks_refresh"), posts)
         self.assertFalse({_adopt(newest.pk), _reject(newest.pk)} & posts)
 
-    def stop_the_worker(self):
-        """No run holds the worker: each claim's lease has run out."""
+    def worker_gone(self, seen=None):
+        """HQ's playbook worker holds no run, and was last seen ``seen``
+        ago, or never when not given."""
 
         from datetime import timedelta
 
         from django.utils import timezone
 
-        OperationRequest.objects.filter(state=OperationRequest.State.CLAIMED).update(
-            lease_expires_at=timezone.now() - timedelta(minutes=1)
-        )
+        from hq.platform.core.models import UpstreamReading
 
-    def test_a_refresh_says_what_it_waits_on_and_what_to_do_when_it_does_not_come(self):
+        now = timezone.now()
+        work = OperationRequest.objects.filter(action__in=("scan", "run"))
+        work.filter(state=OperationRequest.State.CLAIMED).update(lease_expires_at=now - timedelta(minutes=1))
+        heartbeat = UpstreamReading.objects.filter(key="automation-heartbeat")
+        if seen is None:
+            heartbeat.delete()
+            work.update(claimed_at=None)
+        else:
+            heartbeat.update(observed_at=now - seen)
+            work.exclude(claimed_at=None).update(claimed_at=now - seen)
+
+    def setup_commands(self, html: str) -> str:
+        return " ".join(element.words for element in with_class(html, "operator-command"))
+
+    def test_with_no_worker_ever_seen_refresh_is_refused_and_the_page_says_how_to_set_one_up(self):
+        self.worker_gone()
+        queued = OperationRequest.objects.filter(state=OperationRequest.State.QUEUED).count()
+
+        answered = json.loads(self.client.post(reverse("control_plane:playbooks_refresh"), _sent(), **XHR).content)
+        self.assertEqual(answered["state"], "failed")
+        self.assertIn("no playbook worker reports to this HQ", answered["note"])
+        self.assertEqual(OperationRequest.objects.filter(state=OperationRequest.State.QUEUED).count(), queued)
+
+        html = self.page()
+        commands = self.setup_commands(html)
+        self.assertIn("hq-host automation", commands)
+        self.assertIn("/etc/severino-hq/host.json", commands)
+        refresh = [element for element in within(html, "data-ask") if element.tag == "button"]
+        self.assertTrue(refresh)
+        self.assertTrue(all("disabled" in element.attrs for element in refresh), "Refresh says why it is refused")
+
+    def test_a_worker_not_seen_within_its_interval_is_refused_the_same_and_says_when_it_was(self):
         from datetime import timedelta
-        from unittest import mock
 
-        self.stop_the_worker()
+        self.worker_gone(seen=timedelta(hours=3))
+
+        answered = json.loads(self.client.post(reverse("control_plane:playbooks_refresh"), _sent(), **XHR).content)
+        self.assertEqual(answered["state"], "failed")
+        # An amount and its unit are kept on one line.
+        self.assertIn(
+            "3 hours since a playbook worker last reported", answered["note"].replace("\N{NO-BREAK SPACE}", " ")
+        )
+        html = self.page()
+        self.assertIn("hq-host automation", self.setup_commands(html))
+        self.assertIn("3 hours ago", text(html).replace("\N{NO-BREAK SPACE}", " "))
+
+    def test_a_worker_seen_lately_takes_a_refresh_and_the_page_draws_no_setup(self):
+        from datetime import timedelta
+
+        # Seen inside its timer's interval, holding nothing.
+        self.worker_gone(seen=timedelta(minutes=20))
+
         answered = json.loads(self.client.post(reverse("control_plane:playbooks_refresh"), _sent(), **XHR).content)
         self.assertEqual(answered["state"], "queued")
         self.assertIn("playbook worker", answered["note"])
-        self.assertNotIn("hq-host automation", answered["note"])
-        # Past when a worker comes, it says how to start one, and where none can be.
-        with mock.patch("hq.platform.application.automation_sources.CLAIM_EXPECTED", timedelta(0)):
-            late = json.loads(self.client.get(answered["status"]).content)
-            # A page loaded while it waits says the same.
-            waiting = " ".join(element.words for element in within(self.page(), "data-ask"))
-        self.assertEqual(late["state"], "queued")
-        self.assertIn("hq-host automation", late["note"])
-        self.assertIn("development server has no worker", late["note"])
-        self.assertIn("hq-host automation", waiting)
+        self.assertEqual(self.setup_commands(self.page()), "")
 
-    def test_a_refresh_behind_work_the_worker_carries_waits_for_it_in_a_few_words(self):
+    def test_a_refresh_behind_a_run_the_worker_holds_waits_for_it_however_long_ago_it_claimed(self):
         from datetime import timedelta
-        from unittest import mock
 
-        self.assertTrue(OperationRequest.objects.filter(state=OperationRequest.State.CLAIMED).exists())
+        from django.utils import timezone
+
+        held = OperationRequest.objects.filter(action="run", state=OperationRequest.State.CLAIMED)
+        self.assertTrue(held.filter(lease_expires_at__gt=timezone.now()).exists())
+        # The worker renews the run's lease, however long ago it claimed it.
+        OperationRequest.objects.filter(action__in=("scan", "run")).exclude(claimed_at=None).update(
+            claimed_at=timezone.now() - timedelta(hours=3)
+        )
+
         answered = json.loads(self.client.post(reverse("control_plane:playbooks_refresh"), _sent(), **XHR).content)
+        self.assertEqual(answered["state"], "queued")
         self.assertIn("playbook worker", answered["note"])
-        # What else the worker is doing, and when it took it, is not the reader's question.
         self.assertNotIn("took", answered["note"])
-        # A worker busy elsewhere is coming, however long the scan has waited.
-        with mock.patch("hq.platform.application.automation_sources.CLAIM_EXPECTED", timedelta(0)):
-            late = json.loads(self.client.get(answered["status"]).content)
-        self.assertNotIn("hq-host automation", late["note"])
+
+    def test_a_scan_waiting_when_the_worker_goes_reads_not_started_and_is_not_followed(self):
+        answered = json.loads(self.client.post(reverse("control_plane:playbooks_refresh"), _sent(), **XHR).content)
+        self.assertEqual(answered["state"], "queued")
+        self.worker_gone()
+
+        followed = json.loads(self.client.get(answered["status"]).content)
+        self.assertEqual(followed["label"], "Not started")
+        self.assertFalse(followed["live"])
+        html = self.page()
+        self.assertFalse(select(html, "data-ask-status"), "nothing under way is followed")
+        said = " ".join(element.words for element in within(html, "data-ask"))
+        self.assertIn("Not started", said)
+        self.assertNotIn("Working", said)
+
+    def test_a_run_waiting_while_no_worker_arrives_reads_not_started_with_the_setup(self):
+        self.worker_gone()
+        waiting = OperationRequest.objects.get(action="run", state=OperationRequest.State.QUEUED)
+
+        html = self.page(reverse("jobs:run", kwargs={"pk": waiting.pk}))
+        self.assertIn("Not started", text(html))
+        # What it waits for, and that it starts by itself once that comes.
+        self.assertIn("Starts when a playbook worker reports", text(html))
+        self.assertIn("hq-host automation", self.setup_commands(html))
+        jobs = text(self.page(reverse("jobs:list")))
+        self.assertIn("Not started", jobs)
+
+    def test_a_page_read_while_the_worker_is_absent_writes_nothing(self):
+        from hq.platform.core import revisions
+        from hq.platform.core.models import UpstreamReading
+
+        self.worker_gone()
+        waiting = OperationRequest.objects.get(action="run", state=OperationRequest.State.QUEUED)
+        tables = [model._meta.db_table for model in (UpstreamReading, OperationRequest, AuditLog)]
+        before = {table: revisions.read().counts.get(table, 0) for table in tables}
+
+        self.page()
+        self.page(reverse("jobs:run", kwargs={"pk": waiting.pk}))
+        self.page(reverse("jobs:list"))
+
+        self.assertEqual({table: revisions.read().counts.get(table, 0) for table in tables}, before)
+        self.assertFalse(UpstreamReading.objects.filter(key="automation-heartbeat").exists())
 
     def test_refresh_queues_a_scan_its_page_follows(self):
         response = self.client.post(reverse("control_plane:playbooks_refresh"), _sent(), **XHR)
@@ -450,6 +533,15 @@ class EmptyPlaybooksPageTests(TestCase):
         self.assertFalse(select(html, "data-scan-failed"))
         self.assertIn("No playbooks are adopted yet.", text(html))
 
+    def test_where_automation_was_never_set_up_refresh_is_refused_and_nothing_is_raised(self):
+        self.client.force_login(self.owner)
+        html = self.client.get(reverse("control_plane:playbooks")).content.decode()
+
+        refresh = [element for element in within(html, "data-ask") if element.tag == "button"]
+        self.assertTrue(refresh)
+        self.assertTrue(all("disabled" in element.attrs for element in refresh), "Refresh says why it is refused")
+        self.assertFalse(with_class(html, "operator-command"), "no setup is raised where nobody set automation up")
+
 
 class OperationStandingTests(TestCase):
     """An operation a worker carries out stands as Jobs shows it."""
@@ -463,17 +555,18 @@ class OperationStandingTests(TestCase):
         from django.utils import timezone
 
         from hq.domains.jobs.models import JobState
-        from hq.platform.application.asks import DONE, FAILED, QUEUED, RUNNING, operation_standing
-        from hq.platform.application.work_runs import LAPSED, run_seen_state
+        from hq.platform.application.asks import DONE, FAILED, QUEUED, RUNNING
+        from hq.platform.application.work_runs import LAPSED, NOT_STARTED, run_rows, seen_as_runs, standing_of
 
         expected = {JobState.QUEUED: QUEUED, JobState.RUNNING: RUNNING, JobState.SUCCEEDED: DONE}
-        runs = OperationRequest.objects.annotate(seen=run_seen_state(timezone.now()))
+        runs = list(seen_as_runs(OperationRequest.objects.select_related("resource"), timezone.now()))
         seen = set()
-        for run in runs:
-            standing = operation_standing(run)
+        for run, row in zip(runs, run_rows(runs), strict=True):
+            standing = standing_of(row)
             with self.subTest(run=str(run.pk), seen=run.seen):
-                self.assertEqual(standing.state, expected.get(JobState(run.seen), FAILED))
-                self.assertEqual(standing.label, JobState(run.seen).label)
+                waits = row.word == NOT_STARTED
+                self.assertEqual(standing.state, FAILED if waits else expected.get(JobState(run.seen), FAILED))
+                self.assertEqual(standing.label, NOT_STARTED if waits else JobState(run.seen).label)
                 if run.seen == JobState.LOST and run.state == OperationRequest.State.CLAIMED:
                     self.assertEqual(standing.note, LAPSED)
             seen.add(run.seen)

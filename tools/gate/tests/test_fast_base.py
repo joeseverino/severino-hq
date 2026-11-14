@@ -14,9 +14,9 @@ from django.test import tag
 from hq.platform.application.tests.reads import reads
 from hq.platform.core.tests.task import RefError
 from tests.mise_tasks import ROOT, body, mise_tasks
-from tools.gate import fast as fast_gate
+from tools.gate import chain as fast_chain, fast as fast_gate
 from tools.gate.tests.base import GateTestCase, fixture_git
-from tools.gate.tests.fast_runs import Recorder, run_main
+from tools.gate.tests.fast_runs import Recorder, everywhere, run_main
 from tools.gate.verdict import Step
 
 
@@ -30,8 +30,8 @@ class FastGateBaseTests(GateTestCase):
                 raise RefError(f"no ref {args[-1]}")
             return [self.REFS[args[-1]]]
 
-        with patch.object(fast_gate, "git", git), patch.object(fast_gate, "landing", return_value=list(landing)):
-            return fast_gate.merge_base(base)
+        with everywhere("git", git), everywhere("landing", return_value=list(landing)):
+            return fast_chain.merge_base(base)
 
     def test_with_none_asked_for_the_branch_head_lands_on_is_the_base(self):
         self.assertEqual(self.resolve(None, landing=["topic"]), "bbb")
@@ -53,13 +53,13 @@ class FastGateBaseTests(GateTestCase):
             git("checkout", "-q", "integration")
             git("commit", "--quiet", "--no-verify", "--allow-empty", "-m", "landed, not pushed")
             fork = git("rev-parse", "HEAD")
-            self.assertEqual(fast_gate.landing(clone), ["origin/integration"])
+            self.assertEqual(fast_chain.landing(clone), ["origin/integration"])
             git("checkout", "-q", "-b", "worker")
             git("commit", "--quiet", "--no-verify", "--allow-empty", "-m", "the worker's change")
             git("checkout", "-q", "integration")
             git("commit", "--quiet", "--no-verify", "--allow-empty", "-m", "another worker landed")
             git("checkout", "-q", "worker")
-            (nearest,) = fast_gate.landing(clone)
+            (nearest,) = fast_chain.landing(clone)
             self.assertEqual(nearest, "refs/heads/integration")
             self.assertEqual(git("merge-base", "HEAD", nearest), fork)
 
@@ -100,11 +100,11 @@ class FastGatePassedBaseTests(GateTestCase):
             self.git("add", "-A")
             self.git("commit", "--quiet", "--no-verify", "-m", name)
             self.commits.append(self.git("rev-parse", "HEAD"))
-        self.enterContext(patch.object(fast_gate, "ROOT", self.root))
-        self.merge_base = self.enterContext(patch.object(fast_gate, "merge_base", return_value="f" * 40))
+        self.enterContext(patch.object(fast_chain, "ROOT", self.root))
+        self.merge_base = self.enterContext(everywhere("merge_base", return_value="f" * 40))
 
     def record(self, commit: str) -> None:
-        folder = fast_gate.passes(self.root)
+        folder = fast_chain.passes(self.root)
         folder.mkdir(parents=True, exist_ok=True)
         (folder / self.git("rev-parse", f"{commit}^{{tree}}")).touch()
 
@@ -112,7 +112,7 @@ class FastGatePassedBaseTests(GateTestCase):
         first, second, _ = self.commits
         self.record(first)
         self.record(second)
-        base, why = fast_gate.fast_base(None)
+        base, why = fast_chain.fast_base(None)
         self.assertEqual(base, second)
         self.assertIn("passed", why)
         self.merge_base.assert_not_called()
@@ -122,15 +122,15 @@ class FastGatePassedBaseTests(GateTestCase):
             with self.subTest(recorded=recorded):
                 if recorded:
                     # A passed tree off HEAD's history is no base of this change.
-                    fast_gate.passes(self.root).mkdir(parents=True, exist_ok=True)
-                    (fast_gate.passes(self.root) / ("e" * 40)).touch()
-                base, why = fast_gate.fast_base(None)
+                    fast_chain.passes(self.root).mkdir(parents=True, exist_ok=True)
+                    (fast_chain.passes(self.root) / ("e" * 40)).touch()
+                base, why = fast_chain.fast_base(None)
                 self.assertEqual(base, "f" * 40)
                 self.assertIn("merge base", why)
 
     def test_a_base_asked_for_wins_over_a_passed_tree(self):
         self.record(self.commits[-1])
-        base, _ = fast_gate.fast_base("main")
+        base, _ = fast_chain.fast_base("main")
         self.assertEqual(base, "f" * 40)
         self.merge_base.assert_called_once_with("main")
 
@@ -169,8 +169,8 @@ class FastGateFixTests(GateTestCase):
                 "tags": ["fast", fast_gate.RECORDING],
             },
         }
-        self.enterContext(patch.object(fast_gate, "ROOT", self.root))
-        self.enterContext(patch.object(fast_gate, "quick_tasks", return_value=self.tasks))
+        self.enterContext(patch.object(fast_chain, "ROOT", self.root))
+        self.enterContext(everywhere("quick_tasks", return_value=self.tasks))
 
     def test_a_gate_declares_a_fix_mode_in_its_usage_whether_toml_or_file_task(self):
         self.assertEqual(fast_gate.fixers(("lint:toml", "lint:file", "lint:check")), ("lint:toml", "lint:file"))
@@ -184,7 +184,7 @@ class FastGateFixTests(GateTestCase):
                 (self.root / name).write_text("formatted\n")
             return subprocess.CompletedProcess(command, 0)
 
-        with patch.object(fast_gate, "subprocess", SimpleNamespace(run=run)):
+        with everywhere("subprocess", SimpleNamespace(run=run)):
             fixed = fast_gate.fix(("lint:toml", "lint:check", "lint:file"))
         self.assertEqual(fixed, ["changed.py", "clean.py"])
         (command,) = ran
@@ -201,14 +201,14 @@ class FastGateFixTests(GateTestCase):
             (self.root / "changed.py").write_text("before\n")
             return subprocess.CompletedProcess(command, 0)
 
-        with patch.object(fast_gate, "subprocess", SimpleNamespace(run=run)):
+        with everywhere("subprocess", SimpleNamespace(run=run)):
             self.assertEqual(fast_gate.fix(("lint:toml",)), ["changed.py"])
 
     def test_a_recordings_fix_never_runs_before_the_gates(self):
         """Its fix is its whole recording again, which every gate would wait on."""
         with (
-            patch.object(fast_gate, "fix", return_value=[]) as fix,
-            patch.object(fast_gate, "changed_paths") as changed,
+            everywhere("fix", return_value=[]) as fix,
+            everywhere("changed_paths") as changed,
         ):
             paths = fast_gate.fixed_first(SimpleNamespace(), ("lint:toml", "lint:record"), "base", (["changed.py"], []))
         fix.assert_called_once_with(("lint:toml",))
@@ -220,12 +220,12 @@ class FastGateFixTests(GateTestCase):
         gate = Mock()
         again = Step("again")
         with (
-            patch.object(fast_gate, "fix", return_value=list(fixed)) as fix,
-            patch.object(fast_gate, "selected_tasks", return_value=("lint:record", "lint:doc")) as selected,
-            patch.object(fast_gate, "affected", return_value=(set(), set())),
-            patch.object(fast_gate, "test_labels", return_value=(["tests.test_examples"], 1)),
-            patch.object(fast_gate, "with_tree", side_effect=lambda labels, paths: labels),
-            patch.object(fast_gate, "gates_and_tests", return_value=[again]) as rerun,
+            everywhere("fix", return_value=list(fixed)) as fix,
+            everywhere("selected_tasks", return_value=("lint:record", "lint:doc")) as selected,
+            everywhere("affected", return_value=(set(), set())),
+            everywhere("test_labels", return_value=(["tests.test_examples"], 1)),
+            everywhere("with_tree", side_effect=lambda labels, paths: labels),
+            everywhere("gates_and_tests", return_value=[again]) as rerun,
             patch("sys.stdout", io.StringIO()),
         ):
             steps = fast_gate.fixed_after(gate, [first], [], "auto")
@@ -260,7 +260,7 @@ class FastGateFixTests(GateTestCase):
                 self.assertEqual(fix.called, bool(first.tasks))
 
     def test_no_selected_fix_mode_runs_nothing(self):
-        with patch.object(fast_gate, "subprocess", SimpleNamespace(run=self.fail)):
+        with everywhere("subprocess", SimpleNamespace(run=self.fail)):
             self.assertEqual(fast_gate.fix(("lint:check",)), [])
 
     def test_a_run_that_fixed_says_so_and_judges_the_fixed_tree(self):
@@ -288,8 +288,8 @@ class FastGateFixModeTests(GateTestCase):
                     self.assertIn("lint:ruff", fast_gate.quick_gates())
                 with (
                     tempfile.TemporaryDirectory() as folder,
-                    patch.object(fast_gate, "ROOT", Path(folder)),
-                    patch.object(fast_gate, "mise_json", return_value=[]),
+                    patch.object(fast_chain, "ROOT", Path(folder)),
+                    everywhere("mise_json", return_value=[]),
                 ):
                     self.assertEqual(fast_gate.quick_gates(), ())
                 self.assertIn("lint:ruff", fast_gate.quick_gates())

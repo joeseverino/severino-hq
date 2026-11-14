@@ -210,7 +210,8 @@ class FindingsTests(SentinelMixin, TestCase):
         """A rule that cannot be quiet is a lens, not a finding."""
 
         for index in range(4):
-            observed(self.rewrite(f"fine-{index}"), self.now)
+            # A documentation address answers nothing, which is a fault of its own.
+            observed(self.rewrite(f"fine-{index}", answer="10.0.0.10"), self.now)
 
         self.assertEqual(self.raised(), ())
 

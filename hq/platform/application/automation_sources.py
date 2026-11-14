@@ -16,11 +16,11 @@ import re
 import secrets
 from collections import Counter
 from dataclasses import dataclass, replace
-from datetime import timedelta
 from typing import TYPE_CHECKING, Annotated, Any
 
 from django.db import transaction
 from django.utils import timezone
+from django.utils.text import Truncator
 from pydantic import (
     AfterValidator,
     BaseModel,
@@ -45,17 +45,16 @@ lazy from . import asks, automation_adoption, pages
 lazy from .action_links import capability_action_link, command_url
 lazy from .approval_review import grouped, marked
 lazy from .automation_runs import access_words, anywhere, capability_name
-lazy from .cadence import ring_automation_doorbell
+lazy from .cadence import automation_standing, ring_automation_doorbell
 lazy from .capabilities import capability_words
 lazy from .findings import rule_for
 lazy from .idempotency import IdempotencyConflict
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
 lazy from .labels import effect_label
-lazy from .moments import ago
-lazy from .record_errors import RecordNotFound
+lazy from .record_errors import PolicyError, RecordNotFound
 lazy from .resource_operations import OperationQueued, enqueue, serialize_operation
 lazy from .routes import reverse
-lazy from .work_runs import run_seen_state, run_url
+lazy from .work_runs import UNENDED, run_rows, run_url, seen_as_runs, standing_of
 
 if TYPE_CHECKING:
     from hq.domains.control_plane.models import (
@@ -81,19 +80,8 @@ PROBLEM_LIMIT = 500
 MOST_PROBLEMS = 20
 # The characters of a commit's id a page names it by: enough to tell two apart.
 SHORT_REVISION = 12
-# The doorbell starts the worker at once and its container starts in seconds,
-# so a scan nobody has taken by then, with the worker busy with nothing else,
-# waits on a worker that is not coming.
-CLAIM_EXPECTED = timedelta(minutes=2)
-# What a queued scan says it waits on, and what to do once the worker has
-# not come.
+# What a queued scan says it waits on while HQ's playbook worker arrives.
 WORKER_DUE = "Waiting for HQ's playbook worker."
-WORKER_SEEN = "it last took work {ago}"
-WORKER_NEVER = "it has never taken work here"
-WORKER_ABSENT = (
-    "HQ's playbook worker hasn't taken it; {seen}. On HQ's host, hq-host automation run as root says why. "
-    "A development server has no worker."
-)
 
 
 def _pattern(value: str) -> str:
@@ -129,10 +117,6 @@ class ProcedureDeclaration(ProcedureTerms):
     )
 
 
-def _clip(text: str) -> str:
-    return text if len(text) <= PROBLEM_LIMIT else text[: PROBLEM_LIMIT - 1] + "…"
-
-
 def _declaration_problems(declaration: Any) -> list[str]:
     if declaration is None:
         return []
@@ -141,7 +125,9 @@ def _declaration_problems(declaration: Any) -> list[str]:
         ProcedureDeclaration.model_validate_json(json.dumps(declaration))
     except ValidationError as exc:
         return [
-            _clip(ended(f"Its sidecar's {'.'.join(str(part) for part in error['loc']) or 'value'}: {error['msg']}"))
+            Truncator(
+                ended(f"Its sidecar's {'.'.join(str(part) for part in error['loc']) or 'value'}: {error['msg']}")
+            ).chars(PROBLEM_LIMIT)
             for error in exc.errors(include_url=False)
         ]
     return []
@@ -228,6 +214,11 @@ def refresh(command: RefreshCommand, *, principal: Principal) -> OperationQueued
         if existing.action != models.OperationRequest.Action.SCAN:
             raise IdempotencyConflict("That retry key was already used for a different request.")
         return {"ok": True, "queued": False, "operation": serialize_operation(existing)}
+    # A scan no worker will take would wait for nothing: the finding that
+    # says so (``automation_findings``) carries how to set one up.
+    untaken = automation_standing().cannot("refresh", now=timezone.now())
+    if untaken:
+        raise PolicyError(untaken)
     with audit_operation(operation=REFRESH, principal=principal):
         resource = _source(principal)
         operation, created = enqueue(
@@ -318,9 +309,11 @@ class SourceStanding:
 def _scans():
     """The source's scans, each with the state Jobs shows it in."""
 
-    return models.OperationRequest.objects.filter(
-        resource__key=SOURCE_KEY, action=models.OperationRequest.Action.SCAN
-    ).annotate(seen=run_seen_state(timezone.now()))
+    return seen_as_runs(
+        models.OperationRequest.objects.filter(
+            resource__key=SOURCE_KEY, action=models.OperationRequest.Action.SCAN
+        ).select_related("resource")
+    )
 
 
 def scan_standing(operation_id: str) -> Standing | None:
@@ -331,23 +324,12 @@ def scan_standing(operation_id: str) -> Standing | None:
 
 
 def _stands(scan: OperationRequest) -> Standing:
-    """How a scan stands, a queued one saying what it waits on: the
-    automation worker, and once it has not come, when that last took any work
-    and what to do. A worker busy with other work is coming."""
+    """How a scan stands, a queued one saying what it waits on: HQ's
+    playbook worker while it arrives, and while none does, that it has not
+    started and why (``work_runs.standing_of``)."""
 
-    standing = asks.operation_standing(scan)
-    if standing.state != asks.QUEUED:
-        return standing
-    worked = models.OperationRequest.objects.filter(
-        action__in=(models.OperationRequest.Action.SCAN, models.OperationRequest.Action.RUN)
-    )
-    now = timezone.now()
-    if worked.filter(state=models.OperationRequest.State.CLAIMED, lease_expires_at__gt=now).exists():
-        return replace(standing, note=WORKER_DUE)
-    last = worked.exclude(claimed_at=None).order_by("-claimed_at").values_list("claimed_at", flat=True).first()
-    seen = WORKER_SEEN.format(ago=ago(last)) if last else WORKER_NEVER
-    late = now - scan.created_at > CLAIM_EXPECTED
-    return replace(standing, note=WORKER_ABSENT.format(seen=seen) if late else WORKER_DUE)
+    standing = standing_of(run_rows((scan,))[0])
+    return replace(standing, note=WORKER_DUE) if standing.state == asks.QUEUED else standing
 
 
 def reviewed(proposal: SourceProposal) -> Reviewed:
@@ -388,16 +370,15 @@ def standing(proposal: int | None = None) -> SourceStanding:
     scans = _scans().order_by("-created_at")
     scan = scans.first()
     scanned = _stands(scan) if scan is not None else asks.Standing()
-    # While a newer scan is under way, what the page says of the repository's
-    # reach is still the last one that ended.
-    under_way = (models.OperationRequest.State.QUEUED, models.OperationRequest.State.CLAIMED)
-    reached = scans.exclude(state__in=under_way).first() if scanned.live else scan
+    # While a newer scan has not ended, started or not, what the page says of
+    # the repository's reach is still the last one that ended.
+    reached = scans.exclude(state__in=UNENDED).first() if scan is not None and scan.state in UNENDED else scan
     catalog = automation_adoption.adopted()
     return SourceStanding(
         scan=scan,
         scanned=scanned,
         reached=reached,
-        reach=asks.operation_standing(reached) if reached is not None else asks.Standing(),
+        reach=standing_of(run_rows((reached,))[0]) if reached is not None else asks.Standing(),
         proposal=reviewed(found) if found is not None else None,
         catalog=catalog,
         procedures=automation_adoption.procedures(catalog.digest) if catalog else (),

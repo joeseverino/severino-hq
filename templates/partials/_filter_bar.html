@@ -1,25 +1,39 @@
-{% comment %}
-A filter bar, drawn by {% filter_bar filtered=narrowed clear=every_url shown=3 total=12 %}{% select "kind" kinds every="kind" %}{% summary %}...{% endfilter_bar %}.
-The page's controls, then the one button that sends them (verb, Filter
-unless told) and Clear filters back to clear while anything narrows
-(filtered), then the summary: shown of total, what the page holds back
-(held, each counted) with the one link that shows it (more), and the
-page's facts about what shows. It is a query (method get), sent to action
-when it asks another page; css a class of the page's beside the part's;
-each data_* option a data- attribute, as the table toolbar's
+{% load filter_tags %}{% comment %}
+A filter bar, drawn by {% filter_bar filtered=narrowed clear=every_url shown=3 total=12 %}<input type="search" name="q">{% choices %}{% select "kind" kinds every="kind" %}{% summary %}...{% endfilter_bar %}.
+The page's search, then its choices, then the one button that sends them
+(verb, Filter unless told; Apply beside choices) and Clear filters back to clear while anything
+narrows (filtered), then the summary: shown of total, what the page holds
+back (held, each counted) with the one link that shows it (more), and the
+page's facts about what shows. id names the bar where a page draws two whose
+choices send the same names, so each fold is its own. Choices beside a search fold behind one
+Filters control, the panel it opens, when the bar has no room for them on
+the search's row; the sizer is their copy at the room they take unfolded,
+which no one sees, sends or reaches. It is a query (method get), sent to
+action when it asks another page; css a class of the page's beside the
+part's; each data_* option a data- attribute, as the table toolbar's
 data-table-toolbar is (filter_tags.py). How it lays out and what each
 option says: docs/Design.md, "One filter bar".
 {% endcomment %}<search><form class="{{ classes }}" method="get"{% if action %} action="{{ action }}"{% endif %}{{ data }}>
-  <div class="filter-bar-query">
-    <div class="filter-bar-controls">{{ content|safe }}</div>
-    <div class="filter-bar-send">
-      <button class="btn" type="submit">{{ verb|breakable }}</button>
-      {% if clear %}<a class="btn ghost" href="{{ clear }}">Clear filters</a>{% endif %}
+  {% if choices %}{% with fold=choices|folded:named verb=applies %}<div class="filter-bar-query">
+    <div class="filter-bar-fit">
+      <div class="filter-bar-controls">{{ content|safe }}
+        <button class="btn filter-bar-fold" type="button" popovertarget="{{ fold.id }}">Filters{% if fold.set %} <span class="filter-count">{{ fold.set|breakable }}</span>{% endif %}</button>
+        <div class="filter-bar-choices" id="{{ fold.id }}" popover>{{ choices|safe }}{% partial send %}</div>
+      </div>
     </div>
-  </div>
+    <div class="filter-bar-sizer" aria-hidden="true" inert>{% filter unnamed %}<div class="filter-bar-controls">{{ content|safe }}<div class="filter-bar-choices">{{ choices|safe }}{% partial send %}</div></div>{% endfilter %}</div>
+  </div>{% endwith %}{% else %}<div class="filter-bar-query">
+    <div class="filter-bar-controls">{{ content|safe }}</div>
+    {% partial send %}
+  </div>{% endif %}
   {% if shown or summary %}<p class="filter-bar-summary" role="status">
     {% if shown %}<span data-filter-bar-shown>{{ shown|breakable }}</span> of {{ total|measured:"shown" }}.{% endif %}
     {% if held %}Held back: {% for phrase in held %}{% if forloop.last %}{{ phrase|breakable:"." }}{% else %}{{ phrase|breakable:forloop }}{% endif %} {% endfor %}<a href="{{ more }}">Show all</a>{% endif %}
     {{ summary|safe }}
   </p>{% endif %}
 </form></search>
+
+{% partialdef send %}<div class="filter-bar-send">
+  <button class="btn" type="submit">{{ verb|breakable }}</button>
+  {% if clear %}<a class="btn ghost" href="{{ clear }}">Clear filters</a>{% endif %}
+</div>{% endpartialdef %}

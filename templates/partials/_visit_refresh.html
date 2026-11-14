@@ -1,28 +1,15 @@
 {% comment %}
-A page about one thing asks for that thing's readings when it is opened.
+A page about one thing asks for that thing's readings when it is opened: an ask
+nobody presses, posted once the page is showing (docs/Design.md, "A page about
+one thing asks for that thing's readings").
 
   {% include "partials/_visit_refresh.html" with visit=page_visit %}
 
-The page says only which page it is (application.pages.PageVisit); HQ works
-out what is behind it, and whether any of it is old enough to read again. It
-asks by posting this form once the page is showing, so nothing is read for a
-page nobody has in front of them, and without script the page is what HQ
-holds. It is an ask (partials/_ask.html) nobody presses: the same answer, the
-same following. What it read is swapped into the page in place, everything
-but itself, so the page never reloads or jumps under the reader.
-
-page.html and the dashboard draw it. A page's note (`#note`) ends the head's
-first line, the trail's or the dashboard's date, so it takes no line of its
-own. It names the form it speaks for, so it stands apart from the ask, in the
-head the refresh swaps with the rest, and the new note finds the form by that
-name. It stands in a slot as wide as the longest sentence HQ writes for it
-word for word, drawn here unseen from the same words the script writes
-(asks.REFRESHING, REFRESHED, NEWER_READING and SHOW_NEWER), so each of those
-is whole, the trail beside it never moves whatever it says, and only a
-failure's sentence is cut, whole in its title. A region that fills itself
-(`refresh="[data-connection-panel]"`, also shown in a dialog with no head)
-holds its note, and is fetched again from its own address when the reading
-lands.
+page.html and the dashboard draw it, and its note (`#note`) ends the head's
+first line, naming the form it speaks for. Its slot is as wide as the longest
+sentence the script writes (asks.REFRESHING, REFRESHED, NEWER_READING and
+SHOW_NEWER), drawn here unseen. A region that fills itself
+(`refresh="[data-connection-panel]"`) holds its own note.
 {% endcomment %}
 <div class="ask ask-quiet" data-ask data-ask-state="idle" data-ask-refresh="{{ refresh|default:'#content > :not(.ask-quiet)' }}"{% if not refresh %} hidden{% endif %}>
   {% comment %}

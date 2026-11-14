@@ -2,6 +2,7 @@
 
 import json
 
+from hq.platform.core.tests.browser.probes import Check
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE
 from hq.platform.core.tests.browser.selectors import SELECTORS
 
@@ -95,5 +96,7 @@ LAYOUT_SHIFTS = (
 CHECKS = {
     # How far the page moved by itself since it began to load, scored from the
     # browser's own record of it as Cumulative Layout Shift.
-    "layout shifts": (LAYOUT_SHIFTS, [SELECTORS["vendored"], CLS_LIMIT]),
+    "layout shifts": Check(
+        (LAYOUT_SHIFTS, [SELECTORS["vendored"], CLS_LIMIT]), reader_sees="the page jumping once it is drawn"
+    ),
 }

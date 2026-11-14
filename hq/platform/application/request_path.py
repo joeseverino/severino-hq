@@ -11,6 +11,8 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
+from django.utils.text import capfirst
+
 from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 from hq.domains.control_plane.names import is_hostname, normalized_hostname
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND
@@ -23,9 +25,10 @@ from .path_model import Hop, HopSource, Route, ServicePath, last_machine
 from .paths import hq_path, why_unread
 from .reach import NETWORKS, network_of
 from .request_addresses import Address, addresses_of, addresses_of_hq
-from .request_channel import forwarded_chain
+from .request_channel import UNTRUSTED_FORWARDER, forwarded_chain
 from .request_connection import Connection, connection
-from .request_headers import RESPONSE_CHECKS, Header, ResponseCheck, headers_of
+from .request_headers import HEADERS_READ, RESPONSE_CHECKS, Header, ResponseCheck, headers_of, redacted
+from .request_layers import ADDRESS_HOST, owned_by
 from .ui import ended
 lazy from . import connections
 lazy from .card_items import Insight
@@ -146,9 +149,7 @@ def address_chain(request) -> tuple[Evidence, ...]:
             _address(
                 peer,
                 "judged",
-                "Not a trusted proxy, so HQ ignores the address it forwarded."
-                if forwarded
-                else "Your address, as HQ sees it.",
+                UNTRUSTED_FORWARDER if forwarded else "Your address, as HQ sees it.",
             ),
         )
     chain = [*forwarded, peer]
@@ -243,7 +244,7 @@ def _whose(found: Connection) -> str:
     if found.identity.corroborated and not found.identity.agent and not found.untrusted_forwarding:
         owner = "yours"
     else:
-        owner = f"owned by {device.user}" if device.user else "no reported owner"
+        owner = owned_by(device)
     return dotted(device.os, owner)
 
 
@@ -406,7 +407,7 @@ def _tailnet_device_check(found: Connection) -> HopCheck:
         )
     gap = why_unread(TAILNET_KIND)
     if gap:
-        return HopCheck(UNPROVEN, ended(gap[:1].upper() + gap[1:]))
+        return HopCheck(UNPROVEN, ended(capfirst(gap)))
     # A device that joined or moved since an old reading is missing from it:
     # that is the reading's age, not a disagreement, until a current one says so.
     if not found.tailnet_current:
@@ -424,7 +425,7 @@ def _tailnet_device_check(found: Connection) -> HopCheck:
 def _dns(hop: Hop, context: _Context):
     evidence = (Evidence("Host", context.host, "The name this request asked for."),)
     if not is_hostname(context.host):
-        return evidence, HopCheck(UNPROVEN, "This request used an address.")
+        return evidence, HopCheck(UNPROVEN, ADDRESS_HOST)
     return evidence, HopCheck(
         PROVEN,
         f"This request asked for {normalized_hostname(context.host)}, which resolves to "
@@ -459,7 +460,7 @@ def _network(hop: Hop, context: _Context):
 def _machine(hop: Hop, context: _Context):
     own = context.answered_on
     if hop.unread:
-        return (), HopCheck(UNPROVEN, ended(hop.unread[:1].upper() + hop.unread[1:]))
+        return (), HopCheck(UNPROVEN, ended(capfirst(hop.unread)))
 
     served = ", ".join(served_at(context.request))
     port = served_port(context.request)
@@ -491,7 +492,7 @@ def _ingress(hop: Hop, context: _Context):
     chain = tuple(item for item in address_chain(request) if item.role == "proxy")
     evidence = chain + _forwarding_headers(hop, context)
     if hop.unread:
-        return evidence, HopCheck(UNPROVEN, ended(hop.unread[:1].upper() + hop.unread[1:]))
+        return evidence, HopCheck(UNPROVEN, ended(capfirst(hop.unread)))
     proxy = _proxy_name(hop)
     if not forwarded:
         return evidence, HopCheck(
@@ -560,9 +561,7 @@ def _edge(_hop: Hop, context: _Context):
     if not headers:
         return (), HopCheck(UNPROVEN, "The edge adds no header HQ reads.")
     present = [name for name in headers if context.header(name)]
-    evidence = tuple(
-        Evidence(name, f"present, {len(context.header(name))} characters", "Never shown.") for name in present
-    )
+    evidence = tuple(Evidence(name, redacted(context.header(name)), "Never shown.") for name in present)
     if not present:
         return evidence, HopCheck(
             CONTRADICTED,
@@ -629,7 +628,7 @@ def _container(hop: Hop, _context: _Context):
 
 def _hq(_hop: Hop, context: _Context):
     evidence = (
-        Evidence("Host", context.host, "Checked against HQ's allowed names."),
+        Evidence("Host", context.host, HEADERS_READ["Host"]),
         Evidence(
             "Scheme",
             "https" if context.request.is_secure() else "http",

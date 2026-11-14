@@ -1,46 +1,43 @@
 {% comment %}
-The queue's rows, one per item, for the queue's table (`_work_queue.html`,
-`_queue_groups.html`). Its face is `application.decisions`: how urgent, as a
-word after the title when it is urgent; what is wrong, its one line of meaning and since when; then what can
-be pressed (the first two; any more, `row-later`, wait in the opened line),
-and where the reader sorts their own queue (`triage`) Dismiss or Restore at
-the row's end. Everything taller (the meaning in full, facts, advice, the
-steps and their commands, the reason it cannot be done from here, the pages
-that help) is `row-below`: the row's toggle opens it in the line beneath, from
-the title's edge to the table's. On a phone the buttons wait there too, so the
-row keeps its words.
+The queue's rows, one per item, in the queue's table (`_work_queue.html`,
+`_queue_groups.html`): a table row as any other, the words in the cell that
+names it and what can be pressed in its row's actions. Its face is
+`application.decisions`. The first line is the title and, only when urgent,
+the word after it; then its one line of meaning, then since when and, once out of
+date, how old its reading is, quiet, under it. What it offers is `{% row_actions %}`: the
+first two buttons, the rest waiting in the opened line, and where the reader
+sorts their own queue (`triage`), Dismiss or Restore as the last of them. Everything taller (the meaning in full, facts, advice, the steps and
+their commands, the reason it cannot be done from here, the pages that help)
+is `row-below`, opened by the row's toggle.
+
 Under a domain's own heading (`grouped`) a row does not repeat the domain; on
 the page of the thing it is about (`here`) its title is plain text; in a
 family (`folded`, the family row's id) it is folded under that row. A
-dismissed row is its title and the way back. In a dense queue
-(`_work_queue.html`) the row is its title, its marks and its buttons on one
-line, its meaning first in the line beneath. Drawn away from the queue
-(`glance`), it holds nothing beneath and names its urgency to a screen reader
-only, since the box it is drawn in is in its tone: its title opens the page
-that shows it whole.
+dismissed row is its title and the way back. In the dense form (`dense`) its
+meaning waits in the opened line too. Drawn away from the queue (`glance`), it
+holds nothing beneath and names its urgency to a screen reader only, since
+the box it is drawn in is in its tone: its title opens the page that shows it
+whole.
 {% endcomment %}
-{% for entry in items %}{% with item=entry|decision %}
-<tr class="queue-row"{% if triage %} id="{{ item.anchor }}"{% endif %} data-attention-item{% if folded %} data-folded="{{ folded }}"{% endif %}>
-  <td class="queue-what row-gutter">
-    <div class="attention-head">
-      {% if glance %}<a class="attention-title cell-prose" href="{{ item.page }}">{{ item.label|breakable }}</a>{% elif item.href and not here %}<a class="attention-title cell-prose" href="{{ item.href }}">{{ item.label|breakable }}</a>{% else %}<span class="attention-title cell-prose">{{ item.label|breakable }}</span>{% endif %}
-      {% if not item.aside %}{% include "partials/_urgency_pill.html" with item=item mark=True quiet=glance only %}{% endif %}
-      {% if not item.aside %}{% if item.since or item.observed_at or not grouped %}
-      <span class="attention-meta">
-        {% if not grouped %}<span>{{ item.source|breakable }}</span>{% endif %}
-        {% if item.since %}<span>Since {{ item.since|when:"day" }}</span>{% endif %}
-        {% if item.observed_at %}{% include "partials/_reading_age.html" with at=item.observed_at only %}{% endif %}
-      </span>
-      {% endif %}{% endif %}
-    </div>
+{% for entry in items %}{% with item=entry|decision %}{% remedies item.actions as shown %}{% triage item sorts=triage as away %}
+<tr{% if triage %} id="{{ item.anchor }}"{% endif %} data-attention-item{% if folded %} data-folded="{{ folded }}"{% endif %}>
+  <td class="row-gutter">
+    <div class="row-line">{% if glance %}<a class="cell-prose" href="{{ item.page }}" data-attention-title>{{ item.label|breakable }}</a>{% elif item.href and not here %}<a class="cell-prose" href="{{ item.href }}" data-attention-title>{{ item.label|breakable }}</a>{% else %}<span class="cell-prose" data-attention-title>{{ item.label|breakable }}</span>{% endif %}{% if not item.aside %} {% include "partials/_urgency_pill.html" with item=item mark=True quiet=glance only %}{% endif %}</div>
     {% if not item.aside %}
-      {% if item.detail and not dense %}<p class="attention-detail cell-prose">{{ item.detail|breakable }}</p>{% endif %}
+      {% if item.detail and not dense %}<p class="muted cell-prose" data-attention-detail>{{ item.detail|breakable }}</p>{% endif %}
+      {% if item.since or item.late or not grouped %}
+      <ul class="dot-list muted">
+        {% if not grouped %}<li>{{ item.source|breakable }}</li>{% endif %}
+        {% if item.since %}<li>Since {{ item.since|when:"day" }}</li>{% endif %}
+        {% if item.late %}<li>{% include "partials/_reading_age.html" with reading=item.late.reading only %}</li><li>{{ item.late.every|breakable }}</li>{% endif %}
+      </ul>
+      {% endif %}
       {% if glance %}{% elif item.facts or item.advice or item.steps or item.reason or item.links or item.detail and dense %}
-      <div class="row-below queue-more">
-        {% if item.detail and dense %}<p class="attention-detail">{{ item.detail|breakable }}</p>{% endif %}
+      <div class="row-below">
+        {% if item.detail and dense %}<p data-attention-detail>{{ item.detail|breakable }}</p>{% endif %}
         {% comment %}What was read that shows a problem (application.decisions): each label once, with every value it was given.{% endcomment %}
         {% if item.facts %}{% facts %}{% for fact in item.facts %}{% fact fact.label %}<ul class="dot-list">{% for value in fact.values %}<li>{% if value.url %}{% entity value.url|outside label=value.text %}{% else %}{{ value.text|readable }}{% endif %}</li>{% endfor %}</ul>{% endfact %}{% endfor %}{% endfacts %}{% endif %}
-        {% if item.advice %}<p class="attention-advice">{{ item.advice|breakable }}</p>{% endif %}
+        {% if item.advice %}<p>{{ item.advice|breakable }}</p>{% endif %}
         {% include "partials/_resolution_workflow.html" with steps=item.steps only %}
         {% if item.reason %}<p class="attention-reason">{{ item.reason|breakable }}</p>{% endif %}
         {% if item.links %}<ul class="attention-links">{% for link in item.links %}<li>{% with icon=link|link_icon %}{% if icon %}<a class="icon-link" href="{{ link.url }}" data-tip="{{ link.label }}">{% include "partials/_icon.html" with name=icon only %}<span class="visually-hidden">{{ link.label|breakable }}</span></a>{% else %}<a href="{{ link.url }}">{{ link.label|breakable }}</a>{% endif %}{% endwith %}</li>{% endfor %}</ul>{% endif %}
@@ -49,23 +46,6 @@ that shows it whole.
     {% endif %}
     {% row_toggle %}
   </td>
-  {% comment %}
-  <!-- ast-grep-ignore: hand-drawn-row-actions --> the queue row itself: Dismiss and Restore are the reader's own triage of an item, posted by its key
-  {% endcomment %}<td class="queue-act">
-    {% if item.actions and not item.aside or triage %}<div class="queue-buttons">{% endif %}
-    {% remedies item.actions as shown %}{% if shown and not item.aside %}<div class="attention-actions narrow-more">{% include "partials/_action_links.html" with actions=shown|slice:":2" only %}</div>{% if shown|length > 2 %}<div class="attention-actions narrow-more row-later">{% include "partials/_action_links.html" with actions=shown|slice:"2:" only %}</div>{% endif %}{% endif %}
-    {% if triage %}
-    <div data-triage>
-      {% if item.aside %}
-        {% url 'action_items_bring_back' as triage_url %}
-        {% post_button "Restore" triage_url name="key" value=item|row_value css="btn compact ghost" %}
-      {% else %}
-        {% url 'action_items_set_aside' as triage_url %}
-        {% post_button "Dismiss" triage_url name="key" value=item|row_value css="btn compact ghost queue-dismiss" %}
-      {% endif %}
-    </div>
-    {% endif %}
-    {% if item.actions and not item.aside or triage %}</div>{% endif %}
-  </td>
+  {% if item.aside %}{% row_actions put_away=away %}{% else %}{% row_actions shown first=2 put_away=away %}{% endif %}
 </tr>
 {% endwith %}{% endfor %}

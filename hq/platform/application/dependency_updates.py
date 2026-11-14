@@ -20,17 +20,21 @@ from hq.domains.control_plane.observations.github import (
     DEPENDENCY_RUN_KIND as KIND,
     REPOSITORY,
 )
+from hq.domains.jobs.models import JobState
 from hq.domains.projects.models import Project
 
 from .command_fields import Describe
 from .projection import iso, read_once
 from .refusal_status import RefusalEnvelope, refuse
 from .security import Principal
-lazy from .cadence import forced_reads, request_reads
+lazy from .cadence import asked_at as read_asked_at, request_reads
 lazy from .projects import repository_key
 lazy from .timestamps import moment
+lazy from .work_runs import TONES
 
 RUN_NOW = "project.dependency_updates.run"
+# Each outcome a run reports, as the job state every page words and tones.
+SEEN = {"ok": JobState.SUCCEEDED, "handed_off": JobState.RUNNING, "timeout": JobState.LOST}
 # A hand-off that failed is tried again after this, not on every sweep.
 RETRY_AFTER = timedelta(hours=1)
 _REPOSITORY = re.compile(REPOSITORY)
@@ -69,6 +73,14 @@ class Run:
     started_at: datetime
     finished_at: datetime | None
 
+    @property
+    def seen(self) -> JobState:
+        return SEEN.get(self.outcome, JobState.FAILED)
+
+    @property
+    def tone(self) -> str:
+        return TONES[self.seen]
+
     def as_record(self) -> dict[str, Any]:
         return {"outcome": self.outcome, "started_at": iso(self.started_at), "finished_at": iso(self.finished_at)}
 
@@ -101,7 +113,7 @@ def _last_runs() -> dict[str, Run]:
 def asked_at() -> datetime | None:
     """When a run was asked for and has not been handed off yet."""
 
-    return next((read.requested_at for read in forced_reads() if read.kind == KIND), None)
+    return read_asked_at(KIND)
 
 
 def plan(now: datetime | None = None) -> dict[str, Any]:

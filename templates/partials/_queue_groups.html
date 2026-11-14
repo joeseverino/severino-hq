@@ -8,7 +8,7 @@ family be dismissed whole. `titled="0"` when the card around it is already
 titled by its one area, so the area is not said twice.
 {% endcomment %}
 {% table_region "Queue" %}
-  <table class="data-table queue-table" data-columns="2" data-line="flat">
+  <table class="data-table" data-columns="2" data-line="flat">
     {% for group in groups %}
     <tbody>
       {% if titled != 0 %}{% row_group group.label group.items|length href=group.url %}{% endif %}

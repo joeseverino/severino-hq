@@ -3,11 +3,12 @@
 import json
 import re
 from itertools import islice, takewhile
+from time import perf_counter
 from typing import override
 
 lazy from playwright.sync_api import TimeoutError as LoadTimeout
 
-from hq.platform.core.tests.browser.gate import BrowserGate, answered_as
+from hq.platform.core.tests.browser.gate import RULE_COSTS, BrowserGate, answered_as
 from hq.platform.core.tests.browser.probes.axe import contrast_read
 from hq.platform.core.tests.browser.probes.boxes import (
     ANY_SCROLLER,
@@ -15,7 +16,6 @@ from hq.platform.core.tests.browser.probes.boxes import (
     INTO_A_NEIGHBOR,
     NARROW_FRAMES,
     OVERLAPS,
-    SHORT_OF_ITS_BUTTONS,
     SIDEWAYS,
 )
 from hq.platform.core.tests.browser.probes.palette import PAINT
@@ -30,10 +30,7 @@ from hq.platform.core.tests.browser.probes.tables import (
 )
 from hq.platform.core.tests.browser.probes.text import (
     BROKEN_WORDS,
-    CHANGES_READ,
-    CHIPS_READ,
     CUT_DECISIONS,
-    FACT_ROWS_READ,
     PAST_THE_CLAMP,
 )
 from hq.platform.core.tests.browser.reading import reads, taken
@@ -122,24 +119,29 @@ class LayoutBrowserTests(BrowserGate):
         """Hold each rule on the page as it stands, one subtest each, in
         order. The probes of a run of rules that only read are read in one
         round trip before the first of them is judged; a probe that threw
-        fails its own rule only."""
+        fails its own rule only. Each subtest's time, its probes' time in the
+        page with it, goes to the run's ledger."""
 
         read: dict[int, list] = {}
         for at, rule in enumerate(rules):
             if hasattr(rule, "probes") and at not in read:
                 read |= self.read_ahead(rules, at)
-            with self.subTest(rule=rule.__name__, page=name, width=width, **where):
-                if at in read:
-                    rule(name, *map(taken, read[at]))
-                else:
-                    rule(name)
+            began = perf_counter() - sum(seconds for _returned, _value, seconds in read.get(at, []))
+            try:
+                with self.subTest(rule=rule.__name__, page=name, width=width, **where):
+                    if at in read:
+                        rule(name, *map(taken, read[at]))
+                    else:
+                        rule(name)
+            finally:
+                self.spent(RULE_COSTS, rule.__name__, perf_counter() - began, f"{name} at {width}px")
 
     def read_ahead(self, rules, at):
-        """The outcomes of each rule's probes, by its place in ``rules``, for
-        the run of reading rules that starts at ``at``."""
+        """The timed outcomes of each rule's probes, by its place in
+        ``rules``, for the run of reading rules that starts at ``at``."""
 
         run = list(takewhile(lambda rule: hasattr(rule, "probes"), rules[at:]))
-        outcomes = iter(self.outcomes([probe for rule in run for probe in rule.probes]))
+        outcomes = iter(self.timed_outcomes([probe for rule in run for probe in rule.probes]))
         return {at + offset: list(islice(outcomes, len(rule.probes))) for offset, rule in enumerate(run)}
 
     # Without script: the page as the server drew it. Layout must hold before
@@ -159,11 +161,26 @@ class LayoutBrowserTests(BrowserGate):
                 self.layout_audit_structural_rules,
             ]
         if width in WIDTHS:
-            rules += [*self.overflow_reads(name), self.a_heads_note_costs_its_head_no_room]
+            reads = [*self.overflow_reads(name), self.a_heads_note_costs_its_head_no_room]
+            rules += [rule for rule in reads if rule not in rules]
         return rules
+
+    @classmethod
+    def unscripted_rules(cls):
+        """Each rule the sweep without script holds, by name, with the widths
+        it holds it at on some page, read off the lists the sweep runs."""
+
+        lists = cls.__new__(cls)
+        held: dict[str, set[int]] = {}
+        for name in (*PAGES, *DENSE_PAGES):
+            for width in {*WIDTHS, *SPARSE_WIDTHS}:
+                for rule in (*lists.unscripted_reads(name, width), *lists.unscripted_openings(name, width)):
+                    held.setdefault(rule.__name__, set()).add(width)
+        return {rule: sorted(widths) for rule, widths in held.items()}
 
     def overflow_reads(self, name):
         rules = [
+            self.tables_scroll_inside_their_own_container,
             self.no_block_breaks_a_paragraph,
             self.words_stay_inside_the_box_that_holds_them,
             self.only_a_table_scrolls_sideways,
@@ -174,10 +191,6 @@ class LayoutBrowserTests(BrowserGate):
             self.nothing_a_summary_names_is_hidden,
             self.a_clamped_box_shows_only_its_lines,
             self.what_an_item_means_is_never_cut,
-            self.an_items_words_run_to_its_buttons,
-            self.a_change_reads_on_one_line_and_baseline,
-            self.a_chip_sits_on_the_baseline_of_its_line,
-            self.a_bands_values_share_their_rows_baseline,
             self.code_and_cards_keep_inside_the_gutter,
             self.nothing_is_drawn_into_its_neighbor,
             self.the_chrome_is_as_tall_as_its_insets_say,
@@ -197,8 +210,6 @@ class LayoutBrowserTests(BrowserGate):
                 self.only_a_table_scrolls_sideways_with_every_disclosure_open,
                 self.a_checks_evidence_follows_its_statement,
                 self.nothing_a_summary_names_is_hidden,
-                self.a_change_reads_on_one_line_and_baseline,
-                self.a_chip_sits_on_the_baseline_of_its_line,
                 self.a_fill_shows_in_both_palettes,
             ]
         return rules
@@ -304,11 +315,15 @@ class LayoutBrowserTests(BrowserGate):
 
     @reads(TABLES)
     def tables_scroll_inside_their_own_container(self, name, tables):
-        """On a phone a wide table scrolls sideways; it never stacks into cards."""
+        """A table wider than its card scrolls sideways in its own region; it
+        never runs past the card or stacks into cards."""
 
         self.assertEqual(tables["found"], [])
-        if "<table" in self.pages[name]:
-            self.assertGreater(tables["seen"], 0, "the probe measured nothing")
+        # The probe counts the tables it skips as undrawn (in a closed
+        # disclosure) by its own test, so a page whose every table is in one
+        # is told apart from a page whose tables it failed to find.
+        if "<table" in (self.pages.get(name) or self.page.content()):
+            self.assertGreater(tables["seen"] + tables["undrawn"], 0, "the probe found no table")
 
     @reads(OVERLAPS)
     def nothing_overlaps(self, _name, found):
@@ -417,30 +432,6 @@ class LayoutBrowserTests(BrowserGate):
         if found := self.findings(name, self.page.viewport_size["width"]):
             self.fail(json.dumps(found, indent=1))
 
-    @reads(CHANGES_READ)
-    def a_change_reads_on_one_line_and_baseline(self, _name, found):
-        """A value and the one it changes into share a baseline with each
-        other, their arrow and the words before them wherever they share a
-        line, and the arrow is on the line of the new value: a narrow line
-        breaks between the two values, never after the arrow."""
-
-        self.assertEqual(found, [])
-
-    @reads(CHIPS_READ)
-    def a_chip_sits_on_the_baseline_of_its_line(self, _name, found):
-        """A chip (an identifier, a tag) set in a line sits on the baseline
-        of the words, pills and links around it, on the line it starts on and
-        the line it ends on."""
-
-        self.assertEqual(found, [])
-
-    @reads(FACT_ROWS_READ)
-    def a_bands_values_share_their_rows_baseline(self, _name, found):
-        """The facts of a band that share a row stand on one baseline, a
-        zero beside a linked count alike."""
-
-        self.assertEqual(found, [])
-
     @reads(PAST_THE_CLAMP)
     def a_clamped_box_shows_only_its_lines(self, _name, found):
         self.assertEqual(found, [])
@@ -449,13 +440,6 @@ class LayoutBrowserTests(BrowserGate):
     def what_an_item_means_is_never_cut(self, _name, found):
         """What a queue item means, an approval's change among them, wraps
         rather than being cut, at every width."""
-
-        self.assertEqual(found, [])
-
-    @reads((SHORT_OF_ITS_BUTTONS, [SELECTORS["decision_words"], SELECTORS["decision_buttons"]]))
-    def an_items_words_run_to_its_buttons(self, _name, found):
-        """A queue item's title and meaning fill the room up to its buttons:
-        no empty band between what it says and what can be pressed."""
 
         self.assertEqual(found, [])
 

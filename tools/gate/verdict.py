@@ -32,7 +32,7 @@ from tools.gate.tree import working_tree
 
 ROOT = Path(__file__).resolve().parents[2]
 # The folder a step's test runs write their failed tests into, a JSON list of
-# FailedTest records per run (hq/platform/core/test_runner.py, which this
+# FailedTest records per run (hq/platform/core/run_report.py, which this
 # helper does not import, so it runs where only tools/ is). GateVerdictTests
 # runs that runner's record under a gate, which holds the two to one shape.
 REPORTS = "HQ_TEST_REPORTS"
@@ -81,7 +81,7 @@ TIMED = re.compile(r"\[([^\]\s]+)\] (?:Finished|passed) in (\d+(?:\.\d+)?)(ns|µ
 UNITS = {"ns": 1e-9, "µs": 1e-6, "ms": 1e-3, "s": 1.0}
 # What a run says it spent, kept in the verdict file under the step times,
 # since that file is what outlives the run: the test runner's slowest classes
-# under their heading (hq/platform/core/test_runner.py, report_class_times),
+# under their heading (hq/platform/core/run_report.py, report_class_times),
 # and tools/lib/measured's line on a heavy run's process tree.
 CLASSES = re.compile(r"^(?:\[[^\]\s]+\] )*(Slowest test classes .*)$")
 CLASS_TIME = re.compile(r"^(?:\[[^\]\s]+\] )*(\s+\d+(?:\.\d+)?s\s+\S+)\s*$")

@@ -15,15 +15,14 @@ from hq.domains.projects.models import Project
 from hq.platform.application.derivation_testing import uncached
 from hq.platform.application.security import cli_principal
 from hq.platform.application.tests.host_only import host_only
+from hq.platform.core.attribution import operation_context
 
 from ..cadence_chart import Cadence, CadenceMatrix, CadenceRow, CadenceWeek
 from ..card_items import Timeline, TimelineItem
 from ..dashboard import operating_snapshot
-from ..doors import Attribution
 from ..money import money
 from ..projection import projection_scope, read_once
 from ..resource_context import get_managed_resource
-from ..resource_operations import operation_summary
 from ..ui import (
     MISSING,
     PLOT_HEIGHT,
@@ -740,39 +739,40 @@ class OperationProjectionTests(TestCase):
             kind="tls.certificate",
             spec={},
         )
-        operation = OperationRequest.objects.create(
-            resource=resource,
-            action=OperationRequest.Action.RECONCILE,
-            state=OperationRequest.State.FAILED,
-            completed_at=timezone.now(),
-            requested_actor="example-controller",
-            requested_interface="controller",
-            idempotency_key="failed-projection",
-            result={
-                "message": "Verification did not converge.",
-                "conditions": [
-                    {
-                        "type": "Degraded",
-                        "status": True,
-                        "reason": "VerificationFailed",
-                        "message": "One consumer serves the previous certificate.",
-                    }
-                ],
-                "status": {
-                    "expected_fingerprint_sha256": "expected",
-                    "consumers": [
+        with operation_context(interface="controller", actor="example-controller", operation="example.ask"):
+            OperationRequest.objects.create(
+                resource=resource,
+                action=OperationRequest.Action.RECONCILE,
+                state=OperationRequest.State.FAILED,
+                completed_at=timezone.now(),
+                requested_actor="example-controller",
+                requested_interface="controller",
+                idempotency_key="failed-projection",
+                result={
+                    "message": "Verification did not converge.",
+                    "conditions": [
                         {
-                            "consumer": "npm",
-                            "domain": "hq.example.com",
-                            "fingerprint_sha256": "observed",
-                            "matches_expected": False,
+                            "type": "Degraded",
+                            "status": True,
+                            "reason": "VerificationFailed",
+                            "message": "One consumer serves the previous certificate.",
                         }
                     ],
+                    "status": {
+                        "expected_fingerprint_sha256": "expected",
+                        "consumers": [
+                            {
+                                "consumer": "npm",
+                                "domain": "hq.example.com",
+                                "fingerprint_sha256": "observed",
+                                "matches_expected": False,
+                            }
+                        ],
+                    },
                 },
-            },
-        )
+            )
 
-        result = operation_summary(operation, Attribution("example-controller", "controller"))
+        (result,) = get_managed_resource("certificate")["operations"]
 
         self.assertEqual(result["headline"], "One consumer serves the previous certificate.")
         self.assertEqual(result["condition"]["reason"], "VerificationFailed")

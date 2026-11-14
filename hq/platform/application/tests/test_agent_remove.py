@@ -11,6 +11,7 @@ from hq.domains.projects.models import Project
 from hq.platform.api.tests.tokens import ISSUER
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.writers import keyed
+from hq.platform.core.audit import audited_labels
 from hq.platform.core.models import AgentDevice, AgentIdentity, AuditLog
 
 from ..capabilities import capability_registry, execute_capability
@@ -78,10 +79,10 @@ class RemovalTests(TestCase):
         self.assertFalse(CapabilityRule.objects.filter(subject=self.subject).exists())
         self.assertTrue(AgentIdentity.objects.filter(client_id=OTHER).exists(), "the agent beside it stays")
         self.assertTrue(CapabilityRule.objects.filter(subject=OTHER).exists(), "another agent's rule stays")
-        (event,) = AuditLog.objects.filter(metadata__operation=REMOVE)
-        self.assertEqual(event.user, self.person)
+        (event,) = AuditLog.objects.filter(metadata__operation=REMOVE, object_type=audited_labels()[AgentIdentity])
+        self.assertEqual(event.actor_label, self.person.get_username())
         self.assertEqual(event.action, AuditLog.Action.DELETED)
-        self.assertEqual((event.metadata["client_id"], event.metadata["subject"]), (AGENT, self.subject))
+        self.assertIn(AGENT, event.message)
 
     def test_the_audit_log_is_kept(self):
         before = set(AuditLog.objects.values_list("pk", flat=True))
@@ -93,10 +94,11 @@ class RemovalTests(TestCase):
     def test_a_retry_with_the_same_key_answers_the_first_result_and_records_once(self):
         payload = keyed()
         first = self._remove(payload=payload)
+        recorded = AuditLog.objects.filter(metadata__operation=REMOVE).count()
         again = self._remove(payload=payload)
 
         self.assertEqual(again, first)
-        self.assertEqual(AuditLog.objects.filter(metadata__operation=REMOVE).count(), 1)
+        self.assertEqual(AuditLog.objects.filter(metadata__operation=REMOVE).count(), recorded)
 
     def test_a_client_hq_has_never_seen_is_refused_as_the_block_refuses_it(self):
         removed = self._remove(target="example-unseen")

@@ -3,11 +3,12 @@
 # second waits for the first and names it, one that gives up names the holder
 # too, a killed holder frees the turn, a task's timeout starts once it holds
 # the turn, a heavy task inside a turn runs at once, a task that weighs its
-# own run (tools/lib/heavy-turn.sh) runs its body once and inside the turn
-# when it is heavy, under its own bound, and beside the holder when it is
-# light, and a run of tests
-# takes the turn only when tools/gate/turn.py finds it heavy. Each heavy run,
-# by a template's shell, a header's lock or the turn task, ends with one line
+# own run (tools/lib/heavy-turn.sh) runs its body once, inside the turn or a
+# share of it, under its own bound, and a run of tests takes the whole turn
+# only when tools/gate/turn.py weighs it more than one process. Shares run
+# side by side up to the budget, never beside a whole run, and a whole run
+# waiting for the turn starts no new share. Each heavy run,
+# by a template's shell, a header's lock, the turn task or a share, ends with one line
 # (tools/lib/measured) whose CPU holds what its descendants spent and
 # whose peak holds each role's processes held at once, a test worker apart from
 # its children; a heavy run inside one adds none, and a heavy file task run by
@@ -18,16 +19,19 @@ repo="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
 work="$(mktemp -d)"
 holder=""
 command=""
+sharer=""
+waiter=""
 cleanup() {
-    [ -z "${holder}" ] || kill "${holder}" 2>/dev/null || true
-    [ -z "${command}" ] || kill "${command}" 2>/dev/null || true
+    for pid in "${holder}" "${command}" "${sharer}" "${waiter}"; do
+        [ -z "${pid}" ] || kill "${pid}" 2>/dev/null || true
+    done
     rm -rf "${work}"
 }
 trap cleanup EXIT
 # Run under lint:shell, this suite is inside that task's turn, which every
 # mise it starts would inherit and so never wait, and inside its measured run,
 # which every run would take as its own.
-unset MISE_TASK_LOCKS MISE_TASK_LOCK_TIMEOUT HQ_MEASURED
+unset MISE_TASK_LOCKS MISE_TASK_LOCK_TIMEOUT HQ_MEASURED HQ_TURN_SHARE
 # The uv this checkout pins, for the test runs made from a directory whose
 # config names none, where a shim finds no version.
 uv="$(mise -C "${repo}" which uv)"
@@ -46,9 +50,13 @@ fifo() {
 # task that weighs its run sources, as this checkout has them.
 main="${work}/main"
 second="${work}/second"
-mkdir -p "${main}/mise-tasks" "${main}/tools/lib"
+mkdir -p "${main}/mise-tasks" "${main}/tools/lib" "${main}/tools/gate"
 cp "${repo}/mise-tasks/turn" "${main}/mise-tasks/"
 cp "${repo}/tools/lib/heavy-turn.sh" "${repo}/tools/lib/measured" "${main}/tools/lib/"
+# The share, run by uv in this checkout's project from the fixture's copy.
+cp "${repo}/tools/gate/turn.py" "${main}/tools/gate/"
+: >"${main}/tools/__init__.py"
+: >"${main}/tools/gate/__init__.py"
 cat >"${main}/mise.toml" <<'TOML'
 [task_templates.heavy]
 lock = "heavy"
@@ -62,6 +70,13 @@ run = 'echo $$ >"$READY"; read -r _ <"$RELEASE"'
 [tasks.quick]
 extends = "heavy"
 timeout = "1s"
+run = 'echo ran >>"$RAN"'
+
+# A heavy task as this checkout declares one, which passes the gate first.
+[tasks.gated]
+extends = "heavy"
+lock = ["gate", "heavy"]
+timeout = "1m"
 run = 'echo ran >>"$RAN"'
 
 [tasks.outer]
@@ -147,7 +162,8 @@ STARTS="${work}/starts"
 READY="${work}/ready"
 RELEASE="${work}/release"
 WORD="${work}/word"
-export RAN STARTS READY RELEASE WORD
+UV_PROJECT="${repo}"
+export RAN STARTS READY RELEASE WORD UV_PROJECT
 
 # Starts a holder in the main worktree and returns once its command holds the
 # turn; the command holds it until a line reaches release.
@@ -317,24 +333,23 @@ case "${said}" in
     *"[turn] ERROR timed out after 1s"*) ;;
     *) fail "a heavy run was not stopped at the bound its task set: ${said}" ;;
 esac
+# A share waits for a run that holds the whole turn and names it, as a whole
+# run does; so do this checkout's runs of tests, narrowed to one process by a
+# label or of every test of a tree.
 hold
 rm -f "${RAN}" "${STARTS}"
-light_run=1 MISE_TASK_LOCK_TIMEOUT=1s mise -C "${second}" run weighed >/dev/null 2>&1 ||
-    fail "a light run of a task that weighs its own waited for the turn"
-[ "$(cat "${RAN}")" = outside ] || fail "a light run's body ran other than once, outside the turn: $(cat "${RAN}")"
+status=0
+said="$(turn_share=1 MISE_TASK_LOCK_TIMEOUT=1s mise -C "${second}" run weighed 2>&1)" || status=$?
+[ "${status}" -ne 0 ] || fail "a share ran beside a run that holds the whole turn"
+names_holder "${said}" "a share that gave up waiting"
+[ ! -e "${RAN}" ] || fail "a share's body ran while a run held the whole turn"
+rm -f "${STARTS}"
 status=0
 said="$(MISE_TASK_LOCK_TIMEOUT=1s mise -C "${second}" run weighed 2>&1)" || status=$?
-[ "${status}" -ne 0 ] || fail "a heavy run of a task that weighs its own ran beside the holder"
-names_holder "${said}" "a heavy run that gave up waiting"
-
-# This checkout's test task and a file task alike run tests a label narrows
-# beside the holder, and wait for it with every test of a tree.
-MISE_TASK_LOCK_TIMEOUT=1s mise -C "${repo}" run -q test hq.platform.core.tests.test_test_runner.BrowserTestTests \
-    >"${work}/light" 2>&1 || { cat "${work}/light" >&2; fail "a narrow test run waited for the turn, or failed"; }
-MISE_TASK_LOCK_TIMEOUT=1s mise -C "${repo}" run -q lint:source tools.gate.tests.test_turn.NarrowRunTests \
-    >"${work}/light" 2>&1 || { cat "${work}/light" >&2; fail "a narrow source test run waited for the turn, or failed"; }
-one_line "${work}/light" "a narrow source test run, outside the turn,"
-for task in "test hq.platform.core.tests" lint:source; do
+[ "${status}" -ne 0 ] || fail "a whole run of a task that weighs its own ran beside the holder"
+names_holder "${said}" "a whole run that gave up waiting"
+for task in "test hq.platform.core.tests.test_test_runner.BrowserTestTests" \
+    "lint:source tools.gate.tests.test_turn.WeightTests" "test hq.platform.core.tests" lint:source; do
     status=0
     # shellcheck disable=SC2086  # the task and its label, as typed
     said="$(MISE_TASK_LOCK_TIMEOUT=1s mise -C "${repo}" run -q ${task} 2>&1)" || status=$?
@@ -342,3 +357,79 @@ for task in "test hq.platform.core.tests" lint:source; do
     names_holder "${said}" "mise run ${task}"
 done
 release
+
+# Shares run side by side up to the budget, each once, in its share: one of
+# two holds its share in the main worktree while one of two in the other runs
+# beside it. One of four waits and names the share it waits for, and so does
+# a whole run.
+fifo linger
+rm -f "${RAN}" "${STARTS}"
+turn_share=2 LINGER="${work}/linger" mise -C "${main}" run weighed >"${work}/share" 2>&1 &
+sharer=$!
+until [ -s "${RAN}" ]; do
+    kill -0 "${sharer}" 2>/dev/null || fail "a share failed: $(cat "${work}/share")"
+    sleep 0.1
+done
+[ "$(cat "${RAN}")" = outside ] || fail "a share's body ran other than once, outside the whole turn: $(cat "${RAN}")"
+turn_share=2 STARTS="${work}/starts-beside" MISE_TASK_LOCK_TIMEOUT=2s mise -C "${second}" run weighed \
+    >"${work}/out" 2>&1 || fail "two shares within the budget did not run side by side: $(cat "${work}/out")"
+one_line "${work}/out" "a share"
+names_share() {
+    case "$1" in
+        *"held by weighed in "*"/main (pid "*) ;;
+        *) fail "$2 does not name the share it waits for: $1" ;;
+    esac
+}
+status=0
+said="$(turn_share=4 STARTS="${work}/starts-past" MISE_TASK_LOCK_TIMEOUT=1s mise -C "${second}" run weighed 2>&1)" ||
+    status=$?
+[ "${status}" -ne 0 ] || fail "a share past the budget ran"
+names_share "${said}" "a share past the budget"
+status=0
+said="$(MISE_TASK_LOCK_TIMEOUT=1s mise -C "${second}" run quick 2>&1)" || status=$?
+[ "${status}" -ne 0 ] || fail "a whole run ran beside a share"
+names_share "${said}" "a whole run waiting for a share"
+
+# A whole run waiting at the gate lets the shares it waits for end and lets no
+# new one start, so shares never starve it.
+fifo waiting
+rm -f "${RAN}"
+mise -C "${second}" run gated >"${work}/waiting" 2>&1 &
+waiter=$!
+exec 8<"${work}/waiting"
+while IFS= read -r line <&8; do
+    case "${line}" in
+        *"waiting for lock heavy"*) break ;;
+    esac
+done
+status=0
+said="$(turn_share=1 STARTS="${work}/starts-late" MISE_TASK_LOCK_TIMEOUT=1s mise -C "${second}" run weighed 2>&1)" ||
+    status=$?
+[ "${status}" -ne 0 ] || fail "a share started while a whole run waited for the turn"
+case "${said}" in
+    *"lock gate, held by gated in "*"/second (pid "*) ;;
+    *) fail "a share that gave up behind a waiting whole run does not name it: ${said}" ;;
+esac
+echo go >"${work}/linger"
+wait "${sharer}" || fail "the share failed: $(cat "${work}/share")"
+one_line "${work}/share" "a share"
+while IFS= read -r line <&8; do :; done
+exec 8<&-
+wait "${waiter}" || fail "the whole run waiting for the shares failed"
+[ "$(cat "${RAN}")" = ran ] || fail "the whole run that waited for the shares did not run once"
+
+# A share's run is stopped at its task's bound.
+fifo never
+rm -f "${STARTS}"
+status=0
+said="$(turn_share=1 BOUND=1s LINGER="${work}/never" mise -C "${main}" run --timeout 30s weighed 2>&1)" || status=$?
+[ "${status}" -ne 0 ] || fail "a share that outlived its task's bound was not stopped"
+case "${said}" in
+    *"[weighed] ERROR timed out after 1s"*) ;;
+    *) fail "a share was not stopped at the bound its task set: ${said}" ;;
+esac
+
+# This checkout's narrow run of source tests takes its share and ends with one line.
+MISE_TASK_LOCK_TIMEOUT=5s mise -C "${repo}" run -q lint:source tools.gate.tests.test_turn.WeightTests \
+    >"${work}/light" 2>&1 || { cat "${work}/light" >&2; fail "a narrow source test run failed"; }
+one_line "${work}/light" "a narrow source test run, in its share,"

@@ -83,6 +83,13 @@ class CatalogNamesTests(SimpleTestCase):
         gate = CatalogLayoutTests.render()
         self.assertEqual(look.catalog_pages(names), {name: gate[name] for name in names})
 
+    def test_the_gallery_is_drawn_as_the_catalog_gate_draws_it(self):
+        from hq.platform.core.tests.browser import catalog
+
+        self.assertEqual(_named("gallery"), ["gallery"])
+        self.assertEqual(look.catalog_pages(["gallery"]), {"gallery": catalog.page("gallery")})
+        self.assertEqual(look.catalog_pages(["gallery", "part/notice-error"]).keys(), {"gallery", "part/notice-error"})
+
     def test_a_name_that_begins_entries_is_every_one_of_them(self):
         from hq.platform.core.tests.browser.catalog import CATALOG
 
@@ -111,11 +118,11 @@ class CatalogNamesTests(SimpleTestCase):
     def test_no_other_page_takes_an_entry_s_name(self):
         # The catalog is read only for a name no other page is, so a page by that name would shadow the entry.
         from hq.platform.core.tests import task
-        from hq.platform.core.tests.browser.catalog import CATALOG
+        from hq.platform.core.tests.browser.catalog import CATALOG, PAGES
         from hq.platform.core.tests.look_posts import post_names
 
         named = [*look._named(), *post_names()]
-        for name in {*CATALOG, *(name.split("/")[0] for name in CATALOG)}:
+        for name in {*PAGES, *(name.split("/")[0] for name in CATALOG)}:
             with self.subTest(name=name), self.assertRaises(task.PageRefused):
                 task.pages([name], [], named)
 
@@ -254,6 +261,46 @@ class RefusedRuleTests(SimpleTestCase):
                 said = look.no_rule(check)
                 self.assertIn(f"--rule {holder}", said)
                 self.assertIn(holder, look._rules())
+
+    def test_every_rule_the_gate_holds_without_script_is_a_rule_by_its_name(self):
+        """A rule CI fails on is run locally under the name its failure prints."""
+
+        from hq.platform.core.tests.browser.layout import LayoutBrowserTests
+
+        rules = look._rules()
+        self.assertIn("no_column_is_narrower_than_its_words", rules)
+        held = LayoutBrowserTests.unscripted_rules()
+        self.assertIn("no_column_is_narrower_than_its_words", held)
+        self.assertEqual(sorted(set(held) - set(rules)), [])
+
+    def test_a_rule_held_only_without_script_names_the_command_that_runs_it(self):
+        from hq.platform.core.tests.browser.layout import LayoutBrowserTests
+
+        held = LayoutBrowserTests.unscripted_rules()
+        self.assertEqual(
+            look.held_without_script_only("a_table_frame_spans_its_box"), held["a_table_frame_spans_its_box"]
+        )
+        # One the survey reads too is held once script has run, as is one that takes a page's name alone.
+        self.assertEqual(look.held_without_script_only("no_column_is_narrower_than_its_words"), [])
+        self.assertEqual(look.held_without_script_only("no_block_breaks_a_paragraph"), [])
+
+    def test_naming_rules_reads_no_probe_the_survey_reads_only_as_it_runs(self):
+        """Such a probe reads what the image lacks (the lint tools), so the
+        image, and the composed suite, name every rule without it."""
+
+        from dataclasses import replace
+
+        from hq.platform.core.tests.browser import survey
+
+        def unread():
+            raise AssertionError("A probe the survey reads only as it runs was read to name a rule.")
+
+        lazy = {name: replace(check, probe=unread) for name, check in survey.CHECKS.items() if callable(check.probe)}
+        with mock.patch.dict(survey.CHECKS, lazy):
+            for rule in look._rules():
+                look.held_without_script_only(rule)
+            for check in [*survey.survey_checks("/", 0), "example-no-such-check"]:
+                look.no_rule(check)
 
     def test_a_name_that_is_no_check_names_no_gate_test(self):
         said = look.no_rule("example-no-such-check")

@@ -96,8 +96,9 @@ def ranked(columns: tuple[TableColumn, ...]) -> tuple[TableColumn, ...]:
 
     Ranks a list declares stand as declared. Otherwise they follow one rule:
     ``optional-col`` columns first, then the rest, each from the far end; never
-    the column that names the row, a key column, or the closing figure of a
-    table that marks no key.
+    the column that names the row, a key column, a column of the row's
+    controls, which stand beneath its words in a narrow box instead, or the
+    closing figure of a table that marks no key.
     """
 
     if columns and columns[0].drop:
@@ -109,7 +110,8 @@ def ranked(columns: tuple[TableColumn, ...]) -> tuple[TableColumn, ...]:
 
     def spare(index: int, column: TableColumn) -> bool:
         closing_figure = not keyed and index == last and column.kind == "numeric"
-        return index > 0 and "key-col" not in column.css.split() and not closing_figure
+        controls = column.kind == "control"
+        return index > 0 and "key-col" not in column.css.split() and not closing_figure and not controls
 
     far_first = [index for index in reversed(range(len(columns))) if spare(index, columns[index])]
     order = sorted(far_first, key=lambda index: "optional-col" not in columns[index].css.split())

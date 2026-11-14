@@ -122,7 +122,7 @@ const primitives = [
     names: String.raw`(?:\.(?:data-table|row-detail|row-columns)(?![-\w])|(?<![-\w.#])(?:table|caption|thead|tbody|tfoot|tr|td|th)(?![-\w]))`,
     sheets: ["base", "cuts", "figures", "tables", "surfaces"],
     parts: [
-      "btn", "cell-line", "cell-part", "cell-whole", "cut", "external-link", "icon-link", "is-expanded", "kept-line", "line-list", "line-rest", "line-run", "muted",
+      "btn", "button-words", "cell-line", "cell-part", "cell-whole", "cut", "external-link", "icon-link", "is-expanded", "kept-line", "line-list", "line-rest", "line-run", "muted",
       "name-line", "narrow-more", "narrow-only", "part", "pill", "readout", "row-actions", "row-below", "row-gutter",
       "row-editor", "row-later", "row-less", "row-more", "select-column", "strut", "table-clamp", "table-scroll", "token", "visually-hidden", "whole",
     ],
@@ -156,7 +156,17 @@ const cellRoles = [
 // that read the mark would miss the box no script measures.
 const narrowMark = String.raw`/\.data-table(?![-\w])[^\s,>+~]*\[data-narrow\]/`;
 const narrowMessage = "a table's narrow box is `--box` (`@container style(--box: narrow)` or `whole`), never the script's `[data-narrow]` mark, which a page with no script never gets";
-const selectorRule = (patterns, message) => [patterns, { splitList: true, message: (selector) => (new RegExp(narrowMark.slice(1, -1)).test(selector) ? narrowMessage : message(selector)) }];
+// A child of one parent that `:is()` asks to be a child of another: both
+// parents are the one element's, so the selector names a parent twice and
+// matches nothing a page draws (`.btn > :is(.words > .token)`).
+const childInIs = String.raw`/>\s*:is\([^()]*>/`;
+const childInIsMessage = "a child combinator before `:is()` and another inside it ask one element's parent to be both: write each path whole inside `:is()` (`:is(.a > .b, .a > .c > .b)`)";
+const selectorMessage = (selector, message) => {
+  if (new RegExp(narrowMark.slice(1, -1)).test(selector)) return narrowMessage;
+  if (new RegExp(childInIs.slice(1, -1)).test(selector)) return childInIsMessage;
+  return message(selector);
+};
+const selectorRule = (patterns, message) => [[...patterns, childInIs], { splitList: true, message: (selector) => selectorMessage(selector, message) }];
 
 // A sheet that draws a primitive may write that one's variants.
 const restyledBySheet = [...new Set(primitives.flatMap((each) => each.sheets))].map((name) => ({
@@ -193,6 +203,11 @@ export default {
     // anywhere else stays a light-mode value on a dark page.
     "color-no-hex": true,
     "color-named": "never",
+    // A palette is a `light-dark()` token picked by `color-scheme`. A rule
+    // under the system's preference skips an operator's chosen theme, and the
+    // browser gate paints each palette through `color-scheme`, so it would
+    // never read that rule either.
+    "media-feature-name-disallowed-list": ["prefers-color-scheme"],
     "function-disallowed-list": [`/^(${colorFunctions})$/i`],
     "declaration-property-value-disallowed-list": disallowedValues({
       ...literalFontSize,

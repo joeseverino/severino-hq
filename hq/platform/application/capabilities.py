@@ -8,7 +8,8 @@ from typing import Annotated, Any, Literal, NamedTuple, TypedDict
 from django.db import transaction
 from pydantic import ConfigDict, with_config
 
-from hq.platform.core.audit import audit_connection, audit_operation
+from hq.platform.core.audit import audit_connection, audit_operation, record_event, tallied
+from hq.platform.core.models import AuditLog
 from hq.platform.core.tracing import note, span
 lazy from hq.platform.core.doorbell import ask_soon
 
@@ -515,6 +516,10 @@ def _consent(
     return None, principal
 
 
+# What the act of a write that recorded no row of its own is filed under.
+CAPABILITY_AUDIT_TYPE = "Capability"
+
+
 def _run(
     spec: CapabilitySpec,
     command: Any,
@@ -540,8 +545,18 @@ def _run(
     with (
         audit_operation(operation=spec.name, principal=principal),
         audit_connection(getattr(command, "connection_ref", "") or ""),
+        tallied() as written,
     ):
         result = spec.handler(command, principal=principal, **arguments)
+        if spec.effect != "read" and not written:
+            # A write whose handler recorded no row still leaves its act: what
+            # ran, under the row's operation, and how it ended.
+            record_event(
+                action=AuditLog.Action.DONE if result.get("ok", True) else AuditLog.Action.FAILED,
+                type_label=CAPABILITY_AUDIT_TYPE,
+                message=str(result.get("message") or ""),
+                required=True,
+            )
     if spec.effect != "read":
         # Every write a person or credential makes passes here, so this is the
         # one place that starts the controller at once rather than at the next

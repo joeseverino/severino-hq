@@ -6,7 +6,7 @@ or a command step runs through ``execute_capability``, an investigation is the
 trace ``action_links.INVESTIGATIONS`` declares, an offer reads its subject
 through the resource a topology node is read by, and "Check again" is this
 read narrowed to the finding's rule. An action none of these derives is left
-out. The machine API keeps the shared shape (``findings.serialize_finding``).
+out. What a finding says beside its actions is the API's (``findings.FindingFacts``).
 """
 
 from dataclasses import asdict
@@ -18,18 +18,27 @@ from hq.platform.application.action_links import INVESTIGATIONS, READ_NOW_CAPABI
 from hq.platform.application.answer_fields import Pinned, SchemaVersion
 from hq.platform.application.capabilities import capability_registry
 from hq.platform.application.describe import Describe
-from hq.platform.application.finding_model import Finding, OperatorStep
+from hq.platform.application.finding_model import Finding
 from hq.platform.application.findings import (
     NODE_READ,
-    FindingEvidence,
+    FindingFacts,
     FindingsSummary,
-    SerializedFinding,
+    RemedyEffect,
+    finding_facts,
     narrowed_findings,
-    serialize_finding,
 )
 from hq.platform.application.json_schemas import Written
 from hq.platform.application.security import Principal
-from hq.platform.application.workflow_contracts import ActionLink, WorkflowOutcome
+from hq.platform.application.workflow_contracts import (
+    ActionLink,
+    PlanId,
+    PlanLabel,
+    StepLabel,
+    StepPhase,
+    StepState,
+    StepSummary,
+    WorkflowOutcome,
+)
 
 # The shape get_findings answers in, apart from the API's: it moves when this shape does.
 AGENT_FINDINGS_SCHEMA_VERSION = 3
@@ -118,57 +127,30 @@ type Call = CapabilityCall | TopologyCall | RecordCall | FindingsCall
 class RemedyCall(CapabilityCall):
     """A command that would fix it."""
 
-    effect: Annotated[
-        str,
-        Describe(
-            "What running it does, in its command's own terms: `read`, `remote_write` or "
-            "`infrastructure_change`. A `destructive` one is never suggested."
-        ),
-    ]
+    effect: RemedyEffect
 
 
 @with_config(_CLOSED)
 class AgentWorkflowStep(TypedDict):
-    phase: Annotated[
-        str,
-        Describe(
-            "What the step is: `act` runs a remedy, `verify` checks it worked, `run` is an exact command the "
-            "operator runs, `do` an instruction in words, `cannot` why it cannot be done from HQ."
-        ),
-    ]
-    label: Annotated[str, Describe("The step's heading; empty when its summary says it all.")]
-    summary: Annotated[str, Describe("The step in full; empty when its label says it.")]
-    state: Annotated[
-        str,
-        Describe(
-            "Where it stands: `recommended` to do now, `after_action` once the step before is done, "
-            "`available` at any time, `operator` for the operator to do by hand, `blocked` where it cannot be done."
-        ),
-    ]
+    phase: StepPhase
+    label: StepLabel
+    summary: StepSummary
+    state: StepState
     calls: Annotated[list[Call], Describe("The calls that carry it out, in order.")]
 
 
 @with_config(_CLOSED)
 class AgentWorkflow(TypedDict):
-    id: Annotated[str, Describe("The plan's id, the same at every read of the problem it resolves.")]
-    label: Annotated[str, Describe("The plan's heading.")]
+    id: PlanId
+    label: PlanLabel
     steps: Annotated[list[AgentWorkflowStep], Describe("Its steps, in the order they are taken.")]
     outcome: Annotated[dict[str, Any], Written(WorkflowOutcome)]
 
 
 @with_config(_CLOSED)
-class AgentFinding(TypedDict):
+class AgentFinding(FindingFacts):
     """One finding, its every action a tool call."""
 
-    id: Annotated[str, Describe("The problem's id, the same at every read while it is open.")]
-    rule: Annotated[str, Describe("The rule that found it, as the `rule` argument takes it.")]
-    subject: Annotated[str | None, Describe("The id of the topology node it is about; null when it has none.")]
-    scope: Annotated[str | None, Describe("The record type, reading type or check it is about as a whole.")]
-    affected_scopes: Annotated[list[str], Describe("Other record types or reading types it bears on.")]
-    title: Annotated[str, Describe("The problem, in a line.")]
-    severity: Annotated[str, Describe("How serious it is.")]
-    explanation: Annotated[str, Describe("Why it matters and what it rests on, in sentences.")]
-    evidence: Annotated[list[FindingEvidence], Describe("What it rests on, a labeled line each.")]
     remedies: Annotated[list[RemedyCall], Describe("The commands you may run that would fix it. None is destructive.")]
     offers: Annotated[list[RecordCall], Describe("Reads of its subject to make before acting.")]
     investigations: Annotated[
@@ -178,12 +160,6 @@ class AgentFinding(TypedDict):
         AgentWorkflow | None,
         Describe("The plan that resolves it, a fix and then the check that confirms it; null when it has neither."),
     ]
-    operator_steps: Annotated[
-        list[Annotated[dict[str, Any], Written(OperatorStep)]],
-        Describe("What the operator does by hand to resolve it, in order. HQ never runs these."),
-    ]
-    no_help_reason: Annotated[str | None, Describe("Why HQ can neither run a fix nor name an exact command for it.")]
-    since: Annotated[str | None, Describe("When it was first seen open, an ISO 8601 instant; null where unrecorded.")]
 
 
 @with_config(_CLOSED)
@@ -251,18 +227,9 @@ def _unique[T: Call](calls: list[T | None]) -> list[T]:
 
 
 def agent_finding(finding: Finding) -> AgentFinding:
-    shared: SerializedFinding = serialize_finding(finding)
     workflow = finding.workflow
     return {
-        "id": shared["id"],
-        "rule": shared["rule"],
-        "subject": shared["subject"],
-        "scope": shared["scope"],
-        "affected_scopes": shared["affected_scopes"],
-        "title": shared["title"],
-        "severity": shared["severity"],
-        "explanation": shared["explanation"],
-        "evidence": shared["evidence"],
+        **finding_facts(finding),
         "remedies": [
             {**_command(remedy.label, remedy.capability, remedy.target), "effect": remedy.effect}
             for remedy in finding.remedies
@@ -288,9 +255,6 @@ def agent_finding(finding: Finding) -> AgentFinding:
             if workflow is not None
             else None
         ),
-        "operator_steps": shared["operator_steps"],
-        "no_help_reason": shared["no_help_reason"],
-        "since": shared["since"],
     }
 
 

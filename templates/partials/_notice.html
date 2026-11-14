@@ -5,5 +5,6 @@ notice; title is its first line, in bold, given as the option or, when the
 page composes it, as the {% title %} part after the body; css a class of the
 page's beside the part's; each data_* option a data- attribute (True draws it
 bare). An error is an alert, any other a status. Drawn with no body it is the
-frame a script fills (notice_tags.py).
-{% endcomment %}<div class="{{ classes }}" role="{{ role }}"{{ data }}>{% if title %}<strong>{{ title|breakable }}</strong>{% endif %}{{ content|safe }}</div>
+frame a script fills (notice_tags.py). A notice is words, so it is .prose: a
+link in it is drawn as a link among words (base.css).
+{% endcomment %}<div class="{{ classes }} prose" role="{{ role }}"{{ data }}>{% if title %}<strong>{{ title|breakable }}</strong>{% endif %}{{ content|safe }}</div>

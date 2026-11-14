@@ -5,17 +5,33 @@ its plant (test_browser_probes holds the two lists to each other). A plant
 that is a flex row sets its ``align-items``, so the row does not stretch its
 items to one height and hide the defect."""
 
+import io
 import json
+import os
+import re
+import shlex
+import subprocess
+import tempfile
+import unittest
+import zipfile
+from contextlib import redirect_stdout
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, override
+from unittest import mock
 
-from hq.platform.application.pages import Page, PageAction
+from django.conf import settings
+
+from hq.platform.core.tests.browser import gate
+from hq.platform.core.tests.browser.catalog import CATALOG
 from hq.platform.core.tests.browser.gate import add_css, with_script
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
 from hq.platform.core.tests.browser.probes.shifts import CLS_LIMIT, LAYOUT_SHIFTS
+from hq.platform.core.tests.browser.probes.tables import TABLES
 from hq.platform.core.tests.browser.reading import probe
 from hq.platform.core.tests.browser.selectors import SELECTORS
-from hq.platform.core.tests.browser.widths import WIDE
+from hq.platform.core.tests.browser.survey import CHECKS
+from hq.platform.core.tests.browser.widths import SPARSE_WIDTHS, WIDE
 
 
 @dataclass(frozen=True)
@@ -62,24 +78,6 @@ PLANTS = {
         '<span style="white-space: nowrap">Example value far wider than its box</span></div>'
     ),
     "cells": Plant(_TABLE.format('<div style="inline-size: 20rem">Example</div>')),
-    # A row's button moved off its row's first line.
-    "actions on the first line": Plant(
-        '<table class="data-table"><tbody><tr><td>Example</td><td class="row-actions">'
-        '<button type="button" class="btn compact" style="translate: 0 0.5rem">Example</button></td></tr></tbody></table>'
-    ),
-    # A row's button set inside its cell's whole padding, as a button taller
-    # than a line is without the row's rule, so its row outgrows a row of words.
-    "actions no taller than the row": Plant(
-        '<table class="data-table"><tbody><tr><td>Example</td><td class="row-actions" style="padding-block: var(--row-pad)">'
-        '<button type="button" class="btn compact">Example</button></td></tr></tbody></table>'
-    ),
-    # A row's two buttons one above the other in a cell of a table with room
-    # for them side by side.
-    "row actions stacked with room": Plant(
-        '<table class="data-table"><tbody><tr><td>Example</td><td class="row-actions">'
-        '<button type="button" class="btn compact" style="display: block">Example one</button>'
-        '<button type="button" class="btn compact" style="display: block">Example two</button></td></tr></tbody></table>'
-    ),
     "broken words": Plant(
         _TABLE.format('<span style="display: block; inline-size: 3ch; word-break: break-all">Example</span>')
     ),
@@ -116,9 +114,11 @@ PLANTS = {
         '<p><code style="display: inline-block; inline-size: 4ch; block-size: 1lh; background: #eee">Example overrun</code></p>'
     ),
     "tables": Plant(_TABLE.format("Example").replace('style="', 'style="display: block; ', 1)),
+    # Held only once script has run, which alone fits a table to its box.
     "tables fit": Plant(
         '<div class="table-scroll" style="inline-size: 10rem"><table class="data-table" style="min-inline-size: 20rem">'
-        "<tbody><tr><td>Example</td></tr></tbody></table></div>"
+        "<tbody><tr><td>Example</td></tr></tbody></table></div>",
+        scripted=True,
     ),
     # A column hidden while a cell still spans it, so the table keeps its width.
     "unseen columns": Plant(
@@ -149,13 +149,7 @@ PLANTS = {
     # A clamp the box's display leaves inert.
     "past the clamp": Plant(f'<p style="display: block; -webkit-line-clamp: 1; inline-size: 8rem">{_LINES}</p>'),
     "cut decisions": Plant(
-        f'<p class="attention-detail" style="max-block-size: 1.5em; overflow: hidden; inline-size: 8rem">{_LINES}</p>'
-    ),
-    # An item's meaning held to a measure, an empty band between it and its buttons.
-    "short of its buttons": Plant(
-        '<table class="data-table queue-table"><tbody><tr class="queue-row" data-attention-item>'
-        '<td class="queue-what"><p class="attention-detail" style="max-inline-size: 8rem">Example</p></td>'
-        '<td class="queue-act"><a class="btn" href="/">Example</a></td></tr></tbody></table>'
+        f'<p data-attention-detail style="max-block-size: 1.5em; overflow: hidden; inline-size: 8rem">{_LINES}</p>'
     ),
     # A name in a sentence cut at a cap, as a cell cuts its own identifier.
     "cut code in text": Plant(
@@ -174,12 +168,14 @@ PLANTS = {
         '<span style="display: block; max-inline-size: 6ch; overflow: hidden; text-overflow: ellipsis; '
         'white-space: nowrap">Example value cut short</span></td><td>Example</td></tr></tbody></table></div>'
     ),
-    # A value cut with an ellipsis in a row with no toggle to open it.
+    # A value cut with an ellipsis in a row with no toggle to open it, and no
+    # title, which only script gives a cut.
     "cut and closed": Plant(
         _TABLE.format(
             '<span style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">'
             "an-example-value-far-too-long-for-its-cell</span>"
-        )
+        ),
+        scripted=True,
     ),
     # The same in a row drawn open, held past the stylesheet's lifting of an
     # open row's cuts.
@@ -189,143 +185,19 @@ PLANTS = {
             'white-space: nowrap !important">an-example-value-far-too-long-for-its-cell</span>'
         )
     ),
-    "changes": Plant(
-        '<p>Example {% include "partials/_change.html" with from="1.0" to="2.0" %}</p>',
-        css=".change-arrow { position: relative; inset-block-start: .2em; }",
-    ),
-    "chips": Plant('<p>Example words <code style="vertical-align: -.2em">example</code> and more words</p>'),
-    # A band's linked count set taller than the zero beside it, as the
-    # Agents card's counts were.
-    "fact rows": Plant(
-        '{% facts layout="band" %}{% fact "Example rules" value=0 %}'
-        '{% fact "Example refused" %}<a href="#" style="display: inline-block; vertical-align: baseline; line-height: 3rem">13</a>'
-        "{% endfact %}{% endfacts %}"
-    ),
-    # Two short facts at the band's start, each track as wide as what it
-    # says, beside an empty end.
-    "facts across their band": Plant(
-        '{% facts layout="band" %}{% fact "Example rules" value=0 %}{% fact "Example refused" value=13 %}{% endfacts %}',
-        css=".facts-band { grid-template-columns: repeat(auto-fit, minmax(var(--fact-min), max-content)); justify-content: start; }",
-    ),
-    # A detail laid out as a grid, which sets each run of its words apart.
-    "fact details in words": Plant(
-        '{% facts layout="band" %}{% fact "Example host" %}Up{% detail %}on <a href="#">example-host</a> today'
-        "{% endfact %}{% endfacts %}",
-        css=".fact-detail { display: grid; }",
-    ),
-    # A detail's link set a target tall by its top, off the words' baseline.
-    "links in a fact's detail": Plant(
-        '{% facts layout="band" %}{% fact "Example host" %}Up{% detail %}<small>on <a href="#">example-host</a> today</small>'
-        "{% endfact %}{% endfacts %}",
-        css=".fact-detail a { display: inline-block; vertical-align: top; line-height: var(--target-min); }",
-    ),
-    # Facts in a frame that keeps no inset, as the container's Upgrade card's were.
-    "facts inside their frame": Plant(
-        '<div style="border: 1px solid; padding: 0">{% facts %}{% fact "Example" value="One" %}{% endfacts %}</div>'
-    ),
-    # A name cut where it overruns, set in a line on the bottom edge it clips at.
-    "raised text": Plant(
-        '<p>Example words <span style="display: inline-block; overflow: hidden">example-name</span> and more</p>'
-    ),
-    # A head whose lead control is hidden, which the menu never holds.
-    "heads": Plant(
-        '{% include "partials/_page_head.html" %}',
-        css=".page-actions > :first-child { display: none; }",
-        values={
-            "page": Page(
-                title="Example", actions=tuple(PageAction(name, f"/{name}/") for name in ("One", "Two", "Three"))
-            )
-        },
-    ),
-    # A section's heading set flush under the paragraph before it.
-    "section heads": Plant(
-        '<div><p style="margin: 0">Example</p><div class="section-head" style="margin-block-start: 0">'
-        "<h2>Example</h2></div><p>Example</p></div>"
-    ),
-    # What sits beside a short heading held narrower than its one line.
-    "section asides": Plant(
-        '<header class="section-head"><h2>Example</h2>'
-        '<div style="flex: none; inline-size: 4rem">Example aside words</div></header>'
-    ),
-    # A filled block in a section's frame, held in the frame's padding.
-    "inset in the frame": Plant('{% section "Example" %}<div style="background: #eee">Example</div>{% endsection %}'),
-    # Two sections side by side, their heads above their frames, one held
-    # taller by what stands beside its heading than any control is. A head
-    # the stylesheet stands inside its frame leaves the frames together.
-    "frames in a row": Plant(
-        '<div style="display: flex; align-items: start; gap: 1rem">'
-        '{% section "Example one" head="above" %}<p>Example</p>{% aside %}'
-        '<span style="display: inline-block; block-size: 4rem">Example</span>{% endsection %}'
-        '{% section "Example two" head="above" %}<p>Example</p>{% endsection %}</div>'
-    ),
     # A flow whose first member the stylesheet paints after the second.
     "flows in reading order": Plant(
         '<div class="section-flow"><section style="order: 1"><p>Example</p></section>'
         "<section><p>Example two</p></section></div>"
-    ),
-    # A wide member (anything not a section) written between two short ones,
-    # splitting two that would share a row.
-    "flows share their rows": Plant(
-        '<div class="section-flow"><section><p>Example</p></section><p>Example across the row</p>'
-        "<section><p>Example two</p></section></div>"
-    ),
-    # A frame stopped at its words' width in the page's column.
-    "frames span their column": Plant('<div class="card" style="inline-size: fit-content">Example</div>'),
-    # A head that spreads its items, a marker set before its heading.
-    "titles at the head's start": Plant(
-        '<header class="section-head"><span style="flex: none">x</span><h2>Example</h2></header>'
     ),
     # A select narrower than its chosen value, and a button whose words wrap.
     "control words on one line": Plant(
         '<select aria-label="Example" style="inline-size: 5rem"><option>Example group name</option></select>'
         '<button type="button" class="btn" style="inline-size: 5rem; white-space: normal">Example label words</button>'
     ),
-    # A toolbar's control held taller than the one beside it.
-    "one height to a row of controls": Plant(
-        '<div style="display: flex; align-items: center; gap: 1rem"><button type="button" class="btn">Example</button>'
-        '<button type="button" class="btn" style="min-block-size: calc(var(--control-size) + 4px)">Example</button></div>'
-    ),
-    # A select left to the browser's own arrow.
-    "select arrows": Plant(
-        '<select aria-label="Example" style="appearance: auto; background-image: none"><option>Example</option></select>'
-    ),
-    # A link among words whose name is set in a box of its own.
-    "link underlines": Plant(
-        '<p>Example <a href="#"><span style="display: inline-block; text-decoration: none">example-name</span></a></p>'
-    ),
     # A link alone on its line, underlined at rest.
     "links at rest": Plant('<div><a href="#" style="text-decoration: underline">Example</a></div>'),
-    # A link whose line runs under the comma after its name.
-    "lined past the name": Plant('<p>Runs on <a href="#">example-host,</a> container example.</p>'),
     "dialogs": Plant('{% include "partials/_modal.html" with id="orphan" title="Orphan" %}'),
-    # A list of names wrapping beside another pair of a four-column list.
-    "lists of facts": Plant(
-        '{% facts %}{% fact "Names" %}<span class="code-list"><code>example-one</code><code>example-two</code>'
-        '<code>example-three</code></span>{% endfact %}{% fact "Other" value="Example" %}{% endfacts %}',
-        css=".facts-list { grid-template-columns: 5rem 6rem 5rem 6rem } .facts-list > .fact { grid-column: span 2 !important }",
-    ),
-    # A card of a few facts across the page, a section beside it in the
-    # page's column rather than sharing its row; and a section whose short
-    # lines stack down its start under a table, beside an empty frame.
-    "frames filled": Plant(
-        '{% card label="Example" %}{% facts %}{% fact "Example" value="One" %}{% endfacts %}{% endcard %}'
-        '{% section "Example" %}<p>Example</p>{% endsection %}'
-        '{% section "Example stack" %}<ul>' + "<li>Example</li>" * 8 + "</ul>"
-        '<table class="data-table"><tbody><tr><td>Example</td><td>Example</td><td>Example</td></tr></tbody></table>'
-        "{% endsection %}"
-    ),
-    # A folded section whose steps sit bare on the page, closed as most are.
-    "bare folds": Plant(
-        '<details class="section-fold"><summary><h2>Example</h2></summary><p>Example step</p></details>'
-    ),
-    # A card's heading dressed as a kicker.
-    "headings in capitals": Plant('<div class="card"><h2 style="text-transform: uppercase">Example</h2></div>'),
-    # A cell's Change link set in the line of the name before it.
-    "quiet links in the line": Plant(
-        _TABLE.format(
-            '<a href="/example/">Example</a> <a class="subtle-link" href="/example/" style="display: inline">Change</a>'
-        )
-    ),
     "gutter": Plant('<div style="inline-size: calc(100% + 2rem)">Example</div>'),
     # A box cut to four lines that scrolls the rest, with no cap that says so.
     "audit": Plant(
@@ -351,6 +223,47 @@ PLANTS = {
         '<span class="reading-mark">x</span><span style="display: block">Example reading</span></div></div>',
         path="/",
     ),
+    # A row's two buttons in a column beside its words, which wrap a few to a
+    # line in a table too narrow for both.
+    "row actions beside squeezed words": Plant(
+        '<table class="data-table" style="inline-size: 16rem"><tbody><tr>'
+        f"<td>{_LINES}</td>"
+        '<td class="row-actions" style="white-space: nowrap"><button type="button" class="btn compact">Example one</button> '
+        '<button type="button" class="btn compact">Example two</button></td></tr></tbody></table>'
+    ),
+    # A row in a narrow box whose button shows only in a whole box, so in the
+    # narrow one it waits behind the row's toggle.
+    "row actions behind the toggle": Plant(
+        '<table class="data-table" style="--box: narrow"><tbody><tr>'
+        '<td>Example</td><td class="row-actions">'
+        '<button type="button" class="btn compact example-held">Example</button></td></tr></tbody></table>',
+        css="@container style(--box: narrow) { .example-held { display: none; } }",
+    ),
+    # A button's word drawn at no size, a glyph standing in its place.
+    "words swapped for a glyph": Plant(
+        '<button type="button" class="btn compact example-glyph" style="font-size: 0">Example</button>',
+        css='.example-glyph::before { content: "\\00d7" / ""; font-size: 1rem; }',
+    ),
+    # A button's words drawn by `breakable` straight into its flex box.
+    "control words in one box": Plant(
+        '{% load value_tags %}<button type="button" class="btn compact">{{ words|breakable }}</button>',
+        values={"words": "Open example-host"},
+    ),
+    # A row's words balanced, every line ending short of the room beside it,
+    # and a row's words held to a column narrower than its button leaves them.
+    "row words to the end of their line": Plant(
+        '<table class="data-table"><tbody><tr><td><p style="inline-size: 20rem; text-wrap: balance">'
+        "Example words enough to run over two lines of a row with room to spare</p></td></tr>"
+        '<tr><td style="inline-size: 12rem"><p>Example words enough to run over lines of a row with room</p></td>'
+        '<td style="inline-size: 30rem; text-align: right"><button type="button" class="btn compact">Example</button></td></tr>'
+        "</tbody></table>"
+    ),
+    # A folded row a rule draws as a line of its own.
+    "folded rows stay folded": Plant(
+        '<table class="data-table"><tbody><tr id="example-family" data-folds><td>Example family</td></tr>'
+        '<tr data-folded="example-family" style="display: flex"><td>Example</td><td>Example</td></tr></tbody></table>',
+        scripted=True,
+    ),
     "contrast": Plant('<p style="color: #c8c8c8; background: #fff">Example words too faint to read</p>'),
     "fields": Plant(
         '<input type="text" aria-label="Example" style="border: 1px solid #fafafa; background: transparent">'
@@ -358,11 +271,6 @@ PLANTS = {
     "button edges": Plant('<button type="button" style="border: 1px solid var(--field-line)">Example</button>'),
     # A fill the light palette shows and the dark one drops.
     "fills": Plant('<p><span style="background: light-dark(#ccc, transparent)">Example</span></p>'),
-    # A filter bar's one choice grown over the bar.
-    "filter choices as wide as their options": Plant(
-        '{% load filter_tags %}{% filter_bar %}<select name="example" aria-label="Example" style="flex-grow: 1">'
-        "<option>Example</option></select>{% endfilter_bar %}"
-    ),
 }
 
 _FLOWS = (
@@ -376,13 +284,58 @@ _FLOWS = (
 # differs from, so a check that finds everything is caught as surely as one
 # that finds nothing.
 PASSES = {
-    # A row's two buttons as the row's rule sets them, beside a row of words
-    # alone: both rows a line of words tall.
-    "actions no taller than the row": Plant(
-        '<table class="data-table"><tbody><tr><td>Example</td><td class="row-actions">'
-        '<button type="button" class="btn compact">Example one</button>'
-        '<button type="button" class="btn compact">Example two</button></td></tr>'
-        '<tr><td>Example</td><td class="row-actions"></td></tr></tbody></table>'
+    # A row in a narrow box whose button leaves its cell and shows in the
+    # words' cell instead, as the region copies it beneath the row's words.
+    "row actions behind the toggle": Plant(
+        '<table class="data-table" style="--box: narrow"><tbody><tr>'
+        '<td>Example<div class="example-beneath">'
+        '<button type="button" class="btn compact">Example</button></div></td><td class="row-actions">'
+        '<button type="button" class="btn compact example-held">Example</button></td></tr></tbody></table>',
+        css=(
+            "@container style(--box: narrow) { .example-held { display: none; } }"
+            " @container style(--box: whole) { .example-beneath { display: none; } }"
+        ),
+    ),
+    # A link's word drawn at no size with no glyph in its place (a calendar's
+    # sliver), and a glyph button named by no word of its own.
+    "words swapped for a glyph": Plant(
+        '<a class="btn compact" href="#example" style="font-size: 0">Example</a>'
+        '<button type="button" class="btn compact example-glyph" aria-label="Example"></button>',
+        css='.example-glyph::before { content: "\\00d7" / ""; font-size: 1rem; }',
+    ),
+    # The same words held in one box, and a button of one word box alone.
+    "control words in one box": Plant(
+        '{% load value_tags %}<button type="button" class="btn compact">{{ words|button_words }}</button>'
+        '<button type="button" class="btn compact">{{ name|breakable }}</button>',
+        values={"words": "Open example-host", "name": "example-host"},
+    ),
+    # A folded row and one its opened family draws.
+    "folded rows stay folded": Plant(
+        '<table class="data-table"><tbody><tr id="example-family" data-folds><td>Example family</td></tr>'
+        '<tr data-folded="example-family"><td>Example</td><td>Example</td></tr>'
+        '<tr data-folded="example-family" data-open><td>Example</td><td>Example</td></tr></tbody></table>',
+        scripted=True,
+    ),
+    # The same words filling each line, and at a line's end what will not fit
+    # there: a name, words a no-break space holds to their count, a code
+    # chip whose padding takes the room its letters leave, a chip set as an
+    # inline block that moves whole, and a line the markup ends.
+    "row words to the end of their line": Plant(
+        '<table class="data-table"><tbody><tr><td><p style="inline-size: 20rem">'
+        "Example words enough to run over two lines of a row with room to spare</p>"
+        '<p style="inline-size: 20rem">Example words then an-example-name-too-long-for-the-end</p>'
+        '<p style="inline-size: 20rem">Example words then 1&nbsp;example&nbsp;held&nbsp;whole&nbsp;to&nbsp;its&nbsp;count</p>'
+        '<p style="inline-size: 20rem">Example words then <code style="padding-inline: 6rem">name</code></p>'
+        '<p style="inline-size: 20rem">Example words then <code style="display: inline-block">'
+        "example chip of words held whole</code></p>"
+        '<p style="inline-size: 20rem">Example words <br>then more</p>'
+        "</td></tr></tbody></table>"
+    ),
+    "row actions beside squeezed words": Plant(
+        '<table class="data-table" style="inline-size: 60rem"><tbody><tr>'
+        f"<td>{_LINES * 3}</td>"
+        '<td class="row-actions" style="white-space: nowrap"><button type="button" class="btn compact">Example one</button> '
+        '<button type="button" class="btn compact">Example two</button></td></tr></tbody></table>'
     ),
     # A primary button caught as its fill fades in, its ink already drawn:
     # it is read as it settles.
@@ -412,14 +365,6 @@ PASSES = {
         ' placeholder="Example names, vendors and notes">{% endfilter_bar %}</div>',
         values={"user": "root", "account": "an-example-service-account"},
     ),
-    # A fact inside its frame whose closed fold holds a line wider than the
-    # frame, laid out by a read before the check, as any earlier probe's may.
-    "facts inside their frame": Plant(
-        '<div style="border: 1px solid; padding: 1rem; inline-size: 16rem">{% facts %}{% fact "Example" %}'
-        '<details><summary>Example</summary><span style="white-space: nowrap">Example words far wider than'
-        " the frame that holds them</span></details>{% endfact %}{% endfacts %}</div>",
-        then="() => { for (const el of document.querySelectorAll('details *')) void el.scrollWidth; }",
-    ),
     # A box that scrolls what it holds, inside a closed fold: no scrollbar is
     # drawn there.
     "audit": Plant(
@@ -434,63 +379,22 @@ PASSES = {
             "Example label</span>"
         )
     ),
-    # Three short facts across a wide band, and five in a narrower one that
-    # wraps them, its last row short of the tracks its first fills.
-    "facts across their band": Plant(
-        '{% facts layout="band" %}{% fact "Example rules" value=0 %}{% fact "Example held" value=2 %}'
-        '{% fact "Example refused" value=13 %}{% endfacts %}<div style="inline-size: 40rem">{% facts layout="band" %}'
-        + "".join(f'{{% fact "Example {n}" value={n} %}}' for n in range(5))
-        + "{% endfacts %}</div>"
-    ),
     # A wide member ahead of five short ones that wrap onto a second row, and
     # two short ones sharing a row ahead of a wide one, the last short one of
     # each alone with nothing after it to share its row.
     "flows in reading order": Plant(_FLOWS),
-    # The same, then two cards of a few facts sharing a row, each growing into
-    # what the row leaves, as the connection panel's identity and link do.
-    "flows share their rows": Plant(
-        _FLOWS
-        + '<div class="section-flow">'
-        + "".join(
-            f'{{% card label="Example {n}" %}}{{% facts %}}{{% fact "Example" value="One" %}}{{% endfacts %}}{{% endcard %}}'
-            for n in range(2)
-        )
-        + "</div>"
-    ),
-    # A frame across its column, and frames that share a row.
-    "frames span their column": Plant(
-        '<div class="card">Example</div><div style="display: flex; gap: 1rem">'
-        '<div class="card">Example</div><div class="card">Example</div></div>'
-    ),
-    # The same card and section sharing a row in the flow, then the card
-    # alone in a flow of its own, across it as every member is; a section of
-    # two short lines, and one whose tall lines reach across it.
-    "frames filled": Plant(
-        '<div class="section-flow">{% card label="Example" %}{% facts %}{% fact "Example" value="One" %}'
-        '{% endfacts %}{% endcard %}{% section "Example" %}<p>Example</p>{% endsection %}</div>'
-        '<div class="section-flow">{% card label="Example" %}{% facts %}{% fact "Example" value="One" %}'
-        "{% endfacts %}{% endcard %}</div>"
-        '{% section "Example short" %}<p>Example</p><p>Example</p>{% endsection %}'
-        '{% section "Example across" %}' + f"<p>{_LINES * 4}</p>" * 4 + "{% endsection %}"
-    ),
-    "titles at the head's start": Plant(
-        '{% section "Example" %}<p>Example</p>{% aside %}<a href="#">Example</a>{% endsection %}'
-    ),
-    # A row's controls one above the other where its table has no room for
-    # them side by side.
-    "row actions stacked with room": Plant(
-        '<div style="inline-size: 12rem"><table class="data-table"><tbody><tr><td>Example</td><td class="row-actions">'
-        '<button type="button" class="btn compact" style="display: block">Example one</button>'
-        '<button type="button" class="btn compact" style="display: block">Example two</button></td></tr></tbody></table></div>'
-    ),
     "control words on one line": Plant(
         '<select aria-label="Example"><option>Example group name</option></select>'
         '<button type="button" class="btn">Example label words</button>' + _OPEN_READINGS
     ),
     # A value cut at its cell's edge beside a sentence that wraps: its row has
     # no room left. The second fills a padded box, whose padding is no room;
-    # the third is cut beside room too narrow to show it whole.
+    # the third is cut beside room too narrow to show it whole. Last, a tight
+    # table's status pill, a header's name too long for its column at its
+    # narrowest, beside a short address whose column has room past it: the
+    # pill's column takes that room and shows the name.
     "cut beside room": Plant(
+        "{% load value_tags status_tags %}"
         '<div class="table-scroll" style="inline-size: 20rem"><table class="data-table"><tbody><tr><td>'
         '<span style="display: block; contain: inline-size; min-inline-size: 6ch; overflow: hidden; '
         'text-overflow: ellipsis; white-space: nowrap">Example value cut short</span></td>'
@@ -502,18 +406,25 @@ PASSES = {
         '<span style="display: block; max-inline-size: 6ch; overflow: hidden; text-overflow: ellipsis; '
         'white-space: nowrap">an-example-value-far-longer-than-the-room-its-cell-leaves-beside-it</span></td>'
         f"<td>{_LINES}</td></tr></tbody></table></div>"
+        '<div style="inline-size: 15rem">{% table_region "Example" %}'
+        '<table class="data-table" data-narrow data-tight><thead><tr>'
+        '{% table_heading "Value" "identifier" %}{% table_heading "Type" "status" %}</tr></thead><tbody>'
+        '<tr><td><code class="cell-whole">{{ address|breakable }}</code></td>'
+        '<td>{% status header tone="neutral" %}</td></tr></tbody></table>{% endtable_region %}</div>',
+        values={"address": "192.0.2.10", "header": "X-Forwarded-Scheme"},
     ),
-    # A button, a field and a select in one row, each the control size.
-    "one height to a row of controls": Plant(
-        '<div style="display: flex; gap: 1rem"><button type="button" class="btn">Example</button>'
-        '<input type="search" aria-label="Example"><select aria-label="Example"><option>Example</option></select></div>'
-        + _OPEN_READINGS
-    ),
-    # A filter bar's choice in a bar too narrow for its option, shrunk to it.
-    "filter choices as wide as their options": Plant(
-        '<div style="inline-size: 10rem">{% load filter_tags %}{% filter_bar %}'
-        '<select name="example" aria-label="Example"><option>Example option far wider than its bar</option></select>'
-        "{% endfilter_bar %}</div>"
+    # An address that breaks only at its seams in the muted line under a
+    # row's name, and a file name among words in a muted cell, each in a whole
+    # table too narrow for it: the line's address is cut on one line, and the
+    # cell's name holds its length as any cell's does.
+    "broken identifiers": Plant(
+        '{% load value_tags %}<div style="inline-size: 4rem">{% table_region "Example" %}'
+        '<table class="data-table"><thead><tr>{% table_heading "Name" "identifier" %}</tr></thead><tbody><tr>'
+        '<td>Example<br><span class="muted">{{ address|breakable }}</span></td></tr></tbody></table>'
+        '{% endtable_region %}</div><div style="inline-size: 4rem">{% table_region "Files" %}'
+        '<table class="data-table"><thead><tr>{% table_heading "File" %}</tr></thead><tbody><tr>'
+        '<td class="muted">{{ file|breakable }}</td></tr></tbody></table>{% endtable_region %}</div>',
+        values={"address": "http://192.0.2.10:8000", "file": "Example receipt.png"},
     ),
 }
 
@@ -536,19 +447,6 @@ _OUTRANKED = (
 _LEFT = "planted/left-behind"
 _LEFT_BEHIND = _TABLE.format('on <span style="display: inline-block">example-name-wider-than-its-cell</span>')
 
-# A member of a flow capped at a width, the rest of its row left empty.
-_CAPS = "planted/caps"
-_CAPPED = '<div class="section-flow"><section style="max-inline-size: 12rem"><p>Example</p></section></div>'
-
-# A short section ending above the tall one its row holds: a row that packs
-# its members at its start, and a row of charts that does.
-_UNEVEN = "planted/uneven"
-_UNEVENED = (
-    '<div class="section-flow" style="align-items: flex-start">{% section "Example short" %}<p>Example</p>{% endsection %}'
-    '{% section "Example tall" %}' + "<p>Example</p>" * 12 + "{% endsection %}</div>"
-    '<div class="domain-charts" style="align-items: flex-start">{% card label="Example chart" %}<p>Example</p>{% endcard %}'
-    '{% card label="Example taller chart" %}' + "<p>Example</p>" * 6 + "{% endcard %}</div>"
-)
 
 # A run of parts whose rest asks its column for nothing and shows one line
 # (`line_list`, written out so it stands without the stylesheet): one held
@@ -593,6 +491,31 @@ _SHIFTS = {
     'margin-block-start: 420px">Example</div><div data-vendored style="grid-area: 1 / 1; block-size: 800px"></div></div>',
 }
 
+# A page whose one table waits in a closed disclosure, as a chart's table of
+# figures does: drawn by nothing until it opens.
+_FOLDED = "planted/a-table-in-a-closed-disclosure"
+_FOLDED_TABLE = (
+    '<details><summary>Example figures</summary><div class="table-scroll"><table class="data-table">'
+    "<thead><tr><th>Example</th></tr></thead><tbody><tr><td>Example</td></tr></tbody></table></div></details>"
+)
+
+
+# A catalog entry `dev:look` draws by name, and a defect laid over it as CSS,
+# which the look lays as well (`--css`): what a failure's look is proven on.
+_LOOKED = "part/section-bare"
+_LOOKED_DEFECT = "main p { inline-size: 3ch; word-break: break-all }"
+_LOOKED_CHECK = "words broken in text"
+# What a failed subtest says: its findings, then the look that finds them again.
+_REPORTED = re.compile(r"AssertionError: (\{.*?\n\})\n\nFound again by: (.+)", re.DOTALL)
+# What the look prints of the report it keeps.
+_LOOK_REPORT = re.compile(r"Page by page: (\S+)")
+# How long the look may take: a fresh checkout migrates its database first.
+_LOOK_WITHIN = 900
+# What a test run sets that a look run inside it must not inherit: its task's
+# arguments, the gate's record of failed tests, the engine and database the
+# look sets for itself.
+_RUN_OWN = ("usage_", "HQ_", "SEVERINO_TEST_", "MISE_TASK_", "DJANGO_")
+
 
 def _said(finding):
     """A finding as a value a set holds: the audit's are dicts."""
@@ -608,6 +531,9 @@ class PlantedBrowserTests(LayoutBrowserTests):
     """Each check of the survey finds in its plant what it does not find on
     the bare probe page, so what it finds is the plant's."""
 
+    # A plant's page is the test's own, which `dev:look` cannot draw.
+    looked_at = False
+
     @classmethod
     @override
     def render(cls):
@@ -616,12 +542,12 @@ class PlantedBrowserTests(LayoutBrowserTests):
         return {
             **pages,
             **passes,
+            _LOOKED: CATALOG[_LOOKED].page(_LOOKED),
             _BARE: probe(""),
             _LIFTED: probe(_OUTRANKED),
             _LEFT: probe(_LEFT_BEHIND),
-            _CAPS: probe(_CAPPED),
-            _UNEVEN: probe(_UNEVENED),
             _RESTS: probe(_RESTED),
+            _FOLDED: probe(_FOLDED_TABLE),
             **{name: probe(markup) for name, markup in _SHIFTS.items()},
         }
 
@@ -661,18 +587,17 @@ class PlantedBrowserTests(LayoutBrowserTests):
         found = self.found(_LEFT, Plant("")).get("lines opening on a stray", [])
         self.assertTrue([said for said in found if 'cuts "on" from "example-name' in said], found)
 
-    def test_a_flow_member_that_caps_its_width_leaves_its_row_short(self):
-        found = self.found(_CAPS, Plant("")).get("flows share their rows", [])
-        self.assertTrue([said for said in found if "caps its width" in said], found)
-
-    def test_a_flow_member_that_ends_above_its_row_s_tallest_is_found(self):
-        found = self.found(_UNEVEN, Plant("")).get("flows share their rows", [])
-        self.assertEqual(len([said for said in found if "px above" in said]), 2, found)
-
     def test_a_rest_that_asks_for_nothing_is_cut_beside_its_own_cell_s_room_only(self):
         found = self.found(_RESTS, Plant("")).get("cut beside room", [])
         self.assertTrue([said for said in found if '"example-capped' in said], found)
         self.assertFalse([said for said in found if '"example-full' in said], found)
+
+    def test_a_page_whose_only_table_is_folded_away_holds_the_table_rule(self):
+        """A table in a closed disclosure is one the table probe skips as
+        undrawn, never one it failed to find."""
+
+        self.open(_FOLDED, WIDE)
+        self.tables_scroll_inside_their_own_container(_FOLDED, self.page.evaluate(TABLES))
 
     def shifted(self, name, *, removed, given=(SELECTORS["vendored"], CLS_LIMIT)):
         """What the layout shift check finds once ``name``'s part has moved up
@@ -739,6 +664,80 @@ class PlantedBrowserTests(LayoutBrowserTests):
     @with_script
     def test_each_check_finds_its_plant_with_script_on(self):
         self.assert_each_found(scripted=True)
+
+    @with_script
+    def test_the_ledger_has_a_row_for_every_check(self):
+        """A survey's read times each check the survey holds, and nothing that
+        is no check (the stand-in put back around the reads)."""
+
+        from hq.platform.core.tests.browser.gate import CHECK_COSTS
+
+        self.open(_BARE, WIDE)
+        self.settle()
+        self.findings(_BARE, WIDE)
+        self.assertEqual(set(self.costs.get(CHECK_COSTS, {})), {*CHECKS, "fills"})
+
+    def a_defect_laid_over_a_page_at_two_widths(self):
+        """What the proof below runs as a test of its own: the entry as drawn,
+        which holds, then with the defect laid over it at two widths."""
+
+        self.looked_at = True
+        for width, defect in (
+            (SPARSE_WIDTHS[-1], ""),
+            (SPARSE_WIDTHS[1], _LOOKED_DEFECT),
+            (SPARSE_WIDTHS[2], _LOOKED_DEFECT),
+        ):
+            if not self.loaded(_LOOKED, width):
+                continue
+            if defect:
+                self.lay_css(defect)
+            self.hold(_LOOKED, width, [self.every_layout_check_holds])
+
+    def test_a_failure_says_once_the_look_that_finds_it_again_with_each_place_and_a_trace_of_its_own(self):
+        """A failed subtest says its findings whole and the `dev:look` that,
+        run as said, finds them again; a finding found again at another width
+        is said once, the place it was found again in the test's closing
+        lines; and its trace holds only its own steps. One engine proves it:
+        the command is built alike in each."""
+
+        if self.browser.browser_type.name != "webkit":
+            self.skipTest("proven in WebKit, the engine dev:look draws in by default")
+        result = unittest.TestResult()
+        said = io.StringIO()
+        with (
+            tempfile.TemporaryDirectory() as folder,
+            mock.patch.object(gate, "browser_failures", lambda: Path(folder)),
+            redirect_stdout(said),
+        ):
+            type(self)("a_defect_laid_over_a_page_at_two_widths").run(result)
+            traces = list(Path(folder).rglob("*.zip"))
+            steps = {
+                json.loads(line).get("method")
+                for trace in traces
+                for line in zipfile.ZipFile(trace).read("trace.trace").decode().splitlines()
+            }
+        self.assertEqual(result.errors, [])
+        [(_subtest, printed)] = result.failures
+        if (reported := _REPORTED.search(printed)) is None:
+            self.fail(printed)
+        findings, command = json.loads(reported[1])[_LOOKED_CHECK], reported[2]
+        self.assertIn(f"{_LOOKED} at {SPARSE_WIDTHS[2]}px", said.getvalue())
+        self.assertEqual(len(traces), 1, traces)
+        self.assertFalse(steps & {"goto", "setViewportSize"}, steps)
+
+        argv = shlex.split(command)
+        self.assertEqual(argv[:3], ["mise", "run", "dev:look"])
+        env = {name: value for name, value in os.environ.items() if not name.startswith(_RUN_OWN)}
+        ran = subprocess.run(
+            argv, cwd=settings.BASE_DIR, env=env, capture_output=True, text=True, timeout=_LOOK_WITHIN, check=False
+        )
+        out = ran.stdout + ran.stderr
+        if (kept := _LOOK_REPORT.search(out)) is None:
+            self.fail(out)
+        drawn = Path(settings.BASE_DIR, kept[1]).read_text(encoding="utf-8")
+        self.assertTrue(findings)
+        for finding in findings:
+            self.assertIn(json.dumps(finding), drawn)
 
     def test_a_style_a_test_writes_outranks_hq_s_rules_as_written_inline(self):
         """The gate serves a test's styles from a sheet, the only kind the

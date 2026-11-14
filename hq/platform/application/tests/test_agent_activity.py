@@ -282,7 +282,11 @@ class PageTests(TestCase):
 
 
 def _row(page: str, client_id: str) -> str:
-    """The markup of ``client_id``'s row on the Agents page."""
+    """The markup of ``client_id``'s row on the Agents page, its open line
+    included."""
 
     start = page.index(f'data-agent="{client_id}"')
-    return page[start : page.index("</tr>", start)]
+    end = page.index("</tr>", start)
+    if page[end:].partition(">")[2].lstrip().startswith('<tr class="row-detail" data-row-detail>'):
+        end = page.index("</tr>", end + 1)
+    return page[start:end]

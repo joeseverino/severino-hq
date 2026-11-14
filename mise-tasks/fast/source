@@ -6,12 +6,12 @@
 #USAGE arg "[labels]..." var=#true help="The source checks fast selected"
 
 # They start no browser and finish in seconds, so a refusal is printed before
-# fast's tests take the heavy turn (tools/gate/fast.py, source_first).
+# fast's tests take the heavy turn (tools/gate/selection.py, source_first).
 set -eu
 # mise hands the words over shell-quoted, one word each.
 eval "set -- ${usage_labels:-}"
 [ "$#" -gt 0 ] || exit 0
-# One process, which tools/gate/turn.py finds narrow.
+# One process, which tools/gate/turn.py gives a share of the turn.
 test_arguments="--noinput --parallel 1 ${usage_labels:-}"
 turn_bound=30m
 # shellcheck source=tools/lib/heavy-turn.sh

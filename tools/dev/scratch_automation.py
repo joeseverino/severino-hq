@@ -18,9 +18,14 @@ Its security properties:
   so no fetch leaves this machine, whatever the database adopted before.
 - It is given a login to one machine alone, the one HQ's inventory says
   this server runs on (``runs_hq``), so a run is asked, and recorded, only
-  on the machine it really runs on; with no such machine it is given none.
-  That login reaches 127.0.0.1 and every play there runs with connection
-  local, so no run reaches another host.
+  on the machine it really runs on. A scratch server whose inventory has no
+  such machine declares one in its own database, at this host's addresses,
+  through the operator's create command; `dev` declares none in its real
+  data and gives the worker no login. That login reaches 127.0.0.1 and
+  every play there runs with connection local, so no run reaches another
+  host.
+- The change playbook writes one file, in the run's own temporary
+  directory, which goes when the run ends.
 
 What it cannot show: GitHub's word on a commit's signature, since the
 repository is local, so `work` vouches for each commit it scans; the
@@ -36,6 +41,7 @@ import signal
 import subprocess
 import sys
 import time
+import uuid
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -43,7 +49,13 @@ from typing import Any
 
 lazy from django.conf import settings
 
+lazy from hq.domains.control_plane.provider_adapters.declarations import MACHINE_KIND
+lazy from hq.platform.application.capabilities import execute_capability
+lazy from hq.platform.application.hq_self import own_addresses
+lazy from hq.platform.application.infrastructure import suggest_key
 lazy from hq.platform.application.machines import machine_catalog
+lazy from hq.platform.application.refusal_status import refusal_of
+lazy from hq.platform.application.security import cli_principal
 lazy from hq_runner import __main__ as entry, ansible, catalog, connections as logins
 lazy from hq_runner.bridge import Bridge, BridgeError
 lazy from hq_runner.claim import Refused
@@ -65,6 +77,10 @@ FLOOR_SECONDS = 15 * 60
 POLL_SECONDS = 1.0
 # The doorbell's name, as hq.platform.application.cadence.AUTOMATION_DOORBELL.
 DOORBELL = "automation-doorbell"
+# The machine a scratch server declares itself as, when its inventory has none at this host's addresses.
+HERE = "scratch-host"
+# The profile whose server declares it: dev:scratch's (tools/dev/dev.sh).
+DECLARES = "scratch"
 # The verification `work` reports for a commit of the local repository.
 VOUCHED = {"verified": True, "reason": "valid", "committer": "dev"}
 
@@ -167,11 +183,41 @@ def here(catalog: Iterable[Any]) -> list[str]:
     return [machine.name for machine in catalog if machine.runs_hq]
 
 
-def write_reaches() -> None:
-    """The worker's connections to the machine this server runs on; run inside `manage.py shell`."""
+def declare_here(addresses: Iterable[str]) -> list[str]:
+    """Declare the machine ``HERE`` at ``addresses``, this host's, as the
+    operator's create form does; its name, or none when it has no address or
+    the declaration is refused."""
+
+    addresses = list(addresses)
+    if not addresses:
+        return []
+    spec = {"name": HERE, "addresses": addresses}
+    answer = execute_capability(
+        "infrastructure.resource.create",
+        {
+            "key": suggest_key(MACHINE_KIND, spec),
+            "kind": MACHINE_KIND,
+            "spec": spec,
+            "enabled": True,
+            "idempotency_key": str(uuid.uuid4()),
+        },
+        principal=cli_principal(),
+    )
+    if answer.get("ok") is False:
+        print(f"automation: {HERE} was not declared: {refusal_of(answer).message}")
+        return []
+    print(f"automation: declared {HERE} at {', '.join(addresses)}, the machine this server runs on")
+    return [HERE]
+
+
+def write_reaches(*, declares: bool = False) -> None:
+    """The worker's connections to the machine this server runs on, declared
+    first when ``declares`` and there is none; run inside `manage.py shell`."""
 
     state = State.of(settings.DATABASES["default"]["NAME"])
     machines = here(machine_catalog())
+    if not machines and declares:
+        machines = declare_here(own_addresses())
     if not machines:
         print("automation: no machine in HQ's inventory holds an address of this host, so the worker reaches none")
     write_connections(state.connections, connections(machines))
@@ -228,16 +274,10 @@ def start_worker(state: State, socket: str, runner_python: str) -> subprocess.Po
     # As the host's unit: the doorbell goes before the worker claims, so one
     # rung while it works still stands when it ends.
     state.doorbell.unlink(missing_ok=True)
+    declares = os.environ.get("HQ_DEV_PROFILE") == DECLARES
+    reaches = f"from tools.dev.scratch_automation import write_reaches; write_reaches(declares={declares})"
     subprocess.run(
-        [
-            sys.executable,
-            "manage.py",
-            "shell",
-            "-v",
-            "0",
-            "-c",
-            "from tools.dev.scratch_automation import write_reaches; write_reaches()",
-        ],
+        [sys.executable, "manage.py", "shell", "-v", "0", "-c", reaches],
         cwd=ROOT,
         check=False,
     )
@@ -265,6 +305,7 @@ def work(origin: str) -> int:
             scratch=scratch,
             token=token,
             role_spec=ansible.role_spec(scratch),
+            modules=ansible.modules(scratch),
             verify=lambda _revision: VOUCHED,
             reaches=lambda: reaches(config),
         )

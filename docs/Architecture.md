@@ -48,7 +48,8 @@ same lifecycle. The adapter parses and steps aside. The service validates,
 authorizes, opens the transaction, guards against stale state, writes, audits
 and returns one result. The adapter only chooses how it looks.
 
-A view reaches a domain write only through `execute_capability`.
+A view reaches a domain write only through `run_posted` or `execute_posted`
+(`hq/platform/application/web_writes.py`), which run `execute_capability`.
 `test_view_writes` follows every call made from the module of each view the
 URL configuration routes, and of its bases. An audit row, a refusal or an
 agent's identity observation is not a domain write.
@@ -94,7 +95,10 @@ and storage are stored as the machine's telemetry reading
 machine page, the resource API and the dashboard summarize one timestamped
 fact. The operator picks the machine with "Show on dashboard" on its edit form;
 the choice lives in `DashboardConfiguration`. Weather is the configured point's
-`WeatherObservation`, edited in the dashboard's Settings popover.
+reading (`weather:<point>`), the point edited in the dashboard's Settings popover.
+Every value HQ reads from outside is an `UpstreamReading` under a key that
+`readings.py` names, and `test_readings.py` fails a model that keeps one of
+its own.
 
 `GET /dashboard/glance/` only reads. A refresh is a CSRF-protected POST to the
 same address:
@@ -767,7 +771,8 @@ The security design is in [Security](Security.md). Inside the core:
 - services revalidate every input and own their transactional writes;
 - restricted documentation is removed from AI-facing results;
 - every success leaves an attributed audit event, and every refusal a `Denied`
-  one.
+  one: a write whose handler recorded no row of its own leaves the act of
+  running it (`capabilities._run`).
 
 The `hq` CLI reaches HQ through the authenticated MCP endpoint. In-process
 management commands are break-glass recovery, not a second transport.
@@ -993,7 +998,9 @@ reporting reads "Stopped early" before HQ ends it and after. A run's report writ
 playbook's record: a `status` is refused. Its `events` land on the run's
 result: each task's outcome on one machine, bounded by the contract's
 `RunEvent` and struck of secrets at the bridge's door. Each changed or failed
-one is an audit row under the run's own id that leads back to the ask.
+one is an audit row under the run's own id that leads back to the ask, and
+the run's end is one DONE or FAILED row (`audit.work_ended`), as a job's is,
+never a change to its record's state.
 
 A provider's declaration is Django's. Its controller half is Go, in
 `controller/providers/`: one file set per integration, each registering its
@@ -1428,6 +1435,15 @@ also name the repository its playbooks come from, whose root is an Ansible
 project, and the file holding the token that repository is fetched with.
 Nothing in a claim names any of them.
 
+HQ knows the worker is there by its claims. Each claim of nothing but its
+work records its arrival (`cadence.note_automation`), so a worker that finds
+nothing to take still counts as seen, and never as the controller. One never
+seen, or not seen within two of its timer's floors while it holds no run's
+lease, is absent (`cadence.automation_standing`). Refresh and every
+playbook's run are then refused with the reason, a run or scan already
+waiting reads "Not started", and the finding `automation-worker-absent` says
+how to set one up.
+
 What runs is the procedure its claim names, at the claim's reviewed revision
 (`hq_runner/procedures.py`). Each pass fetches that one commit into a fresh
 directory of its scratch space (`git fetch --depth 1` by the commit's id, then
@@ -1472,7 +1488,8 @@ that against the pinned release, with a read that asks to escalate in each of
 those ways. The account has no sudo, which is the boundary beneath it. A scan
 is the second layer. A read whose plays name escalation anywhere they reach is
 a problem of that playbook, so it is never adopted. They reach the playbook, a
-file it imports or includes by name, and every file of each role it lists,
+file it imports or includes by name, and every file Ansible reads as YAML
+(`tasks/`, `handlers/`, `defaults/`, `vars/`, `meta/`) of each role it lists,
 includes or depends on. `become: false` and `ansible_become: false` alone
 escalate to nothing.
 
@@ -1481,7 +1498,12 @@ connection's address, port and user, its identity file alone (no agent, no
 password), its pinned `known_hosts` with host key checking on, since
 ansible-runner turns it off unless told otherwise, and its `shell_type` when
 it carries one. The hosts and extra-vars come from the claim's `input`, and
-every ansible-runner argument is fixed in `hq_runner/ansible.py`. Each run's
+every ansible-runner argument is fixed in `hq_runner/ansible.py`. A parameter
+is data, never a template: Ansible reads an extra var's text as one and runs
+its lookups on the worker, so the worker hands the extra vars over as a file
+of its own in which every text is tagged `!unsafe` (`ansible.as_data`), as AWX
+marks a job's extra vars, and never on the command line. The smoke holds that
+with a parameter that would leave a file behind were it evaluated. Each run's
 private data directory is new and empty, and nothing is read from or written
 to its `env/` (`suppress_env_files`), so no file there adds an option, a
 variable or a callback. Its artifacts keep no stdout and no event the handler
@@ -1490,17 +1512,46 @@ sit in a private directory of the scratch space, removed when the run ends.
 Ansible reads the worker's own empty configuration through `ANSIBLE_CONFIG`,
 never a project's `ansible.cfg`, and every plugin and module path is pinned
 to a directory that does not exist; roles come from the project's `roles/`.
+Collections come from one directory of the worker's own Python environment
+(`ansible.COLLECTIONS`), never a home directory or Python's path. The image
+installs there the collections `hq_runner/collections.yml` pins, each to one
+release, in ansible-galaxy's requirements format: its runner-build stage runs
+`ansible-galaxy collection install -r` on that file, which checks each archive
+against the SHA-256 Galaxy publishes, as AWX bakes collections into its
+execution environment. So the image's signature and SBOM cover them, and a run
+fetches nothing. Renovate's ansible-galaxy manager moves each pin, and the
+smoke holds what is installed to the file.
 What Ansible loads from beside a playbook or inside a role, no setting turns
 off, so a scan reports each such directory. While it runs the worker renews
 the lease and stops when HQ answers stop or a renewal fails, and
 ansible-runner's own job timeout ends it at the manifest's `timeout_seconds`. Its report carries one event
 per task and machine, built from Ansible's message alone and struck of
 secrets: the run's secret parameters, the token and each identity's path.
-A run that succeeded says what its playbook found or did: the `result` it
+A run Ansible stops before any task fails or a machine goes unreached (a
+file that does not parse, a module no installed collection provides) says
+the first line Ansible printed as an error, color stripped, with the file and
+line it named when that file is in the project (`events.Stopped`). It is the
+one line read from stdout, which ansible-runner hands over as a `verbose`
+event: struck as a task's message is, clipped to its length, and never a path
+outside the project. A run that succeeded says what its playbook found or did: the `result` it
 set with `ansible.builtin.set_stats` (`per_host: false`), which ansible-runner
 hands over as the `artifact_data` of the `playbook_on_stats` event, each machine
 by name when it is keyed by machine. A playbook that sets none is said by
-its verification, which its checks have just held (`hq_runner/events.py`). A
+its verification, which its checks have just held (`hq_runner/events.py`).
+Beside `result`, the same event carries the playbook's `readings`
+(`{machine: {kind: [record]}}`) and `preview` (`{machine: [line]}`), which
+Ansible merges by machine and the report carries as `stated`; any other stat
+is dropped. Their bounds are the bridge contract's `RunStated`, `StatedText`
+and `StatedBytes`, and the worker keeps each part (one machine's records of
+one kind, one machine's preview) whole or leaves it out and says so in its
+message, never cut down into a wrong reading; HQ refuses a report past them
+whole. Its security property: a run
+states nothing about a machine it was not asked on. The worker drops what a
+playbook stated about any other machine, and HQ refuses a report that names
+one (`controller._hold_stated`), so a compromised worker can misstate only
+the machines of the runs it claims. Both doors strike secrets, the worker as
+it reports and HQ as it settles, and the run keeps what was stated in its
+result, whose kinds of reading the run's page and the `runs` read name. A
 journal names each claim before it is sent and records a run once it starts,
 so a claim retried after a crash is answered the same run, which is reported
 as unknown and never run again. `mise run smoke:runner` runs a real playbook
@@ -1527,9 +1578,25 @@ plugin, collection or variables directory Ansible would read past a playbook
 and its roles. It lists the commit's signature as GitHub verifies it, and each
 machine and privilege profile the worker has a login for ([The automation
 worker](#the-automation-worker)). The worker reads and HQ judges: a sidecar is
-reported as parsed, and what the worker cannot read (a file that is not YAML,
+reported as parsed, and what the worker cannot read (a file the playbook
+reaches, as a read's are walked, that does not parse, named with its line, or
 a role `ansible-doc` cannot find) is a problem of that playbook, while the rest
 of the report still arrives.
+
+Each task the plays reach names its module in full, from `ansible.builtin` or a
+collection the worker ships, and one ansible-doc lists in the worker
+(`ansible.modules`). Any other is a problem of that playbook naming the file,
+the task and the module (`catalog.unshipped`), so it is refused at the Refresh,
+before anything is offered for adoption. A short name is refused whatever a
+`collections:` keyword says, so the keyword resolves nothing the scan admits.
+`ansible.legacy` is refused, since Ansible looks for it beside the playbook
+first, and so is a name Ansible only redirects (`ansible.builtin.yum`). A
+module a repository carries in `library/`, an action in `action_plugins/` or a
+collection in `collections/`, which Ansible finds beside a playbook or in a
+role whatever its settings, is reported as a plugin directory, which adoption
+refuses, and no name a task could reach it by is admitted. A file the plays
+reach only by a name a template computes is not read; a module in it that no
+shipped collection provides stops the run before its first task.
 
 HQ holds each sidecar to `ProcedureDeclaration`
 (`hq/platform/application/automation_sources.py`), adds every way it falls

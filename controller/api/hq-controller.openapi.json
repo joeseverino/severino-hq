@@ -1124,6 +1124,11 @@
             "$ref": "#/components/schemas/SourceCatalog",
             "description": "What a scan of an automation source found; an operation other than a scan reports none.",
             "x-go-type-skip-optional-pointer": false
+          },
+          "stated": {
+            "$ref": "#/components/schemas/RunStated",
+            "description": "What a run's playbook stated beside its result; an operation other than a run reports none.",
+            "x-go-type-skip-optional-pointer": false
           }
         },
         "additionalProperties": false,
@@ -1166,6 +1171,111 @@
           "message"
         ],
         "description": "One task's outcome on one machine, in a run's report."
+      },
+      "RunStated": {
+        "type": "object",
+        "properties": {
+          "readings": {
+            "type": "object",
+            "propertyNames": {
+              "$ref": "#/components/schemas/StatedMachine"
+            },
+            "additionalProperties": {
+              "type": "object",
+              "propertyNames": {
+                "$ref": "#/components/schemas/StatedKind"
+              },
+              "additionalProperties": {
+                "type": "array",
+                "maxItems": 200,
+                "items": {
+                  "$ref": "#/components/schemas/StatedRecord"
+                }
+              }
+            },
+            "x-go-type": "map[string]map[string][]map[string]any",
+            "description": "Each machine's readings by kind, each kind a list of records."
+          },
+          "preview": {
+            "type": "object",
+            "propertyNames": {
+              "$ref": "#/components/schemas/StatedMachine"
+            },
+            "additionalProperties": {
+              "type": "array",
+              "maxItems": 200,
+              "items": {
+                "$ref": "#/components/schemas/StatedText"
+              }
+            },
+            "x-go-type": "map[string][]string",
+            "description": "Each machine's lines of what a change would do."
+          }
+        },
+        "additionalProperties": false,
+        "description": "What a playbook stated with set_stats beside its result, keyed by the machines of its run alone. Its compact JSON is at most StatedBytes' maxLength bytes."
+      },
+      "StatedMachine": {
+        "type": "string",
+        "maxLength": 253,
+        "description": "A machine of the run, as its input's hosts name it."
+      },
+      "StatedKind": {
+        "type": "string",
+        "maxLength": 100,
+        "description": "A kind of reading, by its name."
+      },
+      "StatedRecord": {
+        "type": "object",
+        "propertyNames": {
+          "$ref": "#/components/schemas/StatedText"
+        },
+        "additionalProperties": {
+          "$ref": "#/components/schemas/StatedValue"
+        },
+        "x-go-type": "map[string]any",
+        "description": "One record of a reading, its shape the kind's."
+      },
+      "StatedValue": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/StatedText"
+          },
+          {
+            "type": [
+              "number",
+              "boolean",
+              "null"
+            ]
+          },
+          {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StatedValue"
+            }
+          },
+          {
+            "type": "object",
+            "propertyNames": {
+              "$ref": "#/components/schemas/StatedText"
+            },
+            "additionalProperties": {
+              "$ref": "#/components/schemas/StatedValue"
+            }
+          }
+        ],
+        "x-go-type": "any",
+        "description": "A value in a stated record, at any depth."
+      },
+      "StatedText": {
+        "type": "string",
+        "maxLength": 500,
+        "description": "One text a playbook stated: a member's name or value in a record, or a line of a preview."
+      },
+      "StatedBytes": {
+        "type": "string",
+        "maxLength": 65536,
+        "description": "What a run's playbook stated (RunStated) as compact JSON in UTF-8: maxLength is the most bytes it may be."
       },
       "Renewal": {
         "type": "object",

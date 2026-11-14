@@ -37,7 +37,7 @@ lazy from playwright.sync_api import Error as BrowserError
 from hq.platform.application import fragments
 from hq.platform.core import append_only, seeds
 from hq.platform.core.speculation import NOT_A_NAVIGATION
-from hq.platform.core.test_runner import stall_watch
+from hq.platform.core.stalls import stall_watch
 from hq.platform.core.tests import task
 from hq.platform.core.tests.browser import probes
 from hq.platform.core.tests.browser.estate import ExampleEstateBrowserTests, estate_pages, navigation
@@ -59,7 +59,14 @@ from hq.platform.core.tests.browser.reference import (
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.shots import TALLEST, extent_of, shoot_page
 from hq.platform.core.tests.browser.stress import ALL_PAGES, stress_pages
-from hq.platform.core.tests.browser.survey import BUSY, CLOSE_OPENED, open_every_fold, palette_probes, survey_checks
+from hq.platform.core.tests.browser.survey import (
+    BUSY,
+    CHECKS,
+    CLOSE_OPENED,
+    open_every_fold,
+    palette_probes,
+    survey_checks,
+)
 from hq.platform.core.tests.browser.widths import PHONE_SCREEN
 from hq.platform.core.tests.look_posts import Posted, is_post, post_names, posted
 from hq.platform.core.tests.look_records import EstatePages
@@ -305,7 +312,7 @@ def _script(given: str) -> str:
 
 def _probe(given: str) -> tuple[str, str]:
     """``--probe`` as its name and the source it names, ``<module>:<NAME>`` of
-    a probe module (``boxes:ASIDES_WRAPPED_WITH_ROOM``); a name that is none
+    a probe module (``boxes:OVERLAPS``); a name that is none
     is refused with those its module offers."""
 
     if not given:
@@ -836,15 +843,38 @@ def _shown(path: Path) -> str:
     return str(path.relative_to(settings.BASE_DIR)) if path.is_relative_to(settings.BASE_DIR) else str(path)
 
 
-def _rules() -> list[str]:
-    """What ``--rule`` may name: each check that takes a page's name alone."""
+def _by_name() -> set[str]:
+    """Each check that takes a page's name alone."""
 
-    return sorted(
+    return {
         name
         for owner in (Look, LayoutBrowserTests)
         for name, member in vars(owner).items()
         if inspect.isfunction(member) and list(inspect.signature(member).parameters)[1:] in (["name"], ["_name"])
-    )
+    }
+
+
+def _rules() -> list[str]:
+    """What ``--rule`` may name: each check that takes a page's name alone,
+    and every rule the gate's sweep without script holds."""
+
+    return sorted(_by_name() | set(LayoutBrowserTests.unscripted_rules()))
+
+
+def held_without_script_only(rule: str) -> list[int]:
+    """The widths the gate holds ``rule`` at without script, when it holds it
+    only there: a rule of the sweep without script that reads a probe the
+    survey, which the gate holds once script has run, does not."""
+
+    widths = LayoutBrowserTests.unscripted_rules().get(rule, [])
+    if not widths or rule in _by_name():
+        return []
+    # A rule's probes are fixed as its class is defined, so none is a probe
+    # the survey reads only when it runs (axe's, from the lint tools, which
+    # the image lacks): naming a rule reads none of those.
+    fixed = (check.probe for check in CHECKS.values() if not callable(check.probe))
+    surveyed = {probe[0] if isinstance(probe, tuple) else probe for probe in fixed}
+    return widths if any(source not in surveyed for source, _arg in getattr(LayoutBrowserTests, rule).probes) else []
 
 
 def no_rule(rule: str) -> str:
@@ -885,7 +915,7 @@ def catalog_pages(asked) -> dict[str, str]:
     entries = {name for name in asked if not is_estate(name) and name not in known}
     if not entries:
         return {}
-    return {name: page for name, page in catalog.CatalogLayoutTests.render().items() if name in entries}
+    return {name: catalog.page(name) for name in catalog.PAGES if name in entries}
 
 
 # A template no page or entry draws, with why: once one is drawn, the test
@@ -922,7 +952,7 @@ def _pages(asked: tuple[str, ...], records: task.Records | None) -> list[str]:
             with suppress(task.PageRefused):
                 found = task.pages(asked, estate_pages(), [*named, *posts], records)
         if found is None:
-            named += catalog.CATALOG
+            named += catalog.PAGES
             found = task.pages(_families(asked), estate_pages(), [*named, *posts], records)
     except task.PageRefused as refused:
         raise AssertionError(f"{refused}\n{_rerun(refused.instead)}") from None
@@ -1040,6 +1070,12 @@ def _checked(records: task.Records | None) -> Asked:
     pages = _served(rest, records) if rest or not undrawn else []
     if (rule := Look.rule_asked()) and rule not in _rules():
         raise AssertionError(no_rule(rule))
+    if rule and not given.switch("no_script") and (widths := held_without_script_only(rule)):
+        at = ",".join(map(str, widths))
+        raise AssertionError(
+            f"{rule} is held without script, at {at}: mise run dev:look --rule {rule} --no-script --widths {at}"
+            f" {' '.join(names)}"
+        )
     probe, probe_source = _probe(given.text("probe"))
     if given.text("arg") and not probe:
         raise AssertionError("--arg is what --probe's function takes: name the probe")
@@ -1120,6 +1156,8 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
     # A look's record is its findings and shots; a trace would snapshot the
     # page at every step of every page the look reads.
     traced = False
+    # A rule's findings are what the look is read for, so each is written whole.
+    maxDiff = None
 
     # What the run was asked and the base it is held to, set once by `setUpClass`.
     tree: str
@@ -1331,6 +1369,10 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         if self.css:
             add_css(self.page, self.css)
             self.settle()
+
+    @override
+    def left_out_on(self, path):
+        return catalog.left_out_on(path) if path in self.unscripted else ()
 
     def scripted_for(self, name) -> bool:
         """Whether ``name`` is drawn with script: a page is unless
@@ -1944,7 +1986,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         path = self.addresses.get(name, name)
         if not getattr(self, "said_checks", False):
             self.said_checks = True
-            print(f"survey checks: {', '.join(survey_checks(path, self.width))}", flush=True)
+            print(f"survey checks: {', '.join(survey_checks(path, self.width, self.runs_script))}", flush=True)
         failed = self.findings(path, self.width)
         if failed:
             raise AssertionError("\n".join(f"{check}: {line}" for check, said in failed.items() for line in said))

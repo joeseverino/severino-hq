@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Any, Literal, TypedDict
 
 from django.db import transaction
+from django.db.models import QuerySet
 
 from hq.domains.control_plane.desired_state import advance_dependents
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
@@ -20,7 +21,6 @@ from hq.platform.core.audit import audit_operation, audited_labels
 lazy from hq.platform.core.models import AuditLog
 
 from .adoption import keep_out_declaration, observes_only, require_writable
-from .asks import WAITING
 from .cadence import request_reading, ring_doorbell, swept
 from .command_fields import Describe
 from .default_hold import consent_gap
@@ -49,7 +49,7 @@ from .resource_records import (
     RequestedInterface,
 )
 from .security import CONTROLLER_INTERFACE, Principal
-from .ui import counted, ended
+from .ui import counted
 lazy from . import tailnet
 lazy from .containers import Running
 lazy from .history import who_did
@@ -58,6 +58,7 @@ lazy from .machines import Machine, container_context
 lazy from .moments import when_day
 lazy from .resource_capabilities import public_dns_enabled
 lazy from .tailnet import POLICY_KIND, device_at, may_reach, observer, policy_allowing
+lazy from .work_runs import WorkRun, run_rows, seen_as_runs, shown_result
 
 
 @dataclass(frozen=True, slots=True)
@@ -146,14 +147,15 @@ class ObservedAccepted(ResourceSaved):
 
 
 def serialize_operation(operation: OperationRequest) -> OperationItem:
+    who = asked_by((operation,)).get(str(operation.pk), NOBODY)
     return {
         "id": str(operation.id),
         "resource": operation.resource.key,
         "action": operation.action,
         "state": operation.state,
         "reason": operation.reason,
-        "requested_actor": operation.requested_actor,
-        "requested_interface": operation.requested_interface,
+        "requested_actor": who.actor,
+        "requested_interface": who.interface,
         "created_at": operation.created_at.isoformat(),
         "completed_at": (operation.completed_at.isoformat() if operation.completed_at else None),
         "claimed_by": operation.claimed_by,
@@ -166,51 +168,20 @@ def serialize_operation(operation: OperationRequest) -> OperationItem:
 
 # Conditions that say something is wrong, whatever the operation's own state.
 _PROBLEM_CONDITIONS = ("Degraded", "Drifted")
-# How many past operations are read to find the ones that changed something.
+# How many past operations are read to find the ones that changed something,
+# and how many of those a record's history shows.
 HISTORY_WINDOW = 200
+HISTORY_ROWS = 20
 
 
-def _active(result: dict[str, Any]) -> list[ConditionPart]:
+def active_conditions(result: dict[str, Any]) -> list[ConditionPart]:
     return [item for item in result.get("conditions") or [] if item.get("status") is True]
 
 
-def _problem(result: dict[str, Any]) -> dict[str, Any] | None:
+def problem_condition(result: dict[str, Any]) -> dict[str, Any] | None:
     """The condition saying something is wrong, which a result can carry while succeeding."""
 
-    return next((item for item in _active(result) if item.get("type") in _PROBLEM_CONDITIONS), None)
-
-
-def _outcome(operation: OperationRequest) -> tuple[str, str, str]:
-    """``(tone, label, headline)``: how one operation ended, in a pill and a sentence.
-
-    Read from the result's condition before the operation's state, so a run
-    that finished and found a problem never reads as done.
-    """
-
-    result = operation.result or {}
-    active = _active(result)
-    said = result.get("message") or operation.reason
-    state = operation.get_state_display()
-    if operation.state == OperationRequest.State.QUEUED:
-        return "paused", state, WAITING
-    if operation.state == OperationRequest.State.CLAIMED:
-        return "active", state, "Working on it…"
-    if operation.state == OperationRequest.State.FAILED:
-        headline = (active[0].get("message") if active else "") or said or "It failed."
-        return "serious", state, headline
-    if operation.state == OperationRequest.State.CANCELLED:
-        # Stopped early: something to look at, never a success.
-        return "attention", state, said or ended(state)
-    problem = _problem(result)
-    if problem is not None:
-        return "attention", "Problem found", problem.get("message") or said or "It found a problem."
-    return "good", state, said or ended(state)
-
-
-def headline(operation: OperationRequest) -> str:
-    """How one operation ended, or where it stands, in a sentence."""
-
-    return _outcome(operation)[2]
+    return next((item for item in active_conditions(result) if item.get("type") in _PROBLEM_CONDITIONS), None)
 
 
 def asked_by(operations: Iterable[OperationRequest]) -> dict[str, Attribution]:
@@ -224,23 +195,20 @@ def asked_by(operations: Iterable[OperationRequest]) -> dict[str, Attribution]:
     )
 
 
-def operation_summary(operation: OperationRequest, who: Attribution) -> OperationSummary:
-    """Project one operation into one sentence and its structured evidence,
-    asked for by ``who`` (``asked_by``)."""
-    result = operation.result or {}
-    status = result.get("status") or {}
-    evidence = status.get("consumers") or []
-    affected = [item for item in evidence if item.get("matches_expected") is False]
-    tone, label, headline = _outcome(operation)
+def operation_summary(run: WorkRun, operation: OperationRequest) -> OperationSummary:
+    """One operation as its run (``work_runs.run_rows``) says it, with what
+    only an operation has: its action, the condition its result carries, and
+    what each name served of the certificate it checked."""
 
+    who = run.by
     return {
-        "id": str(operation.id),
+        "id": run.id,
         "action": operation.action,
         "action_label": operation.get_action_display(),
         "state": operation.state,
-        "state_label": label,
-        "tone": tone,
-        "headline": headline,
+        "state_label": run.word,
+        "tone": run.tone,
+        "headline": run.note,
         "automatic": who.interface == CONTROLLER_INTERFACE,
         "requested_actor": who.actor,
         "requested_interface": who.interface,
@@ -248,25 +216,29 @@ def operation_summary(operation: OperationRequest, who: Attribution) -> Operatio
         # Blank for almost everything, and the point when it is not: this is the
         # person who agreed to a change a credential asked for.
         "approved_by": who.approved_by,
-        "created_at": operation.created_at.isoformat(),
-        "completed_at": (operation.completed_at.isoformat() if operation.completed_at else None),
+        "created_at": run.created_at.isoformat(),
+        "completed_at": (run.finished.isoformat() if run.finished else None),
         "attempt_count": operation.attempt_count,
         "reason": operation.reason,
-        "condition": next(iter(_active(result)), None),
-        "affected": affected,
-        "evidence": evidence,
-        "matched": sum(1 for item in evidence if item.get("matches_expected") is True),
-        "expected_fingerprint_sha256": status.get("expected_fingerprint_sha256", ""),
-        # The certificate itself is on the record's page; a history row is not a second copy.
-        "raw_result": {
-            **result,
-            **({"status": {k: v for k, v in status.items() if k != "certificate_pem"}} if status else {}),
-        },
+        "condition": next(iter(active_conditions(operation.result or {})), None),
+        "affected": list(run.evidence.affected),
+        "evidence": list(run.evidence.consumers),
+        "matched": run.evidence.matched,
+        "expected_fingerprint_sha256": run.evidence.expected,
+        "raw_result": shown_result(operation.result or {}),
     }
 
 
-def changes(operations: Any, limit: int) -> list[OperationRequest]:
-    """The operations worth a row of history, from ``operations`` newest first.
+def summaries(operations: Iterable[OperationRequest]) -> list[OperationSummary]:
+    """``operations``, read through ``work_runs.seen_as_runs``, each as ``operation_summary`` says it."""
+
+    found = list(operations)
+    return [operation_summary(run, operation) for run, operation in zip(run_rows(found), found, strict=True)]
+
+
+def changes(operations: QuerySet[OperationRequest], limit: int) -> list[OperationRequest]:
+    """The operations worth a row of history, from the latest ``HISTORY_WINDOW``
+    of ``operations`` newest first, as ``work_runs.run_rows`` reads them.
 
     A check that runs every minute is one row until its answer changes.
     """
@@ -280,12 +252,12 @@ def changes(operations: Any, limit: int) -> list[OperationRequest]:
         return (
             operation.state,
             result.get("message", ""),
-            tuple((item.get("type"), item.get("reason"), item.get("message")) for item in _active(result)),
+            tuple((item.get("type"), item.get("reason"), item.get("message")) for item in active_conditions(result)),
         )
 
     last: dict[tuple[Any, str], tuple[Any, ...]] = {}
     kept: list[OperationRequest] = []
-    for operation in reversed(list(operations)):
+    for operation in reversed(list(seen_as_runs(operations.select_related("resource"))[:HISTORY_WINDOW])):
         key = (operation.resource_id, operation.action)
         said = signature(operation)
         repeats = (
@@ -300,12 +272,10 @@ def changes(operations: Any, limit: int) -> list[OperationRequest]:
     return kept[:limit]
 
 
-def resource_history(resource: ManagedResource, limit: int = 20) -> list[OperationSummary]:
+def resource_history(resource: ManagedResource) -> list[OperationSummary]:
     """One record's history: each operation that changed something, newest first."""
 
-    kept = changes(resource.operations.all()[:HISTORY_WINDOW], limit)
-    who = asked_by(kept)
-    return [operation_summary(operation, who.get(str(operation.pk), NOBODY)) for operation in kept]
+    return summaries(changes(resource.operations.all(), HISTORY_ROWS))
 
 
 def refuse_while_drifted(resource: ManagedResource) -> None:

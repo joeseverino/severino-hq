@@ -115,7 +115,7 @@ MYPYPATH="$hq_root" "$python" -m mypy --show-traceback --cache-dir "$work/mypy"
     hq.platform.core.tests.test_template_separators.TemplateSeparatorTests \
     hq.platform.application.tests.test_action_words.CallSiteWordsTests \
     hq.platform.application.tests.test_architecture_styles.StyleContractTests.test_a_rows_block_detail_opens_beneath_the_row \
-    hq.platform.application.tests.test_view_writes.ViewWriteTests.test_no_view_writes_outside_the_chokepoint \
+    hq.platform.application.tests.test_view_writes.ViewWriteTests.test_no_view_writes_outside_the_runner \
     hq.platform.application.tests.test_architecture.DeliveryAdapterArchitectureTests.test_paginated_list_views_use_the_shared_table_engine \
     hq.platform.application.tests.test_architecture_pages.PageTrailTests \
     hq.platform.application.tests.test_spelling.ExtensionSpellingTests

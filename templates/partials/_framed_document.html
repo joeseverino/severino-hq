@@ -1,0 +1,7 @@
+{% comment %}
+A document of HQ's own drawn inside a page and apart from it, its ids,
+headings and links its own: as wide as the column and as tall as the view
+below the header, scrolling on its own while the page holds still.
+
+  {% include "partials/_framed_document.html" with src=gallery title="Gallery" only %}
+{% endcomment %}<iframe class="framed-document" src="{{ src }}" title="{{ title }}"></iframe>

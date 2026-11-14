@@ -87,11 +87,9 @@ class AskedTests(SimpleTestCase):
         self.assertIn("--no-buffer", run.split())
 
     def test_a_probe_is_named_by_its_module_and_name_and_a_name_that_is_none_is_refused_with_those_offered(self):
-        self.assertEqual(
-            look._probe("boxes:ASIDES_WRAPPED_WITH_ROOM"), ("ASIDES_WRAPPED_WITH_ROOM", boxes.ASIDES_WRAPPED_WITH_ROOM)
-        )
+        self.assertEqual(look._probe("boxes:OVERLAPS"), ("OVERLAPS", boxes.OVERLAPS))
         self.assertEqual(look._probe(""), ("", ""))
-        with self.assertRaisesMessage(AssertionError, "ASIDES_WRAPPED_WITH_ROOM"):
+        with self.assertRaisesMessage(AssertionError, "OVERLAPS"):
             look._probe("boxes:EXAMPLE_MISSING")
         # A value of the module's that is no probe's source.
         with self.assertRaisesMessage(AssertionError, "is no probe"):
@@ -149,6 +147,12 @@ class AskedFirstTests(SimpleTestCase):
         self.assertIn("survey", rules)
         self.assertIn("a_table_fits_its_box_at_every_width", rules)
         self.assertNotIn("look", rules)
+
+    def test_a_rule_held_only_without_script_is_refused_with_script_naming_the_command(self):
+        self.refused_before_the_base(
+            {"usage_pages": "dense/machines", "usage_rule": "a_table_frame_spans_its_box"},
+            "mise run dev:look --rule a_table_frame_spans_its_box --no-script --widths ",
+        )
 
     def test_a_page_that_does_not_exist_is_refused_before_the_base_is_looked_at(self):
         self.refused_before_the_base({"usage_pages": "example/no-such-page"}, "No page example/no-such-page")

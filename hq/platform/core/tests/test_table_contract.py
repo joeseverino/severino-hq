@@ -167,20 +167,19 @@ _ROWS = '<table class="data-table"><tbody><tr><td>a</td></tr></tbody></table>'
 
 
 class TableTagTests(SimpleTestCase):
-    def test_a_region_that_fits_is_a_box_and_one_that_scrolls_a_named_stop(self):
-        """A region that fits holds nothing to scroll to, so it is no stop and
-        no landmark; one that scrolls is a stop for the keyboard, named so the
-        stop says what it holds."""
+    def test_every_region_is_drawn_as_a_stop_named_for_its_table(self):
+        """Without script any region may scroll, so the server draws each one
+        as a stop for the keyboard, named so the stop says what it holds;
+        tables.js takes it off a region whose table fits."""
 
-        html = _render('{% table_region "Machines" %}' + _ROWS + "{% endtable_region %}")
-        (region,) = with_class(html, "table-scroll")
-        self.assertFalse({"role", "aria-label", "tabindex"} & set(region.attrs))
-        self.assertEqual(len(elements(html, "table")), 1)
-        for source in ('{% table_region "Links" pane=True %}', '{% table_region "Runs" chart=True %}'):
-            with self.subTest(source):
-                (scrolls,) = with_class(_render(source + _ROWS + "{% endtable_region %}"), "table-scroll")
-                self.assertEqual(scrolls.attrs["tabindex"], "0")
-                self.assertTrue(scrolls.attrs["aria-label"])
+        for options in ("", " pane=True", " chart=True", ' room="shared"', " compare=True"):
+            with self.subTest(options=options):
+                html = _render('{% table_region "Machines"' + options + " %}" + _ROWS + "{% endtable_region %}")
+                (region,) = with_class(html, "table-scroll")
+                self.assertEqual(
+                    (region.attrs.get("role"), region.attrs.get("aria-label"), region.attrs.get("tabindex")),
+                    ("group", "Machines", "0"),
+                )
         (pane,) = with_class(_render('{% table_region "Links" pane=True %}{% endtable_region %}'), "table-scroll")
         self.assertIn("is-pane", pane.classes)
 
@@ -256,22 +255,43 @@ class TableTagTests(SimpleTestCase):
                 self.assertEqual(len(elements(html, "table")), 1)
                 self.assertEqual(select(html, "data-empty-state"), [])
 
-    def test_a_region_names_the_room_its_identifiers_get_and_still_does_not_scroll(self):
+    def test_what_would_fill_a_region_is_asked_only_when_it_is_empty(self):
+        """A remedy may read the database (`page.remedy`), so a region with
+        rows, which never shows one, never asks for it."""
+
+        asked = []
+
+        class Page:
+            @property
+            def remedy(self):
+                asked.append(True)
+                return {"label": "Add a run", "url": "/runs/new/"}
+
+        source = (
+            '{% table_region "Runs" empty="No runs yet." remedy=page.remedy %}<table class="data-table"><thead><tr>'
+            '{% table_heading "Name" "identifier" %}</tr></thead>'
+            "<tbody>{% for row in rows %}<tr><td>{{ row }}</td></tr>{% endfor %}</tbody></table>{% endtable_region %}"
+        )
+        _render(source, {"rows": ["a"], "page": Page()})
+        self.assertEqual(asked, [])
+        ((words, href),) = links(_render(source, {"rows": [], "page": Page()}))
+        self.assertEqual((words.startswith("Add a run"), href), (True, "/runs/new/"))
+        self.assertEqual(asked, [True])
+
+    def test_a_region_names_the_room_its_identifiers_get(self):
         for room in ("shared", "snug"):
             with self.subTest(room):
                 source = '{% table_region "Services" room="' + room + '" %}{% endtable_region %}'
                 (region,) = with_class(_render(source), "table-scroll")
                 self.assertIn(f"is-{room}", region.classes)
-                self.assertNotIn("tabindex", region.attrs)
         (plain,) = with_class(_render('{% table_region "Services" %}{% endtable_region %}'), "table-scroll")
         self.assertFalse({"is-shared", "is-snug"} & set(plain.classes))
 
-    def test_a_compare_region_says_so_and_still_does_not_scroll(self):
+    def test_a_compare_region_says_so(self):
         (region,) = with_class(
             _render('{% table_region "Changes" compare=True %}{% endtable_region %}'), "table-scroll"
         )
         self.assertIn("is-compare", region.classes)
-        self.assertNotIn("tabindex", region.attrs)
         (plain,) = with_class(_render('{% table_region "Changes" %}{% endtable_region %}'), "table-scroll")
         self.assertNotIn("is-compare", plain.classes)
 
@@ -418,6 +438,23 @@ class TableTagTests(SimpleTestCase):
         marked = [each.attrs.get("data-col") for each in elements(_render(source), "td") if "data-long" in each.attrs]
         self.assertEqual(marked, ["status", "long"])
 
+    def test_the_words_beside_a_rows_controls_keep_their_line(self):
+        long = "A sentence long enough to wrap beside a row's buttons"
+        source = (
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
+            '{% table_heading "State" "status" %}{% table_heading "Note" %}<th></th></tr></thead><tbody>'
+            f'<tr><td data-col="short">a</td><td>Up</td><td data-col="long">{long}</td>'
+            '<td class="row-actions"><button>Read</button></td></tr>'
+            f'<tr><td>b</td><td>Up</td><td>{long}</td><td class="select-column"><input type="checkbox"></td></tr>'
+            "</tbody></table>{% endtable_region %}"
+        )
+        marked = {
+            each.attrs.get("data-col"): each.attrs["data-words"]
+            for each in elements(_render(source), "td")
+            if "data-words" in each.attrs
+        }
+        self.assertEqual(marked, {"short": "line", "long": "floor"})
+
     def test_a_status_too_long_to_keep_wraps(self):
         long = "Ask me first for container stack and tailnet policy changes"
         source = (
@@ -458,8 +495,9 @@ class TableTagTests(SimpleTestCase):
         """After a row is the line its toggle opens: the blocks it keeps
         beneath itself, then under its column's name a column that may leave
         (its blocks taken out of the copy), a narrow part of a column that
-        stays, and a labeled block. A control under no heading is named for
-        a screen reader alone, and a column with nothing to show has no part."""
+        stays, and a labeled block. A column with nothing to show has no part,
+        and the row's controls have none, whatever their rank, since they stand
+        beneath its words in a narrow box."""
 
         source = (
             '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" gutter=True %}'
@@ -485,14 +523,14 @@ class TableTagTests(SimpleTestCase):
         self.assertEqual(cell.attrs["colspan"], "5")
         self.assertEqual([each.words for each in beneath if "row-below" in each.classes], ["tall", "x"])
         terms = [each for each in beneath if each.tag == "dt"]
-        self.assertEqual([each.words for each in terms], ["Name", "Note", "State", "Act", "Also"])
+        self.assertEqual([each.words for each in terms], ["Name", "Note", "State", "Also"])
         self.assertEqual(
             [each.attrs.get("data-column") or each.attrs.keys() & {"data-narrow", "data-label"} for each in terms],
-            [{"data-narrow"}, "1", {"data-narrow"}, "4", {"data-label"}],
+            [{"data-narrow"}, "1", {"data-narrow"}, {"data-label"}],
         )
-        self.assertEqual([each.classes for each in terms], [frozenset()] * 5)
+        self.assertEqual([each.classes for each in terms], [frozenset()] * 4)
         values = [each for each in beneath if each.tag == "dd"]
-        self.assertEqual([each.words for each in values], ["from here", "Said", "since", "Go", "x"])
+        self.assertEqual([each.words for each in values], ["from here", "Said", "since", "x"])
         self.assertEqual(values[1].attrs.get("data-cell"), "data")
 
     def test_each_part_of_a_cell_is_marked_with_its_role(self):

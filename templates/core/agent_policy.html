@@ -161,7 +161,7 @@ approved, and a block stops that device alone.
           {% table_heading "First seen" "status" drop=2 %}
           {% table_heading "Last seen" "status" drop=3 %}
           {% table_heading "Calls" drop=1 %}
-          {% table_heading "Approve or block" "control" hidden=True drop=4 %}
+          {% table_heading "Approve or block" "control" hidden=True %}
         </tr>
       </thead>
       {% for standing, devices in device_groups %}{% with identity=standing.identity %}

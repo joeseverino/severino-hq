@@ -1,0 +1,23 @@
+# A change nothing minds, so a held run can be walked on a development
+# server: one file in the run's own temporary directory, which the worker
+# removes as the run ends. Where it writes is the play's, never an input.
+- name: Write a note
+  hosts: all
+  gather_facts: false
+  vars:
+    ansible_connection: local
+    # The worker points ANSIBLE_LOCAL_TEMP inside the run's private directory.
+    note_dir: "{{ lookup('ansible.builtin.env', 'ANSIBLE_LOCAL_TEMP') }}"
+    note_path: "{{ note_dir }}/note.txt"
+  pre_tasks:
+    - name: The run has a temporary directory of its own
+      ansible.builtin.assert:
+        that:
+          - note_dir is abs
+          - note_dir is directory
+  roles:
+    - note
+  post_tasks:
+    - name: The note holds the text
+      ansible.builtin.assert:
+        that: lookup('ansible.builtin.file', note_path, rstrip=false) == text

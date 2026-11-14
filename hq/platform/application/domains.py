@@ -536,9 +536,6 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
                 "Infrastructure",
             ),
         ),
-        integration=PluginIntegration(
-            attention=_provider("hq.platform.application.attention:services"),
-        ),
     ),
     DomainDescriptor(
         id="hq.estate",
@@ -625,7 +622,6 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
                 "Infrastructure",
             ),
         ),
-        integration=PluginIntegration(attention=_provider("hq.platform.application.containers:attention")),
     ),
     DomainDescriptor(
         id="hq.tailnet",
@@ -730,6 +726,13 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         description="How HQ itself is doing, read as its own page shows it.",
         # HQ itself, after what configures it: the page that says how it is doing.
         navigation=(NavigationItem("HQ", "hq_self", "", HOST_ORDER_MACHINERY + 3, "System"),),
+    ),
+    DomainDescriptor(
+        id="hq.design",
+        label="Design",
+        description="Every shared part HQ draws its pages from, filled with example data.",
+        # Last of HQ's own machinery: the parts every page above is drawn from.
+        navigation=(NavigationItem("Design", "design", "", HOST_ORDER_MACHINERY + 4, "System"),),
     ),
     DomainDescriptor(
         id="hq.agents",

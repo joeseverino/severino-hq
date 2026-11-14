@@ -20,14 +20,15 @@ from hq.platform.application.routes import reverse
 lazy from hq.domains.control_plane.names import in_zone
 
 from .card_items import Insight, Kpi
+from .certificate_expiry import serving
 from .connection_lifecycle import Lifecycle, probed, standing
 from .derivations import reached
 from .drawings import Dot, Dots
 from .entity_links import entity_link
 from .expiry import DEFAULT_RENEWAL_WINDOW_DAYS, days_until, renewal_window
 from .first_seen import dated
-from .item_help import cannot_help, remedy_link
-from .moments import ago, expiry_words, when_day
+from .item_help import cannot_help
+from .moments import ago, when_day
 from .projection import read_once
 from .security import Principal
 from .service_health import UNKNOWN
@@ -46,8 +47,6 @@ lazy from .zones import ZONE_KIND
 # A machine that holds something for the estate and has been offline this long
 # is an action item. Shorter gaps are restarts.
 OFFLINE_AFTER = timedelta(hours=1)
-# Used when a certificate declares no renewal window of its own.
-CERTIFICATE_SERIOUS_DAYS = 7
 # An edge certificate renews itself well before this; inside it, renewal is failing.
 EDGE_RENEWAL_OVERDUE_DAYS = 14
 MANAGED_CERTIFICATE_KINDS = (CERTIFICATE_KIND, UPLOADED_CERTIFICATE_KIND)
@@ -221,37 +220,33 @@ def _registrations(domains: tuple[str, ...]) -> tuple[Expiry, ...]:
 def _certificates(domains: tuple[str, ...], hostnames: set[str]) -> tuple[Expiry, ...]:
     """Edge certificates read under the domains, and certificates HQ manages."""
 
-    found = [*_edge_certificates(domains, hostnames), *_managed_certificates()]
+    found = [*_edge_certificates(domains, hostnames), *managed_certificates()]
     return tuple(sorted(found, key=lambda item: item.expires))
 
 
 def _edge_certificates(domains: tuple[str, ...], hostnames: set[str]) -> list[Expiry]:
     """Each name a reading holds a certificate for that says when it expires,
-    linked to its service when HQ serves the name, else to its zone.
-
-    A reading can hold several for one name (an edge certificate beside the
-    older one it replaced), and the name is served by the one that runs out
-    last, so that one is the name's expiry.
-    """
+    judged by the certificate that serves it, linked to its service when HQ
+    serves the name, else to its zone."""
 
     if not domains:
         return []
-    found: dict[tuple[str, str], Expiry] = {}
+    found = []
     for item in readings().about(Subject.of(zones=domains), facets=("certificate",)):
         if (when := moment(item.expires)) is None:
             continue
         name = next(iter(item.hostnames), "") or item.title
         source = item.spec.short or item.label
-        held = found.get((source, name))
-        if held is not None and held.expires >= when:
-            continue
+        found.append(((source, name), when, (name, source, when)))
+    expiries = []
+    for name, source, when in serving(found):
         zone = next((domain for domain in domains if in_zone(name, domain)), "")
         link = subject_link("service", name) if name in hostnames else subject_link("zone", zone)
-        found[source, name] = Expiry(name, source, when, link)
-    return list(found.values())
+        expiries.append(Expiry(name, source, when, link))
+    return expiries
 
 
-def _managed_certificates() -> list[Expiry]:
+def managed_certificates() -> list[Expiry]:
     """Each certificate HQ manages whose status says when it expires."""
 
     found = []
@@ -457,14 +452,14 @@ def overview(*, principal: Principal):
 
 @dated
 def attention() -> tuple[Insight, ...]:
-    """Offline machines the estate depends on, and certificates the operator must renew.
+    """Offline machines the estate depends on.
 
     A connection that does not answer is the ``connection-not-answering``
-    finding; a domain that will not renew is ``registration-lapsing``.
+    finding; a domain that will not renew is ``registration-lapsing``, and a
+    certificate near expiry is ``certificate-expiring``.
     """
 
-    estate = estate_reading()
-    return (*_offline(estate), *_expiring(estate))
+    return _offline(estate_reading())
 
 
 def _holds_something(machine) -> bool:
@@ -503,49 +498,6 @@ def _offline(estate: Estate) -> tuple[Insight, ...]:
                     f"estate-offline:{machine.name}",
                     "HQ has no power or console access to machines. Bring it back on the machine itself.",
                 ),
-            )
-        )
-    return tuple(items)
-
-
-def _expiring(estate: Estate) -> tuple[Insight, ...]:
-    items = []
-    for expiry in estate.operator_certificates:
-        if expiry.managed and expiry.days > expiry.renewal_window_days:
-            continue
-        days = max(expiry.days, 0)
-        if expiry.managed:
-            key = f"estate-certificate:{expiry.resource_key}"
-            body = f"Expires {ended(expiry.phrase)} Renewal has not run; renew it."
-            action = "Open certificate"
-            renew = remedy_link("certificate.renew", expiry.resource_key)
-            offered: dict[str, Any] = (
-                {"actions": (renew,)}
-                if renew
-                else {"workflow": cannot_help(key, "The renewal command is not mounted on this HQ.")}
-            )
-        else:
-            key = f"estate-certificate:{expiry.source}:{expiry.subject}"
-            body = f"Expires {ended(expiry.phrase)} {expiry.source} renews it; check its settings."
-            action = "Open"
-            offered = {
-                "workflow": cannot_help(
-                    key,
-                    f"{expiry.source} renews it. HQ cannot change its settings.",
-                )
-            }
-        items.append(
-            Insight(
-                status="serious" if days <= CERTIFICATE_SERIOUS_DAYS else "attention",
-                eyebrow="Certificates",
-                key=key,
-                title=f"{expiry.subject} {expiry_words(expiry.days)}",
-                value=str(days),
-                body=body,
-                action=action,
-                url=expiry.url,
-                subject=expiry.link,
-                **offered,
             )
         )
     return tuple(items)

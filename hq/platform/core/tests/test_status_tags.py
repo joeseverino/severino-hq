@@ -160,6 +160,13 @@ class StatusPillTests(SimpleTestCase):
             with self.subTest(options), self.assertRaises(ValueError):
                 status_pill("django", chip=True, **options)
 
+    def test_a_frame_in_a_tone_takes_the_class_its_status_is_colored_by(self):
+        for tone in (*sorted(STATUS_VALUES), "example-unknown"):
+            with self.subTest(tone):
+                frame = _drawn("{{ tone|tone_class }}", tone=tone)
+                (drawn,) = elements(_drawn('{% status "Example" tone=tone dot=True %}', tone=tone), "span")
+                self.assertIn(frame, drawn.classes)
+
 
 # A class a status draws, which a template writing it by hand would spell itself,
 # and a state's tone spelled as a `control-` class: a state, a tone, or one filled in.

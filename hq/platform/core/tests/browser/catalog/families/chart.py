@@ -149,12 +149,12 @@ ENTRIES = {
     ),
     # Several things over the same weeks, one a link with a line about it.
     "chart/cadence-matrix": Entry(
-        '{% section "Example habits" %}{% include "partials/_cadence_matrix.html" %}{% endsection %}',
+        '{% section "Example habits 2" %}{% include "partials/_cadence_matrix.html" %}{% endsection %}',
         {"matrix": _matrix()},
     ),
     # The same, sharing a row with a chart.
     "chart/cadence-matrix-compact": Entry(
-        '<div class="two-col">{% section "Example habits" %}'
+        '<div class="two-col">{% section "Example habits 3" %}'
         '{% include "partials/_cadence_matrix.html" with compact=True label="Example habit" %}{% endsection %}'
         '{% include "partials/_line_chart.html" %}</div>',
         {"matrix": _matrix(), "chart": _readings("Example minutes", "Minutes each day.", "Example run")},

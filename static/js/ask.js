@@ -1,13 +1,10 @@
 "use strict";
 
-// Asked-for work: one behavior for every "do this now".
-//
-// A request never does the work. It stores the ask and answers at once with
-// how the work stands and the address of a status resource (202 while it is
-// live); the controller or a job does the work, and the control follows that
-// resource until it ends. A read the controller takes, a job, and the readings
-// a page asks for when it is opened are all this: `[data-ask]`, drawn by
-// partials/_ask.html, _job_progress.html and _visit_refresh.html.
+// Asked-for work: one behavior for every "do this now", as docs/Design.md's
+// "Asked-for work is an ask" tells it. The request stores the ask and answers
+// at once with how the work stands and where to follow it; this follows that
+// until the work ends. Drawn by partials/_ask.html, _job_progress.html and
+// _visit_refresh.html as `[data-ask]`:
 //
 //   data-ask-status   the status resource, present while the work is live, so
 //                     a page loaded mid-flight resumes following it
@@ -29,10 +26,9 @@
 //   [data-reading-age] a page head's reading line, "Last read …", which a
 //                     control in that head says how its work stands over
 //
-// Polling rather than a socket: one small question every couple of seconds
-// while something is live, asked by the one loop every poll shares (`hqEvery`).
-// A persistent connection would be a second transport to run and secure for a
-// question that fits in a query.
+// Polling rather than a socket, through the one loop every poll shares
+// (`hqEvery`): a second transport to run and secure for a question that fits
+// in a query.
 (() => {
   const POLL_MS = 2000;
   // A tab nobody is looking at should not spend the night asking.
@@ -119,8 +115,19 @@
   // sentence, cut to the line, whole in its title. The note stays the live
   // region, heard rather than seen there (pages.css). Once the result lands
   // the head is drawn again, its line saying the new reading's age.
+  // The line is the nearest one around the control inside the head, so a
+  // control of one reading in a head of several (the dashboard's strip)
+  // speaks over that reading's line alone.
+  const lineOf = (control) => {
+    const head = control.closest(".page-head");
+    for (let scope = control.parentElement; head?.contains(scope); scope = scope.parentElement) {
+      const line = scope.querySelector("[data-reading-age]");
+      if (line || scope === head) return line;
+    }
+    return null;
+  };
   const echo = (control, text, word) => {
-    const line = control.closest(".page-head")?.querySelector("[data-reading-age]");
+    const line = lineOf(control);
     if (!line) return;
     const state = control.dataset.askState;
     const said = state === "failed" ? text || word : state === "idle" ? "" : document.body.dataset.askRefreshing;
@@ -147,8 +154,9 @@
   // hover: the row's open line says the word and the sentence, under the
   // button's label. The server draws it there (`data-ask-why`, _ask.html,
   // through table_tags._detail_row) when the work already stood somewhere;
-  // otherwise it is drawn here as that line draws it, and opens the row's
-  // toggle by being there (tables.css).
+  // otherwise it is drawn here as that line draws it, once, and the row is
+  // marked as holding a block there (`data-below`), which shows its toggle
+  // (tables.css).
   const sayBelow = (control, said) => {
     const row = control.closest(".data-table > tbody > tr:not(.row-detail)");
     const button = control.querySelector("[data-ask-button]");
@@ -163,6 +171,7 @@
         if (term?.matches("dt")) term.remove();
         (why.closest(".row-columns > dd") || why).remove();
       });
+      row.toggleAttribute("data-below", Boolean(detail?.querySelector(".row-below")));
       return;
     }
     if (copies.length) {
@@ -172,7 +181,7 @@
     const why = part("ask-why row-below", said);
     why.dataset.askWhy = key;
     why.dataset.label = button.textContent.trim();
-    control.append(why);
+    row.toggleAttribute("data-below", true);
     if (!detail) {
       detail = document.createElement("tr");
       detail.className = "row-detail";
@@ -192,7 +201,7 @@
     term.dataset.label = "";
     value.dataset.label = "";
     term.textContent = why.dataset.label;
-    value.append(why.cloneNode(true));
+    value.append(why);
     list.append(term, value);
   };
 
@@ -218,7 +227,12 @@
     say(control, standing.note || "", standing.label || "");
     tick(control);
     const label = control.querySelector("[data-ask-label]");
-    if (label && standing.label) label.textContent = standing.label;
+    if (label && standing.label) {
+      label.textContent = standing.label;
+      // Its pill takes the state's tone with its word (work_runs.TONES).
+      const toned = [...label.classList].find((name) => name.startsWith("pill-"));
+      if (toned && standing.tone) label.classList.replace(toned, `pill-${standing.tone}`);
+    }
     const bar = control.querySelector("[data-ask-bar]");
     if (bar) {
       // A <progress> with no value is indeterminate, which is what work that

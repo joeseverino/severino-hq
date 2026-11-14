@@ -9,29 +9,33 @@ one control (``partials/_ask.html``) and one script behavior follow all of it.
 
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Annotated, Any, TypedDict
+from datetime import datetime, timedelta
+from typing import Annotated, Any, ClassVar, TypedDict
 
 from django.contrib import messages
 from django.core import signing
-from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect
 from django.utils import timezone
+from django.views import View
 
-lazy from hq.domains.control_plane.models import OperationState, ProviderConnection, ProviderInventory
+lazy from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
 lazy from hq.domains.control_plane.providers import registry_label
 lazy from hq.domains.control_plane.reading_parts import WHOLE, refused_parts
-lazy from hq.domains.jobs.models import JobState
 
 from .describe import Describe, listed
 from .moments import duration
+from .record_errors import Sentence
 from .routes import reverse
 from .ui import ended
 lazy from . import cadence
 lazy from .cadence import every_sweep, read_request_lifetime
-lazy from .resource_operations import headline as operation_headline
+lazy from .capabilities import capability_registry
+lazy from .refusal_status import refusal_of
 lazy from .security import safe_next
-lazy from .work_runs import LAPSED
+lazy from .timestamps import moment
+lazy from .web_writes import execute_posted
+lazy from .work_runs import standing_tone, standing_word
 
 IDLE = "idle"
 QUEUED = "queued"
@@ -39,10 +43,6 @@ RUNNING = "running"
 DONE = "done"
 FAILED = "failed"
 LIVE = frozenset({QUEUED, RUNNING})
-
-# A read's state in the words ``jobs.JobState`` says a job's in, so no two
-# pages call the same state two things. A job's standing carries its own.
-_LABELS = {IDLE: "", QUEUED: "Waiting", RUNNING: "Running", DONE: "Done", FAILED: "Failed"}
 
 # What asked-for work says while it waits its turn, and while a read is under way.
 WAITING = "Waiting…"
@@ -52,9 +52,6 @@ REFRESHING = "Refreshing…"
 REFRESHED = "Refreshed just now."
 NEWER_READING = "A newer reading is in."
 SHOW_NEWER = "Show the reading"
-# What a read asked of the controller says when none is arriving to take it;
-# while one is on its way, it says REFRESHING.
-READ_UNTAKEN = "Cannot refresh: {absent}"
 # What a saved change says of when it reaches the live system.
 APPLIES_SHORTLY = "HQ applies it shortly."
 
@@ -71,6 +68,7 @@ class StandingAnswer(TypedDict):
 
     state: Annotated[str, Describe(ended(f"Where the work stands: {listed((IDLE, QUEUED, RUNNING, DONE, FAILED))}"))]
     label: Annotated[str, Describe("Where it stands, in the words a page shows.")]
+    tone: Annotated[str, Describe("The tone a page colors that label in; empty while nothing was asked.")]
     live: Annotated[bool, Describe("Whether the work is still under way.")]
     note: Annotated[str, Describe("What the work is doing, or how it ended, in a sentence.")]
     seconds: Annotated[int, Describe("How long ago the work was asked for, in whole seconds; 0 when it was not.")]
@@ -98,7 +96,8 @@ class Standing:
     since: datetime | None = None
     # How far along, where the work knows.
     percent: int | None = None
-    # The state in words, where the work's own record has them.
+    # The state in words, where the work's own record has them; else the
+    # words its job state is said in (``work_runs.standing_word``).
     word: str = ""
 
     def __post_init__(self) -> None:
@@ -114,7 +113,7 @@ class Standing:
 
     @property
     def label(self) -> str:
-        return self.word or _LABELS[self.state]
+        return self.word or standing_word(self.state)
 
     @property
     def seconds(self) -> int:
@@ -122,10 +121,18 @@ class Standing:
             return 0
         return max(0, int((timezone.now() - self.since).total_seconds()))
 
+    @classmethod
+    def of(cls, said: StandingAnswer) -> Standing:
+        """The standing a command answered with ``as_json``."""
+
+        since = timezone.now() - timedelta(seconds=said["seconds"]) if said["seconds"] else None
+        return cls(said["state"], said["note"], since=since, percent=said["percent"], word=said["label"])
+
     def as_json(self) -> StandingAnswer:
         return {
             "state": self.state,
             "label": self.label,
+            "tone": standing_tone(self.state, self.label),
             "live": self.live,
             "note": self.note,
             "seconds": self.seconds,
@@ -155,6 +162,8 @@ class Ask:
     compact: bool = False
     # Shown but not usable, with ``title`` saying why.
     disabled: bool = False
+    # The ``refresh`` part draws how the work ended, failure included.
+    outcome: bool = False
     # A PageAction is a link or a post; this is neither, and says so.
     is_ask = True
     danger = False
@@ -166,31 +175,90 @@ class Ask:
         return " ".join(("btn", *(("primary",) if self.primary else ()), *(("compact",) if self.compact else ())))
 
 
-def answer(
-    request: HttpRequest,
-    standing: Standing,
-    *,
-    fallback: str,
-    status_url: str = "",
-    message: str = "",
-) -> HttpResponse:
-    """Answer the request that asked, at once.
+@dataclass(frozen=True, slots=True)
+class Took:
+    """What an ask that ran answers: how its work stands, where a page watches
+    it while it is live, and the sentence a page without script shows."""
 
-    To the page's script: how the work stands and where to watch it, 202 while
-    it is live (RFC 9110 15.3.3). To a plain form post: back to the page it
-    came from, which says the same from what is stored. ``message`` is the
-    sentence a page without script shows; the standing's note otherwise.
-    """
+    standing: Standing
+    status_url: str = ""
+    message: str = ""
 
-    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
-        return JsonResponse(
-            {**standing.as_json(), "status": status_url if standing.live else ""},
-            status=202 if standing.live else 200,
+
+class AskMixin:
+    """The view an ``Ask``'s button posts to, declared by what it asks: it
+    runs ``capability`` as the person who pressed it and answers at once, a
+    refusal as failed work in the refusal's own sentence."""
+
+    http_method_names: ClassVar[list[str]] = ["post"]
+    capability: str
+    back_to: str
+    reads: tuple[str, ...] = ()
+
+    def back(self) -> str:
+        return reverse(self.back_to)
+
+    def payload(self) -> dict[str, Any]:
+        return {}
+
+    def target(self) -> str | None:
+        return None
+
+    def cannot(self) -> Sentence:
+        """Why the person cannot ask at all, before anything runs; "" when they can."""
+
+        return ""
+
+    def asked(self, result: dict[str, Any], at: datetime) -> Took:
+        """How the work asked for at ``at`` stands, from the capability's answer."""
+
+        return Took(
+            read_standing(self.reads, at),
+            read_status_url(self.reads, at),
+            capability_registry()[self.capability].requested(),
         )
-    said = message or standing.note
-    if said:
-        (messages.error if standing.state == FAILED else messages.success)(request, said)
-    return redirect(safe_next(request, fallback=fallback))
+
+    def post(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
+        """To the page's script: how the work stands and where to watch it, 202
+        while it is live (RFC 9110 15.3.3). To a plain form post: back to the
+        page, which says the same from what is stored, and the ask's sentence."""
+
+        at = timezone.now()
+        if said := self.cannot():
+            took = Took(Standing(FAILED, said))
+        elif (result := execute_posted(request, self.capability, self.payload(), target=self.target())).get("ok"):
+            took = self.asked(result, at)
+        else:
+            took = Took(Standing(FAILED, refusal_of(result).message))
+        standing = took.standing
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return JsonResponse(
+                {**standing.as_json(), "status": took.status_url if standing.live else ""},
+                status=202 if standing.live else 200,
+            )
+        if said := took.message or standing.note:
+            (messages.error if standing.state == FAILED else messages.success)(request, said)
+        return redirect(safe_next(request, fallback=self.back()))
+
+
+class WatchView(View):
+    """How asked-for work stands, for a page following it: only what HQ signed
+    for that page to watch (``watch_token``), by default a read of kinds."""
+
+    http_method_names: ClassVar[list[str]] = ["get"]
+
+    def standing(self, subject: dict[str, Any]) -> Standing | None:
+        asked = moment(str(subject.get("asked", "")))
+        if asked is None or not isinstance(subject.get("read"), list):
+            return None
+        return read_standing(map(str, subject["read"]), asked, connection_ref=str(subject.get("ref", "")))
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        token = str(request.GET.get("watch", ""))
+        found = watched(token) if 0 < len(token) <= WATCH_LIMIT else None
+        if (standing := self.standing(found) if found else None) is None:
+            raise Http404("Nothing to watch.")
+        return JsonResponse(standing.as_json())
 
 
 def watch_token(subject: dict[str, Any]) -> str:
@@ -214,14 +282,10 @@ def watched(token: str) -> dict[str, Any] | None:
 # ----- Reads the controller takes ---------------------------------------------
 
 
-def read_watch(kinds: Iterable[str], asked: datetime, *, connection_ref: str = "") -> str:
-    """The token for a read of ``kinds`` (none: every kind) asked for at ``asked``."""
-
-    return watch_token({"read": sorted(set(kinds)), "ref": connection_ref, "asked": asked.isoformat()})
-
-
 def read_status_url(kinds: Iterable[str], asked: datetime, *, connection_ref: str = "") -> str:
-    token = read_watch(kinds, asked, connection_ref=connection_ref)
+    """Where a page follows a read of ``kinds`` (none: every kind) asked for at ``asked``."""
+
+    token = watch_token({"read": sorted(set(kinds)), "ref": connection_ref, "asked": asked.isoformat()})
     return f"{reverse('control_plane:read_status')}?watch={token}"
 
 
@@ -229,16 +293,13 @@ def _untried(asked: datetime) -> Standing:
     """How a read asked for at ``asked``, and not yet answered, stands: under
     way once the controller has arrived since, waiting while one is due, and
     failed when none is arriving to take it. Readings in a database copied from
-    elsewhere are no controller of this HQ's (``ControllerStanding.here``)."""
+    elsewhere are no controller of this HQ's (``WorkerStanding.here``)."""
 
     controller = cadence.controller_standing()
-    if controller.seen_at is None or not controller.here:
-        return Standing(FAILED, ended(READ_UNTAKEN.format(absent="no controller reports to this HQ")), since=asked)
-    if controller.seen_at > asked:
+    if controller.here and controller.seen_at is not None and controller.seen_at > asked:
         return Standing(RUNNING, REFRESHING, since=asked)
-    if controller.silent:
-        silence = duration(timezone.now() - controller.seen_at)
-        return Standing(FAILED, ended(READ_UNTAKEN.format(absent=f"no controller seen in {silence}")), since=asked)
+    if untaken := controller.cannot("refresh", now=timezone.now()):
+        return Standing(FAILED, untaken, since=asked)
     return Standing(QUEUED, REFRESHING, since=asked)
 
 
@@ -288,40 +349,3 @@ def read_standing(kinds: Iterable[str], asked: datetime, *, connection_ref: str 
     if refused:
         return Standing(FAILED, ended(refused[0].phrase), since=asked)
     return Standing(DONE, REFRESHED, since=asked)
-
-
-# ----- Jobs the runner runs ---------------------------------------------------
-
-
-# How work stands by the state it is seen in, as ``jobs.JobState`` says it,
-# so a job and an operation a worker carries out read alike; any other has
-# ended badly.
-_STANDS = {"queued": QUEUED, "running": RUNNING, "succeeded": DONE}
-
-
-def job_standing(job: Any) -> Standing:
-    """How a ``jobs.Job`` stands, in the shared shape."""
-
-    state = _STANDS.get(job.seen_state, FAILED)
-    note = job.seen_error if state == FAILED else job.note
-    return Standing(
-        state,
-        note,
-        since=job.created_at,
-        percent=job.percent if state != DONE else 100,
-        word=job.seen_state_display,
-    )
-
-
-# ----- Operations a worker carries out ----------------------------------------
-
-
-def operation_standing(operation: Any) -> Standing:
-    """How an ``OperationRequest`` stands, in the shared shape: by the state
-    Jobs shows it in, which its query annotates as ``seen``
-    (``work_runs.run_seen_state``), and in the sentence its history says."""
-
-    seen = JobState(operation.seen)
-    lapsed = seen == JobState.LOST and operation.state == OperationState.CLAIMED
-    note = LAPSED if lapsed else operation_headline(operation)
-    return Standing(_STANDS.get(seen, FAILED), note, since=operation.created_at, word=seen.label)

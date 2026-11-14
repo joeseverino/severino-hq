@@ -129,7 +129,8 @@ document.addEventListener("change", (event) => {
 // header's follow. "Dismiss all" and a family's "Dismiss" stay ordinary
 // posts, since what they cover is the server's to say.
 document.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-triage] button[formaction]");
+  // The row's own Dismiss or Restore posts the row's key (action_tags.triage).
+  const button = event.target.closest('[data-attention-item] .row-actions > button[name="key"][formaction]');
   if (!button || event.defaultPrevented) return;
   const row = button.closest("[data-attention-item]");
   const form = document.getElementById(button.getAttribute("form"));
@@ -163,17 +164,16 @@ document.addEventListener("click", (event) => {
         });
       }
       // The button becomes its opposite, posting to the other route.
-      if (dismissing) row.dataset.dismissed = `Dismissed: ${row.querySelector(".attention-title")?.textContent.trim() || ""}`;
+      if (dismissing) row.dataset.dismissed = `Dismissed: ${row.querySelector("[data-attention-title]")?.textContent.trim() || ""}`;
       else delete row.dataset.dismissed;
+      const routes = document.querySelector("[data-triage-routes]")?.dataset;
+      const next = other || {
+        action: dismissing ? routes?.restore : routes?.dismiss,
+        label: dismissing ? "Restore" : "Dismiss",
+      };
       button.dataset.other = JSON.stringify(was);
-      if (other) {
-        button.setAttribute("formaction", other.action);
-        button.textContent = other.label;
-      } else {
-        const routes = document.querySelector("[data-triage-routes]")?.dataset;
-        button.setAttribute("formaction", dismissing ? routes?.restore : routes?.dismiss);
-        button.textContent = dismissing ? "Restore" : "Dismiss";
-      }
+      button.setAttribute("formaction", next.action);
+      button.textContent = next.label;
     })
     // Whatever went wrong, the plain form still works.
     .catch(() => { button.setAttribute("form", form.id); form.requestSubmit(button); })

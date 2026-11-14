@@ -10,8 +10,10 @@ import json
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
+from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
+from functools import cache
 from logging import getLogger
 from typing import Any, Literal, overload
 from uuid import UUID
@@ -20,6 +22,7 @@ from django.core.serializers.json import DjangoJSONEncoder
 from django.db import transaction
 from django.db.models.signals import post_delete, post_init, post_save
 from django.dispatch import receiver
+from django.utils.text import Truncator
 lazy from django.contrib.auth.base_user import AbstractBaseUser
 lazy from django.db.models import Max, Model, Q, QuerySet
 lazy from django.utils import timezone
@@ -27,13 +30,13 @@ lazy from django.utils import timezone
 from hq.platform.application import request_context
 from hq.platform.application.payload_words import changed_words
 lazy from hq.platform.application.request_identity import signed_in
+lazy from hq.platform.application.security import person_of
 
 from . import speculation
 from .attribution import OperationContext, bound, operation_context
 from .audit_words import REDACTED, changes_said
-from .facets import as_metadata as facet_metadata
+from .facets import Facet, Timing, as_metadata as facet_metadata
 from .models import AuditLog
-lazy from .facets import Facet
 
 logger = getLogger("severino.audit")
 
@@ -41,10 +44,15 @@ _AUDITED_MODELS: dict[type, str] = {}
 # The record a registered model's rows are about, by its key, where that is
 # not the row itself: an operation or a decision on a managed resource.
 _SUBJECTS: dict[type, Callable[[Any], str]] = {}
+# The connection a registered model's rows went through, where it names one.
+_CONNECTIONS: dict[type, Callable[[Any], str]] = {}
 _connection_context: ContextVar[str] = ContextVar("hq_audit_connection", default="")
 # A seed's say in the rows it causes: when each happened and who did it.
 type Stamp = Callable[[Model | None, str, str], dict[str, Any] | None]
 _stamp_context: ContextVar[Stamp | None] = ContextVar("hq_audit_stamp", default=None)
+# The tallies open around work that answers for the rows it writes; each row
+# recorded counts in every one open (``tallied``).
+_tallies: ContextVar[tuple[list[AuditLog], ...]] = ContextVar("hq_audit_tallies", default=())
 
 # The object type of an event about one connection.
 CONNECTION_AUDIT_TYPE = "Connection"
@@ -98,15 +106,14 @@ def _readable(value):
     return str(value)[:VALUE_CHARS]
 
 
-def _cut(words: str) -> str:
-    return words if len(words) <= VALUE_CHARS else f"{words[: VALUE_CHARS - 1]}…"
-
-
 def _inner_changes(before, after) -> dict[str, list[str]]:
     """A record or list that moved, as each value in it that moved, in words,
     by where it is inside the field ("" for the field as a whole).
     """
-    return {row.label: [_cut(row.before), _cut(row.after)] for row in changed_words(before, after)}
+    return {
+        row.label: [Truncator(row.before).chars(VALUE_CHARS), Truncator(row.after).chars(VALUE_CHARS)]
+        for row in changed_words(before, after)
+    }
 
 
 # Types whose values cannot change in place. Holding one is the same as
@@ -231,9 +238,19 @@ def audit_operation(
         device=getattr(principal, "device", None) or "",
         cause=cause,
         approved_by=getattr(principal, "approved_by", None) or "",
+        person=_acted_for(principal),
         rebinds=rebinds,
     ):
         yield
+
+
+def _acted_for(principal: object | None) -> Callable[[], AbstractBaseUser | None] | None:
+    """How to find the account a token's principal acts for, which no session
+    names (``security.person_of``), looked up once, by the first row that asks."""
+
+    if not getattr(principal, "person_key", ""):
+        return None
+    return cache(lambda: person_of(principal))
 
 
 @contextmanager
@@ -285,10 +302,12 @@ def withdrawn(*models: type[Model]) -> Iterator[dict[type, str]]:
         raise LookupError(f"Not audited: {', '.join(unknown)}.")
     registry = dict(_AUDITED_MODELS)
     subjects = dict(_SUBJECTS)
+    connections = dict(_CONNECTIONS)
     receivers = {signal: list(signal.receivers) for signal in _SIGNALS}
     labels = {model: _AUDITED_MODELS.pop(model) for model in models}
     for model in models:
         _SUBJECTS.pop(model, None)
+        _CONNECTIONS.pop(model, None)
     for signal in _SIGNALS:
         for model in models:
             signal.disconnect(sender=model, dispatch_uid=AUDIT_DISPATCH_UID)
@@ -299,6 +318,8 @@ def withdrawn(*models: type[Model]) -> Iterator[dict[type, str]]:
         _AUDITED_MODELS.update(registry)
         _SUBJECTS.clear()
         _SUBJECTS.update(subjects)
+        _CONNECTIONS.clear()
+        _CONNECTIONS.update(connections)
         for signal, kept in receivers.items():
             with signal.lock:
                 signal.receivers = kept
@@ -314,6 +335,7 @@ def register_audit(
     connection: Callable[[Any], str] | None = None,
     redact_for: Callable[[Any], Iterable[str]] | None = None,
     subject: Callable[[Any], str] | None = None,
+    required: bool = False,
 ) -> None:
     """Register a model so create/update/delete events land in the audit log.
 
@@ -324,6 +346,8 @@ def register_audit(
     goes through; `observation` names fields that only record HQ looking.
     `subject` returns the key of the record an instance's rows are about, so
     one query on the row's `subject` reads that record's whole story.
+    `required` fails the save with its row, for a model whose change must not
+    commit unrecorded (a person's access or an agent's standing).
     """
 
     if model in _AUDITED_MODELS:
@@ -331,6 +355,8 @@ def register_audit(
     _AUDITED_MODELS[model] = type_label
     if subject is not None:
         _SUBJECTS[model] = subject
+    if connection is not None:
+        _CONNECTIONS[model] = connection
     secret = frozenset(redact)
     # Fields that record HQ *looking*, not the world changing. A sweep confirms
     # hundreds of declarations per pass and stamps the time on each; audited as
@@ -377,6 +403,7 @@ def register_audit(
             message=str(instance.__dict__.pop("audit_said", "") or "") or changes_said(changes),
             metadata={"changes": changes} if changes else None,
             connection=_connection_of(connection, instance),
+            required=required,
         )
         # Re-armed for the next save in the same request: without this, a
         # second save would re-report the first one's changes.
@@ -392,6 +419,7 @@ def register_audit(
             type_label=type_label,
             message=str(getattr(instance, "audit_gone", "") or ""),
             connection=_connection_of(connection, instance),
+            required=required,
         )
 
 
@@ -491,7 +519,7 @@ def record_event(
     # asgiref compares a variable's values when it restores a context
     # (``asgiref.sync._restore_context``), and comparing the lazy user would
     # load it from the session on the event loop's thread.
-    user = user or signed_in(request_context.current())
+    user = user or signed_in(request_context.current()) or (context.person() if context.person else None)
     if user is not None and not user.is_authenticated:
         user = None
 
@@ -542,8 +570,78 @@ def record_event(
         if required:
             raise
         return None
+    for rows in _tallies.get():
+        rows.append(row)
     emit_line("audit.recorded", _line(row))
     return row
+
+
+@contextmanager
+def tallied() -> Iterator[list[AuditLog]]:
+    """The rows recorded in the block, a nested block's included: what the job
+    runner and the capability runner count of the work they run."""
+
+    rows: list[AuditLog] = []
+    with _tallies.set((*_tallies.get(), rows)):
+        yield rows
+
+
+def made_in(record: Model) -> str:
+    """The operation whose row made ``record``, where that is not its own; ""
+    for a record no row made, or one made under its own id."""
+
+    label = _AUDITED_MODELS.get(type(record))
+    if label is None:
+        return ""
+    return (
+        AuditLog.objects.filter(object_type=label, object_id=str(record.pk), action=AuditLog.Action.CREATED)
+        .exclude(operation_id=str(record.pk))
+        .values_list("operation_id", flat=True)
+        .first()
+        or ""
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class Outcome:
+    """How a piece of work, or one task of it, ended: ``seconds`` how long it
+    took where that was measured, ``facets`` what it measured of itself,
+    ``routine`` an end only the scheduler asked for that changed nothing, and
+    ``filed_under`` its row's type where no audit registration names one."""
+
+    message: str
+    seconds: float | None = None
+    ok: bool = True
+    routine: bool = False
+    facets: tuple[Facet, ...] = ()
+    detail: dict[str, Any] = field(default_factory=dict)
+    filed_under: str = ""
+
+
+def work_ended(row: Model, outcome: Outcome) -> AuditLog | None:
+    """The one row saying how the work ``row`` stands for ended, a job's or a
+    controller's operation's, or one task of it, beside the rows its work
+    wrote. Required: an end that cannot be recorded does not commit."""
+
+    model = type(row)
+    return record_event(
+        action=AuditLog.Action.FAILED
+        if not outcome.ok
+        else AuditLog.Action.OBSERVED
+        if outcome.routine
+        else AuditLog.Action.DONE,
+        obj=row,
+        type_label=_AUDITED_MODELS.get(model) or outcome.filed_under,
+        message=outcome.message,
+        # How long it took as a number, comparable with the last run's.
+        facets=(
+            *(() if outcome.seconds is None else (Timing(duration_ms=round(outcome.seconds * 1000)),)),
+            *outcome.facets,
+        ),
+        metadata=outcome.detail,
+        connection=_connection_of(_CONNECTIONS.get(model), row),
+        required=True,
+    )
 
 
 def _actor(context: OperationContext, user: AbstractBaseUser | None, *, stamped_user: bool) -> str:

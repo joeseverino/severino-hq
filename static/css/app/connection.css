@@ -101,14 +101,6 @@ textarea.code {
    padding. */
 .conn-pending { padding: calc(var(--space-10) + 1em) 0; }
 
-.conn-peering.conn-tailnet { border-left: 3px solid var(--ok); }
-.conn-peering:is(.conn-network, .conn-loopback) { border-left: 3px solid var(--warn); }
-.conn-peering.conn-elsewhere { border-left: 3px solid var(--danger); }
-/* The tailnet's color only once every check on the way in is confirmed
-   (Connection.verdict). */
-.conn-peering.conn-tailnet.conn-verdict-unconfirmed { border-left-color: var(--line); }
-.conn-peering.conn-tailnet.conn-verdict-failing { border-left-color: var(--attn); }
-.conn-verdict-unconfirmed .conn-link:not(.conn-link-relayed) .conn-link-line { background: var(--line); }
 .conn-headline { display: inline-flex; align-items: center; font-size: var(--text-lg); font-weight: 650; margin: 0; }
 .conn-sub { margin: 0; color: var(--muted); font-size: var(--text-xs); text-align: center; }
 
@@ -138,6 +130,8 @@ textarea.code {
 .conn-peering {
   display: grid; grid-template-columns: minmax(min-content, 1fr) auto minmax(min-content, 1fr); gap: var(--space-7); align-items: center;
   padding: var(--space-7) var(--space-8); border: 1px solid var(--line); border-radius: var(--radius);
+  /* The connection's tone (Connection.tone), the one its status dot is drawn in. */
+  border-inline-start: 3px solid var(--toned);
 }
 .conn-peer { display: grid; gap: var(--space-1); justify-items: start; min-width: 0; }
 .conn-peering > .conn-peer:last-child { justify-items: end; text-align: right; }
@@ -150,11 +144,14 @@ textarea.code {
 .conn-link { display: grid; gap: var(--space-2); justify-items: center; min-width: 120px; }
 .conn-link-line {
   width: 100%; height: 2px; border-radius: 2px;
-  background: linear-gradient(90deg, var(--accent-2), var(--ok));
+  background: var(--toned);
 }
+/* The path is drawn in the line's pattern, so its color stays the connection's
+   tone: a relay dashed, a link with no reading now dotted. */
 .conn-link-relayed .conn-link-line { background: repeating-linear-gradient(
-  90deg, var(--warn) 0 5px, transparent 5px 10px); }
-.conn-link-idle .conn-link-line { background: var(--line); }
+  90deg, var(--toned) 0 5px, transparent 5px 10px); }
+.conn-link-idle .conn-link-line { background: repeating-linear-gradient(
+  90deg, var(--toned) 0 2px, transparent 2px 6px); }
 @container peering (max-width: 36rem) {
   /* Stacked, the two ends read as one column rather than as two facing each
      other, so they share an axis instead of one hugging each edge. */
@@ -164,8 +161,6 @@ textarea.code {
   }
   .conn-link-line { height: 2px; }
 }
-
-.conn-opaque { border-left-color: var(--danger); }
 
 .conn-peer-name { font-size: var(--text-md); font-weight: 600; }
 

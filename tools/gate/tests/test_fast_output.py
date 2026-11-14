@@ -1,6 +1,6 @@
-"""fast's one mise run: the source checks that read the browser gate run ahead
-of the tests, the summary output is the run's config environment's, and the
-run goes on past a failure to name every one."""
+"""fast's runs of mise: the source checks that read the browser gate run ahead
+of the tests, the summary output is the runs' config environment's, and a run
+goes on past a failure to name every one."""
 
 import os
 import subprocess
@@ -14,7 +14,7 @@ from django.test.runner import DiscoverRunner
 from hq.platform.core.test_runner import drives_a_browser, tests_in
 from hq.platform.core.tests.task import trusted_mise
 from tests.mise_tasks import body, mise_tasks
-from tools.gate import fast as fast_gate, verdict
+from tools.gate import fast as fast_gate, selection as fast_select, verdict
 from tools.gate.tests.base import GateTestCase
 from tools.gate.verdict import ESCAPE
 
@@ -28,12 +28,12 @@ class SourceFirstTests(GateTestCase):
 
     def test_the_probe_check_runs_first_and_the_rest_with_the_tests(self):
         other = "hq.platform.core.tests.test_part_tags"
-        first, rest = fast_gate.source_first([PROBES, f"{PROBES}.ProbeTests", other], fast_gate.python_files())
+        first, rest = fast_select.source_first([PROBES, f"{PROBES}.ProbeTests", other], fast_select.python_files())
         self.assertEqual(first, [PROBES, f"{PROBES}.ProbeTests"])
         self.assertEqual(rest, [other])
 
     def test_each_test_run_first_starts_no_browser(self):
-        readers = sorted(fast_gate.importers(fast_gate.python_files())[fast_gate.BROWSER_MODULES])
+        readers = sorted(fast_select.importers(fast_select.python_files())[fast_select.BROWSER_MODULES])
         self.assertIn(PROBES, readers)
         suite = DiscoverRunner(verbosity=0).build_suite(readers)
         self.assertFalse([test.id() for test in tests_in(suite) if drives_a_browser(test)])
@@ -56,10 +56,13 @@ class SourceFirstTests(GateTestCase):
         self.assertTrue(order[0].startswith("[fast:source] ") and order[0].endswith(f" {PROBES}"), order)
         self.assertTrue(order[1].startswith(f"[{fast_gate.TESTS}] "), order)
 
-    def test_the_run_is_one_mise_run_in_fast_s_environment_with_no_output_flag(self):
+    def test_each_run_is_a_mise_run_in_fast_s_environment_with_no_output_flag(self):
         # An --output or MISE_TASK_OUTPUT would outrank the tests' own output setting.
-        command = fast_gate.run_command(("lint:ruff", "lint:mypy"), [PROBES], ["example.tests.test_x"], "auto")
-        mise = command.index("mise")
+        quick = fast_gate.quick_command(("lint:ruff", "lint:prose"), "auto")
+        self.assertEqual(quick[:4], ["mise", "--env", fast_gate.ENVIRONMENT, "run"])
+        self.assertNotIn("--output", quick)
+        command = fast_gate.run_command(("lint:mypy",), [PROBES], ["example.tests.test_x"], "auto")
+        mise = command.index("--env") - 1
         self.assertEqual(command[mise : mise + 4], ["mise", "--env", fast_gate.ENVIRONMENT, "run"])
         self.assertIn(f"{fast_gate.SOURCE}={PROBES}", command[:mise])
         self.assertNotIn("--output", command)
@@ -72,16 +75,14 @@ class SourceFirstTests(GateTestCase):
         self.assertRegex(body(mise_tasks()[fast_gate.TESTS]), r'(?m)^#MISE output="prefix"$')
 
 
-# Two quick gates that fail and the tests' task, as a project of the test's own declares them.
-FAILING_GATES = f"""
+# Two quick gates that fail, as a project of the test's own declares them.
+FAILING_GATES = """
 [tasks."lint:ruff"]
 run = "echo ruff refused example.py; exit 1"
 
 [tasks."lint:prose"]
 run = "echo prose refused example.md; exit 3"
 
-[tasks."{fast_gate.TESTS}"]
-run = "true"
 """
 
 
@@ -104,9 +105,9 @@ class EveryFailureTests(GateTestCase):
             "MISE_SYSTEM_CONFIG_FILE": str(none),
         }
         # One job, so the second gate starts only after the first has failed.
-        command = fast_gate.run_command(("lint:ruff", "lint:prose"), [], ["example.tests.test_x"], "1")
+        command = fast_gate.quick_command(("lint:ruff", "lint:prose"), "1")
         with patch.dict(os.environ, env, clear=True), patch.object(verdict, "outlets", return_value=[]):
-            step = verdict.run("quick gates and tests", command, cwd=folder)
+            step = verdict.run("quick gates", command, cwd=folder)
         self.assertFalse(step.ok)
         self.assertNotEqual(step.code, 0)
         self.assertLessEqual({"lint:ruff", "lint:prose"}, set(step.failures()))

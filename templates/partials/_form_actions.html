@@ -16,9 +16,9 @@ the bottom of the screen once the form has changed (pages.css).
 {% endcomment %}
 <div class="form-actions{% if bar %} save-bar{% endif %}">
   {% if choices %}
-    {% for value, words in choices %}<button class="btn{% if forloop.length == 1 %} primary{% endif %}" type="submit" name="{{ choice_field }}" value="{{ value }}">{{ words|breakable }}</button>{% endfor %}
+    {% for value, words in choices %}<button class="btn{% if forloop.length == 1 %} primary{% endif %}" type="submit" name="{{ choice_field }}" value="{{ value }}">{{ words|button_words }}</button>{% endfor %}
   {% else %}
-    <button class="btn primary" type="submit"{% if gap %} disabled{% endif %}>{{ verb|breakable }}</button>
+    <button class="btn primary" type="submit"{% if gap %} disabled{% endif %}>{{ verb|button_words }}</button>
   {% endif %}
   {% if gap %}{% include "partials/_write_gap.html" with gap=gap only %}{% endif %}
   {% if cancel_url %}<a class="btn" href="{{ cancel_url }}"{% if live %} data-live-cancel{% endif %}{% if in_place is True %} data-fragment-target=""{% endif %}>Cancel</a>{% endif %}

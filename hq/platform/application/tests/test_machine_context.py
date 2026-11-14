@@ -87,6 +87,20 @@ class NamesTests(TestCase):
 
         self.assertEqual(row[2].text, "10.9.9.9")
 
+    def test_a_part_with_an_open_problem_says_its_worst_in_its_tone(self):
+        declare("site-dns", "adguard.rewrite", domain="site.test", answer="10.9.9.9")
+        worst = {"label": "10.9.9.9 does not answer", "status": "serious"}
+
+        def about(url, _principal):
+            return (worst,) if "site-dns" in url else ()
+
+        with mock.patch("hq.platform.application.machine_context.problems_about", side_effect=about):
+            row = row_for(a_machine("site.test"), "site.test")
+
+        self.assertEqual((row[2].text, row[2].tone), ("does not answer", "serious"))
+        self.assertEqual(row[2].link.label, "10.9.9.9")
+        self.assertIn("site-dns", row[2].url)
+
     def test_columns_follow_the_facet_registry_by_id(self):
         from unittest import mock
 

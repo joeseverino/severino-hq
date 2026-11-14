@@ -123,17 +123,18 @@ def contrast_read():
     return (axe_probe(), [SELECTORS["contrast_scope"], CONTRAST, [], SELECTORS["vendored"]])
 
 
-def rules_read():
-    """Every rule of TAGS but those LEFT_OUT, over the whole page, as a probe
-    and its argument."""
+def rules_read(left_out=()):
+    """Every rule of TAGS but those LEFT_OUT and ``left_out``, the rules a
+    page declares it leaves out (``BrowserGate.left_out_on``), over the whole
+    page, as a probe and its argument."""
 
-    return (axe_probe(), [None, TAGS, list(LEFT_OUT), SELECTORS["vendored"]])
+    return (axe_probe(), [None, TAGS, [*LEFT_OUT, *left_out], SELECTORS["vendored"]])
 
 
 # The survey checks these probes answer (`probes/__init__.py`), each read only
 # when it runs: a tree without the lint tools (the image, the composed suite's
 # copy) names them all the same.
 CHECKS = {
-    "axe": rules_read,
-    "contrast": Check(contrast_read, palette=True),
+    "axe": Check(rules_read, reader_sees="a part a screen reader or the keyboard cannot use"),
+    "contrast": Check(contrast_read, palette=True, reader_sees="text too faint to read"),
 }

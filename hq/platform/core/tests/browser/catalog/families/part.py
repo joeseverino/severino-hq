@@ -46,7 +46,7 @@ from hq.platform.application.ui import (
 )
 from hq.platform.core.models import AgentIdentity
 from hq.platform.core.templatetags.action_tags import MOST_BESIDE
-from hq.platform.core.tests.browser.catalog.common import HEAD, Entry
+from hq.platform.core.tests.browser.catalog.common import DRAWN_AT, HEAD, Entry
 from hq.platform.core.tests.browser.selectors import SELECTORS
 lazy from hq.platform.application.dashboard import queue_item
 lazy from hq.platform.application.github_estate import Repository
@@ -140,17 +140,21 @@ def _holding(entry: CalendarEvent) -> Callable[[date, date], tuple[CalendarEvent
     return lambda _first, _last: (entry,)
 
 
-def _month_gone_by():
-    """A month seen from a day in it: each kind of entry on the days gone by,
+def _month_gone_by(month=date(2026, 1, 1)):
+    """``month`` seen from a day in it: each kind of entry on the days gone by,
     a bar running on past today, each in a series color whose fill sits
-    closest to the ink a day gone by is set in."""
+    closest to the ink a day gone by is set in. Each entry draws a month of
+    its own, whose days no other's grid holds, so its days' ids are its own
+    on the gallery's page."""
 
-    month, today = date(2026, 1, 1), date(2026, 1, 21)
+    today = month.replace(day=21)
     entries = {
-        7: CalendarEvent("example-bar", "Example window that runs past today", date(2026, 1, 12), date(2026, 1, 24)),
-        1: CalendarEvent("example-timed", "Example timed line", datetime(2026, 1, 14, 15, tzinfo=UTC)),
-        6: CalendarEvent("example-all-day", "Example all-day line", date(2026, 1, 15)),
-        8: CalendarEvent("example-mark", "Example mark", date(2026, 1, 13), mark=True),
+        7: CalendarEvent(
+            "example-bar", "Example window that runs past today", month.replace(day=12), month.replace(day=24)
+        ),
+        1: CalendarEvent("example-timed", "Example timed line", datetime(month.year, month.month, 14, 15, tzinfo=UTC)),
+        6: CalendarEvent("example-all-day", "Example all-day line", month.replace(day=15)),
+        8: CalendarEvent("example-mark", "Example mark", month.replace(day=13), mark=True),
     }
     sources = tuple(
         ("Example", CalendarSource(f"example.series-{slot}", f"Example {slot}", _holding(entry), slot=slot))
@@ -263,7 +267,7 @@ _WIDE = (
 
 
 # What a part that says how long ago is drawn against.
-_NOW = datetime.now(UTC)
+_NOW = DRAWN_AT
 
 
 def _approval(state, **decided):
@@ -293,6 +297,7 @@ def _approval(state, **decided):
             else (),
             "resource_url": "/example/",
             "resource_label": "Playbooks",
+            "resource_open": "Open Playbooks",
         }
     }
 
@@ -349,11 +354,12 @@ def _runs():
     )
 
 
-def _connection(channel=TAILNET_CHANNEL, *, path="direct", held=True, linked=True):
+def _connection(channel=TAILNET_CHANNEL, *, path="direct", held=True, linked=True, failing=False):
     """A request as the connection panel reads it: from an example laptop to
     an example HQ, over ``path`` (``direct``, ``relayed``, or ``""`` for no
     tailnet reading), its checks confirmed when ``held`` and one not yet
-    read otherwise, each end leading to its machine when ``linked``."""
+    read otherwise, or one read and not holding when ``failing``, each end
+    leading to its machine when ``linked``."""
 
     laptop = Device("example-laptop", addresses=("192.0.2.10",), user="example-person@example.com")
     hq = Device("example-hq", addresses=("192.0.2.20",))
@@ -375,7 +381,15 @@ def _connection(channel=TAILNET_CHANNEL, *, path="direct", held=True, linked=Tru
         serves=hq if tailnet else None,
         observer=None,
         identity=Identity(username="example", tailnet_user=laptop.user if tailnet else ""),
-        layers=(Layer("example-check", "Example check", holds=True, detail="An example check.", conclusive=held),),
+        layers=(
+            Layer(
+                "example-check",
+                "Example check",
+                holds=not failing,
+                detail="An example check.",
+                conclusive=held or failing,
+            ),
+        ),
         secure_transport=True,
         host="hq.example.com",
         machine_url="/example/machines/example-laptop/" if linked else "",
@@ -464,16 +478,19 @@ class _ExampleDistance(forms.Form):
 
 
 # A table whose rows each open an editor under them (`row_editor`).
-_EDITED_ROWS = (
-    '{% section "Example runs" %}{% table_region "Example runs" %}<table class="data-table"><thead><tr>'
-    '{% table_heading "Run" "identifier" gutter=True %}{% table_heading "Miles" "numeric" %}'
-    '{% table_heading "Distance check" "control" %}</tr></thead><tbody>'
-    '<tr><td>example-01</td><td>3.10</td><td>{% row_editor form "example-01" label="Correct distance" '
-    'action="/example/distance/" verb="Save distance" distance_miles="3.10" %}</td></tr>'
-    '<tr><td>example-02</td><td>5.00</td><td>{% row_editor form "example-02" label="Correct distance" '
-    'action="/example/distance/" verb="Save distance" distance_miles="5.00" %}</td></tr>'
-    "</tbody></table>{% endtable_region %}{% endsection %}"
-)
+def _edited_rows(name, first, second):
+    """A table named ``name`` whose rows ``first`` and ``second`` each open an editor."""
+
+    return (
+        f'{{% section "{name}" %}}{{% table_region "{name}" %}}<table class="data-table"><thead><tr>'
+        '{% table_heading "Run" "identifier" gutter=True %}{% table_heading "Miles" "numeric" %}'
+        '{% table_heading "Distance check" "control" %}</tr></thead><tbody>'
+        f'<tr><td>{first}</td><td>3.10</td><td>{{% row_editor form "{first}" label="Correct distance" '
+        'action="/example/distance/" verb="Save distance" distance_miles="3.10" %}</td></tr>'
+        f'<tr><td>{second}</td><td>5.00</td><td>{{% row_editor form "{second}" label="Correct distance" '
+        'action="/example/distance/" verb="Save distance" distance_miles="5.00" %}</td></tr>'
+        "</tbody></table>{% endtable_region %}{% endsection %}"
+    )
 
 
 # Each provider's last sweep, as ``inventory.inventory_state`` hands it over:
@@ -646,6 +663,7 @@ _EXAMPLE_RUNS = (
         "Reported every example disk.",
         RunEvidence(
             hosts=("example-01",),
+            stated=("example.filesystem", "example.reading_with_a_longer_name"),
             events=tuple(
                 _event(f"Example task {number}", outcome, tone)
                 for number, (outcome, tone) in enumerate(
@@ -691,24 +709,26 @@ ENTRIES = {
     # narrow ones, takes the row before they share theirs.
     "part/flow-two": Entry(_flow(("Example identity", _NARROW), ("Example link", _NARROW))),
     "part/flow-three": Entry(
-        _flow(("Example identity", _NARROW), ("Example link", _NARROW), ("Example path", _NARROW))
+        _flow(("Example identity 2", _NARROW), ("Example link 2", _NARROW), ("Example path", _NARROW))
     ),
     "part/flow-four": Entry(
         _flow(
-            ("Example identity", _NARROW),
-            ("Example link", _NARROW),
-            ("Example path", _NARROW),
+            ("Example identity 3", _NARROW),
+            ("Example link 3", _NARROW),
+            ("Example path 2", _NARROW),
             ("Example device", _NARROW),
         )
     ),
-    "part/flow-wide": Entry(_flow(("Example hosts", _WIDE), ("Example identity", _NARROW), ("Example link", _NARROW))),
+    "part/flow-wide": Entry(
+        _flow(("Example hosts", _WIDE), ("Example identity 4", _NARROW), ("Example link 4", _NARROW))
+    ),
     # A section that says how to read it beside a taller one: the row ends
     # both together, and the foot stands at the bottom of its frame.
     "part/flow-foot": Entry(
         _flow(
-            ("Example identity", _NARROW + "{% foot %}Example of how to read it."),
+            ("Example identity 5", _NARROW + "{% foot %}Example of how to read it."),
             (
-                "Example link",
+                "Example link 5",
                 "{% facts %}"
                 + "".join(f'{{% fact "Example fact {n}" value="example-{n:02}" %}}' for n in range(1, 7))
                 + "{% endfacts %}",
@@ -718,7 +738,7 @@ ENTRIES = {
     # The section part ({% section %}) in each state a page can give it; a new
     # option of the tag comes with an entry here (test_catalog's source check).
     "part/section-bare": Entry(
-        '{% section "Example notes" %}<p>An example line of prose in the frame.</p>{% endsection %}'
+        '{% section "Example notes 2" %}<p>An example line of prose in the frame.</p>{% endsection %}'
     ),
     "part/section-full": Entry(
         '{% section "An example heading long enough to need the row" count="12 example hosts" id="example-hosts"'
@@ -755,7 +775,7 @@ ENTRIES = {
     ),
     # A table whose region carries the heading's name, as a list's sections draw one.
     "part/section-table": Entry(
-        '{% section "Example hosts" count=2 %}{% table_region "Example hosts" %}'
+        '{% section "Example hosts 2" count=2 %}{% table_region "Example hosts 2" %}'
         '<table class="data-table"><thead><tr><th scope="col">Name</th><th scope="col">State</th></tr></thead>'
         "<tbody><tr><td>example-01</td><td>Online</td></tr><tr><td>example-02</td><td>Online</td></tr></tbody>"
         "</table>{% endtable_region %}{% aside %}<span>Example source</span>{% endsection %}"
@@ -765,16 +785,16 @@ ENTRIES = {
     "part/queue-dense": Entry(
         '{% section "Example containers" %}{% include "partials/_problems.html#rest" with rest=rest %}'
         "<p>The section's own content.</p>{% endsection %}",
-        {"rest": _problems("example-web-01 runs an image by tag alone", "example-worker-02 restarts often")},
+        {"rest": _problems("example-web-05 runs an image by tag alone", "example-worker-06 restarts often")},
     ),
     # Several of one family: one row saying what kind and how many, opening to them.
     "part/queue-family": Entry(
-        '{% section "Example containers" %}{% include "partials/_problems.html#rest" with rest=rest %}{% endsection %}',
+        '{% section "Example containers 2" %}{% include "partials/_problems.html#rest" with rest=rest %}{% endsection %}',
         {
             "rest": _problems(
-                "example-web-01 runs an image by tag alone",
-                "example-web-02 runs an image by tag alone",
-                "example-web-03 runs an image by tag alone",
+                "example-web-07 runs an image by tag alone",
+                "example-web-08 runs an image by tag alone",
+                "example-web-09 runs an image by tag alone",
                 family="Example images by tag",
             )
         },
@@ -805,7 +825,7 @@ ENTRIES = {
     "part/section-edge": Entry(
         '{% section "Example request" edge="attention" lede="An example agent wants to change an example record." '
         'more_label="example.com" more_url="/example/" %}<p>An example line of prose in the frame.</p>'
-        '{% endsection %}{% section "Example hosts" edge="serious" %}{% table_region "Example hosts" %}'
+        '{% endsection %}{% section "Example hosts 3" edge="serious" %}{% table_region "Example hosts 3" %}'
         '<table class="data-table"><thead><tr><th scope="col">Name</th></tr></thead>'
         "<tbody><tr><td>example-01</td></tr></tbody></table>{% endtable_region %}{% endsection %}"
     ),
@@ -820,7 +840,7 @@ ENTRIES = {
     ),
     "part/section-head-above": Entry('{% section "Example" head="above" %}<p>An example line.</p>{% endsection %}'),
     "part/section-head-inside": Entry(
-        '{% section "Example" head="inside" %}{% table_region "Example" %}<table class="data-table"><thead><tr>'
+        '{% section "Example 2" head="inside" %}{% table_region "Example 2" %}<table class="data-table"><thead><tr>'
         "<th>Name</th></tr></thead><tbody><tr><td>Example</td></tr></tbody></table>{% endtable_region %}"
         "{% endsection %}"
     ),
@@ -872,7 +892,7 @@ ENTRIES = {
     # head quieter than the outer one, and each spaced from what is above it
     # by the stack gap, after prose and after a list of rows alike.
     "part/section-nested-rows": Entry(
-        '{% section "Example repository" %}<p>An example line about the repository.</p>'
+        '{% section "Example repository 2" %}<p>An example line about the repository.</p>'
         '{% section "Example pull requests" count=2 %}{% include "partials/_record_list.html" %}{% endsection %}'
         '{% section "Example workflows" %}<p>Example build, example test</p>{% endsection %}'
         "{% endsection %}",
@@ -886,7 +906,7 @@ ENTRIES = {
     # A section in a section: the inner head in the outer frame, the inner
     # table reaching the outer frame's sides and foot.
     "part/section-nested": Entry(
-        '{% section "Example path" %}<p>An example line before the steps.</p>'
+        '{% section "Example path 3" %}<p>An example line before the steps.</p>'
         '{% section "Example steps" %}{% table_region "Example steps" %}'
         '<table class="data-table"><thead><tr><th scope="col">Step</th><th scope="col">State</th></tr></thead>'
         "<tbody><tr><td>Example DNS</td><td>Working</td></tr></tbody></table>{% endtable_region %}{% endsection %}"
@@ -909,7 +929,7 @@ ENTRIES = {
     # A link onward whose words wrap at a phone's width: its arrow stays with
     # its last word.
     "part/section-more-wrapped": Entry(
-        '{% section "Example request" more_label="example-service-with-a-deliberately-long-name.example.com"'
+        '{% section "Example request 2" more_label="example-service-with-a-deliberately-long-name.example.com"'
         ' more_url="/example/" %}<p>An example line of prose in the frame.</p>{% endsection %}'
     ),
     # A choice of one ({% select %}) with a visible label, then one named by
@@ -1238,22 +1258,33 @@ ENTRIES = {
         '{% section "Example month" %}{% include "calendars/_month_grid.html" %}{% endsection %}',
         {"calendar": _month_gone_by()},
     ),
-    # The same month compact, as the dashboard draws it beside other sections:
+    # A month compact, as the dashboard draws it beside its recent projects:
     # where things are, each a dot or a sliver, the day opening the rest.
     "part/month-compact": Entry(
-        '<div class="section-flow">{% section "Example month" %}'
+        '<div class="section-flow">{% section "Example month 2" %}'
         '{% include "calendars/_month_grid.html" with compact=True %}{% endsection %}'
-        '{% section "Example notes" %}<p>An example line of prose in the frame.</p>{% endsection %}</div>',
-        {"calendar": _month_gone_by()},
+        '{% section "Example projects" %}{% include "partials/_record_list.html" %}{% endsection %}</div>',
+        {
+            "calendar": _month_gone_by(date(2026, 5, 1)),
+            "rows": [
+                ListRow(
+                    f"Example project {number}",
+                    url=f"/example/project-{number}/",
+                    detail="Software",
+                    at=date(2026, 1, 20 - number),
+                )
+                for number in range(1, 7)
+            ],
+        },
     ),
     # A month as the calendar page draws it, the main of a `.split` beside a
     # flow of sections: the month takes the room, the sections keep their
     # basis beside it and pair up once they wrap under it.
     "part/month-split": Entry(
-        '<div class="split">{% section "Example month" %}{% include "calendars/_month_grid.html" %}'
-        '{% endsection %}<aside class="section-flow">{% section "Example identity" %}' + _NARROW + "{% endsection %}"
-        '{% section "Example link" %}' + _NARROW + "{% endsection %}</aside></div>",
-        {"calendar": _month_gone_by()},
+        '<div class="split">{% section "Example month 3" %}{% include "calendars/_month_grid.html" %}'
+        '{% endsection %}<aside class="section-flow">{% section "Example identity 6" %}' + _NARROW + "{% endsection %}"
+        '{% section "Example link 6" %}' + _NARROW + "{% endsection %}</aside></div>",
+        {"calendar": _month_gone_by(date(2026, 9, 1))},
     ),
     # A row's buttons whose labels end in a name, one of them hyphenated, as a
     # queue row draws a plan for each container behind: the hyphenated part is
@@ -1391,7 +1422,7 @@ ENTRIES = {
         '{% fact "Signature" value="Verified by an example" %}'
         '{% fact "Scanned" value="Nov 11, 10:31 PM" %}'
         "{% endfacts %}{% endsection %}"
-        '{% section "Example record" %}{% facts %}'
+        '{% section "Example record 2" %}{% facts %}'
         '{% fact "Example name" value="example-01" %}'
         '{% fact "Example address" value="192.0.2.10" detail="Read an example minute ago" %}'
         '{% fact "Example kind" value="Container" %}'
@@ -1446,7 +1477,7 @@ ENTRIES = {
     # A note in its own words with the names HQ knows in it as links, its
     # line breaks kept, and a name with no break in it.
     "part/linked-text": Entry(
-        '{% section "Example notes" %}{% include "partials/_linked_text.html" %}{% endsection %}',
+        '{% section "Example notes 4" %}{% include "partials/_linked_text.html" %}{% endsection %}',
         {
             "parts": (
                 "Deploys to ",
@@ -1500,7 +1531,7 @@ ENTRIES = {
     # A run's evidence ({% run_evidence %}) in its row's open line, as Jobs,
     # a machine's page and a procedure's page draw it: a run with every field,
     # one with none, one whose names and messages run long, and one with many
-    # tasks.
+    # tasks that stated readings.
     "part/run-evidence": Entry(
         '{% section "Example runs" %}{% table_region "Example runs" %}<table class="data-table"><thead><tr>'
         '{% table_heading "Procedure" gutter=True %}{% table_heading "State" "status" %}'
@@ -1552,7 +1583,7 @@ ENTRIES = {
         ),
     ),
     "part/change-table-empty": Entry(
-        '{% section "Example request" %}<p>An example start, which changes no field.</p>'
+        '{% section "Example request 3" %}<p>An example start, which changes no field.</p>'
         "{% change_table preview %}{% endsection %}",
         {"preview": compare({}, {}, label="Would change")},
     ),
@@ -1686,7 +1717,7 @@ ENTRIES = {
     # A "do this now" control in a section's body: one never pressed, beside
     # one whose work ended and says how.
     "part/ask": Entry(
-        '{% section "Example readings" %}<p>{% include "partials/_ask.html" with ask=idle %}</p>'
+        '{% section "Example readings 2" %}<p>{% include "partials/_ask.html" with ask=idle %}</p>'
         '<p>{% include "partials/_ask.html" with ask=done %}</p>{% endsection %}',
         {
             "idle": Ask("Read example-host-01", "/example/read/", title="Reads example-host-01 again."),
@@ -1700,7 +1731,7 @@ ENTRIES = {
     # While its work is under way: busy, its elapsed time ticking, followed
     # at its status resource.
     "part/ask-running": Entry(
-        '{% section "Example readings" %}{% include "partials/_ask.html" with ask=ask %}{% endsection %}',
+        '{% section "Example readings 3" %}{% include "partials/_ask.html" with ask=ask %}{% endsection %}',
         {
             "ask": Ask(
                 "Read example-host-01",
@@ -1719,7 +1750,7 @@ ENTRIES = {
     # In a row's cell, where its word alone stands and its sentence opens
     # under the row: one that failed with a long sentence.
     "part/ask-in-a-row": Entry(
-        '{% section "Example connections" %}{% table_region "Example connections" %}<table class="data-table">'
+        '{% section "Example connections 2" %}{% table_region "Example connections 2" %}<table class="data-table">'
         '<thead><tr>{% table_heading "Name" "identifier" %}{% table_heading "Read" "control" %}</tr></thead>'
         '<tbody><tr><td>example-main</td><td>{% include "partials/_ask.html" with ask=ask %}</td></tr>'
         "</tbody></table>{% endtable_region %}{% endsection %}",
@@ -1739,7 +1770,7 @@ ENTRIES = {
     # Waiting its turn, given a sentence that only says its word again: the
     # word alone, in the cell and in the head, and no line under the row.
     "part/ask-waiting": Entry(
-        '{% section "Example connections" %}{% table_region "Example connections" %}<table class="data-table">'
+        '{% section "Example connections 3" %}{% table_region "Example connections 3" %}<table class="data-table">'
         '<thead><tr>{% table_heading "Name" "identifier" %}{% table_heading "Read" "control" %}</tr></thead>'
         '<tbody><tr><td>example-main</td><td>{% include "partials/_ask.html" with ask=ask %}</td></tr>'
         '</tbody></table>{% endtable_region %}<p>{% include "partials/_ask.html" with ask=ask %}</p>{% endsection %}',
@@ -1847,7 +1878,7 @@ ENTRIES = {
                 kind="example.import",
                 label="Example import of a file with a name long enough to wrap",
                 state=JobState.FAILED,
-                note="The example file has no header row, so none of its rows could be read as example records.",
+                error="The example file has no header row, so none of its rows could be read as example records.",
                 created_at=_NOW,
             )
         },
@@ -1923,6 +1954,12 @@ ENTRIES = {
         '{% include "partials/_document_picture.html" with src=picture alt="An example receipt" only %}'
         "{% endsection %}",
     ),
+    # A document of HQ's own framed in a page, an empty one standing in.
+    "part/framed-document": Entry(
+        '{% section "Example document" %}'
+        '{% include "partials/_framed_document.html" with src="about:blank" title="Example document" only %}'
+        "{% endsection %}",
+    ),
     # A command to paste somewhere else, short and long enough to wrap at its
     # slashes and spaces.
     "part/command": Entry(
@@ -1937,7 +1974,7 @@ ENTRIES = {
     # (one read from a value, one that does not hold with the rules it rests
     # on), a stop not read, and one that does not hold, drawn opened.
     "part/check-ladder-route": Entry(
-        '{% section "Example path" %}{% check_ladder route=True %}'
+        '{% section "Example path 4" %}{% check_ladder route=True %}'
         '{% check_rung state="holds" kind="Device" open=True data_example="device" %}example-laptop{% detail %}Example OS'
         '{% more %}2 checks{% page %}<a href="/example/machines/example-laptop/">example-laptop</a>{% body %}<p>Example HQ confirmed this example device.</p>'
         "{% check_ladder %}"
@@ -1957,7 +1994,7 @@ ENTRIES = {
     ),
     # Checks read down as rows, with no route: each in a frame of its own.
     "part/check-ladder": Entry(
-        '{% section "Example checks" %}{% check_ladder %}'
+        '{% section "Example checks 2" %}{% check_ladder %}'
         '{% check_rung state="holds" evidence="192.0.2.10" %}Example address is known'
         "{% body %}<p>Example HQ knows this address.</p>{% endcheck_rung %}"
         '{% check_rung state="does-not" %}Example sign-in is linked{% body %}<p>No example account links it.</p>'
@@ -1969,7 +2006,7 @@ ENTRIES = {
     # it: across the internet with the address to look up, through a relay,
     # and on the reader's own network.
     "part/connection-carriage": Entry(
-        '{% section "Example link" %}{% facts %}'
+        '{% section "Example link 7" %}{% facts %}'
         '{% fact "Connection" %}{% include "partials/_connection_peering.html#carriage" with peering=internet only %}'
         "{% endfact %}"
         '{% fact "Relayed" %}{% include "partials/_connection_peering.html#carriage" with peering=relay only %}'
@@ -2005,10 +2042,16 @@ ENTRIES = {
             "posture": _posture((True, False, None), advanced=False),
         },
     ),
+    # Over the tailnet with a check that does not hold, drawn in the tone
+    # the panel's status dot takes.
+    "part/connection-peering-failing": Entry(
+        '{% include "partials/_connection_peering.html" %}',
+        {"connection": _connection(failing=True)},
+    ),
     # Dots beside a figure, a part of a whole and a history whose dots lead
     # to each run; and a history in a table's cell.
     "part/figure-dots": Entry(
-        '{% section "Example hosts" %}{% include "partials/_kpi_grid.html" %}{% endsection %}',
+        '{% section "Example hosts 4" %}{% include "partials/_kpi_grid.html" %}{% endsection %}',
         {
             "items": [
                 Kpi("Example hosts online", "3 of 5", "2 example hosts offline", drawing=Dots.of(3, 5)),
@@ -2040,7 +2083,7 @@ ENTRIES = {
         address="/example/events/?q=example&page=2",
     ),
     "part/pagination-first": Entry(
-        '{% section "Example events" %}{% include "partials/_pagination.html" %}{% endsection %}',
+        '{% section "Example events 2" %}{% include "partials/_pagination.html" %}{% endsection %}',
         _paged(1),
         address="/example/events/",
     ),
@@ -2056,8 +2099,16 @@ ENTRIES = {
     ),
     # A row's editor: the way in, closed, and the address that opens the
     # first row's form in the line beneath it.
-    "part/row-editor": Entry(_EDITED_ROWS, {"form": _ExampleDistance()}, address="/example/runs/"),
-    "part/row-editor-open": Entry(_EDITED_ROWS, {"form": _ExampleDistance()}, address="/example/runs/?edit=example-01"),
+    "part/row-editor": Entry(
+        _edited_rows("Example runs to correct", "example-01", "example-02"),
+        {"form": _ExampleDistance()},
+        address="/example/runs/",
+    ),
+    "part/row-editor-open": Entry(
+        _edited_rows("Example runs corrected", "example-11", "example-12"),
+        {"form": _ExampleDistance()},
+        address="/example/runs/?edit=example-11",
+    ),
     # The open problems about the thing a page shows: an urgent one in its
     # box above, and the rest in a card of their own.
     "part/problems": Entry(
@@ -2072,7 +2123,7 @@ ENTRIES = {
     # A reading's age in each of its states: current, out of date, the moment
     # alone, and none.
     "part/reading-age": Entry(
-        '{% section "Example readings" %}{% facts %}'
+        '{% section "Example readings 4" %}{% facts %}'
         '{% fact "Example current" %}{% include "partials/_reading_age.html" with reading=current only %}{% endfact %}'
         '{% fact "Example stale" %}{% include "partials/_reading_age.html" with reading=stale only %}{% endfact %}'
         '{% fact "Example moment" %}{% include "partials/_reading_age.html" with at=at only %}{% endfact %}'
@@ -2097,7 +2148,7 @@ ENTRIES = {
     # with nothing read yet, a long line that wraps inside its reading, and
     # one of its own, outside any region.
     "part/readings-under-the-title": Entry(
-        '{% include "partials/_page_head.html" %}{% section "Example section" %}<p>An example line.</p>{% endsection %}',
+        '{% include "partials/_page_head.html" %}{% section "Example section 2" %}<p>An example line.</p>{% endsection %}',
         {
             "page": Page(title="Example readings", lede="An example lede long enough to take the head's line."),
             "page_facts": "An example fact · another example fact",
@@ -2110,7 +2161,7 @@ ENTRIES = {
     # as a list whose parts each wrap whole. A new option of the tag comes
     # with an entry here (test_title_tags).
     "part/title-meta": Entry(
-        '{% include "partials/_page_head.html" %}{% section "Example section" %}<p>An example line.</p>{% endsection %}',
+        '{% include "partials/_page_head.html" %}{% section "Example section 3" %}<p>An example line.</p>{% endsection %}',
         {
             "page": Page(title="example-host-01"),
             "page_aside": _Drawn(
@@ -2122,7 +2173,7 @@ ENTRIES = {
         heads_the_page=True,
     ),
     "part/title-meta-list": Entry(
-        '{% include "partials/_page_head.html" %}{% section "Example section" %}<p>An example line.</p>{% endsection %}',
+        '{% include "partials/_page_head.html" %}{% section "Example section 4" %}<p>An example line.</p>{% endsection %}',
         {
             "page": Page(title="Example record"),
             "page_aside": _Drawn(
@@ -2139,12 +2190,12 @@ ENTRIES = {
     # age alone, in a heading's aside.
     "part/sweep-freshness": Entry('{% include "partials/_sweep_freshness.html" %}', {"inventory": _INVENTORY}),
     "part/sweep-freshness-one": Entry(
-        '{% section "Example records" %}{% include "partials/_sweep_freshness.html" with only_kind="example.records" %}'
+        '{% section "Example records 2" %}{% include "partials/_sweep_freshness.html" with only_kind="example.records" %}'
         "{% endsection %}",
         {"inventory": _INVENTORY},
     ),
     "part/sweep-freshness-inline": Entry(
-        '{% section "Example records" %}<p>An example line.</p>{% aside %}<span class="count">12 example records'
+        '{% section "Example records 3" %}<p>An example line.</p>{% aside %}<span class="count">12 example records'
         '{% include "partials/_sweep_freshness.html" with only_kind="example.records" inline=True %}</span>'
         "{% endsection %}",
         {"inventory": _INVENTORY},
@@ -2170,9 +2221,9 @@ ENTRIES = {
     # head's first line, and a region that fills itself holding its own.
     "part/visit-refresh": Entry(
         '{% include "partials/_page_head.html" %}{% include "partials/_visit_refresh.html" with visit=page_visit %}'
-        '{% section "Example host" %}<p>An example line.</p>{% endsection %}',
+        '{% section "Example host 2" %}<p>An example line.</p>{% endsection %}',
         {
-            "page": Page(title="Example host", trail=(("Example machines", "/example/"),)),
+            "page": Page(title="Example host 2", trail=(("Example machines", "/example/"),)),
             "page_visit": PageVisit("machine", "example-host-01"),
         },
         heads_the_page=True,
@@ -2268,7 +2319,7 @@ ENTRIES = {
     # read, with a certificate, with facts under its name, and a name long
     # enough to break.
     "part/path-hops": Entry(
-        '{% section "Example path" %}{% include "control_plane/_path_hops.html" with route=route '
+        '{% section "Example path 5" %}{% include "control_plane/_path_hops.html" with route=route '
         'label="Path via example record" %}{% endsection %}',
         {"route": _route()},
     ),
@@ -2297,7 +2348,7 @@ ENTRIES = {
     # and its score: one failing that others can reach, one meeting it all,
     # and one whose access was never read.
     "part/repository-postures": Entry(
-        '{% section "Example repositories" count=3 %}{% include "projects/_repository_postures.html" %}{% endsection %}',
+        '{% section "Example repositories 2" count=3 %}{% include "projects/_repository_postures.html" %}{% endsection %}',
         {"repositories": _repository_postures()},
     ),
     # A dense page's map, more links than a phone's row holds, over the
@@ -2315,8 +2366,8 @@ ENTRIES = {
                         for number, label in enumerate(
                             (
                                 "Overview",
-                                "Example readings",
-                                "Example containers",
+                                "Example readings 5",
+                                "Example containers 3",
                                 "Example certificates",
                                 "Relationships",
                                 "Example history",

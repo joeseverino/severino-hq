@@ -27,8 +27,10 @@ lazy from hq.domains.control_plane.observations import OBSERVATIONS
 lazy from hq.domains.control_plane.provider_adapters.declarations import MACHINE_KIND
 
 from . import (
+    automation_findings,
     certificate_expiry,
     connection_findings,
+    container_findings,
     contradiction_findings,
     controller_findings,
     credential_findings,
@@ -42,6 +44,7 @@ from . import (
     reference_findings,
     registration_findings,
     render_status_findings,
+    tailnet_device_findings,
     tailnet_findings,
     unit_findings,
 )
@@ -174,6 +177,7 @@ def _estate(topology: Topology) -> FindingEstate:
 # This is the closed set, in the order pages list the rules.
 RULE_MODULES = (
     docker_estate,
+    container_findings,
     perimeter_findings,
     connection_findings,
     credential_findings,
@@ -187,9 +191,11 @@ RULE_MODULES = (
     reference_findings,
     controller_findings,
     tailnet_findings,
+    tailnet_device_findings,
     dns_findings,
     contradiction_findings,
     posture_findings,
+    automation_findings,
 )
 RULES: tuple[FindingRule, ...] = tuple(rule for module in RULE_MODULES for rule in module.RULES)
 
@@ -252,10 +258,9 @@ def rule_origin(name: str) -> dict[str, Any] | None:
         return None
     where = ""
     try:
-        source = Path(inspect.getsourcefile(rule.detect) or "")
-        line = inspect.getsourcelines(rule.detect)[1]
+        source, line = _declared_at(rule.detect)
         where = f"{source.relative_to(settings.BASE_DIR)}:{line}"
-    except OSError, TypeError, ValueError:
+    except OSError, StopIteration, TypeError, ValueError:
         where = ""
     return {
         "rule": rule.name,
@@ -264,6 +269,21 @@ def rule_origin(name: str) -> dict[str, Any] | None:
         "subsumes": list(rule.subsumes),
         "where": where,
     }
+
+
+def _declared_at(detect: Callable[..., Any]) -> tuple[Path, int]:
+    """A detector's file and line: a function's own, or for a declaration such
+    as an ``OnEachMachine``, which ``inspect`` cannot place, the line binding
+    it in the rule module that holds it."""
+
+    if inspect.isfunction(detect):
+        return Path(inspect.getsourcefile(detect) or ""), inspect.getsourcelines(detect)[1]
+    module = next(module for module in RULE_MODULES if any(rule.detect is detect for rule in module.RULES))
+    name = next(name for name, value in vars(module).items() if value is detect)
+    lines, _start = inspect.getsourcelines(module)
+    return Path(inspect.getsourcefile(module) or ""), next(
+        number for number, text in enumerate(lines, 1) if text.startswith(f"{name} =")
+    )
 
 
 def _permitted(capability: str, principal: Principal, graph: IntegrationGraph) -> tuple[bool, str]:
@@ -321,7 +341,7 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
             )
         )
     resolved_remedies = tuple(kept)
-    offers = tuple(
+    offers = finding.offers + tuple(
         action for action in (subject.actions if subject else ()) if action.effect == "read" and action.method == "GET"
     )
     investigations = topology_investigation_links(subject.id) if subject else ()
@@ -348,24 +368,17 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
         remedies=remedy_actions,
         verification=verification,
     )
-    return Finding(
-        rule=finding.rule,
-        subject=finding.subject,
-        title=finding.title,
-        severity=finding.severity,
-        explanation=finding.explanation,
-        evidence=finding.evidence,
+    # Every field the detector set carries through; only what derivation adds changes.
+    return replace(
+        finding,
         remedies=resolved_remedies,
         offers=offers,
         investigations=investigations,
-        scope=finding.scope,
-        affected_scopes=finding.affected_scopes,
         workflow=workflow,
         steps=finding_steps(finding),
         no_help_reason=_no_help_reason(finding),
         subject_link=ActionLink("subject", subject.label, "read", subject.url) if subject and subject.url else None,
         read_capabilities=_held_to(finding, subject, principal),
-        part=finding.part,
         read_now=read_now,
     )
 
@@ -385,12 +398,13 @@ def read_gate(finding: Finding, subject: TopologyNode | None) -> tuple[str, ...]
     """What a reader must hold to be told ``finding``; None when it cannot be derived.
 
     The union of its subject node's gate, each scope's and what its detector
-    carried for the evidence it names. A subject that names no node, or a
-    scope no resource reads, leaves it underivable.
+    carried for the evidence it names, which alone gates a claim about none
+    of them. A subject that names no node, a scope no resource reads, or a
+    claim about nothing that carries no gate leaves it underivable.
     """
 
     scopes = _finding_scopes(finding)
-    if (finding.subject and subject is None) or not (subject or scopes):
+    if (finding.subject and subject is None) or not (subject or scopes or finding.read_capabilities):
         return None
     gates = [finding.read_capabilities]
     if subject is not None:
@@ -631,27 +645,32 @@ class FindingEvidence(TypedDict):
     value: Annotated[Any, Describe("What was found, most often a name or a sentence.")]
 
 
+# What running a suggested remedy does, as the API and MCP both say it.
+type RemedyEffect = Annotated[
+    str,
+    Describe(
+        "What running it does, in its command's own terms: `read`, `remote_write` or "
+        "`infrastructure_change`. A `destructive` one is never suggested."
+    ),
+]
+
+
 class SuggestedRemedy(TypedDict):
     """A capability that would answer a finding, and the target it runs on."""
 
     capability: Annotated[str, Describe("The command that would fix it, run with `target` as its target.")]
     target: Annotated[Any, Describe("The record the command runs on.")]
     label: Annotated[str, Describe("What running it does here, in the remedy's own words or its command's.")]
-    effect: Annotated[
-        str,
-        Describe(
-            "What running it does, in its command's own terms: `read`, `remote_write` or "
-            "`infrastructure_change`. A `destructive` one is never suggested."
-        ),
-    ]
+    effect: RemedyEffect
     auto: Annotated[
         bool,
         Describe("Whether HQ runs it unattended. A problem only proposes, so it reads false."),
     ]
 
 
-class SerializedFinding(TypedDict):
-    """One finding as the API answers it; MCP's `get_findings` makes its actions tool calls."""
+class FindingFacts(TypedDict):
+    """What a finding says the same at every door: what it is about, what it
+    rests on, and what the operator does by hand. Each door adds its actions."""
 
     id: Annotated[
         str,
@@ -671,19 +690,6 @@ class SerializedFinding(TypedDict):
     severity: Annotated[str, Describe(f"How serious it is: {listed(SEVERITIES)}, most severe first.")]
     explanation: Annotated[str, Describe("Why it matters and what it rests on, in sentences.")]
     evidence: Annotated[list[FindingEvidence], Describe("What it rests on, a labeled line each.")]
-    remedies: Annotated[
-        list[SuggestedRemedy],
-        Describe("The commands that would fix it which this reader may run, none of them destructive."),
-    ]
-    offers: Annotated[list[WrittenAction], Describe("Reads of its subject this reader may run before acting.")]
-    investigations: Annotated[
-        list[WrittenAction],
-        Describe("Where on the map to look around its subject: its neighborhood and what it affects."),
-    ]
-    workflow: Annotated[
-        WrittenWorkflow | None,
-        Describe("The plan that resolves it, a fix and then the check that confirms it; null when it has neither."),
-    ]
     operator_steps: Annotated[
         list[Annotated[dict[str, Any], Written(OperatorStep)]],
         Describe("What you do by hand to resolve it, in order. HQ never runs these."),
@@ -698,7 +704,25 @@ class SerializedFinding(TypedDict):
     ]
 
 
-def serialize_finding(finding: Finding) -> SerializedFinding:
+class SerializedFinding(FindingFacts):
+    """One finding as the API answers it; MCP's `get_findings` makes its actions tool calls."""
+
+    remedies: Annotated[
+        list[SuggestedRemedy],
+        Describe("The commands that would fix it which this reader may run, none of them destructive."),
+    ]
+    offers: Annotated[list[WrittenAction], Describe("Reads of its subject this reader may run before acting.")]
+    investigations: Annotated[
+        list[WrittenAction],
+        Describe("Where on the map to look around its subject: its neighborhood and what it affects."),
+    ]
+    workflow: Annotated[
+        WrittenWorkflow | None,
+        Describe("The plan that resolves it, a fix and then the check that confirms it; null when it has neither."),
+    ]
+
+
+def finding_facts(finding: Finding) -> FindingFacts:
     return {
         "id": claim_identity(_CLAIM_NAMESPACE, finding.rule, finding.subject, finding.scope),
         "rule": finding.rule,
@@ -709,6 +733,15 @@ def serialize_finding(finding: Finding) -> SerializedFinding:
         "severity": finding.severity,
         "explanation": finding.explanation,
         "evidence": [{"label": label, "value": value} for label, value in finding.evidence],
+        "operator_steps": [asdict(step) for step in finding.steps],
+        "no_help_reason": finding.no_help_reason or None,
+        "since": finding.since.isoformat() if finding.since else None,
+    }
+
+
+def serialize_finding(finding: Finding) -> SerializedFinding:
+    return {
+        **finding_facts(finding),
         "remedies": [
             {
                 "capability": remedy.capability,
@@ -722,9 +755,6 @@ def serialize_finding(finding: Finding) -> SerializedFinding:
         "offers": [asdict(action) for action in finding.offers],
         "investigations": [asdict(action) for action in finding.investigations],
         "workflow": serialize_workflow(finding.workflow),
-        "operator_steps": [asdict(step) for step in finding.steps],
-        "no_help_reason": finding.no_help_reason or None,
-        "since": finding.since.isoformat() if finding.since else None,
     }
 
 

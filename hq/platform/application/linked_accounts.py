@@ -14,15 +14,13 @@ from typing import Any
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from hq.platform.core.audit import record_event
-from hq.platform.core.models import AuditLog, LinkedAccount
+from hq.platform.core.models import LinkedAccount
 
 GITHUB = "github"
 # The identity provider's own subject for the person: the one claim that names
 # them and never changes. Kept as a digest of issuer and subject, which fits the
 # column whatever length the provider's subjects are.
 SIGN_IN = "oidc"
-AUDIT_LABEL = "Linked account"
 
 logger = logging.getLogger("severino.auth")
 
@@ -56,21 +54,16 @@ def _record(user, provider: str, login: str) -> None:
             return
         if not login:
             if found is not None:
-                record_event(
-                    action=AuditLog.Action.DELETED,
-                    obj=found,
-                    type_label=AUDIT_LABEL,
-                    message=f"Your sign-in no longer names the {provider} account {found.login}",
-                    user=user,
-                    required=True,
-                )
+                found.audit_gone = f"Your sign-in no longer names the {provider} account {found.login}"
                 found.delete()
             return
+        account = found or LinkedAccount(user=user, provider=provider)
+        account.login = login
+        account.updated_at = timezone.now()
+        account.audit_said = f"Your sign-in names the {provider} account {login}"
         try:
             with transaction.atomic():
-                account, created = LinkedAccount.objects.update_or_create(
-                    user=user, provider=provider, defaults={"login": login, "updated_at": timezone.now()}
-                )
+                account.save()
         except IntegrityError:
             # Another person's sign-in already names it, and one account is one person's.
             logger.warning(
@@ -78,15 +71,6 @@ def _record(user, provider: str, login: str) -> None:
                 provider,
                 extra={"event": "auth.linked_account.taken"},
             )
-            return
-        record_event(
-            action=AuditLog.Action.CREATED if created else AuditLog.Action.UPDATED,
-            obj=account,
-            type_label=AUDIT_LABEL,
-            message=f"Your sign-in names the {provider} account {login}",
-            user=user,
-            required=True,
-        )
 
 
 def linked_login(user, provider: str) -> str:

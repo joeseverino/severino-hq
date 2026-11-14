@@ -13,7 +13,6 @@ from typing import Any
 from hq.domains.control_plane.names import normalized_hostname
 
 from .entity_links import EntityLink, entity_link
-from .facts import stored_snapshots
 from .reach import network_of
 lazy from . import connections
 lazy from .locate import Machines, host_of, machines_index, observed_answers
@@ -111,8 +110,7 @@ def connection_reach(endpoints: Iterable[tuple[str, str]]) -> dict[str, Connecti
 
     known = connections.machines_by_name(connections.machines_once())
     index = machines_index()
-    # From the one read of every reading the connections page shares.
-    answers = observed_answers(row for rows in stored_snapshots().values() for row in rows)
+    answers = observed_answers()
     found: dict[str, ConnectionReach] = {}
     for ref, endpoint in endpoints:
         if ref and (host := host_of(endpoint)):

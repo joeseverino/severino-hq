@@ -448,6 +448,58 @@ class CapabilityTests(TestCase):
             )
 
 
+class ExampleWrite(StrictCommand):
+    pass
+
+
+class WriteActTests(TestCase):
+    """A write leaves a row however its handler is written: its own change, or
+    else the act of running it."""
+
+    principal = Principal("test", "test", frozenset({"example.write"}))
+
+    def run_write(self, handler, payload):
+        spec = CapabilitySpec(
+            "example.write", "Write an example.", "remote_write", "example.write", ExampleWrite, handler
+        )
+        with mock.patch("hq.platform.application.capabilities.capability_registry", return_value={spec.name: spec}):
+            return execute_capability(spec.name, payload, principal=self.principal)
+
+    def written_since(self, before):
+        return AuditLog.objects.filter(pk__gt=before)
+
+    def last_pk(self):
+        return AuditLog.objects.order_by("-pk").values_list("pk", flat=True).first() or 0
+
+    def test_a_write_that_recorded_nothing_leaves_its_act_once_however_often_it_is_retried(self):
+        before = self.last_pk()
+        payload = {"idempotency_key": "example-act"}
+
+        first = self.run_write(lambda command, **kwargs: {"ok": True, "message": "Set."}, payload)
+        again = self.run_write(lambda command, **kwargs: {"ok": True, "message": "Set."}, payload)
+
+        self.assertEqual(first, again)
+        (act,) = self.written_since(before)
+        self.assertEqual(
+            (act.action, act.metadata["operation"], act.message), (AuditLog.Action.DONE, "example.write", "Set.")
+        )
+
+    def test_a_write_that_recorded_its_change_leaves_no_act_beside_it(self):
+        before = self.last_pk()
+
+        def handler(command, **kwargs):
+            Project.objects.create(name="Example", slug="example-act")
+            return {"ok": True}
+
+        self.assertTrue(self.run_write(handler, keyed())["ok"])
+
+        (row,) = self.written_since(before)
+        self.assertEqual(
+            (row.action, row.object_type, row.metadata["operation"]),
+            (AuditLog.Action.CREATED, "Project", "example.write"),
+        )
+
+
 class DocumentationSyncCapabilityTests(SimpleTestCase):
     """`hq sync` must be grantable without handing over every other write."""
 

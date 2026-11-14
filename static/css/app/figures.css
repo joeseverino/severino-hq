@@ -57,10 +57,10 @@
 @container style(--box: whole) {
   .data-table td [data-entity]:not(strong > *, .row-gutter > *, .muted *):has(> .token[data-sole]):not(:has(> .token > .cut .whole)) { width: max-content; max-width: var(--name-hold); }
 }
-/* A name the cell cuts (cuts.css) sizes its track by its unseen strut (value_tags), never by the box that draws it: the box asks nothing and fills the track, and the strut's one run of text asks for the whole name and a pixel more, which the parts, each a box of its own, may measure a fraction past. So however an engine measures the box, the box is as wide as the name wherever its row has room. Outside a narrow box a second copy holds out for the name up to its column's hold, as code's chip does (tables.css); one in a context line (`.muted`) or a kept line (`.kept-line`, which keeps no floor for an identifier) holds out for nothing. */
+/* A name the cell cuts (cuts.css) sizes its track by its unseen strut (value_tags), never by the box that draws it: the box asks nothing and fills the track, and the strut's one run of text asks for the whole name and a pixel more, which the parts, each a box of its own, may measure a fraction past. So however an engine measures the box, the box is as wide as the name wherever its row has room. Outside a narrow box a second copy holds out for the name up to its column's hold, as code's chip does (tables.css); one in a context line (`.muted`) or a kept line (`.kept-line`, which keeps no floor for an identifier) holds out for nothing. A name in a context line is cut so too when it breaks only at its seams, since holding out for nothing it would otherwise break there. */
 .data-table > tbody > tr:not(.is-expanded, .row-detail) > td :is(
-  [data-entity]:not(strong > *, .row-gutter > *, .row-gutter > br + .muted > *):has(> .token[data-sole] > .cut .whole),
-  .token[data-sole]:not([data-entity] *, .cell-line *):has(> .cut .whole),
+  [data-entity]:not(strong > *, .row-gutter > *, .row-gutter > br + .muted > *):is(:has(> .token[data-sole] > .cut .whole), td .muted > :has(> .token[data-sole])),
+  .token[data-sole]:not([data-entity] *, .cell-line *, .row-gutter > br + .muted > *):is(:has(> .cut .whole), td .muted > *),
   .cell-line:not(strong > *):has(> .token[data-sole])
 ):not(code *, [data-cell~=name] *, [data-cell~=data] *) {
   & > .cut, & > .token[data-sole] > .cut { contain: inline-size; justify-self: stretch; }
@@ -81,9 +81,9 @@
     }
   }
 }
-/* Outside a narrow box an identifier is one line. One that breaks only at its seams holds its whole length, so its table lets a ranked column go before the name would break (tables.js); a name the cell cuts shows one line, cut. A narrow box has no column left to let go, so there it breaks at its seams again. Every part a cell marks with its role (`data-cell`: the row's own name, what a row means, free text), a context line, a preview, an identifier that wraps by design (`cell-whole`) and a phrase's word whose hyphenated parts are each cut at the cell's edge (below) wrap as they always do; `broken identifiers` in the layout survey holds the rest. */
+/* Outside a narrow box an identifier is one line. One that breaks only at its seams holds its whole length, so its table lets a ranked column go before the name would break (tables.js); a name the cell cuts shows one line, cut. A narrow box has no column left to let go, so there it breaks at its seams again. Every part a cell marks with its role (`data-cell`: the row's own name, what a row means, free text), a context line (a muted line in a cell; a cell drawn muted is a cell like any other), a preview, an identifier that wraps by design (`cell-whole`) and a phrase's word whose hyphenated parts are each cut at the cell's edge (below) wrap as they always do; `broken identifiers` in the layout survey holds the rest. */
 @container style(--box: whole) {
-  .data-table > tbody > tr:not(.is-expanded, .row-detail) > td :not(.row-gutter *, [data-cell] *, .muted *, .table-clamp *, code.cell-whole *, .btn *) {
+  .data-table > tbody > tr:not(.is-expanded, .row-detail) > td :not(.row-gutter *, [data-cell] *, td .muted *, .table-clamp *, code.cell-whole *, .btn *) {
     /* On the name's link too, since there the token is text with no box (base.css), and WebKit breaks at a seam by the box around it. */
     &:is(.token:not(:has(.whole)), [data-entity]:has(> .token[data-sole]):not(:has(.whole))) { white-space: nowrap; }
     &:is([data-entity]:has(> .token[data-sole] > .cut .whole), .token[data-sole]:not(.cell-line > *):has(> .cut .whole)) { --cut-lines: 1; }
@@ -155,6 +155,25 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
   border-radius: var(--radius-sm);
   background: var(--bg-tint);
 }
+/* A document of HQ's own drawn inside a page (partials/_framed_document.html):
+   as wide as the column and as tall as the view below the header, so it
+   scrolls on its own while the page holds still. */
+.framed-document {
+  display: block;
+  inline-size: 100%;
+  block-size: calc(100dvh - var(--site-header-height, 0px));
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+/* Drawn straight in the content column, the frame takes what the page's head
+   leaves of the view, so the page stands still and only the document scrolls. */
+.content:has(> .framed-document) {
+  display: flex;
+  flex-direction: column;
+  block-size: calc(100dvh - var(--site-header-height, 0px));
+}
+.content > .framed-document { flex: 1 1 0; block-size: auto; min-block-size: 20rem; }
 .chart-legend { display: flex; flex-wrap: wrap; gap: var(--space-6); margin: 0; color: var(--muted); font-size: var(--text-xs); }
 /* A legend after the drawing it keys stands apart from it; one that opens what holds it (a figure's head, the row over a calendar's days) takes its place from that. */
 .chart-legend:not(:first-child) { margin-block: var(--space-6) var(--space-1); }

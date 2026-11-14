@@ -4,7 +4,9 @@ from pathlib import Path
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.db import connection
 from django.test import TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
@@ -13,6 +15,7 @@ from hq.platform.core.models import AuditLog, LinkedAccount
 
 from .. import github_profile
 from ..asks import REFRESHING
+from ..cadence import asked_at
 from ..capabilities import capability_registry, execute_capability
 from ..security import Capability, Principal
 from .markup import hrefs, select, text
@@ -133,7 +136,7 @@ class PlanTests(TestCase):
         asked = github_profile.request_read(github_profile.ProfileReadCommand("example-user"), principal=operator())
 
         self.assertTrue(github_profile.plan()["due"])
-        self.assertEqual(github_profile.asked_at().isoformat(), asked["asked_at"])
+        self.assertEqual(asked_at(github_profile.KIND).isoformat(), asked["asked_at"])
         self.assertEqual(github_profile.standing().state, "queued")
 
     def test_the_controller_registry_carries_the_plan(self):
@@ -150,7 +153,7 @@ class PlanTests(TestCase):
                 refused = execute_capability(github_profile.READ_NOW, payload, principal=operator())
 
                 self.assertEqual(refused["error"]["code"], "invalid_input")
-        self.assertIsNone(github_profile.asked_at())
+        self.assertIsNone(asked_at(github_profile.KIND))
 
     def test_the_profiles_own_age_never_makes_a_sweep_due(self):
         from hq.domains.control_plane.models import ProviderInventory
@@ -266,7 +269,6 @@ class PageTests(TestCase):
                 metadata__operation=github_profile.READ_NOW,
                 metadata__interface="web",
                 metadata__actor="operator",
-                metadata__login="example-user",
             ).exists()
         )
 
@@ -280,7 +282,7 @@ class PageTests(TestCase):
 
         # The refusal names the grant the person lacks.
         self.assertIn(Capability.LOOK_UP_PUBLIC_RECORDS.value, text(response))
-        self.assertIsNone(github_profile.asked_at())
+        self.assertIsNone(asked_at(github_profile.KIND))
         self.assertTrue(
             AuditLog.objects.filter(
                 action=AuditLog.Action.DENIED, metadata__capability=github_profile.READ_NOW
@@ -313,6 +315,16 @@ class PageTests(TestCase):
         hold(reachable=False, error="GitHub profile: provider answered 502")
         failed = self.client.get(status).json()
         self.assertEqual((failed["state"], failed["note"]), ("failed", "GitHub profile: provider answered 502"))
+
+    def test_the_account_a_sign_in_names_is_read_once_a_page(self):
+        LinkedAccount.objects.create(user=self.user, provider="github", login="example-user")
+        hold()
+        table = LinkedAccount._meta.db_table
+
+        with CaptureQueriesContext(connection) as captured:
+            self.assertEqual(self.client.get(reverse("watching")).status_code, 200)
+
+        self.assertEqual(sum(f'FROM "{table}"' in query["sql"] for query in captured.captured_queries), 1)
 
     def test_a_status_hq_did_not_sign_is_not_found(self):
         self.assertEqual(self.client.get(reverse("control_plane:read_status"), {"watch": "forged"}).status_code, 404)

@@ -24,9 +24,9 @@ fi
 . ./tools/lib/extension-set.sh
 compose_extensions
 
-# The whole suite takes the heavy turn; a run its arguments narrow goes ahead
-# at once (tools/gate/turn.py).
-test_arguments="${usage_arguments:-}"
+# The whole suite takes the heavy turn; a run its arguments narrow to one
+# process takes a share of it (tools/gate/turn.py).
+test_arguments="--noinput --parallel auto --exclude-tag=source ${usage_arguments:-}"
 turn_bound=30m
 # shellcheck source=tools/lib/heavy-turn.sh
 . ./tools/lib/heavy-turn.sh

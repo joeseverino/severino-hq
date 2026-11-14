@@ -22,7 +22,7 @@ lazy from django.utils import timezone
 lazy from hq.domains.jobs.models import Job
 lazy from hq.domains.jobs.runner import ALREADY_RUNNING, JobConflict, Progress, due as is_due, run, start
 
-from .asks import FAILED, Ask, Standing, job_standing
+from .asks import FAILED, Ask, Standing
 from .contracts import DOTTED_NAME
 from .describe import Describe
 from .integration_specs import CapabilitySpec, requested
@@ -34,6 +34,7 @@ from .ui import ended
 lazy from .domains import host_specs
 lazy from .plugins import plugin_outbound_work
 lazy from .routes import reverse
+lazy from .work_runs import job_run, standing_of
 
 # What outbound work may be: a change somewhere else, never a read of HQ.
 EFFECTS = frozenset({"remote_write", "destructive", "infrastructure_change"})
@@ -274,7 +275,7 @@ def request_work(work: OutboundWork, subject: str, *, principal: Principal) -> W
         return conflict
     if not waited:
         return {"ok": True, "started": True, "job": str(job.pk), "message": requested(work.words, subject)}
-    standing = job_standing(job)
+    standing = standing_of(job_run(job))
     if standing.state == FAILED:
         return cast(RefusalEnvelope, refuse("work_failed", standing.note or ended(standing.label)))
     return {"ok": True, "started": True, "job": str(job.pk), "message": standing.note, "result": job.result}
@@ -348,7 +349,7 @@ def ask(
 
     work = _named(name)
     job = last_job(name, subject)
-    standing = job_standing(job) if job is not None else Standing()
+    standing = standing_of(job_run(job)) if job is not None else Standing()
     if job is not None and not standing.live and standing.state != FAILED:
         standing = Standing()
     reason = "" if standing.live else _refusal(work, subject)

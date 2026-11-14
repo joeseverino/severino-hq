@@ -18,12 +18,17 @@ class Element:
     text: str = ""
     ancestors: tuple[Element, ...] = field(default=(), repr=False, compare=False)
     chunks: list[str] = field(default_factory=list, repr=False, compare=False)
-    # In the line beneath a row (`data-row-detail`), which a reader meets only
-    # once the row is opened: a copy of what the row holds back.
+    # What the line beneath a row (`data-row-detail`) holds, met only once the
+    # row is opened, copies what the row holds back. A block the row moved
+    # there (`row-below`) is its only copy, so it is read as the row's.
     beneath: bool = field(default=False, repr=False, compare=False)
-    # A <template> and what it holds: markup a script clones, which a browser
-    # parses into no element of the page.
+    # A <template> and what it holds, markup a script clones, which a browser
+    # parses into no element of the page; and an element marked inert, which
+    # no one reaches (a filter bar's sizer).
     inert: bool = field(default=False, repr=False, compare=False)
+    # For a row's open line (`data-row-detail`), the row it opens: what the
+    # row moved there (`row-below`, its editor) is still the row's.
+    opens: Element | None = field(default=None, repr=False, compare=False)
 
     @property
     def classes(self) -> frozenset[str]:
@@ -34,6 +39,11 @@ class Element:
         """The element's text as a reader sees it: whitespace collapsed, a space between elements."""
 
         return " ".join(" ".join(self.chunks).split())
+
+    def inside(self, row: Element) -> bool:
+        """Whether the element is within ``row``, the line it opens included."""
+
+        return any(row in (ancestor, ancestor.opens) for ancestor in self.ancestors)
 
 
 class _Page(HTMLParser):
@@ -50,8 +60,15 @@ class _Page(HTMLParser):
     @override
     def handle_starttag(self, tag, attrs):
         element = Element(tag, {name: value or "" for name, value in attrs}, ancestors=tuple(self._open))
-        element.beneath = "data-row-detail" in element.attrs or any(opened.beneath for opened in self._open)
-        element.inert = tag == "template" or any(opened.inert for opened in self._open)
+        moved = any("row-below" in opened.classes for opened in (*self._open, element))
+        element.beneath = not moved and (
+            "data-row-detail" in element.attrs or any("data-row-detail" in opened.attrs for opened in self._open)
+        )
+        element.inert = tag == "template" or "inert" in element.attrs or any(opened.inert for opened in self._open)
+        if tag == "tr" and "data-row-detail" in element.attrs:
+            element.opens = next(
+                (row for row in reversed(self.elements) if row.tag == "tr" and row.ancestors == element.ancestors), None
+            )
         if not element.inert:
             self.elements.append(element)
         self._edge = self._edge or not _TOKEN_PARTS & element.classes
@@ -73,15 +90,17 @@ class _Page(HTMLParser):
         # A token (`|breakable`) marks where it may wrap with markup; read, it
         # is one word, with any text it touches.
         # The mark it holds to a value is read with the word it ends.
+        # Text beneath a row is no word of the page, nor does it join one.
+        beneath = bool(self._open) and self._open[-1].beneath
         token = next((element for element in self._open if {"token", "mark"} & element.classes), None)
-        joined = self._joins(token, data)
-        self._token = token
-        self._edge = False
-        beneath = any(element.beneath for element in self._open)
-        if joined:
-            self.words[-1] += data
-        elif not beneath:
-            self.words.append(data)
+        joined = not beneath and self._joins(token, data)
+        if not beneath:
+            self._token = token
+            self._edge = False
+            if joined:
+                self.words[-1] += data
+            else:
+                self.words.append(data)
         # Text hidden from the accessibility tree is no part of the name of a
         # link or a button around it (a mark held to its name), though a
         # reader sees it.
@@ -149,13 +168,16 @@ def with_class(html, name: str) -> list[Element]:
 
 
 def within(html, attribute: str, value: str | None = None) -> list[Element]:
-    """Every element inside one carrying ``attribute``, in page order.
+    """Every element inside one carrying ``attribute``, in page order, a row's
+    open line counted as inside the row it opens.
 
     With ``value``, only inside one whose attribute equals it; for ``class``,
     one whose class list includes it.
     """
 
     def holds(ancestor: Element) -> bool:
+        if ancestor.opens is not None and holds(ancestor.opens):
+            return True
         if attribute not in ancestor.attrs:
             return False
         if value is None:

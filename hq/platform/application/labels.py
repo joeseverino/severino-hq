@@ -2,6 +2,7 @@
 
 lazy from django.utils.html import conditional_escape
 lazy from django.utils.safestring import SafeString, mark_safe
+lazy from django.utils.text import capfirst
 
 _ACRONYMS = frozenset({"acl", "api", "dns", "hq", "id", "mcp", "npm", "nws", "ssh", "tls", "url", "vin", "vm"})
 
@@ -22,7 +23,7 @@ def field_label(name: str, title: str | None = None) -> str:
         return title
     words = name.replace(".", " ").replace("_", " ").split()
     said = " ".join(word.upper() if word in _ACRONYMS else word for word in words)
-    return said[:1].upper() + said[1:]
+    return capfirst(said)
 
 
 def one(noun: str) -> str:
@@ -67,7 +68,7 @@ def sentence(text: str) -> str:
     first = text.split(maxsplit=1)[0] if text.strip() else ""
     if text[1:2].isupper() or any(character.isdigit() for character in first):
         return text
-    return text[:1].upper() + text[1:]
+    return capfirst(text)
 
 
 _SIBILANT_ENDINGS = ("s", "x", "z", "ch", "sh")

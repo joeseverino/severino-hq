@@ -33,7 +33,9 @@ class ExampleEstateDoorTests(TestCase):
         self.assertEqual(dict(through_the_harness), {})
 
     def test_what_the_owner_did_by_hand_they_did_in_the_browser(self):
-        doors = set(AuditLog.objects.filter(user=self.owner).values_list("interface", flat=True))
+        # What an agent did for them names them too, with the agent as its actor.
+        by_hand = AuditLog.objects.filter(user=self.owner, actor=self.owner.get_username())
+        doors = set(by_hand.values_list("interface", flat=True))
 
         self.assertEqual(doors, {WEB_INTERFACE})
 

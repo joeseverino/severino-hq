@@ -1,34 +1,20 @@
-"""``--parallel`` on a WAL SQLite database, which Django does not support alone.
+"""HQ's test runner, the one entry every test passes through: what a run
+selects, and what each test process sets up before its first test.
 
-The test database is a WAL file on purpose, so work on a background thread
-behaves as in production. Two of Django's assumptions about copying it then
-fail, answered by ``_checkpoint`` and ``_use_the_file_clone``: a change to the
-test database's journal mode, its path, or how work reaches a thread is checked
-against both.
+Its parts live beside it: the stall watch (``stalls``), what a run reports
+(``run_report``) and the parallel workers' database files (``file_clones``).
 """
 
 import contextlib
-import faulthandler
-import io
-import json
 import multiprocessing
 import os
-import pickle
 import re
 import shutil
-import signal
 import subprocess
 import sys
-import threading
-import traceback
 import unittest
-import unittest.util
 from contextvars import ContextVar
-from dataclasses import asdict, dataclass
 from pathlib import Path
-
-# Bound here, so a test that patches time.monotonic moves its own clock and never the stall watch's.
-from time import monotonic
 from typing import override
 lazy import inspect
 lazy import pdb
@@ -36,13 +22,7 @@ lazy import pdb
 from django.conf import settings
 from django.db import connections
 from django.db.models.signals import post_save
-from django.test.runner import (
-    DiscoverRunner,
-    ParallelTestSuite,
-    RemoteTestResult,
-    RemoteTestRunner,
-    _init_worker,
-)
+from django.test.runner import DiscoverRunner, ParallelTestSuite, _init_worker
 lazy from django.apps import apps
 lazy from django.contrib.auth import get_user_model
 lazy from django.core.management.base import BaseCommand
@@ -51,12 +31,21 @@ lazy from django.test import TransactionTestCase
 
 from hq.config.imports import lazily
 from hq.config.sandbox import shared_tempdir
-from hq.platform.core.coverage_contexts import ModuleContexts
-from hq.platform.core.isolation_testing import CompositionIsolation, own_markers, patches_leave_no_copy
-from hq.platform.core.live_objects import live
+from hq.platform.core.file_clones import clone_for_workers, use_the_file_clone
+from hq.platform.core.isolation_testing import own_markers, patches_leave_no_copy
+from hq.platform.core.run_report import (
+    ClassTimedSuite,
+    CompositionRemoteRunner,
+    CompositionTextResult,
+    report_class_times,
+    report_costs,
+    write_failures,
+)
+from hq.platform.core.stalls import stall_watch
 lazy from hq.platform.application import plugins, roles
 lazy from hq.platform.core import append_only
 lazy from hq.platform.core.attribution import bind_this_thread, bound, command_operation, from_the_shell
+lazy from hq.platform.core.tests.browser import shards
 
 
 def performance_cores() -> int | None:
@@ -210,74 +199,6 @@ def hypothesis_profiles() -> None:
     hypothesis.load_profile(os.environ.get("HYPOTHESIS_PROFILE") or ("ci" if ci else "dev"))
 
 
-# A gate names a folder here, and the run writes each test that failed into
-# it, for the gate's closing line. tools/gate/verdict.py, which runs without
-# the host, names it too; GateVerdictTests runs this record under a gate.
-REPORTS = "HQ_TEST_REPORTS"
-
-
-@dataclass(frozen=True)
-class FailedTest:
-    """A test that failed or errored: its id, the exception's first line, and the traceback the run printed."""
-
-    test: str
-    exception: str
-    traceback: str
-
-
-class FailureRecord:
-    """Each failed test as the result is told of it, a parallel worker's
-    replayed in the parent with its traceback (tblib). A test whose subtests
-    fail is recorded once, by its first."""
-
-    def addError(self, test, err):
-        super().addError(test, err)
-        self._record(test, err, self.errors)
-
-    def addFailure(self, test, err):
-        super().addFailure(test, err)
-        self._record(test, err, self.failures)
-
-    def addSubTest(self, test, subtest, err):
-        super().addSubTest(test, subtest, err)
-        if err is not None:
-            self._record(test, err, self.failures if issubclass(err[0], test.failureException) else self.errors)
-
-    def addUnexpectedSuccess(self, test):
-        super().addUnexpectedSuccess(test)
-        vars(self).setdefault("failed", {}).setdefault(test.id(), FailedTest(test.id(), "unexpected success", ""))
-
-    def _record(self, test, err, printed) -> None:
-        # A worker's exception sent as text reads as the exception it stands in for.
-        said = str(err[1]) if isinstance(err[1], SentException) else traceback.format_exception_only(err[0], err[1])
-        exception = "".join(said).partition("\n")[0]
-        # unittest has just added the traceback it prints, as this test's last entry.
-        vars(self).setdefault("failed", {}).setdefault(test.id(), FailedTest(test.id(), exception, printed[-1][1]))
-
-
-def write_failures(result) -> None:
-    """Write the run's failed tests where the gate running it reads them, when one does."""
-
-    folder = os.environ.get(REPORTS)
-    failed = list(vars(result).get("failed", {}).values())
-    if folder and failed:
-        Path(folder, f"{os.getpid()}.json").write_text(json.dumps([asdict(each) for each in failed]))
-
-
-class _ClassTimes:
-    """Each test class's wall time, its class fixtures included, by class.
-
-    Django's ``--durations`` times each test from ``setUp`` to its cleanups
-    (``unittest.TestCase.run``), so it never sees ``setUpClass``, where a
-    browser class renders every page and launches the browser, and it cannot
-    say which class a parallel run waited on, since Django gives each worker
-    whole classes.
-    """
-
-    def addClassTime(self, test, seconds):
-        vars(self).setdefault("class_times", {})[unittest.util.strclass(type(test))] = seconds
-
-
 def breakpoint_on_the_terminal() -> None:
     """``breakpoint()`` in a test: pdb on the process's own stdout, since
     --buffer holds the test's ``sys.stdout``, where the prompt would wait
@@ -289,402 +210,17 @@ def breakpoint_on_the_terminal() -> None:
     debugger.set_trace(inspect.currentframe().f_back)
 
 
-def block_on_output() -> None:
-    """Make writes to stdout and stderr wait for room again.
-
-    A child that shares the run's pipes (Playwright's driver does) can leave
-    them non-blocking, and a long report written then stops part way with
-    ``BlockingIOError``, its failures never printed.
-    """
-
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            os.set_blocking(stream.fileno(), True)
-        except OSError, ValueError, io.UnsupportedOperation:  # noqa: S112 - a stream with no descriptor has no blocking mode to set
-            continue
-
-
-# Seconds a test process may go without progress (a test, a class fixture or a
-# subtest starting, or a subtest ending) before the test it is in fails: past
-# the slowest legitimate step on a loaded laptop, and short enough that a hung
-# test frees the machine's heavy turn within minutes. The environment
-# overrides it; 0 turns the watch off.
-STALL_SECONDS = "HQ_TEST_STALL_SECONDS"
-DEFAULT_STALL_SECONDS = 300.0
-
-# How long a stalled test has to end once interrupted before its process exits,
-# and how long the watch's own thread has to act before faulthandler's C
-# watchdog ends the process without it: the thread needs the interpreter, which
-# a call that never releases it does not give up.
-_FALLBACK_GRACE = 30.0
-
-# What interrupts the test's thread: a real signal, so a blocking call in it
-# returns with EINTR and the handler runs there.
-_INTERRUPT = signal.SIGALRM
-
-
-class Stalled(Exception):
-    """Raised in a test that made no progress for the stall bound.
-
-    An ``Exception``, so unittest records it as the error of the test or class
-    fixture it ends, Django's fixtures roll back, and the run goes on. Code
-    under test that swallows it leaves the test stalled, and the process exits
-    after the grace.
-    """
-
-
-def suspended_greenlets(stream) -> None:
-    """The stack of every greenlet that is not running. Playwright's sync API
-    runs the test on one and its event loop on another, so the thread's stack
-    shows only the loop and the test's own call is here."""
-
-    if (greenlet := sys.modules.get("greenlet")) is None:
-        return
-    for each in live(greenlet.greenlet):
-        if each.gr_frame is not None:
-            stream.write(f"--- suspended greenlet {each!r} (most recent call last) ---\n")
-            stream.writelines(traceback.format_stack(each.gr_frame))
-
-
-class StallWatch:
-    """Fail the test or class fixture a test process is in once it has made no
-    progress for ``seconds``, saying where it is stuck.
-
-    A daemon thread waits for the deadline each ``mark`` moves, then reports and
-    interrupts the test thread, whose handler raises ``Stalled``. With no mark
-    within ``grace`` the process exits, a parallel worker first telling Django's
-    parent so the run stops (docs/Development.md).
-    """
-
-    def __init__(self, seconds: float | None, stream=None, grace: float = _FALLBACK_GRACE):
-        self.seconds = seconds
-        self.stream = stream
-        self.grace = grace
-        self.evidence: list = []
-        # A parallel worker's share of the run's worker counter: negative, it
-        # stops Django's parent (ParallelTestSuite.run).
-        self.workers = None
-        self._ready = threading.Condition()
-        self._watching = 0
-        self._label: str | None = None
-        self._deadline: float | None = None
-        self._marks = 0
-        self._thread: threading.Thread | None = None
-        self._main: int | None = None
-        self._previous = None
-        self._due: str | None = None
-
-    @classmethod
-    def from_environment(cls) -> StallWatch:
-        value = os.environ.get(STALL_SECONDS, "").strip()
-        return cls(float(value) if value else DEFAULT_STALL_SECONDS)
-
-    @property
-    def enabled(self) -> bool:
-        return bool(self.seconds)
-
-    @contextlib.contextmanager
-    def watching(self):
-        """Watch this process while the block runs, restoring what an outer
-        run was watching when it ends."""
-
-        if not self.enabled:
-            yield
-            return
-        with self._ready:
-            saved = (self._label, self._deadline)
-            self._watching += 1
-            if self._watching == 1:
-                self._take_interrupt()
-            if self._thread is None:
-                self._thread = threading.Thread(target=self._wait, name="stall-watch", daemon=True)
-                self._thread.start()
-        try:
-            yield
-        finally:
-            with self._ready:
-                self._watching -= 1
-                self._label, self._deadline = saved if self._watching else (None, None)
-                if not self._watching:
-                    self._give_back_interrupt()
-                self._ready.notify()
-            if self._deadline is None:
-                faulthandler.cancel_dump_traceback_later()
-
-    def _take_interrupt(self) -> None:
-        # Only the main thread may set a handler, and only its handlers run.
-        if threading.current_thread() is threading.main_thread():
-            self._main = threading.get_ident()
-            self._previous = signal.signal(_INTERRUPT, self._interrupted)
-
-    def _give_back_interrupt(self) -> None:
-        if self._main is not None:
-            signal.signal(_INTERRUPT, self._previous)
-            self._main = self._previous = self._due = None
-
-    def _interrupted(self, signum, frame) -> None:
-        label, self._due = self._due, None
-        if label is not None:
-            raise Stalled(f"{label} made no progress for {self.seconds:g}s; its stall report is above")
-        if callable(self._previous):
-            self._previous(signum, frame)
-
-    def mark(self, label: str) -> None:
-        """``label`` starts now; it has ``seconds`` to finish or be followed."""
-
-        if not self._watching:
-            return
-        with self._ready:
-            self._label = label
-            self._deadline = monotonic() + self.seconds
-            self._marks += 1
-            self._ready.notify()
-        self._backstop(self.seconds + self.grace)
-
-    @staticmethod
-    def _backstop(seconds: float) -> None:
-        """Arm faulthandler's watchdog, which dumps every stack and exits the
-        process. To the process's own stderr: a test may have swapped
-        ``sys.stderr`` for a stream with no descriptor."""
-
-        faulthandler.dump_traceback_later(seconds, exit=True, file=sys.__stderr__)
-
-    @contextlib.contextmanager
-    def paused(self):
-        """No deadline while the block runs: a wait on a child process that
-        has a watch of its own. What was running has the whole bound again
-        once it ends."""
-
-        with self._ready:
-            label, self._deadline = self._label, None
-        faulthandler.cancel_dump_traceback_later()
-        try:
-            yield
-        finally:
-            if label is not None:
-                self.mark(label)
-
-    def report(self, label: str) -> None:
-        """Write what has stalled, the evidence for it, and every thread's stack."""
-
-        block_on_output()
-        # The process's own stderr: the test's may be --buffer's, printed only once it fails.
-        stream = self.stream or sys.__stderr__
-        stream.write(f"\n=== stalled {self.seconds:g}s: {label} (pid {os.getpid()}) ===\n")
-        for evidence in list(self.evidence):
-            evidence(stream)
-        stream.write("--- every thread's stack ---\n")
-        stream.flush()
-        faulthandler.dump_traceback(file=stream, all_threads=True)
-        suspended_greenlets(stream)
-        stream.write(f"=== end of stall report: {label} ===\n")
-        stream.flush()
-
-    def stop(self, label: str, marks: int) -> None:
-        """Fail what stalled, or end the process if it does not stop."""
-
-        # Armed before the interrupt, so the end of the watch, which the
-        # interrupt can bring about, always comes after it and cancels it.
-        self._backstop(self.grace + _FALLBACK_GRACE)
-        if self._main is not None:
-            self._due = label
-            signal.pthread_kill(self._main, _INTERRUPT)
-        with self._ready:
-            moved = self._ready.wait_for(lambda: self._marks != marks or not self._watching, timeout=self.grace)
-        if not moved:
-            self.end(label)
-
-    def end(self, label: str) -> None:
-        """Exit the process: what stalled did not stop when interrupted."""
-
-        stream = self.stream or sys.__stderr__
-        stream.write(f"=== {label} did not stop {self.grace:g}s after it was interrupted: the process exits ===\n")
-        stream.flush()
-        if self.workers is not None:
-            with self.workers.get_lock():
-                self.workers.value = -1
-        os._exit(1)
-
-    def _wait(self) -> None:
-        while True:
-            with self._ready:
-                while self._deadline is None or (left := self._deadline - monotonic()) > 0:
-                    self._ready.wait(None if self._deadline is None else left)
-                label, marks, self._deadline = self._label or "", self._marks, None
-            faulthandler.cancel_dump_traceback_later()
-            self.report(label)
-            self.stop(label, marks)
-
-
-stall_watch = StallWatch.from_environment()
-
-
-class _StallMarks:
-    """Restart the stall watch as each test begins and each subtest ends."""
-
-    def startTest(self, test):
-        stall_watch.mark(test.id())
-        return super().startTest(test)
-
-    def addSubTest(self, test, subtest, err):
-        stall_watch.mark(f"{test.id()} after {subtest.id().removeprefix(test.id()).strip()}")
-        return super().addSubTest(test, subtest, err)
-
-
-class CompositionTextResult(FailureRecord, _StallMarks, CompositionIsolation, _ClassTimes, unittest.TextTestResult):
-    def printErrors(self):
-        block_on_output()
-        super().printErrors()
-
-
-@dataclass(frozen=True)
-class SentSubtest:
-    """A failed subtest as a parallel worker sends it to the parent: what the
-    parent's result reads from one, as text.
-
-    A ``_SubTest`` carries its whole test case, so one whose case holds a test
-    client or an open connection does not pickle, and Django's worker then
-    raises rather than report the failure.
-    """
-
-    name: str
-    description: str
-    short_description: str | None
-    failureException: type[BaseException]
-
-    @classmethod
-    def of(cls, subtest: unittest.TestCase) -> SentSubtest:
-        return cls(subtest.id(), str(subtest), subtest.shortDescription(), subtest.failureException)
-
-    def id(self) -> str:
-        return self.name
-
-    def shortDescription(self) -> str | None:
-        return self.short_description
-
-    def __str__(self) -> str:
-        return self.description
-
-
-class SentException(Exception):
-    """An exception a parallel worker could not pickle, as its text, so the
-    parent reports the failure. Django's worker otherwise raises, and the
-    whole run ends on multiprocessing's MaybeEncodingError."""
-
-
-class SentFailure(SentException, AssertionError):
-    """A failed assertion a worker could not pickle, still counted a failure."""
-
-
-def sendable(test: unittest.TestCase, err):
-    """``err`` as a worker can send it: itself when it pickles, else its
-    text in a SentException with its traceback (tblib pickles that), or
-    without one if even that does not pickle."""
-
-    if err is None or _pickles(err):
-        return err
-    kind, value, trace = err
-    text = "".join(traceback.format_exception_only(kind, value)).rstrip("\n")
-    sent = SentFailure if issubclass(kind, test.failureException) else SentException
-    return (sent, sent(text), trace if _pickles(trace) else None)
-
-
-def _pickles(value) -> bool:
-    try:
-        pickle.loads(pickle.dumps(value))  # noqa: S301 - a value of its own, round-tripped to learn whether it crosses to the parent
-    except Exception:  # noqa: BLE001 - whatever pickling raises, the value cannot cross to the parent.
-        return False
-    return True
-
-
-class CompositionRemoteResult(_StallMarks, CompositionIsolation, RemoteTestResult):
-    def addError(self, test, err):
-        super().addError(test, sendable(test, err))
-
-    def addFailure(self, test, err):
-        super().addFailure(test, sendable(test, err))
-
-    def addExpectedFailure(self, test, err):
-        super().addExpectedFailure(test, sendable(test, err))
-
-    def addSubTest(self, test, subtest, err):
-        super().addSubTest(test, subtest if err is None else SentSubtest.of(subtest), sendable(test, err))
-
-    def addClassTime(self, _test, seconds):
-        # A worker's result keeps nothing: the parent replays this event
-        # against the subsuite's test at that index.
-        self.events.append(("addClassTime", self.test_index, seconds))
-
-
-class ClassTimedSuite(ModuleContexts):
-    """A suite that tells its result how long each class took, from its
-    ``setUpClass`` to the end of its ``tearDownClass``, and keeps the stall
-    watch on while it runs.
-
-    Django partitions a suite into suites of its own type, so under
-    ``--parallel`` both happen in the worker the class ran in.
-    """
-
-    @override
-    def run(self, result, debug=False):
-        if getattr(result, "_testRunEntered", False):
-            return super().run(result, debug)
-        with stall_watch.watching():
-            return super().run(result, debug)
-
-    def _handleClassSetUp(self, test, result):
-        if type(test) is not getattr(result, "_previousTestClass", None):
-            stall_watch.mark(f"{unittest.util.strclass(type(test))} setUpClass")
-            self._timing = (test, monotonic())
-        super()._handleClassSetUp(test, result)
-
-    def _tearDownPreviousClass(self, test, result):
-        previous = getattr(result, "_previousTestClass", None)
-        if previous is not None and previous is not type(test):
-            stall_watch.mark(f"{unittest.util.strclass(previous)} tearDownClass")
-        super()._tearDownPreviousClass(test, result)
-        timing = vars(self).pop("_timing", None) if previous is not type(test) else None
-        if timing and (record := getattr(result, "addClassTime", None)):
-            first, began = timing
-            record(first, monotonic() - began)
-
-
-# Enough to show where a run's wall time went: a parallel run lasts as long as
-# its slowest class.
-SLOWEST_SHOWN = 10
-
-
-def report_class_times(result, stream, began_load: tuple[float, ...]) -> None:
-    """The slowest classes of a run, and the load the machine was under."""
-
-    times = sorted(vars(result).get("class_times", {}).items(), key=lambda item: item[1], reverse=True)
-    if not times:
-        return
-    block_on_output()
-    load = " / ".join(f"{a:.2f} {b:.2f} {c:.2f}" for a, b, c in (began_load, os.getloadavg()))
-    stream.write(f"\nSlowest test classes (load average at start / end: {load}):\n")
-    for name, seconds in times[:SLOWEST_SHOWN]:
-        stream.write(f"  {seconds:8.1f}s  {name}\n")
-    stream.flush()
-
-
-class CompositionRemoteRunner(RemoteTestRunner):
-    resultclass = CompositionRemoteResult
-
-
-def _use_the_file_clone(creation, worker_id):
-    """Point a worker at the database file that was cloned for it.
-
-    Under ``spawn`` (macOS's default) and ``forkserver`` (Linux's) Django
-    copies each clone into a shared-cache in-memory database, which locks whole
-    tables instead of using WAL and so deadlocks a test against work it started
-    on another thread. The file keeps a serial run's journal mode, as Django
-    does under ``fork``; under those two methods Django names a file clone even
-    for an in-memory test database.
-    """
-
-    creation.connection.settings_dict.update(creation.get_test_db_clone_settings(worker_id))
-    creation.connection.close()
+def prepare_this_process() -> None:
+    """What every test process sets up before its first test: the run's
+    parent, and each parallel worker as it starts."""
+
+    own_markers()
+    patches_leave_no_copy()
+    default_people_to_operator()
+    flush_through_the_audit_guard()
+    commands_from_the_shell()
+    bind_test_arrangement()
+    hypothesis_profiles()
 
 
 def _init_worker_on_file_databases(counter, *args, **kwargs):
@@ -697,16 +233,10 @@ def _init_worker_on_file_databases(counter, *args, **kwargs):
     """
 
     lazily()
-    DatabaseCreation.setup_worker_connection = _use_the_file_clone
+    DatabaseCreation.setup_worker_connection = use_the_file_clone
     stall_watch.workers = counter
     started = _init_worker(counter, *args, **kwargs)
-    own_markers()
-    patches_leave_no_copy()
-    default_people_to_operator()
-    flush_through_the_audit_guard()
-    commands_from_the_shell()
-    bind_test_arrangement()
-    hypothesis_profiles()
+    prepare_this_process()
     return started
 
 
@@ -717,26 +247,6 @@ class FileClonedParallelSuite(ParallelTestSuite):
     # .__func__`, which only exists on a bound method.
     init_worker = _init_worker_on_file_databases
     runner_class = CompositionRemoteRunner
-
-
-def _checkpoint(alias: str) -> None:
-    """Fold a WAL sidecar back into the database file it belongs to.
-
-    Django clones with ``shutil.copy`` of the one ``.sqlite3`` file, and WAL keeps
-    the newest pages (after ``migrate``, most of the schema) in ``-wal``.
-    """
-
-    connection = connections[alias]
-    if connection.vendor != "sqlite":
-        return
-    with connection.cursor() as cursor:
-        cursor.execute("PRAGMA journal_mode")
-        if (cursor.fetchone() or [""])[0].lower() != "wal":
-            return
-        # TRUNCATE rather than PASSIVE: PASSIVE gives up if a reader is mid-read
-        # and reports success anyway, which would leave the clone copied from a
-        # file that is missing its newest pages.
-        cursor.execute("PRAGMA wal_checkpoint(TRUNCATE)")
 
 
 # The deployment identity the suite runs under, whatever the shell exports: the
@@ -774,6 +284,13 @@ def drives_a_browser(test: unittest.TestCase) -> bool:
         kind.__module__ == BROWSER_TESTS or kind.__module__.startswith(f"{BROWSER_TESTS}.")
         for kind in type(test).__mro__
     )
+
+
+def in_this_share(test: unittest.TestCase) -> bool:
+    """Whether a named test runs in this job's share of a split browser gate
+    (``shards``): a sweep runs in every share, reading its own pages."""
+
+    return not drives_a_browser(test) or shards.sweeps(test) or shards.runs_here(test.id())
 
 
 def browser_failures() -> Path:
@@ -844,18 +361,23 @@ class SeverinoTestRunner(DiscoverRunner):
         settings.SEVERINO_SITE_HOST = ""
         super().setup_test_environment(**kwargs)
         sys.breakpointhook = breakpoint_on_the_terminal
-        own_markers()
-        patches_leave_no_copy()
-        default_people_to_operator()
-        flush_through_the_audit_guard()
-        commands_from_the_shell()
-        bind_test_arrangement()
-        hypothesis_profiles()
+        prepare_this_process()
+
+    def load_tests_for_label(self, label, discover_kwargs):
+        # Discovery loads a package's __init__ as well as its test files, so a
+        # browser gate declared there is found; the browser gates run by name.
+        # Left out here, as each label loads: Django then splits what is left
+        # across the workers, and a suite rebuilt after that runs in one process.
+        tests = super().load_tests_for_label(label, discover_kwargs)
+        if self.named:
+            return self.test_suite(test for test in tests_in(tests) if in_this_share(test))
+        return self.test_suite(test for test in tests_in(tests) if not drives_a_browser(test))
 
     def build_suite(self, test_labels=None, **kwargs):
         # A run with no labels is the whole suite: the host's and every
         # installed plugin's, so a composed run tests what it composes. Named
         # labels run what they name.
+        self.named = bool(test_labels)
         self.exclude_tags = excluded_tags(test_labels, self.tags, self.exclude_tags)
         if test_labels:
             suite = super().build_suite(test_labels, **kwargs)
@@ -864,14 +386,14 @@ class SeverinoTestRunner(DiscoverRunner):
             if self.installed_plugins and not modules:
                 raise RuntimeError("--installed-plugins: no plugin is installed.")
             suite = super().build_suite([*modules] if self.installed_plugins else [".", *modules], **kwargs)
-            # Discovery loads a package's __init__ as well as its test files, so a
-            # browser gate declared there is found; the browser gates run by name.
-            suite = self.test_suite(test for test in tests_in(suite) if not drives_a_browser(test))
             require_tests_from(suite, modules)
         if any(drives_a_browser(test) for test in tests_in(suite)):
             # Here, in the process that starts the run and before any worker
             # shoots: the last run's shots of this task give way to this one's.
             shutil.rmtree(browser_failures(), ignore_errors=True)
+            index, total = shards.shard()
+            if total > 1:
+                print(f"Browser share {index}/{total}: {sum(1 for _ in tests_in(suite))} tests", file=sys.stderr)
         if self.tags and next(tests_in(suite), None) is None:
             # A gate that selects by tag and finds nothing has checked nothing.
             untagged = f" Their tests run with `mise run test {' '.join(test_labels)}`." if test_labels else ""
@@ -892,6 +414,7 @@ class SeverinoTestRunner(DiscoverRunner):
             stopped.add_note("Or a worker exited on a test that did not stop when interrupted: see its stall report.")
             raise
         report_class_times(result, sys.stderr, began_load)
+        report_costs(result, sys.stderr)
         write_failures(result)
         return result
 
@@ -904,15 +427,6 @@ class SeverinoTestRunner(DiscoverRunner):
             config = super().setup_databases(**kwargs)
         finally:
             self.parallel = requested
-        if requested <= 1:
-            return config
-
-        for connection, _old_name, _destroy in config:
-            _checkpoint(connection.alias)
-            for index in range(requested):
-                connection.creation.clone_test_db(
-                    suffix=str(index + 1),
-                    verbosity=self.verbosity,
-                    keepdb=self.keepdb,
-                )
+        if requested > 1:
+            clone_for_workers(config, requested, verbosity=self.verbosity, keepdb=self.keepdb)
         return config

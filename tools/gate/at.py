@@ -3,8 +3,8 @@ closing on the line tools/gate/verdict.py prints.
 
 mise parses the task's arguments (its usage in mise-tasks/test.toml) and this
 reads what it parsed. What `--at` and `--keep` do is the task's help
-(`mise run test --help`). A run takes the heavy turn (mise-tasks/turn) unless
-tools/gate/turn.py finds it narrow; a run at a ref builds a worktree, so it always takes it.
+(`mise run test --help`). A run takes the heavy turn (mise-tasks/turn), or a share of it when
+tools/gate/turn.py finds it one process; a run at a ref builds a worktree, so it always takes the turn.
 """
 
 import fnmatch
@@ -34,7 +34,7 @@ from hq.platform.core.tests.task import (
     worktree,
 )
 from tests.mise_tasks import mise_tasks
-from tools.gate.turn import in_turn, inside
+from tools.gate.turn import in_share, in_turn, inside
 from tools.gate.verdict import REPORTS, FailedTest, Gate, Step, run
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -99,10 +99,6 @@ MISE = ["mise"]
 # A folder of fixtures a test reads by path, from any tree: Go's convention, which go build skips
 # (`go help packages`), and a Python test may read another tree's (a case table the controller shares).
 TESTDATA = "testdata"
-# Ends a run with the line on what its process tree spent; a run inside a measured one adds none.
-MEASURER = str(ROOT / "tools" / "lib" / "measured")
-# Set by the run that found itself narrow, for the run it execs under the measurer, which pops it.
-FOUND_NARROW = "HQ_FOUND_NARROW"
 
 
 class KeepRefused(Exception):
@@ -567,27 +563,26 @@ def stop(signum: int, _frame: object) -> None:
 
 
 def take_the_turn(typed: Typed) -> None:
-    """Run again inside the heavy turn, unless this run is in it or narrow; a narrow run runs again
-    under the measurer, so every run ends with its line. The run again inherits mise's parse through
-    the environment."""
+    """Run again inside the heavy turn, or in a share of it when the run is one process, unless this run is
+    in either already. Either ends the run with the line on what its process tree spent. The run again
+    inherits mise's parse through the environment."""
 
-    # The narrow run re-run below was found narrow already; the marker is popped so no child inherits it.
-    if os.environ.pop(FOUND_NARROW, None) or inside():
+    if inside():
         return
-    # Whether it is narrow is asked in a process of its own, as tools/lib/heavy-turn.sh asks: the
-    # settings it loads start a run, which the exec below would leave with nothing to remove it.
-    heavy = [sys.executable, "-m", "tools.gate.turn", *typed.args]
-    if typed.at is not None or typed.go or subprocess.call(heavy, cwd=ROOT):
-        # A run at a ref builds a worktree and may run the suite there twice.
-        command = [*in_turn("2h"), sys.executable, "-m", "tools.gate.at"]
-        os.execvp(command[0], command)
-    # Measured already (a gate's run of tests): the line is the outer one's.
-    if os.environ.get("HQ_MEASURED"):
-        return
-    os.environ[FOUND_NARROW] = "1"
-    command = [MEASURER, sys.executable, "-m", "tools.gate.at"]
+    # What it weighs is asked in a process of its own, as tools/lib/heavy-turn.sh asks: the settings it
+    # loads start a run, which the exec below would leave with nothing to remove it. It weighs the run
+    # this task makes: TEST's own options, then the developer's arguments.
+    weight = "whole"
+    if typed.at is None and not typed.go:
+        weighed = [sys.executable, "-m", "tools.gate.turn", *TEST[2:], *typed.args]
+        weight = (
+            subprocess.run(weighed, cwd=ROOT, capture_output=True, text=True, check=False).stdout.split() or [weight]
+        )[-1]
+    # A run at a ref builds a worktree and may run the suite there twice.
+    prefix = in_turn("2h") if not weight.isdigit() else in_share(int(weight), "2h")
+    command = [*prefix, sys.executable, "-m", "tools.gate.at"]
     os.chdir(ROOT)
-    os.execv(command[0], command)
+    os.execvp(command[0], command)
 
 
 def run_here(argv: list[str], *, go: bool = False, shell: bool = False) -> int:

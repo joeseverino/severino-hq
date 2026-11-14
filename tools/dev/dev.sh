@@ -187,10 +187,9 @@ if [ "$runner" = true ]; then
     (umask 077 && mkdir -p "$bridge")
     SEVERINO_BRIDGE_SOCKET="$bridge/bridge.sock"
     export SEVERINO_BRIDGE_SOCKET
-    # The runner group's environment, which smoke:runner shares, so the
-    # checkout's .venv keeps the default groups.
-    UV_PROJECT_ENVIRONMENT=var/runner/venv uv sync --inexact --group runner --quiet
-    "$python" -m tools.dev.scratch_automation watch "$$" "$root/var/runner/venv/bin/python" &
+    # shellcheck source=tools/lib/runner-environment.sh
+    . ./tools/lib/runner-environment.sh
+    "$python" -m tools.dev.scratch_automation watch "$$" "$root/$runner_venv/bin/python" &
 fi
 # --no-proxy-headers, as the image's: the application reads its proxy's
 # forwarded headers itself, after recording the peer they replace. The

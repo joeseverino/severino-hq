@@ -27,6 +27,8 @@ UPDATED = "photo-library"
 # The scheduled work HQ declares that runs on a clock, and how many runs to show.
 SCHEDULED = tuple((work.name, work.every) for work in scheduled_work.SCHEDULED if work.every is not None)
 RUNS = 3
+# The states the latest run of the first scheduled kinds is left in, one each.
+LIVE = (Job.State.RUNNING, Job.State.QUEUED)
 CONTENT_SYNC = "content.sync"
 # What the site's index says of each writeup: its description and what it uses.
 DESCRIBED = {
@@ -162,7 +164,12 @@ def repositories():
             "followers": 12,
             "following": 9,
             "created_at": "2016-05-21T18:04:00Z",
+            "company": "Example Co",
             "location": "Fairview, IL",
+            "website": "https://example.com",
+            "social": "example",
+            "public_gists": 3,
+            "hireable": True,
             "starred": 38,
             "watched": _watched(),
         },
@@ -296,6 +303,18 @@ def jobs():
         for run in range(RUNS, 0, -1):
             work = _described if kind == CONTENT_SYNC and run == 1 else _nothing
             _ran(kind, every * run - timedelta(minutes=7), work)
+    # A timer's run under way and one waiting its turn, so a page draws work in both states.
+    now = timezone.now()
+    for (kind, _every), state in zip(SCHEDULED, LIVE, strict=False):
+        running = state == Job.State.RUNNING
+        Job.objects.create(
+            kind=kind,
+            label=scheduled_work.named(kind).label,
+            actor=runner.SCHEDULER,
+            state=state,
+            started_at=now if running else None,
+            heartbeat_at=now if running else None,
+        )
 
 
 def _nothing(_progress):

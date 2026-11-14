@@ -7,19 +7,26 @@ resend after an answer that never arrived, a fragment posting again) acts
 once, as a token's write does. ``fragment.js``'s ``hqFetch`` draws the form a
 new key once a post is answered, so a form that stays on the page asks afresh.
 
-A form view whose write is a service call of its own (``writes``' mixins) runs
-it through ``write_once`` under the same key, and answers a resend from
-``posted_answer`` before its form is validated again.
+A form view sends its form's values as the payload ``form_payload`` makes
+of them, and answers a resend from ``posted_answer`` before its form is
+validated again. Only a published form mixin whose write is no capability
+(``writes.outside_the_runner``) runs it through ``write_once`` instead.
 
 A refused answer reaches the person through ``refused``, said on the form or
 the next page, or as the whole response through ``refusal_response``.
 """
 
+import json
 import secrets
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
+from dataclasses import fields
 from typing import Any
 
 from django.contrib import messages
+from django.core.exceptions import ImproperlyConfigured
+from django.core.files.uploadedfile import UploadedFile
+from django.core.serializers.json import DjangoJSONEncoder
+from django.db.models import Model
 from django.http import HttpRequest, HttpResponse
 lazy from django.forms import BaseForm
 lazy from django.utils.html import format_html
@@ -28,17 +35,19 @@ lazy from hq.platform.core.templatetags.action_tags import post_button
 lazy from hq.platform.core.templatetags.value_tags import breakable
 
 from .capabilities import Ran, run_capability
+from .forms import file_as_sent
 from .idempotency import (
     KEY,
     IdempotencyConflict,
     InvalidIdempotencyKey,
+    answered,
     execute_form_once,
-    form_answer,
     validate_key,
 )
 from .refusal_status import Refusal, refusal_of, refuse
-from .security import Principal, web_principal
+from .security import Principal, agent_subject, web_principal
 lazy from .automation_runs import held_words
+lazy from .records import records_for
 
 # The hidden field the key travels in: a name no command declares, like the
 # command form's other fields of its own.
@@ -183,7 +192,7 @@ def write_once(request: HttpRequest, write: str, operation: Callable[[], dict[st
         return Ran(refuse("idempotency_key_required", "This form was sent without its retry key: reload the page."))
     try:
         answer, replayed = execute_form_once(
-            actor=web_principal(request.user).actor,
+            actor=agent_subject(web_principal(request.user)),
             key=validate_key(key),
             write=write,
             form=_posted_form(request),
@@ -196,8 +205,8 @@ def write_once(request: HttpRequest, write: str, operation: Callable[[], dict[st
     return Ran(answer, replayed)
 
 
-def posted_answer(request: HttpRequest, write: str) -> dict[str, Any] | None:
-    """What ``write_once`` answered this same post the first time, or None.
+def posted_answer(request: HttpRequest) -> dict[str, Any] | None:
+    """What this same post was answered the first time it wrote, or None.
 
     Read before the form is validated again: what the first post wrote can
     make its own resend invalid (a slug now taken, a record now gone). An
@@ -208,7 +217,7 @@ def posted_answer(request: HttpRequest, write: str) -> dict[str, Any] | None:
     sent = request.POST.get(RETRY_KEY_FIELD) or None
     if sent is None or not KEY.fullmatch(sent):
         return None
-    answer = form_answer(actor=web_principal(request.user).actor, key=sent, write=write, form=_posted_form(request))
+    answer = answered(actor=agent_subject(web_principal(request.user)), key=sent)
     if answer is not None:
         _call_key(request)
     return answer
@@ -229,3 +238,41 @@ def _posted_form(request: HttpRequest) -> dict[str, Any]:
             (name, [(upload.name, upload.size) for upload in uploads]) for name, uploads in request.FILES.lists()
         ),
     }
+
+
+def form_payload(form: BaseForm, command: type) -> dict[str, Any]:
+    """A valid form's values as ``command``'s payload, the JSON every door sends.
+
+    A record a field chose is sent by its key, the field its domain names it
+    by, and a file picked as ``file_as_sent`` makes it. A field the command
+    does not take is left out when it holds what the form was drawn with (a
+    stored file not replaced), and refused when it changed, since its value
+    would be lost.
+    """
+
+    takes = {field.name for field in fields(command)}
+    lost = [name for name in form.changed_data if name in form.cleaned_data and name not in takes]
+    if lost:
+        raise ImproperlyConfigured(f"{command.__name__} takes no {', '.join(lost)}, which {type(form).__name__} sends.")
+    sent = {name: _as_sent(value) for name, value in form.cleaned_data.items() if name in takes}
+    return json.loads(json.dumps(sent, cls=DjangoJSONEncoder))
+
+
+def _as_sent(value: Any) -> Any:
+    if isinstance(value, Model):
+        return _key(value)
+    if isinstance(value, UploadedFile):
+        return file_as_sent(value)
+    if isinstance(value, Iterable) and not isinstance(value, str | bytes | dict):
+        return [_as_sent(item) for item in value]
+    return value
+
+
+def _key(record: Model) -> Any:
+    """What a command names ``record`` by: its domain's lookup, or its primary key."""
+
+    try:
+        lookup = records_for(type(record)).lookup
+    except LookupError:
+        return record.pk
+    return getattr(record, lookup)

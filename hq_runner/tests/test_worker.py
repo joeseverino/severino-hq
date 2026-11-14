@@ -149,6 +149,131 @@ class ResultTests(PassTestCase):
         self.assertNotIn("PRIVATE KEY", self.only_report(bridge)["message"])
 
 
+class StatedTests(PassTestCase):
+    """A run's report carries the readings and preview its playbook stated
+    (``fakes.READINGS``, recorded on two machines and one planted beside them),
+    about its own machines alone, each part whole or left out and said."""
+
+    def stating(self, artifact=None, *, parameters=None):
+        event = json.loads(json.dumps(fakes.READINGS))
+        if artifact is not None:
+            event["event_data"]["artifact_data"] = artifact
+        bridge = fakes.Bridge(fakes.pending(parameters=parameters))
+        self.work(bridge, fakes.Runner([*fakes.WELL[:-1], event]))
+        return self.only_report(bridge)
+
+    def test_the_readings_and_preview_a_playbook_stated_on_the_run_s_machine_are_reported(self):
+        recorded = fakes.READINGS["event_data"]["artifact_data"]
+
+        report = self.stating()
+
+        self.assertTrue(report["success"])
+        self.assertEqual(
+            report["stated"],
+            {
+                "readings": {fakes.APP: recorded["readings"][fakes.APP]},
+                "preview": {fakes.APP: recorded["preview"][fakes.APP]},
+            },
+        )
+        self.assertEqual(sorted(report["stated"]["readings"][fakes.APP]), ["host.filesystem", "host.reboot"])
+
+    def test_what_it_stated_about_a_machine_the_run_is_not_on_is_left_out_and_said(self):
+        report = self.stating()
+
+        stated_on = {machine for stat in report["stated"].values() for machine in stat}
+        self.assertEqual(stated_on, {fakes.APP})
+        self.assertNotIn("elsewhere.example.com", json.dumps(report))
+        self.assertNotIn("db.example.com", json.dumps(report["stated"]))
+        # db.example.com's readings and preview, and elsewhere.example.com's readings.
+        self.assertIn("3 parts", report["message"])
+        self.assertIn("for a machine it was not run on", report["message"])
+
+    def test_a_stat_of_no_name_a_report_carries_is_dropped(self):
+        report = self.stating()
+
+        self.assertEqual(set(report["stated"]), {"readings", "preview"})
+        self.assertNotIn("not a stat HQ takes", json.dumps(report))
+
+    def test_a_part_past_a_bound_is_left_out_whole_and_the_rest_reported(self):
+        record = {"mount": "/", "free_bytes": 1, "total_bytes": 2, "read_at": "2026-11-13T12:00:00Z"}
+        long = "x" * 501
+        cases = {
+            "more records of one kind than the bound": [record] * 201,
+            "a value longer than a text": [{**record, "mount": long}],
+            "a nested value longer than a text": [{"packages": [long]}],
+            "a member name longer than a text": [{long: 1}],
+        }
+        for case, records in cases.items():
+            with self.subTest(case):
+                report = self.stating(
+                    {"readings": {fakes.APP: {"host.filesystem": records, "host.reboot": [{"required": True}]}}}
+                )
+
+                self.assertEqual(report["stated"], {"readings": {fakes.APP: {"host.reboot": [{"required": True}]}}})
+                self.assertIn(
+                    "1 part of what the playbook stated is not reported: 1 past the bridge's bounds", report["message"]
+                )
+
+    def test_a_kind_named_past_its_bound_is_left_out(self):
+        report = self.stating({"readings": {fakes.APP: {"host." + "x" * 96: [{"mount": "/"}]}}})
+
+        self.assertNotIn("stated", report)
+        self.assertIn("past the bridge's bounds", report["message"])
+
+    def test_a_preview_past_a_bound_is_left_out_whole(self):
+        for case, lines in {
+            "more lines than the bound": ["line"] * 201,
+            "a line longer than a text": ["x" * 501],
+        }.items():
+            with self.subTest(case):
+                report = self.stating({"preview": {fakes.APP: lines}})
+
+                self.assertNotIn("stated", report)
+                self.assertIn("past the bridge's bounds", report["message"])
+
+    def test_everything_stated_past_the_bound_in_all_is_left_out(self):
+        from hq_runner.events import STATED_BYTES
+
+        kinds = {f"host.part{index}": [{"text": "x" * 400} for _ in range(10)] for index in range(20)}
+
+        report = self.stating({"readings": {fakes.APP: kinds}, "preview": {fakes.APP: ["line"]}})
+
+        self.assertGreater(len(json.dumps(kinds)), STATED_BYTES)
+        self.assertNotIn("stated", report)
+        self.assertIn(
+            "21 parts of what the playbook stated are not reported: 21 past the bridge's bounds", report["message"]
+        )
+
+    def test_a_part_that_is_neither_a_reading_nor_a_preview_is_left_out(self):
+        cases = {
+            "readings that are not keyed by machine": {"readings": ["host.filesystem"]},
+            "a machine's readings that are not keyed by kind": {"readings": {fakes.APP: ["host.filesystem"]}},
+            "records that are not a list": {"readings": {fakes.APP: {"host.filesystem": {"mount": "/"}}}},
+            "a record that is not an object": {"readings": {fakes.APP: {"host.filesystem": ["/"]}}},
+            "a preview line that is not text": {"preview": {fakes.APP: [1]}},
+        }
+        for case, artifact in cases.items():
+            with self.subTest(case):
+                report = self.stating(artifact)
+
+                self.assertNotIn("stated", report)
+                self.assertIn("not shaped as a reading or a preview", report["message"])
+
+    def test_a_secret_in_what_a_playbook_stated_never_reaches_the_report(self):
+        report = self.stating(
+            {
+                "readings": {fakes.APP: {"host.filesystem": [{"mount": "/", "note": f"key {PRIVATE_KEY}"}]}},
+                "preview": {fakes.APP: ["would write example-learned-secret to /etc/example.conf"]},
+            },
+            parameters={"api_token": "example-learned-secret"},
+        )
+
+        said = json.dumps(report["stated"])
+        self.assertNotIn("PRIVATE KEY", said)
+        self.assertNotIn("example-learned-secret", said)
+        self.assertIn("[redacted]", said)
+
+
 class FailedRunTests(PassTestCase):
     def test_a_failed_task_reports_failure_and_names_the_task(self):
         bridge = fakes.Bridge(fakes.pending())
@@ -159,6 +284,62 @@ class FailedRunTests(PassTestCase):
         self.assertFalse(report["success"])
         self.assertIn(("localhost", "Fail", "failed"), [(e["host"], e["task"], e["outcome"]) for e in report["events"]])
         self.assertEqual(report["conditions"][0]["type"], "Degraded")
+
+
+class StoppedRunTests(PassTestCase):
+    """A run Ansible stops before its first task says the error it stopped
+    with, from the runs ``fakes.STOPPED`` recorded."""
+
+    def test_a_run_stopped_before_its_first_task_says_ansible_s_error_and_where(self):
+        cases = {
+            "broken_role": ("YAML parsing failed", "roles/broken/tasks/main.yml:4:1"),
+            "missing_collection": ("example.absent.compose_restart", "playbooks/missing_collection.yml:7:7"),
+        }
+        for name, (said, where) in cases.items():
+            with self.subTest(name):
+                bridge = fakes.Bridge(fakes.pending())
+
+                self.work(bridge, fakes.Runner(fakes.STOPPED[name], status="failed"))
+
+                report = bridge.reports[-1]
+                self.assertFalse(report["success"])
+                self.assertEqual(report["events"], [])
+                self.assertIn(said, report["message"])
+                self.assertIn(where, report["message"])
+                self.assertNotIn("/srv/example/project", report["message"])
+                self.assertNotIn("\x1b", report["message"])
+                self.assertNotIn("[ERROR]", report["message"])
+                self.assertEqual(report["conditions"][0]["message"], report["message"])
+
+    def test_a_secret_parameter_in_ansible_s_error_is_struck(self):
+        bridge = fakes.Bridge(fakes.pending(parameters={"api_token": "example.absent.compose_restart"}))
+
+        self.work(bridge, fakes.Runner(fakes.STOPPED["missing_collection"], status="failed"))
+
+        message = bridge.reports[-1]["message"]
+        self.assertNotIn("example.absent.compose_restart", message)
+        self.assertIn("[redacted]", message)
+
+    def test_an_error_line_never_replaces_a_failed_task(self):
+        bridge = fakes.Bridge(fakes.pending())
+
+        self.work(bridge, fakes.Runner([*fakes.STOPPED["broken_role"], *fakes.RECORDED], status="failed"))
+
+        report = bridge.reports[-1]
+        self.assertNotIn("YAML parsing failed", report["message"])
+        self.assertIn("failed", [event["outcome"] for event in report["events"]])
+
+    def test_a_place_outside_the_project_is_never_said(self):
+        moved = json.loads(json.dumps(fakes.STOPPED["missing_collection"]))
+        for event in moved:
+            event["stdout"] = event["stdout"].replace("/srv/example/project", "/srv/example/elsewhere")
+        bridge = fakes.Bridge(fakes.pending())
+
+        self.work(bridge, fakes.Runner(moved, status="failed"))
+
+        message = bridge.reports[-1]["message"]
+        self.assertIn("example.absent.compose_restart", message)
+        self.assertNotIn("elsewhere", message)
 
 
 class TimeoutTests(PassTestCase):
@@ -292,7 +473,6 @@ class LoginTests(PassTestCase):
     def test_a_read_goes_through_the_read_login_and_never_escalates(self):
         for asked in ({"effect": "read", "privilege": ""}, {"effect": "infrastructure_change", "privilege": ""}):
             with self.subTest(**asked):
-                self.journal.clear()
                 (run,), looked, _ = self.logins(**asked)
 
                 self.assertEqual(looked, [(fakes.APP, "read")])

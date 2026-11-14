@@ -12,12 +12,12 @@ from hq.domains.control_plane.provider_adapters.github import COMPOSE_WORKFLOW, 
 from hq.platform.core.attribution import operation_context
 from hq_sdk.testing import plain
 
-from ..doors import NOBODY, door_words
+from ..doors import door_words
 from ..entity_links import entity_link, record_name
 from ..inventory import confirm_observed
 from ..projection import projection_scope
 from ..resource_context import record_status
-from ..resource_operations import changes, operation_summary, resource_history
+from ..resource_operations import changes, resource_history, serialize_operation, summaries
 from .inventory_records import kind_read
 from .markup import all_elements, select, texts
 
@@ -321,10 +321,7 @@ class HistoryShowsChangesTests(TestCase):
         return operation
 
     def listed(self, limit: int = 20) -> list[str]:
-        return [
-            operation_summary(operation, NOBODY)["headline"]
-            for operation in changes(self.resource.operations.all(), limit)
-        ]
+        return [summary["headline"] for summary in summaries(changes(self.resource.operations.all(), limit))]
 
     def test_a_check_that_keeps_finding_the_same_thing_is_one_row(self):
         for _minute in range(30):
@@ -349,14 +346,9 @@ class HistoryShowsChangesTests(TestCase):
         self.assertEqual(len(self.listed()), 2)
 
     def test_a_run_that_found_a_problem_never_reads_as_done(self):
-        summary = operation_summary(
-            self.ran(
-                "Deploy reported.",
-                condition="Degraded",
-                reason="NotDelivered",
-            ),
-            NOBODY,
-        )
+        self.ran("Deploy reported.", condition="Degraded", reason="NotDelivered")
+
+        (summary,) = resource_history(self.resource)
 
         self.assertEqual((summary["tone"], summary["state_label"]), ("attention", "Problem found"))
         self.assertNotIn("guidance", summary)
@@ -377,3 +369,12 @@ class HistoryShowsChangesTests(TestCase):
                 f"example-controller, {door_words('controller')}",
             ],
         )
+
+    def test_an_operations_answer_says_who_asked_as_its_audit_row_does(self):
+        operation = self.ran("Unchanged.", by="mcp")
+        OperationRequest.objects.filter(pk=operation.pk).update(requested_actor="a-copy", requested_interface="web")
+        operation.refresh_from_db()
+
+        item = serialize_operation(operation)
+
+        self.assertEqual((item["requested_actor"], item["requested_interface"]), ("operator", "mcp"))

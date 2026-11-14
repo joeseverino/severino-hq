@@ -6,9 +6,8 @@ from django.contrib.auth import get_user_model
 from django.template.loader import render_to_string
 from django.test import TestCase, override_settings
 from django.urls import reverse
-from django.utils import timezone
 
-from hq.domains.control_plane.models import AddressReading
+from hq.platform.application import readings
 from hq.platform.application.lookup import LOOK_UP_ADDRESS
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.request_connection import connection
@@ -18,6 +17,7 @@ from hq.platform.application.tests.markup import select, text
 from hq.platform.application.tests.test_lookup import AN_ADDRESS, AN_ALLOCATION, GLOBAL as ADDRESS
 from hq.platform.core.models import AuditLog
 
+KEY = readings.public_address(ADDRESS)
 STORED = {
     "ok": True,
     "address": ADDRESS,
@@ -52,7 +52,7 @@ class PublicAddressViewTests(TestCase):
         return self.client.post(self.url, form_keyed({"address": address}), HTTP_X_REQUESTED_WITH="XMLHttpRequest")
 
     def test_a_get_serves_the_stored_reading_and_asks_nobody(self):
-        AddressReading.objects.create(address=ADDRESS, reading=STORED, observed_at=timezone.now())
+        readings.record(KEY, STORED)
         resolver, registry = nobody_asked()
         with resolver, registry:
             response = self.client.get(self.url, {"address": ADDRESS})
@@ -68,7 +68,7 @@ class PublicAddressViewTests(TestCase):
 
         self.assertContains(response, "Not looked up yet")
         self.assertTrue(select(response, "formaction", self.url))
-        self.assertFalse(AddressReading.objects.exists())
+        self.assertIsNone(readings.stored(KEY))
 
     def test_a_non_routable_address_is_answered_locally_with_no_lookup_offered(self):
         response = self.client.get(self.url, {"address": "10.9.9.9"})
@@ -82,7 +82,7 @@ class PublicAddressViewTests(TestCase):
         self.assertContains(response, "That is not an IP address.")
 
     def test_a_get_without_the_grant_is_refused_and_recorded(self):
-        AddressReading.objects.create(address=ADDRESS, reading=STORED, observed_at=timezone.now())
+        readings.record(KEY, STORED)
         lacking = Principal("op", "web", OPERATOR_CAPABILITIES - {Capability.LOOK_UP_PUBLIC_RECORDS})
         with patch("hq.platform.core.views.web_principal", return_value=lacking):
             response = self.client.get(self.url, {"address": ADDRESS})
@@ -103,7 +103,7 @@ class PublicAddressViewTests(TestCase):
         self.assertEqual(denied.count(), 1)
 
     def test_a_post_looks_the_address_up_again_and_keeps_what_it_found(self):
-        AddressReading.objects.create(address=ADDRESS, reading=STORED, observed_at=timezone.now())
+        readings.record(KEY, STORED)
         with (
             patch("hq.platform.application.lookup.resolve", return_value=AN_ADDRESS),
             patch("hq.platform.application.lookup.registry", return_value=AN_ALLOCATION),
@@ -111,7 +111,7 @@ class PublicAddressViewTests(TestCase):
             response = self.look_up(ADDRESS)
 
         self.assertIn("Example Networks LLC", text(response))
-        self.assertEqual(AddressReading.objects.get().reading["hostnames"], AN_ADDRESS["hostnames"])
+        self.assertEqual(readings.stored(KEY).value["hostnames"], AN_ADDRESS["hostnames"])
 
     def test_a_post_of_something_that_is_not_an_address_says_so(self):
         resolver, registry = nobody_asked()
@@ -119,7 +119,7 @@ class PublicAddressViewTests(TestCase):
             response = self.look_up("not-an-address")
 
         self.assertIn("That is not an IP address.", text(response))
-        self.assertFalse(AddressReading.objects.exists())
+        self.assertIsNone(readings.stored(KEY))
 
     def test_an_operator_without_the_grant_is_refused_in_the_fragment(self):
         lacking = Principal("op", "web", OPERATOR_CAPABILITIES - {Capability.LOOK_UP_PUBLIC_RECORDS})
@@ -128,7 +128,7 @@ class PublicAddressViewTests(TestCase):
             response = self.look_up(ADDRESS)
 
         self.assertIn("look_up_public_records", text(response))
-        self.assertFalse(AddressReading.objects.exists())
+        self.assertIsNone(readings.stored(KEY))
         denied = AuditLog.objects.filter(action=AuditLog.Action.DENIED, metadata__capability=LOOK_UP_ADDRESS)
         self.assertEqual(denied.count(), 1)
 
@@ -138,7 +138,7 @@ class PublicAddressViewTests(TestCase):
             response = self.client.post(self.url, form_keyed({"address": ADDRESS}))
 
         self.assertRedirects(response, reverse("connection"), fetch_redirect_response=False)
-        self.assertFalse(AddressReading.objects.exists())
+        self.assertIsNone(readings.stored(KEY))
 
     @override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
     def test_the_connection_panel_loads_this_fragment_for_the_peers_public_address(self):
@@ -148,7 +148,7 @@ class PublicAddressViewTests(TestCase):
         )
         panel = render_to_string("core/_connection_panel.html", {"connection": connection(a_request())})
         (region,) = select(panel, "data-fragment-load")
-        AddressReading.objects.create(address=ADDRESS, reading=STORED, observed_at=timezone.now())
+        readings.record(KEY, STORED)
 
         self.assertTrue(region.attrs.get("data-fragment-failure"))
         self.assertIn("host.example.net", text(self.client.get(region.attrs["data-fragment"])))

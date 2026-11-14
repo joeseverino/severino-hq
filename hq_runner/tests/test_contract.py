@@ -42,6 +42,33 @@ class ContractTests(unittest.TestCase):
         outcomes = {"ok", "changed", *(outcome for outcome in events._OUTCOMES.values())}
         self.assertLessEqual(outcomes, set(run_event["outcome"]["enum"]))
 
+    def test_what_a_run_states_is_held_to_run_stated_s_bounds(self):
+        stated = self.schemas["RunStated"]["properties"]
+        readings = stated["readings"]["additionalProperties"]["additionalProperties"]
+        self.assertEqual(events.RECORD_LIMIT, readings["maxItems"])
+        self.assertEqual(events.RECORD_LIMIT, stated["preview"]["additionalProperties"]["maxItems"])
+        self.assertEqual(events.TEXT_LIMIT, self.schemas["StatedText"]["maxLength"])
+        self.assertEqual(events.HOST_LIMIT, self.schemas["StatedMachine"]["maxLength"])
+        self.assertEqual(events.KIND_LIMIT, self.schemas["StatedKind"]["maxLength"])
+        self.assertEqual(events.STATED_BYTES, self.schemas["StatedBytes"]["maxLength"])
+        self.assertEqual({events.READINGS_STAT, events.PREVIEW_STAT}, set(stated))
+
+    def test_what_the_worker_reports_of_the_recorded_run_conforms_to_run_stated(self):
+        from jsonschema import Draft202012Validator
+        from referencing import Registry, Resource
+        from referencing.jsonschema import DRAFT202012
+
+        from . import fakes
+
+        contract = json.loads(BASE.read_text(encoding="utf-8"))
+        uri = "urn:hq-bridge"
+        registry = Registry().with_resource(uri, Resource.from_contents(contract, default_specification=DRAFT202012))
+        validator = Draft202012Validator({"$ref": f"{uri}#/components/schemas/RunStated"}, registry=registry)
+        said = events.stated(fakes.READINGS, ("app.example.com", "db.example.com")).as_report()
+
+        self.assertEqual(set(said["readings"]), {"app.example.com", "db.example.com"})
+        self.assertEqual([error.message for error in validator.iter_errors(said)], [])
+
     def test_a_scan_s_catalog_is_held_to_source_catalog_s_bounds(self):
         from hq_runner import catalog
 

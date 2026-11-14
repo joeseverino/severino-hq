@@ -19,7 +19,7 @@ from typing import Annotated, Literal, TypedDict
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Exists, F, OuterRef
+from django.db.models import Exists, F, Max, OuterRef
 from django.utils import timezone
 from pydantic import Field
 
@@ -39,9 +39,10 @@ lazy from hq.domains.control_plane.providers import PROVIDERS, enabled_controlle
 
 from . import readings
 from .command_fields import Describe, Names
-from .derivations import asked_ahead, holds_until
+from .derivations import asked_ahead, holds_until, passed, present, since
 from .integration_specs import requested
 from .moments import duration
+from .record_errors import Sentence
 from .security import Principal
 from .ui import ended
 lazy from .action_links import READ_NOW_CAPABILITY
@@ -150,15 +151,22 @@ CONTROLLER_FLOOR = timedelta(minutes=15)
 CONTROLLER_SILENT_AFTER = 2 * CONTROLLER_FLOOR
 
 
+# What each worker that pulls HQ's work is called in a sentence about it.
+CONTROLLER_NAMED = "controller"
+PLAYBOOK_WORKER_NAMED = "playbook worker"
+
+
 @dataclass(frozen=True, slots=True)
-class ControllerStanding:
-    """When the controller last reached HQ, and whether that is too long ago."""
+class WorkerStanding:
+    """When a worker that pulls HQ's work (the controller, or HQ's playbook
+    worker) last reached HQ, and whether that is too long ago."""
 
     seen_at: datetime | None
     silent: bool
     # Seen by its heartbeat, written only as it reaches this HQ, rather than
     # by readings that may have come with a database copied from elsewhere.
     here: bool = False
+    named: Sentence = CONTROLLER_NAMED
 
     @property
     def known(self) -> bool:
@@ -182,8 +190,35 @@ class ControllerStanding:
 
         return self.here and not self.silent
 
+    def cannot(self, doing: Sentence, *, now: datetime) -> Sentence:
+        """Why work asked of it now would wait for nothing, as the sentence
+        a refusal says ("Cannot refresh: no controller reports to this HQ."),
+        or, with ``doing`` empty, what work already queued for it waits for:
+        nothing expires a queued run, so it starts once one reports ("Starts
+        when a playbook worker reports; 3 hours since one last did."). "" while it
+        reports. The one wording of an absent or late worker, whichever
+        worker it is."""
 
-def controller_standing(now: datetime | None = None) -> ControllerStanding:
+        if self.seen_at is None or not self.here:
+            late = ""
+        elif self.silent:
+            late = f"{duration(since(self.seen_at, now=now))}"
+        else:
+            return ""
+        if not doing:
+            return (
+                f"Starts when a {self.named} reports; {late} since one last did."
+                if late
+                else f"Starts when a {self.named} reports; none ever has."
+            )
+        return (
+            f"Cannot {doing}: {late} since a {self.named} last reported."
+            if late
+            else f"Cannot {doing}: no {self.named} reports to this HQ."
+        )
+
+
+def controller_standing(now: datetime | None = None) -> WorkerStanding:
     """The controller's last arrival: its heartbeat, else the newest read it
     reported, answered or failed, since only a controller writes one (a
     database copied from another host has readings and no heartbeat here).
@@ -197,9 +232,66 @@ def controller_standing(now: datetime | None = None) -> ControllerStanding:
     except OSError:
         seen_at, here = newest_reading(), False
     if seen_at is None:
-        return ControllerStanding(seen_at=None, silent=False)
+        return WorkerStanding(seen_at=None, silent=False)
     silent = (now or timezone.now()) - seen_at > CONTROLLER_SILENT_AFTER
-    return ControllerStanding(seen_at=seen_at, silent=silent, here=here)
+    return WorkerStanding(seen_at=seen_at, silent=silent, here=here)
+
+
+# HQ's playbook worker's arrival, a reading rather than a file beside the
+# controller's: the findings and the queue that say it is absent are derived
+# from rows (``derivations``), so a row is what moves them when it arrives.
+AUTOMATION_HEARTBEAT = "automation-heartbeat"
+# The host starts the worker this long after the last one ended, as well as at
+# its doorbell. deploy/systemd/severino-hq-automation.timer must hold the same
+# value (tested).
+AUTOMATION_FLOOR = timedelta(minutes=15)
+# A worker that arrives arrives at least once per floor; the second floor
+# allows for one that started late. One holding a run renews its lease instead.
+AUTOMATION_SILENT_AFTER = 2 * AUTOMATION_FLOOR
+# A worker claims until nothing waits, so one pass claims several times, and
+# a write a minute says all an age is worded in.
+_AUTOMATION_NOTED_EVERY = timedelta(minutes=1)
+# The work only HQ's playbook worker claims.
+AUTOMATION_WORK = (OperationRequest.Action.SCAN, OperationRequest.Action.RUN)
+
+
+def note_automation() -> None:
+    """Record that HQ's playbook worker reached HQ, as each of its claims
+    arrives, so a worker that finds nothing to take still counts as seen.
+
+    Its security: it is written only by the bridge's claim of the worker's
+    own work (``bridge_actions``), over the socket only root and the web
+    account reach, never by a page, since a GET writes nothing
+    (``hq.platform.core.speculation``). It holds a moment and nothing else,
+    so it names no secret, no host credential and no repository. Forged, it
+    makes a worker that is not there read as present, which is what the
+    socket's boundary already rules out.
+    """
+
+    reading = readings.stored(AUTOMATION_HEARTBEAT)
+    if reading is None or timezone.now() - reading.observed_at >= _AUTOMATION_NOTED_EVERY:
+        readings.record(AUTOMATION_HEARTBEAT, {})
+
+
+def automation_standing() -> WorkerStanding:
+    """HQ's playbook worker's last arrival: its heartbeat, or its newest
+    claim of a scan or a run. Silent once two of its timer's floors pass with
+    no arrival, unless it still holds a run's lease. Unlike the controller,
+    one never seen is absent: a scan or run asked of it waits for nothing, so
+    each is refused while it stands (``cannot``)."""
+
+    now = present()
+    work = OperationRequest.objects.filter(action__in=AUTOMATION_WORK)
+    heartbeat = readings.stored(AUTOMATION_HEARTBEAT)
+    claimed = work.aggregate(newest=Max("claimed_at"))["newest"]
+    seen = [moment for moment in (heartbeat.observed_at if heartbeat else None, claimed) if moment is not None]
+    if not seen:
+        return WorkerStanding(seen_at=None, silent=False, named=PLAYBOOK_WORKER_NAMED)
+    seen_at = max(seen)
+    leases = work.filter(state=OperationRequest.State.CLAIMED).values_list("lease_expires_at", flat=True)
+    holding = any(lease is not None and not passed(lease, now=now) for lease in leases)
+    silent = not holding and passed(seen_at + AUTOMATION_SILENT_AFTER, now=now)
+    return WorkerStanding(seen_at=seen_at, silent=silent, here=True, named=PLAYBOOK_WORKER_NAMED)
 
 
 def newest_reading() -> datetime | None:
@@ -442,6 +534,12 @@ def _answered(read: ForcedRead, stored: dict[str, datetime], probed: dict[str, d
         swept_at = [at for kind, at in stored.items() if every_sweep(kind)]
         return bool(swept_at) and min(swept_at) > asked
     return all(stored.get(kind, asked) > asked for kind in read.kinds)
+
+
+def asked_at(kind: str) -> datetime | None:
+    """When a read of this kind was asked for and has not been tried yet."""
+
+    return next((read.requested_at for read in forced_reads() if read.kind == kind), None)
 
 
 def forced_reads() -> tuple[ForcedRead, ...]:

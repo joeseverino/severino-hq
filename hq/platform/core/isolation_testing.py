@@ -197,6 +197,9 @@ class CompositionIsolation:
         # set it took it from.
         agent_limits.LIMITS = agent_limits.Limits()
         _hold_markers({})
+        # A catalog a test adopted is rolled back with its database, so the
+        # next class's setUpClass builds from none, as its tests do.
+        automation_adoption.forget()
         return super().stopTest(test)
 
 
