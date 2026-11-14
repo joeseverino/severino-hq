@@ -274,8 +274,11 @@ failure to name every gate that failed.
 
 `fast`, `check`, `lint`, `test`, `browser`, the composed suite and an
 extension's check (`tools/pipeline/check-plugin.sh`) end on a verdict line
-(`tools/gate/verdict.py`). It names each failed leaf task and test and the one
-command that reruns just those. A gate whose steps queued for the
+(`tools/gate/verdict.py`). It names each failed task and test and the one
+command that reruns just those. The tasks, their times and each failed task's
+last lines are mise's own: the report of each run of mise a step starts
+(`mise run --report-file`) and the output mise logs of each task
+(`mise tasks log`), so a task is named as the run a step started names it. A gate whose steps queued for the
 [heavy turn](#heavy-gates-take-turns) says how long beside its total
 (`passed in 664.5s, 410s of it waiting for the turn`), so the rest reads as
 working time.
