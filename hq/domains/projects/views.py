@@ -18,7 +18,7 @@ lazy from django.template.loader import render_to_string
 from hq.domains.projects.github import github_repository
 from hq.platform.application import related
 from hq.platform.application.action_links import capability_action_link, command_url
-from hq.platform.application.capabilities import capability_registry, capability_words
+from hq.platform.application.capabilities import capability_words, command_spec
 from hq.platform.application.documentation import related_documents
 from hq.platform.application.entity_links import web_url
 from hq.platform.application.pages import PageAction, PageBadge, PageMixin
@@ -397,7 +397,7 @@ class WatchingRefreshView(AskMixin, View):
         return Took(
             read_standing((KIND,), asked),
             read_status_url((KIND,), asked),
-            capability_registry()[READ_NOW].requested(f"@{self.login}"),
+            command_spec(READ_NOW).requested(f"@{self.login}"),
         )
 
 

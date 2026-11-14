@@ -36,7 +36,7 @@ from hq.platform.application.agent_access import SET_AGENT_BLOCK
 from hq.platform.application.agent_devices import APPROVE_AGENT_DEVICE, BLOCK_AGENT_DEVICE
 from hq.platform.application.agent_limits import RATE_LIMITED, Slot
 from hq.platform.application.approvals import is_held
-from hq.platform.application.capabilities import capability_registry, run_capability
+from hq.platform.application.capabilities import command_spec, run_capability
 from hq.platform.application.capability_policy import SET_POLICY, set_rule
 from hq.platform.application.linked_accounts import sign_in_subject
 from hq.platform.application.own_devices import SET_OWN_DEVICE
@@ -329,7 +329,7 @@ def ruled(owner, capability, rule):
     """The owner's rule for the agent on ``capability``, set as the Agents page sets it."""
 
     with _deciding(owner):
-        set_rule(subject=AGENT, spec=capability_registry()[capability], rule=rule, user=owner)
+        set_rule(subject=AGENT, spec=command_spec(capability), rule=rule, user=owner)
 
 
 @contextmanager

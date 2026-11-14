@@ -41,9 +41,9 @@ from .records import described, display_noun, records_for
 from .security import web_principal
 from .ui import ended
 from .web_writes import form_payload, posted_answer, refused, run_posted, write_once
-lazy from .capabilities import Ran, capability_registry, capability_words
+lazy from .capabilities import Ran, capability_registry, capability_words, command_spec
 lazy from .domains import Records
-lazy from .integrations import integration_graph
+lazy from .integrations import held_graph
 lazy from .security import Principal
 
 
@@ -141,7 +141,7 @@ def _registered(service: Callable[..., Any] | None, *, targeted: bool) -> str:
 def _command_payload(name: str, command: Any) -> dict[str, Any]:
     """A built command as capability ``name``'s payload, the JSON every door sends."""
 
-    adapter = command_adapter(capability_registry()[name].command_type)
+    adapter = command_adapter(command_spec(name).command_type)
     return adapter.dump_python(adapter.validate_python(command), mode="json")
 
 
@@ -206,7 +206,7 @@ class CapabilityFormMixin(_RecordWrite):
 
     def form_valid(self, form: BaseForm) -> HttpResponse:
         name = self.capability(form)
-        payload = form_payload(form, capability_registry()[name].command_type)
+        payload = form_payload(form, command_spec(name).command_type)
         target = None if self.adding else self.stored_identity()
         return self._answered(form, run_posted(self.request, name, payload, target=target).answer)
 
@@ -320,7 +320,7 @@ class RecordFormMixin(_Records, CapabilityFormMixin):
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
         form = context["form"]
-        listed = route_url(integration_graph().resources[records_for(form._meta.model).resource].web_route)
+        listed = route_url(held_graph().resources[records_for(form._meta.model).resource].web_route)
         return {**context, **form_close(self.object, self.get_form_verb(form), listed)}
 
 
@@ -346,7 +346,7 @@ class CommandFormPage:
     listed_route = ""
 
     def get_form(self, form_class: Any = None) -> Any:
-        return described(super().get_form(form_class), capability_registry()[self.creates].command_type)
+        return described(super().get_form(form_class), command_spec(self.creates).command_type)
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)

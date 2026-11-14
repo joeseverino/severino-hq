@@ -37,7 +37,7 @@ from .contracts import EFFECT_MEANINGS
 from .describe import Describe, listed
 from .entity_links import entity_link
 from .integration_validation import required_capability_names
-from .integrations import integration_graph
+from .integrations import held_graph
 from .moments import ago
 from .security import Capability, Principal
 from .ui import ended
@@ -512,7 +512,7 @@ def describe_connections(*, principal: Principal | None = None) -> ConnectionCat
 
     return {
         "schema_version": CONNECTIONS_SCHEMA_VERSION,
-        "connections": [_connection(spec, principal) for spec in integration_graph().connections.values()],
+        "connections": [_connection(spec, principal) for spec in held_graph().connections.values()],
     }
 
 

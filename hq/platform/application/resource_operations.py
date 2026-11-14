@@ -52,7 +52,7 @@ from .security import CONTROLLER_INTERFACE, Principal
 from .ui import counted
 lazy from . import tailnet
 lazy from .containers import Running
-lazy from .history import who_did
+lazy from .history import Acts, who_did_each
 lazy from .inventory import live_spec
 lazy from .machines import Machine, container_context
 lazy from .moments import when_day
@@ -188,9 +188,17 @@ def asked_by(operations: Iterable[OperationRequest]) -> dict[str, Attribution]:
     """Who asked for each of ``operations``, by id, from the audit row that
     queued it (``history.who_did``); nobody for one no row records."""
 
-    return who_did(
+    (found,) = who_did_each(asking(operations))
+    return found
+
+
+def asking(operations: Iterable[OperationRequest]) -> Acts:
+    """The audit rows that say who asked for each of ``operations``, read
+    with others' by ``history.who_did_each``."""
+
+    return Acts(
         (audited_labels()[OperationRequest],),
-        (operation.pk for operation in operations),
+        [operation.pk for operation in operations],
         action=AuditLog.Action.CREATED,
     )
 

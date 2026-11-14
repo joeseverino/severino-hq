@@ -6,7 +6,6 @@ no handler expected would escape the application.
 
 import tempfile
 from pathlib import Path
-from unittest import mock
 
 from django.test import SimpleTestCase, TestCase, tag
 
@@ -18,6 +17,7 @@ from hq_sdk.capabilities import StrictCommand
 from .. import refusal_status
 from ..approvals import _UNAPPLIED, TooManyPendingApprovals
 from ..capabilities import CapabilitySpec, adapter_refusal, execute_capability
+from ..integration_testing import commands_registered
 from ..resource_refusals import UnknownResource, UnsupportedResourceOperation
 from ..security import AuthorizationError, Capability, Principal, cli_principal
 from .facts import TOP, scan
@@ -192,7 +192,7 @@ class CapabilityFailureTests(TestCase):
             raise raised
 
         spec = CapabilitySpec("example.records.change", "Change.", "read", Capability.READ, ExampleCommand, handler)
-        with mock.patch("hq.platform.application.capabilities.capability_registry", return_value={spec.name: spec}):
+        with commands_registered({spec.name: spec}):
             return execute_capability(spec.name, {}, principal=principal or cli_principal())
 
     def test_an_exception_no_handler_expected_is_operation_failed_and_logged_with_its_traceback(self):

@@ -1,7 +1,5 @@
 """What one capability call answers, whatever adapter carried it."""
 
-from unittest import mock
-
 from django.test import TestCase
 
 from hq.platform.core.audit import record_event
@@ -9,6 +7,7 @@ from hq.platform.core.models import AuditLog, IdempotencyRecord
 from hq_sdk.capabilities import StrictCommand
 
 from ..capabilities import CAPABILITIES_SCHEMA_VERSION, CapabilitySpec, describe_capabilities, execute_capability
+from ..integration_testing import commands_registered
 from ..security import Capability, Principal, cli_principal
 from .writers import keyed
 
@@ -30,10 +29,7 @@ class CapabilityCallTests(TestCase):
         return {"ok": True}
 
     def registered(self, *specs):
-        return mock.patch(
-            "hq.platform.application.capabilities.capability_registry",
-            return_value={spec.name: spec for spec in specs},
-        )
+        return commands_registered({spec.name: spec for spec in specs})
 
     def call(self, spec, payload, target=None):
         with self.registered(spec):

@@ -11,7 +11,7 @@ from django.views.generic import DetailView, ListView
 from hq.platform.application.action_links import READ_NOW_CAPABILITY, command_url
 from hq.platform.application.approval_review import asked_by
 from hq.platform.application.approvals import DESTRUCTIVE_EFFECT
-from hq.platform.application.capabilities import capability_registry, capability_words
+from hq.platform.application.capabilities import capability_words, command_spec
 from hq.platform.application.doors import NOBODY
 from hq.platform.application.entity_links import kind_label, record_name, web_url
 from hq.platform.application.infrastructure import (
@@ -510,7 +510,7 @@ def is_destructive(verb: str) -> bool:
     as its capability declares: asked for by name on a page of its own, never
     pressed straight from a head."""
 
-    return capability_registry()[ACTION_CAPABILITY[verb]].effect == DESTRUCTIVE_EFFECT
+    return command_spec(ACTION_CAPABILITY[verb]).effect == DESTRUCTIVE_EFFECT
 
 
 def verb_action(

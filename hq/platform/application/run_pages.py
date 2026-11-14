@@ -7,7 +7,7 @@ from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
 
 from .action_links import command_url
 from .automation_findings import worker_problems
-from .capabilities import capability_registry
+from .capabilities import capability_spec
 from .pages import offered
 from .routes import reverse
 from .security import web_principal
@@ -41,7 +41,7 @@ def run_context(run: WorkRun, operation: OperationRequest, *, user: Any) -> dict
         # A scan runs no playbook: what it ran is the command that asked for it.
         "ran_label": "Command" if operation.action == OperationRequest.Action.SCAN else "Playbook",
         # A playbook no longer adopted has no command to link to.
-        "playbook_url": command_url(run.kind) if capability_registry().get(run.kind) else "",
+        "playbook_url": command_url(run.kind) if capability_spec(run.kind) else "",
         "approval_url": approval_url if approval_url and offered(user, approval_url) else "",
         "problems": worker_problems(web_principal(user)) if run.word == NOT_STARTED else (),
     }

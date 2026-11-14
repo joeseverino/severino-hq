@@ -8,6 +8,7 @@ from unittest import mock
 from django.test import TestCase, override_settings
 
 from hq.platform.application.capabilities import capability_registry
+from hq.platform.application.integration_testing import commands_registered
 from hq.platform.core.models import AuditLog
 from hq.platform.core.tests import audit_rows
 
@@ -27,7 +28,7 @@ def _failing(name: str, raised: Exception):
 
     registry = capability_registry()
     registry[name] = replace(registry[name], handler=mock.Mock(side_effect=raised))
-    return mock.patch("hq.platform.application.capabilities.capability_registry", return_value=registry)
+    return commands_registered(registry)
 
 
 @override_settings(

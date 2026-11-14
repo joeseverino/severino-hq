@@ -16,7 +16,7 @@ from django.views import View
 from hq.platform.application.action_links import command_url
 from hq.platform.application.capabilities import (
     authorize_capability,
-    capability_registry,
+    capability_spec,
 )
 from hq.platform.application.command_forms import command_form_class, own_fields
 from hq.platform.application.command_targets import (
@@ -29,7 +29,7 @@ from hq.platform.application.command_targets import (
 )
 from hq.platform.application.contracts import route_url
 from hq.platform.application.integration_specs import ON_ITS_PAGE, capability_schema, kept_by
-from hq.platform.application.integrations import integration_graph
+from hq.platform.application.integrations import held_graph
 from hq.platform.application.pages import page_context
 from hq.platform.application.payload_words import value_words
 from hq.platform.application.refusal_status import refusal_of
@@ -133,7 +133,7 @@ class CommandView(View):
 
     @override
     def dispatch(self, request, name: str, *args, **kwargs):
-        self.spec = capability_registry().get(name)
+        self.spec = capability_spec(name)
         if self.spec is None:
             raise Http404("Unknown command.")
         self.principal = web_principal(request.user)
@@ -172,7 +172,7 @@ class CommandView(View):
     def _context(self, form, *, result=None):
         if result and _only_queues(result["payload"]):
             result = None
-        resource = integration_graph().resources.get(self.spec.subject_resource)
+        resource = held_graph().resources.get(self.spec.subject_resource)
         schema = capability_schema(self.spec)
         facts, table = _result_projection(result["payload"]) if result else ((), None)
         resource_url = route_url(resource.web_route) if resource else ""

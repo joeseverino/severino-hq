@@ -48,7 +48,7 @@ from .field_masks import FieldMaskRefusal, Fields, asks_whole, selected
 from .input_errors import pydantic_refusal
 from .integration_specs import PAGE_FIELD, ResourceSpec
 from .integration_validation import required_capability_names
-from .integrations import integration_graph
+from .integrations import held_graph
 from .json_schemas import json_schema, narrowed
 from .projection import MAX_PAGE_SIZE, CursorRefusal, NextPage, PageScope, page_size, paging
 from .record_errors import HostRefusal, RecordNotFound
@@ -600,17 +600,15 @@ def name_refusal(tool: str, name: object) -> HostRefusal | None:
 
 
 def resource_registry() -> dict[str, ResourceSpec]:
-    return dict(integration_graph().resources)
+    return dict(held_graph().resources)
 
 
 def resource_search_definitions() -> tuple[SearchDefinition, ...]:
-    return tuple(integration_graph().search.values())
+    return tuple(held_graph().search.values())
 
 
 def resource_search_capabilities() -> dict[str, tuple[Capability | str, ...]]:
-    return {
-        spec.search.scope: spec.required_capabilities for spec in integration_graph().resources.values() if spec.search
-    }
+    return {spec.search.scope: spec.required_capabilities for spec in held_graph().resources.values() if spec.search}
 
 
 class ListOperation(TypedDict):
@@ -714,7 +712,7 @@ def describe_resources(*, principal: Principal | None = None, name: str = "") ->
             "schema_version": RESOURCES_SCHEMA_VERSION,
             "resources": [_described(_resource(name), principal, whole=True)],
         }
-    described = [_described(spec, principal, whole=False) for spec in integration_graph().resources.values()]
+    described = [_described(spec, principal, whole=False) for spec in held_graph().resources.values()]
     return {"schema_version": RESOURCES_SCHEMA_VERSION, "resources": described, "schemas": WHOLE_SCHEMA}
 
 

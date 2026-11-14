@@ -100,7 +100,7 @@ def command_action(
     declaration and cannot drift from it.
     """
 
-    spec = capabilities.capability_registry()[capability]
+    spec = capabilities.command_spec(capability)
     return ActionLink(
         name,
         # ``variant`` picks one of the words the command declares for its
@@ -145,7 +145,7 @@ def _permitted_spec(name: str, principal: Principal):
 
     if not name:
         return None
-    spec = capabilities.capability_registry().get(name)
+    spec = capabilities.capability_spec(name)
     if spec is None:
         return None
     return spec if principal.permits(*spec.required_capabilities) else None

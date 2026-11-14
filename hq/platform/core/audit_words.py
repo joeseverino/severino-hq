@@ -15,7 +15,7 @@ from django.utils.text import Truncator
 from hq.platform.application.payload_words import STEP, ChangeRow, path_words, value_words
 from hq.platform.application.ui import counted
 lazy from hq.domains.control_plane.bridge_actions import ACTIONS
-lazy from hq.platform.application.capabilities import capability_registry
+lazy from hq.platform.application.capabilities import capability_spec
 lazy from hq.platform.application.scheduled_work import job_names
 
 lazy from .models import AuditLog
@@ -119,7 +119,7 @@ def title_of(operation: str) -> str | None:
 
     if not operation:
         return None
-    spec = capability_registry().get(operation)
+    spec = capability_spec(operation)
     if spec is not None:
         return spec.title
     if title := job_names().get(operation) or TITLES.get(operation):

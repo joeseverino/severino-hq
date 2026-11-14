@@ -310,15 +310,27 @@ def compile_integration_graph(
 # moves the commands, and each process builds its graph anew at its next ask.
 @lru_cache(maxsize=1)
 def _compiled_integration_graph(generation: str) -> IntegrationGraph:
+    fixed = (
+        *CORE_CAPABILITY_SPECS,
+        *record_capability_specs(),
+        *host_specs("capabilities"),
+        *plugin_capability_specs(),
+        *outbound_work.capability_specs(),
+    )
+    # Only the procedures move with an adoption, which is what lets
+    # ``held_graph`` answer every other command without reading the catalog.
+    if taken := sorted(spec.name for spec in fixed if automation_runs.runs_procedure(spec.name)):
+        raise IntegrationGraphError(
+            [
+                IntegrationViolation(
+                    "capability_in_procedure_namespace",
+                    f"{', '.join(taken)} is named as an adopted playbook's command is (automation.<id>.run).",
+                    tuple(taken),
+                )
+            ]
+        )
     return compile_integration_graph(
-        capabilities=(
-            *CORE_CAPABILITY_SPECS,
-            *record_capability_specs(),
-            *host_specs("capabilities"),
-            *plugin_capability_specs(),
-            *outbound_work.capability_specs(),
-            *automation_runs.capability_specs(generation),
-        ),
+        capabilities=(*fixed, *automation_runs.capability_specs(generation)),
         resources=(*core_resource_specs(), *host_specs("resources"), *plugins.plugin_resource_specs()),
         connections=(*host_specs("connections"), *plugins.plugin_connection_specs()),
         search=plugin_search_definitions(),
@@ -329,7 +341,18 @@ _GRAPH_OVERRIDE: ContextVar[IntegrationGraph | None] = ContextVar("integration_g
 
 
 def integration_graph() -> IntegrationGraph:
+    """The graph at the catalog adopted now, which a request reads once."""
+
     return _GRAPH_OVERRIDE.get() or _compiled_integration_graph(automation_adoption.generation())
+
+
+def held_graph() -> IntegrationGraph:
+    """The graph at the catalog this process last read, asking the database
+    nothing. Its resources, connections and search, and every command outside
+    the procedures' namespace (``automation_runs.runs_procedure``), are the
+    same at every generation, so only those are read from it."""
+
+    return _GRAPH_OVERRIDE.get() or _compiled_integration_graph(automation_adoption.held())
 
 
 def clear_integration_graph_cache() -> None:

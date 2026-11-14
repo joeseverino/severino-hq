@@ -682,7 +682,7 @@ def approve(command: ApproveCommand, *, principal: Principal) -> ApprovalApplied
 
 
 def _apply(held: ApprovalRequest, principal: Principal) -> ApprovalApplied:
-    spec = capabilities.capability_registry().get(held.capability)
+    spec = capabilities.capability_spec(held.capability)
     if spec is None:
         raise ApprovalError("What this request asks for is no longer something HQ can do, so it cannot be applied.")
     _require_person(principal, held)

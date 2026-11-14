@@ -47,7 +47,7 @@ from .security import Principal
 from .ui import ended
 lazy from .action_links import READ_NOW_CAPABILITY
 lazy from .adoption import manages_through, observes_only
-lazy from .capabilities import capability_registry
+lazy from .capabilities import command_spec
 lazy from .credential_sight import fed_kinds
 lazy from .facts import stored_snapshots
 
@@ -854,7 +854,7 @@ def _read_label(subject: tuple[str, str] | None) -> str:
 def _sweep_message(subject: tuple[str, str] | None, *, due: bool) -> str:
     """What asking says, in the refresh command's own words."""
 
-    refresh = capability_registry()[READ_NOW_CAPABILITY]
+    refresh = command_spec(READ_NOW_CAPABILITY)
     ref, kind = subject or ("", "")
     if ref or kind:
         return refresh.requested(ref or registry_label(kind))

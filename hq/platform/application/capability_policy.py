@@ -39,7 +39,7 @@ from .security import (
 lazy from . import capabilities
 lazy from .agent_registry import identity_of
 lazy from .entity_links import kind_label
-lazy from .integrations import integration_graph
+lazy from .integrations import held_graph
 
 Rule = CapabilityRule.Rule
 
@@ -326,7 +326,7 @@ def _subject(spec) -> str:
 def _subject_label(subject: str) -> str:
     """What a group of commands acts on, by the name its own page has."""
 
-    resource = integration_graph().resources.get(subject)
+    resource = held_graph().resources.get(subject)
     if resource is not None:
         return resource.label
     return field_label(subject)

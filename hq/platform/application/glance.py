@@ -29,7 +29,7 @@ from .labels import dotted
 from .record_errors import InputError, PolicyError
 from .security import Capability, Principal
 from .timestamps import moment
-lazy from .capabilities import capability_registry, capability_words
+lazy from .capabilities import capability_words, command_spec
 lazy from .projection import read_once
 
 # The National Weather Service API. The connection shows it and the glance plan
@@ -484,7 +484,7 @@ def asked_refresh(result: dict[str, Any]) -> Took:
 
     return Took(
         Standing(QUEUED, REFRESHING) if result["requested"] else Standing(),
-        message=capability_registry()[DASHBOARD_REFRESH].requested(),
+        message=command_spec(DASHBOARD_REFRESH).requested(),
     )
 
 

@@ -41,7 +41,7 @@ from .integration_specs import (
     takes_sent_fields,
     takes_stale_write_token,
 )
-from .integrations import integration_graph
+from .integrations import held_graph, integration_graph
 from .labels import human_label
 from .projection import QueryRefusal
 from .refusal_status import Refusal, next_call, refusal_of, refuse, refused
@@ -55,23 +55,44 @@ from .security import (
     require_all,
 )
 from .ui import ended
-lazy from . import agent_registry
+lazy from . import agent_registry, automation_runs
 
 
 def capability_title(name: str) -> str:
     """What a person calls the command named ``name``, registered or not."""
 
-    spec = capability_registry().get(name)
+    spec = capability_spec(name)
     return spec.title if spec else human_label(name)
 
 
 def capability_words(name: str, variant: str = "") -> str:
     """What a button for the command named ``name`` says (``CapabilitySpec.words``)."""
 
-    return capability_registry()[name].words(variant)
+    return command_spec(name).words(variant)
+
+
+def capability_spec(name: str) -> CapabilitySpec | None:
+    """The command named ``name``, or None for a name nothing registers. Only
+    an adopted procedure's reads the adopted catalog; every other command is
+    the same at every adoption, so a page that names one asks nothing."""
+
+    graph = integration_graph() if automation_runs.runs_procedure(name) else held_graph()
+    return graph.capabilities.get(name)
+
+
+def command_spec(name: str) -> CapabilitySpec:
+    """The registered command named ``name`` (``capability_spec``), which a
+    caller names knowing it is registered."""
+
+    spec = capability_spec(name)
+    if spec is None:
+        raise KeyError(name)
+    return spec
 
 
 def capability_registry() -> dict[str, CapabilitySpec]:
+    """Every command, at the catalog adopted now; one command is ``capability_spec``."""
+
     return dict(integration_graph().capabilities)
 
 
@@ -280,7 +301,7 @@ def _named_run(
     expected_updated_at: str | None,
     idempotency_key: str | None,
 ) -> Ran:
-    spec = capability_registry().get(name)
+    spec = capability_spec(name)
     if spec is None:
         return Ran(
             refuse(

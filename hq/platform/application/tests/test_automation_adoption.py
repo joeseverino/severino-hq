@@ -233,6 +233,29 @@ class RegistryTests(AdoptionTestCase):
         with served():
             self.assertIn("automation.example.check.run", capability_registry())
 
+    def test_a_command_the_catalog_does_not_hold_is_named_without_reading_the_catalog(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from hq.domains.control_plane.models import AdoptedCatalog
+
+        from ..automation_adoption import ADOPT, forget, served
+        from ..capabilities import capability_title, capability_words
+
+        name = "automation.example.check.run"
+        self.adopt(self.proposed(catalog(procedure("check"))))
+        # A process that read the catalog before another process adopted this one.
+        forget()
+        with served(), CaptureQueriesContext(connection) as sent:
+            words = capability_words(ADOPT)
+        self.assertFalse([query for query in sent if AdoptedCatalog._meta.db_table in query["sql"]])
+        self.assertEqual(words, capability_registry()[ADOPT].words(""))
+
+        # A procedure is still read at the catalog adopted now.
+        forget()
+        with served():
+            self.assertEqual(capability_title(name), capability_registry()[name].title)
+
     def test_adopting_tells_every_listening_agent_its_tools_changed(self):
         from ..agent_registry import TOOLS_CHANGED
 

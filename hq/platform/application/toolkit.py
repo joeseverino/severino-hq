@@ -10,9 +10,9 @@ routing, the default and the empty state all derive from one tuple.
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from .integrations import integration_graph
 from .lookup import LOOK_UP_ADDRESS, LOOK_UP_NAME
 from .security import Principal
+lazy from .capabilities import capability_spec
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,8 +39,8 @@ class ToolTab:
         that can only answer 403 teaches an operator to distrust the page.
         """
 
-        specs = integration_graph().capabilities
-        return any(principal.permits(*specs[name].required_capabilities) for name in self.capabilities if name in specs)
+        specs = [spec for name in self.capabilities if (spec := capability_spec(name))]
+        return any(principal.permits(*spec.required_capabilities) for spec in specs)
 
 
 TOOL_TABS: tuple[ToolTab, ...] = (

@@ -98,6 +98,13 @@ def capability_name(operation_id: str) -> str:
     return f"automation.{operation_id}.run"
 
 
+def runs_procedure(name: str) -> bool:
+    """Whether the command named ``name`` is in the namespace ``capability_name``
+    gives the adopted catalog's procedures, the only commands an adoption moves."""
+
+    return name.startswith("automation.") and name.endswith(".run")
+
+
 def run_title(operation_id: str, titles: Mapping[str, str]) -> str:
     """A procedure's run in words, as its command's heading and button and a
     list of work say it: its playbook's title among ``titles``

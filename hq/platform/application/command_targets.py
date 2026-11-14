@@ -14,7 +14,7 @@ from .contracts import route_url
 from .entity_links import kind_label
 from .field_masks import WHOLE_RECORD
 from .integration_specs import ON_ITS_PAGE
-from .integrations import integration_graph
+from .integrations import held_graph
 from .json_schemas import fields
 from .projection import MAX_PAGE_SIZE
 from .record_errors import RecordNotFound
@@ -86,7 +86,7 @@ def page_named(route: str) -> tuple[str, str]:
 
     named = (
         *(item.label for item in domain_navigation() if item.route == route),
-        *(resource.label for resource in integration_graph().resources.values() if resource.web_route == route),
+        *(resource.label for resource in held_graph().resources.values() if resource.web_route == route),
     )
     return (named[0] if named else "", route_url(route))
 
@@ -140,7 +140,7 @@ def resource_options(
     (the resource's identifier unless named), or ``None`` when it is not
     listable."""
 
-    resource = integration_graph().resources.get(resource_name)
+    resource = held_graph().resources.get(resource_name)
     key = key or (resource.identifier if resource else "") or ""
     if not resource or not resource.list_handler or not key:
         return None

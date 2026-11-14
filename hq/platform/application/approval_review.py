@@ -220,7 +220,7 @@ def preview(held: ApprovalRequest) -> ChangePreview:
     if isinstance(compared, Mapping):
         # A handler that measures its own subject says what it compares.
         return grouped(compared["before"], compared["after"], label="Would change")
-    spec = capabilities.capability_registry().get(held.capability)
+    spec = capabilities.capability_spec(held.capability)
     if spec is not None and (shown := shown_by(spec)) is not None:
         # A handler that measures its own subject may say how it reads.
         return shown(held)
@@ -324,7 +324,7 @@ def asked(held: ApprovalRequest, shown: ChangePreview | None = None) -> Asked:
     one value as that change. ``shown`` is its preview, when already read."""
 
     shown = preview(held) if shown is None else shown
-    spec = capabilities.capability_registry().get(held.capability)
+    spec = capabilities.capability_spec(held.capability)
     # A switch is said as the side it sets, never as a value moving.
     moved = _one_move(shown) if spec is not None and spec.target_kind and not switch_field(spec) else None
     if moved is not None:
