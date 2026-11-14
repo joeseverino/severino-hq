@@ -20,9 +20,9 @@ from hq.platform.core.audit import record_event
 from hq.platform.core.models import ActionItemRead, AuditLog
 
 from .command_fields import Describe
+from .moments import moment
 from .projection import projection_scope
 from .security import Principal, person
-from .timestamps import moment
 lazy from . import dashboard
 lazy from .attention import readable_by
 lazy from .decisions import decision
