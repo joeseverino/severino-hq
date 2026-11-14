@@ -18541,11 +18541,16 @@
           "status": {
             "description": "Where to follow the readings while one is under way; empty when none is.",
             "type": "string"
+          },
+          "tone": {
+            "description": "The tone a page colors that label in; empty while nothing was asked.",
+            "type": "string"
           }
         },
         "required": [
           "state",
           "label",
+          "tone",
           "live",
           "note",
           "seconds",

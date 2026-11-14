@@ -270,6 +270,8 @@ class JobStatusViewTests(TestCase):
         self.assertEqual(payload["percent"], 42)
         self.assertEqual(payload["note"], "halfway")
         self.assertTrue(payload["live"])
+        # The word and the tone a following control's pill takes, the run table's.
+        self.assertEqual((payload["label"], payload["tone"]), ("Running", "active"))
 
     def test_status_requires_a_session(self):
         job = Job.objects.create(kind="test.private", label="Private")

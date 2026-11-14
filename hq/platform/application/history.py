@@ -34,7 +34,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 from hq.domains.control_plane.observations.portainer import RUNTIME_KIND
-lazy from hq.domains.control_plane.models import ReadRequest
+lazy from hq.domains.control_plane.models import DashboardConfiguration, ReadRequest
 lazy from hq.platform.core.audit import ROUTINE_EVENTS, audited_labels
 lazy from hq.platform.core.audit_words import words_of
 lazy from hq.platform.core.models import AuditLog, object_type_label, object_type_plural
@@ -46,7 +46,6 @@ from .labels import lower_first, plural
 from .routes import reverse
 from .timestamps import moment
 from .ui import counted
-lazy from .glance import AUDIT_LABEL as DASHBOARD_AUDIT_TYPE
 lazy from .inventory import READING_AUDIT_TYPE
 
 # How far either side of a moment counts as near it.
@@ -509,7 +508,9 @@ def read_requests() -> Q:
     panels they named.
     """
 
-    return Q(object_type=read_request_type()) | Q(object_type=DASHBOARD_AUDIT_TYPE, metadata__has_key="panels")
+    return Q(object_type=read_request_type()) | Q(
+        object_type=audited_labels()[DashboardConfiguration], metadata__has_key="panels"
+    )
 
 
 def routine() -> Q:

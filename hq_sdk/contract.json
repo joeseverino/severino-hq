@@ -901,7 +901,8 @@
           "title=",
           "primary=",
           "compact=",
-          "disabled="
+          "disabled=",
+          "outcome="
         ],
         "fields": [],
         "kind": "dataclass",

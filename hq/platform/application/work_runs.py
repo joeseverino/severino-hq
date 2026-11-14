@@ -554,6 +554,14 @@ def standing_of(run: WorkRun) -> Standing:
     return Standing(state, run.note, since=run.created_at, percent=run.percent, word=run.word)
 
 
+def standing_tone(state: str, word: str) -> str:
+    """The tone of the job state ``word`` names, else of the one ``state`` stands for; "" for idle."""
+
+    seen = next((seen for seen in JobState if seen.label == word), None)
+    seen = seen or next((seen for seen, stands in STANDS.items() if stands == state), None)
+    return TONES[seen] if seen else ""
+
+
 def standing_word(state: str) -> str:
     """A control's state (``asks.Standing``) in the word its job state is said in; "" for idle."""
 

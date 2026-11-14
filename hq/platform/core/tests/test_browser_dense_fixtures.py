@@ -467,7 +467,11 @@ def _asked_on_opening(user):
             SEVERINO_CONTROLLER_DOORBELL=str(markers / "doorbell"),
             SEVERINO_ACTIVITY_MARKER=str(markers / "activity"),
         ):
-            asked = client.post(reverse("control_plane:visit"), form_keyed({"subject": "page", "name": "dashboard"}))
+            asked = client.post(
+                reverse("control_plane:visit"),
+                form_keyed({"subject": "page", "name": "dashboard"}),
+                headers={"X-Requested-With": "XMLHttpRequest"},
+            )
             status = asked.json()["status"]
             followed = client.get(status)
     if asked.json()["note"] != REFRESHING or followed.json()["note"] != REFRESHING:

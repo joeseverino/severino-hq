@@ -1878,7 +1878,7 @@ ENTRIES = {
                 kind="example.import",
                 label="Example import of a file with a name long enough to wrap",
                 state=JobState.FAILED,
-                note="The example file has no header row, so none of its rows could be read as example records.",
+                error="The example file has no header row, so none of its rows could be read as example records.",
                 created_at=_NOW,
             )
         },

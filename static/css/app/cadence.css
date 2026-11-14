@@ -199,7 +199,6 @@
 /* Work that outlives its request, reporting where it has got to. */
 .job-progress { margin: 0 0 var(--stack-gap); }
 .job-progress-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-6); }
-.job-state { color: var(--muted); font-size: var(--text-xs); }
 /* A `<progress>`: the browser draws the fill from its value, which the poller
    moves, so no width is written. The fill takes `color`, so a state recolors
    one property. `overflow: hidden` so the fill's corners are the track's. */

@@ -262,12 +262,15 @@ class LastRunSurfaceTests(TestCase):
 
         self.assertIn("Not run yet", state.words)
 
-    def test_the_last_run_shows_its_outcome(self):
-        for outcome, said in (
-            ("ok", "Last ran"),
-            ("failed", "Failed"),
-            ("timeout", "Stopped early"),
-            ("handed_off", "Running"),
+    def test_the_last_run_shows_its_outcome_in_the_run_tables_word_and_tone(self):
+        from hq.domains.jobs.models import JobState
+        from hq.platform.application.work_runs import TONES
+
+        for outcome, seen in (
+            ("ok", None),
+            ("failed", JobState.FAILED),
+            ("timeout", JobState.LOST),
+            ("handed_off", JobState.RUNNING),
         ):
             with self.subTest(outcome):
                 ran(outcome)
@@ -275,7 +278,10 @@ class LastRunSurfaceTests(TestCase):
 
                 (run,) = select(response, "data-updates-run")
                 self.assertEqual(run.attrs["data-updates-run"], outcome)
-                self.assertIn(said, run.words)
+                self.assertIn(seen.label if seen else "Last ran", run.words)
+                tones = {name for element in within(response, "data-updates-run") for name in element.classes}
+                if seen:
+                    self.assertIn(f"pill-{TONES[seen]}", tones)
                 self.assertIn("2 hours ago", state.words)
 
     def test_a_run_asked_for_and_not_yet_handed_off_says_so_and_is_followed(self):

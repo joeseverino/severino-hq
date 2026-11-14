@@ -29,7 +29,7 @@ from .finding_model import (
     per_connection,
     reconcile_remedy,
 )
-from .freshness import freshness
+from .freshness import LAST_READ, freshness
 from .infrastructure import DRIFT_LABEL, NOT_READ_LABEL
 from .labels import field_label, lower_first, plural
 from .moments import ago, duration
@@ -234,7 +234,7 @@ def _environment_read_empty(estate: FindingEstate) -> tuple[Finding, ...]:
                     ("Environment", name or machine),
                     *((("Status", str(environment["status"])),) if environment.get("status") else ()),
                     ("Listed until", ago(last, estate.now)),
-                    *((_when("Last read", newest),) if newest else ()),
+                    *((_when(LAST_READ, newest),) if newest else ()),
                     ("Not listed", ", ".join(node.label for node in containers)),
                 ),
                 remedies=(_read_again(),),
@@ -296,7 +296,7 @@ def _kind_never_swept(estate: FindingEstate) -> tuple[Finding, ...]:
                 severity="serious",
                 explanation="Refresh them. If that fails, the connection that reads them needs fixing.",
                 evidence=(
-                    _when("Last read", newest),
+                    _when(LAST_READ, newest),
                     ("Read every", duration(sweep_interval())),
                 ),
                 remedies=(_read_again(),),
@@ -320,7 +320,7 @@ def _kind_never_swept(estate: FindingEstate) -> tuple[Finding, ...]:
                     "them. If that fails, the connection that reads them needs fixing."
                 ),
                 evidence=(
-                    _when("Last read", None),
+                    _when(LAST_READ, None),
                     ("In HQ", str(estate.declared_counts.get(kind_key, 0))),
                     ("Read every", duration(sweep_interval())),
                 ),
@@ -616,7 +616,7 @@ def _weakly_verified(estate: FindingEstate) -> tuple[Finding, ...]:
             ),
             evidence=(
                 ("Could not check", _settings(node)),
-                _when("Last read", node.observed_at),
+                _when(LAST_READ, node.observed_at),
             ),
             remedies=reconcile_remedy(node),
         )

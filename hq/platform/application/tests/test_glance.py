@@ -30,12 +30,14 @@ from ..glance import (
     DASHBOARD_MACHINE,
     DASHBOARD_REFRESH,
     DASHBOARD_SETTINGS,
+    GLANCE_REGION,
     DashboardMachineCommand,
     _glance_reading,
     dashboard_panels,
     dashboard_refresh_plan,
     panel_specs,
     record_dashboard_observations,
+    refresh_ask,
     select_dashboard_machine,
 )
 from ..security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal
@@ -438,7 +440,7 @@ class DashboardGlanceTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertTrue(DashboardMachine.objects.filter(machine=other).exists())
-        shown = AuditLog.objects.get(object_type="Dashboard", object_id=str(other.pk))
+        shown = AuditLog.objects.get(object_type="Dashboard", metadata__subject=other.key)
         self.assertEqual((shown.metadata["actor"], shown.metadata["operation"]), ("operator", DASHBOARD_MACHINE))
 
     def test_only_a_person_in_the_browser_chooses_the_dashboard_machines(self):
@@ -724,15 +726,15 @@ class GlanceRenderingTests(TestCase):
         weather = next(p for p in dashboard_panels() if p["id"] == "weather")
         self.assertEqual((weather["refreshable"], weather["refreshing"]), (False, False))
 
-    def test_the_strip_has_no_controls_of_its_own(self):
-        html = render_to_string(
-            "core/_dashboard_glance.html",
-            {"dashboard_panels": dashboard_panels(), "dashboard_can_refresh": True},
-        )
-        # Each panel's button posts through the strip's one form; settings are a page.
-        (form,) = select(html, "id", "glance-refresh")
-        self.assertEqual((form.tag, form.attrs["action"]), ("form", reverse("dashboard_glance")))
-        self.assertTrue(all(button.tag == "button" for button in select(html, "form", "glance-refresh")))
+    def test_each_panels_refresh_is_the_shared_ask_and_fetches_the_strip(self):
+        panels = tuple({**panel, "ask": refresh_ask(panel["standing"])} for panel in dashboard_panels())
+        html = render_to_string("core/_dashboard_glance.html", {"dashboard_panels": panels})
+
+        controls = select(html, "data-ask-refresh", GLANCE_REGION)
+        self.assertEqual(len(controls), len(panels))
+        self.assertTrue(all("data-ask-outcome" in control.attrs for control in controls))
+        self.assertEqual(len(select(html, "formaction", reverse("dashboard_glance"))), len(panels))
+        self.assertTrue(select(html, "data-glance"))
         self.assertIn(reverse("dashboard_glance_settings"), hrefs(html))
 
     def test_machine_routes_read_the_catalog_once_per_projection(self):

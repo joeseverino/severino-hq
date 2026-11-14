@@ -35,6 +35,8 @@ ABOUT_THEMSELVES = frozenset(
         "core.PersonRole",
         "content.ContentItem",
         "control_plane.CapabilityRule",
+        "control_plane.DashboardConfiguration",
+        "control_plane.DashboardRefreshRequest",
         "control_plane.NotManaged",
         "control_plane.ReadRequest",
         "docs_index.DocumentationRecord",

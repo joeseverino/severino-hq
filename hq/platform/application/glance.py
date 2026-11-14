@@ -15,12 +15,11 @@ from hq.domains.control_plane.models import (
     ManagedResource,
     ProviderConnection,
 )
-from hq.platform.core.audit import record_event
 lazy from hq.platform.application.routes import reverse
 lazy from hq.platform.application.ui import STATUS_VALUES
-lazy from hq.platform.core.models import AuditLog
 
 from . import readings
+from .asks import FAILED, QUEUED, REFRESHING, RUNNING, Ask, Standing, Took
 from .cadence import ring_glance_doorbell
 from .command_fields import Describe
 from .connections import ConnectionAbility, ConnectionInstance, ConnectionLink, ConnectionSpec, machines_once
@@ -30,10 +29,8 @@ from .labels import dotted
 from .record_errors import InputError, PolicyError
 from .security import Capability, Principal
 from .timestamps import moment
-lazy from .history import read_request_type
+lazy from .capabilities import capability_registry, capability_words
 lazy from .projection import read_once
-
-AUDIT_LABEL = "Dashboard"
 
 # The National Weather Service API. The connection shows it and the glance plan
 # hands it to the controller, which states no address of its own.
@@ -253,16 +250,13 @@ def select_dashboard_machine(
         return {"ok": True, "machine": resource.key if shown else ""}
     if command.selected:
         last = DashboardMachine.objects.aggregate(value=Max("position"))["value"]
-        DashboardMachine.objects.create(machine=resource, position=(last + 1) if last is not None else 0)
+        placement = DashboardMachine(machine=resource, position=(last + 1) if last is not None else 0)
+        placement.audit_said = f"{resource.key} shown on the dashboard"
+        placement.save()
     else:
-        DashboardMachine.objects.filter(machine=resource).delete()
-    record_event(
-        action=AuditLog.Action.UPDATED,
-        obj=resource,
-        type_label=AUDIT_LABEL,
-        message=f"{resource.key} {'shown on' if command.selected else 'taken off'} the dashboard",
-        required=True,
-    )
+        placement = DashboardMachine.objects.select_related("machine").get(machine=resource)
+        placement.audit_gone = f"{resource.key} taken off the dashboard"
+        placement.delete()
     return {"ok": True, "machine": resource.key if command.selected else ""}
 
 
@@ -304,23 +298,12 @@ class DashboardSettingsSaved(TypedDict):
 def save_dashboard_settings(command: DashboardSettingsCommand, *, principal: Principal) -> DashboardSettingsSaved:
     del principal
     point = _clean_point(command.weather_point)
-    configuration, _ = DashboardConfiguration.objects.select_for_update().get_or_create(pk=1)
+    configuration = DashboardConfiguration.objects.select_for_update().filter(pk=1).first() or DashboardConfiguration()
     configuration.weather_point = point
     configuration.weather_label = command.weather_label.strip()[:40] or "Weather"
     configuration.infrastructure_label = command.infrastructure_label.strip()[:40] or "Homelab"
-    configuration.save(update_fields=("weather_point", "weather_label", "infrastructure_label", "updated_at"))
-    record_event(
-        action=AuditLog.Action.SETTINGS_CHANGED,
-        obj=configuration,
-        type_label=AUDIT_LABEL,
-        message="Dashboard settings saved",
-        metadata={
-            "weather_point": configuration.weather_point,
-            "weather_label": configuration.weather_label,
-            "infrastructure_label": configuration.infrastructure_label,
-        },
-        required=True,
-    )
+    configuration.audit_said = "Dashboard settings saved"
+    configuration.save()
     return {"ok": True}
 
 
@@ -361,6 +344,7 @@ def _panel(
         "observed_at": observed_at,
         "refreshing": refreshing,
         "refreshable": refreshable,
+        "standing": _standing(payload, refreshing=refreshing),
         "readings": shown,
         "hours": tuple(_hour_tile(hour) for hour in payload.get("hours") or ()),
         **_head(shown, spec),
@@ -468,6 +452,42 @@ def dashboard_panels(
     return tuple(sorted(shown, key=lambda panel: panel["outdated"]))
 
 
+def _standing(payload: dict[str, Any], *, refreshing: bool) -> Standing:
+    """How the panel's last ask for a reading stands, as every ask says it:
+    under way while one is pending, failed while its last reading failed."""
+
+    if refreshing:
+        return Standing(RUNNING, REFRESHING)
+    if failed := payload.get("refresh_failed"):
+        return Standing(FAILED, f"The last reading failed ({failed}).")
+    return Standing()
+
+
+# The strip, which a finished ask fetches again (_dashboard_glance.html).
+GLANCE_REGION = "[data-glance]"
+
+
+def refresh_ask(standing: Standing) -> Ask:
+    """A panel's Refresh: an ask for every panel, standing as this one's reading does."""
+
+    return Ask(
+        capability_words(DASHBOARD_REFRESH),
+        reverse("dashboard_glance"),
+        standing=standing,
+        refresh=GLANCE_REGION,
+        outcome=True,
+    )
+
+
+def asked_refresh(result: dict[str, Any]) -> Took:
+    """How an ask for the dashboard's readings stands once it is stored."""
+
+    return Took(
+        Standing(QUEUED, REFRESHING) if result["requested"] else Standing(),
+        message=capability_registry()[DASHBOARD_REFRESH].requested(),
+    )
+
+
 def glance_context(
     configuration: DashboardConfiguration | None = None,
     panels: tuple[dict[str, Any], ...] | None = None,
@@ -476,9 +496,10 @@ def glance_context(
 
     configuration = configuration or dashboard_configuration()
     panels = dashboard_panels(configuration) if panels is None else panels
+    if any(panel["refreshable"] for panel in panels):
+        panels = tuple({**panel, "ask": refresh_ask(panel["standing"])} for panel in panels)
     return {
         "dashboard_panels": panels,
-        "dashboard_can_refresh": any(panel["refreshable"] for panel in panels),
         # The strip is asked again for as long as a reading is on its way, and
         # asks for the due ones itself when the page opens.
         "dashboard_refreshing": any(panel.get("refreshing") for panel in panels),
@@ -536,21 +557,14 @@ def _ask_for(ids: list[str], *, why: str) -> str:
     """Queue a reading of each panel in ``ids``, recorded once; when it was asked."""
 
     now = timezone.now()
-    for panel_id in ids:
-        DashboardRefreshRequest.objects.update_or_create(
-            panel_id=panel_id,
-            defaults={"requested_at": now, "completed_at": None},
-        )
+    asked = DashboardRefreshRequest.objects.select_for_update().in_bulk(ids, field_name="panel_id")
+    # Each panel by the name its head shows.
+    for panel_id, name in zip(ids, _panel_names(ids), strict=True):
+        request = asked.get(panel_id) or DashboardRefreshRequest(panel_id=panel_id)
+        request.requested_at, request.completed_at = now, None
+        request.audit_said = f"Asked for {why}: {name}"
+        request.save()
     if ids:
-        # An ask for a fresh reading, as the log files every other one, so it
-        # waits behind the same toggle; each panel by the name its head shows.
-        record_event(
-            action=AuditLog.Action.CREATED,
-            type_label=read_request_type(),
-            message=f"Asked for {why}: {', '.join(_panel_names(ids))}",
-            metadata={"panels": ids},
-            required=True,
-        )
         transaction.on_commit(ring_glance_doorbell)
     return now.isoformat()
 

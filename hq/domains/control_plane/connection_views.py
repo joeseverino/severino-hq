@@ -1,33 +1,19 @@
 """The connections page and asking the controller to read now."""
 
 from functools import cached_property
-from typing import ClassVar, override
+from typing import override
 
 from django.views import View
 from django.views.generic import TemplateView
-lazy from django.http import Http404, JsonResponse
 lazy from django.template.loader import render_to_string
-lazy from django.utils import timezone
 
 from hq.platform.application.action_links import READ_NOW_CAPABILITY, read_now_payload
 from hq.platform.application.connection_context import connections_context
 from hq.platform.application.pages import PageAction, PageMixin
-from hq.platform.application.refusal_status import refusal_of
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import web_principal
-from hq.platform.application.web_writes import execute_posted
-lazy from hq.platform.application.asks import (
-    FAILED,
-    WATCH_LIMIT,
-    Ask,
-    Standing,
-    answer,
-    read_standing,
-    read_status_url,
-    watched,
-)
+lazy from hq.platform.application.asks import Ask, AskMixin, Standing, Took, WatchView, read_standing, read_status_url
 lazy from hq.platform.application.cadence import forced_kinds
-lazy from hq.platform.application.timestamps import moment
 
 
 class ConnectionListView(PageMixin, TemplateView):
@@ -74,55 +60,33 @@ class ConnectionListView(PageMixin, TemplateView):
         return context
 
 
-class ReadNowView(View):
-    """Ask the controller to read one connection, one kind, or everything now.
+class ReadNowView(AskMixin, View):
+    """Ask the controller to read one connection, one kind, or everything now,
+    named by the form or the action's URL."""
 
-    POST only; the subject comes from the form or the action's URL. The
-    request answers once the ask is stored: the controller reads on its next
-    pull, and ``ReadStatusView`` says how that stands.
-    """
+    capability = READ_NOW_CAPABILITY
+    back_to = "control_plane:connections"
 
-    http_method_names: ClassVar[list[str]] = ["post"]
+    @override
+    def payload(self):
+        return read_now_payload({**self.request.GET.dict(), **self.request.POST.dict()})
 
-    def post(self, request):
-        back = reverse("control_plane:connections")
-        payload = read_now_payload({**request.GET.dict(), **request.POST.dict()})
-        asked = timezone.now()
-        result = execute_posted(request, READ_NOW_CAPABILITY, payload)
-        if not result.get("ok"):
-            return answer(request, Standing(FAILED, refusal_of(result).message), fallback=back)
+    @override
+    def asked(self, result, at) -> Took:
+        said = str(result.get("message") or "")
         if not result.get("read_now"):
             # A bare wake-up names nothing to wait for.
-            return answer(request, Standing(note=str(result.get("message") or "")), fallback=back)
+            return Took(Standing(note=said))
+        payload = self.payload()
         ref = str(payload.get("connection_ref", ""))
         kinds = forced_kinds(ref, str(payload.get("kind", ""))) or ()
-        return answer(
-            request,
-            read_standing(kinds, asked, connection_ref=ref),
-            fallback=back,
-            status_url=read_status_url(kinds, asked, connection_ref=ref),
-            message=str(result.get("message") or ""),
+        return Took(
+            read_standing(kinds, at, connection_ref=ref),
+            read_status_url(kinds, at, connection_ref=ref),
+            said,
         )
 
 
-class ReadStatusView(View):
-    """How a read the controller was asked for stands, for a page following it.
-
-    Reports only on what HQ handed that page to watch, signed, and asks nothing
-    of anyone: it reads when each kind was last stored.
-    """
-
-    http_method_names: ClassVar[list[str]] = ["get"]
-
-    def get(self, request):
-        token = str(request.GET.get("watch", ""))
-        found = watched(token) if 0 < len(token) <= WATCH_LIMIT else None
-        asked = moment(found.get("asked", "")) if found else None
-        if found is None or asked is None or not isinstance(found.get("read"), list):
-            raise Http404("Nothing to watch.")
-        standing = read_standing(
-            tuple(str(kind) for kind in found["read"]),
-            asked,
-            connection_ref=str(found.get("ref", "")),
-        )
-        return JsonResponse(standing.as_json())
+class ReadStatusView(WatchView):
+    """How a read the controller was asked for stands: it asks nothing of
+    anyone, and reads when each kind was last stored."""

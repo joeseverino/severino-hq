@@ -32,6 +32,7 @@ from .finding_model import (
     cannot_run_commands,
     fact_values,
 )
+from .freshness import LAST_READ
 from .moments import when
 from .timestamps import moment
 from .topology_model import TopologyNode, derived_id
@@ -244,7 +245,7 @@ class Unjudged:
     @property
     def evidence(self) -> tuple[tuple[str, str], ...]:
         return (
-            ("Last read", when(self.taken)),
+            (LAST_READ, when(self.taken)),
             *((("Why it has not been read since", self.refusal.detail),) if self.refusal else ()),
         )
 

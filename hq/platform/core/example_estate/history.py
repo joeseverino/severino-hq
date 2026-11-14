@@ -16,7 +16,7 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 
 from hq.domains.calendars.models import Entry
-from hq.domains.control_plane.models import ManagedResource
+from hq.domains.control_plane.models import DashboardConfiguration, DashboardMachine, ManagedResource
 from hq.domains.projects.models import Project
 from hq.domains.receipts.models import Receipt
 from hq.platform.application.documentation import SYNC as DOCUMENTATION_SYNC
@@ -129,6 +129,17 @@ KINDS = (
         Entry,
         _by_hand("calendar:entry_new", "calendar:entry_edit", "uid"),
         lambda e: (_days_back(20 + int(hexed(e.title), 16) % 180, e.title),) * 2,
+    ),
+    # The dashboard's machine, shown from its edit page, and its settings page.
+    (
+        DashboardMachine,
+        lambda placement, _action: doors.stamp(doors.page("control_plane:edit", key=placement.machine.key)),
+        lambda p: (_days_back(MACHINE_DAYS - 1, "dashboard"),) * 2,
+    ),
+    (
+        DashboardConfiguration,
+        lambda _configuration, _action: doors.stamp(doors.page("dashboard_glance_settings")),
+        lambda c: (_days_back(MACHINE_DAYS - 1, "dashboard settings"),) * 2,
     ),
     (LinkedAccount, _signed_in, lambda a: (_days_back(MACHINE_DAYS, a.provider),) * 2),
     (

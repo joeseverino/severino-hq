@@ -247,7 +247,5 @@ class OneWordingTests(SimpleTestCase):
             for match in OWN_WORDING.finditer(text)
         ]
 
-        self.assertRegex(
-            PARTIAL.read_text(), OWN_WORDING, "the partial no longer words an age: the rule checks nothing"
-        )
+        self.assertRegex('Last read {{ at|when:"ago" }}', OWN_WORDING, "the rule no longer finds an age worded by hand")
         self.assertEqual(found, [])

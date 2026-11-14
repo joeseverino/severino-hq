@@ -36,7 +36,6 @@ COMMAND_BUILDERS = {
 VARIANT_CALLS = ("capability_words", "command_action", "capability_action_link", "FindingRemedy")
 # Text a template writes that is a declared word for something no command does.
 TEMPLATE_EXEMPT = {
-    ("core/_dashboard_glance.html", "Refresh"): "fetches the glance panels again; no command runs",
     ("dashboard.html", "Edit"): "opens the chooser of the dashboard's links, whose save is a preference",
 }
 # What a control says (a constructor's label or intent, a confirmation's

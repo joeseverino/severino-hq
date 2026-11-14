@@ -31,6 +31,7 @@ from .connection_contracts import (
 from .connection_lifecycle import WORKING, Lifecycle, standing
 from .contracts import SCOPE_NAME, endpoint_has_private_parts
 from .derivations import passed, present
+from .freshness import last_read
 from .integration_validation import safe_connection_url
 from .integrations import integration_graph
 from .moments import ago
@@ -242,7 +243,7 @@ class ConnectionView:
         if self.lifecycle == Lifecycle.REVOKED:
             return ""
         if self.lifecycle == Lifecycle.STALE:
-            return f"Last read {ago(observed)}"
+            return last_read(observed)
         if self.lifecycle == Lifecycle.UNREACHABLE:
             return f"Last tried {ago(observed)}" if observed else ""
         if self.lifecycle == Lifecycle.UNAUTHORIZED:

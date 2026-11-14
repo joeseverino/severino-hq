@@ -41,6 +41,7 @@ from hq.platform.core.templatetags.line_breaks import breakable, button_words, c
 lazy from hq.domains.control_plane.provider_spec import expiry_phrase
 lazy from hq.platform.application import references, request_identity, security
 lazy from hq.platform.application.derivations import this_year
+lazy from hq.platform.application.freshness import LAST_READ
 lazy from hq.platform.application.problems import problems_about as _problems_about
 lazy from hq.platform.application.references import reference_of
 lazy from hq.platform.application.where_it_runs import named_links as _named_links
@@ -216,6 +217,14 @@ def when(value, form=""):
         _when_exact(found),
         _WHEN_FORMS[form](found),
     )
+
+
+@register.filter
+def last_read(value):
+    """``{{ moment|last_read }}``: when a reading was taken, said as every page
+    says it (``freshness.LAST_READ``), its age a ``when`` that shows the moment."""
+
+    return format_html("{} {}", LAST_READ, when(value, "ago"))
 
 
 @register.filter

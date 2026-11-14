@@ -1603,8 +1603,10 @@ heard and not seen, and once the work lands the head is drawn again, its line
 saying the new reading's age. A head with no reading line says it on the busy
 button alone.
 
-Pressing it posts; the request stores the ask and answers at once, and the
-control then says how the work stands.
+Pressing it posts to a view that declares only what it asks
+(`asks.AskMixin`): the request runs the work's capability, stores the ask and
+answers at once, a refusal as failed work in the refusal's own sentence, and
+the control then says how the work stands.
 
 - The note beside the button is a live region (`role="status"`) that changes
   only when the state does. The elapsed time ticks next to it outside the
@@ -1643,6 +1645,7 @@ A link to a command (an `ActionLink`) is drawn by
 would refuse now carries the refusal: it stands as an `aria-disabled` control,
 focusable, with the reason as its title, never a link or a form.
 *Gates:* `RequestNeverWaitsTests.test_asked_for_work_is_followed_by_one_script_behavior`;
+`lint:ast-grep` (`ask-answered-by-ask-mixin.yml`);
 `ComponentLayoutTests.test_a_rows_ask_says_its_sentence_on_the_line_its_row_opens_to`;
 `hq/platform/application/tests/test_refused_links.py`;
 `hq/platform/core/tests/test_action_budgets.py`.

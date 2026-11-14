@@ -25,9 +25,6 @@ THE_ONE_WAY = (
 
 # Each call that still writes a change, or an action read from elsewhere, and why no row's signal can write it.
 NOT_A_ROW = {
-    ("hq/platform/application/glance.py", "select_dashboard_machine"): "the dashboard's choice, kept in no row",
-    ("hq/platform/application/glance.py", "save_dashboard_settings"): "the dashboard's settings, kept in no row",
-    ("hq/platform/application/glance.py", "_ask_for"): "a refresh asked for, kept in no row",
     ("hq/platform/application/pins.py", "_audit"): "one act on many of a person's pins at once",
     ("hq/platform/application/action_items.py", "_audit"): "one act on many queue items at once",
     ("hq/platform/application/projects.py", "refresh_project"): "the sum of a content sync over many rows",

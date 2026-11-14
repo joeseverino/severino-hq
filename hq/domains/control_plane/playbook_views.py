@@ -15,7 +15,6 @@ from typing import ClassVar, override
 
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
-from django.http import Http404, JsonResponse
 from django.shortcuts import redirect
 from django.utils import timezone
 from django.views import View
@@ -39,7 +38,7 @@ from hq.platform.application.routes import reverse
 from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.web_writes import execute_posted, refused
 lazy from hq.domains.jobs.models import JobState
-lazy from hq.platform.application.asks import FAILED, WATCH_LIMIT, Ask, Standing, answer, watch_token, watched
+lazy from hq.platform.application.asks import FAILED, Ask, AskMixin, Standing, Took, WatchView, watch_token
 lazy from hq.platform.application.cadence import automation_standing
 lazy from hq.platform.application.refusal_status import WANTS_A_GRANT, refusal_of
 lazy from hq.platform.application.work_runs import TONES, UNENDED
@@ -121,40 +120,24 @@ class PlaybooksView(PageMixin, TemplateView):
         return context
 
 
-class RefreshView(View):
-    """Ask HQ's runner to scan the repository now: the scan is
-    queued and the request answers at once, and ``ScanStatusView`` says how
-    it stands."""
+class RefreshView(AskMixin, View):
+    """Ask HQ's runner to scan the repository now."""
 
-    http_method_names: ClassVar[list[str]] = ["post"]
+    capability = REFRESH
+    back_to = "control_plane:playbooks"
 
-    def post(self, request):
-        back = reverse("control_plane:playbooks")
-        result = execute_posted(request, REFRESH, {})
-        if not result.get("ok"):
-            return answer(request, Standing(FAILED, refusal_of(result).message), fallback=back)
+    @override
+    def asked(self, result, at) -> Took:
         operation = str(result["operation"]["id"])
-        return answer(
-            request,
-            scan_standing(operation) or Standing(),
-            fallback=back,
-            status_url=scan_status_url(operation),
-        )
+        return Took(scan_standing(operation) or Standing(), scan_status_url(operation))
 
 
-class ScanStatusView(View):
-    """How a scan stands, for a page following it: only one HQ handed that
-    page to watch, signed."""
+class ScanStatusView(WatchView):
+    """How a scan stands."""
 
-    http_method_names: ClassVar[list[str]] = ["get"]
-
-    def get(self, request):
-        token = str(request.GET.get("watch", ""))
-        found = watched(token) if 0 < len(token) <= WATCH_LIMIT else None
-        scan = scan_standing(str(found["scan"])) if found and isinstance(found.get("scan"), str) else None
-        if scan is None:
-            raise Http404("Nothing to watch.")
-        return JsonResponse(scan.as_json())
+    @override
+    def standing(self, subject):
+        return scan_standing(subject["scan"]) if isinstance(subject.get("scan"), str) else None
 
 
 class ProposalDecisionView(View):

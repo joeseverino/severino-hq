@@ -1,4 +1,4 @@
-from typing import ClassVar, override
+from typing import override
 
 from django.db.models import Case, IntegerField, Value, When
 from django.urls import reverse, reverse_lazy
@@ -14,7 +14,6 @@ from django.views.generic import (
 )
 lazy from django.template.defaultfilters import linebreaksbr
 lazy from django.template.loader import render_to_string
-lazy from django.utils import timezone
 
 from hq.domains.projects.github import github_repository
 from hq.platform.application import related
@@ -30,7 +29,7 @@ from hq.platform.application.projects import (
     projects_by_repository,
     repository_key,
 )
-from hq.platform.application.refusal_status import refusal_of
+from hq.platform.application.record_errors import Sentence
 from hq.platform.application.security import web_principal
 from hq.platform.application.tables import (
     TableColumn,
@@ -40,17 +39,9 @@ from hq.platform.application.tables import (
     TableToggle,
 )
 from hq.platform.application.timestamps import moment
-from hq.platform.application.web_writes import execute_posted
 from hq.platform.application.where_it_runs import where_it_runs
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
-lazy from hq.platform.application.asks import (
-    FAILED,
-    Ask,
-    Standing,
-    answer,
-    read_standing,
-    read_status_url,
-)
+lazy from hq.platform.application.asks import Ask, AskMixin, Standing, Took, read_standing, read_status_url
 lazy from hq.platform.application.connection_setup import docs_url
 lazy from hq.platform.application.dependency_updates import KIND as RUN_KIND, RUN_NOW, asked_at, last_run
 lazy from hq.platform.application.github_estate import repositories, repository_for
@@ -167,25 +158,15 @@ def run_now_ask(project, principal, asked) -> Ask | None:
     )
 
 
-class ProjectUpdatesRunView(View):
-    """Ask for a dependency update run now. Nothing runs here: the request
-    answers once the ask is stored, and the controller's next pass hands off."""
+class ProjectUpdatesRunView(AskMixin, View):
+    """Ask for a dependency update run now, which the controller's next pass hands off."""
 
-    http_method_names: ClassVar[list[str]] = ["post"]
+    capability = RUN_NOW
+    reads = (RUN_KIND,)
 
-    def post(self, request, slug: str):
-        back = reverse("projects:detail", args=[slug])
-        asked = timezone.now()
-        result = execute_posted(request, RUN_NOW, {})
-        if not result.get("ok"):
-            return answer(request, Standing(FAILED, refusal_of(result).message), fallback=back)
-        return answer(
-            request,
-            read_standing((RUN_KIND,), asked),
-            fallback=back,
-            status_url=read_status_url((RUN_KIND,), asked),
-            message=capability_registry()[RUN_NOW].requested(),
-        )
+    @override
+    def back(self) -> str:
+        return reverse("projects:detail", args=[self.kwargs["slug"]])
 
 
 class ProjectPage(PageMixin):
@@ -340,7 +321,7 @@ class WatchingView(PageMixin, TemplateView):
                 capability_words(READ_NOW),
                 reverse("watching_refresh"),
                 standing=found,
-                status_url=_profile_status(found.since),
+                status_url=read_status_url((KIND,), found.since) if found.since else "",
                 refresh=WATCHING_REGION,
             ),
         ]
@@ -392,29 +373,31 @@ def _written_as(url: str) -> str:
     return str(url or "").removeprefix("https://").removeprefix("http://").rstrip("/")
 
 
-def _profile_status(asked) -> str:
-    return read_status_url((KIND,), asked) if asked is not None else ""
+class WatchingRefreshView(AskMixin, View):
+    """Ask the controller to read your GitHub profile now."""
 
+    capability = READ_NOW
+    back_to = "watching"
 
-class WatchingRefreshView(View):
-    """Ask the controller to read your GitHub profile now. Nothing is read here:
-    the request answers once the ask is stored, and the page follows it."""
+    @cached_property
+    def login(self) -> str:
+        return linked_login(self.request.user, GITHUB)
 
-    def post(self, request):
-        login = linked_login(request.user, GITHUB)
-        back = reverse("watching")
-        if not login:
-            return answer(request, Standing(FAILED, "Your sign-in names no GitHub account."), fallback=back)
-        result = execute_posted(request, READ_NOW, {"login": login})
-        if not result["ok"]:
-            return answer(request, Standing(FAILED, refusal_of(result).message), fallback=back)
+    @override
+    def cannot(self) -> Sentence:
+        return "" if self.login else "Your sign-in names no GitHub account."
+
+    @override
+    def payload(self):
+        return {"login": self.login}
+
+    @override
+    def asked(self, result, at) -> Took:
         asked = moment(result["asked_at"])
-        return answer(
-            request,
+        return Took(
             read_standing((KIND,), asked),
-            fallback=back,
-            status_url=_profile_status(asked),
-            message=capability_registry()[READ_NOW].requested(f"@{login}"),
+            read_status_url((KIND,), asked),
+            capability_registry()[READ_NOW].requested(f"@{self.login}"),
         )
 
 
