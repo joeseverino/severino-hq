@@ -214,8 +214,9 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
    mark beside that line rather than centered on however many lines the
    reading happens to have (it keeps its own column for the whole reading, so
    nothing is ever set under it); then the quiet lines, which start level
-   because the leads do. Each holds the room of its lead and two quiet lines
-   whatever it says now, so a reading that lands with fewer lines leaves the
+   because the leads do. Its parts may take a second line and its note one
+   more, so each holds the room of its lead and three quiet lines whatever it
+   says now, and a reading that lands with fewer lines or no note leaves the
    row and the page under it still. */
 .reading-head {
   display: grid;
@@ -224,7 +225,7 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
   align-items: center;
   gap: 0 var(--space-5);
   inline-size: 100%;
-  min-block-size: calc(2 * var(--space-3) + var(--reading-lead) + 2 * var(--quiet-line));
+  min-block-size: calc(2 * var(--space-3) + var(--reading-lead) + 3 * var(--quiet-line));
   padding: var(--space-3);
   border: 0;
   border-radius: var(--radius);
