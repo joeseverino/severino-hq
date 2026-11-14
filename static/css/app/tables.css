@@ -264,7 +264,8 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 @container table-region (width < 36rem) {
   .data-table > tbody { --row-pad: var(--space-6); }
   .data-table [data-kind] .narrow-more, .data-table .wide-only { display: none; }
-  .data-table .narrow-only { display: inline; }  :is(.row-columns > [data-narrow], .data-table > tbody > tr:has(+ .row-detail [data-narrow]) .row-expand) { display: grid; }
+  .data-table .narrow-only { display: inline; }
+  :is(.row-columns > [data-narrow], .data-table > tbody > tr:has(+ .row-detail [data-narrow]) .row-expand) { display: grid; }
   .data-table[data-marks] > * > tr > * { padding: var(--space-3) var(--space-1); }
 }
 

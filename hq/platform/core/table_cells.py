@@ -118,6 +118,13 @@ class _Cell:
     # which is the row's own.
     toggled: bool = False
     folds: bool = False
+    # Where a toggle a template draws last in it starts: its value ends
+    # there, so neither its clamp nor its copy on the open line holds it.
+    toggle_at: tuple[int, int] | None = None
+
+    @property
+    def value_end(self) -> tuple[int, int] | None:
+        return self.toggle_at or self.closed
     # A heading's sort control, as the spans that take it off again.
     sort: list[tuple[Point, Point]] = field(default_factory=list)
     sort_mark: Position | None = None
@@ -268,6 +275,7 @@ class Cells(HTMLParser):
             cell.fields = True
         if "data-row-toggle" in given:
             cell.toggled = True
+            cell.toggle_at = cell.toggle_at or self.getpos()
             cell.folds = cell.folds or "data-fold-toggle" in given
         if self.section == "thead" and "data-sort-local" in given:
             at = self.getpos()
@@ -476,7 +484,7 @@ class Cells(HTMLParser):
                 marks.append(f' title="{html.escape(said)}"')
             if cell.longest > LONG and cell.closed:
                 cell.clamped = True
-                self.clamps.append((cell.opened, cell.closed))
+                self.clamps.append((cell.opened, cell.value_end))
         if body and kind == "status" and cell.tops == [True] and not cell.loose:
             marks.append(" data-pill-only")
         return marks
@@ -520,7 +528,7 @@ class Cells(HTMLParser):
                 when = "" if shown else f' data-drop="{levels[at]}"' if at in levels else ""
                 when += "" if shown or "narrow-more" not in cell.holds else " data-narrow"
                 label = names[at] if 0 <= at < len(names) else ""
-                entries.append(LineEntry(label, (cell.opened, cell.closed), whole=False, marks=when))
+                entries.append(LineEntry(label, (cell.opened, cell.value_end), whole=False, marks=when))
                 always = always or shown
             entries += [LineEntry(label, span) for label, span in moved if label]
         if always:
