@@ -573,8 +573,12 @@ PASSES = {
     ),
     # A value cut at its cell's edge beside a sentence that wraps: its row has
     # no room left. The second fills a padded box, whose padding is no room;
-    # the third is cut beside room too narrow to show it whole.
+    # the third is cut beside room too narrow to show it whole. Last, a tight
+    # table's status pill, a header's name too long for its column at its
+    # narrowest, beside a short address whose column has room past it: the
+    # pill's column takes that room and shows the name.
     "cut beside room": Plant(
+        "{% load value_tags status_tags %}"
         '<div class="table-scroll" style="inline-size: 20rem"><table class="data-table"><tbody><tr><td>'
         '<span style="display: block; contain: inline-size; min-inline-size: 6ch; overflow: hidden; '
         'text-overflow: ellipsis; white-space: nowrap">Example value cut short</span></td>'
@@ -586,12 +590,31 @@ PASSES = {
         '<span style="display: block; max-inline-size: 6ch; overflow: hidden; text-overflow: ellipsis; '
         'white-space: nowrap">an-example-value-far-longer-than-the-room-its-cell-leaves-beside-it</span></td>'
         f"<td>{_LINES}</td></tr></tbody></table></div>"
+        '<div style="inline-size: 15rem">{% table_region "Example" %}'
+        '<table class="data-table" data-narrow data-tight><thead><tr>'
+        '{% table_heading "Value" "identifier" %}{% table_heading "Type" "status" %}</tr></thead><tbody>'
+        '<tr><td><code class="cell-whole">{{ address|breakable }}</code></td>'
+        '<td>{% status header tone="neutral" %}</td></tr></tbody></table>{% endtable_region %}</div>',
+        values={"address": "192.0.2.10", "header": "X-Forwarded-Scheme"},
     ),
     # A button, a field and a select in one row, each the control size.
     "one height to a row of controls": Plant(
         '<div style="display: flex; gap: 1rem"><button type="button" class="btn">Example</button>'
         '<input type="search" aria-label="Example"><select aria-label="Example"><option>Example</option></select></div>'
         + _OPEN_READINGS
+    ),
+    # An address that breaks only at its seams in the muted line under a
+    # row's name, and a file name among words in a muted cell, each in a whole
+    # table too narrow for it: the line's address is cut on one line, and the
+    # cell's name holds its length as any cell's does.
+    "broken identifiers": Plant(
+        '{% load value_tags %}<div style="inline-size: 4rem">{% table_region "Example" %}'
+        '<table class="data-table"><thead><tr>{% table_heading "Name" "identifier" %}</tr></thead><tbody><tr>'
+        '<td>Example<br><span class="muted">{{ address|breakable }}</span></td></tr></tbody></table>'
+        '{% endtable_region %}</div><div style="inline-size: 4rem">{% table_region "Files" %}'
+        '<table class="data-table"><thead><tr>{% table_heading "File" %}</tr></thead><tbody><tr>'
+        '<td class="muted">{{ file|breakable }}</td></tr></tbody></table>{% endtable_region %}</div>',
+        values={"address": "http://192.0.2.10:8000", "file": "Example receipt.png"},
     ),
     # A filter bar's choice in a bar too narrow for its option, shrunk to it.
     "filter choices as wide as their options": Plant(

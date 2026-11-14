@@ -27,7 +27,7 @@ from django.test import Client
 from django.urls import reverse
 lazy from django.db import transaction
 
-from hq.platform.core.tests.browser.gate import BrowserGate, answered, tab_key
+from hq.platform.core.tests.browser.gate import BrowserGate, answered, tab_key, unfold
 from hq.platform.core.tests.browser.in_flight import InFlight
 from hq.platform.core.tests.browser.probes.boxes import SIDEWAYS
 from hq.platform.core.tests.browser.probes.describe import TEXT_SHOWN
@@ -378,6 +378,8 @@ def _cell_words(row):
 _NOTHING = "nothing-is-called-this"
 # A phone and a laptop: where a control moves into a menu, and where it does not.
 PRESSED_AT = (PHONE_SCREEN[0], WIDE)
+
+
 # The address shows what was asked for and the answer is in place.
 _ASKED = """([name, value]) => new URLSearchParams(location.search).getAll(name).includes(value)
   && !document.querySelector('main[aria-busy]')"""
@@ -566,6 +568,7 @@ class ExampleEstateControlTests(BrowserGate):
                 # Every answer below is drawn on this page, never by loading another.
                 self.page.evaluate("() => { window.kept = true; }")
                 every = self.rows()
+                unfold(self.page)
                 self.page.locator(SELECTORS["table_filter"]).first.click()
                 menu = self.page.locator(SELECTORS["table_filter_panel"]).first
                 box = menu.locator(SELECTORS["table_filter_box"]).first
@@ -687,6 +690,7 @@ class ExampleEstateControlTests(BrowserGate):
             with self.subTest(width=width):
                 self.visit(reverse("action_items"), width)
                 every = self.page.locator(SELECTORS["decisions"]).count()
+                unfold(self.page)
                 urgency = self.page.locator(SELECTORS["queue_urgency"])
                 # The urgency the first row is at, so the answer has rows to hold.
                 offered = urgency.locator("option").evaluate_all("(options) => options.map((option) => option.value)")
@@ -853,7 +857,9 @@ class ExampleEstateControlTests(BrowserGate):
         for width in PRESSED_AT:
             with self.subTest(width=width):
                 self.visit(reverse("expenses:list"), width)
-                handles = [self.page.locator(SELECTORS["table_filter"]).first]
+                # A row with no room folds the filters behind one control, itself a menu.
+                fold = self.page.locator(SELECTORS["filter_fold"])
+                handles = [fold if fold.is_visible() else self.page.locator(SELECTORS["table_filter"]).first]
                 if width >= WIDE:
                     handles.append(self.page.locator(SELECTORS["nav_menu"]).first)
                 for handle in handles:

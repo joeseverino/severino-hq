@@ -21,8 +21,9 @@ class Element:
     # In the line beneath a row (`data-row-detail`), which a reader meets only
     # once the row is opened: a copy of what the row holds back.
     beneath: bool = field(default=False, repr=False, compare=False)
-    # A <template> and what it holds: markup a script clones, which a browser
-    # parses into no element of the page.
+    # A <template> and what it holds, markup a script clones, which a browser
+    # parses into no element of the page; and an element marked inert, which
+    # no one reaches (a filter bar's sizer).
     inert: bool = field(default=False, repr=False, compare=False)
 
     @property
@@ -51,7 +52,7 @@ class _Page(HTMLParser):
     def handle_starttag(self, tag, attrs):
         element = Element(tag, {name: value or "" for name, value in attrs}, ancestors=tuple(self._open))
         element.beneath = "data-row-detail" in element.attrs or any(opened.beneath for opened in self._open)
-        element.inert = tag == "template" or any(opened.inert for opened in self._open)
+        element.inert = tag == "template" or "inert" in element.attrs or any(opened.inert for opened in self._open)
         if not element.inert:
             self.elements.append(element)
         self._edge = self._edge or not _TOKEN_PARTS & element.classes

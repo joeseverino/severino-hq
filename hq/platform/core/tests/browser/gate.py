@@ -184,6 +184,15 @@ def tab_key(browser):
     return "Alt+Tab" if browser.browser_type.name == "webkit" else "Tab"
 
 
+def unfold(page) -> None:
+    """Opens the Filters control of a filter bar that folds its choices
+    behind it, so they can be pressed as a reader presses them there."""
+
+    fold = page.locator(SELECTORS["filter_fold"])
+    if fold.count() and fold.is_visible():
+        fold.click()
+
+
 def add_css(page, css):
     """``css`` added to ``page`` after its own sheets, with script on or off.
 

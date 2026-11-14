@@ -944,9 +944,24 @@ takes the whole screen on a phone.
 %}` draws the page's controls in one order: the search, then its selects, then
 its toggles. Then come one Filter (or the bar's own `verb=` for a bar that asks
 a question rather than narrows a list), Clear filters back to `clear` when
-anything is set, and the summary at the row's end. The controls wrap in a box
-of their own and the button stands beside their last line, so it never takes a
-line alone. The summary is the part's words: "`shown` of `total` shown." Then
+anything is set, and the summary at the row's end. A bar with a search puts
+what follows it after `{% choices %}`: those choices, with the button that
+sends them and Clear, stand on the search's row while it holds them all, and
+otherwise fold behind one Filters control, a popover panel under the bar that
+sends without a script. That button reads Apply unless the bar names its own
+verb, so Filter never stands beside Filters. The control counts the choices that narrow (a select off its "Any", a
+table's filter with a box ticked, a set of toggles with one off, a ticked
+toggle), so a folded bar never hides that its list is narrowed. The fold is
+the layout's own measure, never a width written for one page: the bar's sizer,
+an inert copy of the row unfolded, takes the room the row needs, and the
+choices fold exactly when what is left is none, which is where the row would
+otherwise wrap. The bar asks beside its summary only the room of the search
+and the Filters control, so the summary shares the row where it fits, as the
+queue's count does at a phone. The panel is drawn as the header's sections
+are: inline while there is room, a popover once there is none (base.css). A
+bar with no search, or nothing after it,
+keeps its controls in a box of their own, the button beside their last line,
+so it never takes a line alone. The summary is the part's words: "`shown` of `total` shown." Then
 comes what the page holds back without being asked (`held=`, each part counted,
 as the map's main lanes hold back its context), and the one link that shows it
 (`more=`). Last are the page's own facts about what shows (`{% summary %}`, "1
@@ -973,10 +988,12 @@ visible label `label` the name a reader hears (a table cell's setting). `tone`
 says the choice in a status tone, the status part's ink, edged in it unless
 neutral, as an agent's rule reads "On" in the good tone and "Off" in the
 serious one. *Gate:* the `hand-drawn-filter-bar` rule refuses `.filter-bar`
-written by hand. `test_filter_tags.FilterBarUseTests` reads every `{%
+written by hand, and a query form of a page's own (`method="get"`) that holds a
+select. `test_filter_tags.FilterBarUseTests` reads every `{%
 filter_bar %}` in the templates. It refuses an empty option written by hand,
 `every=` on a view or an order, a count written in the summary, a narrowing bar
-with no count, and a search after another control. The survey's "filter choices
+with no count, a control beside a search outside `{% choices %}`, and a search
+inside it. The survey's "filter choices
 as wide as their options" finds a choice stretched over its bar.
 
 **One switch.** `{% switch label=... %}{% choice url=... current=... %}...{% endchoice %}{% summary %}...{% endswitch %}`

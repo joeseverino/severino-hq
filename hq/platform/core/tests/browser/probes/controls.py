@@ -434,6 +434,6 @@ CHECKS = {
     ),
     "filter choices as wide as their options": (
         CHOICES_AS_WIDE_AS_THEIR_OPTIONS,
-        ".filter-bar-controls > :is(select, .table-filter-menu, .table-sort)",
+        ":is(.filter-bar-controls, .filter-bar-choices) > :is(select, .table-filter-menu, .table-sort)",
     ),
 }

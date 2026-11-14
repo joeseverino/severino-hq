@@ -20,7 +20,7 @@ from hq.platform.application.asks import Ask, Standing
 from hq.platform.application.money import money
 from hq.platform.application.ui import ActivityCalendar, CalendarDay, ChartSeries, line_chart
 from hq.platform.core.stylesheets import DIRECTORY, stylesheet
-from hq.platform.core.tests.browser.gate import add_css, served_sheet, tab_key, with_script
+from hq.platform.core.tests.browser.gate import add_css, served_sheet, tab_key, unfold, with_script
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
 from hq.platform.core.tests.browser.probes.boxes import ANY_SCROLLER, MAP, SIDEWAYS, SMALL_TARGETS
 from hq.platform.core.tests.browser.probes.palette import BUTTON_EDGES
@@ -1086,6 +1086,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
         given the field's edge is found."""
 
         self.open("projects", WIDE)
+        unfold(self.page)
         self.assertGreater(self.page.locator(SELECTORS["table_filter"]).count(), 0)
         for palette in ("light", "dark"):
             with self.subTest(palette=palette):

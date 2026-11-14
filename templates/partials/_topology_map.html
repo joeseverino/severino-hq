@@ -23,6 +23,7 @@ back, and topology_more the view that shows it.
   {% endcomment %}
   {% filter_bar filtered=topology_view clear=main_lanes_url shown=topology_shown total=topology_total held=topology_held more=topology_more %}
     <input type="search" placeholder="Find on the map" aria-label="Find on the map" data-topology-search autocomplete="off">
+    {% choices %}
     {% select "lens" topology_views chosen=topology_view label="View" %}
     {% include "partials/_toggle_set.html" with legend="Show" set="kind" toggles=topology_kinds only %}
     <button class="btn ghost compact" type="button" data-topology-reset hidden>Clear selection</button>

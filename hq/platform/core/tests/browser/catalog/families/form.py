@@ -159,6 +159,7 @@ ENTRIES = {
         '{% filter_bar filtered=True clear="#" shown=3 total=12 %}'
         '<input type="search" name="q" value="example" placeholder="Filter example records" '
         'aria-label="Filter example records">'
+        "{% choices %}"
         '{% select "state" states chosen="on" label="Example state" every="example state" %}'
         '{% select "kind" kinds label="Example kind" every="example kind" %}'
         "{% summary %}1 needs a look.{% endfilter_bar %}",
@@ -166,7 +167,7 @@ ENTRIES = {
     ),
     "form/filter-bar-held": Entry(
         '{% filter_bar shown=93 total=170 held=held more="#" %}'
-        '<input type="search" placeholder="Find an example" aria-label="Find an example">'
+        '<input type="search" placeholder="Find an example" aria-label="Find an example">{% choices %}'
         '{% select "view" views label="Example view" %}{% endfilter_bar %}',
         {
             "views": (("", "Example main view"), ("everything", "Everything")),
@@ -189,7 +190,7 @@ ENTRIES = {
     # to wrap in a narrow bar, and a control a script shows only once it has
     # something to act on.
     "form/filter-bar-toggles": Entry(
-        '{% filter_bar shown=12 total=12 %}<input type="search" placeholder="Find an example" aria-label="Find an example">'
+        '{% filter_bar shown=12 total=12 %}<input type="search" placeholder="Find an example" aria-label="Find an example">{% choices %}'
         '{% include "partials/_toggle_set.html" with legend="Example kinds" set="kind" name="kind" toggles=toggles only %}'
         '<button class="btn ghost compact" type="button" hidden>Example clear</button>'
         "{% endfilter_bar %}",

@@ -3401,6 +3401,7 @@
           "**data"
         ],
         "parts": [
+          "choices",
           "summary"
         ]
       },

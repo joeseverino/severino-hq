@@ -467,6 +467,8 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
   .data-table :is(.table-sort-link, time, .date-col, .nowrap, .cell-part, .pill) { white-space: normal; }
   /* A pill that wraps (tight, or in an opened row, below) flows as text: as a flex box its words and an identifier among them are items side by side, each squeezed until it breaks inside a word. Its corners round by half of one line, so it is a capsule on one line and a rounded box on several. */
   .data-table td .pill { display: inline-block; border-radius: calc(.5lh + 2px); }
+  /* A status no longer holds out for its whole pill here, so its column asks for the pill's whole length as a wrapping column does: a fixed width would keep it at its narrowest and hand the room its pill could show to the columns beside it. */
+  .data-table > thead th[data-kind="status"] { width: auto; }
 }
 /* A row's controls side by side are a kept line too, so tight they wrap where the cell is too narrow for them all, each line ending the cell. Only a table the script measured lets them go: in one no script measures, the words beside them wrap first, so controls with room stay on one line. */
 .data-table[data-tight] > tbody > tr > :is(td.row-actions, [data-kind="control"]) { white-space: normal; }

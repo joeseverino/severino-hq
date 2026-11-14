@@ -8,7 +8,8 @@ from hq.platform.core.tests.browser.widths import TARGET_MIN
 # page's edge it is cut off, and a box that clips or scrolls what it holds
 # without being allowed to hides it. A chip row, a lane or a code block
 # scrolled past the edge of a phone is content nobody finds; a name cut off
-# with an ellipsis is a deliberate truncation. ``ANY_SCROLLER`` allows every
+# with an ellipsis is a deliberate truncation. What is hidden (`visibility`),
+# such as a filter bar's sizer, is seen nowhere. ``ANY_SCROLLER`` allows every
 # box that scrolls, whatever it is.
 SIDEWAYS = (
     "(allowed) => {"
@@ -28,7 +29,7 @@ SIDEWAYS = (
   };
   for (const el of document.querySelectorAll('body *')) {
     const r = box(el);
-    if (r.width < 2 || r.height < 2 || !el.checkVisibility() || held(el)) continue;
+    if (r.width < 2 || r.height < 2 || !el.checkVisibility({ visibilityProperty: true }) || held(el)) continue;
     const style = getComputedStyle(el);
     const boxed = ['auto', 'scroll', 'hidden', 'clip'].includes(style.overflowX);
     if (boxed && !allows(el) && el.scrollWidth > el.clientWidth + 1 && style.textOverflow !== 'ellipsis') {

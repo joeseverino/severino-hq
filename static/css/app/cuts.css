@@ -108,8 +108,8 @@
 .data-table td .name-line > strong > [data-entity] { min-width: 0; padding-inline-end: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Any other one-token name, and a `.cell-line`, is cut inside a hyphenated part rather than broken there: the box that draws it (`.cut`, line_breaks._token, value_tags.cell_line) fills a grid track its strut sizes (figures.css), which asks for its whole length and holds out for none, down to `--cut-floor` (tables.css); a link or a line around the name is the grid, its token no box, and an external link's arrow is a column of its own. */
 .data-table td :is(
-  [data-entity]:not(strong > *, .row-gutter > *, .row-gutter > br + .muted > *):has(> .token[data-sole] > .cut .whole),
-  .token[data-sole]:not([data-entity] *, .cell-line *):has(> .cut .whole),
+  [data-entity]:not(strong > *, .row-gutter > *, .row-gutter > br + .muted > *):is(:has(> .token[data-sole] > .cut .whole), td .muted > :has(> .token[data-sole])),
+  .token[data-sole]:not([data-entity] *, .cell-line *, .row-gutter > br + .muted > *):is(:has(> .cut .whole), td .muted > *),
   .cell-line:not(strong > *):has(> :is(.cut, .token[data-sole]))
 ):not(code *, [data-cell~=name] *, [data-cell~=data] *) {
   display: inline-grid; grid-template-columns: minmax(0, max-content); grid-auto-flow: column; grid-auto-columns: max-content;

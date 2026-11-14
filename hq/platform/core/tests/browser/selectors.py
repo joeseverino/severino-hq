@@ -94,19 +94,23 @@ SELECTORS = {
     # panel, the panel and a box in one, a toggle beside them, a heading that
     # sorts on the server, and the results they change: the rows, never the
     # line held beneath one, or the empty state that says nothing matches.
-    "table_search": "[data-table-toolbar] input[type=search]",
-    "table_filter": "[data-table-toolbar] [popovertarget]",
-    "table_filter_panel": "[data-table-toolbar] [popover]",
+    # Never the copy a filter bar's sizer holds, which no one reaches.
+    "table_search": "[data-table-toolbar] input[type=search]:not([inert] *)",
+    "table_filter": "[data-table-toolbar] .table-filter-menu > [popovertarget]",
+    "table_filter_panel": "[data-table-toolbar] .table-filter-menu > [popover]:not([inert] *)",
     "table_filter_box": "input[type=checkbox][name]",
-    "table_toggle": "[data-table-toolbar] .table-toggle input",
+    "table_toggle": "[data-table-toolbar] .table-toggle input:not([inert] *)",
     "table_rows": "main .data-table > tbody > tr:not(.row-detail)",
     # The line beneath a row, with what the row holds back.
     "row_detail": "main .data-table > tbody > tr.row-detail",
     "table_empty": "main [data-empty-state]",
     "sort_link": "main a.table-sort-link",
+    # The Filters control a filter bar folds its choices behind, where its
+    # row has no room for them.
+    "filter_fold": "form.filter-bar .filter-bar-fold",
     # The queue's own filter: a choice of urgency, applied by its button.
     "queue_urgency": "form.filter-bar select[name=status]",
-    "queue_apply": "form.filter-bar button[type=submit]",
+    "queue_apply": "form.filter-bar button[type=submit]:not([inert] *)",
     # The header's menus, a group's button and the links it opens, and on a
     # phone the drawer that holds them.
     "nav_menu": ".primary-nav [data-menu] > [popovertarget]",
