@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/netip"
+	"slices"
 	"strings"
+
+	"github.com/joeseverino/severino-hq/controller/api"
 )
 
 // A confined container's network is a bridge of its own, so its egress table
@@ -49,19 +52,28 @@ var automationEgress = confinement{network: AutomationNetwork, bridge: "hq-autom
 var PublicResolvers = []string{"1.1.1.1", "8.8.8.8"}
 
 // Unroutable is every IPv4 destination the container may not reach through
-// the host: this-network, RFC 1918, the tailnet's CGNAT range, loopback,
-// link-local, and multicast with the reserved range above it. The host's own
-// addresses are the input chain's: a packet bound for one never reaches the
-// forward hook.
-var Unroutable = []string{
-	"0.0.0.0/8",
-	"10.0.0.0/8",
-	"100.64.0.0/10",
-	"127.0.0.0/8",
-	"169.254.0.0/16",
-	"172.16.0.0/12",
-	"192.168.0.0/16",
-	"224.0.0.0/3",
+// the host, in address order: this-network, RFC 1918, the tailnet's IPv4
+// range, loopback, link-local, and multicast with the reserved range above
+// it. The host's own addresses are the input chain's: a packet bound for one
+// never reaches the forward hook.
+var Unroutable = unroutable()
+
+func unroutable() []string {
+	prefixes := []netip.Prefix{}
+	for _, cidr := range []string{"0.0.0.0/8", "10.0.0.0/8", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16", "224.0.0.0/3"} {
+		prefixes = append(prefixes, netip.MustParsePrefix(cidr))
+	}
+	for _, tailnet := range api.MustPrefixes("TailnetRange", "enum") {
+		if tailnet.Addr().Is4() {
+			prefixes = append(prefixes, tailnet)
+		}
+	}
+	slices.SortFunc(prefixes, func(a, b netip.Prefix) int { return a.Addr().Compare(b.Addr()) })
+	cidrs := make([]string, len(prefixes))
+	for i, prefix := range prefixes {
+		cidrs[i] = prefix.String()
+	}
+	return cidrs
 }
 
 // EgressRules is the Renovate run's table as `nft list table` prints it,

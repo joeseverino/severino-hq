@@ -5924,6 +5924,18 @@
           "TLSConsumerKindNPM"
         ]
       },
+      "TailnetRange": {
+        "type": "string",
+        "description": "The address ranges Tailscale numbers a tailnet's devices from.",
+        "enum": [
+          "100.64.0.0/10",
+          "fd7a:115c:a1e0::/48"
+        ],
+        "x-enum-varnames": [
+          "TailnetRangeIPv4",
+          "TailnetRangeIPv6"
+        ]
+      },
       "TailscaleDNSRecord": {
         "properties": {
           "record": {

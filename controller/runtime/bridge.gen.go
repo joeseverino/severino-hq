@@ -1028,6 +1028,24 @@ func (e TLSConsumerKind) Valid() bool {
 	}
 }
 
+// Defines values for TailnetRange.
+const (
+	TailnetRangeIPv4 TailnetRange = "100.64.0.0/10"
+	TailnetRangeIPv6 TailnetRange = "fd7a:115c:a1e0::/48"
+)
+
+// Valid indicates whether the value is a known member of the TailnetRange enum.
+func (e TailnetRange) Valid() bool {
+	switch e {
+	case TailnetRangeIPv4:
+		return true
+	case TailnetRangeIPv6:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for UnpinnedPathKind.
 const (
 	Config    UnpinnedPathKind = "config"
@@ -2484,6 +2502,9 @@ type TLSCertificateName = string
 
 // TLSConsumerKind Where a certificate is served from: the kinds of TLS consumer a certificate spec declares.
 type TLSConsumerKind string
+
+// TailnetRange The address ranges Tailscale numbers a tailnet's devices from.
+type TailnetRange string
 
 // TailscaleDNSRecord One tailscale.dns record: Tailnet DNS.
 type TailscaleDNSRecord struct {

@@ -7,6 +7,7 @@ from typing import Any
 from django.utils.text import capfirst
 from pydantic import Field
 
+from hq.config.networks import TAILNET_RANGES
 from hq.platform.application.ui import ended
 
 from ..connection_shapes import OAUTH_CLIENT
@@ -18,6 +19,7 @@ from ..provider_spec import (
     ControllerVerification,
     ProviderModel,
     ProviderSpec,
+    SharedValue,
     applies,
     expiry_phrase,
 )
@@ -340,6 +342,15 @@ POLICY = ProviderSpec(
         ReadingPart("settings", "Tailnet settings", (Tailscale.FEATURE_SETTINGS_READ,)),
         ReadingPart("dns", "Tailnet DNS", (Tailscale.DNS_READ,)),
         ReadingPart("services", "Tailnet services", (Tailscale.SERVICES_READ,)),
+    ),
+)
+
+SHARED = (
+    SharedValue(
+        "TailnetRange",
+        TAILNET_RANGES,
+        "The address ranges Tailscale numbers a tailnet's devices from.",
+        varnames=("TailnetRangeIPv4", "TailnetRangeIPv6"),
     ),
 )
 

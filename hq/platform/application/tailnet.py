@@ -11,9 +11,9 @@ import json
 import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from ipaddress import ip_address
 from typing import Any
 
+from hq.config.networks import is_loopback
 from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND, TAILNET_POLICY_KIND
 from hq.platform.application.labels import dotted
@@ -693,15 +693,6 @@ def _service_ports() -> tuple[_ServicePort, ...]:
     return tuple(found)
 
 
-def _is_loopback(host: str) -> bool:
-    if host == "localhost":
-        return True
-    try:
-        return ip_address(host).is_loopback
-    except ValueError:
-        return False
-
-
 def _grant_machines(names, known, by_name) -> tuple:
     """The machines a grant's destinations name, through their tailnet devices."""
 
@@ -747,7 +738,7 @@ class _PortNamer:
         for item in self.service_ports:
             if item.port != port:
                 continue
-            here = _is_loopback(item.host) and item.controller.lower() in names
+            here = is_loopback(item.host) and item.controller.lower() in names
             if here or item.ref in refs or item.host in addresses:
                 return item.label
         return ""

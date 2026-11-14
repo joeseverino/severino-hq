@@ -9,9 +9,11 @@ import json
 import re
 from dataclasses import dataclass
 
+from hq.config.networks import is_loopback
+
 from . import connections
 from .projection import projection_scope, read_once
-from .tailnet import _by_name, _grant_machines, _is_loopback, _PortNamer, _service_ports, _ssh_ports, devices, policy
+from .tailnet import _by_name, _grant_machines, _PortNamer, _service_ports, _ssh_ports, devices, policy
 lazy from .containers import containers
 lazy from .hq_self import LISTENS_AT, own_container
 
@@ -113,7 +115,7 @@ def _loopback_port(entry: str, machine, read, own, namer: _PortNamer) -> Loopbac
     if namer.opens(machine, port) or namer.service(machine, port):
         return None
     host, served = LISTENS_AT
-    hq = bool(machine.runs_hq) and port == served and proto in ("", "tcp") and _is_loopback(host)
+    hq = bool(machine.runs_hq) and port == served and proto in ("", "tcp") and is_loopback(host)
     others = [item.runtime for item in read if own is None or item.address != own.address]
     published = _published_on(others, proto, port)
     if published is None:
@@ -133,7 +135,7 @@ def _published_on(runtimes, proto: str, port: int) -> bool | None:
             for binding in runtime.get("port_bindings") or ()
             if str(binding.get("host_port", "")) == str(port) and _same_protocol(proto, binding)
         ]
-        if any(not _is_loopback(str(binding.get("host_ip", "") or "")) for binding in bound):
+        if any(not is_loopback(str(binding.get("host_ip", "") or "")) for binding in bound):
             return None
         published = published or bool(bound)
     return published

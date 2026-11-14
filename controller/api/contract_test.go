@@ -1,6 +1,8 @@
 package api
 
 import (
+	"net/netip"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -42,5 +44,18 @@ func TestKeywordFailsClosed(t *testing.T) {
 	}
 	if limit := MustLimit("AnalyticsRow", "properties", "value", "maxLength"); limit <= 0 {
 		t.Errorf("limit = %d", limit)
+	}
+	if prefixes, err := Prefixes("CaddyRouteInFile", "properties", "domain", "pattern"); err == nil {
+		t.Errorf("a pattern read as the ranges %v", prefixes)
+	}
+	if prefixes, err := Prefixes("TLSConsumerKind", "enum"); err == nil {
+		t.Errorf("names read as the ranges %v", prefixes)
+	}
+}
+
+func TestPrefixesReadsTheTailnetsRanges(t *testing.T) {
+	prefixes := MustPrefixes("TailnetRange", "enum")
+	if !slices.ContainsFunc(prefixes, func(p netip.Prefix) bool { return p.Addr().Is4() }) || !slices.ContainsFunc(prefixes, func(p netip.Prefix) bool { return p.Addr().Is6() }) {
+		t.Errorf("the tailnet's ranges are %v, want an IPv4 and an IPv6 range", prefixes)
 	}
 }

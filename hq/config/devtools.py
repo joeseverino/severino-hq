@@ -11,7 +11,8 @@ suite.
 """
 
 import importlib.util
-from ipaddress import ip_address
+
+from hq.config.networks import is_loopback
 
 DEBUG_TOOLBAR_APP = "debug_toolbar"
 DEBUG_TOOLBAR_MIDDLEWARE = "debug_toolbar.middleware.DebugToolbarMiddleware"
@@ -42,14 +43,3 @@ def scratch_account(*, debug: bool, profile: str, host: str, account: str, testi
     if not debug or profile != "scratch" or testing or not is_loopback(host):
         return ""
     return account
-
-
-def is_loopback(host: str) -> bool:
-    """Whether a server bound to ``host`` answers this machine alone."""
-
-    if host == "localhost":
-        return True
-    try:
-        return ip_address(host).is_loopback
-    except ValueError:
-        return False

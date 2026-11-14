@@ -15,13 +15,12 @@ from ipaddress import IPv6Network, ip_address, ip_network
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from hq.config.networks import TAILNET_RANGES
+
 if TYPE_CHECKING:
     from hq.domains.control_plane.provider_adapters.contracts import IngressPolicy
 
-# Tailscale hands out addresses from the carrier-grade NAT range and one IPv6
-# ULA prefix. Nothing else on a normal network uses either, so an address in
-# them is reachable by tailnet members and by nobody else.
-TAILNET = (ip_network("100.64.0.0/10"), ip_network("fd7a:115c:a1e0::/48"))
+TAILNET = tuple(ip_network(network) for network in TAILNET_RANGES)
 PRIVATE = (
     ip_network("10.0.0.0/8"),
     ip_network("172.16.0.0/12"),

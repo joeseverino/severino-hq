@@ -19,7 +19,7 @@ import socket
 from uvicorn import Config, Server
 from uvicorn.supervisors import ChangeReload
 
-from hq.config.devtools import is_loopback
+from hq.config.networks import is_loopback
 
 APPLICATION = "hq.config.dev_asgi:migrated_application"
 LOOPBACK = ("127.0.0.1", "::1")
