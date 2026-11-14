@@ -898,6 +898,9 @@ def _bound(parsed: BaseModel) -> str:
     """The filters a page was read under, as one digest: every query field but the page's size and cursor."""
 
     terms = parsed.model_dump(mode="json", exclude={"limit", PAGE_FIELD})
+    # A cursor issued before carries this digest of spaced JSON; on digest's
+    # form it would be refused as issued under other filters.
+    # ast-grep-ignore: json-digest-by-digests
     return hashlib.sha256(json.dumps(terms, sort_keys=True).encode()).hexdigest()[:32]
 
 

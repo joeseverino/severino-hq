@@ -26,6 +26,7 @@ from hq.domains.control_plane.providers import OBSERVATION_KINDS, PROVIDERS, rea
 from hq.domains.control_plane.reading_parts import clean_refused_parts, refused_parts
 from hq.platform.application.labels import field_label
 from hq.platform.core.audit import CONNECTION_AUDIT_TYPE, record_event
+from hq.platform.core.digests import canonical
 from hq.platform.core.models import AuditLog
 lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
@@ -453,7 +454,7 @@ def _canonical_document(text: str) -> str:
         parsed = json.loads(stripped)
     except ValueError:
         return text
-    return json.dumps(parsed, sort_keys=True, separators=(",", ":"))
+    return canonical(parsed)
 
 
 def _record_drift(resource: ManagedResource, drift: tuple[tuple[str, str, str], ...]) -> None:

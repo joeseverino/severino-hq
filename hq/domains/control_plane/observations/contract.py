@@ -1,7 +1,5 @@
 """The contract every reading is registered under."""
 
-import hashlib
-import json
 from collections.abc import Callable, Collection, Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -9,6 +7,7 @@ from typing import Annotated, Any
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, PlainSerializer, ValidationError, WithJsonSchema
 
+from hq.platform.core.digests import digest
 lazy from hq.platform.application.json_schemas import json_schema
 lazy from hq.platform.application.timestamps import moment
 
@@ -218,7 +217,7 @@ class ObservationSpec:
         schema = json_schema(self.record)
         names = {*member_names(schema), *(part.name for part in self.parts)}
         held = {"schema": schema, "declared": sorted(names & set(declared))}
-        return hashlib.sha256(json.dumps(held, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        return digest(held)
 
     def clean(self, records: Iterable[Any]) -> tuple[list[dict[str, Any]], int]:
         """The records as the schema admits them, and how many it refused."""

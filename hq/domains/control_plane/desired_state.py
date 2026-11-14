@@ -19,6 +19,10 @@ from .providers import resolve_provider_spec
 
 
 def _canonical(payload: dict[str, Any]) -> bytes:
+    # Stored fingerprints were taken over UTF-8 text, where digest escapes
+    # anything past ASCII, so a resource declared with such text would read
+    # as changed.
+    # ast-grep-ignore: json-digest-by-digests
     return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
 
 

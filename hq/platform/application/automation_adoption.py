@@ -27,7 +27,6 @@ Security properties:
   name no execution field (``automation_manifest._closed``).
 """
 
-import hashlib
 import json
 import re
 from collections import Counter
@@ -57,6 +56,7 @@ from pydantic import (
 )
 
 from hq.domains.control_plane.models import AdoptedCatalog, SourceProposal
+from hq.platform.core.digests import digest
 lazy from hq.platform.core.audit import audit_operation
 
 from . import automation_sources
@@ -611,12 +611,7 @@ class AdoptionPlan:
 
 
 def _digest(procedures: Iterable[AdoptedProcedure]) -> str:
-    material = json.dumps(
-        {"procedures": [procedure.model_dump(mode="json") for procedure in procedures]},
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    return hashlib.sha256(material.encode()).hexdigest()
+    return digest({"procedures": [procedure.model_dump(mode="json") for procedure in procedures]})
 
 
 def _commit_refusals(proposal: SourceProposal) -> list[str]:

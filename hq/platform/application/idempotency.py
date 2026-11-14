@@ -1,7 +1,6 @@
 """Durable replay semantics shared by machine and human command transports."""
 
 import hashlib
-import json
 import re
 from collections.abc import Callable
 from datetime import timedelta
@@ -11,6 +10,7 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
+from hq.platform.core.digests import digest
 from hq.platform.core.models import IdempotencyRecord
 
 from .integration_specs import CURRENT_API_VERSION, IDEMPOTENCY_KEY_LENGTH, IDEMPOTENCY_KEY_PATTERN
@@ -44,13 +44,7 @@ def validate_key(value: str) -> str:
 def request_fingerprint(name: str, envelope: dict[str, Any]) -> str:
     """The request a key was first used for: the capability, its command, target and stale-write token."""
 
-    canonical = json.dumps(
-        {"api_version": CURRENT_API_VERSION, "capability": name, "request": envelope},
-        allow_nan=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("utf-8")
-    return hashlib.sha256(canonical).hexdigest()
+    return digest({"api_version": CURRENT_API_VERSION, "capability": name, "request": envelope})
 
 
 def execute_form_once(

@@ -72,6 +72,9 @@ def item_revision(item: Any) -> str:
     """
 
     seen = ["notice", item.body] if item.notice else [item.status, item.magnitude or 1]
+    # A set-aside revision is stored as this digest of spaced JSON; on
+    # digest's form every item set aside would come back.
+    # ast-grep-ignore: json-digest-by-digests
     return hashlib.sha256(json.dumps(seen).encode()).hexdigest()[:16]
 
 

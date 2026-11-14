@@ -7,8 +7,6 @@ for the kinds that matter most a person has to agree; what a held request may
 and may not do is docs/Security.md#what-hq-enforces.
 """
 
-import hashlib
-import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import timedelta
@@ -22,6 +20,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ApprovalRequest, ManagedResource
 from hq.platform.core.attribution import own_operation
+from hq.platform.core.digests import digest
 lazy from hq.domains.control_plane.providers import record_spec
 lazy from hq.platform.core.models import AuditLog
 
@@ -137,10 +136,6 @@ def _window() -> timedelta:
     return timedelta(hours=hours)
 
 
-def _canonical(value: Any) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
-
-
 def fingerprint(capability: str, target: Any, payload: dict[str, Any], baseline: dict[str, Any]) -> str:
     """One digest over the requested call and the state it was read against.
 
@@ -151,7 +146,7 @@ def fingerprint(capability: str, target: Any, payload: dict[str, Any], baseline:
     approval of an untrue comparison is not an approval of anything.
     """
 
-    material = _canonical(
+    return digest(
         {
             "capability": capability,
             "target": "" if target is None else str(target),
@@ -159,7 +154,6 @@ def fingerprint(capability: str, target: Any, payload: dict[str, Any], baseline:
             "baseline": baseline,
         }
     )
-    return hashlib.sha256(material.encode()).hexdigest()
 
 
 def _baseline_of(resource: ManagedResource) -> dict[str, Any]:

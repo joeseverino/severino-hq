@@ -1,0 +1,41 @@
+# A JSON value's canonical text and its digest are hq/platform/core/digests.py's
+# canonical and digest. Each hand-written copy picks its own separators,
+# escaping and fallback, so two equal values can fingerprint differently, and
+# a fingerprint that is stored stops matching when one copy's bytes move. The
+# copies whose stored bytes differ from digest's are marked where they stand.
+id: json-digest-by-digests
+language: python
+severity: error
+message: A JSON value's canonical text or digest is written by hand.
+note: Call canonical(value) or digest(value) from hq.platform.core.digests.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+  - "tools/**"
+ignores:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/migrations/**"
+  - "hq/platform/core/digests.py"
+rule:
+  pattern: json.dumps($$$)
+  any:
+    # json.dumps(value, sort_keys=True, separators=(",", ":"))
+    - all:
+        - has:
+            field: arguments
+            has:
+              kind: keyword_argument
+              regex: ^sort_keys\s*=\s*True$
+        - has:
+            field: arguments
+            has:
+              kind: keyword_argument
+              regex: ^separators\s*=
+    # hashlib.sha256(json.dumps(value).encode())
+    - inside:
+        stopBy: end
+        kind: call
+        has:
+          field: function
+          regex: ^(hashlib\.)?(sha\d+|blake2[bs]|md5|new)$

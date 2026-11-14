@@ -6,8 +6,6 @@ here. What it binds to, and what its approval is measured against:
 docs/Architecture.md, "Running a playbook".
 """
 
-import hashlib
-import json
 import secrets
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
@@ -22,6 +20,7 @@ from django.utils.text import get_text_list
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StrictStr, create_model
 
 from hq.domains.control_plane.names import is_hostname, normalized_hostname
+from hq.platform.core.digests import digest
 lazy from hq.domains.control_plane.models import (
     ApprovalRequest,
     ManagedResource,
@@ -201,10 +200,6 @@ def command_type(manifest: OperationManifest) -> type[RunCommand]:
     return model
 
 
-def _canonical(value: Any) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
-
-
 def pinned(manifest: OperationManifest) -> dict[str, Any]:
     """The manifest as its record's spec holds it: what a run binds to.
 
@@ -214,14 +209,13 @@ def pinned(manifest: OperationManifest) -> dict[str, Any]:
     offered and nothing of what a run does.
     """
 
-    schema = _canonical(json_schema(manifest.input_type))
     return validate_spec(
         OPERATION_KIND,
         {
             **manifest.model_dump(mode="json", exclude={"id", "input_type", "privilege", "fixes"}),
             "operation": manifest.id,
             "privilege": manifest.privilege or "",
-            "input_schema_sha256": hashlib.sha256(schema.encode()).hexdigest(),
+            "input_schema_sha256": digest(json_schema(manifest.input_type)),
         },
     )
 

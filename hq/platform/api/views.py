@@ -178,7 +178,10 @@ class CapabilityRequestCatalog(TypedDict):
 
 
 def _json(payload: Mapping[str, Any], *, status: int = 200) -> HttpResponse:
+    # A response body, which no fingerprint compares, and which fails on a
+    # value JSON has no form for rather than writing its str.
     response = HttpResponse(
+        # ast-grep-ignore: json-digest-by-digests
         json.dumps(payload, separators=(",", ":"), sort_keys=True),
         content_type="application/json",
         status=status,
