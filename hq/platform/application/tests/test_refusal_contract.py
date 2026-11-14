@@ -10,6 +10,7 @@ from unittest import mock
 
 from django.test import SimpleTestCase, TestCase, tag
 
+from hq.platform.application.tests.reads import reads
 from hq.platform.core.models import AuditLog
 from hq.platform.core.tests import audit_rows
 from hq_sdk.capabilities import StrictCommand
@@ -108,6 +109,14 @@ def codes(*paths: Path) -> list[tuple[str, str]]:
 
 
 @tag("source", "tree")
+@reads(
+    "hq/domains/**/*.py",
+    "hq/platform/api/**/*.py",
+    "hq/platform/application/**/*.py",
+    "hq/platform/mcp/**/*.py",
+    "hq_sdk/**/*.py",
+    lists=("hq/domains/**", "hq/platform/api/**", "hq/platform/application/**", "hq/platform/mcp/**", "hq_sdk/**"),
+)
 class EveryCodeHasAStatusTests(SimpleTestCase):
     def test_every_code_the_application_answers_with_has_a_row(self):
         found = set()

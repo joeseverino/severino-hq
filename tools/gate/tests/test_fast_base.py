@@ -314,7 +314,7 @@ class FastGateFixModeTests(GateTestCase):
 
 
 @tag("source", "tree")
-@reads(".github/**", "mise-tasks/**", "mise*.toml", "mise.lock")
+@reads(".github/**", "controller/go.mod", "mise-tasks/**", "mise*.toml", "mise.lock", "tools/pipeline/toolchain.env")
 class FixFlagPasserTests(GateTestCase):
     def test_only_fast_and_fix_pass_the_fix_flag(self):
         """A fix mode writes the tree, so a run that judges a tree it cannot change (CI's check, its lint job)

@@ -2,12 +2,13 @@
 and the page of its own it is drawn on."""
 
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Literal, override
 from unittest import mock
 
 from django.forms import BaseForm
 from django.template import Context, Template
 from django.template.context import RenderContext
+from django.template.defaulttags import CsrfTokenNode
 from django.template.loader import render_to_string
 from django.test import RequestFactory, override_settings
 from django.utils import timezone
@@ -60,6 +61,7 @@ class Entry:
         with (
             override_settings(**self.settings),
             mock.patch.object(write_tags, "new_key", return_value=EXAMPLE_KEY),
+            mock.patch.object(write_tags, "CsrfTokenNode", _NoToken),
             mock.patch.object(timezone, "now", return_value=DRAWN_AT),
         ):
             head = "" if self.heads_the_page or self.frame else head_of(name)
@@ -83,6 +85,15 @@ def head_of(name):
     """The page head every page draws, titled `name`."""
 
     return render_to_string(HEAD, {"page": Page(title=name)})
+
+
+class _NoToken(CsrfTokenNode):
+    """The CSRF field of a form that may act nowhere: nothing, where Django's
+    own node, given no token, warns that one went missing."""
+
+    @override
+    def render(self, context):
+        return ""
 
 
 class _Asked(Context):

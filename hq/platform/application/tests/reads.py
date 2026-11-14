@@ -14,13 +14,14 @@ name, or asks whether it is there, is in ``lists``, which a change selects the t
 deletes such a file, since an edit leaves every listing as it was.
 
 A program is allowed only where what it reads is known: the walk ``apart``
-runs, held to the same declaration through ``ENVIRONMENT``; ``git
-ls-files``, a listing of every path, so ``lists`` holds ``**``; ``mise
-tasks ls`` or ``info``, which opens mise's config, the task files and each file
-mise.toml names for it; and one started outside the checkout, which reads
-the fixture it was given and opens each path of the checkout it is handed
-(a script). Any other program started in the checkout fails the test. A
-path git ignores is no change fast can see, so it is never checked.
+runs, held to the same declaration through ``ENVIRONMENT``; ast-grep, Vale
+and git as program_reads.py reads them, each by the paths it is handed, a
+directory it walks being a listing of all below it; ``mise tasks ls`` or
+``info``, which opens mise's config, the task files and each file mise.toml
+names for it; and one started outside the checkout, which reads the fixture
+it was given and opens each path of the checkout it is handed (a script).
+Any other program started in the checkout fails the test. A path git
+ignores is no change fast can see, so it is never checked.
 """
 
 import builtins
@@ -41,6 +42,8 @@ from fnmatch import fnmatchcase
 from pathlib import Path, PurePosixPath
 from threading import local
 from typing import Any
+
+from hq.platform.application.tests import program_reads
 
 ROOT = Path(__file__).resolve().parents[4]
 # A copy of the host with no checkout (the extension check's, an image's) has no change for fast to select
@@ -69,9 +72,6 @@ class Reads:
         found nothing there would see come."""
 
         return any(_under(PurePosixPath(pattern).parts, path.parts) for pattern in (*self.opened, *self.listed))
-
-    def lists_everything(self) -> bool:
-        return "**" in (*self.opened, *self.listed)
 
     def selects(self, changed: Iterable[str], listed: Iterable[str]) -> bool:
         """Whether a change reaches what this declares: ``changed`` (each path edited, added or deleted)
@@ -129,29 +129,54 @@ class Watch:
     def __init__(self, declared: Reads):
         self.declared = declared
         self.misses: set[str] = set()
+        self.seen: set[tuple[str, str]] = set()
+
+    def first(self, kind: str, path: Any) -> bool:
+        """Whether this is the first ``kind`` of read of ``path``: a scan stats and opens the same files many
+        times, and an absolute path is judged the same each time."""
+
+        try:
+            text = os.fsdecode(path)
+        except TypeError:
+            return True
+        if not text.startswith(os.sep):
+            return True
+        if (kind, text) in self.seen:
+            return False
+        self.seen.add((kind, text))
+        return True
 
     def listed(self, path: Any) -> None:
-        if (inside := _inside(path)) and not self.declared.lists(inside):
+        if self.first("lists", path) and (inside := _inside(path)) and not self.declared.lists(inside):
             self.misses.add(f"lists {inside}")
 
     def missed(self, path: Any) -> None:
-        if (inside := _inside(path)) and not self.declared.lists_under(inside):
+        if self.first("looks", path) and (inside := _inside(path)) and not self.declared.lists_under(inside):
             self.misses.add(f"looks for {inside}, which an add under it puts there")
 
     def opened(self, path: Any) -> None:
-        if (inside := _inside(path)) and not self.declared.opens(inside):
+        if self.first("opens", path) and (inside := _inside(path)) and not self.declared.opens(inside):
             self.misses.add(f"opens {inside}")
+
+    def walked(self, path: Path) -> None:
+        inside = _inside(path, root=True) if self.first("walks", path) else None
+        if inside is not None and not self.declared.lists_under(inside):
+            self.misses.add(f"walks {inside.as_posix() or 'the checkout'}, which an add under it reaches")
 
     def started(self, argv: list[str], cwd: Any) -> None:
         program, words = PurePosixPath(argv[0]).name, argv[1:]
         if words[:2] == ["-m", APART]:
             return
-        if program == "git" and "ls-files" in words:
-            if not self.declared.lists_everything():
-                self.misses.add("runs a listing of every tracked path: declare lists=('**',)")
-            return
         if words[:1] in (["-C"], ["--cd"]) and len(words) > 1:
             cwd, words = words[1], words[2:]
+        with _unwatched():
+            found = program_reads.handed(program, words, Path.cwd() if cwd is None else Path(os.fsdecode(cwd)))
+        if found is not None:
+            for path in found.opened:
+                self.opened(path)
+            for path in found.walked:
+                self.walked(path)
+            return
         here = cwd is None or _inside(cwd, ignored=False) is not None
         if here and program == "mise" and words[:1] == ["tasks"] and words[1:2] in (["ls"], ["info"]):
             for path in _mise_config():
@@ -276,9 +301,9 @@ def _unwatched() -> Iterator[None]:
         _state.depth -= 1
 
 
-def _inside(path: Any, *, ignored: bool = True) -> PurePosixPath | None:
+def _inside(path: Any, *, ignored: bool = True, root: bool = False) -> PurePosixPath | None:
     """``path`` from the checkout's root, when it lies in the checkout and (with ``ignored``) git does not
-    ignore it."""
+    ignore it; the root itself, as the empty path, only with ``root``."""
 
     if path is None or isinstance(path, int):
         return None
@@ -287,10 +312,12 @@ def _inside(path: Any, *, ignored: bool = True) -> PurePosixPath | None:
         text = posixpath.normpath(Path(os.fsdecode(path)).absolute().as_posix())
     except TypeError:
         return None
-    root = str(ROOT)
-    if text != root and not text.startswith(root + os.sep):
+    top = str(ROOT)
+    if text != top and not text.startswith(top + os.sep):
         return None
-    relative = PurePosixPath(text[len(root) + 1 :])
+    relative = PurePosixPath(text[len(top) + 1 :])
+    if root and not relative.parts:
+        return relative
     # git keeps itself in .git, which it never lists as ignored, and Python's caches appear as the run goes,
     # after the ignored paths were read.
     if ignored and (not relative.parts or relative.parts[0] == ".git" or "__pycache__" in relative.parts):

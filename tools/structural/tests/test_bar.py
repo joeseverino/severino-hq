@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 from django.test import SimpleTestCase, tag
 
+from hq.platform.application.tests.reads import reads
 from hq.platform.core.tests.task import Usage
 from tools.structural import bar, classify
 
@@ -126,6 +127,7 @@ class CompareTests(SimpleTestCase):
 
 
 @tag("source", "tree")
+@reads()
 class CacheTests(SimpleTestCase):
     """The bar reads the graph once per set of inputs, and its verdict is the same either way."""
 

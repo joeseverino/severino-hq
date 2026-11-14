@@ -9,10 +9,12 @@ read from the source, so a new one is found however it is reached.
 import ast
 from pathlib import Path
 
+from django.apps import apps
 from django.test import SimpleTestCase, tag
 
 from hq.platform.application.tests.reads import reads
 from hq.platform.application.tests.source import source_files
+from hq.platform.core.audit import audited_labels
 
 ROOT = Path(__file__).resolve().parents[4]
 CHANGES = frozenset({"CREATED", "UPDATED", "DELETED", "SETTINGS_CHANGED"})
@@ -30,8 +32,6 @@ NOT_A_ROW = {
     ("hq/platform/application/projects.py", "refresh_project"): "the sum of a content sync over many rows",
     ("hq/platform/core/views.py", "DemoModeView.post"): "a switch kept in the session alone",
     ("hq/platform/application/inventory.py", "_record_manages"): "a provider's own setting, as a read found it",
-    ("hq/domains/jobs/runner.py", "_audit"): "how a job ended, never a change",
-    ("hq/platform/application/controller.py", "_settle_run"): "how a run's tasks ended, never a change",
 }
 
 
@@ -122,3 +122,174 @@ def seen():
 """
 
         self.assertEqual([where for where, _action in hand_changes(source)], ["kept", "Settings.post", "ended"])
+
+
+ENDINGS = frozenset({"DONE", "FAILED"})
+
+
+def hand_endings(source: str) -> list[str]:
+    """The enclosing definition of each ``record_event`` call in ``source`` that
+    may write DONE or FAILED about a record (an ``obj``): a piece of work's end,
+    which is ``audit.work_ended``'s alone."""
+
+    found: list[str] = []
+
+    def visit(node: ast.AST, where: tuple[str, ...]) -> None:
+        for child in ast.iter_child_nodes(node):
+            inner = (
+                (*where, child.name)
+                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+                else where
+            )
+            if isinstance(child, ast.Call) and _is_record_event(child.func):
+                named = {keyword.arg: keyword.value for keyword in child.keywords}
+                action = named.get("action")
+                members = _members(action) if action is not None else [None]
+                if "obj" in named and (None in members or ENDINGS.intersection(members)):
+                    found.append(".".join(where))
+            visit(child, inner)
+
+    visit(ast.parse(source), ())
+    return found
+
+
+@tag("source", "tree")
+@reads("hq/**/*.py", "hq_sdk/**/*.py")
+class WorkEndedTests(SimpleTestCase):
+    def test_a_record_s_end_is_written_only_by_work_ended(self):
+        found = [
+            f"{path.relative_to(ROOT).as_posix()}: {where}"
+            for top in ("hq", "hq_sdk")
+            for path in source_files(ROOT / top, "*.py")
+            if "tests" not in path.relative_to(ROOT).parts and path.relative_to(ROOT).as_posix() != WRITER
+            for where in hand_endings(path.read_text(encoding="utf-8"))
+        ]
+
+        self.assertEqual(found, [], "A job's, a run's or a task's end is written by audit.work_ended alone.")
+
+    def test_an_end_about_a_record_is_found_and_an_act_is_not(self):
+        source = """
+def ended(job):
+    record_event(action=AuditLog.Action.DONE, obj=job)
+
+def either(job, ok):
+    record_event(action=AuditLog.Action.DONE if ok else AuditLog.Action.FAILED, obj=job)
+
+def unknown(job, action):
+    record_event(action=action, obj=job)
+
+def refused():
+    record_event(action=AuditLog.Action.FAILED, type_label="Example")
+
+def seen(row):
+    record_event(action=AuditLog.Action.OBSERVED, obj=row)
+"""
+
+        self.assertEqual(hand_endings(source), ["ended", "either", "unknown"])
+
+
+# The one place a capability's handler runs, which writes the act of a write
+# whose handler recorded no row (``capabilities._run``).
+RUNNER = ("hq/platform/application/capabilities.py", "_run")
+
+# Each host model no audit signal watches, and why no change to its rows is a
+# person's change of their own to record, so a write to a model nobody
+# registered is found here rather than passing as an act that changed nothing.
+UNWATCHED = {
+    "analytics.AnalyticsCoverage": "a day a credential read, a reading",
+    "analytics.AnalyticsSite": "a site as the credential reports it, a reading",
+    "analytics.RumDaily": "a day of traffic, a reading",
+    "analytics.VitalsDaily": "a day of web vitals, a reading",
+    "calendars.Preference": "a person arranging their own month, recorded as the capability's act",
+    "control_plane.CertificateMaterial": "beside the sealed secret its upload writes, whose row records it",
+    "control_plane.OperationHost": "an index of the machines a run's input names",
+    "control_plane.ProviderConnection": "an endpoint as a controller reports it, a reading",
+    "control_plane.ProviderInventory": "what a controller read, a reading",
+    "control_plane.RefusedReport": "a call the bridge refused, kept until the next is accepted",
+    "core.ActionItemRead": "where a person has read to, written by hand with its act",
+    "core.AuditLog": "the log itself",
+    "core.IdempotencyRecord": "a retry key's first answer",
+    "core.Pin": "a person's pins, written by hand with its act (NOT_A_ROW)",
+    "core.Revision": "a table's write count, moved by a trigger",
+    "core.UpstreamReading": "a reading, recorded as observed when it changes",
+    "jobs.Job": "a job's one row is its end (audit.work_ended)",
+    "search_index.SearchDocument": "an index derived from the records",
+}
+
+
+def handler_calls(source: str) -> list[str]:
+    """The enclosing definition of each call of a ``handler`` attribute in ``source``."""
+
+    found: list[str] = []
+
+    def visit(node: ast.AST, where: tuple[str, ...]) -> None:
+        for child in ast.iter_child_nodes(node):
+            inner = (
+                (*where, child.name)
+                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+                else where
+            )
+            if isinstance(child, ast.Call) and isinstance(child.func, ast.Attribute) and child.func.attr == "handler":
+                found.append(".".join(where))
+            visit(child, inner)
+
+    visit(ast.parse(source), ())
+    return found
+
+
+@tag("source", "tree")
+@reads("hq/**/*.py", "hq_sdk/**/*.py")
+class CapabilityActTests(SimpleTestCase):
+    def test_a_capability_s_handler_runs_only_where_its_act_is_counted(self):
+        files = [
+            path
+            for top in ("hq", "hq_sdk")
+            for path in source_files(ROOT / top, "*.py")
+            if "tests" not in path.relative_to(ROOT).parts
+        ]
+        self.assertTrue(files, "the walk found no source")
+
+        calls = [
+            (path.relative_to(ROOT).as_posix(), where)
+            for path in files
+            for where in handler_calls(path.read_text(encoding="utf-8"))
+        ]
+
+        self.assertEqual(
+            calls,
+            [RUNNER],
+            "A capability's handler runs only in capabilities._run, which records the act of a write that wrote no row.",
+        )
+
+    def test_a_handler_call_is_found_wherever_it_is_reached(self):
+        source = """
+def run(spec):
+    return spec.handler(command)
+
+class Door:
+    def post(self, found):
+        found.spec.handler(command, principal=None)
+
+def named(handler):
+    handler(command)
+"""
+
+        self.assertEqual(handler_calls(source), ["run", "Door.post"])
+
+
+class WatchedModelTests(SimpleTestCase):
+    def test_every_host_model_is_watched_or_says_why_not(self):
+        watched = audited_labels()
+        unwatched = {
+            model._meta.label
+            for model in apps.get_models()
+            if model.__module__.startswith("hq.") and model not in watched
+        }
+
+        self.assertEqual(
+            sorted(unwatched - set(UNWATCHED)),
+            [],
+            "Register each with register_audit(Model, label) in its app's ready(), so a change to its rows is "
+            "recorded, or name it in UNWATCHED with why no change to it is a person's own.",
+        )
+        self.assertEqual(sorted(set(UNWATCHED) - unwatched), [], "Each listed model is a host model no signal watches.")

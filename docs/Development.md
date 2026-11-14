@@ -403,7 +403,11 @@ The tests it selects are:
   on every change. The declaration holds the class as it runs, as Bazel's
   sandbox holds a test to its declared inputs: an open, a listing, a stat or a program
   that reaches past it fails the test, naming each path, so a declaration that
-  falls short fails in CI's whole run rather than going unselected;
+  falls short fails in CI's whole run rather than going unselected. A program
+  is held by what its own tool says it reads of the paths it is handed
+  (ast-grep's `--inspect entity`, Vale's `ls-config`, the pathspecs of a
+  git listing, in `hq/platform/application/tests/program_reads.py`), and one
+  read nowhere there keeps its test running on every change;
 - the extensions' suites, composed, when `mise.local.toml` names a set and the
   change reaches what extensions render through (`templates/`, `static/`,
   `hq_sdk/`, the shared table, page, UI and moment modules, template tags).
@@ -1056,8 +1060,8 @@ draw an entry apart. `gallery` is every entry on one page, each in a region
 named for it, after a map of its families: the gate holds it to the survey
 each entry alone is held to, so a finding there that no entry has alone is
 one entry disturbing another. HQ's System > Design page frames the same
-gallery as a document of its own, drawn live on a dev server and from the
-image build's copy elsewhere. An entry is answered from memory as a gate page is, with no
+gallery as a document of its own, drawn by a checkout's server from the catalog it runs on each request, and
+read from the image build's copy in the image. An entry is answered from memory as a gate page is, with no
 server or estate behind it, so a look at one entry is the quick way to see a
 change to a shared part, ahead of the catalog's whole browser class. A name that begins entries
 (`part/notice`, `table`) is each of them, in the catalog's order. The gate

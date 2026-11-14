@@ -10,11 +10,14 @@ from unittest import mock
 
 from django.test import SimpleTestCase, override_settings, tag
 
+from hq.platform.application.tests.reads import reads
+
 from . import look, look_report
 from .test_browser_look import ASKED, _git, _repository
 
 
 @tag("source", "tree")
+@reads()
 class WorktreeTests(SimpleTestCase):
     def test_a_report_names_the_commit_it_was_looked_at(self):
         with tempfile.TemporaryDirectory() as folder, override_settings(BASE_DIR=folder):

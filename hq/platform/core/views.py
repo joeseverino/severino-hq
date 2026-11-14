@@ -678,8 +678,8 @@ class DesignView(PageMixin, TemplateView):
     @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        body = design_gallery.document()
-        context["gallery"] = reverse("design_gallery", args=[design_gallery.named(body)]) if body else ""
+        name = design_gallery.located()
+        context["gallery"] = reverse("design_gallery", args=[name]) if name else ""
         return context
 
 
@@ -700,14 +700,15 @@ GALLERY_POLICY = _APPLICATION | {
 def design_gallery_document(_request, digest):
     """The gallery the Design page frames, as a document of its own: its
     examples (their ids, headings, links and forms) are the catalog's, held to
-    the catalog's survey, and never part of the page around them. The address
-    carries the gallery's digest, so a browser may keep it for good."""
+    the catalog's survey, and never part of the page around them. A built
+    gallery's address carries its digest, so a browser may keep it for good;
+    one drawn on each request is asked for again each time."""
 
-    body = design_gallery.document()
-    if body is None or design_gallery.named(body) != digest:
+    body = design_gallery.document(digest)
+    if body is None:
         raise Http404
     response = HttpResponse(body, content_type="text/html; charset=utf-8")
-    response["Cache-Control"] = "private, max-age=31536000, immutable"
+    response["Cache-Control"] = "no-cache" if digest == design_gallery.LIVE else "private, max-age=31536000, immutable"
     return response
 
 

@@ -11,6 +11,8 @@ from pathlib import Path
 
 from django.test import SimpleTestCase, tag
 
+from hq.platform.application.tests.reads import reads
+
 from .facts import TOP, scan
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -42,6 +44,12 @@ def collisions(root: Path, packages: tuple[str, ...]) -> dict[str, list[str]]:
 
 
 @tag("source", "tree")
+@reads(
+    "hq/domains/**/*.py",
+    "hq/platform/application/**/*.py",
+    "hq/platform/core/**/*.py",
+    lists=("hq/domains/**", "hq/platform/application/**", "hq/platform/core/**"),
+)
 class ClassNameTests(SimpleTestCase):
     def test_a_public_class_name_is_defined_once(self):
         found = collisions(REPO_ROOT, ROOTS)

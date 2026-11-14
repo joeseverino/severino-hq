@@ -28,6 +28,7 @@ from hq.domains.control_plane.provider_adapters import caddy
 from hq.domains.control_plane.provider_spec import ConnectionShape, Setting
 from hq.domains.control_plane.providers import OBSERVATION_KINDS, PROVIDERS
 from hq.platform.application.tests.facts import TOP, grouped, scan
+from hq.platform.application.tests.reads import reads
 from hq.platform.core.tests.test_settings_env import REPO_ROOT, subprocess_env
 
 PACKAGE = Path(bridge_contract.__file__).parent
@@ -118,6 +119,7 @@ RULES = {
 
 
 @tag("source", "tree")
+@reads("hq/**/*.py", lists=("hq/**",))
 class WrittenFileTests(SimpleTestCase):
     def test_python_reads_no_fact_back_from_a_file_it_writes(self):
         """Only ``bridge_contract`` names the written files, and only to write them."""

@@ -192,6 +192,7 @@ def _readers(modules: dict[str, _Module]) -> set[Unit]:
 
 
 @tag("source", "tree")
+@reads("hq/platform/application/**/*.py", lists=("hq/platform/application/**",))
 class ReadingItemsCarryTheirAgeTests(SimpleTestCase):
     def test_every_item_built_from_a_stored_reading_carries_observed_at(self):
         """Without it a card cannot say how old its claim is, and an old

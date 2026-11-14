@@ -14,7 +14,7 @@ from django.urls import reverse
 
 from hq.domains.control_plane.bridge_actions import CONTROLLER
 from hq.platform.application.security import CONTROLLER_INTERFACE, MCP_INTERFACE, MCP_OPERATION
-from hq.platform.core.attribution import bound, door_of_its_own, operation_context
+from hq.platform.core.attribution import OperationContext, bound, door_of_its_own, operation_context
 from hq.platform.core.middleware import request_operation
 
 # Where a person's sign-in lands: the identity provider's callback, which
@@ -51,7 +51,9 @@ def controller(action: str) -> AbstractContextManager[None]:
 
     # Of its own, as the bridge's own request is, whoever runs the seed.
     return door_of_its_own(
-        interface=CONTROLLER_INTERFACE, actor=CONTROLLER, operation=f"bridge.{action}", operation_id=uuid7().hex
+        OperationContext(
+            interface=CONTROLLER_INTERFACE, actor=CONTROLLER, operation=f"bridge.{action}", operation_id=uuid7().hex
+        )
     )
 
 

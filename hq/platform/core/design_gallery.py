@@ -4,10 +4,12 @@ The catalog is test code, so it reaches HQ through this module alone (an
 import contract in pyproject.toml holds that). The gallery is the document the
 catalog's survey judges (`catalog.page`), framed by the Design page, so its
 example ids, headings and links stay inside it and never meet a page's rules.
-A dev server draws it live, so a change to a part shows on the next load;
-anywhere else it is the file the image build wrote with `manage.py
-design_gallery`, after the assets were collected, so its asset addresses are
-the image's own.
+The image is the file its build wrote with `manage.py design_gallery` to
+SEVERINO_DESIGN_GALLERY, after the assets were collected, so its asset
+addresses are the image's own, at an address named for its bytes. A checkout
+names no file, whatever DEBUG says, and its server draws the catalog as it
+stands on each request for the gallery, at the address ``LIVE``; the page that
+frames it draws nothing of the catalog's.
 """
 
 import hashlib
@@ -17,6 +19,9 @@ from pathlib import Path
 from django.conf import settings
 
 lazy from hq.platform.core.tests.browser import catalog
+
+# The name of the gallery a server draws on each request, which no digest is.
+LIVE = "live"
 
 
 def drawn() -> bytes:
@@ -33,10 +38,28 @@ def _built(path: Path) -> bytes | None:
         return None
 
 
-def document() -> bytes | None:
-    """The gallery document, or None where no build wrote it."""
+def _named_file() -> Path | None:
+    path = settings.SEVERINO_DESIGN_GALLERY
+    return None if path is None else Path(path)
 
-    return drawn() if settings.DEBUG else _built(Path(settings.SEVERINO_DESIGN_GALLERY))
+
+def located() -> str | None:
+    """The name the Design page frames the gallery at, or None where the
+    build named a file and wrote none there."""
+
+    if (path := _named_file()) is None:
+        return LIVE
+    body = _built(path)
+    return named(body) if body else None
+
+
+def document(name: str) -> bytes | None:
+    """The gallery at ``name``, or None where none answers to it."""
+
+    if (path := _named_file()) is None:
+        return drawn() if name == LIVE else None
+    body = _built(path)
+    return body if body and named(body) == name else None
 
 
 def named(body: bytes) -> str:

@@ -7,6 +7,8 @@ from pathlib import Path
 
 from django.test import SimpleTestCase, tag
 
+from hq.platform.application.tests.reads import reads
+
 from ..connection_lifecycle import UNREPORTED_FACT, UNREPORTED_NODE, Lifecycle
 from .facts import Found, scan
 
@@ -69,6 +71,7 @@ def restated(*paths: Path) -> dict[str, list[str]]:
 
 
 @tag("source", "tree")
+@reads("hq/**/*.py", lists=("hq/**",))
 class LifecycleDeclaredOnceTests(SimpleTestCase):
     def test_no_other_module_lists_lifecycle_states_or_spells_the_unreported_marker(self):
         """A label table or a set of states spelled as strings restates the vocabulary."""

@@ -321,11 +321,7 @@ class SourcesChosen(TypedDict):
 
 @transaction.atomic
 def choose_source(command: SourceChoiceCommand, *, principal: Principal) -> SourcesChosen:
-    """Check or uncheck one source for the signed-in person.
-
-    Not audited: a view preference is the person arranging their own page,
-    not a change to anything HQ holds.
-    """
+    """Check or uncheck one source for the signed-in person."""
 
     user = person(principal)
     if command.source not in {source.id for _group, source in calendar.calendar_sources()}:

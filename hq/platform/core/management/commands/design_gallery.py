@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import override
 
 from django.conf import settings
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 
 from hq.platform.core import design_gallery
 
@@ -16,6 +16,10 @@ class Command(BaseCommand):
 
     @override
     def handle(self, *args, **options):
-        path = options["output"] or Path(settings.SEVERINO_DESIGN_GALLERY)
+        path = options["output"] or settings.SEVERINO_DESIGN_GALLERY
+        if path is None:
+            raise CommandError(
+                "SEVERINO_DESIGN_GALLERY is unset, so this server draws the gallery live; name --output."
+            )
         size = design_gallery.write(path)
         self.stdout.write(f"{path}: {size} bytes")

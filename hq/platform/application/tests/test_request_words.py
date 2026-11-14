@@ -14,6 +14,8 @@ from pathlib import Path
 
 from django.test import SimpleTestCase, tag
 
+from hq.platform.application.tests.reads import reads
+
 from .facts import STRING, scan, strings
 
 APPLICATION = Path(__file__).resolve().parents[1]
@@ -34,6 +36,7 @@ def restated(directory: Path) -> dict[str, list[str]]:
 
 
 @tag("source", "tree")
+@reads("hq/platform/application/request_*.py")
 class RequestWordsTests(SimpleTestCase):
     def test_no_phrase_is_written_in_two_request_modules(self):
         self.assertTrue(list(APPLICATION.glob(MODULES)), f"no {MODULES} in {APPLICATION}")

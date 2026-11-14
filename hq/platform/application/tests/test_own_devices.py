@@ -9,7 +9,7 @@ from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog, OwnDevice
 
-from ..capabilities import execute_capability
+from ..capabilities import CAPABILITY_AUDIT_TYPE, execute_capability
 from ..linked_accounts import bind_sign_in, sign_in_subject
 from ..own_devices import SET_OWN_DEVICE, registered
 from ..security import Capability, Principal, cli_principal, web_principal
@@ -49,7 +49,12 @@ class RegistrationTests(TestCase):
         self._set(state=False)
 
         self.assertFalse(registered(PHONE, self.key))
-        events = AuditLog.objects.filter(metadata__operation=SET_OWN_DEVICE).order_by("id")
+        # The changes, apart from the act of a repeat that changed nothing.
+        events = (
+            AuditLog.objects.filter(metadata__operation=SET_OWN_DEVICE)
+            .exclude(object_type=CAPABILITY_AUDIT_TYPE)
+            .order_by("id")
+        )
         self.assertEqual([event.action for event in events], [AuditLog.Action.CREATED, AuditLog.Action.DELETED])
         self.assertEqual({event.actor_label for event in events}, {self.person.get_username()})
 

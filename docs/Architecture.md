@@ -771,7 +771,8 @@ The security design is in [Security](Security.md). Inside the core:
 - services revalidate every input and own their transactional writes;
 - restricted documentation is removed from AI-facing results;
 - every success leaves an attributed audit event, and every refusal a `Denied`
-  one.
+  one: a write whose handler recorded no row of its own leaves the act of
+  running it (`capabilities._run`).
 
 The `hq` CLI reaches HQ through the authenticated MCP endpoint. In-process
 management commands are break-glass recovery, not a second transport.
@@ -997,7 +998,9 @@ reporting reads "Stopped early" before HQ ends it and after. A run's report writ
 playbook's record: a `status` is refused. Its `events` land on the run's
 result: each task's outcome on one machine, bounded by the contract's
 `RunEvent` and struck of secrets at the bridge's door. Each changed or failed
-one is an audit row under the run's own id that leads back to the ask.
+one is an audit row under the run's own id that leads back to the ask, and
+the run's end is one DONE or FAILED row (`audit.work_ended`), as a job's is,
+never a change to its record's state.
 
 A provider's declaration is Django's. Its controller half is Go, in
 `controller/providers/`: one file set per integration, each registering its
