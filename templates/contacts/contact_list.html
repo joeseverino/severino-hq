@@ -12,10 +12,7 @@
   {% endfor %}
 {% endswitch %}
 
-{% filter_bar filtered=q clear=search_cleared shown=submissions|length total=status_total %}
-  <input type="search" name="q" value="{{ q }}" placeholder="Filter by name, email, or message" aria-label="Filter by name, email, or message">
-  {% if selected_status %}<input type="hidden" name="status" value="{{ selected_status }}">{% endif %}
-{% endfilter_bar %}
+{% filter_bar search="Filter by name, email, or message" query=q keep=status_kept filtered=q clear=search_cleared shown=submissions|length total=status_total %}{% endfilter_bar %}
 
 {% comment %}With nothing received, one sentence says so; the tabs, the count and an empty table would say it three more times.{% endcomment %}
 {% if not total_count and not q %}

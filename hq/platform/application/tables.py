@@ -400,6 +400,11 @@ class TableListMixin:
             "search_placeholder": self.table_search_placeholder,
             "filters": filters,
             "sorts": self.get_table_sorts(),
+            # A search adds the order that ranks by how well each row matches.
+            "sort_choices": [
+                *([("_relevance", "Relevance")] if query else []),
+                *((spec.value, spec.label) for spec in self.get_table_sorts()),
+            ],
             "selected_sort": (
                 "_relevance"
                 if query and self.request.GET.get("sort") in (None, "_relevance")

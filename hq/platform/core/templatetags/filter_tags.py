@@ -1,6 +1,6 @@
 """The filter bar: every query a page asks of what it lists, in one bar.
 
-``{% filter_bar filtered=narrowed clear=every_url shown=3 total=12 %}<input type="search" name="q">{% choices %}{% select "kind" kinds every="kind" %}{% endfilter_bar %}``
+``{% filter_bar search="Filter by name" query=q filtered=narrowed clear=every_url shown=3 total=12 %}{% choices %}{% select "kind" kinds every="kind" %}{% endfilter_bar %}``
 draws ``partials/_filter_bar.html``. A list's table toolbar is the same bar
 (``partials/_table_toolbar.html``), never a second one.
 """
@@ -50,6 +50,10 @@ def filter_bar_frame(name: str, given: dict) -> dict:
         "held": held,
         "more": given.get("more") if held else "",
         "named": given.get("id") or "",
+        "search": given.get("search") or "",
+        "query": given.get("query") or "",
+        "autofocus": bool(given.get("autofocus")),
+        "kept": tuple((field, value) for field, value in (given.get("keep") or {}).items() if value not in (None, "")),
         "data": html_attributes(
             {option.replace("_", "-"): value for option, value in given.items() if option.startswith("data_")}
         ),
@@ -60,7 +64,24 @@ slotted(
     "filter_bar",
     FILTER_BAR_PARTIAL,
     ("content", "choices", "summary"),
-    frozenset(("filtered", "clear", "verb", "action", "css", "shown", "total", "held", "more", "id")),
+    frozenset(
+        (
+            "filtered",
+            "clear",
+            "verb",
+            "action",
+            "css",
+            "shown",
+            "total",
+            "held",
+            "more",
+            "id",
+            "search",
+            "query",
+            "keep",
+            "autofocus",
+        )
+    ),
     shape=filter_bar_frame,
     library=register,
 )

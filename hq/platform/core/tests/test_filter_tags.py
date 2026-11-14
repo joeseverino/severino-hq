@@ -110,6 +110,29 @@ class FilterBarTagTests(SimpleTestCase):
         with self.assertRaises(TemplateSyntaxError):
             Template('{% filter_bar label="Example" %}{% endfilter_bar %}')
 
+    def test_its_search_is_drawn_first_and_the_query_s_other_fields_are_sent_again(self):
+        html = _render(
+            '{% filter_bar search="Filter by name" query=q keep=kept autofocus=True %}{% choices %}'
+            '{% select "kind" kinds label="Kind" every="kind" %}{% endfilter_bar %}',
+            q="example",
+            kept={"about": "example.host", "status": ""},
+            kinds=(("host", "Example host"),),
+        )
+
+        (search, *sized) = [field for field in elements(html, "input") if field.attrs.get("type") == "search"]
+        self.assertEqual((search.attrs["name"], search.attrs["value"]), ("q", "example"))
+        self.assertEqual((search.attrs["placeholder"], search.attrs["aria-label"]), ("Filter by name",) * 2)
+        self.assertIn("autofocus", search.attrs)
+        self.assertTrue(all("name" not in copy.attrs for copy in sized), "the sizer's copy sends nothing")
+        (controls, *_) = with_class(html, "filter-bar-controls")
+        self.assertIn(controls, search.ancestors)
+        kept = [
+            (field.attrs["name"], field.attrs["value"])
+            for field in elements(html, "input")
+            if field.attrs.get("type") == "hidden"
+        ]
+        self.assertEqual(kept, [("about", "example.host")], "a field with no value is not sent")
+
 
 class FilterBarFoldTests(SimpleTestCase):
     """The choices beside a search fold behind one Filters control."""
@@ -298,9 +321,7 @@ class FilterBarCatalogTests(SimpleTestCase):
 # What a filter bar's controls and summary may not say for themselves.
 _BAR = re.compile(r"\{% filter_bar(?P<options>.*?)%\}(?P<body>.*?)\{% endfilter_bar %\}", re.DOTALL)
 _COMMENT = re.compile(r"\{% comment %\}.*?\{% endcomment %\}", re.DOTALL)
-_EMPTY_OPTION = re.compile(r"<option(?![^>]*\bvalue=)[^>]*>|<option[^>]*\bvalue=(?:\"\"|'')")
 _A_COUNT = re.compile(r"\b(?:of|shown)\b")
-_CONTROL = re.compile(r"\{% select |<select\b|_toggle_set\.html|table-filter-menu|table-toggle")
 # Its count is its pager's, which the list's table draws under it.
 _COUNTED_BY_ITS_PAGER = frozenset({"partials/_table_toolbar.html"})
 
@@ -310,19 +331,12 @@ def filter_bar_faults(name: str, source: str) -> list[str]:
 
     faults = []
     for bar in _BAR.finditer(_COMMENT.sub("", source)):
-        controls, _, summary = bar["body"].partition("{% summary %}")
-        content, _, choices = controls.partition("{% choices %}")
+        _, _, summary = bar["body"].partition("{% summary %}")
         options = bar["options"]
-        if _EMPTY_OPTION.search(controls):
-            faults.append(f"{name}: an empty option written by hand; give its select every=")
         if _A_COUNT.search(re.sub(r"\{.*?\}", "", summary, flags=re.DOTALL)):
             faults.append(f"{name}: a count written in the summary; give the bar shown= and total=")
         if "filtered=" in options and "shown=" not in options and name not in _COUNTED_BY_ITS_PAGER:
             faults.append(f"{name}: a bar that narrows says how many it shows; give it shown= and total=")
-        if re.search(r'type="search"', content) and _CONTROL.search(content):
-            faults.append(f"{name}: the search comes first, then {{% choices %}} and the selects and toggles")
-        if re.search(r'type="search"', choices):
-            faults.append(f"{name}: the search comes before {{% choices %}}, which fold beside it")
     return faults
 
 
@@ -331,19 +345,15 @@ class FilterBarFaultTests(SimpleTestCase):
 
     def test_a_bar_that_says_for_itself_what_the_part_says_is_refused(self):
         for source in (
-            '{% filter_bar %}<select name="k"><option value="">All kinds</option></select>{% endfilter_bar %}',
-            '{% filter_bar %}<input name="q">{% summary %}{{ n }} of {{ m }}{% endfilter_bar %}',
-            '{% filter_bar filtered=x clear=y %}<input name="q">{% endfilter_bar %}',
-            '{% filter_bar %}{% select "k" kinds %}<input type="search">{% endfilter_bar %}',
-            '{% filter_bar %}<input type="search">{% select "k" kinds %}{% endfilter_bar %}',
-            '{% filter_bar %}{% choices %}<input type="search">{% select "k" kinds %}{% endfilter_bar %}',
+            '{% filter_bar search="Find" %}{% summary %}{{ n }} of {{ m }}{% endfilter_bar %}',
+            '{% filter_bar search="Find" filtered=x clear=y %}{% endfilter_bar %}',
         ):
             with self.subTest(source=source):
                 self.assertEqual(len(filter_bar_faults("example.html", source)), 1)
 
     def test_a_bar_through_the_part_passes(self):
         source = (
-            '{% filter_bar filtered=x clear=y shown=n total=m %}<input type="search">{% choices %}'
+            '{% filter_bar search="Find" filtered=x clear=y shown=n total=m %}{% choices %}'
             '{% select "k" kinds every="kind" %}{% summary %}{{ k|counted:"needs a look,need a look" }}.'
             "{% endfilter_bar %}"
         )
@@ -354,7 +364,7 @@ class FilterBarFaultTests(SimpleTestCase):
 @tag("source", "tree")
 @reads("**/templates/**")
 class FilterBarUseTests(SimpleTestCase):
-    def test_every_filter_bar_says_its_count_and_its_empty_choice_through_the_part(self):
+    def test_every_filter_bar_says_its_count_through_the_part(self):
         """Every bar reads the same: the search first and the choices beside
         it in {% choices %}, which fold where the row has no room, an empty choice only
         as "Any" from every=, and the count, what is held back and the link

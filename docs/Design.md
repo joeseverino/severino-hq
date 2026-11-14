@@ -933,7 +933,9 @@ takes the whole screen on a phone.
 
 **One filter bar.** `{% filter_bar filtered=... clear=... shown=... total=...
 %}` draws the page's controls in one order: the search, then its selects, then
-its toggles. Then come one Filter (or the bar's own `verb=` for a bar that asks
+its toggles. The search is the bar's own: `search=` the words it is named by and
+shows empty, `query=` what was asked, sent as `q`, and `autofocus=True` where
+it is the page's first act. Then come one Filter (or the bar's own `verb=` for a bar that asks
 a question rather than narrows a list), Clear filters back to `clear` when
 anything is set, and the summary at the row's end. A bar with a search puts
 what follows it after `{% choices %}`: those choices, with the button that
@@ -965,7 +967,8 @@ and the part leads it with "Any type", which claims no total, so no summary
 contradicts it. A select that picks a view or an order (the map's View, a
 table's Sort) offers only named choices. Its default is named for what it shows
 ("Main lanes"), never Any or All. The empty option comes only from `every=`. A
-state no control holds travels as a hidden input. The search takes the line's
+state no control holds is the bar's `keep=`, the query's other fields as the
+view hands them, each sent again while it has a value. The search takes the line's
 room; every other control is as wide as what it says, a select its longest
 option. No chip walls: a set of on-or-off choices is
 `partials/_toggle_set.html`, checkboxes in a row of their own words under one
@@ -977,16 +980,16 @@ control's visible name is `{% control_label "From" control="id" %}`, the
 A choice of one drawn from data is `{% select "rule" choices chosen=rule
 label="What it sets" tone=tone %}`: an option for each `(value, words)`, the
 chosen one selected, `id` the one a control label names it by, and with no
-visible label `label` the name a reader hears (a table cell's setting). `tone`
+visible label `label` the name a reader hears (a table cell's setting). A value
+alone is its own words (a year, a port), and `submit_on_change=True` sends the
+form as the choice changes, for a bar whose one choice is its whole query. `tone`
 says the choice in a status tone, the status part's ink, edged in it unless
 neutral, as an agent's rule reads "On" in the good tone and "Off" in the
-serious one. *Gate:* the `hand-drawn-filter-bar` rule refuses `.filter-bar`
-written by hand, and a query form of a page's own (`method="get"`) that holds a
-select. `test_filter_tags.FilterBarUseTests` reads every `{%
-filter_bar %}` in the templates. It refuses an empty option written by hand,
-`every=` on a view or an order, a count written in the summary, a narrowing bar
-with no count, a control beside a search outside `{% choices %}`, and a search
-inside it.
+serious one. *Gate:* the `hand-drawn-filter-bar` rule refuses `.filter-bar`, a
+search field and a select written by hand, outside the parts that draw them.
+`test_filter_tags.FilterBarUseTests` reads every `{% filter_bar %}` in the
+templates. It refuses a count written in the summary and a narrowing bar with
+no count.
 
 **One switch.** `{% switch label=... %}{% choice url=... current=... %}...{% endchoice %}{% summary %}...{% endswitch %}`
 (`switch_tags.py`, drawn by `partials/_switch.html`): a row of links to the

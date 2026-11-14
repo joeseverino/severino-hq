@@ -3,8 +3,7 @@
 {% comment %}The palette's results: the part this page answers to the header's search.{% endcomment %}
 {% partialdef palette %}{% include "partials/_command_center.html#results" %}{% endpartialdef %}
 {% comment %}The count sits in the bar that asked for it.{% endcomment %}
-{% filter_bar verb="Search" data_table_toolbar=True %}
-  <input type="search" name="q" value="{{ q }}" placeholder="Find anything" aria-label="Find anything" autofocus>
+{% filter_bar search="Find anything" query=q autofocus=True verb="Search" data_table_toolbar=True %}
 {% summary %}{% if total %}{{ total|counted:"record" }} for <strong>{{ q|breakable }}</strong>{% endif %}
 {% endfilter_bar %}
 

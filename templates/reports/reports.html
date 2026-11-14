@@ -1,12 +1,6 @@
 {% extends "page.html" %}
 {% block page %}
-{% filter_bar %}
-  <select name="year" aria-label="Year" data-submit-on-change>
-    {% for y in available_years %}
-      <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>
-    {% endfor %}
-  </select>
-{% endfilter_bar %}
+{% filter_bar %}{% select "year" available_years chosen=year label="Year" submit_on_change=True %}{% endfilter_bar %}
 
 {% include "partials/_kpi_grid.html" with items=figures only %}
 

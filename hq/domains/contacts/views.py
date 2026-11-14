@@ -100,6 +100,7 @@ def contact_list(request):
             ],
             "status_tabs": status_tabs,
             "selected_status": selected_status,
+            "status_kept": {"status": selected_status},
             "q": q,
             # The search cleared, on the tab it was asked on.
             "search_cleared": reverse("contacts:list") + (f"?status={selected_status}" if selected_status else ""),

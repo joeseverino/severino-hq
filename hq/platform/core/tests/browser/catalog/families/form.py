@@ -156,18 +156,20 @@ ENTRIES = {
     # labeled choices asking another page, its verb its own. A new option of
     # the tag comes with an entry here (test_filter_tags).
     "form/filter-bar": Entry(
-        '{% filter_bar filtered=True clear="#" shown=3 total=12 %}'
-        '<input type="search" name="q" value="example" placeholder="Filter example records" '
-        'aria-label="Filter example records">'
+        '{% filter_bar search="Filter example records" query="example" keep=kept autofocus=True filtered=True '
+        'clear="#" shown=3 total=12 %}'
         "{% choices %}"
         '{% select "state" states chosen="on" label="Example state" every="example state" %}'
         '{% select "kind" kinds label="Example kind" every="example kind" %}'
         "{% summary %}1 needs a look.{% endfilter_bar %}",
-        {"states": (("on", "Online"), ("off", "Offline")), "kinds": (("host", "Example host"),)},
+        {
+            "states": (("on", "Online"), ("off", "Offline")),
+            "kinds": (("host", "Example host"),),
+            "kept": {"about": "example.host"},
+        },
     ),
     "form/filter-bar-held": Entry(
-        '{% filter_bar id="example-held" shown=93 total=170 held=held more="#" %}'
-        '<input type="search" placeholder="Find an example" aria-label="Find an example">{% choices %}'
+        '{% filter_bar search="Find an example" id="example-held" shown=93 total=170 held=held more="#" %}{% choices %}'
         '{% select "view" views label="Example view" %}{% endfilter_bar %}',
         {
             "views": (("", "Example main view"), ("everything", "Everything")),
@@ -175,22 +177,24 @@ ENTRIES = {
         },
     ),
     "form/filter-bar-one": Entry(
-        '{% filter_bar %}<select name="year" aria-label="Example year"><option>2026</option>'
-        "<option>2025</option></select>{% endfilter_bar %}"
+        '{% filter_bar %}{% select "year" years chosen=2026 label="Example year" submit_on_change=True %}'
+        "{% endfilter_bar %}",
+        {"years": (2026, 2025)},
     ),
     "form/filter-bar-labeled": Entry(
         '{% filter_bar verb="Check" action="#" css="example" data_example="example" %}'
         '{% control_label "From" control="example-from" %}'
-        '<select id="example-from" name="from"><option>example-host-01</option></select>'
+        '{% select "from" from_hosts id="example-from" %}'
         '{% control_label "To" control="example-to" %}'
-        '<select id="example-to" name="to"><option>example-host-02</option></select>'
-        "{% endfilter_bar %}"
+        '{% select "to" to_hosts id="example-to" %}'
+        "{% endfilter_bar %}",
+        {"from_hosts": ("example-host-01",), "to_hosts": ("example-host-02",)},
     ),
     # A set of toggles in a filter bar, some on and some off, enough of them
     # to wrap in a narrow bar, and a control a script shows only once it has
     # something to act on.
     "form/filter-bar-toggles": Entry(
-        '{% filter_bar shown=12 total=12 %}<input type="search" placeholder="Find an example" aria-label="Find an example">{% choices %}'
+        '{% filter_bar search="Find an example" shown=12 total=12 %}{% choices %}'
         '{% include "partials/_toggle_set.html" with legend="Example kinds" set="kind" name="kind" toggles=toggles only %}'
         '<button class="btn ghost compact" type="button" hidden>Example clear</button>'
         "{% endfilter_bar %}",
@@ -216,6 +220,7 @@ ENTRIES = {
                     for number in range(1, 5)
                 ),
                 "sorts": ({"value": "name", "label": "Name"}, {"value": "updated", "label": "Last updated"}),
+                "sort_choices": (("name", "Name"), ("updated", "Last updated")),
                 "selected_sort": "name",
                 "active_count": 0,
             }

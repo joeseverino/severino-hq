@@ -83,6 +83,7 @@ class ActionItemsView(PageMixin, TemplateView):
             action_status=status,
             action_source=source,
             action_about=about,
+            action_kept={"about": about},
             action_filtered=bool(query or status or source or about),
         )
         return context
