@@ -47,8 +47,10 @@ class AuditTaskTests(SimpleTestCase):
                 if name not in UNSANDBOXED:
                     self.assertEqual(own.get("extends"), "audit")
                 self.assertEqual(own.get("allow_write", []), ALSO_WRITES.get(name, []))
-                # mise runs a dependency outside the task's sandbox.
-                self.assertEqual([each for each in task["depends"] if not each.startswith("setup:")], [])
+                # mise runs a dependency outside the task's sandbox. One given
+                # arguments is listed as its name and then them.
+                names = [each if isinstance(each, str) else each[0] for each in task["depends"]]
+                self.assertEqual([name for name in names if not name.startswith("setup:")], [])
                 self.assertTrue(task["hide"], "an audit task is left out of `mise tasks`")
 
     def test_every_path_a_sandboxed_audit_may_write_is_made_before_it_runs(self) -> None:

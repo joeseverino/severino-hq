@@ -21,6 +21,16 @@ rest fill them. Inside a layer a later sheet wins a tie, so a sheet is added
 to the list where its rules belong in the cascade, and every check of the
 stylesheet reads it through that list.
 
+**Browsers.** HQ's floor is the current and the previous release of each
+engine: Safari (on the Mac and on iOS), Chromium and Firefox, read from
+browser-compat-data's release dates as the package moves, never written as
+numbers (`tools/lint/browser-floor.mjs`). A feature newer than the floor is
+written inside `@supports`, or named in the browser floor rule's `degrades`
+(`tools/lint/stylelint.config.mjs`) with what an engine without it draws;
+`lint:css` refuses one written any other way. `mise run audit:bcd` says what
+the floor has, and `mise run audit:supports` what the gates' own engines
+answer.
+
 Each rule names its gate where one enforces it. A lower-case gate without
 `test_` is a rule of `LayoutBrowserTests` (`hq/platform/core/tests/browser/layout.py`), held on
 every page at every width it applies to, each a subtest named for the rule,

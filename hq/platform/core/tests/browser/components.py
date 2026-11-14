@@ -31,7 +31,7 @@ from hq.platform.core.tests.browser.probes.parts import (
     WRAPPED,
     reading_problems,
 )
-from hq.platform.core.tests.browser.probes.settle import KEPT_SELECTORS, PRESS_EVERY_SHOWN, SETTLE
+from hq.platform.core.tests.browser.probes.settle import KEPT_SELECTORS, PRESS_EVERY_SHOWN, SETTLE, UNSUPPORTED
 from hq.platform.core.tests.browser.probes.shifts import CLS_LIMIT, LAYOUT_SHIFTS
 from hq.platform.core.tests.browser.probes.tables import (
     BLANK_TABLE,
@@ -77,12 +77,16 @@ from hq.platform.core.tests.browser.widths import NARROWEST, PHONE_SCREEN, TARGE
 from hq.platform.core.tests.test_browser_fixtures import PAGES
 
 
-def authored_selectors(css: str) -> list[str]:
+def authored_selectors(css: str) -> list[tuple[str, tuple[str, ...]]]:
     """Every style rule's selector as the stylesheet writes it, nested rules
-    included: the text before each ``{`` that does not open an at-rule."""
+    included: the text before each ``{`` that does not open an at-rule. Each
+    comes with the condition of every ``@supports`` around it that asks for a
+    selector, the guard a selector newer than some engine is written behind."""
 
     css = re.sub(r"/\*.*?\*/", "", css, flags=re.DOTALL)
-    found, start, quote = [], 0, ""
+    found: list[tuple[str, tuple[str, ...]]] = []
+    blocks: list[str] = []
+    start, quote = 0, ""
     for at, char in enumerate(css):
         if quote:
             quote = "" if char == quote else quote
@@ -93,7 +97,13 @@ def authored_selectors(css: str) -> list[str]:
                 header = css[start:at].strip()
                 # A keyframe's step is not a selector.
                 if header and not header.startswith("@") and not re.fullmatch(r"[\d.%,\s]+|from|to", header):
-                    found.append(header)
+                    conditions = (
+                        block.removeprefix("@supports").strip() for block in blocks if block.startswith("@supports")
+                    )
+                    found.append((header, tuple(condition for condition in conditions if "selector(" in condition)))
+                blocks.append(header)
+            elif char == "}" and blocks:
+                blocks.pop()
             start = at + 1
     return found
 
@@ -1405,19 +1415,26 @@ class ComponentLayoutTests(LayoutBrowserTests):
     def test_every_selector_parses(self):
         """Every rule the stylesheet writes is one the engine keeps, but for
         another engine's own part (``::-moz-progress-bar`` in WebKit) in a
-        rule of its own: an engine drops a whole rule whose list names a part
-        it does not know, so such a part shares its rule with nothing."""
+        rule of its own, and a rule behind an ``@supports selector(…)`` the
+        engine says it lacks: an engine drops a whole rule whose list names a
+        part it does not know, so such a part shares its rule with nothing,
+        and a selector newer than the engine waits behind its guard."""
 
         authored = authored_selectors(stylesheet())
         self.open(next(iter(PAGES)), WIDTHS[-1])
         kept = {_plain_selector(selector) for selector in self.page.evaluate(KEPT_SELECTORS, f"/{DIRECTORY}/")}
+        lacked = set(self.page.evaluate(UNSUPPORTED, sorted({each for _, guards in authored for each in guards})))
         own = "-moz-" if self.browser.browser_type.name == "firefox" else "-webkit-"
 
         def anothers_part_alone(selector):
             parts = set(re.findall(r"::(-(?:moz|webkit)-)", selector))
             return bool(parts) and own not in parts and not _top_level_comma(selector)
 
-        dropped = [selector for selector in authored if _plain_selector(selector) not in kept]
+        dropped = [
+            selector
+            for selector, guards in authored
+            if _plain_selector(selector) not in kept and not lacked.intersection(guards)
+        ]
         self.assertEqual([selector for selector in dropped if not anothers_part_alone(selector)], [])
 
     def test_a_share_fills_its_row_from_edge_to_edge(self):

@@ -24,11 +24,18 @@ KEPT_SELECTORS = """(directory) => {
   return found;
 }"""
 
+# The `@supports` conditions given that the engine says it lacks.
+UNSUPPORTED = "(conditions) => conditions.filter((condition) => !CSS.supports(condition))"
+
 # A frame has been drawn and nothing is moving.
 PAINTED = "() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))"
 
+# An endless animation never ends, and one on a timeline other than the
+# document's (scroll() or view()) moves only as the reader scrolls, so
+# neither is waited for.
 STILL = """() => document.getAnimations()
-  .every((motion) => motion.playState !== 'running' || motion.effect?.getComputedTiming().iterations === Infinity)"""
+  .every((motion) => motion.playState !== 'running' || motion.timeline !== document.timeline
+    || motion.effect?.getComputedTiming().iterations === Infinity)"""
 
 SETTLE = "() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))"
 

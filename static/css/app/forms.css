@@ -414,6 +414,7 @@ select.toned:not(.toned-neutral) { border-color: currentColor; }
   padding: var(--space-2) var(--space-5);
   white-space: pre-wrap;
   overflow-wrap: break-word;
+  -webkit-user-select: all;
   user-select: all;
   font-size: var(--text-xs);
 }

@@ -473,6 +473,7 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
   box-shadow: none;
   color: var(--muted);
   line-height: inherit;
+  -webkit-user-select: none;
   user-select: none;
   transition: background .12s ease, color .12s ease;
 }

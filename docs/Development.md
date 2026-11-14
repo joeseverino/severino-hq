@@ -92,7 +92,8 @@ write as they measure, so they run outside it. A `.venv` out of sync with
 | `audit:image [image]` | a built image's layers (size, instruction, the parts of HQ each holds), what a container sees by part, site-packages' largest, and dive's wasted bytes | `mise run audit:image severino-hq:ci-local` |
 | `audit:ci-timings <run>...` | where CI runs' time went, each job's end lag included | `mise run audit:ci-timings 41175916328` |
 | `audit:docs-readability` | each doc's Flesch-Kincaid grade, prose words, and longest paragraph and sentence, longest paragraph first (`tools/lint/vale/audit.ini`) | `mise run audit:docs-readability` |
-| `audit:bcd <feature>...` | each browser's first supporting version, from browser-compat-data, Safari first | `mise run audit:bcd css.properties.container-type` |
+| `audit:bcd [feature]...` | each browser's first supporting version, from browser-compat-data, Safari first, and whether the browser floor (docs/Design.md, Browsers) has it; with none, every place the stylesheet writes a feature newer than the floor | `mise run audit:bcd css.properties.container-type` |
+| `audit:supports <engine> <condition>...` | what the browser gates' own WebKit and Chromium answer to `CSS.supports`, one line per engine per condition; reach for it over `audit:bcd` to know what the gates draw, since their WebKit is ahead of every Safari release | `mise run audit:supports gates 'selector(:heading)' 'color: alpha(from red / 50%)'` |
 
 A path or glob narrows a count, and `!glob` leaves files out, so
 `mise run audit:ruff SLF001 '!**/tests/**'` and

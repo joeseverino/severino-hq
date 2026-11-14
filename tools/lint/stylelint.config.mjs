@@ -178,6 +178,7 @@ export default {
   plugins: [
     "./stylelint-ground-cover.mjs",
     "./stylelint-restyled-primitive.mjs",
+    "./stylelint-browser-floor.mjs",
   ],
   // The app sheets share one set of tokens, so a property one sheet reads may
   // be defined in another.
@@ -188,6 +189,17 @@ export default {
   reportNeedlessDisables: true,
   rules: {
     "hq/ground-cover": true,
+    // A feature newer than the browser floor (docs/Design.md, "Browsers") is
+    // written inside @supports, or named here with what an engine without it
+    // draws instead.
+    "hq/browser-floor": {
+      degrades: {
+        "css.properties.text-wrap.pretty": "the engine's own line breaks",
+        "css.properties.baseline-source": "the last line's baseline, and a row-columns pair set by its top (tables.css)",
+        "css.at-rules.view-transition": "a navigation with no cross-fade",
+        "css.properties.break-after.avoid": "a printed heading that may end a page",
+      },
+    },
     // Any other sheet draws none.
     "hq/restyled-primitive": { primitives },
     // CSS resolves an undefined custom property to an invalid value without

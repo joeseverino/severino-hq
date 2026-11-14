@@ -217,7 +217,7 @@ jobs:
     # guide runs it: the runner's user, which owns the workspace, and the
     # host's IPC namespace, without which Chromium runs out of shared memory.
     container:
-      image: mcr.microsoft.com/playwright/python:v1.64.1-resolute@sha256:e0006b47eb8c8eb548acebc35ece5968a331051c8f33ae5cd45e9cafd65fdc83
+      image: mcr.microsoft.com/playwright/python:v1.65.2-resolute@sha256:8c0e5d0ff77103dd1c3552d514fa98a86ceaa30aa50e4263573df81c716e11e0
       options: --user 1001 --ipc=host
     strategy:
       fail-fast: false
