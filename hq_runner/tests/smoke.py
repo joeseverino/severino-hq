@@ -1,4 +1,4 @@
-"""One scan and one run through the worker's own entry point, the real
+"""One scan and its runs through the worker's own entry point, the real
 ansible-runner, ansible-doc and ansible-playbook, on this machine alone, over
 the fake bridge: what ``mise run smoke:runner`` runs, in an environment of the
 runner group alone, so it also shows the worker needs nothing of HQ's own
@@ -10,7 +10,8 @@ one on this machine (``remote``): Ansible's sample layout, with an
 ``callback_plugins/`` and from a collection in ``collections/``, and send roles
 elsewhere, were it read. The run passes only if none of it loads, and its machine is reached through a runner connection
 in a connections document as the renderer writes one; the playbook alone sets
-its connection to local, so no ssh is opened.
+its connection to local, so no ssh is opened. Two runs Ansible stops before
+their first task hold ``recorded_stopped_events.json`` to what it says.
 
 It also holds the worker's copies of Ansible's own names to the ansible-core
 installed: the plugin paths it pins, the plugin directories a scan reports,
@@ -23,7 +24,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from hq_runner import ansible, catalog
+from hq_runner import ansible, catalog, events
 from hq_runner.__main__ import Config, drain
 
 from . import fakes
@@ -98,6 +99,48 @@ TEMPLATED_FILES = {
 }
 
 
+# Two playbooks Ansible stops before their first task, which
+# ``recorded_stopped_events.json`` was recorded from: each run's report says
+# the error the recorded events give.
+STOPPED_FILES = {
+    "playbooks/broken_role.yml": """\
+- name: Use a role whose tasks do not parse
+  hosts: all
+  gather_facts: false
+  vars:
+    ansible_connection: local
+  roles:
+    - broken
+""",
+    "roles/broken/tasks/main.yml": """\
+- name: Say something
+  ansible.builtin.debug:
+    msg: [unclosed
+""",
+    "playbooks/missing_collection.yml": """\
+- name: Use a module from a collection the worker lacks
+  hosts: all
+  gather_facts: false
+  vars:
+    ansible_connection: local
+  tasks:
+    - name: Restart the stack
+      example.absent.compose_restart:
+        project: /srv/example
+""",
+}
+STOPPED = {"broken_role": "playbooks/broken_role.yml", "missing_collection": "playbooks/missing_collection.yml"}
+
+
+def _recorded_stop(name: str) -> str | None:
+    """What a run's report says of the recorded run ``name`` Ansible stopped."""
+
+    stopped = events.Stopped(fakes.PROCEDURES[fakes.PROCEDURE].project_dir)
+    for event in fakes.STOPPED[name]:
+        stopped.read(event)
+    return stopped.message
+
+
 def _templated(marker: Path) -> str:
     return "{{ lookup('ansible.builtin.pipe', 'touch " + str(marker) + "') }}"
 
@@ -145,20 +188,25 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="hq-runner-") as directory:
         root = Path(directory)
         remote = Remote(root / "remote")
-        revision = remote.commit({**project_files(), **ESCALATING_FILES, **TEMPLATED_FILES})
-        run, escalating, templated = (fakes.pending(revision=revision, effect="read", privilege="") for _ in range(3))
-        for asked, playbook in (
-            (run, "playbooks/host_health.yml"),
-            (escalating, ESCALATING),
-            (templated, TEMPLATED),
+        revision = remote.commit({**project_files(), **ESCALATING_FILES, **TEMPLATED_FILES, **STOPPED_FILES})
+        run, escalating, templated, *stops = (
+            fakes.pending(revision=revision, effect="read", privilege="") for _ in range(3 + len(STOPPED))
+        )
+        for index, (asked, playbook) in enumerate(
+            (
+                (run, "playbooks/host_health.yml"),
+                (escalating, ESCALATING),
+                (templated, TEMPLATED),
+                *zip(stops, STOPPED.values(), strict=True),
+            )
         ):
             asked["resource"]["spec"]["playbook"] = playbook
             asked["input"]["hosts"] = ["localhost"]
-        escalating["operation"]["id"] = "33333333-4444-4555-8666-777777777777"
-        templated["operation"]["id"] = "44444444-5555-4666-8777-888888888888"
+            if index:
+                asked["operation"]["id"] = f"{index + 2:08d}-4444-4555-8666-777777777777"
         evaluated = root / "evaluated"
         templated["input"]["parameters"] = {"said": _templated(evaluated)}
-        bridge = fakes.Bridge(fakes.scan_pending(), run, escalating, templated)
+        bridge = fakes.Bridge(fakes.scan_pending(), run, escalating, templated, *stops)
         config = Config.read(_environment(root))
         # The one change from the configuration the environment gives: the
         # repository is this machine's, reached over git's file transport.
@@ -171,7 +219,13 @@ def main() -> int:
             wrong.append("the project's own ansible.cfg loaded a callback of the project's")
         if evaluated.exists():
             wrong.append("a parameter's template was evaluated on the worker")
-    scanned, ran, read, given = [*bridge.reports, {}, {}, {}, {}][:4]
+    scanned, ran, read, given, *stopped = [*bridge.reports, *({} for _ in range(4 + len(STOPPED)))][: 4 + len(STOPPED)]
+    for name, report in zip(STOPPED, stopped, strict=True):
+        if report.get("success") is not False or report.get("message") != _recorded_stop(name):
+            wrong.append(
+                f"the run of {STOPPED[name]} said {report.get('message')!r}, not {_recorded_stop(name)!r},"
+                " which recorded_stopped_events.json gives"
+            )
     if given.get("success") is not True:
         wrong.append(f"a run given a template as a parameter did not take it as text: {given.get('message')}")
     specs = {
@@ -190,7 +244,7 @@ def main() -> int:
         wrong.append(
             f"the scan reported the logins {scanned.get('catalog', {}).get('reaches')}, not the one its connections hold"
         )
-    if worked != 4 or scanned.get("success") is not True:
+    if worked != 4 + len(STOPPED) or scanned.get("success") is not True:
         wrong.append(f"wanted a scan that succeeded first, not {scanned}")
     elif specs != recorded:
         wrong.append(f"ansible-doc answered {specs}, not the role specs recorded_role_specs.json holds")

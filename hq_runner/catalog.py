@@ -99,6 +99,10 @@ ROLE_KEYS = frozenset(
     f"{prefix}{action}" for action in _ROLE_ACTIONS for prefix in ("", "ansible.builtin.", "ansible.legacy.")
 )
 YAML_SUFFIXES = (".yml", ".yaml")
+# The directories of a role Ansible reads as YAML (ansible-core 2.22's
+# ``playbook.role.Role``, each ``_load_role_yaml``); ``files`` and
+# ``templates`` hold what a task copies or renders, which need not be YAML.
+ROLE_YAML = ("tasks", "handlers", "defaults", "vars", "meta")
 
 GITHUB_API = "api.github.com"
 # How long GitHub may take to answer, and the most bytes of its answer read.
@@ -141,6 +145,17 @@ def _loader() -> type:
     loader: type[yaml.SafeLoader] = type("AnsibleYAML", (yaml.SafeLoader,), {})
     loader.add_multi_constructor("!", _untagged)
     return loader
+
+
+def _unread(path: str, exc: Exception) -> str:
+    """Why the file at ``path`` could not be read, with the line YAML stopped
+    at when it says one."""
+
+    mark = getattr(exc, "problem_mark", None)
+    if isinstance(exc, yaml.MarkedYAMLError) and mark is not None:
+        said = ", ".join(part for part in (exc.context, exc.problem) if part)
+        return f"{path} does not parse at line {mark.line + 1}: {said}."
+    return f"{path} could not be read: {exc}"
 
 
 def _yaml(project_dir: Path, path: str, limit: int) -> Any:
@@ -251,13 +266,13 @@ def _dependencies(path: str, node: Any) -> list[str]:
 
 
 def _role_files(role: str, playbook_dir: PurePosixPath, files: frozenset[str]) -> list[str]:
-    """Every YAML file of the role named ``role``, where Ansible finds it for
-    a playbook in ``playbook_dir``: beside it in ``roles/``, in the project's
-    ``roles/``, or beside it."""
+    """Every file Ansible reads as YAML of the role named ``role``, where it
+    finds it for a playbook in ``playbook_dir``: beside it in ``roles/``, in
+    the project's ``roles/``, or beside it."""
 
     for where in (playbook_dir / ROLES / role, PurePosixPath(ROLES) / role, playbook_dir / role):
-        prefix = f"{where}/"
-        found = sorted(path for path in files if path.startswith(prefix) and path.endswith(YAML_SUFFIXES))
+        prefixes = tuple(f"{where}/{directory}/" for directory in ROLE_YAML)
+        found = sorted(path for path in files if path.startswith(prefixes) and path.endswith(YAML_SUFFIXES))
         if found:
             return found
     return []
@@ -277,7 +292,7 @@ class _Procedure:
             "verification": [],
             "problems": [],
         }
-        # The playbook as read, which a read's escalation is looked for in.
+        # The playbook as read, where the walk of the files it pulls in starts.
         self.plays: Any = None
 
     def problem(self, said: str) -> None:
@@ -292,7 +307,7 @@ class _Procedure:
             self.problem(refused.message)
             return
         except (OSError, ValueError, yaml.YAMLError) as exc:
-            self.problem(f"Its sidecar could not be read: {exc}")
+            self.problem(_unread(self.found["sidecar"], exc))
             return
         if not isinstance(declaration, Mapping):
             self.problem("Its sidecar is not a mapping.")
@@ -309,7 +324,7 @@ class _Procedure:
             self.problem(refused.message)
             return []
         except (OSError, ValueError, yaml.YAMLError) as exc:
-            self.problem(f"Its playbook could not be read: {exc}")
+            self.problem(_unread(self.found["playbook"], exc))
             return []
         if not isinstance(plays, list):
             self.problem("Its playbook is not a list of plays.")
@@ -345,8 +360,10 @@ class _Procedure:
         declaration = self.found["declaration"]
         return isinstance(declaration, Mapping) and declaration.get("effect") == READ
 
-    def refuse_escalation(self, project_dir: Path, roles: list[str], files: frozenset[str]) -> None:
-        """A problem for each file the read's plays pull in that escalates."""
+    def read_pulled_in(self, project_dir: Path, roles: list[str], files: frozenset[str]) -> None:
+        """A problem for each file the plays pull in that does not parse, with
+        its line, so a run never stops on one; and, for a read, for each that
+        escalates."""
 
         playbook_dir = PurePosixPath(self.found["playbook"]).parent
         queue: list[tuple[str, Any]] = [(self.found["playbook"], self.plays)]
@@ -362,11 +379,11 @@ class _Procedure:
             except Refused as refused:
                 self.problem(refused.message)
             except (OSError, ValueError, yaml.YAMLError) as exc:
-                self.problem(f"{path}, which it pulls in, could not be read: {exc}")
+                self.problem(_unread(path, exc))
 
         while queue:
             path, node = queue.pop(0)
-            key = _escalation(node)
+            key = _escalation(node) if self.reads else ""
             if key:
                 self.problem(f"It is a read, and {path} sets {key}: a read runs with no escalation.")
             here = PurePosixPath(path).parent
@@ -391,8 +408,8 @@ def procedure(project_dir: Path, sidecar: str, files: frozenset[str], role_spec:
         return found.found
     roles = found.read_playbook(project_dir)
     found.read_roles(roles, project_dir, role_spec)
-    if found.reads:
-        found.refuse_escalation(project_dir, roles, files)
+    if found.plays is not None:
+        found.read_pulled_in(project_dir, roles, files)
     return found.found
 
 

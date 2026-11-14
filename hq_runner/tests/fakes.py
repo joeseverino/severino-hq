@@ -102,6 +102,15 @@ RECORDED: list[dict[str, Any]] = json.loads(Path(__file__).with_name("recorded_e
 CHECKED: list[dict[str, Any]] = json.loads(
     Path(__file__).with_name("recorded_validation_events.json").read_text("utf-8")
 )
+# Two runs ansible-runner 2.4.3 recorded that Ansible stopped before their
+# first task: a role file that does not parse (``broken_role``) and a module
+# from a collection the worker lacks (``missing_collection``). Each path is
+# where the checkout sat on the machine that recorded it, rewritten to
+# ``PROCEDURES``' project directory; the smoke holds each first error line to
+# a real run.
+STOPPED: dict[str, list[dict[str, Any]]] = json.loads(
+    Path(__file__).with_name("recorded_stopped_events.json").read_text("utf-8")
+)
 # The run up to the task that failed, and its stats: a run that ends well.
 WELL = [event for event in RECORDED if event.get("event_data", {}).get("task") != "Fail"]
 # The stats event ansible-runner 2.4.3 recorded ending a real run whose play

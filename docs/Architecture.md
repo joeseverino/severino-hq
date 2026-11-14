@@ -1472,7 +1472,8 @@ that against the pinned release, with a read that asks to escalate in each of
 those ways. The account has no sudo, which is the boundary beneath it. A scan
 is the second layer. A read whose plays name escalation anywhere they reach is
 a problem of that playbook, so it is never adopted. They reach the playbook, a
-file it imports or includes by name, and every file of each role it lists,
+file it imports or includes by name, and every file Ansible reads as YAML
+(`tasks/`, `handlers/`, `defaults/`, `vars/`, `meta/`) of each role it lists,
 includes or depends on. `become: false` and `ansible_become: false` alone
 escalate to nothing.
 
@@ -1501,7 +1502,13 @@ the lease and stops when HQ answers stop or a renewal fails, and
 ansible-runner's own job timeout ends it at the manifest's `timeout_seconds`. Its report carries one event
 per task and machine, built from Ansible's message alone and struck of
 secrets: the run's secret parameters, the token and each identity's path.
-A run that succeeded says what its playbook found or did: the `result` it
+A run Ansible stops before any task fails or a machine goes unreached (a
+file that does not parse, a module no installed collection provides) says
+the first line Ansible printed as an error, color stripped, with the file and
+line it named when that file is in the project (`events.Stopped`). It is the
+one line read from stdout, which ansible-runner hands over as a `verbose`
+event: struck as a task's message is, clipped to its length, and never a path
+outside the project. A run that succeeded says what its playbook found or did: the `result` it
 set with `ansible.builtin.set_stats` (`per_host: false`), which ansible-runner
 hands over as the `artifact_data` of the `playbook_on_stats` event, each machine
 by name when it is keyed by machine. A playbook that sets none is said by
@@ -1532,7 +1539,8 @@ plugin, collection or variables directory Ansible would read past a playbook
 and its roles. It lists the commit's signature as GitHub verifies it, and each
 machine and privilege profile the worker has a login for ([The automation
 worker](#the-automation-worker)). The worker reads and HQ judges: a sidecar is
-reported as parsed, and what the worker cannot read (a file that is not YAML,
+reported as parsed, and what the worker cannot read (a file the playbook
+reaches, as a read's are walked, that does not parse, named with its line, or
 a role `ansible-doc` cannot find) is a problem of that playbook, while the rest
 of the report still arrives.
 

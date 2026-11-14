@@ -249,6 +249,41 @@ class EscalationTests(ScanTestCase):
         self.assertEqual(self.problems(READ, {"playbooks/check.yml": off}), [])
         self.assertEqual(self.problems(CHANGE, {"playbooks/check.yml": on}), [])
 
+    def test_a_file_any_playbook_pulls_in_that_does_not_parse_is_a_problem_naming_it_and_its_line(self):
+        unclosed = "- name: Say something\n  ansible.builtin.debug:\n    msg: [unclosed\n"
+        cases = {
+            "a role it lists": ("roles/broken/tasks/main.yml", "  roles: [broken]\n"),
+            "a role it includes": (
+                "roles/broken/tasks/main.yml",
+                "  tasks:\n    - ansible.builtin.include_role:\n        name: broken\n",
+            ),
+            "a file it imports": (
+                "playbooks/tasks/broken.yml",
+                "  tasks:\n    - ansible.builtin.import_tasks: tasks/broken.yml\n",
+            ),
+        }
+        for sidecar in (READ, CHANGE):
+            for name, (broken, body) in cases.items():
+                with self.subTest(name, effect=sidecar.splitlines()[1]):
+                    play = f"- name: Check\n  hosts: all\n{body}"
+                    problems = self.problems(sidecar, {"playbooks/check.yml": play, broken: unclosed})
+
+                    self.assertEqual(len(problems), 1, problems)
+                    self.assertIn(broken, problems[0])
+                    self.assertIn("line 4", problems[0])
+
+    def test_a_role_s_files_and_templates_need_not_be_yaml(self):
+        files = {
+            "playbooks/check.yml": "- name: Check\n  hosts: all\n  roles: [deploy]\n",
+            "roles/deploy/tasks/main.yml": "- name: Render\n  ansible.builtin.template:\n    src: compose.yml\n    dest: /srv/example/compose.yml\n",
+            "roles/deploy/templates/compose.yml": "{% for name in names %}\n  - {{ name }}\n{% endfor %}\n",
+            "roles/deploy/files/notes.yml": "key: [unclosed\n",
+        }
+
+        for sidecar in (READ, CHANGE):
+            with self.subTest(effect=sidecar.splitlines()[1]):
+                self.assertEqual(self.problems(sidecar, files), [])
+
     def test_a_scan_says_each_machine_and_profile_the_worker_has_a_login_for(self):
         self.remote.commit({"playbooks/check.hq.yml": READ, "playbooks/check.yml": "- name: Check\n  hosts: all\n"})
 

@@ -980,8 +980,9 @@ stay where it printed them. A page that could not be looked at (refused, no
 
 The look keeps its test database in `var/dev-look/` through Django's
 `--keepdb`, so a second run creates nothing; an edited migration needs
-`rm -r var/dev-look`. A composed look keeps its database in
-`var/dev-look/composed/`.
+`rm -r var/dev-look`. Each run works on a copy of its own and hands it back
+as it ends, so looks started together share no database. A composed look
+keeps its database in `var/dev-look/composed/`.
 
 A look holds still: the page's clock is frozen at the moment the run began
 (its `--base` run shares that instant), and each screenshot is taken with
