@@ -198,25 +198,26 @@ class EntryPage(PageMixin):
 
 
 class EntryWrite:
-    model = Entry
+    """How an event's write names it; each write names its own capabilities,
+    so no base holds a placeholder for them that another base contradicts."""
+
     noun = "Event"
     result_key = "entry"
     identity_attr = "uid"
-    creates = CREATE
-    updates = UPDATE
-    deletes = DELETE
 
 
 # The fields its form page draws beyond the form's own loop.
 FORM_PAGE = {"form_fields": "calendars/_entry_fields.html"}
 
 
-class EntryFormPage(CommandFormPage):
+class EntryFormPage(EntryWrite, CommandFormPage, EntryPage, ReferencePickerMixin, CapabilityFormMixin):
     """An event's form, said as its command's page says it."""
 
     creates = CREATE
+    updates = UPDATE
     listed_route = "calendar:month"
     extra_context = FORM_PAGE
+    form_class = EntryForm
 
 
 class EntryDetailView(RedirectView):
@@ -229,9 +230,7 @@ class EntryDetailView(RedirectView):
         return get_object_or_404(Entry, uid=uid).get_absolute_url()
 
 
-class EntryCreateView(EntryWrite, EntryFormPage, EntryPage, ReferencePickerMixin, CapabilityFormMixin, CreateView):
-    form_class = EntryForm
-
+class EntryCreateView(EntryFormPage, CreateView):
     @override
     def get_page_title(self):
         return capability_title(CREATE)
@@ -242,12 +241,12 @@ class EntryCreateView(EntryWrite, EntryFormPage, EntryPage, ReferencePickerMixin
         return {"starts_on": on or timezone.localdate()}
 
 
-class EntryUpdateView(EntryWrite, EntryFormPage, EntryPage, ReferencePickerMixin, CapabilityFormMixin, UpdateView):
+class EntryUpdateView(EntryFormPage, UpdateView):
     page_title = "Edit event"
-    form_class = EntryForm
 
 
 class EntryDeleteView(EntryWrite, EntryPage, CapabilityDeleteMixin, DeleteView):
+    deletes = DELETE
     page_title = "Delete event?"
     template_name = "calendars/entry_confirm_delete.html"
     success_url = reverse_lazy("calendar:month")

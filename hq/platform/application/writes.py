@@ -260,8 +260,12 @@ def _refused_delete(view: Any, form: BaseForm, answer: dict[str, Any], refuse: C
     return refuse(form, answer)
 
 
-class _Records:
-    """A plain record domain's capabilities, noun and identity, read off its ``Records`` declaration."""
+class _Records(_RecordWrite):
+    """A plain record domain's capabilities, noun and identity, read off its ``Records`` declaration.
+
+    It is a record write itself, so its model and identity override the
+    defaults the write mixins it is composed with inherit.
+    """
 
     @property
     def records(self) -> Records:

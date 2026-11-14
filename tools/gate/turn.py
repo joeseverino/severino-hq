@@ -92,6 +92,17 @@ def opened(name: str) -> Iterator[int]:
         os.close(descriptor)
 
 
+@contextlib.contextmanager
+def opened_all(names: list[str]) -> Iterator[list[int]]:
+    """The lock files of ``names``, each open in a ``with`` of its own for the block."""
+
+    if not names:
+        yield []
+        return
+    with opened(names[0]) as first, opened_all(names[1:]) as rest:
+        yield [first, *rest]
+
+
 def held_locks() -> set[str]:
     return set(filter(None, os.environ.get(HELD, "").split(",")))
 
@@ -241,10 +252,9 @@ def share_held(tokens: int, waiting: Waiting) -> Iterator[None]:
         # A turnstile: passed, it is let go at once, so only a run that holds it stops the shares behind it.
         with opened(GATE) as gate:
             waiting.until(lambda: flocked(gate, fcntl.LOCK_SH), lambda: on(GATE))
-    with contextlib.ExitStack() as share:
-        mine: list[int] = []
+    mine: list[int] = []
+    with opened_all([slot(n) for n in range(CAPACITY)]) as slots:
         with opened(DOOR) as door:
-            slots = [share.enter_context(opened(slot(n))) for n in range(CAPACITY)]
 
             def enough() -> bool:
                 for n, descriptor in enumerate(slots):
@@ -265,14 +275,14 @@ def share_held(tokens: int, waiting: Waiting) -> Iterator[None]:
                 waiting.until(enough, holders)
             finally:
                 lock_file(DOOR).with_suffix(".json").unlink(missing_ok=True)
-        heavy = share.enter_context(opened(LOCK))
-        try:
-            waiting.until(lambda: flocked(heavy, fcntl.LOCK_SH), lambda: on(LOCK))
-            record(LOCK)
-            waiting.done(tokens)
-            yield
-        finally:
-            give_back()
+        with opened(LOCK) as heavy:
+            try:
+                waiting.until(lambda: flocked(heavy, fcntl.LOCK_SH), lambda: on(LOCK))
+                record(LOCK)
+                waiting.done(tokens)
+                yield
+            finally:
+                give_back()
 
 
 def recorded(name: str) -> str:
