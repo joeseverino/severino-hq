@@ -230,12 +230,11 @@
   /* A row's toggle, drawn by the server where a row holds something back or heads rows folded under it: the one disclosure a row has, sized to be hit, turned when open. */
   :is(.row-expand, .row-fold) {
     display: inline-grid; place-items: center;
-    width: 1.5rem; height: 1.5rem; min-height: 0; padding: 0; margin: 0;
-    border: 0; border-radius: var(--radius-sm); background: none; box-shadow: none;
-    color: var(--muted); font-size: var(--text-sm); line-height: 1; cursor: pointer;
+    width: 1.5rem; height: 1.5rem; padding: 0; border-radius: var(--radius-sm);
+    color: var(--muted); font-size: var(--text-sm); line-height: 1;
     vertical-align: middle;
   }
-  :is(.row-expand, .row-fold):hover { border: 0; background: var(--line-2); color: var(--ink); }
+  :is(.row-expand, .row-fold):hover { background: var(--line-2); color: var(--ink); }
   /* Its chevron is its own border, pointing at what it holds back and turned down when open, so a row carries no drawing for it. */
   :is(.row-expand, .row-fold)::before {
     content: ""; box-sizing: border-box; width: 6px; height: 6px; margin-inline-end: var(--space-1);

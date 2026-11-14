@@ -54,7 +54,7 @@
 /* The page's own sort control is a button that reads exactly as a server sort link: the button primitive's styling is taken back off. */
 /* A heading's words wrap as a cell's do, so a column is never wider than its widest value for its name. */
 .data-table thead .table-sort-link { white-space: normal; }
-.data-table thead button.table-sort-link { min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; font: inherit; text-align: inherit; cursor: pointer; }
+.data-table thead button.table-sort-link { text-align: inherit; border-radius: 0; }
 /* The sort mark is a polygon cut from the heading's color, drawn with the box and in the server's HTML, so it is one shape in every face and nothing moves when a script sorts. */
 .sort-indicator {
   flex: none; display: inline-block; inline-size: calc(var(--text-lg) * 10 / 16); block-size: var(--text-lg);
