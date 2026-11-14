@@ -1,18 +1,17 @@
-"""The machine's heavy turn (mise's task lock `heavy`): what a run of
-manage.py test weighs, the share a one-process run takes beside others, and
-the gate a landing closes in front of them.
+"""The machine's heavy turn (mise's task lock `heavy`): what a run weighs in
+tokens of the machine's budget, the share of those tokens it takes beside
+other runs, and the gate a landing closes in front of them.
 
-`python -m tools.gate.turn [manage.py test arguments...]` prints the run's
-weight: `whole`, or the tokens of the share it takes.
-`python -m tools.gate.turn --share <tokens> <bound> <command...>` runs a
-command in a share. `python -m tools.gate.turn --landing <command...>` runs a
-landing's command (mise-tasks/landing). How the turn is shared, and how a
-landing goes first: docs/Development.md, Heavy gates take turns.
+`python -m tools.gate.turn [manage.py test arguments...]` prints the tokens a
+run of manage.py test takes. `python -m tools.gate.turn --share <tokens|all>
+<bound> <command...>` runs a command in a share. `python -m tools.gate.turn
+--landing <command...>` runs a landing's command (mise-tasks/landing). How the
+turn is shared, and how a landing goes first: docs/Development.md, Heavy gates
+take turns.
 """
 
 import contextlib
 import fcntl
-import hashlib
 import importlib.util
 import json
 import os
@@ -31,41 +30,27 @@ lazy from django.core.management.commands.test import Command as TestCommand
 lazy from django.test.runner import get_max_test_processes
 lazy from django.test.utils import get_runner
 
+from tools.gate.room import GATE, LOCK, capacity, lock_file, slot
 lazy from hq.platform.core.test_runner import drives_a_browser, tests_in
 
-# The lock a run that takes the whole machine holds exclusively, and the task
-# that runs a command in it for a task that weighs its own run (mise-tasks/turn).
-# A share holds it shared, so the two never overlap.
-LOCK = "heavy"
-IN_TURN = ["mise", "run", "turn", "--"]
-# The lock every heavy task takes before the turn, which a landing holds for
-# its command's lifetime. It sorts before LOCK: mise takes a task's locks in
-# sorted order, so a task waiting here holds nothing, and a landing's own heavy
-# tasks, which inherit it, may still add LOCK after it. A share passes through
-# it before it takes a token, so a whole run waiting here lets the shares it
+# GATE sorts before LOCK: mise takes a task's locks in sorted order, so a task
+# waiting at the gate holds nothing, and a landing's own heavy tasks, which
+# inherit it, may still add LOCK after it. A share passes through the gate
+# before it takes a token, so a whole run waiting there lets the shares it
 # waits for drain and no new one start.
-GATE = "gate"
 # How mise says which locks a task holds; a task that inherits one takes it as held.
 HELD = "MISE_TASK_LOCKS"
-
-
-def capacity(cores: int, memory: int) -> int:
-    """The machine's budget for shares, in tokens of about a core and 600 MB each:
-    one for each core, and no more than one for each 2 GB it holds, which leaves
-    room for the dev server, a browser and the agents. An 8 GB Mac holds four,
-    two surveys or four one-process test runs."""
-
-    return max(1, min(cores, memory // 2**31))
-
-
+# The machine's budget for shares: its declared token count, else what its cores and memory allow.
+CAPACITY = capacity(Path(__file__).resolve().parents[2])
 # One share takes its tokens at a time, behind a door, so a share of several
 # is never starved by shares of one.
-CAPACITY = capacity(os.cpu_count() or 1, os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE"))
 DOOR = f"{LOCK}.door"
 # A process that runs tests, and one beside which a browser draws (a survey
 # holds about 1.2 GB and a core and a half).
 ONE = 1
 BROWSER = 2
+# What a run that needs every token asks for: a share of the whole budget.
+ALL = "all"
 # Set for every process a share runs, so a run inside it goes ahead.
 SHARE = "HQ_TURN_SHARE"
 MEASURER = Path(__file__).resolve().parents[2] / "tools" / "lib" / "measured"
@@ -75,31 +60,22 @@ FIRST_POLL, MAX_POLL, REPORT_EVERY = 0.1, 1.0, 30.0
 GRACE = 5
 
 
-def in_turn(bound: str) -> list[str]:
-    """The command that runs what follows it in the turn, stopped once it has held the turn for ``bound`` (30m, 2h).
-
-    mise gives the turn task its own parse, dropping the caller's ``usage_*``
-    variables, so the command is handed them again: a task's run in the turn
-    reads the arguments it was given."""
-
-    parse = [f"{name}={value}" for name, value in os.environ.items() if name.startswith("usage_")]
-    return ["env", f"HQ_TURN_BOUND={bound}", *IN_TURN, "env", *parse]
-
-
 def in_share(tokens: int, bound: str) -> list[str]:
-    """The command that runs what follows it in a share of ``tokens``, stopped once it has held it for ``bound``."""
+    """The command that runs what follows it in a share of ``tokens``, stopped once it has held it for ``bound``.
+
+    mise hands the caller's ``usage_*`` variables down with the environment, so the command reads the
+    arguments its task was given."""
 
     return [sys.executable, "-m", "tools.gate.turn", "--share", str(tokens), bound]
 
 
-def lock_file(name: str) -> Path:
-    """The file mise flocks for the task lock ``name``: under its state directory,
-    named for the lock's hash (src/task/task_lock.rs, ``LockKey::path``)."""
+def weighed(argv: list[str], root: Path) -> int:
+    """The tokens a run of manage.py test on ``argv`` takes, asked in a process of its own: the settings
+    ``weigh`` loads start a run that the caller's exec would leave with nothing to remove it."""
 
-    state = os.environ.get("MISE_STATE_DIR") or Path(
-        os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state", "mise"
-    )
-    return Path(state, "task-locks", hashlib.sha256(name.encode()).hexdigest()[:16] + ".lock")
+    asked = [sys.executable, "-m", "tools.gate.turn", *argv]
+    said = subprocess.run(asked, cwd=root, capture_output=True, text=True, check=False).stdout.split()
+    return int(said[-1]) if said and said[-1].isdigit() else CAPACITY
 
 
 @contextlib.contextmanager
@@ -268,17 +244,17 @@ def share_held(tokens: int, waiting: Waiting) -> Iterator[None]:
     with contextlib.ExitStack() as share:
         mine: list[int] = []
         with opened(DOOR) as door:
-            slots = [share.enter_context(opened(f"{LOCK}.share.{n}")) for n in range(CAPACITY)]
+            slots = [share.enter_context(opened(slot(n))) for n in range(CAPACITY)]
 
             def enough() -> bool:
-                for n, slot in enumerate(slots):
-                    if len(mine) < tokens and slot not in mine and flocked(slot, fcntl.LOCK_EX):
-                        mine.append(slot)
-                        record(f"{LOCK}.share.{n}")
+                for n, descriptor in enumerate(slots):
+                    if len(mine) < tokens and descriptor not in mine and flocked(descriptor, fcntl.LOCK_EX):
+                        mine.append(descriptor)
+                        record(slot(n))
                 return len(mine) == tokens
 
             def holders() -> str:
-                others = [holder(f"{LOCK}.share.{n}") for n, slot in enumerate(slots) if slot not in mine]
+                others = [holder(slot(n)) for n, descriptor in enumerate(slots) if descriptor not in mine]
                 return f"a share of {tokens} of lock {LOCK}'s {CAPACITY}, " + "; ".join(
                     sorted({o for o in others if o})
                 )
@@ -323,9 +299,9 @@ def give_back() -> None:
 
     others = []
     for n in range(CAPACITY):
-        text = recorded(f"{LOCK}.share.{n}")
+        text = recorded(slot(n))
         if ours(text):
-            lock_file(f"{LOCK}.share.{n}").with_suffix(".json").unlink(missing_ok=True)
+            lock_file(slot(n)).with_suffix(".json").unlink(missing_ok=True)
         elif text:
             others.append(text)
     # LOCK's record names one share that holds it; this one's goes to another still holding it, if any.
@@ -338,17 +314,23 @@ def give_back() -> None:
 
 
 def share(tokens: int, bound: str, command: list[str]) -> int:
-    """Run ``command`` in a share of ``tokens`` and return its status, stopping it once it has held the share
-    for ``bound``. Inside the turn or a share it runs at once. It runs under the measurer, so it ends with the
-    line on what its process tree spent."""
+    """Run ``command`` in a share of ``tokens``, no more than the machine holds, and return its status,
+    stopping it once it has held the share for ``bound``. Inside the turn or a share it runs at once. It runs
+    under the measurer, so it ends with the line on what its process tree spent.
+
+    The command is told it holds the gate and the turn the way mise tells a task (MISE_TASK_LOCKS), so a task
+    under it that takes the lock in its header goes ahead inside the share rather than waiting forever on the
+    share its own run holds, so a run that may start one takes every token."""
 
     if not os.environ.get("HQ_MEASURED"):
         command = [str(MEASURER), *command]
     if inside():
         return subprocess.run(command, check=False).returncode
+    tokens = min(tokens, CAPACITY)
+    held = ",".join(sorted(held_locks() | {GATE, LOCK}))
     try:
-        with share_held(min(tokens, CAPACITY), Waiting()):
-            return run_bounded(command, seconds(bound), bound, os.environ | {SHARE: str(tokens)})
+        with share_held(tokens, Waiting()):
+            return run_bounded(command, seconds(bound), bound, os.environ | {SHARE: str(tokens), HELD: held})
     except TimeoutError as error:
         print(f"[{task_name()}] ERROR {error}", file=sys.stderr, flush=True)
         return 1
@@ -393,10 +375,9 @@ def names_a_tree(label: str) -> bool:
     return spec is not None and spec.submodule_search_locations is not None
 
 
-def weigh(argv: list[str]) -> int | None:
-    """The tokens of the share the run manage.py test makes of ``argv`` takes, one for each process it runs
-    tests in and two where a browser draws beside it, or None for one that takes the whole turn: as many as
-    the machine holds, the whole suite or a tree."""
+def weigh(argv: list[str]) -> int:
+    """The tokens the run manage.py test makes of ``argv`` takes: one for each process it runs tests in, two
+    where a browser draws beside it, and never more than the machine holds."""
 
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "hq.config.settings")
     serial = False
@@ -404,27 +385,28 @@ def weigh(argv: list[str]) -> int | None:
         django.setup()
         options = vars(TestCommand().create_parser("manage.py", "test").parse_args(argv))
         labels = options.pop("args")
-        serial = options["parallel"] == 1
-        # A serial run is one process however many tests it loads.
-        if not serial and (not labels or any(map(names_a_tree, labels))):
-            return None
-        # The workers manage.py test asks for (its handle() resolves "auto" so),
-        # loaded without a word: the run says what it found.
+        # manage.py test runs in one process unless asked for more (its default is 0).
+        serial = options["parallel"] in {0, 1}
+        # The workers manage.py test asks for (its handle() resolves "auto" so).
         workers = get_max_test_processes() if options["parallel"] == "auto" else options["parallel"]
+        # A serial run is one process however many tests it loads. The whole suite or a tree is not loaded to
+        # be weighed: its test classes outnumber its workers, any of which may draw a browser.
+        if not serial and (not labels or any(map(names_a_tree, labels))):
+            return min(workers * BROWSER, CAPACITY)
+        # Loaded without a word: the run says what it found.
         runner = get_runner(settings, options["testrunner"])(**(options | {"parallel": workers, "verbosity": 0}))
         suite = runner.build_suite(labels)
         # build_suite cuts the workers to the test classes it found, as the run does.
         tokens = max(runner.parallel, 1) * (BROWSER if any(map(drives_a_browser, tests_in(suite))) else ONE)
-        return tokens if tokens < CAPACITY else None
-    except Exception, SystemExit:  # noqa: BLE001 - manage.py says what stopped it, in the turn
+        return min(tokens, CAPACITY)
+    except Exception, SystemExit:  # noqa: BLE001 - manage.py says what stopped it, in its share
         # A serial run that cannot load its tests fails in one process.
-        return ONE if serial else None
+        return ONE if serial else CAPACITY
 
 
 if __name__ == "__main__":
     if sys.argv[1:2] == ["--landing"]:
         sys.exit(land(sys.argv[2:]))
     if sys.argv[1:2] == ["--share"]:
-        sys.exit(share(int(sys.argv[2]), sys.argv[3], sys.argv[4:]))
-    weight = weigh(sys.argv[1:])
-    print("whole" if weight is None else weight)
+        sys.exit(share(CAPACITY if sys.argv[2] == ALL else int(sys.argv[2]), sys.argv[3], sys.argv[4:]))
+    print(weigh(sys.argv[1:]))

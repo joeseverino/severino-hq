@@ -258,6 +258,8 @@ extend-include = ["deploy/targets/severino-hq-cpanel-controller"]
 "tools/gate/verdict.py" = "py312"
 # The deploy host's python3, sent there over SSH by release:report.
 "tools/pipeline/release_readings.py" = "py312"
+# A gate machine's python3, sent there over SSH by the gate's sender (remote-host.sh room).
+"tools/gate/room.py" = "py312"
 "deploy/targets/severino-hq-cpanel-controller" = "py37"
 
 [tool.ruff.lint]

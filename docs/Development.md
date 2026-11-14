@@ -356,16 +356,19 @@ Ruff's fixes and format, `lint:css` with Stylelint's, `lint:js` with
 ESLint's, `lint:mise-format` with `mise fmt`, `lint:ast-grep` with each
 rule's `fix:`, `lint:controller` with gofmt, `go fix` and `go generate`, and
 each `lint:drift-*` gate with its file's writer), and the run names the files
-they rewrote. The gates then check the fixed files, so formatting or a stale
-derived file never fails a run, and the tree the run judges is the one the
-fixes left. What a tool cannot fix, its gate still reports. Only fast and
-`mise run fix` pass `--fix`, so CI's gates only check.
+they rewrote. A run whose fixes rewrote a file then fails on them, before any
+test, so the tree a run passes is always the tree it was given, the one a
+landing compares with the commit: the fixed files are in the checkout, ready
+to commit, and the next run judges them. `mise run fast --fix` judges the tree
+the fixes leave in the same run instead. What a tool cannot fix, its gate
+still reports. Only fast and `mise run fix` pass `--fix`, so CI's gates only
+check.
 
 A gate tagged `recording` (`lint:drift-api-examples`) is a serial run of the
 tests its run names, compared with a file. Its fix records over the file,
-which every gate would wait on, so fast runs it only once the check has
-failed; the gates and tests the rewritten files select then run again, and
-they decide the run. A change to Python files alone runs a recording only
+which every gate would wait on, so `fast --fix` runs it only once the check
+has failed; the gates and tests the rewritten files select then run again,
+and they decide the run. Without `--fix`, its failure stands. A change to Python files alone runs a recording only
 when it selects one of the tests the recording runs.
 
 The tests it selects are:
@@ -481,11 +484,10 @@ by side, before the tests are selected, and the tests start only once every
 one has passed, so a lint or drift finding fails the run in the seconds they
 take. A recording waits for the selection, which says whether it runs. The tests then run
 beside each selected gate that runs in the heavy turn ([Heavy gates take
-turns](#heavy-gates-take-turns)): with one, fast takes the turn once, through
-the hidden task `turn`, for the tests and those gates together, and mise hands
-its lock down to every task under it, so a gate that takes the lock itself
-goes ahead at once, beside the rest. With none, the tests take the turn
-themselves when their run is more than one process, and a share otherwise. Both runs' output is kept in
+turns](#heavy-gates-take-turns)), in one share of the turn sized by what they
+run, and the share tells every task under it that it holds the turn, as mise
+hands a lock down, so a gate that takes the lock itself goes ahead at once,
+beside the rest. Both runs' output is kept in
 `var/gate/fast.log` ([The gates](#the-gates)), and both run in the config
 environment `mise.fast.toml` sets: mise's summary output, where a gate that
 passed prints its `passed in` line as it ends and one that failed prints
@@ -707,15 +709,16 @@ first. The global pre-push hook runs it with git's refs on stdin.
 ### Heavy gates take turns
 
 Two suites at once exhaust a small machine's memory. So every step that loads
-the machine (a suite, a browser, an image build, CodeQL) waits for one turn
-shared by every checkout and worktree, and a waiting task names the holder.
-A run of tests or a look of one process takes a share of the turn instead,
-and shares run side by side up to the machine's budget.
+the machine takes a share of its budget sized by what it runs, shared by every
+checkout and worktree, and shares run side by side up to the budget. Only a
+step that needs the whole machine whatever it is given (an image build, the
+browser gates, CodeQL) takes the turn to itself. A waiting task names the
+holder.
 
 A step of one process that holds little (a Django command, a linter) runs
 beside the holder. A gate whose one process still loads the machine
 through most of a fast run (`lint:mypy` is one) carries the tag `heavy`, which only fast reads: fast
-runs it beside its tests in the turn it takes for them, never among its
+runs it beside its tests in the share it takes for them, never among its
 quick gates, while a direct `mise run` of it, `lint` and CI run it as a step
 of one process. `FastGateStageTests` (`tools/gate/tests/test_fast_stages.py`)
 holds every gate fast runs to one side: tagged `fast` as a quick gate, or
@@ -735,7 +738,9 @@ browser:demo`) queue on the turn and each runs in full, and a hung holder
 is stopped. A heavy task started inside a turn runs at once, since mise hands
 the lock down (`MISE_TASK_LOCKS`), and a holder killed outright frees it.
 `HeavyTaskTests` (`tools/gate/tests/test_turn.py`) holds every task to its
-side of the line, and `tests/shell/test-heavy.sh` the turn's promises.
+side of the line, `WholeMachineTests` there holds each task that takes the
+turn to itself, or every token, to the list that says why it needs the whole
+machine, and `tests/shell/test-heavy.sh` the turn's promises.
 
 A landing goes first. Every task that takes the turn passes the lock `gate`
 first, which mise takes in sorted order, so a task waiting there holds
@@ -747,29 +752,42 @@ mise polls. The command's own heavy tasks inherit the gate
 (`MISE_TASK_LOCKS`) and take turns on `heavy` among themselves.
 `test_landing.py` (`tools/gate/tests/`) runs that order against mise.
 
-A run of tests takes a share of a token for each process it runs tests in
+A run of tests takes a token for each process it runs tests in
 (`tools/gate/turn.py`): one when it is serial (`--parallel 1`), and
 otherwise as many as the workers Django starts, one for each test class up to
-the workers asked for. So `mise run test <module>.<Class>` takes a share of
-one, and a run across the cores (fast's selection, a module of many classes,
-the suite) waits for the whole turn. The decision weighs the arguments the
-run passes: a task hands it its run's own options before the labels
-(`test_arguments`), which `HeavyTaskTests` holds to the run. `dev:look`
-declares its share (`turn_share`): a browser's two tokens for each process
-it splits its pages among, one for each twenty pages up to what the machine
-holds, save with `--base` or `--perf`, which run perf in the whole turn. A task whose weight depends on what it is given (`test`, `fast`'s
-tests, `lint:source`, the composed suite, `dev:look`, `browser --linux`) runs
-its whole runs through the hidden task `turn`, which holds the lock, and its
-shares through `python -m tools.gate.turn --share` (`tools/lib/heavy-turn.sh`
-for a file task), each under the gate's own bound: `mise run --timeout` would
-count the wait too.
+the workers asked for, two where a browser draws beside one. A run asking
+past the budget takes all of it, so a small machine runs no more at once than
+it holds. So `mise run test <module>.<Class>` takes one, and a run across the
+cores (a module of many classes, the suite) takes every token. The decision
+weighs the arguments the run passes: a task hands it its run's own options
+before the labels (`test_arguments`), which `HeavyTaskTests` holds to the run.
+`test --at` takes what its labels weigh here, since the ref's runs of them
+come one at a time; `test --go` and the shell suites take every token.
+fast's tests and its `heavy` gates take one share: what the tests weigh, one
+token for each such gate, and every token beside a gate that takes the lock.
+`dev:look` declares its share (`turn_share`): a browser's two tokens for each
+process it splits its pages among, one for each twenty pages up to what the
+machine holds, or perf's when `--base` or `--perf` runs perf after it and it
+draws more. perf takes what it draws: two for this tree's server and the
+Chromium that reads it, one more for a base's server beside it, and every
+token with `--image`, whose Docker VM holds memory of its own; its page bytes
+and query counts do not move with load, and its times fail nothing. A task
+whose weight depends on what it is given (`test`, `fast`'s tests,
+`lint:source`, the composed suite, `dev:look`, `perf`, `browser --linux`)
+takes its share through `python -m tools.gate.turn --share`
+(`tools/lib/heavy-turn.sh` for a file task, `turn_share=all` for every token),
+under the gate's own bound: `mise run --timeout` would count the wait too.
 
 A share counts in tokens out of the machine's budget (`CAPACITY`), each about
 a core and 600 MB: a process that runs tests takes one, one beside which a
 browser draws (a look, a survey) two. The budget is derived from the machine,
 a token for each core and no more than one for each 2 GB, so two surveys or
 four test runs fit together beside the dev server and a browser on an 8 GB
-Mac, and a 12-core, 32 GB machine holds twelve. mise's task lock is one
+Mac, and a 12-core, 32 GB machine holds twelve. That count takes every core
+as equal, so a machine whose cores are slow or throttled declares the count
+measured on it instead, once, in its clone's git config
+(`git config hq.gateTokens <tokens>`), which `tools/gate/room.py` reads
+before the fallback. mise's task lock is one
 exclusive flock with no shared or counted mode
 ([task_lock.rs](https://github.com/jdx/mise/blob/v2026.11.8/src/task/task_lock.rs)),
 so a share is the counting semaphore the kernel's flock(2) makes, as
@@ -780,9 +798,13 @@ share of two is never starved by shares of one. A whole run waiting for the
 turn holds the gate while it waits (mise takes `gate`, then polls `heavy`),
 and a share passes the gate before it takes its tokens, so a waiting whole
 run lets the shares it waits for end and lets no new one start: no run
-starves. A run inside a share, like one inside the turn, goes ahead at once
-(`HQ_TURN_SHARE`). A share waits, names who holds what it waits for and gives
-up after `MISE_TASK_LOCK_TIMEOUT` as mise's own waits do.
+starves. A run inside a share, like one inside the turn, goes ahead at once:
+a share tells its command its tokens (`HQ_TURN_SHARE`) and that it holds
+`gate` and `heavy` as mise hands a lock down (`MISE_TASK_LOCKS`), so a task
+under it that takes the lock in its header runs inside it rather than waiting
+on it. A share waits, names who holds what it waits for and gives up after
+`MISE_TASK_LOCK_TIMEOUT` as mise's own waits do, and a gate's closing line
+counts its wait, as it counts mise's.
 
 A task that waits for the turn without holding the lock (each of those, and
 an aggregate whose script runs `mise run` on one that waits) declares
@@ -819,8 +841,8 @@ wrapper that names it), its workers, and children under them such as a walk
 run apart. A worker's and a child's line also gives the most
 one process of its role held. The sampling's own CPU is stated last and kept
 out of the tree's. The template's `shell`, the line every heavy file task
-sources, the `turn` task and a share each run their command under it, and
-`HeavyTaskTests` holds every task that takes the lock to one of the three. A
+sources and a share each run their command under it, and `HeavyTaskTests`
+holds every task that takes the lock to one of the first two. A
 heavy run inside a measured one adds no line of its own, so measuring one
 label is that one command.
 
@@ -842,18 +864,35 @@ git config hq.gateRemote gates:hq
 ```
 
 It names the machine as git names a repository over SSH, the host then
-HQ's checkout there. Each of those tasks then runs there under that
-machine's own heavy turn, never taking this one's, with nothing new to type.
-Its output reads as a run here, paths named in this checkout, after one line
-naming where it runs:
+HQ's checkout there. Each of those tasks then starts on whichever machine
+has the tokens it takes free now, with nothing new to type. The task weighs
+its run first, by the same line the machine that runs it reads again
+(`turn_share`, before it sources `tools/lib/remote.sh`); a run it does not
+weigh (fast, the composed suite, `browser`) takes every token. The sender
+reads both machines' free tokens and capacity with one function,
+`tools/gate/room.py`, here in process and there through the host half's
+`room` step, and sends the run there when that machine has room for it, else
+keeps it here when this one has, else waits on the machine that lacks the
+fewest tokens. A weight of this machine's whole budget is the whole of the
+other machine's too. One sender chooses at a time, and each run it sent holds
+its tokens until its share there holds them, so runs started together
+spread across both machines. A run there runs under that machine's own
+heavy turn, never taking this one's. Its output reads as a run here, paths
+named in this checkout, after one line naming where it runs:
 
 ```text
 [fast] runs on gates, tree 928ba11e2
 ```
 
+A run kept here or left waiting says why, with each machine's free tokens:
+
+```text
+[dev:look] runs here: it takes 2 tokens, and gates has 0 of 6 tokens free
+```
+
 A machine that does not answer within five seconds leaves the run here, after
 one line saying so; so does a run inside a turn here, one whose flag acts on
-this machine (`--open`, `--docs`, `browser --linux`, `perf --image`), and one
+this machine (`--open`, `--docs`, `browser --linux`, `perf --image`, `fast --fix`), and one
 typed with `HQ_GATE_REMOTE=` before it. A task the release check runs that
 reads a secret or the deploy host (`failure-logs`, `mint`, the host check)
 never asks.
@@ -864,17 +903,23 @@ How a run goes (`tools/gate/remote.py`, and `tools/gate/remote-host.sh` there):
    (`tools/gate/tree.py`). It is pushed with git over SSH as a commit on
    HEAD, or HEAD itself when it holds the tree, with each commit an argument
    names (fast's base, `--at`), which are resolved here: a branch there is
-   not this one. fast's default base is resolved here too, from this
+   not this one. The push skips the repository's pre-push hook, which guards
+   a push to its forge, since these refs publish nothing. fast's default base is resolved here too, from this
    checkout's chain of passed trees, which is also synced there with its maps,
    so it selects what it would select here. A run that may compose (the
    composed suite, fast) sends the extension checkout `HQ_LOCAL_PYTHONPATH`
    names the same way, to the clone of the same name beside HQ's there, with
    `HQ_LOCAL_PLUGINS`; one that cannot send it runs here.
-2. There, the tree gets a detached worktree of its own under
-   `~/.cache/hq-gates`, holding the files `.worktreeinclude` names as that
-   checkout has them, and the pushed refs are removed. A file under `var/`
-   that an argument names (a `--eval` probe) goes with it. A worktree
-   untouched for a day is removed as the next one is made.
+2. There, the run takes the first free worktree of this checkout's under
+   `~/.cache/hq-gates` (the checkout is keyed by its machine and path), held
+   with `flock` until the run ends, so two runs at once never share one and
+   each tree a checkout sends finds the environment and caches the last one
+   warmed. The worktree is reset to the commit sent, everything an earlier
+   run left that git tracks or does not ignore removed, and the pushed refs
+   are deleted. A new one holds the files `.worktreeinclude` names as that
+   checkout has them. A file under `var/` that an argument names (a `--eval`
+   probe) is staged before the run and laid in. A worktree untouched for a
+   day is removed as the next run starts.
 3. The same `mise run <task> <arguments>` runs in it, the arguments as mise
    parsed them here, with each variable of this run that changes what a gate
    does (`CARRIED`, such as `HQ_BROWSER_ENGINE`) and this run's output mode,
@@ -883,15 +928,17 @@ How a run goes (`tools/gate/remote.py`, and `tools/gate/remote-host.sh` there):
    `test_remote.py` fails on one in neither. Closing the connection stops it.
    The run only checks, as CI's gates do: fast writes no fix there, and a
    run that leaves the worktree holding any tree but the one sent fails,
-   naming each file it changed. A tree sent again finds its worktree reset
-   to that tree first.
-4. What it wrote comes back: each `var/gate/` verdict that names the tree
+   naming each file it changed.
+4. What it wrote comes back, archived there as the run ends, while the
+   worktree is still its own: each `var/gate/` verdict that names the tree
    sent (any other is left there, and said so), the logs and `var/look/`.
    A pass fast recorded there is recorded here only then, its file naming the
    machine it ran on.
 
 One SSH connection carries every step (`ControlMaster`), with no agent or
-display forwarded. The machine needs mise and the checkouts (the extension
+display forwarded. The machine needs mise, `flock` (util-linux), a `python3`
+for its room and the
+checkouts (the extension
 clone for fast and the composed suite), and nothing that writes to GitHub or reaches
 production; a run of browser tests installs the engine it draws in.
 

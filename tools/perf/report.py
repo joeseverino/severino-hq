@@ -14,7 +14,7 @@ import subprocess
 import sys
 import time
 from collections.abc import Callable, Iterator
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, contextmanager, suppress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -29,6 +29,7 @@ from hq.platform.core.attribution import from_the_shell
 from hq.platform.core.tests import task
 from hq.platform.core.tests.browser.in_flight import SETTLED
 from hq.platform.core.tests.task import ESTATE, PageRefused, RefError, estate_name, trusted_mise, usage, worktree
+from tools.gate import turn
 from tools.perf import measure, runs, table
 from tools.perf.targets import (
     COLD_STARTS,
@@ -190,23 +191,33 @@ def _unsaid(_said: str) -> None:
     """What the early check leaves to the run to say."""
 
 
+def tokens(*, base: bool, image: bool) -> int:
+    """The share of the machine's tokens a run takes (tools/gate/turn.py): this tree's server with the
+    Chromium that draws its pages, a base's server running beside it, and every token for an image, whose
+    Docker VM holds memory of its own. Its page bytes and query counts do not move with load, and its times
+    are reported and fail nothing, so it needs no more of the machine than it draws."""
+
+    return turn.CAPACITY if image else turn.BROWSER + (turn.ONE if base else 0)
+
+
 def refuse_early() -> None:
-    """Check the data set and the pages asked before the task waits for the heavy turn, exiting 2
-    with the refusal ``plan`` would make once it holds it. Neither needs a database: a page is
-    found among the navigation's addresses, and only where it lands is asked of the seed."""
+    """Check the data set and the pages asked before the task waits for its share of the heavy turn,
+    exiting 2 with the refusal ``plan`` would make once it holds it, and print the tokens it takes on
+    the last line. Neither check needs a database: a page is found among the navigation's addresses,
+    and only where it lands is asked of the seed."""
 
     set_up()
     asked = usage()
-    try:
-        seed = seed_of(asked.text("seed"))
-        with override_settings(**seeds.get(seed).settings):
-            served(asked.repeated("pages"), navigation(), leave_out=asked.switch("skip_unservable"), say=_unsaid)
-    except Unservable as error:
-        print(f"perf: {error}", file=sys.stderr)
-        sys.exit(2)
-    except NothingServed:
-        # The run says so: --skip-unservable is dev:look's, which runs perf inside its own turn.
-        return
+    # Nothing served is the run's to say: --skip-unservable is dev:look's, which runs perf inside its own share.
+    with suppress(NothingServed):
+        try:
+            seed = seed_of(asked.text("seed"))
+            with override_settings(**seeds.get(seed).settings):
+                served(asked.repeated("pages"), navigation(), leave_out=asked.switch("skip_unservable"), say=_unsaid)
+        except Unservable as error:
+            print(f"perf: {error}", file=sys.stderr)
+            sys.exit(2)
+    print(tokens(base=bool(asked.text("base")), image=asked.switch("image")), flush=True)
 
 
 def plan() -> Plan:

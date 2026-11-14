@@ -78,39 +78,24 @@ class NestedVerdictTests(GateTestCase):
 @tag("source")
 class WaitedForTheTurnTests(GateTestCase):
     def test_the_closing_line_splits_the_wait_from_the_total_and_a_gate_that_never_waited_says_nothing(self):
-        # As mise 2026.11 prints a wait for a task's lock, under a task and under the turn a task asked for.
+        # As mise 2026.11 prints a wait for a task's locks, naming every lock it holds, and as a share says its own.
         held = "held by lint:source in ~/example/worktree (pid 4121, for 1m02s)"
         waited = gate_verdict.Step("waits")
         for line in (
             f"[lint:shell] waiting for lock heavy, {held}",
-            "[lint:shell] got lock heavy after 6m40s",
-            f"[test:composed] [turn] waiting for lock heavy, {held}",
-            "[test:composed] [turn] got lock heavy after 9.6s",
+            "[lint:shell] got locks gate, heavy after 6m40s",
+            f"[test:composed] waiting for a share of 2 of lock heavy's 4, {held}",
+            "[test:composed] got a share of 2 after 9.6s",
+            "[image:build] got lock heavy after 1m00s",
         ):
             waited.read(line)
         quiet = gate_verdict.Step("quiet")
         quiet.read(f"[lint:shell] waiting for lock heavy, {held}")
         started = gate_verdict.time.monotonic()
         self.assertRegex(
-            gate_verdict.verdict("g", started, [quiet, waited]), r"passed in [\d.]+s, 410s of it waiting for the turn"
+            gate_verdict.verdict("g", started, [quiet, waited]), r"passed in [\d.]+s, 470s of it waiting for the turn"
         )
         self.assertNotIn("waiting", gate_verdict.verdict("g", started, [quiet]))
-
-    def test_a_run_in_the_turn_fails_as_the_task_that_asked_for_it(self):
-        # As mise 2026.11 prints a failed command a file task ran in the turn, under
-        # an aggregate: the turn's line under the task, then the task's own.
-        step = gate_verdict.Step("check")
-        for line in ("[weighs] [turn] ERROR task failed", "Finished in 23.7ms", "[weighs] ERROR task failed"):
-            step.read(line)
-        self.assertEqual(step.tasks, ["weighs"])
-        # The turn's line alone still names the task it ran for.
-        step = gate_verdict.Step("check")
-        step.read("[test:composed] [turn] ERROR task failed")
-        self.assertEqual(step.tasks, ["test:composed"])
-        # A step that runs the turn itself (fast's tests) is named by the step.
-        step = gate_verdict.Step("tests")
-        step.read("[turn] ERROR task failed")
-        self.assertEqual(step.tasks, [])
 
 
 @tag("source")

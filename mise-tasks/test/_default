@@ -24,6 +24,11 @@
 # the heavy turn, or a share of it when tools/gate/turn.py weighs the run one process. The lint tools
 # are installed for a label that reaches Stylelint.
 set -eu
+# A run by label is weighed before the machine is chosen (tools/lib/remote.sh), and the run here takes
+# that weight; the composed suite and every gate at once take every token.
+if [ "${usage_composed:-}" != true ] && { [ -n "${usage_arguments:-}" ] || [ -n "${usage_at+set}" ] || [ "${usage_go:-}" = true ]; }; then
+    turn_share="$(uv run --group browser python -m tools.gate.at --weight)"
+fi
 # shellcheck source=tools/lib/remote.sh
 . ./tools/lib/remote.sh
 
@@ -38,7 +43,7 @@ if [ "${usage_composed:-}" = true ]; then
     exec mise run test:composed -- "$@"
 fi
 if [ -n "${usage_arguments:-}" ] || [ -n "${usage_at+set}" ] || [ "${usage_go:-}" = true ]; then
-    exec uv run --group browser python -m tools.gate.at
+    exec env HQ_TEST_WEIGHED="${turn_share:-}" uv run --group browser python -m tools.gate.at
 fi
 
 # Every gate, each suite and the Go tests in a heavy turn of their own. A

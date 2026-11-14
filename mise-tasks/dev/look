@@ -35,9 +35,6 @@
 # it, in the same heavy turn. The docs' pictures are demo/screenshot.py's, a
 # step of its own (dev:look:docs) with the demo it draws from.
 set -eu
-# shellcheck source=tools/lib/remote.sh
-. ./tools/lib/remote.sh
-
 if [ "${usage_docs:-}" = true ]; then
     exec mise run dev:look:docs
 fi
@@ -61,13 +58,14 @@ eval "set -- ${usage_pages:?}"
 # other runs: all but a record's page, found only in the estate the run draws.
 # Its last line is the share of the heavy turn the look takes: a browser's
 # tokens (tools/gate/turn.py, BROWSER) for each process its pages are split
-# among (hq/platform/core/tests/look_shares.py). A base or a measure runs
-# perf, which takes the whole turn.
+# among (hq/platform/core/tests/look_shares.py), or the share of the perf run
+# that follows it, when that draws more.
 weight="$(uv run --group browser python manage.py shell --no-imports -v 0 \
     -c 'from hq.platform.core.tests.look import refuse_early; refuse_early()')"
 turn_share="$(printf '%s\n' "${weight}" | tail -n 1)"
-[ -z "${usage_base:-}" ] && [ "${usage_perf:-}" != true ] || turn_share=""
 turn_bound=30m
+# shellcheck source=tools/lib/remote.sh
+. ./tools/lib/remote.sh
 # shellcheck source=tools/lib/heavy-turn.sh
 . ./tools/lib/heavy-turn.sh
 

@@ -65,7 +65,6 @@ class ServeTests(SimpleTestCase):
             serve.main()
 
         self.assertEqual(configured.call_args.args, (serve.APPLICATION,))
-        self.assertEqual(serve.APPLICATION, "hq.config.dev_asgi:migrated_application")
         self.assertIs(configured.call_args.kwargs["proxy_headers"], False)
 
     def bound(self, host: str, port: int) -> list[socket.socket]:

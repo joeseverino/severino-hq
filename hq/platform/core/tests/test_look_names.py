@@ -133,6 +133,9 @@ class CatalogNamesTests(SimpleTestCase):
         self.assertIn("part/notice-error", _offers(refused.exception))
 
 
+# The check sizes the look's share by the heavy turn's budget, which tools/gate reads from the machine's git
+# config; no image ships either. The check walks the catalog's tree.
+@tag("source", "tree")
 class EarlyRefusalTests(SimpleTestCase):
     """What the task was asked is checked before it waits for the heavy turn,
     with no database: a test case that refuses every query proves it."""

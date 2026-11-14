@@ -64,7 +64,9 @@ fi
 # tools, uv's cache and the environment) stays in the Docker volume
 # severino-hq-browser-linux, so the next run starts at the gate.
 [ "$#" -gt 0 ] || { echo "mise run browser --linux: name a leg or test labels" >&2; exit 64; }
-# The VM and the browsers in it are one heavy run, taken before the VM boots.
+# The VM and the browsers in it are one heavy run, taken before the VM boots:
+# Docker's VM holds memory of its own, so the run takes every token.
+turn_share=all
 turn_bound=2h
 # shellcheck source=tools/lib/heavy-turn.sh
 . ./tools/lib/heavy-turn.sh

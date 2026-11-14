@@ -92,6 +92,7 @@ lazy from hq.platform.core.example_estate.testing import as_production, sign_in
 # imported, so a base whose constructors this tree's catalog does not fit still
 # looks at every other page: it is read only for a name nothing else is.
 lazy from hq.platform.core.tests.browser import catalog
+lazy from tools.perf.report import tokens as perf_tokens  # noqa: TID251 - dev:look runs perf in its share, and perf declares what it draws
 
 # Each run's shots go to a folder of their own under here, named for when the
 # run began, so a later run never overwrites what an earlier one printed: the
@@ -1149,8 +1150,19 @@ def refuse_early() -> None:
         )
     if said:
         refuse("\n".join(said))
-    # The share of the heavy turn the task takes, on the last line.
-    print(look_shares.tokens(_processes(len(pages), look_shares.capacity())), flush=True)
+    # The share of the heavy turn the task takes, on the last line: the look's, or perf's when perf
+    # follows in the same share and draws more.
+    look = look_shares.tokens(_processes(len(pages), look_shares.capacity()))
+    print(max(look, _measured_after()), flush=True)
+
+
+def _measured_after() -> int:
+    """The tokens of the perf run that follows the look (dev:look's --perf, on by default with --base), or 0."""
+
+    asked = _asked()
+    if {"true": True, "false": False}.get(asked.text("perf"), bool(asked.text("base"))):
+        return perf_tokens(base=bool(asked.text("base")), image=False)
+    return 0
 
 
 def _processes(pages: int, tokens: int) -> int:

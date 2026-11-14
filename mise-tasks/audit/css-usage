@@ -11,14 +11,13 @@
 # A look of its own over dev:look's pages (hq/platform/core/tests/css_usage.py),
 # split among processes as a look is, on dev:look's kept test database.
 set -eu
-# shellcheck source=tools/lib/remote.sh
-. ./tools/lib/remote.sh
-
 # What was asked is checked before the turn; the last line is the share of it the look takes.
 weight="$(uv run --group browser python manage.py shell --no-imports -v 0 \
     -c 'from hq.platform.core.tests.look import refuse_early; refuse_early()')"
 turn_share="$(printf '%s\n' "${weight}" | tail -n 1)"
 turn_bound=30m
+# shellcheck source=tools/lib/remote.sh
+. ./tools/lib/remote.sh
 # shellcheck source=tools/lib/heavy-turn.sh
 . ./tools/lib/heavy-turn.sh
 

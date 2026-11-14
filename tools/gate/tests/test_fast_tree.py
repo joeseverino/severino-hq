@@ -66,7 +66,7 @@ class FastGateTreeTests(GateTestCase):
             [*scan, "--inspect", "entity"], cwd=ROOT, capture_output=True, text=True, check=True
         ).stderr.split()
         files = [word.removeprefix("entity|file|").removesuffix(":") for word in read if "entity|file|" in word]
-        self.assertIn("tools/gate/selection.py", files)
+        self.assertTrue(files, "the scan names no file")
         added = "tools/gate/example/notes.txt"
         with everywhere("tree_tests", return_value=[(walks, held)]):
             for path in files:

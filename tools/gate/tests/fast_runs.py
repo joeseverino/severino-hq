@@ -39,7 +39,7 @@ def run_main(
     reads as added, so a tree test that lists it runs. The gate
     judged no one tree unless ``judged`` is faked, so no run records a pass or a map in this
     repository, and no tree passed and no map is read unless ``passed_ancestor`` or
-    ``recorded_ancestor`` is faked; no fix mode runs unless ``fix`` is, and GitHub is never asked whether CI
+    ``recorded_ancestor`` is faked; the tests weigh one token unless ``weighed`` is faked; no fix mode runs unless ``fix`` is, and GitHub is never asked whether CI
     passed the base unless ``passed_in_ci`` is faked. ``asked`` holds the task's arguments, as mise parsed them."""
 
     fakes = {
@@ -52,6 +52,8 @@ def run_main(
         "selected_tasks": selected,
         "fix": [],
         "passed_in_ci": "CI was not asked",
+        # What the tests weigh, which tools/gate/turn.py asks of Django in a process of its own.
+        "weighed": 1,
         **fakes,
     }
     judged = fakes.pop("judged", None)

@@ -3,12 +3,12 @@
 # second waits for the first and names it, one that gives up names the holder
 # too, a killed holder frees the turn, a task's timeout starts once it holds
 # the turn, a heavy task inside a turn runs at once, a task that weighs its
-# own run (tools/lib/heavy-turn.sh) runs its body once, inside the turn or a
-# share of it, under its own bound, and a run of tests takes the whole turn
-# only when tools/gate/turn.py weighs it more than one process. Shares run
-# side by side up to the budget, never beside a whole run, and a whole run
-# waiting for the turn starts no new share. Each heavy run,
-# by a template's shell, a header's lock, the turn task or a share, ends with one line
+# own run (tools/lib/heavy-turn.sh) runs its body once, in a share of the
+# turn told it holds the turn, under its own bound, and a run of tests takes
+# the share tools/gate/turn.py weighs it at. Shares run side by side up to
+# the budget, never beside a whole run, and a whole run waiting for the turn
+# starts no new share. Each heavy run,
+# by a template's shell, a header's lock or a share, ends with one line
 # (tools/lib/measured) whose CPU holds what its descendants spent and
 # whose peak holds each role's processes held at once, a test worker apart from
 # its children; a heavy run inside one adds none, and a heavy file task run by
@@ -51,15 +51,15 @@ fifo() {
     mkfifo "${work}/$1"
 }
 
-# Two worktrees of one repository, each with the turn task and the line a
-# task that weighs its run sources, as this checkout has them.
+# Two worktrees of one repository, each with the line a task that weighs its
+# run sources, as this checkout has it.
 main="${work}/main"
 second="${work}/second"
 mkdir -p "${main}/mise-tasks" "${main}/tools/lib" "${main}/tools/gate"
-cp "${repo}/mise-tasks/turn" "${main}/mise-tasks/"
 cp "${repo}/tools/lib/heavy-turn.sh" "${repo}/tools/lib/measured" "${main}/tools/lib/"
-# The share, run by uv in this checkout's project from the fixture's copy.
-cp "${repo}/tools/gate/turn.py" "${main}/tools/gate/"
+# The share, run by uv in this checkout's project from the fixture's copy,
+# with the locks and budget it takes from room.py.
+cp "${repo}/tools/gate/turn.py" "${repo}/tools/gate/room.py" "${main}/tools/gate/"
 : >"${main}/tools/__init__.py"
 : >"${main}/tools/gate/__init__.py"
 cat >"${main}/mise.toml" <<'TOML'
@@ -146,6 +146,7 @@ starts="$(($(cat "$STARTS" 2>/dev/null || echo 0) + 1))"
 echo "${starts}" >"$STARTS"
 [ "${starts}" -le 2 ] || exit 9
 turn_bound="${BOUND:-1m}"
+: "${turn_share:=all}"
 . ./tools/lib/heavy-turn.sh
 echo "${MISE_TASK_LOCKS:-outside}" >>"$RAN"
 echo "${usage_word:-}" >"$WORD"
@@ -318,29 +319,29 @@ one_line "${work}/out" "a heavy file task"
 [ "$(cat "${RAN}")" = "heavy
 outside" ] || fail "a heavy file task ran other than once in the turn, and once by its path outside it: $(cat "${RAN}")"
 
-# A heavy run of a task that weighs its own runs its body once, inside the
-# turn, on the arguments it was given, and ends with one line; a light one
-# runs beside the holder, and a heavy one waits for it.
+# A run of every token of a task that weighs its own runs its body once, in
+# its share, told it holds the turn, on the arguments it was given, and ends
+# with one line.
 rm -f "${RAN}" "${STARTS}"
 MISE_TASK_LOCK_TIMEOUT=5s mise -C "${main}" run weighed "two words" >"${work}/out" 2>&1 ||
     fail "a heavy run of a task that weighs its own failed after $(cat "${STARTS}") starts"
 one_line "${work}/out" "a heavy run of a task that weighs its own"
-[ "$(cat "${RAN}")" = gate,heavy ] || fail "a heavy run's body ran outside the turn, or not once: $(cat "${RAN}")"
+[ "$(cat "${RAN}")" = gate,heavy ] || fail "a heavy run's body was not told it holds the turn, or ran other than once: $(cat "${RAN}")"
 [ "$(cat "${WORD}")" = "two words" ] || fail "a heavy run's body lost the arguments it was given: '$(cat "${WORD}")'"
-# The heavy run is stopped at the bound its task sets, not the turn task's;
-# the whole run's own limit only ends a run that bound did not stop.
+# The heavy run is stopped at the bound its task sets; the whole run's own
+# limit only ends a run that bound did not stop.
 fifo never
 rm -f "${RAN}" "${STARTS}"
 status=0
 said="$(BOUND=1s LINGER="${work}/never" mise -C "${main}" run --timeout 30s weighed 2>&1)" || status=$?
 [ "${status}" -ne 0 ] || fail "a heavy run that outlived its task's bound was not stopped"
 case "${said}" in
-    *"[turn] ERROR timed out after 1s"*) ;;
+    *"[weighed] ERROR timed out after 1s"*) ;;
     *) fail "a heavy run was not stopped at the bound its task set: ${said}" ;;
 esac
-# A share waits for a run that holds the whole turn and names it, as a whole
-# run does; so do this checkout's runs of tests, narrowed to one process by a
-# label or of every test of a tree.
+# A share waits for a run that holds the whole turn and names it, as a share
+# of every token does; so do this checkout's runs of tests, narrowed to one
+# process by a label or of every test of a tree.
 hold
 rm -f "${RAN}" "${STARTS}"
 status=0
@@ -351,8 +352,8 @@ names_holder "${said}" "a share that gave up waiting"
 rm -f "${STARTS}"
 status=0
 said="$(MISE_TASK_LOCK_TIMEOUT=1s mise -C "${second}" run weighed 2>&1)" || status=$?
-[ "${status}" -ne 0 ] || fail "a whole run of a task that weighs its own ran beside the holder"
-names_holder "${said}" "a whole run that gave up waiting"
+[ "${status}" -ne 0 ] || fail "a share of every token ran beside the holder"
+names_holder "${said}" "a share of every token that gave up waiting"
 for task in "test hq.platform.core.tests.test_test_runner.BrowserTestTests" \
     "lint:source tools.gate.tests.test_turn.WeightTests" "test hq.platform.core.tests" lint:source; do
     status=0
@@ -375,7 +376,7 @@ until [ -s "${RAN}" ]; do
     kill -0 "${sharer}" 2>/dev/null || fail "a share failed: $(cat "${work}/share")"
     sleep 0.1
 done
-[ "$(cat "${RAN}")" = outside ] || fail "a share's body ran other than once, outside the whole turn: $(cat "${RAN}")"
+[ "$(cat "${RAN}")" = gate,heavy ] || fail "a share's body was not told it holds the turn, or ran other than once: $(cat "${RAN}")"
 turn_share=2 STARTS="${work}/starts-beside" MISE_TASK_LOCK_TIMEOUT=2s mise -C "${second}" run weighed \
     >"${work}/out" 2>&1 || fail "two shares within the budget did not run side by side: $(cat "${work}/out")"
 one_line "${work}/out" "a share"

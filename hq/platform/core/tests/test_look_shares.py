@@ -221,19 +221,19 @@ class MergedTests(SimpleTestCase):
 class ProcessesTests(SimpleTestCase):
     def test_the_processes_take_no_more_of_the_turn_than_the_machine_holds_and_one_for_a_few_pages(self):
         from hq.platform.core.tests import look_shares
-        from tools.gate import turn  # noqa: TID251 - the budget the processes are held to
+        from tools.gate import room, turn  # noqa: TID251 - the budget the processes are held to
 
         for cores, memory in ((8, 8 * 2**30), (12, 30 * 2**30), (2, 4 * 2**30), (1, 2**30)):
-            budget = turn.capacity(cores, memory)
+            budget = room.budget(cores, memory)
             for pages in (1, look_shares.PAGES_EACH, 308, 10_000):
                 with self.subTest(cores=cores, memory=memory, pages=pages):
                     processes = look_shares.processes(pages, budget)
                     self.assertGreaterEqual(processes, 1)
                     self.assertLessEqual(look_shares.tokens(processes), max(budget, turn.BROWSER))
         self.assertEqual(look_shares.processes(look_shares.PAGES_EACH - 1, 12), 1)
-        # An 8 GB Mac's four tokens are two browsers; the laptop's twelve, six.
-        self.assertEqual(look_shares.processes(308, turn.capacity(8, 8 * 2**30)), 2)
-        self.assertEqual(look_shares.processes(308, turn.capacity(12, 30 * 2**30)), 6)
+        # Four tokens are two browsers; twelve, six.
+        self.assertEqual(look_shares.processes(308, room.budget(8, 8 * 2**30)), 2)
+        self.assertEqual(look_shares.processes(308, room.budget(12, 30 * 2**30)), 6)
 
     def test_a_run_takes_as_many_processes_as_the_share_it_holds(self):
         from hq.platform.core.tests import look_shares

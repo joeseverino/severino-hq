@@ -5,10 +5,13 @@ answer leaves the run here."""
 
 import importlib
 import io
+import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
+import sys
 import tarfile
 import tempfile
 from pathlib import Path
@@ -52,6 +55,8 @@ class RemoteTestCase(GateTestCase):
         super().setUp()
         # Imported as each test runs, so a run at a ref without it fails the test rather than the module.
         self.remote = importlib.import_module("tools.gate.remote")
+        # The turn reads the machine's budget as it loads, before a test stands in for the programs it runs.
+        importlib.import_module("tools.gate.turn")
 
 
 class WordsTests(RemoteTestCase):
@@ -112,15 +117,18 @@ class RecordedElsewhereTests(RemoteTestCase):
         (gate / "fast.txt").write_text(f"tree {OTHER}\nbefore\n")
         back = {"var/back/fast-passes/" + TREE: "", f"var/back/fast-maps/{TREE}.json": "{}"}
         where = "/home/example/.cache/hq-gates/" + TREE
-        sent = self.remote.Sent(TREE, where, "/home/example", [], "", "")
-        self.remote.bring_back(archive({"var/gate/fast.txt": f"tree {OTHER}\n", **back}), sent, "example-host", "fast")
+        sent = self.remote.Sent(TREE, OTHER, [], "run", None, "")
+        there = self.remote.Where(where, "/home/example")
+        self.remote.bring_back(
+            archive({"var/gate/fast.txt": f"tree {OTHER}\n", **back}), sent, there, "example-host", "fast"
+        )
         self.assertEqual((gate / "fast.txt").read_text(), f"tree {OTHER}\nbefore\n")
         self.assertFalse((self.passes / TREE).exists())
 
         shot = "var/look/run/estate.png"
         failed = f"tree {TREE}\n[fast] FAILED: {{}}/hq/x.py:3\n"
         files = {"var/gate/fast.txt": failed.format(where), "var/gate/fast.log": where, shot: "png", **back}
-        self.remote.bring_back(archive(files), sent, "example-host", "fast")
+        self.remote.bring_back(archive(files), sent, there, "example-host", "fast")
         self.assertEqual((gate / "fast.txt").read_text(), failed.format(self.remote.ROOT))
         self.assertEqual((gate / "fast.log").read_text(), str(self.remote.ROOT))
         self.assertEqual((gate / "fast.prev.txt").read_text(), f"tree {OTHER}\nbefore\n")
@@ -135,15 +143,18 @@ class StaysHereTests(RemoteTestCase):
 
         def ran(command, **_options):
             calls.append(command)
-            return subprocess.CompletedProcess(command, ssh_status, b"", b"")
+            return subprocess.CompletedProcess(command, ssh_status, b"4\n4\n" * (not ssh_status), b"")
 
         base = {name: value for name, value in os.environ.items() if not name.startswith("usage_")}
-        given = {"MISE_TASK_NAME": "fast", self.remote.SETTING: "example-host:hq"} | environ
+        state = self.enterContext(tempfile.TemporaryDirectory())
+        given = {"MISE_TASK_NAME": "fast", self.remote.SETTING: "example-host:hq", "MISE_STATE_DIR": state}
         with (
-            mock.patch.dict(os.environ, base | given, clear=True),
+            mock.patch.dict(os.environ, base | given | environ, clear=True),
             mock.patch.object(self.remote.subprocess, "run", ran),
             mock.patch.object(self.remote, "inside", return_value=False),
+            mock.patch.object(self.remote.room, "room", return_value=(0, 4, set())),
             mock.patch.object(self.remote, "run_there", return_value=0) as there,
+            mock.patch.object(sys, "argv", ["remote", "all"]),
         ):
             status = self.remote.main()
         return status, calls if not there.called else [*calls, ["there"]]
@@ -153,17 +164,132 @@ class StaysHereTests(RemoteTestCase):
             status, calls = self.run_main(255)
         self.assertEqual(status, self.remote.HERE)
         self.assertEqual(len(calls), 1)
-        self.assertEqual(calls[0][-2:], ["example-host", "true"])
+        self.assertEqual(calls[0][: len(self.remote.SSH) + 1], [*self.remote.SSH, "example-host"])
         self.assertEqual(len(said.getvalue().splitlines()), 1)
         self.assertIn("example-host", said.getvalue())
 
-    def test_a_machine_that_answers_takes_the_run(self):
+    def test_a_machine_that_answers_with_room_takes_the_run(self):
         self.assertEqual(self.run_main(0)[1][-1], ["there"])
 
     def test_a_run_that_acts_on_this_machine_never_asks(self):
         for flag in sorted(self.remote.STAYS):
             with self.subTest(flag=flag):
                 self.assertEqual(self.run_main(0, **{f"usage_{flag}": "true"}), (self.remote.HERE, []))
+
+
+class ChoiceTests(RemoteTestCase):
+    """A run starts on whichever machine has the tokens it takes free now, the second machine first, and waits
+    only when neither has, saying on which machine and why. The two machines' rooms are stand-ins."""
+
+    def choose(self, demand: str, here: tuple[int, int], there: tuple[int, int] | None) -> tuple[bool, str]:
+        """Whether a run weighed at ``demand`` went there, and what it said, with this machine's free tokens
+        and capacity ``here`` and the second machine's ``there`` (None: it does not answer)."""
+
+        state = self.enterContext(tempfile.TemporaryDirectory())
+        given = {"MISE_TASK_NAME": "test", self.remote.SETTING: "example-host:hq", "MISE_STATE_DIR": state}
+        answer = None if there is None else self.remote.Room(*there)
+        with (
+            mock.patch.dict(os.environ, given),
+            mock.patch.object(self.remote, "inside", return_value=False),
+            mock.patch.object(self.remote, "asked", return_value=answer),
+            mock.patch.object(self.remote.room, "room", return_value=(*here, set())),
+            mock.patch.object(self.remote, "run_there", return_value=0) as ran,
+            mock.patch.object(sys, "argv", ["remote", demand]),
+            mock.patch("sys.stderr", new_callable=io.StringIO) as said,
+        ):
+            status = self.remote.main()
+        self.assertEqual(status, 0 if ran.called else self.remote.HERE)
+        return ran.called, said.getvalue()
+
+    def test_a_run_that_fits_here_while_the_second_machine_is_busy_runs_here(self):
+        went, said = self.choose("2", here=(4, 4), there=(0, 8))
+        self.assertFalse(went)
+        self.assertIn("runs here", said)
+        self.assertIn("0 of 8", said)
+
+    def test_a_run_goes_there_when_that_machine_has_room_for_it(self):
+        for demand, there in (("2", (2, 8)), ("1", (1, 8)), ("all", (8, 8)), ("4", (8, 8))):
+            with self.subTest(demand=demand, there=there):
+                self.assertEqual(self.choose(demand, here=(4, 4), there=there), (True, ""))
+
+    def test_a_run_neither_machine_has_room_for_waits_on_one_and_says_which_and_why(self):
+        """It waits on the machine that lacks the fewest tokens, the second machine on a tie, and its line
+        names that machine, the tokens the run takes and what each machine has free."""
+
+        went, said = self.choose("2", here=(0, 4), there=(1, 8))
+        self.assertTrue(went)
+        self.assertRegex(said, r"waits on example-host\b")
+        self.assertIn("2 tokens", said)
+        self.assertIn("1 of 8", said)
+        self.assertIn("0 of 4", said)
+        went, said = self.choose("all", here=(3, 4), there=(2, 8))
+        self.assertFalse(went)
+        self.assertIn("waits on this machine", said)
+        self.assertIn("every token", said)
+
+    def test_a_weight_that_takes_every_token_here_takes_every_token_there(self):
+        """A parallel run of a tree is weighed at this machine's whole budget, which on a larger machine is the
+        whole of it too, never a part of it."""
+
+        self.assertFalse(self.choose("4", here=(4, 4), there=(6, 8))[0])
+        self.assertTrue(self.choose("3", here=(4, 4), there=(3, 8))[0])
+
+    def test_a_machine_that_cannot_say_its_room_leaves_the_run_here(self):
+        went, said = self.choose("1", here=(0, 4), there=None)
+        self.assertFalse(went)
+        self.assertEqual(len(said.splitlines()), 1)
+
+    def test_runs_started_together_count_the_tokens_sent_ahead_of_them(self):
+        """A run sent there holds its tokens until its share there does, so a run choosing while the first is
+        on its way counts them, and stops counting them once the room there names the first run's worktree."""
+
+        state = self.enterContext(tempfile.TemporaryDirectory())
+        self.enterContext(mock.patch.dict(os.environ, {"MISE_STATE_DIR": state}))
+        first = self.remote.Claim("example-host", 6)
+        try:
+            self.assertEqual(self.remote.claimed("example-host", frozenset()), 6)
+            self.assertEqual(self.remote.claimed("elsewhere.example", frozenset()), 0)
+            first.took("/home/example/.cache/hq-gates/sender-1")
+            self.assertEqual(self.remote.claimed("example-host", frozenset()), 6)
+            self.assertEqual(
+                self.remote.claimed("example-host", frozenset({"/home/example/.cache/hq-gates/sender-1"})), 0
+            )
+        finally:
+            first.close()
+        self.assertEqual(self.remote.claimed("example-host", frozenset()), 0)
+        # A claim its sender left behind when it died holds nothing.
+        left = self.remote.Claim("example-host", 2)
+        os.close(left.descriptor)
+        self.assertEqual(self.remote.claimed("example-host", frozenset()), 0)
+        self.assertFalse(left.path.exists())
+
+    def test_a_run_choosing_behind_one_sent_ahead_runs_here_when_the_tokens_left_there_are_too_few(self):
+        state = self.enterContext(tempfile.TemporaryDirectory())
+        given = {"MISE_TASK_NAME": "dev:look", self.remote.SETTING: "example-host:hq", "MISE_STATE_DIR": state}
+        self.enterContext(mock.patch.dict(os.environ, given))
+        first = self.remote.Claim("example-host", 8)
+        self.addCleanup(first.close)
+        with (
+            mock.patch.object(self.remote, "inside", return_value=False),
+            mock.patch.object(self.remote, "asked", return_value=self.remote.Room(8, 8)),
+            mock.patch.object(self.remote.room, "room", return_value=(4, 4, set())),
+            mock.patch.object(self.remote, "run_there", return_value=0) as ran,
+            mock.patch.object(sys, "argv", ["remote", "2"]),
+            mock.patch("sys.stderr", new_callable=io.StringIO),
+        ):
+            self.assertEqual(self.remote.main(), self.remote.HERE)
+        self.assertFalse(ran.called)
+
+
+# flock(1) for a machine without util-linux's (macOS): it locks the descriptor it is named, as flock(2) locks
+# the open file the shell holds there, so the lock lasts as long as the shell's descriptor.
+FLOCK = """#!PYTHON
+import fcntl, sys
+try:
+    fcntl.flock(int(sys.argv[-1]), fcntl.LOCK_EX | fcntl.LOCK_NB)
+except BlockingIOError:
+    sys.exit(1)
+"""
 
 
 class HostHalfTests(RemoteTestCase):
@@ -181,84 +307,106 @@ class HostHalfTests(RemoteTestCase):
         self.git("commit", "--quiet", "--no-verify", "-m", "first")
         (self.checkout / "local.toml").write_text("kept")
         self.commit, self.tree = self.git("rev-parse", "HEAD"), self.git("rev-parse", "HEAD^{tree}")
-
-    def step(self, *args: str, given: bytes = b"") -> bytes:
-        env = os.environ | {"XDG_CACHE_HOME": str(self.scratch / "cache")}
-        command = ["sh", str(self.remote.HOST_HALF), *args]
-        return subprocess.run(command, input=given, env=env, capture_output=True, check=True).stdout
-
-    def prepared(self) -> Path:
-        """The worktree there for the tree, as a run's push and prepare leave it."""
-
-        self.git("update-ref", f"refs/gate/{self.tree}", self.commit)
-        made = self.step("prepare", str(self.checkout), self.tree, self.commit, given=archive({}))
-        return Path(made.decode().splitlines()[0])
-
-    def test_a_tree_gets_a_worktree_of_its_commit_and_back_archives_only_what_the_run_wrote(self):
-        """No ref sent is left behind, the gitignored files .worktreeinclude names are copied in, and the
-        archive holds what the run wrote since it began, never an older verdict."""
-
-        tree = self.tree
-        where = self.prepared()
-        self.assertEqual(fixture_git(where)("rev-parse", "HEAD"), self.commit)
-        self.assertEqual((where / "local.toml").read_text(), "kept")
-        self.assertEqual(self.git("for-each-ref", "refs/gate"), "")
-
-        (where / "var" / "gate").mkdir(parents=True)
-        (where / "var" / "gate" / "old.txt").write_text("before")
-        os.utime(where / "var" / "gate" / "old.txt", (0, 0))
-        (where / "var" / "remote-stamp").touch()
-        os.utime(where / "var" / "remote-stamp", (1000, 1000))
-        (where / "var" / "gate" / "fast.txt").write_text(f"tree {tree}\n")
-        with tarfile.open(fileobj=io.BytesIO(self.step("back", tree))) as kept:
-            self.assertEqual(kept.getnames(), ["var/gate/fast.txt"])
-
-    def test_a_tree_sent_again_is_judged_as_sent_whatever_an_earlier_run_wrote_there(self):
-        """A run there that rewrote a tracked file or left a new one leaves the next run of the same tree
-        judging that tree, so its verdict names the tree sent; the gitignored files stay."""
-
-        from tools.gate.tree import working_tree
-
-        where = self.prepared()
-        (where / "kept.py").write_text("one = 2\n")
-        (where / "stray.py").write_text("left = True\n")
-        (where / "var").mkdir()
-        (where / "var" / "kept.txt").write_text("a run's own")
-
-        self.assertEqual(self.prepared(), where)
-        self.assertEqual(working_tree(where), self.tree)
-        self.assertEqual((where / "local.toml").read_text(), "kept")
-        self.assertEqual((where / "var" / "kept.txt").read_text(), "a run's own")
-
-    def test_a_run_that_rewrites_the_tree_it_was_sent_fails_naming_what_it_wrote(self):
-        """A step that writes a fix there passes a tree nobody sent and never brings it back, so the run
-        fails, naming the files; one that writes only what git ignores passes, and the run is told the tree
-        it was sent, which keeps fast's fixes from running."""
-
-        self.prepared()
         fake = self.scratch / "bin"
         fake.mkdir()
         # macOS has no setsid; the run's own session is not what this holds.
         (fake / "setsid").write_text('#!/bin/sh\nexec "$@"\n')
-        (fake / "setsid").chmod(0o755)
+        if not shutil.which("flock"):
+            (fake / "flock").write_text(FLOCK.replace("PYTHON", sys.executable))
+        for each in fake.iterdir():
+            each.chmod(0o755)
+        self.env = os.environ | {"XDG_CACHE_HOME": str(self.scratch / "cache"), "PATH": f"{fake}:{os.environ['PATH']}"}
 
-        def ran(script: str) -> tuple[int, str]:
-            env = os.environ | {"XDG_CACHE_HOME": str(self.scratch / "cache"), "PATH": f"{fake}:{os.environ['PATH']}"}
-            command = ["sh", str(self.remote.HOST_HALF), "run", self.tree, "", "", "sh", "-c", script]
-            # Its input left open: closing it is what stops a run there.
-            with subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, env=env) as run:
-                said = run.stdout.read().decode() if run.stdout else ""
-                status = run.wait()
-            return status, said
+    def step(self, *args: str, given: bytes = b"") -> bytes:
+        command = ["sh", str(self.remote.HOST_HALF), *args]
+        return subprocess.run(command, input=given, env=self.env, capture_output=True, check=True).stdout
 
-        status, said = ran('echo "$HQ_GATE_SENT" >var/sent; mkdir -p var/gate; echo ok >var/gate/x.txt')
+    def start(self, script: str, run: str = "run", key: str = "sender") -> subprocess.Popen:
+        """A run of ``script`` sent as a run's push leaves the tree, its input left open: closing it is what
+        stops a run there."""
+
+        self.git("update-ref", f"refs/gate/{run}", self.commit)
+        words = [run, key, str(self.checkout), self.tree, self.commit, "-", "", "", "sh", "-c", script]
+        command = ["sh", str(self.remote.HOST_HALF), "run", *words]
+        return subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, env=self.env)
+
+    def ran(self, script: str, run: str = "run") -> tuple[int, Path, str]:
+        """The status of a run of ``script``, the worktree it took and what it printed after naming it."""
+
+        with self.start(script, run) as started:
+            said = started.stdout.read().decode() if started.stdout else ""
+            status = started.wait()
+        where, rest = said.split("\n", 1)
+        return status, Path(where.split()[0]), rest
+
+    def test_a_tree_gets_a_worktree_of_its_commit_and_back_archives_only_what_the_run_wrote(self):
+        """No ref sent is left behind, the gitignored files .worktreeinclude names and the files staged for
+        the run are laid in, and back holds what the run wrote, once, never an older verdict."""
+
+        self.step("stage", "run", given=archive({"var/probe.js": "probe"}))
+        status, where, said = self.ran('echo "$HQ_GATE_SENT" >var/sent; mkdir -p var/gate; echo ok >var/gate/x.txt')
         self.assertEqual(status, 0, said)
-        where = self.scratch / "cache" / "hq-gates" / self.tree
+        self.assertEqual(fixture_git(where)("rev-parse", "HEAD"), self.commit)
+        self.assertEqual((where / "local.toml").read_text(), "kept")
+        self.assertEqual((where / "var" / "probe.js").read_text(), "probe")
         self.assertEqual((where / "var" / "sent").read_text().strip(), self.tree)
+        self.assertEqual(self.git("for-each-ref", "refs/gate"), "")
+        with tarfile.open(fileobj=io.BytesIO(self.step("back", "run"))) as kept:
+            self.assertEqual(kept.getnames(), ["var/gate/x.txt"])
+        self.assertEqual(self.step("back", "run"), b"")
 
-        status, said = ran("echo 'one = 2' >kept.py")
+    def test_a_checkout_s_next_tree_reuses_its_worktree_judged_as_sent_whatever_an_earlier_run_wrote(self):
+        """The environment and caches a run left stay warm for the next tree its checkout sends, while a
+        tracked file it rewrote or a new one it left is gone: the run judges the tree sent."""
+
+        from tools.gate.tree import working_tree
+
+        _, where, _ = self.ran("echo 'one = 2' >kept.py; echo 'left = True' >stray.py; echo mine >var/kept.txt")
+        status, again, said = self.ran("true", run="again")
+        self.assertEqual((status, again), (0, where), said)
+        self.assertEqual(working_tree(where), self.tree)
+        self.assertEqual((where / "local.toml").read_text(), "kept")
+        self.assertEqual((where / "var" / "kept.txt").read_text().strip(), "mine")
+
+    def test_runs_at_once_never_share_a_worktree(self):
+        """Two runs of one checkout at once each take a worktree of their own, so neither resets the tree or
+        the stamp of what it wrote under the other."""
+
+        with self.start("sleep 60", run="first") as first:
+            assert first.stdout and first.stdin
+            where = Path(first.stdout.readline().decode().split()[0])
+            status, other, said = self.ran("true", run="second")
+            first.stdin.close()
+            first.stdout.read()
+        self.assertEqual(status, 0, said)
+        self.assertNotEqual(other, where)
+
+    def test_room_says_the_machines_free_tokens_and_the_count_its_clone_declares(self):
+        """The sender weighs a run against that machine by the code that reads its own room, run there in the
+        clone whose git config declares the machine's tokens."""
+
+        from tools.gate.room import DECLARED
+
+        self.git("config", DECLARED, "3")
+        self.env |= {"MISE_STATE_DIR": str(self.scratch / "state")}
+        said = self.step("room", str(self.checkout), given=self.remote.ROOM.read_bytes()).decode()
+        self.assertEqual(said.splitlines(), ["3", "3"])
+
+    def test_a_run_that_rewrites_the_tree_it_was_sent_fails_naming_what_it_wrote(self):
+        """A step that writes a fix there (the formatter, on a file sent unformatted) passes a tree nobody sent
+        and never brings it back, so the run fails, naming the files; one that writes only what git ignores
+        passes."""
+
+        status, _, said = self.ran("mkdir -p var/gate; echo ok >var/gate/x.txt")
+        self.assertEqual(status, 0, said)
+        (self.checkout / "unformatted.py").write_text("one=1\n")
+        self.git("add", "unformatted.py")
+        self.git("commit", "--quiet", "--no-verify", "-m", "unformatted")
+        self.commit, self.tree = self.git("rev-parse", "HEAD"), self.git("rev-parse", "HEAD^{tree}")
+        ruff = Path(sys.executable).with_name("ruff")
+        status, _, said = self.ran(f"{shlex.quote(str(ruff))} format --quiet --no-cache unformatted.py")
         self.assertNotEqual(status, 0)
-        self.assertIn("kept.py", said)
+        self.assertIn("unformatted.py", said)
 
 
 class ComposedTests(RemoteTestCase):
@@ -273,12 +421,38 @@ class ComposedTests(RemoteTestCase):
         self.assertFalse(composes("dev:look", {}))
         self.assertIn("HQ_LOCAL_PLUGINS", self.remote.CARRIED)
 
+    def test_runs_sending_one_tree_at_once_push_refs_of_their_own(self):
+        """Worktrees send the same extension tree at once; a ref named for the tree makes the second push
+        fail as the first creates it, and the first run there to take its commit would delete it."""
+
+        pushed = []
+        spec = json.dumps({"usage_spec": {"cmd": {}}})
+        with (
+            mock.patch.dict(os.environ, {"HQ_LOCAL_PYTHONPATH": str(self.remote.ROOT)}),
+            mock.patch.object(self.remote, "working_tree", return_value=TREE),
+            mock.patch.object(self.remote, "gate_commit", return_value=OTHER),
+            mock.patch.object(self.remote, "git", return_value=[str(self.remote.ROOT)]),
+            mock.patch.object(self.remote, "push", side_effect=lambda _root, _to, refspecs: pushed.extend(refspecs)),
+            mock.patch.object(self.remote, "done", return_value=spec),
+            mock.patch.object(self.remote, "words", return_value=[]),
+            mock.patch.object(self.remote.chain, "answered", return_value=[]),
+            mock.patch.object(self.remote.chain, "fast_base", return_value=(OTHER,)),
+            mock.patch.object(self.remote.chain, "passes", return_value=Path("/nonexistent")),
+            mock.patch.object(self.remote.chain, "maps", return_value=Path("/nonexistent")),
+        ):
+            sent = [self.remote.send("fast", "example-host", "/home/example/hq", {}) for _ in range(2)]
+        refs = [spec.split(":", 1)[1] for spec in pushed]
+        self.assertEqual(len(refs), 4, pushed)
+        self.assertNotEqual(refs[0], refs[2], "the tree's ref")
+        self.assertNotEqual(refs[1], refs[3], "the extension's ref")
+        self.assertNotEqual(sent[0].id, sent[1].id)
+
 
 class CarriedTests(RemoteTestCase):
     def handed(self, environ: dict[str, str], *, terminal: bool) -> list[str]:
         """The variables the run there is started with, by the command run_there sends."""
 
-        sent = self.remote.Sent(TREE, "/home/example/hq-gates/" + TREE, "/home/example", ["--", "x"], "", "")
+        sent = self.remote.Sent(TREE, OTHER, ["--", "x"], "run", None, "")
         screen = mock.Mock(isatty=mock.Mock(return_value=terminal))
         with (
             mock.patch.dict(os.environ, environ, clear=True),
@@ -289,9 +463,9 @@ class CarriedTests(RemoteTestCase):
             mock.patch("sys.stdout", screen),
             mock.patch("sys.stderr", new_callable=io.StringIO),
         ):
-            started.return_value.stdout = []
+            started.return_value.stdout = [b"/home/example/hq-gates/sender-1 /home/example\n"]
             started.return_value.wait.return_value = 0
-            self.remote.run_there("test", "example-host", "hq", {})
+            self.remote.run_there("test", "example-host", "hq", {}, lambda _where: None)
         # The host half's arguments are one word of the ssh command line, as the shell there splits it.
         (there,) = [word for word in started.call_args.args[0] if "remote-host.sh" in word]
         words = shlex.split(there)

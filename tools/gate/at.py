@@ -3,8 +3,7 @@ closing on the line tools/gate/verdict.py prints.
 
 mise parses the task's arguments (its usage in mise-tasks/test.toml) and this
 reads what it parsed. What `--at` and `--keep` do is the task's help
-(`mise run test --help`). A run takes the heavy turn (mise-tasks/turn), or a share of it when
-tools/gate/turn.py finds it one process; a run at a ref builds a worktree, so it always takes the turn.
+(`mise run test --help`). A run takes the share of the heavy turn ``weight`` gives it.
 """
 
 import fnmatch
@@ -13,7 +12,6 @@ import os
 import re
 import shlex
 import signal
-import subprocess
 import sys
 from collections.abc import Callable, Collection
 from dataclasses import dataclass, field, replace
@@ -34,12 +32,14 @@ from hq.platform.core.tests.task import (
     worktree,
 )
 from tests.mise_tasks import mise_tasks
-from tools.gate.turn import in_share, in_turn, inside
+from tools.gate.turn import CAPACITY, ONE, in_share, inside, weighed
 from tools.gate.verdict import REPORTS, FailedTest, Gate, Step, run
 
 ROOT = Path(__file__).resolve().parents[2]
 # Everything after it is the developer's, so a later --parallel or -k wins.
 TEST = ["manage.py", "test", "--noinput", "--parallel", "auto"]
+# The tokens mise run test weighed the run at (`python -m tools.gate.at --weight`) before it chose the machine.
+WEIGHED = "HQ_TEST_WEIGHED"
 # The ref's own dependencies, as `mise run test` installs them here.
 UV_RUN = ["uv", "run", "--group", "browser", "python"]
 # How the test loader reports a label whose module raised on import.
@@ -562,25 +562,39 @@ def stop(signum: int, _frame: object) -> None:
     raise SystemExit(128 + signum)
 
 
-def take_the_turn(typed: Typed) -> None:
-    """Run again inside the heavy turn, or in a share of it when the run is one process, unless this run is
-    in either already. Either ends the run with the line on what its process tree spent. The run again
-    inherits mise's parse through the environment."""
+def weight(typed: Typed) -> int:
+    """The tokens of the share the run takes. Go's tests under the race detector and the shell suites need
+    the whole machine, as test:controller and lint:shell do. A run of tests takes what tools/gate/turn.py
+    weighs this tree's run of its labels at: TEST's own options, then the developer's arguments. At a ref
+    it is the same: the worktree it builds is files, and the ref's run of those labels, and the run again
+    with a support file kept, each start one at a time and load no more tests than this tree has."""
+
+    try:
+        if typed.go or shell_run(typed):
+            return CAPACITY
+    except ValueError:
+        # main refuses it before any run.
+        return ONE
+    return weighed([*TEST[2:], *typed.args], ROOT)
+
+
+def handed_weight() -> str:
+    """The weight mise run test handed this run, taken out of the environment so no run under it reads it."""
+
+    handed = os.environ.get(WEIGHED, "")
+    os.environ.pop(WEIGHED, None)
+    return handed
+
+
+def take_the_turn(typed: Typed, handed: str = "") -> None:
+    """Run again in the share ``weight`` gives it, or the weight ``handed`` the task handed it, unless this
+    run is in the turn or a share already, which ends the run with the line on what its process tree spent.
+    The run again inherits mise's parse through the environment."""
 
     if inside():
         return
-    # What it weighs is asked in a process of its own, as tools/lib/heavy-turn.sh asks: the settings it
-    # loads start a run, which the exec below would leave with nothing to remove it. It weighs the run
-    # this task makes: TEST's own options, then the developer's arguments.
-    weight = "whole"
-    if typed.at is None and not typed.go:
-        weighed = [sys.executable, "-m", "tools.gate.turn", *TEST[2:], *typed.args]
-        weight = (
-            subprocess.run(weighed, cwd=ROOT, capture_output=True, text=True, check=False).stdout.split() or [weight]
-        )[-1]
-    # A run at a ref builds a worktree and may run the suite there twice.
-    prefix = in_turn("2h") if not weight.isdigit() else in_share(int(weight), "2h")
-    command = [*prefix, sys.executable, "-m", "tools.gate.at"]
+    tokens = int(handed) if handed.isdigit() else weight(typed)
+    command = [*in_share(tokens, "2h"), sys.executable, "-m", "tools.gate.at"]
     os.chdir(ROOT)
     os.execvp(command[0], command)
 
@@ -668,8 +682,12 @@ def main(typed: Typed) -> int:
 
 if __name__ == "__main__":
     typed = Typed.from_usage(usage())
+    if sys.argv[1:] == ["--weight"]:
+        print(weight(typed))
+        sys.exit(0)
+    handed = handed_weight()
     # Refused before the turn, so a mistyped label waits for nothing.
     if refuse_tasks(typed):
         sys.exit(2)
-    take_the_turn(typed)
+    take_the_turn(typed, handed)
     sys.exit(main(typed))
