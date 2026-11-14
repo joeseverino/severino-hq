@@ -3,15 +3,20 @@
 import re
 import statistics
 from html.parser import HTMLParser
-from typing import override
+from typing import NamedTuple, override
 
 from tools.pipeline.release_readings import keyed
 
 # One metric of a Server-Timing header: its name, then `;dur=<ms>` among its parameters.
 _METRIC = re.compile(r"(?:^|,)\s*([!#$%&'*+.^_`|~\w-]+)((?:\s*;[^,]*)*)")
 _DURATION = re.compile(r";\s*dur\s*=\s*([0-9.]+)")
-# `footprint -f bytes` prints each process's resident footprint as this line.
-_FOOTPRINT = re.compile(r"^\s*phys_footprint:\s*(\d+)\s*B\s*$", re.MULTILINE)
+# What each system reports a process's memory as, as tools/lib/measured reads it, and the bytes in
+# its unit: `footprint -f bytes` on macOS prints each process's footprint as the first line, and
+# Linux's smaps_rollup gives a process's proportional set size and its swapped share as the second.
+_MEMORY = (
+    (re.compile(r"^\s*phys_footprint:\s*(\d+)\s*B\s*$", re.MULTILINE), 1),
+    (re.compile(r"^(?:Swap)?Pss:\s+(\d+) kB$", re.MULTILINE), 1024),
+)
 
 
 def server_time(header: str, metric: str = "app") -> float | None:
@@ -31,12 +36,13 @@ def percentiles(values: list[float]) -> tuple[float, float]:
     return round(cuts[9], 2), round(cuts[18], 2)
 
 
-def footprint_bytes(output: str) -> int:
-    """The footprint of every process `footprint -f bytes` reported, together."""
+def memory_bytes(output: str) -> int:
+    """The memory of every process ``output`` reports, together: what `footprint -f bytes` printed,
+    or the /proc smaps_rollup of each process."""
 
-    found = [int(value) for value in _FOOTPRINT.findall(output)]
+    found = [int(value) * unit for pattern, unit in _MEMORY for value in pattern.findall(output)]
     if not found:
-        raise ValueError(f"footprint reported no process: {output.strip()[:200]!r}")
+        raise ValueError(f"no process's memory was reported: {output.strip()[:200]!r}")
     return sum(found)
 
 
@@ -55,22 +61,44 @@ _VOID = frozenset(
 )
 # A table body's rows that are no record: a group's heading, and the line held beneath an open row.
 _NOT_RECORDS = frozenset({"row-group", "row-detail"})
+# A group's heading is drawn once for many records, so its markup is the page's, not a record's.
+_GROUPING = frozenset({"row-group"})
+
+
+class Rows(NamedTuple):
+    """The records a page's tables hold, and the bytes of HTML their rows take, each record's
+    held-back line included: what the page spends per record, apart from what it spends once."""
+
+    count: int
+    html_bytes: int
 
 
 class _Rows(HTMLParser):
     """Counts the records a reader meets in a page's tables, as the browser gates select them
-    (`main .data-table > tbody > tr`), leaving out the rows that hold no record of their own."""
+    (`main .data-table > tbody > tr`), leaving out the rows that hold no record of their own, and
+    measures the HTML of every row a record draws."""
 
-    def __init__(self) -> None:
+    def __init__(self, html: str) -> None:
         super().__init__()
+        self.html = html
+        self.line_starts = [0, *(index + 1 for index, char in enumerate(html) if char == "\n")]
         self.open: list[tuple[str, frozenset[str]]] = []
         self.rows = 0
+        # The depth in ``open`` of the row being measured, and where in the text it starts.
+        self.measuring: tuple[int, int] | None = None
+        self.row_bytes = 0
+
+    def _offset(self) -> int:
+        line, column = self.getpos()
+        return self.line_starts[line - 1] + column
 
     @override
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         classes = frozenset((dict(attrs).get("class") or "").split())
-        if tag == "tr" and self._in_body() and not classes & _NOT_RECORDS:
-            self.rows += 1
+        if tag == "tr" and self._in_body():
+            self.rows += 0 if classes & _NOT_RECORDS else 1
+            if not classes & _GROUPING:
+                self.measuring = (len(self.open), self._offset())
         if tag not in _VOID:
             self.open.append((tag, classes))
 
@@ -88,16 +116,20 @@ class _Rows(HTMLParser):
         for depth in range(len(self.open) - 1, -1, -1):
             if self.open[depth][0] == tag:
                 del self.open[depth:]
+                if self.measuring and depth <= self.measuring[0]:
+                    end = self.html.find(">", self._offset()) + 1 or len(self.html)
+                    self.row_bytes += len(self.html[self.measuring[1] : end].encode())
+                    self.measuring = None
                 return
 
 
-def data_rows(html: str) -> int:
-    """How many records the tables of a page's main region hold."""
+def data_rows(html: str) -> Rows:
+    """The records the tables of a page's main region hold, and the HTML their rows take."""
 
-    reader = _Rows()
+    reader = _Rows(html)
     reader.feed(html)
     reader.close()
-    return reader.rows
+    return Rows(reader.rows, reader.row_bytes)
 
 
 def cookie(output: str) -> tuple[str, str]:

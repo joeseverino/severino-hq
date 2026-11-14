@@ -1304,10 +1304,17 @@ chain of ancestors with their widths:
 `mise tasks info perf` gives its flags. It is a report, not a gate. It
 measures:
 
-- on the server: time, queries, the rows its tables hold and its HTML size;
+- on the server: time, the rows its tables hold, and its queries and HTML
+  split into what the page costs once and what it costs per row;
 - in Chromium: bytes, requests, first and largest contentful paint (first
   visit and repeat), script time and layout shift;
 - memory and cold start.
+
+A page's queries are `page q`, the first of each SQL statement it sends, and
+`row q`, every repeat of one (N+1), which grows with the rows it draws. Its
+HTML is `page KB`, outside its records' rows, and `B/row`, their bytes per
+record. Each ref is measured on its own seed, so a page that drew more rows at
+the same cost moves only `rows`, `row q` and its total HTML.
 
 A first load's bytes are also shown by type (document, stylesheet, script,
 font, image). A load whose stylesheets and scripts all came uncompressed, as a
@@ -1325,11 +1332,14 @@ failed one is recorded with its error and the rest go on, and each step says
 how long it took. `<run>.txt`, which the session log shows, is the summary,
 and `<run>.table` has every page.
 
-Memory is what the server allocated: a scratch server's footprint, or an
-image's cgroup `anon`, the same reading `release:report` takes of production,
-so the three compare. A container's `memory.current`, `docker stats` and a
-process's RSS add clean pages of the files it mapped or read (the shared
-libraries, the database), charged to whichever container read them first.
+Memory is what the server allocated: a scratch server's footprint on macOS
+and its proportional set size with its swapped share on Linux, the readings
+the heavy gates' peak memory takes, or an image's cgroup `anon`, the same
+reading `release:report` takes of production. A container's
+`memory.current`, `docker stats` and a process's RSS add clean pages of the
+files it mapped or read (the shared libraries, the database), charged to
+whichever container read them first. The title names the machine measured,
+and a run kept on another machine never stands in for a base.
 
 Production holds more than a pass over the pages does: the bridge and the
 signing-key keeper it runs, and the MCP server. The MCP server starts on an

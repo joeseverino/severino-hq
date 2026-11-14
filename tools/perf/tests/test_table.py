@@ -18,7 +18,7 @@ RECORDED = {
     "pages": [
         {
             "page": "/",
-            "server": {"status": 200, "p50_ms": 37.21, "p95_ms": 38.05, "queries": 42},
+            "server": {"status": 200, "p50_ms": 37.21, "p95_ms": 38.05, "queries": 42, "repeated_queries": 30},
             "browser": {
                 "402": {
                     "first": {"bytes": 563445, "requests": 25},
@@ -40,7 +40,7 @@ RECORDED = {
         },
         {
             "page": "/domains/",
-            "server": {"status": 302, "p50_ms": 7.48, "p95_ms": 7.74, "queries": None},
+            "server": {"status": 302, "p50_ms": 7.48, "p95_ms": 7.74, "queries": None, "repeated_queries": None},
             "browser": {
                 "402": {
                     "first": {"bytes": 557687, "requests": 25},
@@ -105,16 +105,17 @@ class TableTests(SimpleTestCase):
     def test_a_row_per_page_and_width_with_the_server_on_the_first(self):
         found = rows(table.render(RECORDED))
 
-        self.assertEqual(found["/", "402"]["queries"], "42")
+        self.assertEqual(found["/", "402"]["page q"], "12")
+        self.assertEqual(found["/", "402"]["row q"], "30")
         self.assertEqual(found["/", "402"]["p50 ms"], "37.2")
-        self.assertNotIn("queries", found["/", "1360"])
+        self.assertNotIn("page q", found["/", "1360"])
         self.assertEqual(found["/", "1360"]["script ms"], "4.2")
         self.assertEqual(found["/", "402"]["first KB"], f"{563445 / 1024:.1f}")
 
     def test_a_page_that_did_not_answer_200_says_so_and_its_missing_count_is_a_dash(self):
         found = rows(table.render(RECORDED))
 
-        self.assertEqual(found["/domains/ (302)", "402"]["queries"], "-")
+        self.assertEqual(found["/domains/ (302)", "402"]["page q"], "-")
 
     def test_a_page_s_records_and_html_size_sit_beside_its_server_time(self):
         report = copy.deepcopy(RECORDED)
@@ -126,6 +127,35 @@ class TableTests(SimpleTestCase):
 
         self.assertEqual(found["/", "402"]["rows"], "50 +25")
         self.assertEqual(found["/", "402"]["HTML KB"], "40.0 +20.0")
+
+    def test_a_page_that_drew_more_records_at_the_same_cost_each_reads_as_more_rows_only(self):
+        def drawing(records: int) -> dict:
+            report = copy.deepcopy(RECORDED)
+            report["pages"][0]["server"] |= {
+                "rows": records,
+                "html_bytes": 20480 + records * 400,
+                "row_html_bytes": records * 400,
+                "queries": 12 + records - 1,
+                "repeated_queries": records - 1,
+            }
+            return report
+
+        found = rows(table.render(drawing(50), drawing(25)))["/", "402"]
+
+        self.assertEqual(found["rows"], "50 +25")
+        self.assertEqual(found["row q"], "49 +25")
+        self.assertEqual(found["page q"], "12 0")
+        self.assertEqual(found["page KB"], "20.0 0")
+        self.assertEqual(found["B/row"], "400 0")
+
+    def test_a_page_without_records_has_no_bytes_per_row(self):
+        report = copy.deepcopy(RECORDED)
+        report["pages"][0]["server"] |= {"rows": 0, "html_bytes": 2048, "row_html_bytes": 0}
+
+        found = rows(table.render(report))["/", "402"]
+
+        self.assertEqual(found["B/row"], "-")
+        self.assertEqual(found["page KB"], "2.0")
 
     def test_each_visit_s_paint_times_sit_beside_its_bytes_and_a_report_without_them_shows_a_dash(self):
         report = copy.deepcopy(RECORDED)
@@ -144,9 +174,28 @@ class TableTests(SimpleTestCase):
     def test_the_total_sums_every_page(self):
         found = rows(table.render(RECORDED))
 
-        self.assertEqual(found["total", "402"]["queries"], "42")
+        self.assertEqual(found["total", "402"]["row q"], "30")
         self.assertEqual(found["total", "402"]["p50 ms"], f"{37.21 + 7.48:.1f}")
         self.assertEqual(found["total", "1360"]["first req"], "50")
+
+    def test_the_total_bytes_per_row_are_every_record_s_bytes_over_every_record(self):
+        report = copy.deepcopy(RECORDED)
+        report["pages"][0]["server"] |= {"rows": 10, "html_bytes": 4000, "row_html_bytes": 1000}
+        report["pages"][1]["server"] |= {"rows": 30, "html_bytes": 12000, "row_html_bytes": 9000}
+
+        found = rows(table.render(report))
+
+        self.assertEqual(found["total", "402"]["B/row"], "250")
+
+    def test_the_title_names_the_machine_and_a_base_measured_on_another(self):
+        report = copy.deepcopy(RECORDED)
+        report["plan"]["machine"] = "here.example"
+        base = copy.deepcopy(report)
+
+        self.assertIn("on here.example", table.render(report).splitlines()[0])
+        self.assertNotIn("measured on", table.render(report, base).splitlines()[0])
+        base["plan"]["machine"] = "there.example"
+        self.assertIn("measured on there.example", table.render(report, base).splitlines()[0])
 
     def test_memory_and_cold_start_follow_the_table(self):
         rendered = table.render(RECORDED)
@@ -158,6 +207,7 @@ class TableTests(SimpleTestCase):
         base = copy.deepcopy(RECORDED)
         base["commit"] = "0123456789ab"
         base["pages"][0]["server"]["queries"] = 40
+        base["pages"][0]["server"]["repeated_queries"] = 28
         base["pages"][0]["browser"]["402"]["script_ms"] = 20.4
         base["memory"]["idle_bytes"] -= 2 * 1024**2
 
@@ -165,10 +215,10 @@ class TableTests(SimpleTestCase):
         found = rows(rendered)
 
         self.assertIn("beside 0123456789ab", rendered.splitlines()[0])
-        self.assertEqual(found["/", "402"]["queries"], "42 +2")
+        self.assertEqual(found["/", "402"]["row q"], "30 +2")
         self.assertEqual(found["/", "402"]["script ms"], "19.4 -1.0")
         self.assertEqual(found["/", "402"]["p50 ms"], "37.2 0")
-        self.assertEqual(found["total", "402"]["queries"], "42 +2")
+        self.assertEqual(found["total", "402"]["row q"], "30 +2")
         self.assertIn("MB", next(line for line in rendered.splitlines() if line.startswith("memory idle")))
         self.assertIn("+2.0", next(line for line in rendered.splitlines() if line.startswith("memory idle")))
 

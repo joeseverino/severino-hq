@@ -122,6 +122,7 @@ class AlternationTests(SimpleTestCase):
         self.assertEqual(found["here"]["/"]["p50_ms"], 6.0)
         self.assertEqual(found["here"]["/"]["rows"], 5)
         self.assertEqual(found["base"]["/"]["rows"], 3)
+        self.assertEqual(found["here"]["/"]["row_html_bytes"], 5 * len("<tr><td>x</td></tr>"))
 
     def test_a_page_a_server_lacks_is_never_asked_of_it_nor_in_its_answer(self):
         asked: dict[str, list[str]] = {"base": [], "here": []}

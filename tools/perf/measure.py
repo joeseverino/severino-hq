@@ -162,8 +162,9 @@ def server_times(
     lacks: Mapping[str, Collection[str]] | None = None,
 ) -> dict[str, dict[str, dict[str, Any]]]:
     """By server, then page: its status, the median and 95th percentile of its server time over
-    ``rounds``, every time in the order asked, and the records its tables hold and its HTML's size,
-    so a page drawing more rows on one side than the other is told apart from code that got slower.
+    ``rounds``, every time in the order asked, the records its tables hold, its HTML's size and the
+    part of it their rows take, so a page drawing more rows on one side than the other is told
+    apart from code that got slower or heavier.
 
     Each round walks every page, asking each server in turn, and which goes first alternates round
     by round, so a machine busy for a moment weighs on every side alike. A page in a server's
@@ -200,13 +201,15 @@ def _asking_order(names: list[str], turn: int) -> list[str]:
 def _numbers(times: list[float | None], last: Answer) -> dict[str, Any]:
     known = [took for took in times if took is not None]
     p50, p95 = parse.percentiles(known) if known else (None, None)
+    rows = parse.data_rows(last.body.decode("utf-8", errors="replace"))
     return {
         "status": last.status,
         "p50_ms": p50,
         "p95_ms": p95,
         "times_ms": times,
-        "rows": parse.data_rows(last.body.decode("utf-8", errors="replace")),
+        "rows": rows.count,
         "html_bytes": len(last.body),
+        "row_html_bytes": rows.html_bytes,
     }
 
 

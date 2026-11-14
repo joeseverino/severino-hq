@@ -33,11 +33,19 @@ def shown_under(seed: str) -> dict[str, str]:
 
 
 PROBE = Path(__file__).with_name("queries_probe.py")
-# What each target's memory counts. A footprint is dirty, compressed and swapped memory, no clean
-# page of a file. An image's is its cgroup's anon, as release:report reads production's: docker
-# stats adds the page cache charged to the container, which is whatever files it read first, not
-# anything the code holds.
-SCRATCH_MEMORY = "footprint of the serving process"
+# What each target's memory counts. A scratch server's is read from what tools/lib/measured reads
+# on the same system: on Linux each process's proportional set size and its swapped share
+# (smaps_rollup), so pages the processes share count once; elsewhere its macOS footprint, dirty,
+# compressed and swapped memory and no clean page of a file. The two are not one measure, so each
+# names itself, and a kept report stands in only under the same. An image's is its cgroup's anon,
+# as release:report reads production's: docker stats adds the page cache charged to the container,
+# which is whatever files it read first, not anything the code holds.
+LINUX = Path("/proc/self/smaps_rollup").is_file()
+SCRATCH_MEMORY = (
+    "proportional set size of the serving process, its swapped share included"
+    if LINUX
+    else "footprint of the serving process"
+)
 IMAGE_MEMORY = "the container's anonymous memory"
 MARKER = "perf-queries "
 # A first boot migrates and seeds a new database; a later one finds it made.
@@ -124,7 +132,7 @@ def run(command: list[str], *, env: dict[str, str] | None = None, cwd: Path | No
     return done.stdout
 
 
-def probe_counts(output: str) -> dict[str, int | None]:
+def probe_counts(output: str) -> dict[str, dict[str, int] | None]:
     for line in output.splitlines():
         if line.startswith(MARKER):
             return json.loads(line.removeprefix(MARKER))
@@ -249,20 +257,20 @@ class Scratch:
     def session(self) -> tuple[str, str]:
         return parse.cookie(self._read("dev:session"))
 
-    def queries(self, pages: list[str]) -> dict[str, int | None]:
+    def queries(self, pages: list[str]) -> dict[str, dict[str, int] | None]:
         env = self.env | {"PERF_PAGES": json.dumps(pages), "PERF_USER": USER}
         code = PROBE.read_text(encoding="utf-8")
         return probe_counts(self._read("manage:scratch", "--", "shell", "--no-imports", "-c", code, env=env))
 
     def memory(self) -> int:
-        """The serving processes' footprint: under the reloader, its worker alone."""
+        """The serving processes' memory, as SCRATCH_MEMORY counts it: under the reloader, its worker alone."""
 
         listening = run(["lsof", "-nP", f"-iTCP:{self.port}", "-sTCP:LISTEN", "-t"]).split()
         parents = {pid: run(["ps", "-o", "ppid=", "-p", pid]).strip() for pid in listening}
         workers = [pid for pid, parent in parents.items() if parent in parents] or listening
-        return parse.footprint_bytes(
-            run(["footprint", "-f", "bytes", "--noCategories", *(f"-p{pid}" for pid in workers)])
-        )
+        if not workers:
+            raise NotMeasured(f"no process listens on port {self.port}")
+        return process_memory(workers)
 
     def cold_start(self) -> float:
         """Milliseconds from starting again on the database made to ready."""
@@ -272,6 +280,16 @@ class Scratch:
         self._start("--keep")
         wait_ready(self.url, BOOT_S, self._alive)
         return (time.monotonic() - started) * 1000
+
+
+def process_memory(pids: list[str]) -> int:
+    """What ``pids`` hold together, as SCRATCH_MEMORY counts it."""
+
+    if LINUX:
+        return parse.memory_bytes(
+            "".join(Path(f"/proc/{pid}/smaps_rollup").read_text(encoding="utf-8") for pid in pids)
+        )
+    return parse.memory_bytes(run(["footprint", "-f", "bytes", "--noCategories", *(f"-p{pid}" for pid in pids)]))
 
 
 def stop_group(process: subprocess.Popen) -> None:
@@ -396,7 +414,7 @@ class Image:
         # serving process's, which shares the database and the key.
         return parse.cookie(self._manage("dev_session", USER, env={"DJANGO_DEBUG": "1"}))
 
-    def queries(self, pages: list[str]) -> dict[str, int | None]:
+    def queries(self, pages: list[str]) -> dict[str, dict[str, int] | None]:
         code = PROBE.read_text(encoding="utf-8")
         env = {"PERF_PAGES": json.dumps(pages), "PERF_USER": USER}
         return probe_counts(self._manage("shell", "--no-imports", "-c", code, env=env))

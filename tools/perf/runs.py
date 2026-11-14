@@ -21,7 +21,9 @@ Report = dict[str, Any]
 # How a report's numbers are computed from what it measured. A kept report is taken
 # only under the same, so a number never stands beside one computed another way:
 # raise it when a computation changes.
-FORMAT = 3
+FORMAT = 4
+# What the query probe counts of each page, each a key of its `server` numbers.
+QUERIES = ("queries", "repeated_queries")
 # How far apart, in one-minute load average, a kept report's load and this run's may be for it to
 # stand in. Cold start swings most with load, by more than a change moves it: within 2, a kept
 # base stands in on a machine as quiet or as busy as when it was measured, and one measured idle
@@ -164,5 +166,4 @@ def stand_in(measured: Report, kept: Report) -> None:
     for entry in measured["pages"]:
         was = entries[entry["page"]]
         entry["browser"] = copy.deepcopy(was.get("browser", {}))
-        if "queries" in was.get("server", {}):
-            entry["server"]["queries"] = was["server"]["queries"]
+        entry["server"].update({key: was["server"][key] for key in QUERIES if key in was.get("server", {})})

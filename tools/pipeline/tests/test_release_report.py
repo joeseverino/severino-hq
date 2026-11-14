@@ -65,7 +65,15 @@ def side(commit, idle, server_ms):
         "pages": [
             {
                 "page": "/",
-                "server": {"p50_ms": server_ms, "p95_ms": server_ms, "queries": 3, "rows": 1, "html_bytes": 2048},
+                "server": {
+                    "p50_ms": server_ms,
+                    "p95_ms": server_ms,
+                    "queries": 3,
+                    "repeated_queries": 0,
+                    "rows": 1,
+                    "html_bytes": 2048,
+                    "row_html_bytes": 512,
+                },
             }
         ],
         "memory": {"idle_bytes": idle, "after_pass_bytes": idle * 2},

@@ -3,6 +3,7 @@ tells a server that refuses it from one still starting."""
 
 import ast
 import inspect
+import os
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import override
@@ -81,3 +82,8 @@ class ReadinessTests(SimpleTestCase):
         for status in (400, 403):
             with self.subTest(status=status), self.assertRaisesRegex(targets.NotMeasured, str(status)):
                 self.wait(status)
+
+
+class ProcessMemoryTests(SimpleTestCase):
+    def test_a_running_process_s_memory_is_read_on_this_system(self):
+        self.assertGreater(targets.process_memory([str(os.getpid())]), 0)

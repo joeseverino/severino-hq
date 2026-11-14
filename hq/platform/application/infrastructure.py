@@ -476,9 +476,7 @@ def save_managed_resource(
         # state is recomputed here rather than waiting for each to be saved.
         if changed and provider.resolution_input:
             advance_dependents(delivery_targets())
-        applying = (
-            _apply_saved(resource, replaced, principal=principal) if changed and not copied_from_live else None
-        )
+        applying = _apply_saved(resource, replaced, principal=principal) if changed and not copied_from_live else None
 
     return {
         "ok": True,
@@ -513,9 +511,7 @@ def _call_off_waiting(resource: ManagedResource) -> None:
 SAVED_REASON = "HQ's copy of it changed."
 
 
-def _apply_saved(
-    resource: ManagedResource, replaced: dict[str, Any], *, principal: Principal
-) -> OperationItem | None:
+def _apply_saved(resource: ManagedResource, replaced: dict[str, Any], *, principal: Principal) -> OperationItem | None:
     """Queue the reconcile that applies a saved declaration, as the save's own act.
 
     Every kind's change is applied by the save that made it, so one consent

@@ -7,6 +7,7 @@ gate.
 """
 
 import os
+import platform
 import shutil
 import signal
 import subprocess
@@ -92,6 +93,8 @@ class Plan:
             "extensions": self.extensions,
             "browser_waits_for": SETTLED,
             "memory": IMAGE_MEMORY if self.image else SCRATCH_MEMORY,
+            # Memory and cold start are the machine's: a report kept on another stands in for nothing.
+            "machine": platform.node(),
         }
 
 
@@ -405,8 +408,8 @@ def measure_costs(server: Live, asked: Plan) -> None:
             server.entry(page)["browser"] = seen
 
     def queries() -> None:
-        for page, count in target.queries(pages).items():
-            server.entry(page)["server"]["queries"] = count
+        for page, counts in target.queries(pages).items():
+            server.entry(page)["server"].update(counts or dict.fromkeys(runs.QUERIES))
 
     report["load"] = runs.load()
     print(f"Measuring {report['commit']} at load {report['load']}: cold start, {COLD_STARTS} times", flush=True)

@@ -158,7 +158,9 @@ class SaidWholeTests(SimpleTestCase):
 
         from hq.platform.core.tests import look_shares
 
-        printed = {(f"example/page-{number}", 402): [f"Looking at example/page-{number} at 402"] for number in range(50)}
+        printed = {
+            (f"example/page-{number}", 402): [f"Looking at example/page-{number} at 402"] for number in range(50)
+        }
         read, write = os.pipe()
         heard = bytearray()
         reader = threading.Thread(target=lambda: heard.extend(b"".join(iter_read(read))))
