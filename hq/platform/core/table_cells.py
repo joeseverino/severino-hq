@@ -790,13 +790,9 @@ def _layout(
         # grid stretches an `auto` track whose cells have left as well.
         # The widest column holds at least the padding of a cell drawn across
         # the row (`_SPANNING`), so that cell asks no held column for it.
-        # A column of controls is as wide as its widest control and no wider:
-        # the grid would widen it to the row with the most controls, leaving
-        # every other row's words and columns short of the room beside them,
-        # so a row with more than one control stands them in lines.
-        if kind == "control":
-            tracks.append("min-content")
-            continue
+        # A column of controls is held as the other held columns are: a row's
+        # controls stand side by side where the table has the room, and in
+        # lines only once it has none.
         # A shared column keeps its floor while the table keeps it (`--whole`,
         # or its rank's `--keep-<rank>`, tables.css), which it does only while
         # it has room for every floor it keeps, so no column squeezes another
