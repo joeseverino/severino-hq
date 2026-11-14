@@ -115,7 +115,7 @@ now, in the present tense; how it came to be is the commit message's.
 The policy's `style-src-elem 'self'` refuses a `<style>` element, and HQ
 writes no `style` attribute either: one would be refused once
 `style-src-attr` is `'self'` too, which waits only on a WebKit defect
-(`WebKitSelectCanaryTests` says when it is fixed). A value drawn to scale is
+([playwright#43617](https://github.com/microsoft/playwright/issues/43617)). A value drawn to scale is
 an element that carries it (`<meter>`, `<progress>`, an SVG mark placed in
 percent, `partials/_allocation.html`); a script that places a part writes
 through the CSSOM (`style.setProperty`), which the policy does not govern. A

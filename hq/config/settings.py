@@ -243,8 +243,8 @@ SEVERINO_OUTBOUND_IN_REQUEST = "refuse"
 # https://web.dev/articles/strict-csp
 # Objects and framing are disabled outright.
 # A style element comes only from HQ's own sheets. Attributes stay allowed
-# while WebKit reports one for every <select> (playwright#43617, the canary in
-# browser/reports.py); test_rendered and the template contract keep HQ's out.
+# while WebKit reports one for every <select> (playwright#43617); test_rendered
+# and the template contract keep HQ's out.
 #
 # `require-trusted-types-for` is the one directive here that is not about where
 # content may come from. Every other line describes an origin; this one removes

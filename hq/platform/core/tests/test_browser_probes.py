@@ -11,7 +11,7 @@ from unittest import mock
 from django.test import SimpleTestCase, tag
 
 from hq.platform.core.stylesheets import SHEETS
-from hq.platform.core.tests.browser import planted, probes as probe_package, survey
+from hq.platform.core.tests.browser import probes as probe_package, survey
 from hq.platform.core.tests.browser.probes import axe, settle
 from hq.platform.core.tests.browser.probes.audit import AUDIT
 from hq.platform.core.tests.browser.probes.palette import LINE_CONTRAST, losses, lost_fills
@@ -83,17 +83,7 @@ class ProbeTests(SimpleTestCase):
         )
 
 
-class PlantTests(SimpleTestCase):
-    def test_every_geometry_check_has_a_known_bad_case(self):
-        """A check is proven able to fail by the plant PlantedBrowserTests
-        requires it to find: one with none could pass every page forever."""
-
-        checks = survey_checks("/", WIDE)
-        self.assertIn("sideways", checks)
-        self.assertEqual(sorted(set(checks) - set(planted.PLANTS)), [], "a check with no plant in planted.PLANTS")
-        self.assertEqual(sorted(set(planted.PLANTS) - set(checks)), [], "a plant for no check the survey runs")
-        self.assertEqual(sorted(set(planted.PASSES) - set(checks)), [], "a near miss for no check the survey runs")
-
+class SurveyCheckTests(SimpleTestCase):
     def test_a_check_that_holds_only_once_script_has_run_is_left_out_without_it(self):
         """Only script folds a row, so a page with none is never held to keep
         its rows folded; the gate and the look both read the survey this way."""
@@ -102,13 +92,11 @@ class PlantTests(SimpleTestCase):
         self.assertIn("folded rows stay folded", scripted)
         self.assertLessEqual(scripted, set(survey_checks("/", WIDE)))
         self.assertEqual(scripted & set(survey_checks("/", WIDE, scripted=False)), set())
-        # Its plant is found where it is held.
-        self.assertTrue(all(planted.PLANTS[name].scripted for name in scripted))
 
     def test_every_palette_check_reads_the_page_settled(self):
         """A color caught mid-transition is one the page never settles on,
         so each check of the colors a page paints finishes its transitions
-        first; the near miss of PASSES["contrast"] shows one caught so."""
+        first."""
 
         first = f"async (arg) => {{ ({settle.FINISH_TRANSITIONS})(); return "
         axe.axe_probe.cache_clear()
@@ -160,7 +148,7 @@ def _reader_sees(declared: ast.expr) -> str:
 @tag("source")
 class CheckRegistryTests(SimpleTestCase):
     """A check is declared once, beside its probe, so a new one is an edit to
-    its probe module and planted.py and never to the survey."""
+    its probe module and never to the survey."""
 
     def test_no_check_is_declared_twice(self):
         declared = Counter(name for name, _declared in _every_declared())

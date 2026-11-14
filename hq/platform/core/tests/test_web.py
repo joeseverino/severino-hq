@@ -152,8 +152,8 @@ class AuthGateTests(TestCase):
         A style element comes only from a sheet of HQ's own origin, as a
         script comes only from a tag HQ rendered. ``style-src-attr`` admits
         ``'unsafe-inline'`` only while WebKit reports a violation for every
-        ``<select>`` (WebKitSelectCanaryTests says when it stops); HQ writes
-        no style attribute (test_rendered, the template contract).
+        ``<select>`` (playwright#43617); HQ writes no style attribute
+        (test_rendered, the template contract).
 
         Asserted rather than merely documented, because the failure mode of a
         documented rule is that a second relaxation quietly joins the first

@@ -180,8 +180,8 @@ linux-x64 = { asset_pattern = "codeql-bundle-linux64.tar.zst" }
 # a gate reports, and gates run side by side never share a database (two
 # processes making one new file WAL at once: one is refused as "database is
 # locked"). A gate sees no extension set it did not ask for. A task extends one
-# template and a template extends none, so django-browser restates django's env
-# (test_browser_gate_tasks holds it to it). The composed suite extends django
+# template and a template extends none, so django-browser restates django's
+# env. The composed suite extends django
 # and sets what it changes in its own header. A gate keeps each template it
 # has read, as production does: DEBUG alone would read and parse every
 # template again on every render, which is most of what a page costs a test.

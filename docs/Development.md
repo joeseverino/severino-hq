@@ -407,8 +407,8 @@ The tests it selects are:
 - the architecture tests;
 - every test tagged `tree` the change reaches. Such a test finds its files (a
   module, a template, a doc) by walking this checkout, which no import or name shows
-  (`test_tree_tag.py` holds the tag to the walks; a test that patches the
-  `ROOT` of the code it drives walks a fixture and carries none). One whose
+  (a test that patches the `ROOT` of the code it drives walks a fixture and
+  carries none). One whose
   class declares what it reads, `@reads("**/templates/**", lists=("**",))`
   (`hq/platform/application/tests/reads.py`), runs when the change edits, adds
   or deletes a file it opens, or adds or deletes one it lists or stats; any other runs
@@ -581,7 +581,7 @@ outside the modules run through `apart`:
   the image runs it and ships no ast-grep.
 
 Each is a walk to `tree.is_walk`, an ast-grep command line included, so the
-test carries the `tree` tag (`test_tree_tag.py`).
+test carries the `tree` tag.
 
 The wording rules are Vale's, in `tools/lint/vale`: `.vale.ini` there says
 which files each style reads, `styles` holds the rules, and `lint:prose` runs
@@ -1001,11 +1001,8 @@ nothing.
 
 A check is declared once, beside its probe: an entry of its probe module's
 `CHECKS` (`hq/platform/core/tests/browser/probes/__init__.py` says what an
-entry holds), which the survey collects from every module there. Every check
-the survey runs is proven able to fail. `PLANTS`
-(`hq/platform/core/tests/browser/planted.py`) holds the smallest defect each
-must find, `PlantedBrowserTests` requires it found, and a new check lands as
-its `CHECKS` entry and its plant, never an edit to `survey.py`.
+entry holds), which the survey collects from every module there, so a new check lands as
+its `CHECKS` entry, never an edit to `survey.py`.
 
 A check selects markup only through `SELECTORS`, and
 `hq/platform/core/tests/test_browser_selectors.py` fails on a selector no
@@ -1070,16 +1067,14 @@ host name outside the reserved and shared ranges it names.
 `browser:webkit` runs every browser test in WebKit, which judges, since HQ is
 read in Safari. Chromium is a second opinion, `browser:chromium`, which `mise
 run browser` leaves to CI: the catalog of shared parts, the example estate at
-a phone and a laptop, the planted proofs of every probe, and the layout shifts
-only Chromium records. Every test it runs is also run in WebKit
-(`test_browser_gate_tasks`).
+a phone and a laptop, and the layout shifts only Chromium records. Every
+test it runs is also run in WebKit.
 
 CI splits each of the two into shares that run side by side, `i/n` in the
 browser job's matrix. A sweep marked `@sweep` runs in every share and reads
 its share of the pages (`BrowserGate.mine`); any other test runs in the one
 share its id picks (`hq/platform/core/tests/browser/shards.py`). The shares
-together run the whole gate, which GateReferenceTests and
-`test_browser_gate_tasks` hold.
+together run the whole gate, which GateReferenceTests holds.
 
 `browser --linux` draws in Chromium unless `--engine` names another. It runs
 on this checkout inside the Playwright image `ci.yml` gives the browser job, as

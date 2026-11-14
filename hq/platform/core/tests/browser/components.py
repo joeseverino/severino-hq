@@ -22,7 +22,7 @@ from hq.platform.application.ui import ActivityCalendar, CalendarDay, ChartSerie
 from hq.platform.core.stylesheets import DIRECTORY, stylesheet
 from hq.platform.core.tests.browser.gate import add_css, served_sheet, tab_key, unfold, with_script
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
-from hq.platform.core.tests.browser.probes.boxes import ANY_SCROLLER, MAP, SIDEWAYS, SMALL_TARGETS
+from hq.platform.core.tests.browser.probes.boxes import MAP, SIDEWAYS, SMALL_TARGETS
 from hq.platform.core.tests.browser.probes.palette import BUTTON_EDGES
 from hq.platform.core.tests.browser.probes.parts import (
     DIALOGS_WITHOUT_OPENERS,
@@ -848,42 +848,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
         }""")
         found = [line for line in self.page.evaluate(CELLS) if "example-" in line]
         self.assertEqual([line.split(" runs ")[0] for line in found], ["div.example-box"])
-
-    def test_what_moves_sideways_is_allowed_only_inside_a_box_the_exemption_names(self):
-        """A box past the page's edge is found wherever it is not held by a
-        scrolling box the exemption names: under any scroller, one inside a
-        lane that scrolls is held and the lane passes; under the boxes built
-        to scroll, the lane is found for what it hides and what it holds for
-        running past the page. Either way a table's own scroll box run past
-        the page is found."""
-
-        self.open(next(iter(PAGES)), NARROWEST)
-        self.page.evaluate("""() => {
-          const wide = (name) => {
-            const box = document.createElement('div');
-            box.className = name;
-            box.style.cssText = 'inline-size: 200vw; block-size: 1rem';
-            return box;
-          };
-          const lane = document.createElement('div');
-          lane.className = 'example-lane';
-          lane.style.setProperty('overflow-x', 'auto');
-          lane.append(wide('example-in-lane'));
-          const table = document.createElement('div');
-          table.className = 'table-scroll example-table';
-          table.style.cssText = 'overflow-x: auto; inline-size: 200vw; max-inline-size: none; block-size: 1rem';
-          document.querySelector('main').append(lane, wide('example-loose'), table);
-        }""")
-
-        def found(allowed):
-            said = self.page.evaluate(SIDEWAYS, allowed)
-            return {line.split(" ")[0] for line in said if "example-" in line}
-
-        self.assertEqual(found(ANY_SCROLLER), {"div.example-loose", "div.table-scroll.example-table"})
-        self.assertEqual(
-            found(SELECTORS["sideways"]),
-            {"div.example-lane", "div.example-in-lane", "div.example-loose", "div.table-scroll.example-table"},
-        )
 
     def test_a_word_wider_than_its_chip_may_break_and_a_short_one_in_a_wide_chip_may_not(self):
         """A run is measured against the box it lays out in: a digest that

@@ -698,7 +698,7 @@ def with_tree(
     listed: list[str] | None = None,
     walking: Future[TreeTests] | None = None,
 ) -> list[str]:
-    """The selected labels, and each test tagged tree (test_tree_tag.py) that ``paths`` reach, of those
+    """The selected labels, and each test tagged tree that ``paths`` reach, of those
     ``walking`` finds or else of a walk run now: a walk finds a file by no import or name, so one that declares
     nothing runs on any change, and one that declares its reads (reads.py) on a change to them, ``listed``
     (``paths`` when not given) being what was added or deleted."""

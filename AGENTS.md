@@ -45,10 +45,9 @@ checkouts. To compose an extension worktree instead, set
 
 A test that reads the repository's files carries `@tag("source")`, since no
 image ships those files. It runs only in `lint:source` (`mise run lint:source
-<labels>` for some). One that walks a tree also carries `tree`
-(`test_tree_tag.py` says when). The suite runs in parallel on WAL SQLite
-through `hq/platform/core/file_clones.py`: read it before changing the test
-database. Adding a host domain: [New Domain](docs/New-Domain.md). How agents
+<labels>` for some). One that walks a tree also carries `tree`. The
+suite runs in parallel on WAL SQLite through
+`hq/platform/core/file_clones.py`: read it before changing the test database. Adding a host domain: [New Domain](docs/New-Domain.md). How agents
 build and operate HQ: [AI and HQ](docs/AI.md).
 
 ## Architecture in one minute

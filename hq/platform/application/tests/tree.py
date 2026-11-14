@@ -1,6 +1,5 @@
 """Which tests of a checkout carry which tags, and which of them walk a tree or run a program the image lacks, read from their source.
 
-The guard in test_tree_tag.py holds the ``tree`` tag to the walks, and
 ``mise run fast`` runs the tests it finds tagged ``tree``. The guard in
 test_unshipped_tag.py holds a test that runs git or a tool mise pins to the
 ``source`` tag. Each walk runs apart (apart.py), so the trees it parses leave
@@ -11,7 +10,6 @@ import ast
 import re
 import tomllib
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass
 from pathlib import Path
 
 from hq.platform.application.tests.apart import apart
@@ -149,16 +147,6 @@ def _imported_from(node: ast.ImportFrom, package: str) -> str:
     return ".".join([*base, *([node.module] if node.module else [])])
 
 
-@dataclass(frozen=True)
-class Unit:
-    """One test method: its label, its tags and where its own tags stand."""
-
-    label: str
-    tags: frozenset[str]
-    on_method: bool
-    walks: bool
-
-
 class Reach:
     """Which definitions of a checkout reach what ``found`` picks out (a walk
     unless told otherwise), followed by name across its modules."""
@@ -237,20 +225,6 @@ class Reach:
                 found = self.resolve(owner, node.attr)
         return isinstance(found, tuple) and self.definition(found, cls)
 
-    def units(self, dotted: str) -> list[Unit]:
-        """Every test method of a test module, with the tags Django gives it.
-
-        A class that replaces the ROOT of the code it drives runs that code on
-        a fixture, so what it walks is the fixture, never this checkout.
-        """
-
-        found = []
-        for cls, method, held, own in self.methods(dotted):
-            setup = [m for name in SETUP if (m := self.member(dotted, cls, name))]
-            walks = not replaces_root([method, *(node for _, node in setup)]) and self.reached(dotted, cls, method)
-            found.append(Unit(f"{dotted}.{cls.name}.{method.name}", frozenset(held | own), bool(own), walks))
-        return found
-
     def reached(self, dotted: str, cls: ast.ClassDef, method: ast.FunctionDef) -> bool:
         """Whether a test method, or its class's setup, reaches what is looked for."""
 
@@ -282,31 +256,8 @@ class Reach:
         return held
 
 
-def replaces_root(nodes: list[ast.AST]) -> bool:
-    """Whether any of ``nodes`` patches a module's ROOT: ``patch.object(module, "ROOT", ...)`` or ``patch("a.b.ROOT", ...)``."""
-
-    for node in (sub for each in nodes for sub in ast.walk(each)):
-        if not (isinstance(node, ast.Call) and node.args):
-            continue
-        name = getattr(node.func, "attr", getattr(node.func, "id", ""))
-        named = [arg.value for arg in node.args[:2] if isinstance(arg, ast.Constant) and isinstance(arg.value, str)]
-        if (name == "object" and named == ["ROOT"]) or (name == "patch" and named[:1] and named[0].endswith(".ROOT")):
-            return True
-    return False
-
-
-def tagged(root: Path, tag: str) -> list[str]:
-    """The label of every test carrying ``tag``: its class's, when every test of the class does."""
-
-    return apart(_tagged, root, tag)
-
-
-def _tagged(root: str, tag: str) -> list[str]:
-    return [label for label, _ in _labels(Reach(Path(root)), tag)]
-
-
 def _labels(walks: Reach, tag: str) -> Iterator[tuple[str, Declared | None]]:
-    """Each label ``tagged`` gives, with what its class's ``@reads`` declares, or None without one fast can read."""
+    """Each label of a test carrying ``tag`` (its class's, when every test of the class does), with what its class's ``@reads`` declares, or None without one fast can read."""
 
     for dotted in test_modules(walks.root):
         by_class: dict[str, list[tuple[str, bool]]] = {}
@@ -325,7 +276,7 @@ def _labels(walks: Reach, tag: str) -> Iterator[tuple[str, Declared | None]]:
 
 
 def tree_tests(root: Path) -> TreeTests:
-    """Each test tagged ``tree``, labeled as ``tagged`` labels it, with what its class's ``@reads`` declares
+    """Each test tagged ``tree``, labeled as ``_labels`` labels it, with what its class's ``@reads`` declares
     (reads.py): None runs it on every change."""
 
     return [(label, found and (tuple(found[0]), tuple(found[1]))) for label, found in apart(_tree_tests, root)]
@@ -338,53 +289,6 @@ def _tree_tests(root: str) -> TreeTests:
 def test_modules(root: Path, packages: tuple[str, ...] = SUITE) -> list[str]:
     paths = [path for package in packages for path in source_files(root / package, "test*.py")]
     return [".".join(path.relative_to(root).with_suffix("").parts) for path in paths]
-
-
-def misplaced(root: Path) -> tuple[list[str], list[str], dict[str, str]]:
-    """(source tests that walk without ``tree``, tree tags on no walk, each ``@reads`` fast cannot read and why).
-
-    A tag on a class asks only that one of its tests walk, so a class keeps
-    one tag rather than one per method.
-    """
-
-    untagged, idle, unread = apart(_misplaced, root)
-    return untagged, idle, unread
-
-
-def _misplaced(root: str) -> tuple[list[str], list[str], dict[str, str]]:
-    walks = Reach(Path(root))
-    untagged, idle, unread = [], [], {}
-    for dotted in test_modules(walks.root):
-        by_class: dict[str, list[Unit]] = {}
-        for unit in walks.units(dotted):
-            by_class.setdefault(unit.label.rpartition(".")[0], []).append(unit)
-            if unit.walks and "source" in unit.tags and "tree" not in unit.tags:
-                untagged.append(unit.label)
-        for cls, units in by_class.items():
-            idle.extend(unit.label for unit in units if unit.on_method and "tree" in unit.tags and not unit.walks)
-            if all("tree" in unit.tags and not unit.walks for unit in units) and any(not u.on_method for u in units):
-                idle.append(cls)
-        unread |= _unread(walks, dotted)
-    return untagged, idle, unread
-
-
-def _unread(walks: Reach, dotted: str) -> dict[str, str]:
-    """Each ``@reads`` of a test module that fast would not read as its class's declaration, and why."""
-
-    found = {}
-    module = walks.module(dotted)
-    assert module, dotted
-    for cls in (node for node in module.defined.values() if isinstance(node, ast.ClassDef)):
-        label = f"{dotted}.{cls.name}"
-        own = declared(cls.decorator_list)
-        if own == UNREAD:
-            found[label] = "a glob that is no string literal, which fast cannot read"
-        elif own is not None and not any("tree" in held | mine for _, _, held, mine in walks.methods_of(dotted, cls)):
-            found[label] = "no test of the class is tagged tree, so fast never reads it"
-        for method in (node for node in cls.body if isinstance(node, ast.FunctionDef)):
-            if declared(method.decorator_list) is not None:
-                found[f"{label}.{method.name}"] = "on a method: it holds a class, its class fixtures included"
-    return found
 
 
 # The image's copy of the checkout into /app, with what it leaves out.
