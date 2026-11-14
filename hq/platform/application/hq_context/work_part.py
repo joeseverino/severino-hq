@@ -21,6 +21,7 @@ lazy from ..facts import stored_snapshots
 lazy from ..render_status_findings import FAILURE_CLASSES, UNKNOWN_FAILURE, UNREAD_REASONS, rendering
 lazy from ..routes import reverse
 lazy from ..unit_findings import unit_state
+lazy from ..work_runs import job_run
 
 
 @dataclass(frozen=True, slots=True)
@@ -266,23 +267,14 @@ def _every(span: timedelta) -> str:
     return f"Every {counted(hours, 'hour')}" if hours else f"Every {counted(int(span.total_seconds() // 60), 'minute')}"
 
 
-# The tone of each job state; the words are the state's own.
-_TONES = {"succeeded": GOOD, "failed": SERIOUS, "queued": NEUTRAL, "running": NEUTRAL, "lost": ATTENTION}
 # Recent runs shown per piece of work: as many dots as Dots draws.
 RECENT = Dots.LIMIT
 
 
-def _ended(state: str) -> tuple[str, str]:
-    """How a job of a piece of scheduled work stands, in words, with its tone."""
-
-    return JobRow.State(state).label, _TONES[state]
-
-
 def _run_dot(job: Any) -> Dot:
-    result, _tone = _ended(job.state)
     return Dot(
-        filled=job.state == "succeeded",
-        tip=f"{result}, {timezone.localtime(job.created_at):%b %-d %H:%M}",
+        filled=job.state == JobRow.State.SUCCEEDED,
+        tip=f"{job_run(job).word}, {timezone.localtime(job.created_at):%b %-d %H:%M}",
         url=reverse("jobs:status", args=[job.pk]),
     )
 
@@ -319,7 +311,8 @@ def _scheduled_work() -> tuple[Scheduled, ...]:
     for name, label, every in declared:
         runs = recent.get(name, [])[:RECENT]
         if runs:
-            result, tone = _ended(runs[0].state)
+            latest = job_run(runs[0])
+            result, tone = latest.word, latest.tone
         else:
             result, tone = ("Not run lately", ATTENTION) if name in last_seen else ("Not done yet", NEUTRAL)
         last = succeeded.get(name)

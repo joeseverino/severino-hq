@@ -555,17 +555,18 @@ class OperationStandingTests(TestCase):
         from django.utils import timezone
 
         from hq.domains.jobs.models import JobState
-        from hq.platform.application.asks import DONE, FAILED, QUEUED, RUNNING, operation_standing
-        from hq.platform.application.work_runs import LAPSED, run_seen_state
+        from hq.platform.application.asks import DONE, FAILED, QUEUED, RUNNING
+        from hq.platform.application.work_runs import LAPSED, NOT_STARTED, run_rows, seen_as_runs, standing_of
 
         expected = {JobState.QUEUED: QUEUED, JobState.RUNNING: RUNNING, JobState.SUCCEEDED: DONE}
-        runs = OperationRequest.objects.annotate(seen=run_seen_state(timezone.now()))
+        runs = list(seen_as_runs(OperationRequest.objects.select_related("resource"), timezone.now()))
         seen = set()
-        for run in runs:
-            standing = operation_standing(run)
+        for run, row in zip(runs, run_rows(runs), strict=True):
+            standing = standing_of(row)
             with self.subTest(run=str(run.pk), seen=run.seen):
-                self.assertEqual(standing.state, expected.get(JobState(run.seen), FAILED))
-                self.assertEqual(standing.label, JobState(run.seen).label)
+                waits = row.word == NOT_STARTED
+                self.assertEqual(standing.state, FAILED if waits else expected.get(JobState(run.seen), FAILED))
+                self.assertEqual(standing.label, NOT_STARTED if waits else JobState(run.seen).label)
                 if run.seen == JobState.LOST and run.state == OperationRequest.State.CLAIMED:
                     self.assertEqual(standing.note, LAPSED)
             seen.add(run.seen)

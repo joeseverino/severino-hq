@@ -308,11 +308,12 @@ class RunOnTheCallingThreadTests(TestCase):
         self.assertEqual((ran, Job.objects.count()), ([], 0))
 
     def test_a_state_is_called_the_same_by_a_control_the_list_and_a_read(self):
-        from hq.platform.application.asks import DONE, FAILED, QUEUED, RUNNING, Standing, job_standing
+        from hq.platform.application.asks import DONE, FAILED, QUEUED, RUNNING, Standing
+        from hq.platform.application.work_runs import job_run, standing_of
 
         for state in Job.State:
             job = Job(kind="test.words", label="Words", state=state, created_at=timezone.now())
-            self.assertEqual(job_standing(job).label, job.get_state_display())
+            self.assertEqual(standing_of(job_run(job)).label, job.get_state_display())
         for state in (QUEUED, RUNNING, DONE, FAILED):
             self.assertIn(Standing(state).label, Job.State.labels)
 
@@ -337,7 +338,7 @@ class RunOnTheCallingThreadTests(TestCase):
             self.assertEqual(state.label, state.as_job.label)
 
     def test_failed_is_the_sentence_the_control_says(self):
-        from hq.platform.application.asks import job_standing
+        from hq.platform.application.work_runs import job_run, standing_of
 
         def work(progress):
             raise Failed("The registry lists nothing for it.")
@@ -345,7 +346,7 @@ class RunOnTheCallingThreadTests(TestCase):
         job = run("test.inline", "Inline", work)
 
         self.assertEqual((job.state, job.error), ("failed", "The registry lists nothing for it."))
-        self.assertEqual(job_standing(job).note, "The registry lists nothing for it.")
+        self.assertEqual(standing_of(job_run(job)).note, "The registry lists nothing for it.")
         failed = AuditLog.objects.filter(operation_id=str(job.pk), action=AuditLog.Action.FAILED).get()
         self.assertEqual(
             failed.metadata["failure"], {"message": "The registry lists nothing for it.", "kind": "Failed"}

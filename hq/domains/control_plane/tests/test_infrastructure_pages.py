@@ -279,8 +279,8 @@ class InfrastructureViewsTests(TestCase):
 
         detail = self.client.get(reverse("control_plane:detail", args=[self.resource.key]))
 
-        (operation,) = detail.context["operations"]
-        self.assertFalse(operation["affected"])
+        ((evidence,),) = (section.below for section in detail.context["history"])
+        self.assertEqual(evidence.affected, ())
 
     def test_failed_operation_renders_guidance_and_expected_observed_evidence(self):
         OperationRequest.objects.create(
@@ -317,11 +317,11 @@ class InfrastructureViewsTests(TestCase):
 
         detail = self.client.get(reverse("control_plane:detail", args=[self.resource.key]))
 
-        (operation,) = detail.context["operations"]
+        ((evidence,),) = (section.below for section in detail.context["history"])
         self.assertEqual(
-            [(item["consumer"], item["domain"]) for item in operation["affected"]], [("npm", "hq.example.test")]
+            [(item["consumer"], item["domain"]) for item in evidence.affected], [("npm", "hq.example.test")]
         )
-        self.assertTrue(operation["raw_result"])
+        self.assertTrue(evidence.raw)
         shown = text(detail)
         self.assertIn("One consumer serves the previous certificate.", shown)
         self.assertIn("1 name serves a different certificate", shown)

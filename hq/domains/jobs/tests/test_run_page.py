@@ -98,7 +98,7 @@ class RunPageTests(TestCase):
         self.assertEqual(said["Correlation"][0], CORRELATION)
         self.assertEqual(said["Machines"][1], reverse("control_plane:machine", kwargs={"name": MACHINE}))
         self.assertEqual(said["Playbook"][1], reverse("command", args=[RUN]))
-        tasks = " ".join(element.words for element in within(html, "id", "tasks"))
+        tasks = said["Tasks"][0]
         self.assertTrue(run.result["events"])
         for event in run.result["events"]:
             self.assertIn(event["task"], tasks)
@@ -121,7 +121,7 @@ class RunPageTests(TestCase):
 
         said = facts(self.page(run_page(run.pk)))
 
-        self.assertEqual(said["Lease"][0], run.claimed_by)
+        self.assertIn(run.claimed_by, said["Lease"][0])
         self.assertNotIn("Result", said)
 
     def test_a_reader_who_may_not_open_jobs_is_refused_a_run_s_page_and_offered_no_link_to_one(self):

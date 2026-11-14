@@ -58,10 +58,10 @@ is not a row, so an unchanged minute-by-minute result is one line.
       {% for change in changes %}
         <tr>
           <td>{% entity "resource"|entity_of:change.resource %}</td>
-          <td>{{ change.action|breakable }}</td>
-          <td>{% status change.summary.state_label tone=change.summary.tone %} {{ change.summary.headline|truncatechars:120|breakable }}</td>
-          <td>{{ change.by|or_empty }}</td>
-          <td class="muted date-col">{{ change.at|when }}</td>
+          <td>{{ change.run.title|breakable }}</td>
+          <td>{% status change.run.word tone=change.run.tone %} {{ change.run.note|truncatechars:120|breakable }}</td>
+          <td>{{ change.run.by.words|or_empty }}</td>
+          <td class="muted date-col">{{ change.run.created_at|when }}</td>
         </tr>
       {% endfor %}
     </tbody>

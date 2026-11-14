@@ -106,7 +106,7 @@ class ExampleEstateTests(TestCase):
         self.assertEqual(nameless, [])
 
     def test_each_scheduled_run_is_one_row_dated_to_when_it_ended(self):
-        for job in Job.objects.filter(actor=runner.SCHEDULER):
+        for job in Job.objects.filter(actor=runner.SCHEDULER, finished_at__isnull=False):
             with self.subTest(kind=job.kind):
                 (ending,) = AuditLog.objects.filter(object_type=runner.AUDIT_TYPE, object_id=str(job.pk))
                 self.assertEqual(ending.created_at, job.finished_at)

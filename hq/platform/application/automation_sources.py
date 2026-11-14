@@ -54,7 +54,7 @@ lazy from .labels import effect_label
 lazy from .record_errors import PolicyError, RecordNotFound
 lazy from .resource_operations import OperationQueued, enqueue, serialize_operation
 lazy from .routes import reverse
-lazy from .work_runs import UNENDED, not_started, run_seen_state, run_url
+lazy from .work_runs import UNENDED, run_rows, run_url, seen_as_runs, standing_of
 
 if TYPE_CHECKING:
     from hq.domains.control_plane.models import (
@@ -309,9 +309,11 @@ class SourceStanding:
 def _scans():
     """The source's scans, each with the state Jobs shows it in."""
 
-    return models.OperationRequest.objects.filter(
-        resource__key=SOURCE_KEY, action=models.OperationRequest.Action.SCAN
-    ).annotate(seen=run_seen_state(timezone.now()))
+    return seen_as_runs(
+        models.OperationRequest.objects.filter(
+            resource__key=SOURCE_KEY, action=models.OperationRequest.Action.SCAN
+        ).select_related("resource")
+    )
 
 
 def scan_standing(operation_id: str) -> Standing | None:
@@ -324,12 +326,10 @@ def scan_standing(operation_id: str) -> Standing | None:
 def _stands(scan: OperationRequest) -> Standing:
     """How a scan stands, a queued one saying what it waits on: HQ's
     playbook worker while it arrives, and while none does, that it has not
-    started and why (``work_runs.not_started``)."""
+    started and why (``work_runs.standing_of``)."""
 
-    standing = asks.operation_standing(scan)
-    if standing.state != asks.QUEUED:
-        return standing
-    return not_started(standing) or replace(standing, note=WORKER_DUE)
+    standing = standing_of(run_rows((scan,))[0])
+    return replace(standing, note=WORKER_DUE) if standing.state == asks.QUEUED else standing
 
 
 def reviewed(proposal: SourceProposal) -> Reviewed:
@@ -378,7 +378,7 @@ def standing(proposal: int | None = None) -> SourceStanding:
         scan=scan,
         scanned=scanned,
         reached=reached,
-        reach=asks.operation_standing(reached) if reached is not None else asks.Standing(),
+        reach=standing_of(run_rows((reached,))[0]) if reached is not None else asks.Standing(),
         proposal=reviewed(found) if found is not None else None,
         catalog=catalog,
         procedures=automation_adoption.procedures(catalog.digest) if catalog else (),

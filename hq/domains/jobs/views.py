@@ -13,7 +13,7 @@ from hq.platform.application.security import web_principal
 from hq.platform.application.tables import Projected, TableColumn, TableFilter, TableListMixin, TableQuery, TableSort
 from hq.platform.application.web_writes import execute_posted
 lazy from hq.platform.application import outbound_work, work_runs
-lazy from hq.platform.application.asks import FAILED, Standing, answer, job_standing
+lazy from hq.platform.application.asks import FAILED, Standing, answer
 lazy from hq.platform.application.automation_runs import cancel_action, listed_with_actions, run_here_url
 lazy from hq.platform.application.capabilities import capability_registry
 lazy from hq.platform.application.labels import lower_first
@@ -162,7 +162,7 @@ class JobStatusView(DetailView):
     def render_to_response(self, context, **response_kwargs):
         job = self.object
         # The shape every ask's status answers in, with the job's own result.
-        return JsonResponse({**job_standing(job).as_json(), "result": job.result})
+        return JsonResponse({**work_runs.standing_of(work_runs.job_run(job)).as_json(), "result": job.result})
 
 
 class WorkAskView(View):
@@ -191,7 +191,7 @@ class WorkAskView(View):
             return answer(request, Standing(FAILED, result.get("message", "")), fallback=back)
         return answer(
             request,
-            job_standing(job),
+            work_runs.standing_of(work_runs.job_run(job)),
             fallback=back,
             status_url=reverse("jobs:status", args=[job.pk]),
             message=result.get("message", ""),

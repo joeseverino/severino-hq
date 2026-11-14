@@ -275,20 +275,46 @@ def recent_work(
     )
 
 
-def _run_record(run: WorkRun, *, by_machine: bool, opens: bool, shows: bool) -> tuple[Cell, ...]:
-    """One run's row, led by its link to its own page where its reader ``opens``
-    it: by the playbook on a machine's page, else by when it was asked."""
+# The id of the section of a record's history (``operation_history``).
+HISTORY_SECTION = "history"
 
-    rest = (
+
+def operation_history(runs: Sequence[WorkRun]) -> ServiceSection | None:
+    """The operations that changed a record, newest first, each in the row a
+    machine's page draws its runs in, its evidence beneath; None when none did."""
+
+    if not runs:
+        return None
+    return ServiceSection(
+        id=HISTORY_SECTION,
+        label="History",
+        columns=("Action", "State", "Started", "Duration", "Result", "By"),
+        records=tuple((Cell(run.title), *_run_cells(run, shows=True)) for run in runs),
+        below=tuple(run.evidence or None for run in runs),
+    )
+
+
+def _run_cells(run: WorkRun, *, shows: bool) -> tuple[Cell, ...]:
+    """What a run's row says after what it was: its state, when it was asked,
+    how long it took, how it ended, and who asked where its reader ``shows`` that."""
+
+    return (
+        Cell(run.word, tone=run.tone),
+        Cell(ago(run.created_at), muted=True),
         Cell(str(seconds(run.duration)) if run.duration is not None else ""),
         Cell(run.note),
         Cell(run.by.words if shows else ""),
     )
-    state = Cell(run.word, tone=run.tone)
+
+
+def _run_record(run: WorkRun, *, by_machine: bool, opens: bool, shows: bool) -> tuple[Cell, ...]:
+    """One run's row, led by its link to its own page where its reader ``opens``
+    it: by the playbook on a machine's page, else by when it was asked."""
+
     if by_machine:
         # Read without the run's page, the playbook leads to the command it is run through.
-        playbook = Cell(run.title, run.url if opens else command_url(run.kind))
-        return (playbook, state, Cell(ago(run.created_at), muted=True), *rest)
+        return (Cell(run.title, run.url if opens else command_url(run.kind)), *_run_cells(run, shows=shows))
+    state, _asked, *rest = _run_cells(run, shows=shows)
     return (Cell(ago(run.created_at), run.url if opens else ""), machines_cell(run.evidence.hosts), state, *rest)
 
 
