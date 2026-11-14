@@ -878,6 +878,8 @@ shared parts drew it: `chart-card`, `danger-link`, `domain-head`,
 and `section-period`.
 `PLUGIN_API_VERSION` 13 retires `{% title_meta %}`'s `element` option: its
 parts are always `<li>` elements.
+`PLUGIN_API_VERSION` 14 retires `partials/_line_chart.html` and
+`partials/_stacked_bar_chart.html`: `partials/_chart.html` draws either chart.
 
 A notice is `{% notice tone=... title=... %}body{% endnotice %}`, with a
 title the page composes as its `{% title %}` part after the body
