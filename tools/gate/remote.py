@@ -31,7 +31,7 @@ SETTING = "HQ_GATE_REMOTE"
 # The status that has the task run here (EX_TEMPFAIL).
 HERE = 75
 # Flags whose run acts on this machine (its browser, tracked files, Docker), so it stays here.
-STAYS = {"open", "docs", "linux"}
+STAYS = {"open", "docs", "linux", "image"}
 # Arguments that name a commit: resolved here, since a branch there is not this one, and sent with the tree.
 REFS = {"base", "at"}
 # What this run sets that changes what a gate does, handed to the run there.

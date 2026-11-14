@@ -821,12 +821,12 @@ the run's whatever the measuring did. A measurement it cannot take (no
 ### Gates on a second machine
 
 A second machine you reach over SSH can take the gates a person types:
-`fast`, `test` (the composed suite and `--at` included), `dev:look` and
-`browser`. One line in the gitignored `mise.local.toml`, which
-`.worktreeinclude` copies into every worktree, turns it on:
+`fast`, `test` (the composed suite and `--at` included), `dev:look`,
+`browser` and `perf`. One setting in the repository's git config, which every
+worktree shares however it was made, turns it on:
 
-```toml
-HQ_GATE_REMOTE = "gates:hq"
+```sh
+git config hq.gateRemote gates:hq
 ```
 
 It names the machine as git names a repository over SSH, the host then
@@ -840,10 +840,11 @@ naming where it runs:
 ```
 
 A machine that does not answer within five seconds leaves the run here, after
-one line saying so; so does a run inside a turn here, and one whose flag acts
-on this machine (`--open`, `--docs`, `browser --linux`). A task the release
-check runs that reads a secret or the deploy host (`failure-logs`, `mint`,
-the host check) never asks.
+one line saying so; so does a run inside a turn here, one whose flag acts on
+this machine (`--open`, `--docs`, `browser --linux`, `perf --image`), and one
+typed with `HQ_GATE_REMOTE=` before it. A task the release check runs that
+reads a secret or the deploy host (`failure-logs`, `mint`, the host check)
+never asks.
 
 How a run goes (`tools/gate/remote.py`, and `tools/gate/remote-host.sh` there):
 
