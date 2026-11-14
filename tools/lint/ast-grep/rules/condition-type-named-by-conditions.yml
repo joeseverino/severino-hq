@@ -1,0 +1,32 @@
+# A resource condition's type is one of the bridge schema's ConditionType,
+# which the controller's Go constants are generated from and
+# hq/platform/application/conditions.py reads as READY, DRIFTED and DEGRADED.
+# Whether one holds is asked of conditions.holding. A type spelled by hand is
+# a second list for the two sides to disagree on, and a check of its own can
+# forget that a condition of that type may no longer hold.
+id: condition-type-named-by-conditions
+language: python
+severity: error
+message: A condition type is spelled by hand.
+note: Name it READY, DRIFTED or DEGRADED from hq.platform.application.conditions, and ask holding(conditions, ...) whether it holds.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+  - "tools/**"
+ignores:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/migrations/**"
+  - "hq/platform/application/conditions.py"
+rule:
+  kind: string
+  any:
+    - regex: ^[a-zA-Z]*["'](Drifted|Degraded)["']$
+    # {"type": "Ready", ...}: the word alone means much else.
+    - all:
+        - regex: ^[a-zA-Z]*["']Ready["']$
+        - inside:
+            kind: pair
+            has:
+              field: key
+              regex: ^["']type["']$

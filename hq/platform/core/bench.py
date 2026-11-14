@@ -32,6 +32,7 @@ from hq.domains.expenses.models import Expense
 from hq.domains.jobs.models import Job
 from hq.domains.projects.models import Project
 from hq.domains.receipts.models import Receipt
+from hq.platform.application.conditions import READY
 from hq.platform.application.security import API_INTERFACE, WEB_INTERFACE
 from hq.platform.core.example_estate import automation
 from hq.platform.core.models import AuditLog
@@ -460,7 +461,7 @@ def _resource(kind: str, key: str, spec: dict[str, Any], now: datetime, **fields
         spec=spec,
         observed_generation=1,
         last_observed_at=now,
-        conditions=[{"type": "Ready", "status": True}],
+        conditions=[{"type": READY, "status": True}],
         **fields,
     )
 

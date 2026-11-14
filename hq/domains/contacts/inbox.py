@@ -16,6 +16,7 @@ from django.conf import settings
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.control_plane.observations.cloudflare import CONTACT_SUBMISSION_KIND
 from hq.domains.control_plane.provider_adapters.cloudflare import CONTACT_INBOX_KIND
+from hq.platform.application.conditions import DEGRADED, holding
 lazy from hq.platform.application.projection import read_once
 
 READING = CONTACT_SUBMISSION_KIND
@@ -136,14 +137,7 @@ def _waiting(rows: list[dict[str, Any]], spec: dict[str, Any]) -> int:
 def _refusal(resource: ManagedResource | None) -> str:
     if resource is None or resource.generation == resource.observed_generation:
         return ""
-    return next(
-        (
-            str(item.get("message", ""))
-            for item in resource.conditions or ()
-            if item.get("status") is True and item.get("type") == "Degraded"
-        ),
-        "",
-    )
+    return next((str(item.get("message", "")) for item in holding(resource.conditions, DEGRADED)), "")
 
 
 def current() -> Inbox:

@@ -57,6 +57,23 @@ class ConditionTests(TestCase):
         self.assertGreater(held_since(back, "Drifted"), start)
         self.assertIsNone(held_since(ready, "Drifted"))
 
+    def test_a_reconcile_is_keyed_on_the_problems_that_hold(self):
+        from types import SimpleNamespace
+
+        from ..controller import _automatic_reconcile
+
+        def keyed(*conditions):
+            resource = SimpleNamespace(
+                kind="example", status={}, generation=1, observed_generation=1, conditions=list(conditions)
+            )
+            return _automatic_reconcile(resource)[2]
+
+        drifted = {"type": "Drifted", "status": True, "message": "Port is 8080."}
+        stopped = {"type": "Degraded", "status": False, "message": "It answered 503."}
+
+        self.assertEqual(keyed(drifted, stopped), keyed(drifted))
+        self.assertEqual(keyed(stopped), "")
+
 
 class ReadingChangeTests(TestCase):
     def test_a_record_that_changed_between_sweeps_is_a_moment(self):

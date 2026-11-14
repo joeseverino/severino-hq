@@ -12,12 +12,12 @@ from hq.platform.application.action_links import READ_NOW_CAPABILITY, command_ur
 from hq.platform.application.approval_review import asked_by
 from hq.platform.application.approvals import DESTRUCTIVE_EFFECT
 from hq.platform.application.capabilities import capability_words, command_spec
+from hq.platform.application.conditions import DRIFTED, holding
 from hq.platform.application.doors import NOBODY
 from hq.platform.application.entity_links import kind_label, record_name, web_url
 from hq.platform.application.infrastructure import (
     declared_machines,
     delivery_targets,
-    is_drifted,
     serialize_public_status,
     serialize_resource,
 )
@@ -374,7 +374,7 @@ class InfrastructureDetailView(PageMixin, DetailView):
             return ()
         key = self.object.key
         capabilities = self.capabilities
-        drifted = is_drifted(self.object)
+        drifted = bool(holding(self.object.conditions, DRIFTED))
         provider = PROVIDERS[self.object.kind]
         actions = [
             verb_action(

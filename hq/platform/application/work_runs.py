@@ -28,8 +28,9 @@ lazy from hq.domains.jobs.runner import AUDIT_TYPE as JOB_AUDIT_TYPE
 
 from .asks import DONE, FAILED, QUEUED, RUNNING, Standing
 from .automation_runs import capability_name, resource_key, run_title
+from .conditions import PROBLEMS, holding
 from .doors import NOBODY, Attribution
-from .resource_operations import active_conditions, asked_by, asking, problem_condition
+from .resource_operations import asked_by, asking
 from .routes import reverse
 lazy from .automation_adoption import playbook_titles
 lazy from .automation_sources import REFRESH, SOURCE_KEY, capability_specs
@@ -580,7 +581,7 @@ def _run_row(
     claimed = operation.state == OperationState.CLAIMED
     lapsed = seen == JobState.LOST and claimed
     stuck = seen == JobState.QUEUED and bool(untaken)
-    problem = problem_condition(result) if seen == JobState.SUCCEEDED else None
+    problem = next(iter(holding(result.get("conditions"), *PROBLEMS)), None) if seen == JobState.SUCCEEDED else None
     word, tone = (
         (NOT_STARTED, NOT_STARTED_TONE)
         if stuck
@@ -650,7 +651,7 @@ def _said(operation: OperationRequest, problem: dict[str, Any] | None) -> str:
     result = operation.result or {}
     said = result.get("message") or operation.reason
     if operation.state == OperationState.FAILED:
-        active = active_conditions(result)
+        active = holding(result.get("conditions"))
         return (active[0].get("message") if active else "") or said
     return (problem.get("message") if problem else "") or said
 

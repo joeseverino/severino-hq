@@ -33,13 +33,14 @@ from .action_links import (
     topology_url,
 )
 from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
+from .conditions import DRIFTED, holding
 from .connection_catalog import ConnectionGroup, connection_catalog
 from .connections import ConnectionLink, ConnectionSpec
 from .contradiction_findings import add_contradiction_facts
 from .derivations import derivation
 from .derived_inputs import ESTATE_READS, estate_variant
 from .entity_links import entity_link, kind_label, node_name, record_name
-from .infrastructure import RESOURCE_TONES, is_drifted, resource_health
+from .infrastructure import RESOURCE_TONES, resource_health
 from .integration_validation import required_capability_names
 from .projection import QUERY, QueryRefusal, projection_scope
 from .resource_capabilities import REMOVAL_CAPABILITY, removals_pending, resource_capabilities
@@ -112,7 +113,7 @@ def _resource_actions(
                 target=key,
             )
         )
-    drifted = is_drifted(resource)
+    drifted = bool(holding(resource.conditions, DRIFTED))
     if drifted:
         # Something changed it outside HQ: keeping that is the choice that
         # loses nothing, so it is offered, and first.

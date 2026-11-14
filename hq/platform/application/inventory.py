@@ -29,7 +29,7 @@ from hq.platform.core.audit import CONNECTION_AUDIT_TYPE, record_event
 from hq.platform.core.models import AuditLog
 lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
-from .conditions import stamped
+from .conditions import DEGRADED, DRIFTED, READY, stamped
 from .contracts import endpoint_has_private_parts
 from .credential_mint import parse_expiry, store_references
 from .security import Capability, Principal
@@ -292,7 +292,7 @@ def _observe(resource: ManagedResource, found: dict[str, Any], seen: datetime) -
         resource.conditions,
         [
             {
-                "type": "Ready",
+                "type": READY,
                 "status": True,
                 "reason": "Observed",
                 "message": MATCHES,
@@ -491,16 +491,16 @@ def _difference_condition(kind: str, drift: tuple[tuple[str, str, str], ...]) ->
     reported = [live for field, _, live in drift if field in provider.reported_fields]
     if reported and len(reported) == len(drift):
         return {
-            "type": "Degraded",
+            "type": DEGRADED,
             "status": True,
             "reason": "Reported",
             "message": " ".join(ended(said) for said in reported),
         }
     fields = provider.spec_type.model_fields
     return {
-        "type": "Drifted",
+        "type": DRIFTED,
         "status": True,
-        "reason": "Drifted",
+        "reason": DRIFTED,
         "message": " ".join(
             _difference_phrase(field_label(field, fields[field].title if field in fields else None), asked, live)
             for field, asked, live in drift

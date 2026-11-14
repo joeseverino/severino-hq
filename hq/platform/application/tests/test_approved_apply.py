@@ -11,8 +11,9 @@ from hq.domains.control_plane.models import ApprovalRequest, ManagedResource, Op
 
 from ..approvals import ApproveCommand, RejectCommand, approve, reject
 from ..capabilities import execute_capability
+from ..conditions import DRIFTED, holding
 from ..controller import ControllerReport, claim_next_operation, report_operation
-from ..infrastructure import ManagedResourceCommand, is_drifted, save_managed_resource
+from ..infrastructure import ManagedResourceCommand, save_managed_resource
 from ..security import cli_principal, mcp_principal
 from ..sweep import record_sweep
 from .test_approvals import (
@@ -94,7 +95,7 @@ class ApprovedChangeAppliesTests(TestCase):
 
         self.resource.refresh_from_db()
         self.assertEqual(self.resource.spec["document"], wanted)
-        self.assertFalse(is_drifted(self.resource))
+        self.assertFalse(holding(self.resource.conditions, DRIFTED))
         operation.refresh_from_db()
         self.assertEqual(operation.state, OperationRequest.State.SUCCEEDED)
 

@@ -24,7 +24,7 @@ from hq.domains.control_plane.providers import PROVIDERS, record_spec, registry_
 lazy from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS, connection_credential
 
 from .command_fields import Describe, Names
-from .conditions import stamped
+from .conditions import READY, stamped
 from .inventory import record_identity, record_token, service_hostnames
 from .record_errors import PolicyError, RecordNotFound, Sentence
 from .security import Principal
@@ -566,7 +566,7 @@ def _record_as_observed(key: str, found: Unmanaged) -> None:
         resource.conditions,
         [
             {
-                "type": "Ready",
+                "type": READY,
                 "status": True,
                 "reason": "Adopted",
                 "message": "Added to HQ from what was live.",

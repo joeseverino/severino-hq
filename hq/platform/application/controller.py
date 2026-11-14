@@ -30,7 +30,7 @@ lazy from hq.domains.control_plane.secret_shapes import struck
 
 from . import agent_access
 from .adoption import manages_through, observes_only
-from .conditions import stamped
+from .conditions import DRIFTED, PROBLEMS, holding, stamped
 from .infrastructure import controller_contract, resolved_spec, serialize_resource
 from .inventory import read_as, read_since, strike_removed
 from .plugin_admission import admitted_sources
@@ -266,15 +266,11 @@ def _automatic_reconcile(resource: ManagedResource) -> tuple[bool, str, str]:
         return True, "Automatic: the certificate's expiry could not be read.", "invalid-expiry"
     if resource.generation != resource.observed_generation:
         return True, "Automatic: HQ's config for it changed.", "generation"
-    drifted = any(
-        item.get("status") is True and item.get("type") in {"Drifted", "Degraded"} for item in resource.conditions
-    )
-    if drifted:
+    problems = holding(resource.conditions, *PROBLEMS)
+    if problems:
         # Keyed on what drifted, so a new difference is new work the same day
         # and the same one is acted on once.
-        said = "|".join(
-            str(item.get("message", "")) for item in resource.conditions if item.get("type") in {"Drifted", "Degraded"}
-        )
+        said = "|".join(str(item.get("message", "")) for item in problems)
         digest = hashlib.sha256(said.encode()).hexdigest()[:16]
         return True, "Automatic: it was changed outside HQ.", f"drift-{digest}"
     return False, "", ""
@@ -487,7 +483,7 @@ def _next_resolvable(operations):
             continue
         if standing:
             with own_operation(operation):
-                _end(operation, OperationRequest.State.FAILED, {"ok": False, "message": standing, "reason": "Drifted"})
+                _end(operation, OperationRequest.State.FAILED, {"ok": False, "message": standing, "reason": DRIFTED})
             continue
         try:
             return operation, controller_contract(operation.resource)

@@ -19,6 +19,7 @@ from hq.domains.control_plane.observations.contract import READERS, READING_FACE
 from hq.domains.control_plane.provider_adapters.contracts import REFUSALS
 
 from .answer_fields import AsRead, ObservedAt, Since, UpdatedAt
+from .conditions import DEGRADED, DRIFTED, READY
 from .credential_sight import STATE_LABELS
 from .describe import Describe, listed
 from .documentation import (
@@ -56,7 +57,7 @@ WrittenLink = Annotated[dict[str, Any], Written(EntityLink)]
 class ConditionPart(TypedDict):
     type: Annotated[
         str,
-        Describe(ended(f"What the condition says of the record, such as {listed(('Ready', 'Drifted', 'Degraded'))}")),
+        Describe(ended(f"What the condition says of the record, such as {listed((READY, DRIFTED, DEGRADED))}")),
     ]
     status: Annotated[bool, Describe("Whether the condition holds now.")]
     reason: Annotated[str, Describe("Why, in the controller's one word for it; empty for none.")]

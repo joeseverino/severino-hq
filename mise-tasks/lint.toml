@@ -366,6 +366,7 @@ sources = [
   "**/*.py",
   "hq_sdk/**",
   "docs/Plugins.md",
+  "hq/domains/control_plane/bridge_base.json",
   "templates/**",
   "static/css/**",
   "static/js/**",
@@ -391,6 +392,7 @@ sources = [
   "**/*.py",
   "hq/platform/api/hq-api.openapi.json",
   "hq/platform/api/openapi-examples.json",
+  "hq/domains/control_plane/bridge_base.json",
   "deploy/systemd/severino-hq-secrets.timer",
   "pyproject.toml",
   "uv.lock",
@@ -464,6 +466,7 @@ tags = ["fast"]
 sources = [
   "**/*.py",
   "docs/Connections.md",
+  "hq/domains/control_plane/bridge_base.json",
   "deploy/systemd/severino-hq-secrets.timer",
   "pyproject.toml",
   "uv.lock",
@@ -484,6 +487,7 @@ tags = ["fast"]
 sources = [
   "**/*.py",
   "hq/platform/application/hq-procedure.schema.json",
+  "hq/domains/control_plane/bridge_base.json",
   "deploy/systemd/severino-hq-secrets.timer",
   "pyproject.toml",
   "uv.lock",

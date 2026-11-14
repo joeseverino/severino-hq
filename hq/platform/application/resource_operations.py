@@ -8,7 +8,7 @@ before the controller runs it.
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Annotated, Any, Literal, TypedDict
+from typing import Annotated, Any, Literal, TypedDict, cast
 
 from django.db import transaction
 from django.db.models import QuerySet
@@ -23,13 +23,13 @@ lazy from hq.platform.core.models import AuditLog
 from .adoption import keep_out_declaration, observes_only, require_writable
 from .cadence import request_reading, ring_doorbell, swept
 from .command_fields import Describe
+from .conditions import DRIFTED, PROBLEMS, holding
 from .default_hold import consent_gap
 from .doors import NOBODY, Attribution
 from .expiry import certificate_expiry, days_until, renewal_opens_at, renewal_window
 from .infrastructure import (
     ManagedResourceCommand,
     delivery_targets,
-    is_drifted,
     save_managed_resource,
 )
 from .record_errors import PolicyError, RecordNotFound, Sentence
@@ -166,22 +166,10 @@ def serialize_operation(operation: OperationRequest) -> OperationItem:
     }
 
 
-# Conditions that say something is wrong, whatever the operation's own state.
-_PROBLEM_CONDITIONS = ("Degraded", "Drifted")
 # How many past operations are read to find the ones that changed something,
 # and how many of those a record's history shows.
 HISTORY_WINDOW = 200
 HISTORY_ROWS = 20
-
-
-def active_conditions(result: dict[str, Any]) -> list[ConditionPart]:
-    return [item for item in result.get("conditions") or [] if item.get("status") is True]
-
-
-def problem_condition(result: dict[str, Any]) -> dict[str, Any] | None:
-    """The condition saying something is wrong, which a result can carry while succeeding."""
-
-    return next((item for item in active_conditions(result) if item.get("type") in _PROBLEM_CONDITIONS), None)
 
 
 def asked_by(operations: Iterable[OperationRequest]) -> dict[str, Attribution]:
@@ -228,7 +216,10 @@ def operation_summary(run: WorkRun, operation: OperationRequest) -> OperationSum
         "completed_at": (run.finished.isoformat() if run.finished else None),
         "attempt_count": operation.attempt_count,
         "reason": operation.reason,
-        "condition": next(iter(active_conditions(operation.result or {})), None),
+        # A condition the controller reported is the part's shape.
+        "condition": cast(
+            "ConditionPart | None", next(iter(holding((operation.result or {}).get("conditions"))), None)
+        ),
         "affected": list(run.evidence.affected),
         "evidence": list(run.evidence.consumers),
         "matched": run.evidence.matched,
@@ -260,7 +251,10 @@ def changes(operations: QuerySet[OperationRequest], limit: int) -> list[Operatio
         return (
             operation.state,
             result.get("message", ""),
-            tuple((item.get("type"), item.get("reason"), item.get("message")) for item in active_conditions(result)),
+            tuple(
+                (item.get("type"), item.get("reason"), item.get("message"))
+                for item in holding(result.get("conditions"))
+            ),
         )
 
     last: dict[tuple[Any, str], tuple[Any, ...]] = {}
@@ -295,7 +289,7 @@ def refuse_while_drifted(resource: ManagedResource) -> None:
     decides first: keep the live version, or restore HQ's.
     """
 
-    if is_drifted(resource):
+    if holding(resource.conditions, DRIFTED):
         raise PolicyError("This record differs from what is live. Keep the live version or restore HQ's first.")
 
 
@@ -663,10 +657,7 @@ def certificate_renewal_allowed(resource: ManagedResource) -> tuple[bool, Senten
     allowed, explanation = controller_action_policy(resource.kind, OperationRequest.Action.RENEW)
     if not allowed:
         return False, explanation
-    if any(
-        condition.get("status") is True and condition.get("type") in {"Drifted", "Degraded"}
-        for condition in resource.conditions
-    ):
+    if holding(resource.conditions, *PROBLEMS):
         return True, "A place it is installed is serving a different certificate or has a problem."
 
     if not resource.status.get("not_after"):

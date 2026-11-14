@@ -11,6 +11,7 @@ from hq.domains.control_plane.models import (
     ManagedResource,
 )
 from hq.platform.application import readings
+from hq.platform.application.conditions import READY
 from hq.platform.application.labels import dotted
 from hq.platform.application.report_testing import report_connections
 from hq.platform.application.security import cli_principal
@@ -116,7 +117,7 @@ def _observe_everything():
             generation=1,
             observed_generation=1,
             status={**record.spec, **issued.get(record.key, {})},
-            conditions=[{"type": "Ready", "status": True, "reason": "Reconciled", "message": ""}],
+            conditions=[{"type": READY, "status": True, "reason": "Reconciled", "message": ""}],
         )
 
 

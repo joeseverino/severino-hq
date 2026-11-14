@@ -14,6 +14,7 @@ from hq.domains.control_plane.provider_adapters import github as delivery
 from hq.domains.jobs import runner
 from hq.domains.jobs.models import Job
 from hq.platform.application import scheduled_work
+from hq.platform.application.conditions import READY
 from hq.platform.application.images import ImageRef
 from hq.platform.core.audit import stamped
 
@@ -154,7 +155,7 @@ def repositories():
         generation=1,
         observed_generation=1,
         last_observed_at=at,
-        conditions=[{"type": "Ready", "status": True, "reason": "Reconciled", "message": ""}],
+        conditions=[{"type": READY, "status": True, "reason": "Reconciled", "message": ""}],
     )
     store(delivery.KIND, {**deploys, "connection_ref": GITHUB, "extensions": []})
     store(

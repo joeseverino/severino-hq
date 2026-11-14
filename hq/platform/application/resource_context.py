@@ -27,7 +27,7 @@ from .resource_capabilities import ResourceCapabilities, resource_capabilities
 from .resource_operations import resource_history
 lazy from . import machines
 lazy from .approvals import pending
-lazy from .conditions import held_since
+lazy from .conditions import DEGRADED, DRIFTED, held_since
 lazy from .connections import connection_readings
 lazy from .security import internal_principal
 lazy from .services import certificate_use
@@ -162,7 +162,7 @@ def _fault_status(resource, health: dict[str, str]) -> RecordStatus | None:
             "drifted",
             health["label"],
             f"{health['message']} Keep the live version, or restore HQ's version.".strip(),
-            held_since(resource.conditions, "Drifted"),
+            held_since(resource.conditions, DRIFTED),
             read_at,
         )
     if health["state"] == "deploying":
@@ -171,7 +171,7 @@ def _fault_status(resource, health: dict[str, str]) -> RecordStatus | None:
             "pending",
             health["label"],
             health["message"],
-            held_since(resource.conditions, "Degraded"),
+            held_since(resource.conditions, DEGRADED),
             read_at,
         )
     if health["state"] == "degraded":
@@ -180,7 +180,7 @@ def _fault_status(resource, health: dict[str, str]) -> RecordStatus | None:
             "degraded",
             health["label"],
             health["message"],
-            held_since(resource.conditions, "Degraded"),
+            held_since(resource.conditions, DEGRADED),
             read_at,
         )
     return None

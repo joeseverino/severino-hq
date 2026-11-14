@@ -30,6 +30,7 @@ lazy from hq.domains.control_plane.provider_spec import ProviderResolutionContex
 
 from .adoption import require_writable
 from .command_fields import Choices, Describe
+from .conditions import DEGRADED, DRIFTED, READY, holding
 from .default_hold import consent_gap
 from .integration_specs import Kept, keeps
 from .projection import keyset_page, read_once
@@ -254,21 +255,12 @@ DRIFT_LABEL = "Changed outside HQ"
 NOT_READ_LABEL = "Not read yet"
 
 
-def is_drifted(resource: ManagedResource) -> bool:
-    """Whether the provider holds something other than this declaration."""
-
-    return any(
-        condition.get("type") == "Drifted" and condition.get("status") is True
-        for condition in resource.conditions or ()
-    )
-
-
 def resource_health(resource: ManagedResource) -> HealthPart:
-    active = {condition.get("type"): condition for condition in resource.conditions if condition.get("status") is True}
+    active = {condition.get("type"): condition for condition in holding(resource.conditions)}
     for condition_type, state, label in (
-        ("Drifted", "drifted", DRIFT_LABEL),
-        ("Degraded", "degraded", "Has a problem"),
-        ("Ready", "healthy", "Working"),
+        (DRIFTED, "drifted", DRIFT_LABEL),
+        (DEGRADED, "degraded", "Has a problem"),
+        (READY, "healthy", "Working"),
     ):
         if condition_type in active:
             condition = active[condition_type]
