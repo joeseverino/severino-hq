@@ -65,6 +65,21 @@ def machine_telemetry(machine_key: str) -> str:
     return f"machine-telemetry:{machine_key}"
 
 
+def weather(point: str) -> str:
+    """The reading key for the forecast at one point, as latitude,longitude."""
+    return f"weather:{point}"
+
+
+def public_address(address: str) -> str:
+    """The reading key for what the public registries say about one address.
+
+    The answer barely moves, and asking again spends a stranger's rate limit
+    and tells them which addresses HQ cares about, so the connection panel and
+    the tools page share the one stored answer.
+    """
+    return f"public-address:{address}"
+
+
 def expire(key: str) -> None:
     """Keep the value, but have the next refresh read again."""
 

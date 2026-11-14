@@ -442,17 +442,22 @@ def history_row_attributes(row: Any, folds: str = "") -> SafeString:
 
 
 @register.inclusion_tag("partials/_row_actions.html")
-def row_actions(actions: Any = (), *, gap: Any = None) -> dict[str, Any]:
+def row_actions(actions: Any = (), *, gap: Any = None, first: int = 0, put_away: Any = None) -> dict[str, Any]:
     """The cell that ends a row with what can be done to its record: each of
     ``actions`` (a ``PageAction``, as a ``ListRow``'s are) a compact control
     drawn by ``_page_action.html``, so a row's buttons look like every other
     and only a destructive one differs. Under a heading of kind ``control``
     (``css="actions-col"``), so the region sizes the column to what it holds
-    and a narrow box moves it to the row's open line. ``gap``, an
+    and a narrow box sets it beneath the row's words. ``gap``, an
     ``adoption.WriteGap``, stands in for every action when the connection
-    cannot make the change."""
+    cannot make the change. Given ``first``, the actions past that many wait
+    in the row's open line. ``put_away``, a POST ``PageAction`` such as the
+    queue's Dismiss, is the reader's own way to set the row aside: the last
+    of its buttons, drawn as they are, and never waiting in the open line."""
 
-    return {"actions": tuple(actions or ()), "gap": gap}
+    actions = tuple(actions or ())
+    shown, later = (actions[:first], actions[first:]) if first else (actions, ())
+    return {"actions": shown, "later": later, "gap": gap, "put_away": put_away}
 
 
 @register.inclusion_tag("partials/_row_toggle.html")

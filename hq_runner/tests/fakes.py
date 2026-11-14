@@ -116,6 +116,13 @@ WELL = [event for event in RECORDED if event.get("event_data", {}).get("task") !
 # The stats event ansible-runner 2.4.3 recorded ending a real run whose play
 # stated its result with ``ansible.builtin.set_stats``.
 STATED: dict[str, Any] = json.loads(Path(__file__).with_name("recorded_stats_event.json").read_text("utf-8"))
+# The stats event ansible-runner 2.4.3 recorded ending a real run on two
+# machines, app.example.com and db.example.com, whose play stated a result,
+# readings of two kinds and a preview for each, in separate set_stats tasks
+# Ansible merged by machine, and one more task that stated a reading for
+# elsewhere.example.com, outside its inventory, and a stat of no name a
+# report carries (``extra``).
+READINGS: dict[str, Any] = json.loads(Path(__file__).with_name("recorded_readings_event.json").read_text("utf-8"))
 # Its task outcomes alone, one per task, so a test counts the tasks that ran.
 OUTCOMES = [event for event in RECORDED if event["event"] in ("runner_on_ok", "runner_on_failed", "runner_on_skipped")]
 

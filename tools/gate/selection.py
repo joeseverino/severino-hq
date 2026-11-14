@@ -1,6 +1,6 @@
 """What fast selects from a change: the test modules it reaches through
-imports, apps, the paths modules name and the map of the tests that ran each
-file (docs/Development.md, What `fast` runs)."""
+imports, the routes and paths modules name and the map of the tests that ran
+each file (docs/Development.md, What `fast` runs)."""
 
 from __future__ import annotations
 
@@ -10,12 +10,14 @@ import json
 import re
 import subprocess
 import sys
+from collections.abc import Iterable
 from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
+from typing import NamedTuple
 
 from hq.platform.application.tests.reads import Reads
 from hq.platform.application.tests.tree import TreeTests, tree_tests
-from hq.platform.core.tests.task import changed_paths, git, names
+from hq.platform.core.tests.task import RefError, changed_paths, git, names
 from tests.mise_tasks import ROOT as TASKS_ROOT, body, mise_tasks, run_files, runs
 from tools.gate import chain, testmap
 from tools.gate.chain import maps, recorded_ancestor
@@ -164,42 +166,253 @@ def string_attributes(node: ast.ClassDef) -> dict[str, str]:
     }
 
 
-def owner(path: str, apps: dict[str, str]) -> str | None:
-    """Map source directories and shared asset namespaces to app labels."""
-
-    parts = Path(path).parts
-    if parts and parts[0] in ("templates", "static") and len(parts) > 2:
-        return parts[1] if parts[1] in apps.values() else None
-    for prefix, label in apps.items():
-        if path == prefix or path.startswith(prefix + "/"):
-            return label
-    return None
-
-
 def affected(
     changed: list[str], deleted: list[str], files: list[Path], apart: frozenset[str] = frozenset()
 ) -> tuple[set[str], set[str]]:
-    """(modules reachable from the change through importers, apps it touches).
+    """(modules the change reaches, the apps whose models it reaches).
 
-    A change in an app also selects the app's own tests and every test that
-    imports any of the app: a test that drives its views through the client
-    imports its models, never its views. A path in ``apart`` touches no app:
-    the map names the tests that ran it, or it is a test module (``by_map``).
+    It reaches the modules that import what it touched, those that name a file it touched, and those that
+    name a route whose view it reaches, by its name or its path: a test that drives a view through the
+    client imports its models, never its views. A path in ``apart`` reaches no route: the map names the
+    tests that ran it, or it is a test module (``by_map``).
     """
 
-    reverse = importers(files)
-    apps = django_apps(files)
+    reverse = with_gone(importers(files), deleted, files)
     paths = [*changed, *deleted]
-    touched = {label for path in paths if path not in apart and (label := owner(path, apps))}
-    return app_reach(touched, apps, reverse) | import_reach(seeds(paths), reverse) | reading(paths, files), touched
+    reached = import_reach(seeds(paths), reverse) | reading(paths, files)
+    own = [path for path in paths if path not in apart]
+    started = seeds(own)
+    imported = import_reach(started, reverse)
+    read = reading(own, files)
+    index = named(chain.ROOT, tuple(files))
+    shown = [path for path in rendering(own) if not path.endswith(".py")]
+    # A module that names a page a change reaches reaches the routes of the views in it that name the page.
+    readers = {
+        module_name(Path(path)): path for parts in (Path(p).parts for p in shown) for path in Naming(index).file(parts)
+    }
+    every = routes(chain.ROOT, tuple(files))
+    hit = {
+        route
+        for route in every
+        if route.urls in started
+        or route.view in imported
+        or (route.view in read and route.view not in readers)
+        or (route.view in readers and route.definition in defined_naming(readers[route.view], tuple(shown)))
+    }
+    near = imported | read
+    by_name = {path for route in hit for path in Naming(index)((route.name,))}
+    by_path = {path for parts, paths in requested(index, every).items() if parts in hit for path in paths}
+    touched = {label for prefix, label in django_apps(files).items() if f"{prefix.replace('/', '.')}.models" in near}
+    return reached | {module_name(Path(path)) for path in by_name | by_path}, touched
+
+
+def requested(index: dict[tuple[tuple[str, ...], bool], set[str]], every: tuple[Route, ...]) -> dict[Route, set[str]]:
+    """The files that spell a path each route answers (``/infrastructure/machines/{name}/?q=a``), each path
+    resolved as Django resolves it, to the first route whose shape it fits."""
+
+    shaped = [route for route in every if route.path is not None]
+    found: dict[Route, set[str]] = {}
+    for (parts, _), paths in index.items():
+        if not parts:
+            continue
+        # A query is no part of the path: after a slash it spells a part of its own.
+        asked = tuple(part for part in (*parts[:-1], parts[-1].partition("?")[0]) if part)
+        route = next((route for route in shaped if fits(asked, route.path)), None)
+        if route is not None:
+            found.setdefault(route, set()).update(paths)
+    return found
+
+
+def fits(asked: tuple[str, ...], shape: tuple[str | None, ...] | None) -> bool:
+    return (
+        shape is not None
+        and len(shape) == len(asked)
+        and all(want is None or want == got for want, got in zip(shape, asked, strict=True))
+    )
 
 
 def seeds(paths: list[str]) -> set[str]:
-    """The modules a change starts from: each Python module it touched, and
-    the module that reads the tasks when it touched a task's definition."""
+    """The modules a change starts from: each Python module it touched, the
+    models of the app whose migration it touched, and the module that reads
+    the tasks when it touched a task's definition."""
 
     found = {module_name(Path(path)) for path in paths if path.endswith(".py")}
+    found |= {
+        ".".join(Path(path).parts[: Path(path).parts.index(MIGRATIONS)]) + ".models"
+        for path in paths
+        if MIGRATIONS in Path(path).parts[:-1]
+    }
     return (found | {TASK_READER}) if any(defines_tasks(path) for path in paths) else found
+
+
+# A migration changes its app's models as the database holds them, which no module imports.
+MIGRATIONS = "migrations"
+# The functions a URL module declares a route with, and the setting that names the root one.
+ROUTE_CALLS = ("path", "re_path")
+ROOT_URLCONF = "ROOT_URLCONF"
+
+
+class Route(NamedTuple):
+    """A route a URL module declares by name: its name as a test reverses it ("namespace:name"), the URL
+    module, the module its view is defined in, and its path from the root (None for a segment a converter
+    fills), when a mount and a plain pattern give one."""
+
+    name: str
+    urls: str
+    view: str
+    definition: str | None
+    path: tuple[str | None, ...] | None
+
+
+@functools.cache
+def routes(root: Path, files: tuple[Path, ...]) -> tuple[Route, ...]:
+    """Every route the URL modules of a tree declare by name."""
+
+    modules = {module_name(p) for p in files}
+    trees = {}
+    for path in files:
+        text = (root / path).read_text(encoding="utf-8")
+        if any(word in text for word in ("urlpatterns", ROOT_URLCONF, "Mount(", "include(")):
+            trees[path] = ast.parse(text)
+    mounts = mounted(trees.values(), modules)
+    found = []
+    for path, tree in trees.items():
+        urls = module_name(path)
+        bound = imported_names(tree, urls, path.name == "__init__.py")
+        namespace = next(
+            (
+                node.value.value
+                for node in tree.body
+                if isinstance(node, ast.Assign)
+                and any(isinstance(t, ast.Name) and t.id == "app_name" for t in node.targets)
+                and isinstance(node.value, ast.Constant)
+            ),
+            None,
+        )
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Call) and call_name(node.func) in ROUTE_CALLS and len(node.args) > 1):
+                continue
+            name = next(
+                (k.value.value for k in node.keywords if k.arg == "name" and isinstance(k.value, ast.Constant)), None
+            )
+            if not isinstance(name, str):
+                continue
+            pattern = node.args[0]
+            shape = None
+            if urls in mounts and call_name(node.func) == "path" and isinstance(pattern, ast.Constant):
+                shape = segments(mounts[urls] + str(pattern.value))
+            view, definition = defining_module(node.args[1], bound, modules, urls)
+            found.append(Route(f"{namespace}:{name}" if namespace else name, urls, view, definition, shape))
+    return tuple(found)
+
+
+def mounted(trees: Iterable[ast.Module], modules: set[str]) -> dict[str, str]:
+    """The prefix each URL module hangs off the root by: none for the one the settings name the root, and
+    for another a call that pairs a prefix with its dotted name
+    (``Mount("infrastructure/", "hq.domains.control_plane.urls")``, ``path("api/", include("..."))``)."""
+
+    found = {}
+    for tree in trees:
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Assign)
+                and any(isinstance(t, ast.Name) and t.id == ROOT_URLCONF for t in node.targets)
+                and isinstance(node.value, ast.Constant)
+                and node.value.value in modules
+            ):
+                found[node.value.value] = ""
+            if not (isinstance(node, ast.Call) and len(node.args) > 1):
+                continue
+            prefix, target = node.args[:2]
+            if isinstance(target, ast.Call) and call_name(target.func) == "include" and target.args:
+                target = target.args[0]
+            if (
+                isinstance(prefix, ast.Constant)
+                and isinstance(prefix.value, str)
+                and isinstance(target, ast.Constant)
+                and target.value in modules
+            ):
+                found[target.value] = prefix.value
+    return found
+
+
+def segments(path: str) -> tuple[str | None, ...]:
+    """A route's path as the parts a spelled path splits into, None for each a converter fills."""
+
+    return tuple(None if "<" in part else part for part in path.split("/") if part)
+
+
+def call_name(func: ast.expr) -> str | None:
+    return func.id if isinstance(func, ast.Name) else func.attr if isinstance(func, ast.Attribute) else None
+
+
+def imported_names(tree: ast.Module, module: str, package: bool) -> dict[str, str]:
+    """Each name a module's imports bind, mapped to the dotted name it binds."""
+
+    here = module.split(".") if package else module.split(".")[:-1]
+    bound: dict[str, str] = {}
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                bound[alias.asname or alias.name.split(".")[0]] = (
+                    alias.name if alias.asname else alias.name.split(".")[0]
+                )
+        elif isinstance(node, ast.ImportFrom):
+            base = here[: len(here) - node.level + 1] if node.level else []
+            source = ".".join([*base, *([node.module] if node.module else [])])
+            for alias in node.names:
+                bound[alias.asname or alias.name] = f"{source}.{alias.name}"
+    return bound
+
+
+def defining_module(view: ast.expr, bound: dict[str, str], modules: set[str], here: str) -> tuple[str, str | None]:
+    """(the module of this tree a route's view expression comes from, the definition in it), as
+    ``views.ListView.as_view()`` gives (``<app>.views``, ``ListView``); ``here`` when it is defined there or
+    comes from outside the tree."""
+
+    chain_: list[str] = []
+    node = view
+    while not isinstance(node, ast.Name):
+        if isinstance(node, ast.Call):
+            node = node.func
+        elif isinstance(node, ast.Attribute):
+            chain_.insert(0, node.attr)
+            node = node.value
+        else:
+            return here, None
+    if node.id not in bound:
+        return here, node.id
+    dotted = [*bound[node.id].split("."), *chain_]
+    for n in range(len(dotted), 0, -1):
+        if ".".join(dotted[:n]) in modules:
+            return ".".join(dotted[:n]), dotted[n] if n < len(dotted) else None
+    return here, None
+
+
+@functools.cache
+def defined_naming(path: str, shown: tuple[str, ...]) -> frozenset[str | None]:
+    """The top-level definitions of the module at ``path`` that name one of ``shown`` as a module names a
+    file, and the classes in it that derive from one of those."""
+
+    text = (chain.ROOT / path).read_text(encoding="utf-8")
+    tree = ast.parse(text)
+    definitions = [node for node in tree.body if isinstance(node, (ast.ClassDef, ast.FunctionDef))]
+    index: dict[tuple[tuple[str, ...], bool], set[str]] = {}
+    for node in definitions:
+        for joined, literals in LITERALS.findall(ast.get_source_segment(text, node) or ""):
+            for parts in spelled(literals):
+                index.setdefault((parts, bool(joined)), set()).add(node.name)
+    found = {name for path in shown for name in Naming(index).file(Path(path).parts)}
+    grew = True
+    while grew:
+        heirs = {
+            node.name
+            for node in definitions
+            if isinstance(node, ast.ClassDef) and any(isinstance(b, ast.Name) and b.id in found for b in node.bases)
+        }
+        grew = not heirs <= found
+        found |= heirs
+    return frozenset(found)
 
 
 def reading(paths: list[str], files: list[Path]) -> set[str]:
@@ -210,6 +423,7 @@ def reading(paths: list[str], files: list[Path]) -> set[str]:
     builds (``hq.platform.application.tests.tree.Named``)."""
 
     index = Naming(named(chain.ROOT, tuple(files)))
+    paths = rendering(paths)
     # A module that names a file, and a test that imports it, one hop out: two reach much of the suite.
     near: set[str] = set()
     # A test that names a directory above a module: the modules that name a package are many.
@@ -222,6 +436,59 @@ def reading(paths: list[str], files: list[Path]) -> set[str]:
             near |= index.file(parts)
     as_modules = {module_name(Path(path)) for path in near}
     return import_reach(as_modules, importers(files), 1) | {module_name(Path(path)) for path in alone}
+
+
+def rendering(paths: list[str]) -> list[str]:
+    """``paths``, and each template that includes or extends one of them, or loads a tag library one of them
+    is, as far as that goes: a page drawn from a changed part reaches the views that render the page."""
+
+    naming, loading = templates(chain.ROOT)
+    found = list(paths)
+    for path in found:
+        parts = Path(path).parts
+        users = naming.get(loader_name(parts), set()) if TEMPLATES in parts[:-1] else set()
+        if parts[-2:-1] == ("templatetags",) and path.endswith(".py"):
+            users = users | loading.get(Path(path).stem, set())
+        found += sorted(users - set(found))
+    return found
+
+
+# The directory Django's loaders read templates from, and how a template names
+# another ({% include "a/b.html" %}, {% extends %}) and loads a tag library.
+TEMPLATES = "templates"
+TEMPLATE_NAME = re.compile(r"""["']([^"'\s{}%]+\.(?:html|txt|xml))["']""")
+LOAD = re.compile(r"{%\s*load\s+(.+?)\s*%}")
+
+
+def loader_name(parts: tuple[str, ...]) -> str:
+    """A template's name as a loader finds it: its path below the last templates directory above it."""
+
+    last = len(parts) - 1 - parts[::-1].index(TEMPLATES)
+    return "/".join(parts[last + 1 :])
+
+
+@functools.cache
+def templates(root: Path) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
+    """(each template's name -> the templates that name it, each tag library -> the templates that load it),
+    read once per tree."""
+
+    naming: dict[str, set[str]] = {}
+    loading: dict[str, set[str]] = {}
+    try:
+        listed = names("ls-files", "--cached", "--others", "--exclude-standard", "*.html", "*.txt", "*.xml", root=root)
+    except RefError:
+        # A tree outside git (a fixture's) holds no templates fast reads.
+        listed = []
+    for path in listed:
+        if TEMPLATES not in Path(path).parts[:-1] or not (root / path).is_file():
+            continue
+        text = (root / path).read_text(encoding="utf-8")
+        for name in TEMPLATE_NAME.findall(text):
+            naming.setdefault(name, set()).add(path)
+        for words in (load.split() for load in LOAD.findall(text)):
+            for library in words[words.index("from") + 1 :] if "from" in words else words:
+                loading.setdefault(library, set()).add(path)
+    return naming, loading
 
 
 class Naming:
@@ -287,16 +554,24 @@ def spelled(literals: str) -> list[tuple[str, ...]]:
     return found
 
 
-def app_reach(touched: set[str], apps: dict[str, str], reverse: dict[str, set[str]]) -> set[str]:
-    """Every module of the touched apps, and each module that imports one.
+def with_gone(reverse: dict[str, set[str]], deleted: list[str], files: list[Path]) -> dict[str, set[str]]:
+    """``reverse`` with the modules that still import each deleted module, which the import graph of the tree
+    without it cannot resolve: those that spell ``import <module>`` or ``from <module>``, or import it from
+    its package by name."""
 
-    One hop only: a test that imports the app. Following importers further
-    would reach every module through the shared layers.
-    """
-
-    prefixes = [prefix.replace("/", ".") for prefix, label in apps.items() if label in touched]
-    members = {m for m in reverse if any(m == prefix or m.startswith(prefix + ".") for prefix in prefixes)}
-    return members | {i for m in members for i in reverse[m]}
+    gone = {module_name(Path(path)) for path in deleted if path.endswith(".py")} - reverse.keys()
+    if not gone:
+        return reverse
+    spelled = {
+        module: re.compile(
+            rf"^\s*(?:from\s+{re.escape(module)}\s+import\b|import\s+{re.escape(module)}\b"
+            rf"|from\s+{re.escape(module.rpartition('.')[0])}\s+import\s+[^\n]*\b{re.escape(module.rpartition('.')[2])}\b)",
+            re.MULTILINE,
+        )
+        for module in gone
+    }
+    texts = {module_name(path): (chain.ROOT / path).read_text(encoding="utf-8") for path in files}
+    return reverse | {module: {m for m, text in texts.items() if word.search(text)} for module, word in spelled.items()}
 
 
 def import_reach(start: set[str], reverse: dict[str, set[str]], hops: int = REACH) -> set[str]:
@@ -374,14 +649,14 @@ def whole_suite(files: list[Path]) -> list[str]:
 
 
 def chosen(modules: dict[str, Path], reached: set[str], touched: set[str]) -> set[str]:
-    """Those of ``modules`` the change reaches, and those that name an app it touched."""
+    """Those of ``modules`` the change reaches, and those that name an app whose models it reaches."""
 
     picked = {m for m in modules if m in reached}
-    # A test that names an app exercises it: a URL namespace ("projects:list"),
-    # a model label ("projects.Project") or the app label given to Django.
+    # A test that names an app's models exercises them: a model label
+    # ("projects.Project") or the app label given to Django.
     words = [
         re.compile(
-            rf"""["']{re.escape(app)}(?::|\.[A-Z])"""
+            rf"""["']{re.escape(app)}\.[A-Z]"""
             rf"""|(?:app_label\W+|get_model\(\s*|get_app_config\(\s*)["']{re.escape(app)}["']"""
         )
         for app in touched

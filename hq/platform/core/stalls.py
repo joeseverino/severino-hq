@@ -13,7 +13,7 @@ import threading
 import traceback
 
 # Bound here, so a test that patches time.monotonic moves its own clock and never the stall watch's.
-from time import monotonic, thread_time
+from time import monotonic, process_time, thread_time
 from types import FrameType
 lazy import ctypes
 lazy from collections.abc import Callable
@@ -90,8 +90,13 @@ def suspended_greenlets(stream) -> None:
 
 def tree_cpu() -> dict[int, float]:
     """CPU seconds, user and system, of this process and of each process
-    under it, by pid: this process's with its reaped children's, each live
-    descendant's its own.
+    under it, by pid: this process's, less the calling thread's, with its
+    reaped children's, each live descendant's its own.
+
+    This process's own is read from the clocks the kernel keeps to the
+    nanosecond, the two back to back: ``os.times`` counts in clock ticks, so
+    less a thread clock it grows by a whole tick whenever the calling thread's
+    own reads cross one, and a walk between the two would count as work.
 
     The standard library reads only this process and its reaped children,
     so a live descendant is read from the kernel: ``/proc`` on Linux, libproc
@@ -100,8 +105,9 @@ def tree_cpu() -> dict[int, float]:
     ``subprocess``.
     """
 
-    own = os.times()
-    spent = {os.getpid(): own.user + own.system + own.children_user + own.children_system}
+    own = process_time() - thread_time()
+    reaped = os.times()
+    spent = {os.getpid(): own + reaped.children_user + reaped.children_system}
     spent |= _darwin_descendants(os.getpid()) if sys.platform == "darwin" else _linux_descendants(os.getpid())
     return spent
 
@@ -348,9 +354,7 @@ class StallWatch:
     def cpu(self) -> dict[int, float]:
         """The tree's CPU time by pid, less what this watch's own thread spent reading it."""
 
-        spent = tree_cpu()
-        spent[os.getpid()] -= thread_time()
-        return spent
+        return tree_cpu()
 
     def _wait(self) -> None:
         last: tuple[float, dict[int, float]] | None = None

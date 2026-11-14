@@ -3,7 +3,6 @@
 from functools import cached_property
 from typing import override
 
-from django.core.exceptions import PermissionDenied
 from django.http import Http404, JsonResponse
 from django.urls import reverse, reverse_lazy
 from django.views.generic import DetailView, ListView, TemplateView, View
@@ -11,17 +10,18 @@ from django.views.generic import DetailView, ListView, TemplateView, View
 from hq.platform.application.pages import PageAction, PageBadge, PageMixin
 from hq.platform.application.security import web_principal
 from hq.platform.application.tables import Projected, TableColumn, TableFilter, TableListMixin, TableQuery, TableSort
-from hq.platform.application.web_writes import execute_posted
 lazy from hq.platform.application import outbound_work, work_runs
-lazy from hq.platform.application.asks import FAILED, Standing, answer, job_standing
+lazy from hq.platform.application.asks import FAILED, AskMixin, Standing, Took
 lazy from hq.platform.application.automation_runs import cancel_action, listed_with_actions, run_here_url
 lazy from hq.platform.application.capabilities import capability_registry
 lazy from hq.platform.application.labels import lower_first
 lazy from hq.platform.application.outbound_work import SUBJECT_FIELD
-lazy from hq.platform.application.refusal_status import WANTS_A_GRANT
 lazy from hq.platform.application.run_pages import run_context
 
 from .models import Job, JobState
+
+# A run's tone (``work_runs.TONES``) in the notice's own names for it.
+NOTICE_TONES = {"serious": "error", "attention": "warning"}
 
 
 class JobListView(PageMixin, TableListMixin, ListView):
@@ -101,6 +101,9 @@ class JobListView(PageMixin, TableListMixin, ListView):
         context["ended_badly"] = [(JobState(state).label, titles) for state, titles in ended.items() if titles]
         if context["ended_badly"]:
             (first, _), *rest = context["ended_badly"]
+            # The worst state leads ENDED_BADLY, and the banner reads in the tone its run does.
+            worst = next(state for state, titles in ended.items() if titles)
+            context["ended_badly_tone"] = NOTICE_TONES[work_runs.TONES[JobState(worst)]]
             said = " or ".join((first, *(lower_first(label) for label, _ in rest)))
             many = sum(len(titles) for _, titles in context["ended_badly"]) > 1
             context["ended_badly_title"] = f"{said} on {'their' if many else 'its'} last run"
@@ -149,50 +152,45 @@ class RunView(PageMixin, TemplateView):
 
 
 class JobStatusView(DetailView):
-    """One job's state, as JSON, for a page that is watching it.
-
-    Polled every couple of seconds for as long as the page is open, so it
-    reads one row and renders no template. It answers as ``asks.Standing``
-    does, so the control that follows a controller's read follows a job.
-    """
+    """How one job stands, for a page following it: one row, no template."""
 
     model = Job
 
     @override
     def render_to_response(self, context, **response_kwargs):
-        job = self.object
-        # The shape every ask's status answers in, with the job's own result.
-        return JsonResponse({**job_standing(job).as_json(), "result": job.result})
+        return JsonResponse(work_runs.standing_of(work_runs.job_run(self.object)).as_json())
 
 
-class WorkAskView(View):
-    """Where a control asks for declared outbound work.
+class WorkAskView(AskMixin, View):
+    """Where a control asks for declared outbound work, through the work's own
+    capability, so a press is authorized and recorded as the API's call is."""
 
-    The ask is the work's own capability, so a pressed button is authorized,
-    refused and recorded exactly as the same ask through the API is. The
-    request answers once the job is recorded; the job does the work.
-    """
+    back_to = "jobs:list"
 
-    def post(self, request, name: str):
-        work = outbound_work.declared_work().get(name)
+    @override
+    def setup(self, request, *args, **kwargs):
+        super().setup(request, *args, **kwargs)
+        self.capability = kwargs["name"]
+
+    @cached_property
+    def work(self):
+        work = outbound_work.declared_work().get(self.capability)
         if work is None:
             raise Http404("No such work is declared.")
-        subject = request.POST.get(SUBJECT_FIELD, "")
-        result = execute_posted(request, name, {}, target=subject if work.takes_subject else None)
-        back = reverse("jobs:list")
-        if not result.get("ok"):
-            error = result.get("error", {})
-            if error.get("code") in WANTS_A_GRANT:
-                raise PermissionDenied(error.get("message", ""))
-            return answer(request, Standing(FAILED, error.get("message", "")), fallback=back)
+        return work
+
+    @override
+    def target(self) -> str | None:
+        return self.request.POST.get(SUBJECT_FIELD, "") if self.work.takes_subject else None
+
+    @override
+    def asked(self, result, at) -> Took:
         job = Job.objects.filter(pk=result["job"]).first() if result.get("job") else None
         if job is None:
             # Another subject's run of the same work holds the one live slot.
-            return answer(request, Standing(FAILED, result.get("message", "")), fallback=back)
-        return answer(
-            request,
-            job_standing(job),
-            fallback=back,
-            status_url=reverse("jobs:status", args=[job.pk]),
-            message=result.get("message", ""),
+            return Took(Standing(FAILED, result.get("message", "")))
+        return Took(
+            work_runs.standing_of(work_runs.job_run(job)),
+            reverse("jobs:status", args=[job.pk]),
+            result.get("message", ""),
         )

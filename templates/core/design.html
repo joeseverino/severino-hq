@@ -1,0 +1,9 @@
+{% extends "page.html" %}
+{% block page %}
+{% comment %}
+Every shared part as the component catalog fills it, each under its name, in
+a document of its own (hq.platform.core.design_gallery): drawn on each request
+where SEVERINO_DESIGN_GALLERY names no file, else as the image build wrote it.
+{% endcomment %}
+{% if gallery %}{% include "partials/_framed_document.html" with src=gallery title="Gallery" only %}{% else %}{% include "partials/_empty_state.html" with message="No gallery in this build." only %}{% endif %}
+{% endblock %}

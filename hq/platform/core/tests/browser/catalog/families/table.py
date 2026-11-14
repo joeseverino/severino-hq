@@ -18,13 +18,13 @@ ENTRIES = {
         "{% endtable_region %}{% endsection %}"
     ),
     "table/sorts": Entry(
-        '{% section "Example hosts" %}{% table_region "Example hosts" %}<table class="data-table"><thead><tr>'
+        '{% section "Example hosts 5" %}{% table_region "Example hosts 5" %}<table class="data-table"><thead><tr>'
         '{% table_heading "Name" %}{% table_heading "State" "status" %}'
         '{% table_heading "Actions" "control" hidden=True %}</tr></thead>'
         '<tbody><tr><td>example-01</td><td>{% status "Online" tone="good" %}</td><td><a href="#">Open</a></td></tr>'
         '<tr><td>example-02</td><td>{% status "Offline" tone="attention" %}</td><td><a href="#">Open</a></td></tr>'
         "</tbody></table>{% endtable_region %}{% endsection %}"
-        '{% section "Example host" %}{% table_region "Example host" %}<table class="data-table"><thead><tr>'
+        '{% section "Example host 3" %}{% table_region "Example host 3" %}<table class="data-table"><thead><tr>'
         '{% table_heading "Name" %}{% table_heading "State" "status" %}</tr></thead>'
         '<tbody><tr><td>example-01</td><td>{% status "Online" tone="good" %}</td></tr></tbody></table>'
         "{% endtable_region %}{% endsection %}"
@@ -32,17 +32,17 @@ ENTRIES = {
     # A region whose tables hold no row: what is missing and what fills it,
     # then a list its own filter emptied, with the way back.
     "table/empty": Entry(
-        '{% section "Example hosts" %}{% table_region "Example hosts" empty="No example hosts yet." '
+        '{% section "Example hosts 6" %}{% table_region "Example hosts 6" empty="No example hosts yet." '
         'action_url="#" action_label="Add an example host" %}<table class="data-table"><thead><tr>'
         '{% table_heading "Name" %}{% table_heading "State" "status" %}</tr></thead><tbody></tbody></table>'
         "{% endtable_region %}{% endsection %}"
-        '{% section "Example records" %}{% table_region "Example records" empty="No example records yet." '
+        '{% section "Example records 4" %}{% table_region "Example records 4" empty="No example records yet." '
         'filtered=True clear="#" %}<table class="data-table"><thead><tr>'
         '{% table_heading "Name" %}{% table_heading "State" "status" %}</tr></thead><tbody></tbody></table>'
         "{% endtable_region %}{% endsection %}"
     ),
     "table/gutter": Entry(
-        '{% section "Example records" %}{% table_region "Example records" %}<table class="data-table"><thead><tr>'
+        '{% section "Example records 5" %}{% table_region "Example records 5" %}<table class="data-table"><thead><tr>'
         '{% table_heading "Name" "identifier" gutter=True %}{% table_heading "Note" %}</tr></thead><tbody>'
         "<tr><td><strong>example-01</strong></td><td>An example note"
         '<div class="row-below">An example line the row holds back.</div></td></tr>'
@@ -52,7 +52,7 @@ ENTRIES = {
     # A fact on one line ({% cell_line lines=1 %}), as Jobs says who asked for
     # each run; a cut of one is measured, and opened, by tables.js.
     "table/one-line": Entry(
-        '{% section "Example runs" %}{% table_region "Example runs" %}<table class="data-table"><thead><tr>'
+        '{% section "Example runs 2" %}{% table_region "Example runs 2" %}<table class="data-table"><thead><tr>'
         '{% table_heading "Run" "identifier" gutter=True %}{% table_heading "Asked by" %}</tr></thead><tbody>'
         '<tr><td><strong>example-01</strong></td><td>{% cell_line "example-owner, on the web" lines=1 %}</td></tr>'
         '<tr><td><strong>example-02</strong></td><td>{% cell_line "example-agent, over MCP" lines=1 %}</td></tr>'
@@ -64,7 +64,7 @@ ENTRIES = {
     "table/row-actions": Entry(
         '{% section "Example messages" %}{% table_region "Example messages" %}<table class="data-table"><thead><tr>'
         '{% table_heading "From" "identifier" gutter=True %}{% table_heading "Note" %}'
-        '{% table_heading "Actions" css="actions-col" hidden=True drop=1 %}</tr></thead><tbody>'
+        '{% table_heading "Actions" css="actions-col" hidden=True %}</tr></thead><tbody>'
         "{% for row in rows %}<tr><td><strong>{{ row.0 }}</strong></td><td>{{ row.1 }}</td>"
         "{% row_actions row.2 %}</tr>{% endfor %}</tbody></table>{% endtable_region %}{% endsection %}",
         {
@@ -90,7 +90,7 @@ ENTRIES = {
     # field, then its two values sharing the room evenly, one long enough to
     # wrap.
     "table/compare": Entry(
-        '{% section "Example changes" %}{% table_region "Example changes" compare=True %}'
+        '{% section "Example changes 2" %}{% table_region "Example changes 2" compare=True %}'
         '<table class="data-table compact-table"><thead><tr>{% table_heading "Field" "identifier" %}'
         '{% table_heading "Before" %}{% table_heading "After" %}</tr></thead><tbody>'
         "<tr><th>example_name</th><td>example-01</td><td>example-02</td></tr>"
@@ -100,7 +100,7 @@ ENTRIES = {
     # A row that asks to be read first ({% row_state emphasized=True %}) among
     # rows that do not, its links weighed and its cells tinted.
     "table/emphasized": Entry(
-        '{% section "Example messages" %}{% table_region "Example messages" %}<table class="data-table"><thead><tr>'
+        '{% section "Example messages 2" %}{% table_region "Example messages 2" %}<table class="data-table"><thead><tr>'
         '{% table_heading "From" "identifier" gutter=True %}{% table_heading "Message" %}</tr></thead><tbody>'
         "{% for row in rows %}<tr{% row_state emphasized=row.2 %}><td>{{ row.0 }}</td>"
         '<td><a href="#">{{ row.1 }}</a></td></tr>{% endfor %}</tbody></table>{% endtable_region %}{% endsection %}',

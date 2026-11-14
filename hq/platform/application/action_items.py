@@ -24,7 +24,10 @@ from .projection import projection_scope
 from .security import Principal, person
 lazy from . import dashboard
 lazy from .attention import readable_by
+lazy from .decisions import decision
 lazy from .domains import attention_urls
+lazy from .findings import rule_of
+lazy from .routes import reverse
 
 # How long a set-aside mark outlives its item. Long enough that a finding which
 # clears and returns within a sweep or two is still recognized as set aside.
@@ -167,13 +170,49 @@ def families(items: list[dict[str, Any]], *, fold: bool = True) -> list[dict[str
             {"family": item.get("family", "") if named else "", "id": family_id(item) if named else "", "items": []},
         )
         entry["items"].append(item)
+    return [_entry(entry) for entry in entries.values()]
+
+
+def _entry(entry: dict[str, Any]) -> dict[str, Any]:
+    """An entry as its row draws it. A folded family says what is inside while
+    closed (its worst item and how many more) and offers what its items do."""
+
+    items = entry["items"]
+    folded = bool(entry["family"]) and len(items) > 1
+    return {
+        **entry,
+        "folded": folded,
+        "status": items[0].get("status", ""),
+        "summary": f"{items[0]['label']}, and {len(items) - 1} more" if folded else "",
+        "lead": _offered(items) if folded else [],
+    }
+
+
+def _offered(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """What a family's row offers: the recommended action every item shares,
+    else, for the findings of one rule, the list of them."""
+
+    decided = [decision(item)["actions"] for item in items]
+    common = set.intersection(*({(action["method"], action["url"]) for action in actions} for actions in decided))
+    shared = [action for action in decided[0] if action["recommended"] and (action["method"], action["url"]) in common]
+    if shared:
+        return shared[:1]
+    rules = {rule_of(str(item.get("key", ""))) for item in items}
+    if len(rules) != 1 or "" in rules:
+        return []
+    url = f"{reverse('control_plane:findings')}?rule={rules.pop()}"
     return [
         {
-            **entry,
-            "folded": bool(entry["family"]) and len(entry["items"]) > 1,
-            "status": entry["items"][0].get("status", ""),
+            "name": "open",
+            "label": f"Open all {len(items)}",
+            "effect": "read",
+            "url": url,
+            "method": "GET",
+            "capability": "",
+            "target": "",
+            "reason": "",
+            "recommended": True,
         }
-        for entry in entries.values()
     ]
 
 

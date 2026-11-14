@@ -18,9 +18,10 @@ from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Cast, Coalesce, RowNumber
 from django.utils import timezone
 
+from hq.platform.core.audit import audited_labels
 from hq.platform.core.models import AgentDevice, AgentIdentity, AuditLog
 
-from . import agent_devices, agent_limits, agent_registry, denials, roles
+from . import agent_devices, agent_limits, denials, roles
 from .agent_access import UNPLACED_CODES
 from .agent_devices import DeviceStanding
 from .agent_limits import RATE_LIMITED, TOO_MANY_CALLS
@@ -47,10 +48,6 @@ CLIENT_SETUP = "https://github.com/joeseverino/severino-hq/blob/main/docs/API.md
 LIMITED = (RATE_LIMITED, TOO_MANY_CALLS)
 
 DENIED = Q(action=AuditLog.Action.DENIED)
-
-# HQ noting it saw an agent or one of its devices, or a person changing either,
-# is not something the agent did.
-NOT_CALLS = (agent_registry.AUDIT_LABEL, agent_devices.AUDIT_LABEL)
 
 
 def agent_name(identity: AgentIdentity) -> str:
@@ -330,8 +327,11 @@ def _unplaced(clients: list[str]) -> dict[str, list[DeviceRow]]:
 
 
 def _calls_of(clients: list[str]):
+    # HQ noting it saw an agent or one of its devices, or a person changing
+    # either, is not something the agent did.
+    labels = audited_labels()
     return AuditLog.objects.filter(actor__in=clients, created_at__gte=timezone.now() - RECENT).exclude(
-        object_type__in=NOT_CALLS
+        object_type__in=(labels[AgentIdentity], labels[AgentDevice])
     )
 
 

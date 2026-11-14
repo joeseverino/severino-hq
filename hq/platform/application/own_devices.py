@@ -8,8 +8,7 @@ from typing import Annotated, Literal, TypedDict
 
 from django.db import DatabaseError, transaction
 
-from hq.platform.core.audit import record_event
-from hq.platform.core.models import AuditLog, OwnDevice
+from hq.platform.core.models import OwnDevice
 
 from .command_fields import Describe
 from .linked_accounts import SIGN_IN, linked_login
@@ -18,7 +17,6 @@ from .security import Principal, person
 
 logger = logging.getLogger("severino.agents")
 
-AUDIT_LABEL = "Own device"
 
 SET_OWN_DEVICE = "agent.device.set"
 
@@ -87,18 +85,10 @@ def set_own_device(command: OwnDeviceCommand, *, principal: Principal, current_k
         if command.registered:
             if not linked_login(user, SIGN_IN):
                 raise PolicyError("You have not signed in through Pocket ID, so no device's token can name you yet.")
-            row = OwnDevice.objects.create(user=user, client_id=client)
+            row = OwnDevice(user=user, client_id=client)
+            row.audit_said = f"{client} added to your own devices"
+            row.save()
         else:
-            row = held
-        record_event(
-            action=AuditLog.Action.CREATED if command.registered else AuditLog.Action.DELETED,
-            obj=row,
-            type_label=AUDIT_LABEL,
-            message=f"{client} {'added to' if command.registered else 'removed from'} your own devices",
-            metadata={"client_id": client, "registered": command.registered},
-            user=user,
-            required=True,
-        )
-        if not command.registered:
-            row.delete()
+            held.audit_gone = f"{client} removed from your own devices"
+            held.delete()
     return {"ok": True, "client_id": client, "registered": command.registered}

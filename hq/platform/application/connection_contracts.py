@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from .security import Requires
+
 # Named for annotations alone: a class's annotations can be read as it is made
 # (a dataclass's are), which would load a lazy import at once.
 if TYPE_CHECKING:
@@ -130,7 +132,7 @@ class ConnectionInstance:
 
 
 @dataclass(frozen=True, slots=True)
-class ConnectionSpec:
+class ConnectionSpec(Requires):
     """One declaration of a connection family and its cached instance provider."""
 
     name: str
@@ -152,9 +154,3 @@ class ConnectionSpec:
     # family that emits from configuration; one fed by controller reports
     # overrides it to say so.
     empty_message: str = "Not set up here yet."
-
-    @property
-    def required_capabilities(self) -> tuple[Capability | str, ...]:
-        if isinstance(self.required_capability, tuple):
-            return self.required_capability
-        return (self.required_capability,)

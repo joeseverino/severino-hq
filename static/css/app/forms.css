@@ -424,6 +424,8 @@ select.toned:not(.toned-neutral) { border-color: currentColor; }
   display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4);
   padding: var(--surface-inset, var(--space-5));
   margin: 0 0 var(--space-6);
+  /* What its folded choices open under (below). */
+  anchor-name: --filter-bar; anchor-scope: --filter-bar;
 }
 /* The controls wrap in a box of their own, and the button that sends them, with Clear, stands in a column beside it at the controls' last line, so it never takes a line alone. That column takes no more than a share of a narrow bar, Clear wrapping under the button, so the controls keep the room their words need. The count follows, its own margin carrying it to the row's end. */
 .filter-bar-query {
@@ -432,12 +434,63 @@ select.toned:not(.toned-neutral) { border-color: currentColor; }
 }
 .filter-bar-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); min-width: 0; }
 .filter-bar-send { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); }
-/* The search alone grows, taking what its line leaves: it asks first for its whole placeholder, or what is typed in it (`field-sizing`), so the controls beside it wrap before it is cut. Every other control is as wide as what it says, as a native control is. */
+/* The search alone grows, taking what its line leaves: it asks first for its whole placeholder, or what is typed in it (`field-sizing`), so the controls beside it wrap, or fold, before it is cut. Every other control is as wide as what it says, as a native control is. */
 .filter-bar-controls > input[type=search] { flex: 1 1 auto; field-sizing: content; min-width: 0; }
 /* A choice is as wide as its longest option, so the bar holds still as the choice changes (never `field-sizing`, which follows the option chosen), and narrower only in a bar too narrow for it. */
 .filter-bar-controls > select { max-width: 100%; min-width: 0; }
 /* A control a script shows only once it has something to act on. */
-.filter-bar-controls > [hidden] { display: none; }
+.filter-bar-controls > [hidden], .filter-bar-choices > [hidden] { display: none; }
+
+/* A bar whose choices fold (its `{% choices %}`): the search keeps its row,
+   and the choices with the button that sends them stand beside it while the
+   row has room for all of them, else behind one Filters control. The room is
+   the layout's own measure: the sizer, a copy of the row unfolded that no
+   one sees, takes the second track at the width it needs, and the fit, the
+   first track, is what is left, so the fit is a container that is empty
+   exactly when the row does not hold them. The row itself is drawn as wide
+   as the bar (`--filter-bar-room`, the bar's width read past the fit). The
+   bar asks beside its count only the room of the search and the Filters
+   control, so the count shares the row where it can. */
+@property --filter-bar-room { syntax: "<length>"; inherits: true; initial-value: 0px; }
+.filter-bar-query:has(> .filter-bar-fit) {
+  flex: 1 1 14rem;
+  container-type: inline-size;
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, max-content); align-items: start; gap: 0;
+}
+.filter-bar-fit { container: filter-bar-fit / inline-size; --filter-bar-room: 100cqi; }
+.filter-bar-fit > .filter-bar-controls { inline-size: var(--filter-bar-room); }
+.filter-bar-query:has(> .filter-bar-fit) .filter-bar-controls { flex-wrap: nowrap; }
+/* stylelint-disable-next-line declaration-property-value-disallowed-list -- the sizer is drawn for its width alone, never seen */
+.filter-bar-sizer { block-size: 0; overflow: clip; visibility: hidden; }
+/* Unfolded, the choices are the row's: what the browser gives a popover
+   (hidden, fixed, framed, painted Canvas) is undone, as the header's nav
+   undoes it (base.css). */
+.filter-bar-choices {
+  display: flex; flex: 0 0 auto; align-items: center; gap: var(--space-4);
+  position: static; inset: auto; inline-size: auto; block-size: auto;
+  margin: 0; padding: 0; border: 0; background: none; color: inherit; overflow: visible;
+}
+.filter-bar-choices > .toggle-set { flex-wrap: nowrap; }
+.filter-bar-fold { display: none; gap: var(--space-3); }
+@container filter-bar-fit (inline-size < 1px) {
+  .filter-bar-fold { display: inline-flex; flex: none; }
+  .filter-bar-choices:not(:popover-open) { display: none; }
+}
+/* Open, the choices are a panel under the bar, as wide as it, at any width:
+   the browser draws it over the page, and a press outside it or Escape
+   closes it. */
+.filter-bar-choices:popover-open {
+  position: fixed; position-anchor: --filter-bar;
+  inset: auto; top: anchor(bottom); left: anchor(left); right: anchor(right);
+  margin: var(--space-2) 0 0;
+  flex-wrap: wrap; gap: var(--space-4);
+  padding: var(--space-5);
+  max-block-size: 70dvh;
+  overflow: auto; overscroll-behavior: contain;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); box-shadow: var(--shadow-pop);
+}
+.filter-bar-choices:popover-open > .toggle-set { flex-wrap: wrap; }
+.filter-bar-choices:popover-open > .filter-bar-send { margin-inline-start: auto; }
 /* A set of toggles (partials/_toggle_set.html): the checkboxes in a row of their own words, wrapping between them. */
 .toggle-set {
   display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6);

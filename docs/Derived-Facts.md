@@ -508,6 +508,7 @@ stored readings for these, polling nothing:
 | `published-port-unfronted` | A container port answers the internet and no route leads to it | The compose change on its page |
 | `tag-granted-to-nobody` | A grant names a tag no read device carries | Edit the declared tailnet policy |
 | `served-certificate-not-held` | The controller found a consumer serving a certificate other than the one HQ installed | Install it again (reconcile) |
+| `service-wiring-incomplete` | A service's declarations: a name parked or pointing nowhere, two of one kind for one name, a proxied name no certificate covers, a proxy forwarding to an unknown machine (`services._faults`) | The service's page |
 
 A machine where a container publishes 80 or 443 itself is never called
 unserved, since HQ cannot enumerate what it answers for. Removal is
@@ -581,7 +582,9 @@ Findings from these readings:
   on the machine has none and is not claimed.
 - `certificate-expiring`: any certificate-facet reading within 21 days of
   expiry, by `expiry.days_until`, on the connection that read it
-  (`hq/platform/application/certificate_expiry.py`).
+  (`hq/platform/application/certificate_expiry.py`), and a certificate HQ
+  renews, inside its declared renewal window, on its declaration, offering the
+  renewal.
 
 The machine, service, domain and declaration pages render the section, with
 "View on map" (`?focus=<node>`), one "Not readable" line linking to the

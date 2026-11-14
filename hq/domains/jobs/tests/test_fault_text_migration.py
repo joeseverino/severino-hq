@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from django.test import SimpleTestCase
 from django.utils import timezone
 
-from hq.platform.application.asks import job_standing
+from hq.platform.application.work_runs import job_run, standing_of
 from hq.platform.core.tests.migration_steps import MigrationStepTestCase
 
 # A value the fault's text held, standing in for a credential.
@@ -50,12 +50,16 @@ class StandingTests(SimpleTestCase):
     def test_a_failed_job_shows_its_whole_sentence(self):
         said = "Two hosts refused the change.\nRetry after the maintenance window."
         job = SimpleNamespace(
+            pk=1,
+            kind="example.work",
             seen_state="failed",
             seen_error=said,
             note="",
             created_at=timezone.now(),
+            started_at=None,
+            finished_at=None,
+            duration_seconds=None,
             percent=None,
-            seen_state_display="Failed",
         )
 
-        self.assertEqual(job_standing(job).note, said)
+        self.assertEqual(standing_of(job_run(job)).note, said)

@@ -256,14 +256,9 @@
           "findings": [
             {
               "affected_scopes": [],
-              "evidence": [
-                {
-                  "label": "Free on /",
-                  "value": "56 MB of 29.0 GB (0.2%)"
-                }
-              ],
-              "explanation": "The next write that needs more room than is left fails, and says only that the write did.",
-              "id": "claim:e378f3b6e41c6c8c",
+              "evidence": [],
+              "explanation": "Expires Feb\u00a08\u00a0\u00b7 24 days. Renewal has not run; renew it.",
+              "id": "claim:008164bedbed1fcb",
               "investigations": [
                 {
                   "capability": "",
@@ -275,7 +270,7 @@
                   "recommended": false,
                   "refusal": "",
                   "target": "",
-                  "url": "/infrastructure/topology/?focus=machine%3Adocker-host-01#trace"
+                  "url": "/infrastructure/topology/?focus=resource%3Awildcard-example-com#trace"
                 }
               ],
               "no_help_reason": null,
@@ -290,28 +285,28 @@
                   "recommended": false,
                   "refusal": "",
                   "target": "",
-                  "url": "/infrastructure/machines/docker-host-01/"
+                  "url": "/infrastructure/wildcard-example-com/"
                 }
               ],
               "operator_steps": [
                 {
-                  "command": "ssh docker-host-01 \"sudo df -h /\"",
-                  "label": "See the space on /",
+                  "command": "",
+                  "label": "Renew the certificate from its page in HQ, or where it is held, or fix its automatic renewal. Then press Check again.",
                   "notes": []
                 }
               ],
               "remedies": [],
-              "rule": "filesystem-nearly-full",
-              "scope": "host.filesystem",
-              "severity": "serious",
+              "rule": "certificate-expiring",
+              "scope": null,
+              "severity": "attention",
               "since": null,
-              "subject": "machine:docker-host-01",
-              "title": "The filesystem at / on docker-host-01 is nearly full",
+              "subject": "resource:wildcard-example-com",
+              "title": "wildcard-example-com expires in 24 days",
               "workflow": {
-                "id": "resolve:claim:e378f3b6e41c6c8c",
+                "id": "resolve:claim:008164bedbed1fcb",
                 "label": "Next steps",
                 "outcome": {
-                  "claim_id": "claim:e378f3b6e41c6c8c",
+                  "claim_id": "claim:008164bedbed1fcb",
                   "kind": "claim_absent",
                   "label": ""
                 },
@@ -328,7 +323,7 @@
                         "recommended": false,
                         "refusal": "",
                         "target": "",
-                        "url": "/infrastructure/findings/?rule=filesystem-nearly-full"
+                        "url": "/infrastructure/findings/?rule=certificate-expiring"
                       }
                     ],
                     "label": "Check again",
@@ -343,10 +338,10 @@
           "rule": null,
           "schema_version": 2,
           "summary": {
-            "findings": 6,
-            "returned": 6,
+            "findings": 9,
+            "returned": 9,
             "severities": {
-              "attention": 3,
+              "attention": 6,
               "neutral": 1,
               "serious": 2
             },
@@ -1290,6 +1285,7 @@
           "started_at": null,
           "state": "queued",
           "state_label": "Waiting",
+          "stated": [],
           "worker": ""
         },
         "ok": true
@@ -1507,7 +1503,7 @@
     "responses": {
       "200": {
         "data": {
-          "count": 11,
+          "count": 12,
           "items": [
             {
               "action": "Review docs",
@@ -1520,7 +1516,7 @@
             }
           ],
           "next": null,
-          "total": 11,
+          "total": 12,
           "truncated": false
         },
         "ok": true
@@ -2829,7 +2825,8 @@
               "playbook": "example.package_upgrade",
               "started_at": null,
               "state": "queued",
-              "state_label": "Waiting"
+              "state_label": "Waiting",
+              "stated": []
             }
           ],
           "next": null,

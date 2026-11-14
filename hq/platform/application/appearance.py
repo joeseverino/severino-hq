@@ -13,15 +13,13 @@ from django.utils import timezone
 
 from hq.platform.application.record_errors import InputError
 from hq.platform.application.security import Principal, person
-from hq.platform.core.audit import record_event
-from hq.platform.core.models import Appearance, AuditLog
+from hq.platform.core.models import Appearance
 
 from .command_fields import Choices, Describe
 from .describe import listed
 from .ui import ended
 
 Theme = Appearance.Theme
-AUDIT_LABEL = "Appearance"
 
 SET_THEME = "appearance.theme.set"
 
@@ -58,18 +56,11 @@ def set_theme(command: ThemeCommand, *, principal: Principal) -> ThemeSet:
         raise InputError("Choose system, light or dark.")
 
     with transaction.atomic():
-        row, _ = Appearance.objects.select_for_update().get_or_create(user=user)
+        row = Appearance.objects.select_for_update().filter(user=user).first() or Appearance(user=user)
         if row.theme == theme:
             return {"ok": True, "theme": theme}
         row.theme = theme
         row.changed_at = timezone.now()
-        row.save(update_fields=["theme", "changed_at"])
-        record_event(
-            action=AuditLog.Action.UPDATED,
-            obj=row,
-            type_label=AUDIT_LABEL,
-            message=f"Theme set to {Theme(theme).label}",
-            user=user,
-            required=True,
-        )
+        row.audit_said = f"Theme set to {Theme(theme).label}"
+        row.save()
     return {"ok": True, "theme": theme}

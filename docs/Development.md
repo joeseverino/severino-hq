@@ -361,8 +361,22 @@ The tests it selects are:
 
 - the test modules that import a changed file, directly or through one module
   between;
-- every test of the changed Django apps, and every test that names one (its
-  URL namespace or app label);
+- every test that names a route whose view the change reaches, by its name
+  (`reverse("control_plane:detail")`) or by a path it answers
+  (`"/infrastructure/topology/"`, an f-string's field filling a converter),
+  each path resolved to the first route it fits, as Django resolves it: a test
+  that drives a view through the client imports its models, never its views.
+  A route is read from each URL module's `path()` calls, its prefix from the
+  call that mounts its module (`Mount("infrastructure/", "<module>")`,
+  `include()`) or from `ROOT_URLCONF`. A view is reached when the change
+  imports into its module, when its module imports a module that names a
+  changed file, or, for the module that names the file itself, when the view
+  (or a class it derives from) is the definition that names it. A template
+  reaches through every template that includes or extends it, and a tag
+  library through every template that loads it;
+- every test that names an app whose models the change reaches, by a model
+  label (`"projects.Project"`) or its app label; a migration reaches its app's
+  models;
 - every test that reads the tasks, when a task definition or a file a task's
   run names changed;
 - every module whose source names a changed file, and every test that
@@ -410,10 +424,10 @@ the map's tree, and runs whichever selection has fewer modules:
 
 - a Python file the map holds, changed only inside function bodies (a
   function's docstring aside), selects the test modules that ran it, and
-  not its app: such a change does nothing at import, and a test that ran
-  none of the file runs what it ran before until it reaches another changed
-  file, which selects it;
-- a changed test module touches no app either;
+  not the tests of its routes: such a change does nothing at import, and a
+  test that ran none of the file runs what it ran before until it reaches
+  another changed file, which selects it;
+- a changed test module reaches no route either;
 - every other path (a module-level line, a template, a migration, a file
   the map does not hold) selects by the rules above, and so does a test
   module the recording did not run.
@@ -456,7 +470,7 @@ turns](#heavy-gates-take-turns)): with one, fast takes the turn once, through
 the hidden task `turn`, for the tests and those gates together, and mise hands
 its lock down to every task under it, so a gate that takes the lock itself
 goes ahead at once, beside the rest. With none, the tests take the turn
-themselves when their run is heavy. Both runs' output is kept in
+themselves when their run is more than one process, and a share otherwise. Both runs' output is kept in
 `var/gate/fast.log` ([The gates](#the-gates)), and both run in the config
 environment `mise.fast.toml` sets: mise's summary output, where a gate that
 passed prints its `passed in` line as it ends and one that failed prints
@@ -680,8 +694,10 @@ first. The global pre-push hook runs it with git's refs on stdin.
 Two suites at once exhaust a small machine's memory. So every step that loads
 the machine (a suite, a browser, an image build, CodeQL) waits for one turn
 shared by every checkout and worktree, and a waiting task names the holder.
+A run of tests or a look of one process takes a share of the turn instead,
+and shares run side by side up to the machine's budget.
 
-A step of one process (a Django command, a linter, a serial test run) runs
+A step of one process that holds little (a Django command, a linter) runs
 beside the holder. A gate whose one process still loads the machine
 through most of a fast run (`lint:mypy` is one) carries the tag `heavy`, which only fast reads: fast
 runs it beside its tests in the turn it takes for them, never among its
@@ -699,8 +715,8 @@ the machine shares. A TOML task takes it by extending the `heavy` template in
 `mise.toml` (`django-browser`), a file task with `#MISE lock=["gate", "heavy"]` in its
 header and the line `. ./tools/lib/heavy-turn.sh` before its work; either
 declares a `timeout`, which mise starts once the task holds the lock, so
-heavy tasks asked together (`mise run browser:layout-1 :::
-browser:layout-2`) queue on the turn and each runs in full, and a hung holder
+heavy tasks asked together (`mise run browser:webkit :::
+browser:demo`) queue on the turn and each runs in full, and a hung holder
 is stopped. A heavy task started inside a turn runs at once, since mise hands
 the lock down (`MISE_TASK_LOCKS`), and a holder killed outright frees it.
 `HeavyTaskTests` (`tools/gate/tests/test_turn.py`) holds every task to its
@@ -716,19 +732,40 @@ mise polls. The command's own heavy tasks inherit the gate
 (`MISE_TASK_LOCKS`) and take turns on `heavy` among themselves.
 `test_landing.py` (`tools/gate/tests/`) runs that order against mise.
 
-A run of tests is narrow, and goes ahead outside the turn, when it runs in
-one process and no test it loads drives a browser (`tools/gate/turn.py`): it
-is serial (`--parallel 1`), or Django, which starts a worker for each test
-class up to the workers asked for, finds one class in what its labels name.
-So `mise run test <module>.<Class>` starts at once, and a parallel run of a
-module of several classes, or of fast's selection, waits for the turn. The
-decision weighs the arguments the run passes: a task hands it its run's own
-options before the labels (`test_arguments`), which `HeavyTaskTests` holds
-to the run. A task whose weight depends on what it is given (`test`, `fast`'s tests, `lint:source`, the composed suite,
-`dev:look`, `browser --linux`) runs its heavy runs through the hidden task
-`turn`, which holds the lock (`tools/lib/heavy-turn.sh` for a file task)
-under the gate's own bound, `HQ_TURN_BOUND`: `mise run --timeout` would count
-the wait too.
+A run of tests takes a share of a token for each process it runs tests in
+(`tools/gate/turn.py`): one when it is serial (`--parallel 1`), and
+otherwise as many as the workers Django starts, one for each test class up to
+the workers asked for. So `mise run test <module>.<Class>` takes a share of
+one, and a run across the cores (fast's selection, a module of many classes,
+the suite) waits for the whole turn. The decision weighs the arguments the
+run passes: a task hands it its run's own options before the labels
+(`test_arguments`), which `HeavyTaskTests` holds to the run. `dev:look` is
+one process whatever pages it names and declares its share
+(`turn_share=2`), save with `--base` or `--perf`, which run perf in the whole
+turn. A task whose weight depends on what it is given (`test`, `fast`'s
+tests, `lint:source`, the composed suite, `dev:look`, `browser --linux`) runs
+its whole runs through the hidden task `turn`, which holds the lock, and its
+shares through `python -m tools.gate.turn --share` (`tools/lib/heavy-turn.sh`
+for a file task), each under the gate's own bound: `mise run --timeout` would
+count the wait too.
+
+A share counts in tokens out of the machine's four (`CAPACITY`), each about
+a core and 600 MB: a process that runs tests takes one, one beside which a
+browser draws (a look, a survey) two, so two surveys or four test runs fit together beside
+the dev server and a browser on an 8 GB Mac. mise's task lock is one
+exclusive flock with no shared or counted mode
+([task_lock.rs](https://github.com/jdx/mise/blob/v2026.11.8/src/task/task_lock.rs)),
+so a share is the counting semaphore the kernel's flock(2) makes, as
+`flock -s` and GNU make's jobserver tokens do: it takes the lock `heavy` shared,
+which a whole run's exclusive lock waits for and keeps out, and its tokens
+from four slot files beside it, one share at a time behind a door, so a
+share of two is never starved by shares of one. A whole run waiting for the
+turn holds the gate while it waits (mise takes `gate`, then polls `heavy`),
+and a share passes the gate before it takes its tokens, so a waiting whole
+run lets the shares it waits for end and lets no new one start: no run
+starves. A run inside a share, like one inside the turn, goes ahead at once
+(`HQ_TURN_SHARE`). A share waits, names who holds what it waits for and gives
+up after `MISE_TASK_LOCK_TIMEOUT` as mise's own waits do.
 
 A task that waits for the turn without holding the lock (each of those, and
 an aggregate whose script runs `mise run` on one that waits) declares
@@ -765,12 +802,10 @@ wrapper that names it), its workers, and children under them such as a walk
 run apart. A worker's and a child's line also gives the most
 one process of its role held. The sampling's own CPU is stated last and kept
 out of the tree's. The template's `shell`, the line every heavy file task
-sources, and the `turn` task each run their command under it, and
+sources, the `turn` task and a share each run their command under it, and
 `HeavyTaskTests` holds every task that takes the lock to one of the three. A
-heavy run inside a measured one adds no line of its own, and a narrow `mise
-run test`, or a narrow run of a file task that weighs its tests (fast's, a
-labeled `lint:source`), runs again under it, so measuring one label is that
-one command.
+heavy run inside a measured one adds no line of its own, so measuring one
+label is that one command.
 
 The line is a report, never a check: load and the mix of tests move both
 memory and time, so nothing fails on them, and the command's exit status is
@@ -820,7 +855,7 @@ It checks what a reader would lose:
   is so a page's policy never meets it
   (`hq/platform/core/tests/browser/probes/axe.py`, whose `LEFT_OUT` names each
   rule it does not hold, and why);
-- in the Chromium legs, each page's Cumulative Layout Shift stays within 0.1.
+- in the Chromium leg, each page's Cumulative Layout Shift stays within 0.1.
 
 `setup:lint-tools` installs the axe-core `tools/lint/package.json` pins before
 every browser gate. Taste (evenness, placement, row height) is written in
@@ -833,9 +868,18 @@ of that task replaces; a test that fails outside its subtests saves `page.png`
 there.
 
 Beside each screenshot is a Playwright trace of the same name (`.zip`): what
-the test did since its last failure, each step with the page as it stood.
+the failed subtest did, each step with the page as it stood.
 `uv run --group browser playwright show-trace <file>` opens it. CI uploads
 every such folder of a failed gate.
+
+A failed subtest says its findings whole, in JSON by check, and ends with the
+`dev:look` that finds them again on that page, run as printed: the engine,
+the width, script, the palette, what was opened and any sheet the test laid
+over it. A finding the test already reported is not reported again; the
+test's closing lines list every place it was found. After the slowest
+classes, the run prints two ledgers: each check's time in the page, and each
+rule's time per subtest, each row with where it was slowest. They fail
+nothing.
 
 A check is declared once, beside its probe: an entry of its probe module's
 `CHECKS` (`hq/platform/core/tests/browser/probes/__init__.py` says what an
@@ -870,12 +914,14 @@ the day it exists (`dev:look derived/<app>/<name>` shows one).
 The example estate (`hq/platform/core/example_estate/`, the homelab the demo
 and `manage.py seed showcase` show) is read by
 `hq.platform.core.tests.browser.estate` on every page the navigation declares.
-It is read with script on and deferred parts loaded, at 402, 820, 1360 and
-1680 pixels and at `WIDE_TABLES`, in the light palette and the dark. A finding
-names its check, page, width and theme.
+It is read with script on and deferred parts loaded, at 402, 820 and 1360
+pixels and, on a page that draws a table, at `WIDE_TABLES`, in the light
+palette at each and the dark at 402 and 1360 (in
+Chromium at 402 and 1360 only). A finding names its check, page, width and
+theme.
 
-Its tables are also read at every shape of the layout, in a leg of their own
-(`browser:table-fit`, `hq.platform.core.tests.browser.table_fit`): from 320
+Its tables are also read at every shape of the layout
+(`hq.platform.core.tests.browser.table_fit`): from 320
 pixels up, at each edge of the stylesheet's viewport queries and wherever a
 box around a table changes shape between two, every row a reader can open is
 opened and every table check is read, with what opening the rows moved. A
@@ -900,14 +946,24 @@ host name outside the reserved and shared ranges it names.
 | To run | Command |
 | --- | --- |
 | both estates in another engine | `HQ_BROWSER_ENGINE=chromium` or `firefox` |
-| the legs named | `mise run browser <leg>...` (`layout-1`, `demo`) |
+| the legs named | `mise run browser <leg>...` (`webkit`, `demo`) |
+| one CI share of a leg | `HQ_BROWSER_SHARD=2/7 mise run browser:webkit` |
 | one browser test | `mise run test <label>`, once `mise run setup:browser webkit` has installed the engine |
-| a failure only CI's Linux shows | `mise run browser --linux` with a leg (`layout-chromium-1`) or test labels |
+| a failure only CI's Linux shows | `mise run browser --linux` with a leg (`chromium`) or test labels |
 
-CI runs the layout gate in two legs side by side (`browser:layout-1`,
-`browser:layout-2`) and runs them and the demo in Chromium as well
-(`browser:layout-chromium-1`, `-2`, `browser:demo-chromium`), which `mise run
-browser` leaves to CI.
+`browser:webkit` runs every browser test in WebKit, which judges, since HQ is
+read in Safari. Chromium is a second opinion, `browser:chromium`, which `mise
+run browser` leaves to CI: the catalog of shared parts, the example estate at
+a phone and a laptop, the planted proofs of every probe, and the layout shifts
+only Chromium records. Every test it runs is also run in WebKit
+(`test_browser_gate_tasks`).
+
+CI splits each of the two into shares that run side by side, `i/n` in the
+browser job's matrix. A sweep marked `@sweep` runs in every share and reads
+its share of the pages (`BrowserGate.mine`); any other test runs in the one
+share its id picks (`hq/platform/core/tests/browser/shards.py`). The shares
+together run the whole gate, which GateReferenceTests and
+`test_browser_gate_tasks` hold.
 
 `browser --linux` draws in Chromium unless `--engine` names another. It runs
 on this checkout inside the Playwright image `ci.yml` gives the browser job, as
@@ -927,6 +983,7 @@ What the browser gates read from the environment:
 | `HQ_BROWSER_ENGINE` | development | the browser gates' engine: `webkit` by default, `chromium` or `firefox` |
 | `HQ_BROWSER_CHANNEL` | development | a Playwright browser channel for that engine |
 | `HQ_BROWSER_FACE` | development | `fallback` draws the browser gates with Inter withheld, in the stack's next face (`--fallback-face`) |
+| `HQ_BROWSER_SHARD` | CI's browser matrix | `i/n` runs one share of a browser gate; unset, the whole gate |
 
 #### Policy, fonts and stalls
 
@@ -941,7 +998,7 @@ estate fails page by page, every other gate at the end of its test.
 
 The gates wait for Inter, but a reader whose copy is late is drawn in whatever
 face the platform has (`font-display: optional`), and each platform sets text
-at its own widths. `--fallback-face` on a layout leg, `browser:navigation` and
+at its own widths. `--fallback-face` on `browser:webkit` and
 `dev:look` (`HQ_BROWSER_FACE=fallback` for a `mise run test` label) withholds
 Inter's face. Every page is then drawn in the next face of the stylesheet's
 stack (`--font`), the platform's system face, and a layout that holds only at
@@ -994,8 +1051,13 @@ filtered list) is a name like any other.
 A component catalog entry (`part/notice-error`, `table/figures`, every key of
 `CATALOG`, which `hq/platform/core/tests/browser/catalog/` gathers from its
 families' modules) is drawn by the
-catalog gate's own `CatalogLayoutTests.render`, so a look and that gate never
-draw an entry apart. It is answered from memory as a gate page is, with no
+catalog gate's own `catalog.page`, so a look and that gate never
+draw an entry apart. `gallery` is every entry on one page, each in a region
+named for it, after a map of its families: the gate holds it to the survey
+each entry alone is held to, so a finding there that no entry has alone is
+one entry disturbing another. HQ's System > Design page frames the same
+gallery as a document of its own, drawn by a checkout's server from the catalog it runs on each request, and
+read from the image build's copy in the image. An entry is answered from memory as a gate page is, with no
 server or estate behind it, so a look at one entry is the quick way to see a
 change to a shared part, ahead of the catalog's whole browser class. A name that begins entries
 (`part/notice`, `table`) is each of them, in the catalog's order. The gate
@@ -1065,8 +1127,8 @@ or reach out is refused and reported instead.
 `--rule survey` runs every check the gates hold (`BrowserGate.findings`), so
 what it finds on a page the gates read is what they fail on. Markup a vendored
 script draws (`data-vendored` on its mount, `SELECTORS["vendored"]`: the API
-reference's viewer) is styled by its own rules alone, and held by its own
-tests instead. With `--open-folds`, a page with a fold closed is surveyed
+reference's viewer) is styled by its own rules alone, and the gates read
+none of it. With `--open-folds`, a page with a fold closed is surveyed
 again with every fold open, a fold within a fold and one a region brings in
 included (`survey.open_every_fold`), and only what that adds is said, under
 "with every fold open"; the folds close again before a dialog opens.

@@ -67,6 +67,10 @@ def proposals() -> type:
 
 
 class RefreshTestCase(TestCase):
+    def setUp(self):
+        # The worker arrives and finds nothing, so a Refresh is taken.
+        self.claim()
+
     def refresh(self, principal: Principal = OPERATOR, key: str = "example-refresh") -> dict:
         with self.captureOnCommitCallbacks(execute=True), patch(DOORBELL) as self.rung:
             return run_capability(REFRESH, {}, principal=principal, idempotency_key=key).answer

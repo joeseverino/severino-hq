@@ -69,6 +69,19 @@ class RunPageTests(TestCase):
                 for run in runs:
                     self.assertIn(run_page(run.id), hrefs)
 
+    def test_a_run_s_page_names_the_kinds_of_reading_its_playbook_stated(self):
+        run = OperationRequest.objects.filter(
+            action=OperationRequest.Action.RUN, state=OperationRequest.State.SUCCEEDED, input__correlation=CORRELATION
+        ).get()
+        machine = run.input["hosts"][0]
+        stated = {"readings": {machine: {"example.reading": [{"value": 1}], "example.other_reading": []}}}
+        OperationRequest.objects.filter(pk=run.pk).update(result={**run.result, "stated": stated})
+
+        said = facts(self.page(run_page(run.pk)))
+
+        self.assertIn("example.reading", said["Readings"][0])
+        self.assertIn("example.other_reading", said["Readings"][0])
+
     def test_a_finished_run_s_page_says_who_asked_how_it_ended_and_each_task(self):
         run = OperationRequest.objects.filter(
             action=OperationRequest.Action.RUN, state=OperationRequest.State.SUCCEEDED, input__correlation=CORRELATION
@@ -85,7 +98,7 @@ class RunPageTests(TestCase):
         self.assertEqual(said["Correlation"][0], CORRELATION)
         self.assertEqual(said["Machines"][1], reverse("control_plane:machine", kwargs={"name": MACHINE}))
         self.assertEqual(said["Playbook"][1], reverse("command", args=[RUN]))
-        tasks = " ".join(element.words for element in within(html, "id", "tasks"))
+        tasks = said["Tasks"][0]
         self.assertTrue(run.result["events"])
         for event in run.result["events"]:
             self.assertIn(event["task"], tasks)
@@ -108,7 +121,7 @@ class RunPageTests(TestCase):
 
         said = facts(self.page(run_page(run.pk)))
 
-        self.assertEqual(said["Lease"][0], run.claimed_by)
+        self.assertIn(run.claimed_by, said["Lease"][0])
         self.assertNotIn("Result", said)
 
     def test_a_reader_who_may_not_open_jobs_is_refused_a_run_s_page_and_offered_no_link_to_one(self):

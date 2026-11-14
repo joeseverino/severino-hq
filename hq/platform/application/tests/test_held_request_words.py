@@ -16,7 +16,7 @@ from ..capabilities import capability_registry, execute_capability
 from ..integration_specs import capability_schema
 from ..projects import DEPENDENCY_UPDATES
 from ..security import Capability, Principal
-from .markup import text, with_class
+from .markup import select, text
 from .writers import keyed
 
 # What a Python dump of a dict or a list leaves in the text.
@@ -101,7 +101,7 @@ class HeldRequestWordsTests(TestCase):
 
         for page in (reverse("dashboard"), reverse("action_items")):
             with self.subTest(page=page):
-                details = [element.words for element in with_class(self.client.get(page), "attention-detail")]
+                details = [element.words for element in select(self.client.get(page), "data-attention-detail")]
                 self.assertIn(" ".join(item.body.split()), details)
 
     def test_its_card_on_the_dashboard_opens_its_own_page(self):
@@ -111,7 +111,7 @@ class HeldRequestWordsTests(TestCase):
         dashboard = self.client.get(reverse("dashboard"))
 
         own = reverse("core:approval_entry", kwargs={"approval_id": self.held.id})
-        self.assertIn(own, [title.attrs["href"] for title in with_class(dashboard, "attention-title")])
+        self.assertIn(own, [title.attrs["href"] for title in select(dashboard, "data-attention-title")])
 
 
 class HeldSentenceTests(TestCase):

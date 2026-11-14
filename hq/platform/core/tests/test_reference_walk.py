@@ -1,10 +1,10 @@
-"""The reference opened whole opens each schema once, where the walk first
-meets it, at any depth: a property whose schema an earlier part or row
+"""dev:look's walk of the reference (`--open`) opens each schema once, where
+the walk first meets it, at any depth: a property whose schema an earlier part or row
 already showed is left closed there, and every other row is opened."""
 
 from django.test import SimpleTestCase
 
-from hq.platform.core.tests.browser.reference import every_tag, opened_operation, opened_walk
+from hq.platform.core.tests.browser.reference import opened_operation, opened_walk
 
 
 def _answer(schema):
@@ -65,7 +65,6 @@ class ReferenceWalkTests(SimpleTestCase):
         # is left closed; the later tag's rows that show Thing and Person too.
         self.assertEqual(first.shared, (f"{_THINGS}.owner :: ",))
         self.assertEqual(set(later.shared), {f"{_LATER}.data :: thing", f"{_LATER}.data :: reviewer"})
-        self.assertEqual(set(every_tag(_DOCUMENT).shared), set(first.shared) | set(later.shared))
 
     def test_a_row_with_nothing_to_open_is_never_named(self):
         shared = {row for opened in opened_walk(_DOCUMENT) for row in opened.shared}

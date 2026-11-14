@@ -27,7 +27,6 @@ from hq.domains.control_plane.observations.public_registry import (
 )
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
-from .card_items import Insight
 from .container_words import UP_TO_DATE, UPDATE_AVAILABLE, ImageStandingWords
 from .display_words import display
 from .github_public import github_repository
@@ -35,7 +34,7 @@ from .images import ImageRef, affected, compare, newer, version
 from .projection import projection_scope, read_once
 from .timestamps import moment
 from .ui import counted
-lazy from . import connections, container_attention
+lazy from . import connections
 lazy from .attestations import github_source
 lazy from .container_hardening import hardening_of
 lazy from .container_standard import posture_of, runtime_path
@@ -949,10 +948,3 @@ def _declared_sources() -> dict[tuple[str, str], str]:
 
 def _by(kind: str, key: str) -> dict[str, Mapping[str, Any]]:
     return {str(record.get(key, "")): record for _snapshot, record in inventory_records(kind) if record.get(key)}
-
-
-def attention() -> tuple[Insight, ...]:
-    """What needs doing about the containers, each item with the help HQ
-    derived for it (``application.container_attention``)."""
-
-    return container_attention.attention()

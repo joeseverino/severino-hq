@@ -815,6 +815,11 @@ FORMAT_MODULE_PATH = ["hq.config.formats"]
 STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = Path(env_str("DJANGO_STATIC_ROOT", str(BASE_DIR / "var" / "static")))
+# The Design page's gallery of every shared part, which the image build writes
+# once (hq.platform.core.design_gallery) where its ENV names, so production
+# reads a file rather than importing the test code that draws it. Unset, as in
+# a checkout, the server draws it from the catalog it runs on each request.
+SEVERINO_DESIGN_GALLERY = Path(_gallery) if (_gallery := env_str("SEVERINO_DESIGN_GALLERY")) else None
 
 # /static/ has one server, the ASGI mount in hq.config.asgi (core.static), and
 # one collected tree: the image build runs collectstatic, so STATIC_ROOT is

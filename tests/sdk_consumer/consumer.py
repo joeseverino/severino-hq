@@ -237,6 +237,15 @@ def a_refused_answer(request: HttpRequest, form: forms.Form, answer: dict[str, A
     return capabilities.refusal_response(answer)
 
 
+def a_refusal_a_person_reads(starts_on: str) -> None:
+    # A service's refusal in the extension's own words, which the runner shows.
+    refusal = capabilities.InputError("A period cannot end before it starts.")
+    assert_type(refusal.reason, str)
+    assert isinstance(refusal, ValueError)
+    capabilities.InputError()  # type: ignore[call-arg]
+    raise capabilities.InputError("The period overlaps another.", details={"field": starts_on})
+
+
 def a_person_holding() -> None:
     # A test asks the real page gate as a person holding only the capabilities it names.
     assert_type(testing.holding("example.read", "example.write"), AbstractContextManager[Any])

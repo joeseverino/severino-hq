@@ -6,11 +6,11 @@ entries are `_queue_entries.html`; the queue page's own sections are
 
 `fold` folds a family under its name, as the queue page does. `dense` is the
 row's compact form, for problems drawn inside a section of a page about
-something else: one line each, its meaning in the line beneath with the rest.
+something else: its meaning waits in the opened line with the rest.
 {% endcomment %}
 {% if items %}
 {% table_region "Queue" %}
-  <table class="data-table queue-table{% if dense %} is-dense{% endif %}" data-columns="2" data-line="flat">
+  <table class="data-table" data-columns="2" data-line="flat">
     <tbody>{% with folding=fold|default:False %}{% include "partials/_queue_entries.html" with entries=items|families:folding prefix="problem" %}{% endwith %}</tbody>
   </table>
 {% endtable_region %}

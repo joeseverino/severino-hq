@@ -20,6 +20,7 @@ from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.names import normalized_hostname
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.application.routes import reverse
+lazy from hq.domains.control_plane.provider_adapters.automation import SOURCE_KIND
 lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
 from .action_links import (
@@ -67,6 +68,7 @@ from .topology_model import (
     newest_stamp,
 )
 lazy from .adoption import manages_through
+lazy from .cadence import WorkerStanding, automation_standing
 lazy from .facts import stored_snapshots
 lazy from .hq_self import serving
 lazy from .posture import estate_posture
@@ -574,7 +576,18 @@ def _derive(principal: Principal) -> Topology:
         (standing.check.id, standing.reading.evidence, standing.reading.read_capabilities)
         for standing in estate_posture(groups).unmet
     )
-    return Topology(ordered_nodes, ordered_edges, unmet, _kinds_read())
+    return Topology(ordered_nodes, ordered_edges, unmet, _kinds_read(), _automation_worker(resources))
+
+
+def _automation_worker(resources) -> WorkerStanding | None:
+    """HQ's playbook worker's standing, or None for an HQ that never had a
+    playbook source and never saw a worker: nobody set automation up there,
+    so its absence is nothing to raise."""
+
+    worker = automation_standing()
+    if worker.seen_at is None and not any(resource.kind == SOURCE_KIND for resource in resources):
+        return None
+    return worker
 
 
 def _kinds_read() -> tuple[tuple[str, datetime], ...]:

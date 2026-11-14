@@ -87,11 +87,9 @@ class AskedTests(SimpleTestCase):
         self.assertIn("--no-buffer", run.split())
 
     def test_a_probe_is_named_by_its_module_and_name_and_a_name_that_is_none_is_refused_with_those_offered(self):
-        self.assertEqual(
-            look._probe("boxes:ASIDES_WRAPPED_WITH_ROOM"), ("ASIDES_WRAPPED_WITH_ROOM", boxes.ASIDES_WRAPPED_WITH_ROOM)
-        )
+        self.assertEqual(look._probe("boxes:OVERLAPS"), ("OVERLAPS", boxes.OVERLAPS))
         self.assertEqual(look._probe(""), ("", ""))
-        with self.assertRaisesMessage(AssertionError, "ASIDES_WRAPPED_WITH_ROOM"):
+        with self.assertRaisesMessage(AssertionError, "OVERLAPS"):
             look._probe("boxes:EXAMPLE_MISSING")
         # A value of the module's that is no probe's source.
         with self.assertRaisesMessage(AssertionError, "is no probe"):

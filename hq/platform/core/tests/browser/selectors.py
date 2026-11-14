@@ -7,25 +7,18 @@ SELECTORS = {
     # A row's actions cell ({% row_actions %}) and any cell of a column of
     # controls, whose controls sit on the row's first line.
     "row_actions_cell": 'main td.row-actions, main td[data-kind="control"]',
-    # The queue's cell of what a row offers and its dismiss
-    # (`partials/_queue_rows.html`), a table with no headings to name its kind.
-    "queue_actions_cell": "main td.queue-act",
+    # A table's row that offers controls: its actions or a column of controls.
+    "controls_row": '.data-table > tbody > tr:has(> :is(td.row-actions, td[data-kind="control"]))',
     # A device on the Agents page waiting for the reader's approval.
     "device_prompt": "[data-prompt]",
     # An agent's update streams: a full set warned of in its row's cell, and
     # the streams it holds open under the cap said in the row's detail.
     "agent_streams": "tr[data-agent] > td [data-streams]",
-    "agent_streams_detail": "tr[data-agent] > th .row-below [data-streams]",
+    "agent_streams_detail": "tr[data-agent] + tr.row-detail .row-below [data-streams]",
     # The fragment primitive: a placeholder's failure line, the disclosure
     # holding one, and the calendar it pages in place.
     "fragment_failure": "main > [data-fragment-load] > .notice",
     "fragment_fold": "details:has(> [data-fragment-load]) > summary",
-    # A folded section, and a part of one drawn only once it opens.
-    "section_fold": "details.section-fold",
-    "drawn_when_opened": "[data-fragment-load]",
-    # A kicker over a group, the one label drawn in capitals, and a quiet
-    # link ("Change", "All projects").
-    "kicker": ".eyebrow",
     # A form's closing row (a long form's save bar is one), the section frame
     # it ends, and a control a row of the form chooses with.
     "save_bar": ".form-actions",
@@ -36,7 +29,6 @@ SELECTORS = {
     "question_button": ".form-actions > button",
     "section_frame": ".section",
     "choice": "select",
-    "quiet_link": ".subtle-link",
     # A service's favorite star (control_plane/_service_pin.html), a control
     # smaller than a finger that hangs its hit area beside it.
     "favorite_star": ".pin-toggle",
@@ -58,14 +50,11 @@ SELECTORS = {
     "row_opener": "main [data-row-toggle]:not([data-fold-toggle])",
     # A table's own rows of records, the lines beneath them left out.
     "own_records": ":scope > tbody > tr:not(.row-detail)",
-    "decision_dismiss": "[data-triage] button",
-    "decision_title": ".attention-title",
+    "decision_dismiss": '[data-attention-item] .row-actions > button[name="key"]',
+    "decision_title": "[data-attention-title]",
     "decision_steps": ".resolution-workflow",
     # What an item means: never cut.
-    "decision_detail": ".attention-detail",
-    # What an item says, and where its buttons are: the words run to the buttons.
-    "decision_words": "[data-attention-item] :is(.attention-head, .attention-detail)",
-    "decision_buttons": ".queue-act",
+    "decision_detail": "[data-attention-detail]",
     # Running text, and what an opened row shows beneath it: code in it is
     # never cut, since only a cell's own identifier is. The rest of a
     # `line_list` is no text but the parts its line has no room for, each
@@ -85,28 +74,32 @@ SELECTORS = {
     "kept_line": "main td > .kept-line",
     "line_icon": ".icon",
     "line_name": ".token",
-    "decision_actions": ".queue-act .attention-actions",
+    "decision_actions": "[data-attention-item] > td.row-actions",
     # The queue's table, and its cells of what is wrong and of its buttons.
-    "queue_table": ".queue-table",
-    "queue_what": "td.queue-what",
-    "queue_act": "td.queue-act",
+    "queue_table": ".data-table:has(> tbody > tr[data-attention-item])",
+    "queue_what": "[data-attention-item] > .row-gutter",
+    "queue_act": "[data-attention-item] > td.row-actions",
     # A list page's controls: its search, the button that opens a filter's
     # panel, the panel and a box in one, a toggle beside them, a heading that
     # sorts on the server, and the results they change: the rows, never the
     # line held beneath one, or the empty state that says nothing matches.
-    "table_search": "[data-table-toolbar] input[type=search]",
-    "table_filter": "[data-table-toolbar] [popovertarget]",
-    "table_filter_panel": "[data-table-toolbar] [popover]",
+    # Never the copy a filter bar's sizer holds, which no one reaches.
+    "table_search": "[data-table-toolbar] input[type=search]:not([inert] *)",
+    "table_filter": "[data-table-toolbar] .table-filter-menu > [popovertarget]",
+    "table_filter_panel": "[data-table-toolbar] .table-filter-menu > [popover]:not([inert] *)",
     "table_filter_box": "input[type=checkbox][name]",
-    "table_toggle": "[data-table-toolbar] .table-toggle input",
+    "table_toggle": "[data-table-toolbar] .table-toggle input:not([inert] *)",
     "table_rows": "main .data-table > tbody > tr:not(.row-detail)",
     # The line beneath a row, with what the row holds back.
     "row_detail": "main .data-table > tbody > tr.row-detail",
     "table_empty": "main [data-empty-state]",
     "sort_link": "main a.table-sort-link",
+    # The Filters control a filter bar folds its choices behind, where its
+    # row has no room for them.
+    "filter_fold": "form.filter-bar .filter-bar-fold",
     # The queue's own filter: a choice of urgency, applied by its button.
     "queue_urgency": "form.filter-bar select[name=status]",
-    "queue_apply": "form.filter-bar button[type=submit]",
+    "queue_apply": "form.filter-bar button[type=submit]:not([inert] *)",
     # The header's menus, a group's button and the links it opens, and on a
     # phone the drawer that holds them.
     "nav_menu": ".primary-nav [data-menu] > [popovertarget]",
@@ -124,13 +117,6 @@ SELECTORS = {
     "fillable": "input:not([type=checkbox], [type=radio], [type=hidden], [type=range], [type=color], [type=submit], [type=button], [type=reset], [type=image]), select, textarea",
     # A link that goes somewhere.
     "link": "a[href]",
-    # A status tag (`{% status %}`), which says a state beside a name.
-    "tag": ".pill",
-    # The mark a sentence puts after a name (`breakable`'s).
-    "mark": ".mark",
-    # A select; the probes that judge one that opens to its choices leave out a
-    # list box (multiple or sized), which Django's widgets mark, not a template.
-    "dropdown": "select, .table-filter-menu > button",
     # A control pressed or picked from rather than typed into: a button, a
     # disclosure's handle, a label drawn around a select or a checkbox.
     "pressed": (
@@ -178,11 +164,9 @@ SELECTORS = {
     "disclosure": "main details",
     # Where the API reference mounts its viewer.
     "reference": "#api-reference-root",
-    # A block of code the reference's viewer draws: a request or answer.
-    "reference_sample": "#api-reference-root pre",
     # Where a vendored script draws markup HQ does not write, which HQ's
     # stylesheet leaves to the vendor's own rules (tokens.css): the API
-    # reference's viewer, which ReferenceBrowserTests holds to its own rules.
+    # reference's viewer.
     "vendored": "[data-vendored]",
     # A check of a check ladder: what it says, then what it was read from.
     "check_statement": ".ladder-statement",
@@ -205,14 +189,9 @@ SELECTORS = {
     "palette_hint": ".command-center-enter-hint",
     # The header's sections, an entry or a group's handle.
     "nav_entry": ".primary-nav > a, .nav-group > button",
-    # A value and the one it changes into, its arrow, and what the arrow points at.
-    "change": "main .change",
     # A chip set in a line: an identifier, wherever it is not a block of code, or a tag.
     "chip": "main :is(code:not(pre *), .tag)",
-    "change_arrow": ".change-arrow",
-    "change_to": ".change-to",
-    # A page head's controls, its menu, and the box of what the menu holds.
-    "head_actions": ".page-head > .page-actions",
+    # A page head's menu, and the box of what the menu holds.
     "head_menu": ".overflow-menu",
     "head_menu_panel": ".overflow-menu-panel",
     # The steps of a page's trail, and a figure's value.
@@ -250,23 +229,14 @@ SELECTORS = {
     # it opens a dialog and names it.
     # The flow of sibling sections or cards, and of charts (layout.css).
     "flow": ".section-flow, .domain-charts",
-    # A section's heading (partials/_section_head.html).
-    "section_head": ".section-head",
-    # A section's body, the frame what it holds is drawn in (partials/_part_section.html).
-    "section_body": ".section-body",
-    # A fact whose value is a list of names (partials' .code-list, .address-list).
-    "fact_list": "main .facts-list .fact-value:has(> :is(.code-list, .address-list) > :nth-child(2))",
-    # A list of facts, label beside value (partials/_facts.html), and the
-    # frames one is drawn in: a card or a section.
+    # A list of facts, label beside value (partials/_facts.html).
     "facts_list": ".facts-list",
-    "list_frame": ".card, .section",
     # What keeps its line wherever it is drawn: the count of planned days kept
     # beside a calendar's legend.
     "one_line": ".calendar-legend > .count",
     # One fact of a band, and the label that names its value.
     "band_fact": ".facts-band > .fact",
     "band_label": ".fact-label",
-    "fact_band": ".facts-band",
     "band_fact_cell": ".fact",
     "fact_value": ".fact-value",
     "fact_label": ".fact-label",

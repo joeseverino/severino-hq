@@ -26,4 +26,4 @@ def audit_findings(report):
 
 
 # The survey checks these probes answer (`probes/__init__.py`).
-CHECKS = {"audit": Check(_AUDIT, findings=audit_findings)}
+CHECKS = {"audit": Check(_AUDIT, findings=audit_findings, reader_sees="a scrollbar on a box nobody asked to scroll")}

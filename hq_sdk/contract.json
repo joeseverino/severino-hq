@@ -1,5 +1,5 @@
 {
-  "api_version": 12,
+  "api_version": 13,
   "modules": {
     "audit": {
       "AuditAction": {
@@ -182,7 +182,8 @@
           "observation=",
           "connection=",
           "redact_for=",
-          "subject="
+          "subject=",
+          "required="
         ]
       },
       "seeded_by_hand": {
@@ -296,7 +297,9 @@
         ]
       },
       "CapabilitySpec": {
-        "bases": [],
+        "bases": [
+          "Requires"
+        ],
         "constructor": [
           "name",
           "summary",
@@ -331,9 +334,6 @@
               "*",
               "again="
             ]
-          },
-          "required_capabilities": {
-            "kind": "property"
           },
           "title": {
             "kind": "property"
@@ -395,6 +395,24 @@
         "fields": [],
         "kind": "dataclass",
         "members": {}
+      },
+      "InputError": {
+        "bases": [
+          "HostRefusal",
+          "ValueError"
+        ],
+        "constructor": [
+          "reason",
+          "*",
+          "details="
+        ],
+        "kind": "class",
+        "members": {
+          "code": {
+            "kind": "attribute",
+            "type": "str"
+          }
+        }
       },
       "Names": {
         "bases": [],
@@ -595,7 +613,9 @@
         "members": {}
       },
       "ConnectionSpec": {
-        "bases": [],
+        "bases": [
+          "Requires"
+        ],
         "constructor": [
           "name",
           "label",
@@ -613,11 +633,7 @@
         ],
         "fields": [],
         "kind": "dataclass",
-        "members": {
-          "required_capabilities": {
-            "kind": "property"
-          }
-        }
+        "members": {}
       },
       "describe_connections": {
         "kind": "function",
@@ -885,7 +901,8 @@
           "title=",
           "primary=",
           "compact=",
-          "disabled="
+          "disabled=",
+          "outcome="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -1406,7 +1423,9 @@
         "members": {}
       },
       "ResourceSpec": {
-        "bases": [],
+        "bases": [
+          "Requires"
+        ],
         "constructor": [
           "name",
           "label",
@@ -1427,11 +1446,7 @@
         ],
         "fields": [],
         "kind": "dataclass",
-        "members": {
-          "required_capabilities": {
-            "kind": "property"
-          }
-        }
+        "members": {}
       },
       "StatusFilter": {
         "kind": "value",
@@ -2164,6 +2179,7 @@
           "family=",
           "since=",
           "observed_at=",
+          "reads=",
           "facts=",
           "links=",
           "read_capabilities="
@@ -3394,6 +3410,7 @@
           "css=",
           "filtered=",
           "held=",
+          "id=",
           "more=",
           "shown=",
           "total=",
@@ -3401,6 +3418,7 @@
           "**data"
         ],
         "parts": [
+          "choices",
           "summary"
         ]
       },
@@ -3476,7 +3494,9 @@
         "parameters": [
           "actions=",
           "*",
-          "gap="
+          "gap=",
+          "first=",
+          "put_away="
         ],
         "parts": []
       },

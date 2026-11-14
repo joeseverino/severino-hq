@@ -120,7 +120,9 @@ class ReadBackTests(Estate):
         # the stop asked for.
         self.assertContains(drawn, 'name="subject" value="resource"')
         following = self.client.post(
-            reverse("control_plane:visit"), form_keyed({"subject": "resource", "name": "example-web"})
+            reverse("control_plane:visit"),
+            form_keyed({"subject": "resource", "name": "example-web"}),
+            headers={"X-Requested-With": "XMLHttpRequest"},
         )
         self.assertEqual(following.status_code, 202)
         self.assertTrue(following.json()["status"])
@@ -129,7 +131,9 @@ class ReadBackTests(Estate):
         ProviderInventory.objects.filter(kind=CONTAINER_KIND).update(updated_at=timezone.now())
 
         landed = self.client.post(
-            reverse("control_plane:visit"), form_keyed({"subject": "resource", "name": "example-web"})
+            reverse("control_plane:visit"),
+            form_keyed({"subject": "resource", "name": "example-web"}),
+            headers={"X-Requested-With": "XMLHttpRequest"},
         )
         self.assertFalse(landed.json()["live"])
         redrawn = self.client.get(page)

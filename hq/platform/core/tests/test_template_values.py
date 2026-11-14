@@ -30,8 +30,8 @@ from hq.platform.core.templatetags.value_tags import breakable, entity, readable
 from hq_sdk.template_contract import WORDED_FIGURES
 
 # Filters whose output holds every name in it: `breakable` itself, and the
-# filters that build on it or print a `<time>`.
-HOLDING = {"breakable", "code_spans", "or_empty", "readout", "when", "readable"}
+# filters that build on it (`button_words`) or print a `<time>` (`last_read`).
+HOLDING = {"breakable", "code_spans", "button_words", "or_empty", "readout", "when", "last_read", "readable"}
 
 # Filters whose output can never hold a hyphen or a seam, so it has nothing
 # to hold.

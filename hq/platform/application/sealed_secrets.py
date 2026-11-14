@@ -10,12 +10,8 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, SealedSecret
 from hq.platform.core import secrets
-from hq.platform.core.audit import record_event
-from hq.platform.core.models import AuditLog
 
-from .security import Principal, person_of
-
-AUDIT_LABEL = "Sealed secret"
+from .security import Principal
 
 
 @transaction.atomic
@@ -28,28 +24,14 @@ def set_secret(resource: ManagedResource, slot: str, plaintext: str, principal: 
 
     sealed = secrets.seal_for_controller(plaintext, resource_key=resource.key, slot=slot)
     row = SealedSecret.objects.select_for_update().filter(resource=resource, slot=slot).first()
-    now = timezone.now()
-    if row is None:
-        row = SealedSecret.objects.create(
-            resource=resource, slot=slot, sealed=sealed, version=1, set_at=now, set_by=principal.actor
-        )
-        change = "set"
-    else:
-        row.sealed = sealed
-        row.version += 1
-        row.set_at = now
-        row.set_by = principal.actor
-        row.save(update_fields=("sealed", "version", "set_at", "set_by"))
-        change = "replaced"
-    record_event(
-        action=AuditLog.Action.CREATED if change == "set" else AuditLog.Action.UPDATED,
-        obj=row,
-        type_label=AUDIT_LABEL,
-        message=f"{slot} {change} on {resource.key} (version {row.version})",
-        metadata={"resource": resource.key, "slot": slot, "change": change, "version": row.version},
-        user=person_of(principal),
-        required=True,
-    )
+    change = "set" if row is None else "replaced"
+    row = row or SealedSecret(resource=resource, slot=slot, version=0)
+    row.sealed = sealed
+    row.version += 1
+    row.set_at = timezone.now()
+    row.set_by = principal.actor
+    row.audit_said = f"{slot} {change} on {resource.key} (version {row.version})"
+    row.save()
     return row
 
 

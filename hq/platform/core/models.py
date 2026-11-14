@@ -241,14 +241,14 @@ class AuditLog(models.Model):
 
     @property
     def who(self) -> Attribution:
-        """Who did it, through which door, as whom, and who approved it."""
+        """Who did it, through which door or agent, and who approved it."""
 
         metadata = self.metadata or {}
         return Attribution(
             self.actor_label,
             # The metadata ``interface`` is generated from, so a row not yet saved says it too.
             str(metadata.get("interface") or ""),
-            acting_as=str(metadata.get("actor") or ""),
+            through=str(metadata.get("actor") or ""),
             approved_by=str(metadata.get("approved_by") or ""),
         )
 
@@ -556,9 +556,14 @@ class PersonRole(models.Model):
 
 
 class UpstreamReading(models.Model):
-    """The last value read from a service outside HQ, and when it was read."""
+    """The last value read from a service outside HQ, and when it was read.
 
-    key = models.CharField(max_length=100, primary_key=True)
+    The one store for such values: its key names the kind of reading and what
+    it is a reading of (``hq.platform.application.readings``).
+    """
+
+    # Room for a kind and a machine's whole key (``ManagedResource.key``).
+    key = models.CharField(max_length=255, primary_key=True)
     value = models.JSONField()
     observed_at = models.DateTimeField()
 

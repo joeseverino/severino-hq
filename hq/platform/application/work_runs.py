@@ -10,6 +10,7 @@ costs the same however much work has run. A held run is an
 ``ApprovalRequest``, not an operation, and is not listed here.
 """
 
+import json
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -25,13 +26,14 @@ from hq.domains.control_plane.models import OperationHost, OperationRequest, Ope
 from hq.domains.jobs.models import HEARTBEAT_GRACE, Job, JobState
 lazy from hq.domains.jobs.runner import AUDIT_TYPE as JOB_AUDIT_TYPE
 
-from .asks import job_standing
+from .asks import DONE, FAILED, QUEUED, RUNNING, Standing
 from .automation_runs import capability_name, resource_key, run_title
 from .doors import NOBODY, Attribution
-from .resource_operations import asked_by, operation_summary
+from .resource_operations import active_conditions, asked_by, problem_condition
 from .routes import reverse
 lazy from .automation_adoption import playbook_titles
 lazy from .automation_sources import REFRESH, SOURCE_KEY, capability_specs
+lazy from .cadence import automation_standing
 lazy from .history import who_did
 lazy from .scheduled_work import job_names
 
@@ -39,8 +41,8 @@ type Source = Literal["job", "run"]
 JOB: Source = "job"
 RUN: Source = "run"
 
-# Each state's tone, the same for a job and a run, in the vocabulary
-# ``resource_operations.operation_summary`` gives an operation's.
+# Each state's tone, the same for a job and a run on every page that says
+# one: work waiting its turn is paused, work under way active.
 TONES = {
     JobState.QUEUED: "paused",
     JobState.RUNNING: "active",
@@ -58,10 +60,26 @@ OUTCOME_TONES = {
     "failed": "serious",
     "unreachable": "serious",
 }
+# How work in each state stands for a control that follows it (``asks.Standing``).
+STANDS = {
+    JobState.QUEUED: QUEUED,
+    JobState.RUNNING: RUNNING,
+    JobState.SUCCEEDED: DONE,
+    JobState.FAILED: FAILED,
+    JobState.LOST: FAILED,
+}
+# What an operation that ended and found something wrong (a ``Degraded`` or
+# ``Drifted`` condition) says, so it never reads as done.
+PROBLEM_FOUND = "Problem found"
+PROBLEM_TONE = "attention"
 # What a claimed run whose lease ran out says until the next claim ends it.
 LAPSED = "The run stopped reporting, so HQ can't tell whether it finished."
+# What a run or scan that waits says while no worker will take it, in the
+# tone of something to look at: it is neither under way nor waiting its turn.
+NOT_STARTED = "Not started"
+NOT_STARTED_TONE = "attention"
 # The states of a run that has no outcome to say yet.
-_UNENDED = frozenset({OperationState.QUEUED, OperationState.CLAIMED})
+UNENDED = frozenset({OperationState.QUEUED, OperationState.CLAIMED})
 # A kind of work whose latest run ended so is one to look at.
 ENDED_BADLY = (JobState.FAILED, JobState.LOST)
 
@@ -88,19 +106,45 @@ _LISTED = (OperationRequest.Action.RUN, OperationRequest.Action.SCAN)
 
 @dataclass(frozen=True, slots=True)
 class RunEvidence:
-    """What a run of automation shows for itself (``partials/_run_evidence.html``):
+    """What a piece of work shows for itself (``partials/_run_evidence.html``):
     its machines, its asker's correlation id, the worker holding it and until
-    when while it is claimed, and its tasks' outcomes (each a ``RunEvent``
-    with its ``tone``)."""
+    when while it is claimed, how many tries it took, its tasks' outcomes
+    (each a ``RunEvent`` with its ``tone``), the kinds of reading its playbook
+    stated, what each name served of the certificate it checked, and the
+    result of an operation with no page of its own."""
 
     hosts: tuple[str, ...] = ()
     correlation: str = ""
     worker: str = ""
     lease_until: datetime | None = None
+    attempts: int = 0
     events: tuple[dict[str, Any], ...] = ()
+    stated: tuple[str, ...] = ()
+    # The certificate's fingerprint, and each name's answer (``matches_expected``).
+    expected: str = ""
+    consumers: tuple[dict[str, Any], ...] = ()
+    raw: str = ""
+
+    @property
+    def affected(self) -> tuple[dict[str, Any], ...]:
+        return tuple(item for item in self.consumers if item.get("matches_expected") is False)
+
+    @property
+    def matched(self) -> int:
+        return sum(1 for item in self.consumers if item.get("matches_expected") is True)
 
     def __bool__(self) -> bool:
-        return bool(self.hosts or self.correlation or self.worker or self.events)
+        return bool(
+            self.hosts
+            or self.correlation
+            or self.worker
+            or self.attempts > 1
+            or self.events
+            or self.stated
+            or self.affected
+            or self.matched
+            or self.raw
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,6 +171,8 @@ class WorkRun:
     duration: float | None
     # What a run shows for itself; empty for a job.
     evidence: RunEvidence = RunEvidence()
+    # How far along a job is, where it knows.
+    percent: int | None = None
     # A run's effect as its playbook's record pins it, which asking for one,
     # and cancelling one, takes the authority of; empty for a job.
     effect: str = ""
@@ -212,8 +258,8 @@ def _scanned(then: str, default: Any) -> Case:
 
 def _run_title() -> Collate:
     """The run's playbook by its title, ``run_title`` of a procedure no longer
-    adopted, or Refresh's title for a scan, as SQL. Case-blind, so the list
-    sorts by it as it reads."""
+    adopted, Refresh's title for a scan, or any other operation's action in
+    words, as SQL. Case-blind, so the list sorts by it as it reads."""
 
     operation = KT("input__operation")
     titled = (
@@ -223,7 +269,10 @@ def _run_title() -> Collate:
     )
     unadopted = Concat(Value(run_title("", {})), operation, output_field=CharField())
     run = Case(*titled, default=unadopted, output_field=CharField())
-    return Collate(_scanned(scan_title(), run), "NOCASE")
+    acted = (
+        When(action=action, then=Value(action.label)) for action in OperationRequest.Action if action not in _LISTED
+    )
+    return Collate(_scanned(scan_title(), Case(*acted, default=run, output_field=CharField())), "NOCASE")
 
 
 def scan_title() -> str:
@@ -297,7 +346,7 @@ def _jobs(now: datetime, asked: _Asked) -> QuerySet:
 
 
 def _runs(now: datetime, asked: _Asked) -> QuerySet:
-    runs = OperationRequest.objects.filter(action__in=_LISTED).annotate(seen=run_seen_state(now), title=_run_title())
+    runs = seen_as_runs(OperationRequest.objects.filter(action__in=_LISTED), now)
     if asked.state:
         runs = runs.filter(seen__in=asked.state)
     if asked.kind:
@@ -375,10 +424,8 @@ def playbook_runs(
     as seen; each left empty keeps every run.
     """
 
-    found = (
-        OperationRequest.objects.filter(action=OperationRequest.Action.RUN)
-        .select_related("resource")
-        .annotate(seen=run_seen_state(now or timezone.now()), title=_run_title())
+    found = seen_as_runs(
+        OperationRequest.objects.filter(action=OperationRequest.Action.RUN).select_related("resource"), now
     )
     if playbook:
         found = found.filter(resource__key=resource_key(playbook))
@@ -391,15 +438,38 @@ def playbook_runs(
     return found
 
 
+def seen_as_runs(operations: QuerySet, now: datetime | None = None) -> QuerySet:
+    """``operations`` with the state each is seen in (``run_seen_state``) and
+    what each is called, as ``run_rows`` reads them."""
+
+    return operations.annotate(seen=run_seen_state(now or timezone.now()), title=_run_title())
+
+
+def untaken() -> str:
+    """What a run or scan that waits is waiting for, in a sentence, while no
+    playbook worker reports to take it; "" while one does."""
+
+    return automation_standing().cannot("", now=timezone.now())
+
+
+def _untaken_of(seen: Iterable[JobState]) -> str:
+    """``untaken``, asked only where a run waits."""
+
+    return untaken() if JobState.QUEUED in seen else ""
+
+
 def run_rows(operations: Iterable[OperationRequest], now: datetime | None = None) -> list[WorkRun]:
-    """Runs read through ``playbook_runs`` as the row every list of work
+    """Operations read through ``seen_as_runs`` as the row every list of work
     draws, who asked for each read in one query."""
 
     found = list(operations)
     who = asked_by(found)
     now = now or timezone.now()
+    said = _untaken_of(JobState(operation.seen) for operation in found)
     return [
-        _run_row(operation, JobState(operation.seen), operation.title, now, who.get(str(operation.pk), NOBODY))
+        _run_row(
+            operation, JobState(operation.seen), operation.title, now, who.get(str(operation.pk), NOBODY), untaken=said
+        )
         for operation in found
     ]
 
@@ -409,16 +479,13 @@ def run_of(operation_id: str, now: datetime | None = None) -> tuple[WorkRun, Ope
     record; None for an id no listed run has."""
 
     now = now or timezone.now()
-    found = (
-        OperationRequest.objects.filter(pk=operation_id, action__in=_LISTED)
-        .select_related("resource")
-        .annotate(seen=run_seen_state(now), title=_run_title())
-        .first()
-    )
+    listed = OperationRequest.objects.filter(pk=operation_id, action__in=_LISTED).select_related("resource")
+    found = seen_as_runs(listed, now).first()
     if found is None:
         return None
     who = asked_by((found,)).get(str(found.pk), NOBODY)
-    return _run_row(found, JobState(found.seen), found.title, now, who), found
+    seen = JobState(found.seen)
+    return _run_row(found, seen, found.title, now, who, untaken=_untaken_of((seen,))), found
 
 
 def run_url(operation_id: str) -> str:
@@ -445,54 +512,100 @@ def hydrated(rows: Iterable[Sequence[Any]]) -> list[WorkRun]:
     # Who started each, from the audit row each wrote first.
     who = {**who_did((JOB_AUDIT_TYPE,), ids[JOB]), **asked_by(runs.values())}
     now = timezone.now()
+    said = _untaken_of(JobState(seen) for source, _pk, seen, *_rest in page if source == RUN)
     built: list[WorkRun] = []
     for source, pk, seen, _created, title, _lead in page:
         by = who.get(str(pk), NOBODY)
         if source == JOB:
-            built.append(_job_row(jobs[pk], title, by))
+            built.append(job_run(jobs[pk], title, by))
         else:
-            built.append(_run_row(runs[pk], JobState(seen), title, now, by))
+            built.append(_run_row(runs[pk], JobState(seen), title, now, by, untaken=said))
     return built
 
 
-def _job_row(job: Job, title: str, by: Attribution) -> WorkRun:
-    standing = job_standing(job)
+def job_run(job: Job, title: str = "", by: Attribution = NOBODY) -> WorkRun:
+    """A job as the row every list of work draws, called ``title`` (its kind
+    when none is given) and started by ``by``."""
+
+    seen = JobState(job.seen_state)
     return WorkRun(
         source=JOB,
         id=str(job.pk),
-        title=title,
+        title=title or job.kind,
         kind=job.kind,
-        state=job.seen_state,
-        word=standing.label,
-        tone=TONES[JobState(job.seen_state)],
-        note=standing.note,
+        state=seen.value,
+        word=seen.label,
+        tone=TONES[seen],
+        note=job.seen_error if seen in ENDED_BADLY else job.note,
         by=by,
         created_at=job.created_at,
         started=job.started_at,
         finished=job.finished_at,
         duration=job.duration_seconds,
+        percent=100 if seen == JobState.SUCCEEDED else job.percent,
     )
 
 
-def _run_row(operation: OperationRequest, seen: JobState, title: str, now: datetime, by: Attribution) -> WorkRun:
-    summary = operation_summary(operation, by)
+def standing_of(run: WorkRun) -> Standing:
+    """How a job or a run stands, for a control that follows it. A run that
+    will not start while no worker takes it has ended, so no page follows it."""
+
+    state = FAILED if run.word == NOT_STARTED else STANDS[JobState(run.state)]
+    return Standing(state, run.note, since=run.created_at, percent=run.percent, word=run.word)
+
+
+def standing_tone(state: str, word: str) -> str:
+    """The tone of the job state ``word`` names, else of the one ``state`` stands for; "" for idle."""
+
+    seen = next((seen for seen in JobState if seen.label == word), None)
+    seen = seen or next((seen for seen, stands in STANDS.items() if stands == state), None)
+    return TONES[seen] if seen else ""
+
+
+def standing_word(state: str) -> str:
+    """A control's state (``asks.Standing``) in the word its job state is said in; "" for idle."""
+
+    return next((seen.label for seen, stands in STANDS.items() if stands == state), "")
+
+
+def _run_row(
+    operation: OperationRequest, seen: JobState, title: str, now: datetime, by: Attribution, *, untaken: str = ""
+) -> WorkRun:
+    """One operation as the row every list of work draws; one that waits
+    while no worker will take it (``untaken``) says it has not started, and why."""
+
     asked = operation.input or {}
-    scan = operation.action == OperationRequest.Action.SCAN
-    procedure = str(asked.get("operation") or "")
+    result = operation.result or {}
+    status = result.get("status") or {}
     claimed = operation.state == OperationState.CLAIMED
     lapsed = seen == JobState.LOST and claimed
+    stuck = seen == JobState.QUEUED and bool(untaken)
+    problem = problem_condition(result) if seen == JobState.SUCCEEDED else None
+    word, tone = (
+        (NOT_STARTED, NOT_STARTED_TONE)
+        if stuck
+        else (PROBLEM_FOUND, PROBLEM_TONE)
+        if problem
+        else (seen.label, TONES[seen])
+    )
     started, finished = operation.claimed_at, operation.completed_at
     return WorkRun(
         source=RUN,
         id=str(operation.pk),
         title=title,
-        kind=REFRESH if scan else capability_name(procedure),
+        kind=_kind_of(operation.action, str(asked.get("operation") or "")),
         state=seen.value,
-        word=seen.label,
-        # A run that finished and found a problem says so in its tone.
-        tone=summary["tone"] if seen == JobState.SUCCEEDED else TONES[seen],
-        # A run not yet ended says only its state, in the State column.
-        note=LAPSED if lapsed else "" if operation.state in _UNENDED else summary["headline"],
+        word=word,
+        tone=tone,
+        # A run not yet ended says only its state, in the State column, unless
+        # it will not start.
+        note=untaken
+        if stuck
+        else LAPSED
+        if lapsed
+        else ""
+        if operation.state in UNENDED
+        else _said(operation, problem),
         by=by,
         created_at=operation.created_at,
         started=started,
@@ -504,13 +617,57 @@ def _run_row(operation: OperationRequest, seen: JobState, title: str, now: datet
             correlation=str(asked.get("correlation") or ""),
             worker=operation.claimed_by if claimed else "",
             lease_until=operation.lease_expires_at if claimed else None,
+            attempts=operation.attempt_count,
             events=tuple(
                 {**event, "tone": OUTCOME_TONES.get(event.get("outcome", ""), "")}
-                for event in (operation.result or {}).get("events") or ()
+                for event in result.get("events") or ()
             ),
+            stated=stated_kinds(result),
+            expected=str(status.get("expected_fingerprint_sha256") or ""),
+            consumers=tuple(status.get("consumers") or ()),
+            # A run or a scan has a page of its own, where its record is.
+            raw=""
+            if operation.action in _LISTED or not result
+            else json.dumps(shown_result(result), indent=2, sort_keys=True, default=str),
         ),
         effect=str((operation.resource.spec or {}).get("effect", "")),
     )
+
+
+def _kind_of(action: str, procedure: str) -> str:
+    """What the list filters an operation by: the command a run's procedure
+    is run through, Refresh for a scan, else its action."""
+
+    if action == OperationRequest.Action.RUN:
+        return capability_name(procedure)
+    return REFRESH if action == OperationRequest.Action.SCAN else action
+
+
+def _said(operation: OperationRequest, problem: dict[str, Any] | None) -> str:
+    """How an ended operation went, in a sentence: the condition that says
+    what went wrong before its own message."""
+
+    result = operation.result or {}
+    said = result.get("message") or operation.reason
+    if operation.state == OperationState.FAILED:
+        active = active_conditions(result)
+        return (active[0].get("message") if active else "") or said
+    return (problem.get("message") if problem else "") or said
+
+
+def shown_result(result: dict[str, Any]) -> dict[str, Any]:
+    """An operation's result less the certificate, which is on its record's
+    page: a row of history is not a second copy."""
+
+    status = result.get("status") or {}
+    return {**result, "status": {k: v for k, v in status.items() if k != "certificate_pem"}} if status else result
+
+
+def stated_kinds(result: dict[str, Any]) -> tuple[str, ...]:
+    """The kinds of reading a run's playbook stated on any of its machines, each once."""
+
+    readings = (result.get("stated") or {}).get("readings") or {}
+    return tuple(sorted({kind for kinds in readings.values() for kind in kinds}))
 
 
 def _seconds(start: datetime | None, end: datetime | None) -> float | None:

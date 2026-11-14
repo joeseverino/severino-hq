@@ -11,7 +11,7 @@ set -eu
 # mise hands the words over shell-quoted, one word each.
 eval "set -- ${usage_labels:-}"
 [ "$#" -gt 0 ] || exit 0
-# One process, which tools/gate/turn.py finds narrow.
+# One process, which tools/gate/turn.py gives a share of the turn.
 test_arguments="--noinput --parallel 1 ${usage_labels:-}"
 turn_bound=30m
 # shellcheck source=tools/lib/heavy-turn.sh

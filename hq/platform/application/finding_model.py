@@ -4,12 +4,13 @@ Every detector module builds its findings from these, and application.findings
 derives, resolves and serves them. Kept apart so a detector can import its
 vocabulary without importing the pipeline that collects it."""
 
+import json
 import re
 import shlex
-from collections.abc import Callable, Iterator
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable, Iterator
+from dataclasses import dataclass, replace
 from datetime import datetime
-from typing import TYPE_CHECKING, Annotated, Any, NotRequired, TypedDict
+from typing import TYPE_CHECKING, Annotated, NotRequired, TypedDict
 
 from pydantic import ConfigDict, with_config
 
@@ -67,8 +68,9 @@ class Finding:
     explanation: str
     evidence: tuple[tuple[str, str], ...] = ()
     remedies: tuple[FindingRemedy, ...] = ()
-    # Safe, already-authorized read workflows emitted by the subject node.
-    # Delivery adapters render these; they do not rediscover or filter them.
+    # Safe reads that help with it: the detector's own (a container's upgrade
+    # plan), then the subject node's. Delivery adapters render these; they do
+    # not rediscover or filter them.
     offers: tuple[ActionLink, ...] = ()
     # Canonical graph investigations derived once from the finding subject.
     investigations: tuple[ActionLink, ...] = ()
@@ -102,6 +104,14 @@ class Finding:
     # link, whose target alone cannot say whether it names a connection or a
     # kind; a door that calls rather than links sends it as the payload.
     read_now: ControllerSweepCommand | None = None
+    # When the reading it rests on was taken, where one reading dates it, and
+    # that reading's kind: a card says how old what it claims is once it is
+    # out of date.
+    observed_at: datetime | None = None
+    reads: str = ""
+    # The page a card leads with, where its subject's own page is not it: the
+    # certificate to renew, the containers to upgrade.
+    primary: ActionLink | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,6 +136,10 @@ class FindingRule:
     # an operator as bare prose (application.item_help).
     no_help_reason: str = ""
     subsumes: tuple[str, ...] = ()
+    # The card of its subject's page that draws it, where the page has one for
+    # the parts it is about ("containers" on a machine's page); empty, the
+    # page's own place for problems.
+    card: str = ""
 
     def __post_init__(self) -> None:
         if not self.operator_action.strip():
@@ -249,8 +263,95 @@ def per_connection(
     return tuple(sorted(found, key=lambda finding: finding.title))
 
 
-def built_findings(fields: tuple[dict[str, Any], ...]) -> tuple[Finding, ...]:
-    return tuple(Finding(**item) for item in fields)
+# A finding worded while the topology is derived, which may read, carried on
+# its subject's node so its rule reads it back and deriving findings costs no
+# query.
+CARRIED = "finding"
+
+
+def carry(nodes: dict[str, TopologyNode], findings: Iterable[Finding]) -> None:
+    """Each of ``findings`` as a fact on its subject's node.
+
+    A subject with no node of its own (a name only a gate mentions) rides on
+    the first node: the rules read every node, so where it rides only has to
+    exist.
+    """
+
+    for finding in findings:
+        anchor = finding.subject if finding.subject in nodes else next(iter(nodes), "")
+        if anchor:
+            node = nodes[anchor]
+            nodes[anchor] = replace(node, facts=(*node.facts, (CARRIED, _encoded(finding))))
+
+
+def _encoded(finding: Finding) -> str:
+    return json.dumps(
+        {
+            "rule": finding.rule,
+            "subject": finding.subject,
+            "title": finding.title,
+            "severity": finding.severity,
+            "explanation": finding.explanation,
+            "part": finding.part,
+            "evidence": [list(pair) for pair in finding.evidence],
+            "remedies": [
+                [remedy.capability, remedy.target, remedy.intent, remedy.variant, remedy.url, remedy.method]
+                for remedy in finding.remedies
+            ],
+            "steps": [[step.label, step.command, list(step.notes)] for step in finding.steps],
+            "offers": [[offer.name, offer.label, offer.url, offer.reason] for offer in finding.offers],
+            "observed_at": finding.observed_at.isoformat() if finding.observed_at else "",
+            "reads": finding.reads,
+            "primary": [finding.primary.label, finding.primary.url] if finding.primary else [],
+        }
+    )
+
+
+def _decoded(value: str) -> Finding:
+    item = json.loads(value)
+    return Finding(
+        rule=item["rule"],
+        subject=item["subject"],
+        title=item["title"],
+        severity=item["severity"],
+        explanation=item["explanation"],
+        part=item["part"],
+        evidence=tuple(tuple(pair) for pair in item["evidence"]),
+        remedies=tuple(
+            FindingRemedy(capability=capability, target=target, intent=intent, variant=variant, url=url, method=method)
+            for capability, target, intent, variant, url, method in item["remedies"]
+        ),
+        steps=tuple(
+            OperatorStep(label=label, command=command, notes=tuple(notes)) for label, command, notes in item["steps"]
+        ),
+        offers=tuple(
+            ActionLink(name, label, "read", url, reason=reason) for name, label, url, reason in item["offers"]
+        ),
+        observed_at=moment(item["observed_at"]),
+        reads=item["reads"],
+        primary=opens(*item["primary"]) if item["primary"] else None,
+    )
+
+
+def opens(label: str, url: str) -> ActionLink:
+    """The page a finding's card leads with, under ``label``."""
+
+    return ActionLink("open", label, "read", url)
+
+
+def carried(rule: str) -> Callable[[FindingEstate], tuple[Finding, ...]]:
+    """The detector of ``rule``: the findings of it the topology carries, each once, in title order."""
+
+    def detect(estate: FindingEstate) -> tuple[Finding, ...]:
+        found = {}
+        for node in estate.nodes():
+            for value in fact_values(node, CARRIED):
+                finding = _decoded(value)
+                if finding.rule == rule:
+                    found.setdefault((finding.subject, finding.part, finding.title), finding)
+        return tuple(found[key] for key in sorted(found))
+
+    return detect
 
 
 # Its own config, so it is written one way under every answer that holds it.
@@ -311,6 +412,10 @@ def cannot_run_commands(machine: str = "") -> str:
 
 
 CANNOT_EDIT_COMPOSE = "HQ cannot edit compose files."
+# A machine page's card of its containers, for a rule about one of them, and
+# its card of its tailnet device, for a rule about that.
+CONTAINERS_CARD = "containers"
+TAILNET_CARD = "tailnet"
 
 
 def parse_stamp(value: str) -> datetime | None:

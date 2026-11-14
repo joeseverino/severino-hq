@@ -10,8 +10,10 @@ hooks, filters it and loads a card's details in place. topology_kinds are the
 toggles of the kind filter, topology_views the views (topology_view the one
 seen through, active_lens its lens); focus_node, topology_shown,
 topology_total and topology_held say what the map holds and what it holds
-back, and topology_more the view that shows it.
-{% endcomment %}{% url 'control_plane:topology' as main_lanes_url %}
+back, and topology_more the view that shows it. map_id names a map where a page
+draws more than one: the ids of its lanes, its details and its bar's fold are
+drawn from it, and a page of one map takes the topology page's own.
+{% endcomment %}{% url 'control_plane:topology' as main_lanes_url %}{% with map_region=map_id|default:"map" map_parts=map_id|default:"topology" %}
 <div data-topology data-topology-ledger="topology-relations" data-focus="{{ focus_node }}">
   {% comment %}
   One bar, in the order a reader narrows: a name, then which view (the
@@ -21,17 +23,18 @@ back, and topology_more the view that shows it.
   script rewrites only the number shown, and shows Clear selection only
   while a card is selected.
   {% endcomment %}
-  {% filter_bar filtered=topology_view clear=main_lanes_url shown=topology_shown total=topology_total held=topology_held more=topology_more %}
+  {% filter_bar filtered=topology_view clear=main_lanes_url shown=topology_shown total=topology_total held=topology_held more=topology_more id=map_id %}
     <input type="search" placeholder="Find on the map" aria-label="Find on the map" data-topology-search autocomplete="off">
+    {% choices %}
     {% select "lens" topology_views chosen=topology_view label="View" %}
     {% include "partials/_toggle_set.html" with legend="Show" set="kind" toggles=topology_kinds only %}
     <button class="btn ghost compact" type="button" data-topology-reset hidden>Clear selection</button>
   {% endfilter_bar %}
 
   <div class="topology-workspace">
-  <div class="topology-map" id="map" tabindex="-1" role="region" aria-label="Map lanes">
+  <div class="topology-map" id="{{ map_region }}" tabindex="-1" role="region" aria-label="Map lanes">
     {% for group in topology_groups %}{% if group.items %}
-      {% section group.label count=group.items|length id="topology-"|add:group.kind css="topology-lane" data_topology_lane=group.kind %}
+      {% section group.label count=group.items|length id=map_parts|add:"-"|add:group.kind css="topology-lane" data_topology_lane=group.kind %}
         <div class="topology-node-list">
           {% for item in group.items %}
             {% comment %}
@@ -39,7 +42,7 @@ back, and topology_more the view that shows it.
               the panel beside the lanes, never inside the card.
             {% endcomment %}
             <article
-              class="topology-node topology-node-{{ item.node.kind }} is-{{ item.node.status }}"
+              class="topology-node topology-node-{{ item.node.kind }} {{ item.node.status|tone_class }}"
               data-topology-node="{{ item.node.id }}"
               data-topology-node-kind="{{ item.node.kind }}"
               data-topology-neighbors="{{ item.neighbors }}"
@@ -51,7 +54,7 @@ back, and topology_more the view that shows it.
                 <small>{{ item.node.subtitle|breakable }}</small>
                 {% if item.node.summary %}<small data-topology-node-summary>{{ item.node.summary|breakable }}</small>{% endif %}
               </span>
-              <a class="topology-node-select" href="{{ item.focus_url }}" data-topology-select aria-controls="topology-detail" title="Details · {{ item.degree|counted:"link" }}" aria-label="Details for {{ item.node.label }}, {{ item.degree|counted:"link" }}"{% if item.node.id == focus_node %} aria-current="true"{% endif %}><span class="topology-node-degree" aria-hidden="true">{{ item.degree|counted:"link" }}</span></a>
+              <a class="topology-node-select" href="{{ item.focus_url }}" data-topology-select aria-controls="{{ map_parts }}-detail" title="Details · {{ item.degree|counted:"link" }}" aria-label="Details for {{ item.node.label }}, {{ item.degree|counted:"link" }}"{% if item.node.id == focus_node %} aria-current="true"{% endif %}><span class="topology-node-degree" aria-hidden="true">{{ item.degree|counted:"link" }}</span></a>
             </article>
           {% endfor %}
         </div>
@@ -67,8 +70,8 @@ back, and topology_more the view that shows it.
   </div>
   {% comment %}
   <!-- ast-grep-ignore: hand-drawn-section --> the map's details pane: a labeled live region the selection moves focus to, titled by the node it shows
-  {% endcomment %}<section class="topology-detail" id="topology-detail" tabindex="-1" aria-label="Details" aria-live="polite" data-topology-detail="{{ focus_node }}" data-fragment-failure="Details did not load."{% if not topology_detail %} hidden{% endif %}>
+  {% endcomment %}<section class="topology-detail" id="{{ map_parts }}-detail" tabindex="-1" aria-label="Details" aria-live="polite" data-topology-detail="{{ focus_node }}" data-fragment-failure="Details did not load."{% if not topology_detail %} hidden{% endif %}>
     {% if topology_detail %}{% include "control_plane/_topology_node_body.html" with item=topology_detail %}{% endif %}
   </section>
   </div>
-</div>
+</div>{% endwith %}

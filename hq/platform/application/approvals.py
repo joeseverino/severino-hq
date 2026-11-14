@@ -10,7 +10,6 @@ and may not do is docs/Security.md#what-hq-enforces.
 import hashlib
 import json
 from collections.abc import Callable
-from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import timedelta
 from functools import wraps
@@ -22,7 +21,7 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ApprovalRequest, ManagedResource
-from hq.platform.core.audit import audit_operation
+from hq.platform.core.attribution import own_operation
 lazy from hq.domains.control_plane.providers import record_spec
 lazy from hq.platform.core.models import AuditLog
 
@@ -371,7 +370,7 @@ def hold_for_approval(
         reason=reason,
         expires_at=timezone.now() + _window(),
     )
-    with _its_operation(held, REQUEST, principal):
+    with own_operation(held, operation=REQUEST, principal=principal):
         # The audit says it as the card does.
         held.audit_said = str(asked(held))
         try:
@@ -568,15 +567,6 @@ def pending(*, principal: Principal, limit: int | None = 50, capability: str = "
     return waiting
 
 
-def _its_operation(
-    held: ApprovalRequest, operation: str, principal: Principal, *, rebinds: bool = False
-) -> AbstractContextManager[None]:
-    """Bind the operation every row of ``held``'s life is part of: its request,
-    its decision, the change it applies and its lapse share its id."""
-
-    return audit_operation(operation=operation, principal=principal, operation_id=str(held.id), rebinds=rebinds)
-
-
 def _settle(
     held: ApprovalRequest, state: str, note: str, *, operation: str, principal: Principal, rebinds: bool = False
 ) -> None:
@@ -588,7 +578,7 @@ def _settle(
     decision that cannot be taken.
     """
 
-    with _its_operation(held, operation, principal, rebinds=rebinds), transaction.atomic():
+    with own_operation(held, operation=operation, principal=principal, rebinds=rebinds), transaction.atomic():
         _record(held, state, decision_note=note)
 
 
@@ -687,7 +677,7 @@ def approve(command: ApproveCommand, *, principal: Principal) -> ApprovalApplied
     """
 
     held = _decidable(command.approval_id, principal)
-    with _its_operation(held, APPROVE, principal):
+    with own_operation(held, operation=APPROVE, principal=principal):
         return _apply(held, principal)
 
 
@@ -730,7 +720,7 @@ def _apply(held: ApprovalRequest, principal: Principal) -> ApprovalApplied:
         locked = _lock_pending(held)
         # The one binding that runs as someone other than whoever started the
         # operation: the approver agreed, and the change is the requester's.
-        with audit_operation(operation=spec.name, principal=acting, operation_id=str(held.id), rebinds=True):
+        with own_operation(held, operation=spec.name, principal=acting, rebinds=True):
             result = execute_approved(
                 spec, command, locked.target or None, principal=acting, sent=frozenset(held.payload)
             )
@@ -774,7 +764,7 @@ def withdraw(command: WithdrawCommand, *, principal: Principal) -> ApprovalWithd
     if held is None:
         raise RecordNotFound("No held request of yours has that id.")
     held = _decidable(str(held.pk), principal)
-    with _its_operation(held, WITHDRAW, principal), transaction.atomic():
+    with own_operation(held, operation=WITHDRAW, principal=principal), transaction.atomic():
         locked = _lock_pending(held)
         _record(locked, ApprovalRequest.State.WITHDRAWN)
     return {"ok": True, "withdrawn": str(locked.id)}
@@ -785,7 +775,7 @@ def reject(command: RejectCommand, *, principal: Principal) -> ApprovalRejected:
 
     held = _decidable(command.approval_id, principal)
     _require_person(principal, held)
-    with _its_operation(held, REJECT, principal), transaction.atomic():
+    with own_operation(held, operation=REJECT, principal=principal), transaction.atomic():
         locked = _lock_pending(held)
         _record(locked, ApprovalRequest.State.REJECTED, decider=principal, decision_note=command.note.strip()[:300])
     return {"ok": True, "rejected": str(locked.id)}

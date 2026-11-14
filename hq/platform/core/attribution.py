@@ -3,20 +3,26 @@
 Every audit row is written inside one of these bindings (``audit.record_event``
 refuses a row written outside them), so the binding is made where a caller
 arrives: the web's request middleware, the MCP and bridge mounts, the job
-runner, and ``manage.py`` for every command. Held apart from ``audit`` so a door
-can bind before Django's applications are loaded.
+runner, ``manage.py`` for every command, and a sign-in for what it keeps.
+Held apart from ``audit`` so a door can bind before Django's applications are
+loaded.
 """
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 from uuid import uuid7
 
-lazy from hq.platform.application.security import CLI_ACTOR, CLI_INTERFACE
+lazy from hq.platform.application import request_context
+lazy from hq.platform.application.security import CLI_ACTOR, CLI_INTERFACE, WEB_INTERFACE
 
 from . import tracing
+lazy from .audit import audit_operation, made_in
+
+# The operation a sign-in's writes are named by where no request bound one.
+SIGN_IN_OPERATION = "sign_in"
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +36,9 @@ class OperationContext:
     the operation that started this one, empty for one that started itself.
     ``approved_by`` is who agreed to the act where one had to
     (``Principal.approved_by``), so each row of it says who allowed it.
+    ``person`` finds the account an agent's call acts for, whom each row names
+    as its user beside the agent as its actor. It is asked when a row is
+    written, since a binding may open on an event loop, where no query runs.
     """
 
     interface: str
@@ -39,6 +48,7 @@ class OperationContext:
     device: str = ""
     cause: str = ""
     approved_by: str = ""
+    person: Callable[[], Any] | None = None
 
 
 _operation_context: ContextVar[OperationContext | None] = ContextVar("hq_operation_context", default=None)
@@ -64,6 +74,7 @@ def operation_context(
     device: str = "",
     cause: str = "",
     approved_by: str = "",
+    person: Callable[[], Any] | None = None,
     rebinds: bool = False,
 ) -> Iterator[None]:
     """Attach adapter-neutral attribution to audit events in this operation.
@@ -102,6 +113,7 @@ def operation_context(
     same_caller = outer is not None and outer.actor == actor
     device = device or (outer.device if same_caller else "")
     approved_by = approved_by or (outer.approved_by if same_caller else "")
+    person = person or (outer.person if same_caller else None)
     with _operation_context.set(
         OperationContext(
             interface=interface,
@@ -111,26 +123,50 @@ def operation_context(
             device=device,
             cause=cause,
             approved_by=approved_by,
+            person=person,
         )
     ):
         yield
 
 
 @contextmanager
-def door_of_its_own(*, interface: str, actor: str, operation: str, operation_id: str) -> Iterator[None]:
-    """Bind an operation as the outermost, whatever is bound around it.
+def door_of_its_own(door: OperationContext) -> Iterator[None]:
+    """Bind ``door`` as the outermost, whatever is bound around it, outside the
+    request being answered: for a record whose rows are its requester's
+    wherever it runs (``own_operation``), and the example estate's doors."""
 
-    For the job runner, whose job's rows are its requester's wherever the job runs,
-    on its own thread, to its end on a caller's, or ended by the sweep that
-    finds it lost; and for the example estate's doors, each bound as its real one
-    binds it whatever runs the seed.
+    with _operation_context.set(door), request_context.bind(None):
+        yield
+
+
+def own_operation(
+    record: Any,
+    *,
+    operation: str = "",
+    principal: object | None = None,
+    rebinds: bool = False,
+    requester: OperationContext | None = None,
+) -> AbstractContextManager[None]:
+    """The operation every row of ``record``'s life is part of, under its own
+    id: a job's work and end, a held change's request, decision, application
+    and lapse, a queued operation's claim and report.
+
+    By ``principal``, else whoever is bound, under the bound operation's name
+    where ``operation`` names none, and caused by the operation that made
+    ``record`` (``audit.made_in``). A ``requester`` (a job's) is bound as the
+    outermost, since the job's rows are its requester's wherever it runs.
     """
 
-    with (
-        _operation_context.set(None),
-        operation_context(interface=interface, actor=actor, operation=operation, operation_id=operation_id),
-    ):
-        yield
+    if requester is not None:
+        return door_of_its_own(replace(requester, operation_id=str(record.pk)))
+    outer = bound()
+    return audit_operation(
+        operation=operation or (outer.operation if outer is not None else ""),
+        principal=principal,
+        operation_id=str(record.pk),
+        cause=made_in(record),
+        rebinds=rebinds,
+    )
 
 
 @contextmanager
@@ -189,6 +225,17 @@ def from_the_shell(operation: str) -> AbstractContextManager[None]:
     """
 
     return operation_context(interface=CLI_INTERFACE, actor=CLI_ACTOR, operation=operation)
+
+
+def signing_in(username: str) -> AbstractContextManager[None]:
+    """A sign-in's door once it knows who signed in, before the session holds
+    them: what it keeps of what the provider said (a role, an account, a
+    picture) is that person's doing, under the request's operation."""
+
+    outer = bound()
+    return operation_context(
+        interface=WEB_INTERFACE, actor=username, operation=outer.operation if outer else SIGN_IN_OPERATION
+    )
 
 
 def command_operation(argv: list[str]) -> str:

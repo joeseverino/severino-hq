@@ -15,6 +15,7 @@ from django.test import tag
 from hq.platform.core.tests.task import Usage
 from tools.gate import at
 from tools.gate.tests.base import UNITTEST, GateTestCase
+from tools.gate.turn import IN_TURN, SHARE, in_share
 
 CHECKOUT = Path(__file__).resolve().parents[3]
 # The test command as the task runs it, before setUp replaces it.
@@ -531,57 +532,41 @@ class TestTypedTests(GateTestCase):
         self.assertEqual(at.Typed.from_usage(Usage.from_environment({"usage_at": ""})).at, "")
 
 
-class MeasuredNarrowRunTests(GateTestCase):
-    """A narrow run ends with the measurer's line, as a heavy run does in the turn."""
+class TurnOrShareTests(GateTestCase):
+    """A run of tests takes the whole turn, or a share of it when tools/gate/turn.py weighs it one process."""
 
-    def take(self, environ: dict[str, str], *, narrow: bool = True) -> tuple[list[list[str]], bool]:
-        """The commands the run execs, and whether it asked if it is narrow."""
+    def take(self, environ: dict[str, str], weight: str = "1") -> tuple[list[list[str]], bool]:
+        """The commands the run execs, and whether it asked what the run weighs."""
 
         execs: list[list[str]] = []
         with (
-            patch.dict(os.environ, environ, clear=False),
+            # This test may itself run in a share, which a run inside goes ahead in.
+            patch.dict(os.environ, {k: v for k, v in os.environ.items() if k != SHARE} | environ, clear=True),
             patch.object(at, "subprocess") as sub,
-            patch.object(at.os, "execv", side_effect=lambda _p, command: execs.append(command)),
             patch.object(at.os, "execvp", side_effect=lambda _p, command: execs.append(command)),
             patch.object(at.os, "chdir"),
         ):
-            sub.call.return_value = 0 if narrow else 1
+            sub.run.return_value.stdout = f"{weight}\n"
             at.take_the_turn(at.Typed(args=["example.tests"]))
-            self.marker = os.environ.get(at.FOUND_NARROW)
-            self.asked = sub.call.call_args
-        return execs, sub.call.called
+            self.asked = sub.run.call_args
+        return execs, sub.run.called
 
     def test_it_asks_of_the_run_it_makes(self):
         """The run passes TEST's options before the developer's; weighed without its
-        --parallel, a run of a module reads as one process and skips the turn."""
+        --parallel, a run of a module reads as one process and takes a share."""
 
-        self.take({"MISE_TASK_LOCKS": "", "HQ_MEASURED": ""})
+        self.take({"MISE_TASK_LOCKS": ""})
         self.assertEqual(self.asked.args[0][3:], [*at.TEST[2:], "example.tests"])
 
-    def test_a_narrow_run_runs_again_under_the_measurer(self):
-        environ = {"MISE_TASK_LOCKS": "", "HQ_MEASURED": ""}
-        (command,), asked = self.take(environ)
+    def test_a_one_process_run_runs_again_in_a_share_of_its_weight(self):
+        (command,), asked = self.take({"MISE_TASK_LOCKS": ""}, weight="2")
         self.assertTrue(asked)
-        self.assertEqual(command, [at.MEASURER, sys.executable, "-m", "tools.gate.at"])
-        self.assertTrue(os.access(at.MEASURER, os.X_OK))
+        self.assertEqual(command, [*in_share(2, "2h"), sys.executable, "-m", "tools.gate.at"])
 
-    def test_a_run_in_the_turn_does_not_run_again_or_ask_again(self):
-        self.assertEqual(self.take({"MISE_TASK_LOCKS": "heavy", "HQ_MEASURED": ""}), ([], False))
+    def test_a_whole_run_runs_again_in_the_turn(self):
+        (command,), _ = self.take({"MISE_TASK_LOCKS": ""}, weight="whole")
+        self.assertEqual(command[: len(IN_TURN) + 2], ["env", "HQ_TURN_BOUND=2h", *IN_TURN])
 
-    def test_a_measured_narrow_run_asks_but_does_not_run_again(self):
-        self.assertEqual(self.take({"MISE_TASK_LOCKS": "", "HQ_MEASURED": "1"}), ([], True))
-
-    def test_a_heavy_run_that_inherits_a_measured_parent_still_takes_the_turn(self):
-        (command, *_), asked = self.take({"MISE_TASK_LOCKS": "", "HQ_MEASURED": "1"}, narrow=False)
-        self.assertTrue(asked)
-        self.assertIn("tools.gate.at", command)
-        self.assertNotEqual(command[0], at.MEASURER)
-
-    def test_the_run_again_skips_the_second_question_and_leaves_no_marker_to_children(self):
-        environ = {"MISE_TASK_LOCKS": "", "HQ_MEASURED": "1", at.FOUND_NARROW: "1"}
-        self.assertEqual(self.take(environ), ([], False))
-        self.assertIsNone(self.marker)
-
-    def test_a_narrow_run_leaves_the_marker_for_the_run_it_execs(self):
-        self.take({"MISE_TASK_LOCKS": "", "HQ_MEASURED": ""})
-        self.assertEqual(self.marker, "1")
+    def test_a_run_in_the_turn_or_a_share_does_not_run_again_or_ask_again(self):
+        self.assertEqual(self.take({"MISE_TASK_LOCKS": "gate,heavy"}), ([], False))
+        self.assertEqual(self.take({"MISE_TASK_LOCKS": "", SHARE: "1"}), ([], False))

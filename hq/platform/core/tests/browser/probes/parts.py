@@ -71,27 +71,31 @@ READINGS = """(heads) => heads.map((head) => {
 })"""
 
 
-# A row of readings of an even count drawn one to a line, where two
-# to a row would hold every reading: laid out two to a row, no part of one runs
-# past its place (a lead is one line; quiet lines wrap inside it). An odd
-# count goes from one row to one a line (page.css), so it is left alone.
-READINGS_ONE_TO_A_LINE_WITH_ROOM = (
-    "(readings) => {"
+# A closed row of a table in a narrow box shows every control it shows in a
+# whole box: what a row offers stands in the row (beneath its words, on a
+# phone), never only behind its toggle. The row's own table is drawn in a
+# whole box for a moment to read what it offers there.
+ROW_ACTIONS_BEHIND_THE_TOGGLE = (
+    "([rows, pressed]) => {"
     + DESCRIBE
     + """
   const found = [];
-  const heads = (row) => [...row.querySelectorAll(readings)].filter((head) => head.checkVisibility());
-  const rows = new Set([...document.querySelectorAll(readings)].map((head) => head.closest('.readings')));
-  for (const row of rows) {
-    if (!row.checkVisibility()) continue;
-    const drawn = heads(row);
-    if (drawn.length < 2 || drawn.length % 2) continue;
-    if (new Set(drawn.map((head) => Math.round(box(head).top))).size < drawn.length) continue;
-    const before = row.style.cssText;
-    row.style.cssText += ';grid-template-columns: repeat(2, minmax(0, 1fr)) !important';
-    const fits = drawn.every((head) => [head, ...head.children].every((part) => part.scrollWidth <= part.clientWidth + 1));
-    row.style.cssText = before;
-    if (fits) found.push(`${describe(row)} stands its ${drawn.length} readings one to a line, where two to a row hold each`);
+  const said = (el) => el.textContent.trim().replace(/\\s+/g, ' ');
+  const offered = (row) => new Set([...row.querySelectorAll(pressed)]
+    .filter((el) => el.checkVisibility() && !el.matches('[data-row-toggle], [data-fold-toggle]') && said(el))
+    .map(said));
+  for (const row of document.querySelectorAll(rows)) {
+    if (!row.checkVisibility() || row.matches('.is-expanded')) continue;
+    const table = row.closest('table');
+    if (getComputedStyle(table).getPropertyValue('--box').trim() !== 'narrow') continue;
+    const narrow = offered(row);
+    const before = [table.style.getPropertyValue('--box'), table.style.getPropertyPriority('--box')];
+    table.style.setProperty('--box', 'whole', 'important');
+    const whole = offered(row);
+    table.style.setProperty('--box', ...before);
+    if (!before[0]) table.style.removeProperty('--box');
+    const held = [...whole].filter((label) => !narrow.has(label));
+    if (held.length) found.push(`${describe(row)} shows "${held.join(' / ')}" only once opened in its narrow box`);
   }
   return found;
 }"""
@@ -141,144 +145,6 @@ HIDDEN_IN_SUMMARIES = (
 }"""
 )
 
-# A folded section's words sit on a panel, as its neighbors' do, open or
-# closed: some box between them and the page paints a background. A table's
-# region is one; words in a part drawn only once the fold opens are read when
-# it has drawn.
-BARE_FOLDS = (
-    "([folds, drawnWhenOpened]) => {"
-    + DESCRIBE
-    + """
-  const page = new Set([document.documentElement, document.body]);
-  const clear = (paint) => paint === 'transparent' || /(?:,\\s*|\\/\\s*)0\\)$/.test(paint);
-  const painted = (el) => {
-    for (let at = el; at && !page.has(at); at = at.parentElement) {
-      if (!clear(getComputedStyle(at).backgroundColor)) return true;
-    }
-    return false;
-  };
-  const found = [];
-  for (const fold of document.querySelectorAll('main ' + folds)) {
-    const words = document.createTreeWalker(fold, NodeFilter.SHOW_TEXT);
-    for (let node = words.nextNode(); node; node = words.nextNode()) {
-      const el = node.parentElement;
-      if (!node.textContent.trim() || el.closest('summary') || el.closest(drawnWhenOpened)) continue;
-      if (!painted(el)) {
-        found.push(`${describe(fold)}: "${node.textContent.trim().slice(0, 40)}" sits on the page`);
-        break;
-      }
-    }
-  }
-  return found;
-}"""
-)
-
-# Every select that opens to its choices, and every filter button that opens
-# to them, wears HQ's chevron, and a select no arrow of the browser's own,
-# whichever way the engine draws it (base-select or native), so no two forms
-# read as two kinds of control. The chevron is
-# compared with the token painted where the select sits, since its ink is
-# light-dark(). A vendored widget draws its own.
-SELECT_ARROWS = """([dropdowns, vendored]) => {
-  const named = (el) => el.name || el.getAttribute('aria-label') || el.id || 'unnamed';
-  return [...document.querySelectorAll(dropdowns)]
-    .filter((el) => !(el instanceof HTMLSelectElement && (el.multiple || el.size > 1)) && !(vendored && el.closest(vendored)))
-    .flatMap((el) => {
-      const style = getComputedStyle(el);
-      const own = el instanceof HTMLSelectElement && (style.appearance === 'base-select'
-        ? getComputedStyle(el, '::picker-icon').display !== 'none'
-        : style.appearance !== 'none');
-      const mark = document.createElement('span');
-      mark.style.setProperty('background-image', 'var(--chevron-image)');
-      el.parentElement.append(mark);
-      const chevron = getComputedStyle(mark).backgroundImage;
-      mark.remove();
-      return [
-        own && `select ${named(el)} draws the browser's own arrow`,
-        style.backgroundImage !== chevron && `${el.localName} ${named(el) === 'unnamed' ? el.textContent.trim().slice(0, 30) : named(el)} does not wear HQ's chevron`,
-      ].filter(Boolean);
-    });
-}"""
-
-# A link's underline runs under its name alone. What a link draws in its
-# line (its shown text and the content of every pseudo-element laid out in
-# it) never ends in a sentence's mark (`breakable`'s, or a comma, semicolon or
-# colon, or a period after a one-word name) nor begins or ends with a
-# separator, which belong to the sentence or list around it; and a tag (a
-# status pill) is never set inside a link it is not itself, since a link laid
-# out as a box draws its line under every box within it. Every link whether or
-# not it is underlined at rest, since hover underlines it, but a card: a link
-# holding a block of its own, stacked rather than in its row, lays out
-# paragraphs, whose own sentences end it.
-LINED_PAST_THE_NAME = """([links, vendored, tag, mark]) => {
-  const MARK = /[,;:]$|^\\S+\\.$/u;
-  const BLOCK = /^(block|flex|grid|table|list-item|flow-root)$/;
-  // A box laid out in a row with its siblings (a flex item of a row) is still
-  // a part of the link's one line.
-  const inRow = (el) => {
-    const style = getComputedStyle(el.parentElement);
-    return /flex/.test(style.display) && style.flexDirection.startsWith('row');
-  };
-  const SEPARATOR = /^[·•|]|[·•|]$/u;
-  const quoted = (content) => (content.match(/^"((?:[^"\\\\]|\\\\.)*)"/) || [null, ''])[1];
-  const inFlow = (style) => style.display !== 'none' && style.visibility === 'visible'
-    && !['absolute', 'fixed'].includes(style.position) && style.float === 'none';
-  const pseudo = (el, which) => {
-    const style = getComputedStyle(el, which);
-    return inFlow(style) ? quoted(style.content) : '';
-  };
-  const drawn = (el) => {
-    if (getComputedStyle(el).display === 'none') return '';
-    let text = pseudo(el, '::before');
-    for (const node of el.childNodes) {
-      if (node.nodeType === Node.TEXT_NODE) {
-        if (getComputedStyle(node.parentElement).visibility === 'visible') text += node.textContent;
-      } else if (node.nodeType === Node.ELEMENT_NODE) text += drawn(node);
-    }
-    return text + pseudo(el, '::after');
-  };
-  const found = [];
-  for (const link of document.querySelectorAll(links)) {
-    if ((vendored && link.closest(vendored)) || !link.getClientRects().length) continue;
-    if ([...link.querySelectorAll('*')].some((el) => BLOCK.test(getComputedStyle(el).display) && !inRow(el))) continue;
-    const line = drawn(link).replace(/[\\s\\u200b\\u2060]+/gu, ' ').trim();
-    if (!line) continue;
-    const name = line.slice(0, 60);
-    const shown = [...link.querySelectorAll(mark)].some((el) => getComputedStyle(el).visibility === 'visible');
-    if (shown || MARK.test(line)) found.push(`link "${name}" draws its sentence's mark in its line`);
-    if (SEPARATOR.test(line)) found.push(`link "${name}" draws a separator in its line`);
-    const inner = [...link.querySelectorAll(tag)].find((el) => el.getClientRects().length);
-    if (inner) found.push(`link "${name}" holds the tag "${inner.textContent.trim().slice(0, 30)}"`);
-  }
-  return found;
-}"""
-
-# A link that draws an underline draws it under all of its words. A line a
-# link draws never reaches into a box of its own inside it (an inline-block
-# part of a name), so each word set in one is read from the nearest such box
-# between it and the link.
-PARTS_NOT_UNDERLINED = """([links, vendored]) => {
-  const atomic = (el) => !['inline', 'contents'].includes(getComputedStyle(el).display);
-  const underlined = (el) => getComputedStyle(el).textDecorationLine.includes('underline');
-  const found = [];
-  for (const link of document.querySelectorAll(links)) {
-    if ((vendored && link.closest(vendored)) || !underlined(link)) continue;
-    const walker = document.createTreeWalker(link, NodeFilter.SHOW_TEXT);
-    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      if (!node.textContent.trim()) continue;
-      const range = document.createRange();
-      range.selectNodeContents(node);
-      if (![...range.getClientRects()].some((r) => r.width && r.height)) continue;
-      let box = node.parentElement;
-      while (box !== link && !atomic(box)) box = box.parentElement;
-      if (box !== link && !underlined(box)) {
-        found.push(`link ${link.textContent.trim().slice(0, 60)} leaves ${node.textContent.trim().slice(0, 40)} without its underline`);
-        break;
-      }
-    }
-  }
-  return found;
-}"""
 
 # A link among words differs from them by more than its color (WCAG 1.4.1):
 # it is underlined at rest, or set in a weight, size, style or face of its
@@ -391,31 +257,6 @@ WRAPPED = (
 }"""
 )
 
-# A fact whose value is a list of names keeps no other pair on its row while
-# it wraps: beside them it makes their row as tall as itself.
-WRAPPED_BESIDE_A_PAIR = (
-    "([values, pairs]) => {"
-    + DESCRIBE
-    + LINE_COUNT
-    + """
-  const found = [];
-  for (const value of document.querySelectorAll(values)) {
-    if (!value.checkVisibility()) continue;
-    const {lines, top, bottom} = linesOf(value);
-    if (lines < 2) continue;
-    const pair = value.closest(pairs);
-    const beside = [...pair.parentElement.children].some((other) => {
-      if (other === pair || !other.checkVisibility()) return false;
-      const r = other.getBoundingClientRect();
-      return r.top < bottom - 1 && r.bottom > top + 1;
-    });
-    const name = pair.querySelector(':scope > dt')?.textContent.trim().replace(/\\s+/g, ' ');
-    if (beside) found.push(`${describe(value)} "${name}" wraps to ${lines} lines beside another pair`);
-  }
-  return found;
-}"""
-)
-
 
 EVIDENCE_READ = (STRANDED_EVIDENCE, [SELECTORS["check_statement"], SELECTORS["check_evidence"]])
 
@@ -425,18 +266,30 @@ _READINGS_OF = f"(selector) => ({READINGS})([...document.querySelectorAll(select
 
 # The survey checks these probes answer (`probes/__init__.py`).
 CHECKS = {
-    "control labels": (SPILLED_LABELS, SELECTORS["control"]),
-    "cell labels": Check((SPILLED_LABELS, SELECTORS["cell_content"]), table=True),
-    "dialogs": (DIALOGS_WITHOUT_OPENERS, [SELECTORS["dialog"], SELECTORS["dialog_opener"]]),
-    "select arrows": (SELECT_ARROWS, [SELECTORS["dropdown"], SELECTORS["vendored"]]),
-    "link underlines": (PARTS_NOT_UNDERLINED, [SELECTORS["link"], SELECTORS["vendored"]]),
-    "links at rest": (LINKS_AT_REST, [SELECTORS["link"], SELECTORS["vendored"]]),
-    "lined past the name": (
-        LINED_PAST_THE_NAME,
-        [SELECTORS["link"], SELECTORS["vendored"], SELECTORS["tag"], SELECTORS["mark"]],
+    "control labels": Check(
+        (SPILLED_LABELS, SELECTORS["control"]), reader_sees="a control's label spilling out of its box"
     ),
-    "lists of facts": (WRAPPED_BESIDE_A_PAIR, [SELECTORS["fact_list"], SELECTORS["band_fact_cell"]]),
-    "bare folds": (BARE_FOLDS, [SELECTORS["section_fold"], SELECTORS["drawn_when_opened"]]),
-    "readings": Check((_READINGS_OF, SELECTORS["readings"]), findings=reading_problems),
-    "readings one to a line with room": (READINGS_ONE_TO_A_LINE_WITH_ROOM, SELECTORS["readings"]),
+    "cell labels": Check(
+        (SPILLED_LABELS, SELECTORS["cell_content"]), table=True, reader_sees="a cell's words spilling out of their box"
+    ),
+    "dialogs": Check(
+        (DIALOGS_WITHOUT_OPENERS, [SELECTORS["dialog"], SELECTORS["dialog_opener"]]),
+        reader_sees="a dialog nothing on the page opens",
+    ),
+    "links at rest": Check(
+        (LINKS_AT_REST, [SELECTORS["link"], SELECTORS["vendored"]]),
+        reader_sees="a link among words told apart from them by color alone",
+    ),
+    "readings": Check(
+        (_READINGS_OF, SELECTORS["readings"]),
+        findings=reading_problems,
+        reader_sees="a reading's line cut short or pushed under its mark",
+    ),
+    "row actions behind the toggle": Check(
+        (
+            ROW_ACTIONS_BEHIND_THE_TOGGLE,
+            [f"main {SELECTORS['controls_row']}", SELECTORS["pressed"]],
+        ),
+        reader_sees="what a row offers hidden until the row is opened",
+    ),
 }

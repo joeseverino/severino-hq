@@ -59,9 +59,15 @@ TABLES = (
                  || getComputedStyle(head).position === 'absolute')) {
       found.push(`${name} hides its column headings`);
     }
-    // A row folded away is not drawn at all, which is not drawn as a card.
+    // A row folded away is not drawn at all, which is not drawn as a card. A
+    // row of a table with a column of controls (`data-beneath`) wraps them to
+    // a line beneath its words in a narrow box, each cell still a cell under
+    // its heading (tables.css), which is no card either.
+    const beneath = table.querySelector(':scope > * > tr > [data-beneath]');
     for (const row of table.querySelectorAll('tbody tr')) {
-      if (!['table-row', 'none'].includes(getComputedStyle(row).display)) {
+      const display = getComputedStyle(row).display;
+      if (beneath && display === 'flex' && row.matches('tr:has(> :nth-child(2))')) continue;
+      if (!['table-row', 'none'].includes(display)) {
         found.push(`${name} stacks its rows`); break;
       }
     }
@@ -512,6 +518,21 @@ PRESS_FIRST_ROW_TOGGLE = """(scroll) => {
   return records.indexOf(toggle.closest('tr'));
 }"""
 
+# A row folded under its family (`data-folded`) is drawn only once its family
+# is opened (`data-open`), at every width: a rule that sets a row's display (a
+# row stacked in a narrow box) must leave a folded row folded. With no script
+# every row shows, so it holds once script runs.
+FOLDED_ROWS_SHOWN = (
+    "() => {"
+    + DESCRIBE
+    + """
+  if (!matchMedia('(scripting: enabled)').matches) return [];
+  return [...document.querySelectorAll('.data-table tr[data-folded]:not([data-open])')]
+    .filter((row) => row.checkVisibility())
+    .map((row) => `${describe(row)} is drawn while its family is folded: ${row.textContent.trim().replace(/\\s+/g, ' ').slice(0, 40)}`);
+}"""
+)
+
 # Nothing reaches past the content's side gutter: drawn there, it touches the
 # edge of the screen. `text` also holds every line of text to the box that
 # holds it.
@@ -782,17 +803,39 @@ IDENTIFIER_VALUES = {
 # of the layout and of its tables (`TABLE_LAYOUT`), in each state a reader can
 # draw the rows in: as drawn, with their folds open, and opened.
 CHECKS = {
-    "cells": Check(CELLS, table=True),
-    "tables": Check(TABLES, table=True, findings=lambda report: report["found"]),
-    # Only script fits a table to its box (tables.js); without it a table scrolls in its region.
-    "tables fit": Check((TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), table=True, scripted=True),
-    "unseen columns": Check((UNSEEN_COLUMNS, SELECTORS["table_scroll"]), table=True),
-    "cut with room": Check(
-        (CUT_WITH_ROOM, [SELECTORS["cut_box"], SELECTORS["name_box"], SELECTORS["unseen"]]), table=True
+    "cells": Check(CELLS, table=True, reader_sees="a cell's content running out of its cell"),
+    "tables": Check(
+        TABLES, table=True, findings=lambda report: report["found"], reader_sees="a table wider than its box"
     ),
-    "cut beside room": Check((CUT_BESIDE_ROOM, SELECTORS["unseen"]), table=True),
-    "cut and closed": Check((CUT_AND_CLOSED, SELECTORS["unseen"]), table=True),
-    "cut when open": Check((CUT_WHEN_OPEN, SELECTORS["unseen"]), table=True),
+    # Only script fits a table to its box (tables.js); without it a table scrolls in its region.
+    "tables fit": Check(
+        (TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]),
+        table=True,
+        scripted=True,
+        reader_sees="a table running past its box once script has fitted it",
+    ),
+    "unseen columns": Check(
+        (UNSEEN_COLUMNS, SELECTORS["table_scroll"]),
+        table=True,
+        reader_sees="a column cut off where nothing scrolls to it",
+    ),
+    "cut with room": Check(
+        (CUT_WITH_ROOM, [SELECTORS["cut_box"], SELECTORS["name_box"], SELECTORS["unseen"]]),
+        table=True,
+        reader_sees="a value cut while its cell has room to show it",
+    ),
+    "cut beside room": Check(
+        (CUT_BESIDE_ROOM, SELECTORS["unseen"]), table=True, reader_sees="a value cut while its row has room to show it"
+    ),
+    "cut and closed": Check(
+        (CUT_AND_CLOSED, SELECTORS["unseen"]), table=True, reader_sees="a cut value with no way to read it whole"
+    ),
+    "cut when open": Check(
+        (CUT_WHEN_OPEN, SELECTORS["unseen"]), table=True, reader_sees="a value still cut in its opened row"
+    ),
+    "folded rows stay folded": Check(
+        FOLDED_ROWS_SHOWN, table=True, scripted=True, reader_sees="a folded row drawn while its group is closed"
+    ),
     # Every box and every line of text, not only a card's or code's.
-    "gutter": (PAST_THE_GUTTER, ["*", True]),
+    "gutter": Check((PAST_THE_GUTTER, ["*", True]), reader_sees="content past the page's gutter"),
 }

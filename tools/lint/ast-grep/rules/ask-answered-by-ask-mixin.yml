@@ -1,0 +1,25 @@
+# An ask's post is answered in one place, asks.AskMixin.post: it runs the
+# capability, says a refusal as failed work in the refusal's own sentence,
+# and answers how the work stands, 202 while it is live. A view that answers
+# by hand, or turns a refusal into a standing itself, picks its own status and
+# words for a refusal, and the next view does it differently.
+id: ask-answered-by-ask-mixin
+language: python
+severity: error
+message: An ask is answered by hand.
+note: >-
+  Subclass asks.AskMixin and declare back_to, payload(), target() and asked();
+  its post runs the capability and answers the refusal and the standing.
+files:
+  - "hq/**"
+ignores:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/migrations/**"
+  # Where an ask is answered.
+  - "hq/platform/application/asks.py"
+rule:
+  any:
+    - pattern: JsonResponse($$$, status=202 if $LIVE else 200)
+    - pattern: Standing($STATE, refusal_of($$$).message, $$$)
+    - pattern: Standing($STATE, refusal_of($$$).message)

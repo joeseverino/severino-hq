@@ -22,6 +22,7 @@ lazy from hq.platform.application.routes import reverse
 from .facts import inventory_records
 from .finding_model import (
     CANNOT_EDIT_COMPOSE,
+    CONTAINERS_CARD,
     Finding,
     FindingEstate,
     FindingRemedy,
@@ -346,6 +347,7 @@ RULES: tuple[FindingRule, ...] = (
         unrecognized_containers,
         operator_action=("Adopt it if you started it. Otherwise remove it on its machine."),
         no_help_reason=("HQ cannot remove a container it did not start."),
+        card=CONTAINERS_CARD,
     ),
     FindingRule(
         "container-image-behind",
@@ -354,6 +356,7 @@ RULES: tuple[FindingRule, ...] = (
         images_behind,
         operator_action=("Recreate the container from its compose project so it runs the image its tag names now."),
         no_help_reason=cannot_run_commands(),
+        card=CONTAINERS_CARD,
     ),
     FindingRule(
         "container-image-untagged",
@@ -362,6 +365,7 @@ RULES: tuple[FindingRule, ...] = (
         images_untagged,
         operator_action=("Pin a tag for the image in the container's compose file and recreate it."),
         no_help_reason=CANNOT_EDIT_COMPOSE,
+        card=CONTAINERS_CARD,
     ),
     FindingRule(
         "container-image-unpinned",
@@ -370,5 +374,6 @@ RULES: tuple[FindingRule, ...] = (
         images_unpinned,
         operator_action=("Pin the image by digest in the container's compose file and recreate it."),
         no_help_reason=CANNOT_EDIT_COMPOSE,
+        card=CONTAINERS_CARD,
     ),
 )

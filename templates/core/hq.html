@@ -33,13 +33,13 @@ uptime and how the request came.
     {% fact "Container" %}<a href="{{ container.url }}">{{ container.running.name|breakable }}</a>{% endfact %}
     {% fact "Health" %}{{ runtime.health|default:container.running.check|default:container.running.status|capfirst|breakable }}{% if runtime %}{% dot %}{{ runtime.restart_count|default:0|counted:"restart" }}{% endif %}{% endfact %}
     {% with posture=container.posture %}
-    {% fact "How it is run" %}{{ posture.met|breakable }} of {{ posture.measured|counted:"check met,checks met" }}{% for result in posture.unmet %}<br><span class="muted">{{ result.check.unmet|breakable }}</span>{% endfor %}{% endfact %}
+    {% fact "How it is run" %}{% stack_list %}<li>{{ posture.met|breakable }} of {{ posture.measured|counted:"check met,checks met" }}</li>{% for result in posture.unmet %}<li class="muted">{{ result.check.unmet|breakable }}</li>{% endfor %}{% endstack_list %}{% endfact %}
     {% endwith %}
     {% endwith %}{% else %}
     {% fact "Container" %}{% include "partials/_empty_state.html" with message="No container HQ reads is known to be HQ's." inline=True %}{% endfact %}
     {% endif %}
     {% if work.services %}
-    {% fact "Kept running by" %}{% for job in work.services %}{% include "partials/_unit.html" with title=job.title unit=job.name only %}{% if job.last_run %} <span class="muted">since {{ job.last_run|when:"ago" }}</span>{% endif %}{% if not forloop.last %}<br>{% endif %}{% endfor %}{% endfact %}
+    {% fact "Kept running by" %}{% stack_list %}{% for job in work.services %}<li>{% include "partials/_unit.html" with title=job.title unit=job.name only %}{% if job.last_run %} <span class="muted">since {{ job.last_run|when:"ago" }}</span>{% endif %}</li>{% endfor %}{% endstack_list %}{% endfact %}
     {% endif %}
   {% endfacts %}
 {% endsection %}
@@ -125,7 +125,7 @@ row in the flow.
   {% elif work.renderers %}
     {% table_region "Credentials refresh" %}
       <table class="data-table compact-table">
-        <thead><tr>{% table_heading "Credentials refresh" "identifier" local_sort=True gutter=True %}{% table_heading "Last run" "status" css="key-col" local_sort=True %}{% table_heading "Tried" "status" local_sort=True drop=2 %}{% table_heading "Last confirmed current" "status" local_sort=True drop=1 %}</tr></thead>
+        <thead><tr>{% table_heading "Credentials refresh" "identifier" local_sort=True gutter=True %}{% table_heading "Result" "status" css="key-col" local_sort=True %}{% table_heading "Tried" "status" local_sort=True drop=2 %}{% table_heading "Last confirmed current" "status" local_sort=True drop=1 %}</tr></thead>
         <tbody>
           {% for item in work.renderers %}
             <tr>

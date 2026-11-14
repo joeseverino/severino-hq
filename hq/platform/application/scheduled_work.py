@@ -27,12 +27,12 @@ lazy from hq.platform.core.models import AuditLog
 
 from .ui import counted
 lazy from . import approvals, outbound_work
-lazy from .asks import job_standing
 lazy from .automation_adoption import prune_proposals
 lazy from .cadence import request_reading
 lazy from .outbound_work import run_now
 lazy from .public_registry import refresh
 lazy from .security import cli_principal, internal_principal
+lazy from .work_runs import job_run
 
 
 @dataclass(frozen=True, slots=True)
@@ -174,7 +174,7 @@ def run(name: str) -> dict[str, Any]:
         job = runner.run(work.name, work.label, work.run, actor=ACTOR)
     except runner.JobConflict:
         return {"name": name, "state": "running", "note": runner.ALREADY_RUNNING}
-    return {"name": name, "state": job.state, "note": job_standing(job).note, "job": str(job.pk)}
+    return {"name": name, "state": job.state, "note": job_run(job).note, "job": str(job.pk)}
 
 
 def start(name: str) -> bool:

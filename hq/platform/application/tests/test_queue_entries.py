@@ -71,6 +71,30 @@ class FamiliesTests(SimpleTestCase):
 
         self.assertEqual([len(entry["items"]) for entry in entries], [1, 1])
 
+    def test_a_folded_family_says_its_worst_and_the_button_its_items_share(self):
+        def led(item, url):
+            return {**item, "action": "Open example", "url": url}
+
+        same = [led(_item("a", family="Pins"), "/example/"), led(_item("b", family="Pins"), "/example/")]
+        apart = [led(_item("a", family="Pins"), "/example/a/"), led(_item("b", family="Pins"), "/example/b/")]
+
+        (shared,) = families(same)
+        (split,) = families(apart)
+
+        self.assertEqual(shared["summary"], "a, and 1 more")
+        self.assertEqual([lead["url"] for lead in shared["lead"]], ["/example/"])
+        self.assertEqual(split["lead"], [])
+
+    def test_a_family_of_one_rule_with_no_shared_fix_opens_the_list_of_them(self):
+        def finding(title, url):
+            return {**_item(title, family="Pins"), "key": f"example:finding:example-rule:{title}", "url": url}
+
+        (entry,) = families([finding("a", "/example/a/"), finding("b", "/example/b/")])
+
+        (lead,) = entry["lead"]
+        self.assertTrue(lead["url"].endswith("?rule=example-rule"))
+        self.assertTrue(lead["recommended"])
+
     def test_the_queue_page_folds_the_same_way(self):
         items = [_item("a", family="Pins"), _item("b"), _item("c", family="Pins")]
 
@@ -94,13 +118,19 @@ class DenseRowTests(SimpleTestCase):
     def test_a_dense_rows_meaning_waits_in_the_line_beneath(self):
         page = _drawn(self.REST, rest=[_item("a")])
 
-        details = [element for element in page if "attention-detail" in element.classes]
+        details = [element for element in page if "data-attention-detail" in element.attrs]
         self.assertTrue(details)
         self.assertTrue(all(_below(detail) for detail in details))
+
+    def test_a_pages_problems_below_the_urgent_ones_are_under_a_heading(self):
+        page = _drawn('{% include "partials/_problems.html" with problems=problems %}', problems=[_item("a")])
+
+        headings = [element.words for element in page if element.tag in {"h2", "h3"}]
+        self.assertTrue(any("Open problems" in words for words in headings))
 
     def test_the_whole_queue_keeps_its_meaning_on_the_row(self):
         page = _drawn('{% include "partials/_work_queue.html" with items=items %}', items=[_item("a")])
 
-        details = [element for element in page if "attention-detail" in element.classes]
+        details = [element for element in page if "data-attention-detail" in element.attrs]
         self.assertTrue(details)
         self.assertFalse(any(_below(detail) for detail in details))

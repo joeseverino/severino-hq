@@ -1,0 +1,23 @@
+# When a reading was taken is said in one wording, declared once as
+# freshness.LAST_READ: a fact's label, last_read(at) in plain text, and the
+# last_read filter in partials/_reading_age.html. A page that writes the words
+# itself drifts from the others the first time either is reworded.
+id: last-read-said-by-freshness
+language: python
+severity: error
+message: When a reading was taken is worded by hand.
+note: >-
+  Use freshness.LAST_READ for the label, freshness.last_read(at) for the
+  sentence, or partials/_reading_age.html on a page.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+ignores:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/migrations/**"
+  # Where the words are declared.
+  - "hq/platform/application/freshness.py"
+rule:
+  kind: string
+  regex: '^f?["'']Last read(["'']| \{)'

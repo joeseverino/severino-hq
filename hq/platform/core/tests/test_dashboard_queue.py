@@ -13,6 +13,7 @@ from hq.platform.application.dashboard import work_queue
 from hq.platform.application.derivation_testing import uncached
 from hq.platform.application.plugins import gather_attention
 from hq.platform.application.tests.markup import hrefs, select, with_class, within
+from hq.platform.application.tests.test_decisions import row_hrefs
 from hq.platform.application.ui import DomainOverview
 from hq.platform.application.workflow_contracts import ActionLink
 from hq.platform.application.workflows import claim_resolution_plan
@@ -81,7 +82,7 @@ class DashboardQueueTests(TestCase):
                 response = self.client.get(path)
                 if path == "/action-items/":
                     self.assertContains(response, "Reconcile the bill")
-                    self.assertEqual(hrefs(response).count("/example/evidence/"), 1)
+                    self.assertEqual(row_hrefs(response).count("/example/evidence/"), 1)
                     # The verification is a write: posted with the token, never a link.
                     self.assertTrue(select(response, "formaction", "/dashboard/glance/"))
                     self.assertNotIn("/dashboard/glance/", hrefs(response))
@@ -133,6 +134,8 @@ class DashboardQueueTests(TestCase):
         self.assertIn("/action-items/", hrefs(response))
 
     def test_a_card_on_the_dashboard_opens_its_whole_card_and_shows_how_old_it_is(self):
+        from datetime import timedelta
+
         from django.utils import timezone
 
         from hq.platform.application.item_help import commands
@@ -145,15 +148,17 @@ class DashboardQueueTests(TestCase):
             "Two checks fail.",
             key="example-failing",
             workflow=commands("example-failing", (("See the failing runs", "example-tool runs --failing"),)),
-            observed_at=timezone.now(),
+            observed_at=timezone.now() - timedelta(days=30),
+            reads="github.repository",
         )
         entries = gather_attention((("example.utility", "Example", lambda: (urgent,), ()),))
         with patch("hq.platform.application.dashboard.domain_attention_items", return_value=entries):
             dashboard = self.client.get("/")
-            (page,) = [title.attrs["href"] for title in with_class(dashboard, "attention-title")]
+            (page,) = [title.attrs["href"] for title in select(dashboard, "data-attention-title")]
             whole = self.client.get(page)
 
         self.assertContains(dashboard, "data-reading-age")
+        self.assertContains(dashboard, "Read every")
         self.assertNotContains(dashboard, "runs --failing")
         path, _, anchor = page.partition("#")
         self.assertEqual(path, "/action-items/")
@@ -293,11 +298,11 @@ class EmptyQueueClaimTests(TestCase):
         self.addCleanup(empty.stop)
 
     def status(self, seen_at):
-        from hq.platform.application.cadence import ControllerStanding
+        from hq.platform.application.cadence import WorkerStanding
 
         with patch(
             "hq.platform.core.dashboard_views.controller_standing",
-            return_value=ControllerStanding(seen_at=seen_at, silent=False),
+            return_value=WorkerStanding(seen_at=seen_at, silent=False),
         ):
             return self.client.get("/")
 

@@ -382,18 +382,6 @@ class DashboardMachine(TimestampedModel):
         return f"{self.machine.key} on the dashboard"
 
 
-class WeatherObservation(TimestampedModel):
-    """The last explicitly refreshed NWS reading for one configured point."""
-
-    point = models.CharField(max_length=64, unique=True)
-    payload = models.JSONField(default=dict)
-    observed_at = models.DateTimeField()
-
-    @override
-    def __str__(self) -> str:
-        return f"The weather at {self.point}"
-
-
 class CertificateMaterial(TimestampedModel):
     """A certificate an operator generated elsewhere, held so it can be reused.
 
@@ -503,13 +491,6 @@ class OperationRequest(TimestampedModel):
     resource = models.ForeignKey(ManagedResource, on_delete=models.PROTECT, related_name="operations")
     action = models.CharField(max_length=20, choices=Action.choices)
     state = models.CharField(max_length=20, choices=State.choices, default=State.QUEUED)
-    requested_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="infrastructure_operations",
-    )
     requested_actor = models.CharField(max_length=160)
     requested_interface = models.CharField(max_length=32)
     # The tailnet device the asker called from (``Principal.device``), so a
@@ -723,10 +704,8 @@ class ApprovalRequest(TimestampedModel):
     # A request nobody answers lapses, so a click weeks later applies nothing.
     expires_at = models.DateTimeField()
     # The decider is a name and an interface, not a user row. A foreign key
-    # would be the obvious thing and would answer a question nobody asks: what
-    # matters is that a person on the web surface agreed, and both of those
-    # facts are here. ``OperationRequest.requested_by`` is the counter-example
-    # sitting next door: a user column no writer has ever filled in.
+    # would answer a question nobody asks: what matters is that a person on the
+    # web surface agreed, and both of those facts are here.
     decided_actor = models.CharField(max_length=160, blank=True)
     decided_interface = models.CharField(max_length=32, blank=True)
     decided_at = models.DateTimeField(null=True, blank=True)
@@ -784,28 +763,6 @@ class ApprovalRequest(TimestampedModel):
     def __str__(self) -> str:
         # Who asked and who decided are the row's Who, never its title.
         return approval_title(self)
-
-
-class AddressReading(models.Model):
-    """What the public registries last said about one address.
-
-    Kept because the answer barely moves (a block changes hands, a network's PTR
-    is reconfigured), and re-asking on every load spends a stranger's rate limit
-    and tells them which addresses HQ cares about. A disposable cache an operator
-    can refresh, keyed by address so the connection panel and the tools page share
-    one answer.
-    """
-
-    address = models.GenericIPAddressField(primary_key=True)
-    reading = models.JSONField(default=dict)
-    observed_at = models.DateTimeField(default=timezone.now)
-
-    class Meta:
-        ordering = ("-observed_at",)
-
-    @override
-    def __str__(self) -> str:
-        return f"{self.address} ({self.observed_at:%Y-%m-%d})"
 
 
 class CapabilityRule(models.Model):

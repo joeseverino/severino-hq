@@ -438,6 +438,23 @@ class TableTagTests(SimpleTestCase):
         marked = [each.attrs.get("data-col") for each in elements(_render(source), "td") if "data-long" in each.attrs]
         self.assertEqual(marked, ["status", "long"])
 
+    def test_the_words_beside_a_rows_controls_keep_their_line(self):
+        long = "A sentence long enough to wrap beside a row's buttons"
+        source = (
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
+            '{% table_heading "State" "status" %}{% table_heading "Note" %}<th></th></tr></thead><tbody>'
+            f'<tr><td data-col="short">a</td><td>Up</td><td data-col="long">{long}</td>'
+            '<td class="row-actions"><button>Read</button></td></tr>'
+            f'<tr><td>b</td><td>Up</td><td>{long}</td><td class="select-column"><input type="checkbox"></td></tr>'
+            "</tbody></table>{% endtable_region %}"
+        )
+        marked = {
+            each.attrs.get("data-col"): each.attrs["data-words"]
+            for each in elements(_render(source), "td")
+            if "data-words" in each.attrs
+        }
+        self.assertEqual(marked, {"short": "line", "long": "floor"})
+
     def test_a_status_too_long_to_keep_wraps(self):
         long = "Ask me first for container stack and tailnet policy changes"
         source = (
@@ -478,8 +495,9 @@ class TableTagTests(SimpleTestCase):
         """After a row is the line its toggle opens: the blocks it keeps
         beneath itself, then under its column's name a column that may leave
         (its blocks taken out of the copy), a narrow part of a column that
-        stays, and a labeled block. A control under no heading is named for
-        a screen reader alone, and a column with nothing to show has no part."""
+        stays, and a labeled block. A column with nothing to show has no part,
+        and the row's controls have none, whatever their rank, since they stand
+        beneath its words in a narrow box."""
 
         source = (
             '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" gutter=True %}'
@@ -505,14 +523,14 @@ class TableTagTests(SimpleTestCase):
         self.assertEqual(cell.attrs["colspan"], "5")
         self.assertEqual([each.words for each in beneath if "row-below" in each.classes], ["tall", "x"])
         terms = [each for each in beneath if each.tag == "dt"]
-        self.assertEqual([each.words for each in terms], ["Name", "Note", "State", "Act", "Also"])
+        self.assertEqual([each.words for each in terms], ["Name", "Note", "State", "Also"])
         self.assertEqual(
             [each.attrs.get("data-column") or each.attrs.keys() & {"data-narrow", "data-label"} for each in terms],
-            [{"data-narrow"}, "1", {"data-narrow"}, "4", {"data-label"}],
+            [{"data-narrow"}, "1", {"data-narrow"}, {"data-label"}],
         )
-        self.assertEqual([each.classes for each in terms], [frozenset()] * 5)
+        self.assertEqual([each.classes for each in terms], [frozenset()] * 4)
         values = [each for each in beneath if each.tag == "dd"]
-        self.assertEqual([each.words for each in values], ["from here", "Said", "since", "Go", "x"])
+        self.assertEqual([each.words for each in values], ["from here", "Said", "since", "x"])
         self.assertEqual(values[1].attrs.get("data-cell"), "data")
 
     def test_each_part_of_a_cell_is_marked_with_its_role(self):

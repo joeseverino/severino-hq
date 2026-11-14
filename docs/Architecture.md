@@ -48,7 +48,8 @@ same lifecycle. The adapter parses and steps aside. The service validates,
 authorizes, opens the transaction, guards against stale state, writes, audits
 and returns one result. The adapter only chooses how it looks.
 
-A view reaches a domain write only through `execute_capability`.
+A view reaches a domain write only through `run_posted` or `execute_posted`
+(`hq/platform/application/web_writes.py`), which run `execute_capability`.
 `test_view_writes` follows every call made from the module of each view the
 URL configuration routes, and of its bases. An audit row, a refusal or an
 agent's identity observation is not a domain write.
@@ -94,7 +95,10 @@ and storage are stored as the machine's telemetry reading
 machine page, the resource API and the dashboard summarize one timestamped
 fact. The operator picks the machine with "Show on dashboard" on its edit form;
 the choice lives in `DashboardConfiguration`. Weather is the configured point's
-`WeatherObservation`, edited in the dashboard's Settings popover.
+reading (`weather:<point>`), the point edited in the dashboard's Settings popover.
+Every value HQ reads from outside is an `UpstreamReading` under a key that
+`readings.py` names, and `test_readings.py` fails a model that keeps one of
+its own.
 
 `GET /dashboard/glance/` only reads. A refresh is a CSRF-protected POST to the
 same address:
@@ -767,7 +771,8 @@ The security design is in [Security](Security.md). Inside the core:
 - services revalidate every input and own their transactional writes;
 - restricted documentation is removed from AI-facing results;
 - every success leaves an attributed audit event, and every refusal a `Denied`
-  one.
+  one: a write whose handler recorded no row of its own leaves the act of
+  running it (`capabilities._run`).
 
 The `hq` CLI reaches HQ through the authenticated MCP endpoint. In-process
 management commands are break-glass recovery, not a second transport.
@@ -993,7 +998,9 @@ reporting reads "Stopped early" before HQ ends it and after. A run's report writ
 playbook's record: a `status` is refused. Its `events` land on the run's
 result: each task's outcome on one machine, bounded by the contract's
 `RunEvent` and struck of secrets at the bridge's door. Each changed or failed
-one is an audit row under the run's own id that leads back to the ask.
+one is an audit row under the run's own id that leads back to the ask, and
+the run's end is one DONE or FAILED row (`audit.work_ended`), as a job's is,
+never a change to its record's state.
 
 A provider's declaration is Django's. Its controller half is Go, in
 `controller/providers/`: one file set per integration, each registering its
@@ -1428,6 +1435,15 @@ also name the repository its playbooks come from, whose root is an Ansible
 project, and the file holding the token that repository is fetched with.
 Nothing in a claim names any of them.
 
+HQ knows the worker is there by its claims. Each claim of nothing but its
+work records its arrival (`cadence.note_automation`), so a worker that finds
+nothing to take still counts as seen, and never as the controller. One never
+seen, or not seen within two of its timer's floors while it holds no run's
+lease, is absent (`cadence.automation_standing`). Refresh and every
+playbook's run are then refused with the reason, a run or scan already
+waiting reads "Not started", and the finding `automation-worker-absent` says
+how to set one up.
+
 What runs is the procedure its claim names, at the claim's reviewed revision
 (`hq_runner/procedures.py`). Each pass fetches that one commit into a fresh
 directory of its scratch space (`git fetch --depth 1` by the commit's id, then
@@ -1521,7 +1537,21 @@ outside the project. A run that succeeded says what its playbook found or did: t
 set with `ansible.builtin.set_stats` (`per_host: false`), which ansible-runner
 hands over as the `artifact_data` of the `playbook_on_stats` event, each machine
 by name when it is keyed by machine. A playbook that sets none is said by
-its verification, which its checks have just held (`hq_runner/events.py`). A
+its verification, which its checks have just held (`hq_runner/events.py`).
+Beside `result`, the same event carries the playbook's `readings`
+(`{machine: {kind: [record]}}`) and `preview` (`{machine: [line]}`), which
+Ansible merges by machine and the report carries as `stated`; any other stat
+is dropped. Their bounds are the bridge contract's `RunStated`, `StatedText`
+and `StatedBytes`, and the worker keeps each part (one machine's records of
+one kind, one machine's preview) whole or leaves it out and says so in its
+message, never cut down into a wrong reading; HQ refuses a report past them
+whole. Its security property: a run
+states nothing about a machine it was not asked on. The worker drops what a
+playbook stated about any other machine, and HQ refuses a report that names
+one (`controller._hold_stated`), so a compromised worker can misstate only
+the machines of the runs it claims. Both doors strike secrets, the worker as
+it reports and HQ as it settles, and the run keeps what was stated in its
+result, whose kinds of reading the run's page and the `runs` read name. A
 journal names each claim before it is sent and records a run once it starts,
 so a claim retried after a crash is answered the same run, which is reported
 as unknown and never run again. `mise run smoke:runner` runs a real playbook

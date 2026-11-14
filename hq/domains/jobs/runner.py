@@ -9,7 +9,6 @@ silently absent.
 import logging
 import threading
 from collections.abc import Callable
-from contextlib import AbstractContextManager
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -19,11 +18,11 @@ from django.utils.text import capfirst
 lazy from django.contrib.auth.base_user import AbstractBaseUser
 lazy from django.contrib.auth.models import AnonymousUser
 
-from hq.platform.application.security import JOB_INTERFACE
-from hq.platform.core.attribution import door_of_its_own
-from hq.platform.core.audit import record_event
+from hq.platform.application.security import CLI_ACTOR, JOB_INTERFACE
+from hq.platform.core.attribution import OperationContext, own_operation
+from hq.platform.core.audit import Outcome, tallied, work_ended
 from hq.platform.core.database import gives_way
-from hq.platform.core.facets import Counts, Failure, Timing
+from hq.platform.core.facets import Counts, Failure
 from hq.platform.core.models import AuditLog
 from hq.platform.core.outbound import OutboundInRequest, off_request, serving_request
 from hq.platform.core.outside_requests import connections_of_its_own
@@ -156,7 +155,7 @@ def _launch(job: Job, work: Callable[[Progress], dict[str, Any]]) -> None:
     except RuntimeError:
         logger.exception("jobs.not_started job=%s kind=%s", job.pk, job.kind)
         ended = timezone.now()
-        _audit(job, AuditLog.Action.FAILED, "could not start", {}, ended)
+        _end(job, "could not start", ended, ok=False)
         Job.objects.filter(pk=job.pk).update(state=Job.State.FAILED, error=NOT_STARTED, finished_at=ended)
         raise
 
@@ -210,7 +209,7 @@ def _work(job_id, work: Callable[[Progress], dict[str, Any]]) -> None:
     # raise on the failure path.
     # An import writes transaction after transaction; this lets the
     # controller's report and a person saving a form have the lock between them.
-    with gives_way(), _its_operation(job):
+    with gives_way(), own_operation(job, requester=_requester(job)), tallied() as written:
         # The audit row is written before the state changes, both ways round:
         # anything that sees a job finished can rely on the record of how it
         # finished already existing. The other order is a race that hides,
@@ -222,16 +221,16 @@ def _work(job_id, work: Callable[[Progress], dict[str, Any]]) -> None:
             # what it changed. Reported as a facet so `counts.created` means
             # the same here as it does for an infrastructure reconcile.
             counts = _counts(result)
-            changed = _changed(job, counts)
+            changed = _changed(counts, written)
             # The rest of the result is recorded beside the counts, which say their own numbers.
             counted = counts[0].as_metadata() if counts else {}
-            _audit(
+            _end(
                 job,
-                AuditLog.Action.DONE if changed or not _routine(job) else AuditLog.Action.OBSERVED,
                 "finished" if changed else "finished with nothing to change",
-                {key: value for key, value in result.items() if key not in counted},
                 ended,
-                facets=counts,
+                routine=not changed and _routine(job),
+                facets=tuple(counts),
+                detail={key: value for key, value in result.items() if key not in counted},
             )
             Job.objects.filter(pk=job_id).update(
                 state=Job.State.SUCCEEDED,
@@ -256,7 +255,7 @@ def _work(job_id, work: Callable[[Progress], dict[str, Any]]) -> None:
 
 def _fail(job: Job, error: str, failure: Failure) -> None:
     ended = timezone.now()
-    _audit(job, AuditLog.Action.FAILED, "failed", {}, ended, facets=(failure,))
+    _end(job, "failed", ended, ok=False, facets=(failure,))
     Job.objects.filter(pk=job.pk).update(
         state=Job.State.FAILED,
         error=error,
@@ -296,52 +295,37 @@ def _routine(job: Job) -> bool:
     return job.requested_by_id is None and job.actor == SCHEDULER
 
 
-def _changed(job: Job, counts: list[Counts]) -> bool:
-    """Whether ``job``'s work changed anything: a row recorded inside its
+def _changed(counts: list[Counts], written: list[AuditLog]) -> bool:
+    """Whether a job's work changed anything: a row ``written`` in its
     operation, or a count of records it made or changed."""
 
-    counted = any((count.created or 0) + (count.updated or 0) + (count.deleted or 0) for count in counts)
-    return counted or AuditLog.objects.filter(operation_id=str(job.pk)).exists()
+    return bool(written) or any((count.created or 0) + (count.updated or 0) + (count.deleted or 0) for count in counts)
 
 
-def _its_operation(job: Job) -> AbstractContextManager[None]:
-    """The operation every row of ``job``'s work and its ending is part of, under the job's own id
-    and its requester, whoever is bound where it runs."""
+def _requester(job: Job) -> OperationContext:
+    """Whom ``job``'s rows are, wherever it runs or ends: whoever asked for it."""
 
-    return door_of_its_own(
+    return OperationContext(
         interface=JOB_INTERFACE,
-        actor=job.actor or "local-operator",
+        actor=job.actor or CLI_ACTOR,
         operation=job.kind,
-        operation_id=str(job.pk),
+        person=lambda: job.requested_by,
     )
 
 
-def _audit(job: Job, action: str, outcome: str, detail: dict, ended, facets=()) -> None:
-    """Record how the job ended, attributed to whoever asked for it: the job's
-    one row in the log, which the rows its work wrote sit beneath."""
+def _end(job: Job, said: str, ended, *, ok: bool = True, **outcome: Any) -> None:
+    """Record how ``job`` ended, under its own operation: bound here too, since
+    a job found lost, or one whose thread never started, ends outside its
+    work's binding."""
 
     # Measured from the in-memory job's start: the row is not marked finished
     # until after this returns.
     seconds = (ended - job.started_at).total_seconds() if job.started_at else 0
     took = f" in {seconds:.0f}s" if seconds >= 1 else ""
-    # Bound here too: a job found lost, or one whose thread never started,
-    # ends outside its work's binding.
-    with _its_operation(job):
-        record_event(
-            action=action,
-            obj=job,
-            type_label=AUDIT_TYPE,
-            # The row names the job already, so the message is how it ended.
-            message=f"{capfirst(outcome)}{took}",
-            # Timing as a facet rather than baked into the message, so how long a
-            # job takes is a number that can be compared with the last one rather
-            # than a phrase that has to be read.
-            facets=(Timing(duration_ms=round(seconds * 1000)), *facets),
-            # The job is the row's object and its kind the operation, so neither is restated.
-            metadata=detail,
-            # Passed explicitly: `record_event` otherwise reads the current
-            # request's user, and there is no request on a worker thread.
-            user=job.requested_by,
+    with own_operation(job, requester=_requester(job)):
+        # The row names the job already, so the message is how it ended.
+        work_ended(
+            job, Outcome(message=f"{capfirst(said)}{took}", seconds=seconds, ok=ok, filed_under=AUDIT_TYPE, **outcome)
         )
 
 
@@ -382,12 +366,12 @@ def reap(kind: str | None = None) -> int:
     # Audited like any other ending: nothing was watching when this died, so
     # this is the only record of it there will be.
     for job in lost:
-        _audit(
+        _end(
             job,
-            AuditLog.Action.FAILED,
             "stopped early",
-            {"last_said": job.note, "last_beat": job.heartbeat_at.isoformat() if job.heartbeat_at else None},
             ended,
+            ok=False,
+            detail={"last_said": job.note, "last_beat": job.heartbeat_at.isoformat() if job.heartbeat_at else None},
         )
     return Job.objects.filter(pk__in=[job.pk for job in lost]).update(
         state=Job.State.LOST,

@@ -9,7 +9,6 @@ django template sets) is run the same way, its database a new file in that
 directory. An explicit setting still wins.
 """
 
-import atexit
 import contextlib
 import fcntl
 import os
@@ -17,6 +16,7 @@ import shutil
 import tempfile
 import time
 from pathlib import Path
+lazy from multiprocessing.util import Finalize
 
 # Short, since a socket a test binds inside a run's directory must fit the 104
 # bytes macOS gives a socket's path.
@@ -95,7 +95,11 @@ def _run_directory() -> Path:
     run = Path(os.environ[RUN])
     with contextlib.suppress(OSError):
         if (run / OWNER).read_text() == str(os.getpid()):
-            atexit.register(shutil.rmtree, run, ignore_errors=True)
+            # multiprocessing removes its own directory (pymp-*, the
+            # forkserver's) inside this one in an exit finalizer at priority
+            # -100, which runs after any atexit hook made here, so this one
+            # is a finalizer of its own that runs after it.
+            Finalize(None, shutil.rmtree, args=(run,), kwargs={"ignore_errors": True}, exitpriority=-101)
     tempfile.tempdir = str(run)
     return run
 

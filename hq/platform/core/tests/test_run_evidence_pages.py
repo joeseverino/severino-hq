@@ -26,7 +26,7 @@ def _evidence(html, section: str = "") -> dict[str, list[str]]:
 
     found: dict[str, list[str]] = {}
     for element in all_elements(html):
-        if "row-below" not in element.classes or not element.beneath:
+        if "row-below" not in element.classes:
             continue
         if section and not any(ancestor.attrs.get("id") == section for ancestor in element.ancestors):
             continue

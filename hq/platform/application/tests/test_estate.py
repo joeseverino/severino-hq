@@ -14,7 +14,6 @@ from hq.domains.control_plane.models import (
     DashboardConfiguration,
     ManagedResource,
     ProviderConnection,
-    WeatherObservation,
 )
 from hq.platform.application.derivation_testing import uncached
 from hq.platform.application.security import cli_principal
@@ -22,7 +21,8 @@ from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
-from ..attention import infrastructure, tailnet
+from .. import readings
+from ..attention import infrastructure
 from ..command_center import command_center
 from ..connection_lifecycle import Lifecycle
 from ..estate import Estate, attention as estate_attention, cards, estate_reading, overview
@@ -368,7 +368,7 @@ class EdgeCertificateExpiryTests(TestCase):
 
     def items(self):
         with projection_scope():
-            return [item for item in estate_attention() if item.eyebrow == "Certificates"]
+            return [item for item in infrastructure() if "certificate-expiring:resource:" in item.key]
 
     def test_an_edge_certificate_outside_the_window_is_not_the_next_expiry(self):
         self.edge(40)
@@ -379,7 +379,7 @@ class EdgeCertificateExpiryTests(TestCase):
         self.assertNotIn("status", figure)
         self.assertEqual(self.items(), [])
 
-    def test_an_edge_certificate_inside_the_window_says_renewal_failed(self):
+    def test_an_edge_certificate_inside_the_window_is_the_next_expiry_and_the_finding_s_to_raise(self):
         self.edge(10)
 
         figure = self.figure()
@@ -387,10 +387,7 @@ class EdgeCertificateExpiryTests(TestCase):
         self.assertIn("example.com", figure["detail"])
         self.assertEqual(figure["status"], "attention")
         self.assertEqual(figure["url"], reverse("zones:detail", args=["example.com"]))
-        (item,) = self.items()
-        self.assertEqual(item.status, "attention")
-        self.assertIn("example.com", item.title)
-        self.assertEqual(item.subject.url, reverse("zones:detail", args=["example.com"]))
+        self.assertEqual(self.items(), [])
 
 
 def in_days(days):
@@ -460,14 +457,10 @@ class CertificateListTests(TestCase):
 
         with projection_scope():
             found = estate_reading().certificates
-            items = [item for item in estate_attention() if item.eyebrow == "Certificates"]
 
         self.assertEqual(
             sorted((item.subject, item.days) for item in found), [("example.com", 5), ("www.example.com", -1)]
         )
-        self.assertEqual(len({item.key for item in items}), len(items))
-        (held_twice,) = [item for item in items if item.title.startswith("example.com ")]
-        self.assertEqual(held_twice.value, "5")
 
 
 class StaleGlanceTests(TestCase):
@@ -476,17 +469,15 @@ class StaleGlanceTests(TestCase):
         machine_spec = ManagedResource.objects.create(key="example-host", kind="machine", spec={"name": "example-host"})
         from hq.domains.control_plane.models import DashboardMachine
 
-        from .. import readings
-
         DashboardMachine.objects.create(machine=machine_spec, position=0)
         readings.record(
             readings.machine_telemetry("example-host"),
             {"metrics": [{"label": "CPU", "value": "4%"}]},
             observed_at=timezone.now() - timedelta(days=26),
         )
-        WeatherObservation.objects.create(
-            point="41.8781,-87.6298",
-            payload={"metrics": [{"label": "Now", "value": "Clear"}]},
+        readings.record(
+            readings.weather("41.8781,-87.6298"),
+            {"metrics": [{"label": "Now", "value": "Clear"}]},
             observed_at=timezone.now() - timedelta(minutes=1),
         )
 
@@ -503,9 +494,9 @@ class StaleGlanceTests(TestCase):
         from ..freshness import DASHBOARD_GLANCE, stale_after
 
         DashboardConfiguration.objects.create(pk=1, weather_point="41.8781,-87.6298")
-        WeatherObservation.objects.create(
-            point="41.8781,-87.6298",
-            payload={"metrics": [{"label": "Now", "value": "Clear"}]},
+        readings.record(
+            readings.weather("41.8781,-87.6298"),
+            {"metrics": [{"label": "Now", "value": "Clear"}]},
             observed_at=timezone.now() - stale_after(DASHBOARD_GLANCE) + timedelta(minutes=1),
         )
 
@@ -517,12 +508,10 @@ class StaleGlanceTests(TestCase):
 class OldGlanceTests(TestCase):
     def test_an_old_reading_stays_on_the_dashboard_with_its_age(self):
         DashboardConfiguration.objects.create(pk=1, weather_point="41.8781,-87.6298")
-        WeatherObservation.objects.update_or_create(
-            point="41.8781,-87.6298",
-            defaults={
-                "payload": {"metrics": [{"label": "Now", "value": "Clear"}]},
-                "observed_at": timezone.now() - timedelta(days=20),
-            },
+        readings.record(
+            readings.weather("41.8781,-87.6298"),
+            {"metrics": [{"label": "Now", "value": "Clear"}]},
+            observed_at=timezone.now() - timedelta(days=20),
         )
         weather = next(panel for panel in dashboard_panels() if panel["id"] == "weather")
 
@@ -530,63 +519,6 @@ class OldGlanceTests(TestCase):
 
 
 class ActionItemTests(TestCase):
-    def test_an_update_names_the_version_other_devices_run(self):
-        devices(
-            device("example-host", update_available=True, client_version="1.102.3-t0abc"),
-            device("example-laptop", client_version="1.102.4-t0def"),
-        )
-
-        (item,) = [item for item in tailnet() if item.key == "tailnet-update:example-host"]
-
-        self.assertIn("1.102.3", item.body)
-        self.assertIn("1.102.4", item.body)
-        self.assertEqual(item.subject.url, reverse("control_plane:machine", args=["example-host"]))
-
-    def test_every_tailnet_item_names_the_machine_as_its_page_does(self):
-        """A device the tailnet calls by its owner's label is one HQ lists
-        under its own name: the item is that machine's, key and links alike."""
-
-        declared("example-laptop", "machine", {"name": "example-laptop", "addresses": ["100.64.0.5"]})
-        devices(
-            device(
-                "Someone’s Laptop",
-                addresses=["100.64.0.5"],
-                update_available=True,
-                authorized=False,
-                lock_error="node key not signed",
-                advertised_routes=["192.0.2.0/24"],
-                key_expires=(timezone.now() + timedelta(days=3)).isoformat(),
-            )
-        )
-        page = reverse("control_plane:machine", args=["example-laptop"])
-
-        items = [item for item in tailnet() if item.key.startswith("tailnet-")]
-
-        self.assertEqual(machine("example-laptop").aliases, ("Someone’s Laptop",))
-        self.assertGreaterEqual(len(items), 3)
-        for item in items:
-            with self.subTest(item.key):
-                self.assertEqual(item.key.split(":", 1)[1], "example-laptop")
-                self.assertEqual(item.subject.url, page)
-                self.assertNotIn("Someone", item.title)
-
-    def test_a_release_with_a_trailing_zero_is_the_same_release(self):
-        devices(
-            device("example-host", update_available=True, client_version="1.80"),
-            device("example-laptop", client_version="1.80.0"),
-        )
-
-        (item,) = [item for item in tailnet() if item.key == "tailnet-update:example-host"]
-
-        self.assertNotIn("1.80.0", item.body)
-
-    def test_an_update_with_no_newer_device_says_what_runs(self):
-        devices(device("example-host", update_available=True, client_version="1.102.3"))
-
-        (item,) = [item for item in tailnet() if item.key == "tailnet-update:example-host"]
-
-        self.assertIn("1.102.3", item.body)
-
     def test_a_connection_that_does_not_answer_is_an_action_item(self):
         connection("example-ssh", reachable=False, detail="Timed out")
 
@@ -680,12 +612,21 @@ class ActionItemTests(TestCase):
             )
 
         with projection_scope():
-            found = [item for item in estate_attention() if item.eyebrow == "Certificates"]
+            found = [item for item in infrastructure() if "certificate-expiring:resource:" in item.key]
 
         self.assertEqual(len(found), 1)
         self.assertEqual(found[0].status, "serious")
         self.assertIn("soon-cert expires in", found[0].title)
         self.assertEqual(found[0].subject.url, reverse("control_plane:detail", args=["soon-cert"]))
+        self.assertIn(
+            f"{reverse('command', kwargs={'name': 'certificate.renew'})}?target=soon-cert",
+            [action.url for step in found[0].workflow.steps for action in step.actions],
+        )
+        # The card leads with the certificate's page, as it did before it was a finding.
+        self.assertEqual(
+            (found[0].action, found[0].url),
+            ("Open certificate", reverse("control_plane:detail", args=["soon-cert"])),
+        )
 
     def test_the_action_items_page_links_each_subject(self):
         user = get_user_model().objects.create_superuser("operator", password="x" * 20)

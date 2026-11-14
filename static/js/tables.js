@@ -31,10 +31,12 @@
   // nothing moves once a page is drawn.
   const REGION = ".table-scroll";
   const headingsOf = (table) => [...table.querySelectorAll(":scope > thead > tr:last-child > th")];
-  // The order the table's columns leave in, by place.
+  // The order the table's columns leave in, by place. A column of a row's
+  // controls never leaves: in a narrow box they stand beneath the row's words
+  // (`data-beneath`, table_cells), so a reader never opens a row to find them.
   const dropOrder = (table) => headingsOf(table)
     .map((heading, place) => [Number(heading.dataset.drop) || 0, place, heading])
-    .filter(([rank, , heading]) => rank && !heading.hasAttribute("data-blank-column"))
+    .filter(([rank, , heading]) => rank && !heading.matches("[data-blank-column], [data-beneath]"))
     .sort((left, right) => left[0] - right[0] || right[1] - left[1])
     .map(([, place]) => place);
   // How far each table has given way: how many of its columns have left, one
@@ -433,7 +435,11 @@
   };
   const heldColumns = (table) => table.querySelector(":scope > colgroup[data-held]");
   const holdColumns = (table) => {
-    if ("rowsHeld" in table.dataset) return;
+    // A table whose rows stack in its narrow box (a column of controls,
+    // `data-beneath`, tables.css), or whose rows are their words and their
+    // controls alone, shares no columns between its rows to hold.
+    const lines = ":has(> * > tr > [data-beneath]):is([data-narrow], :not(:has(> * > tr > :nth-child(3))))";
+    if ("rowsHeld" in table.dataset || table.matches(lines)) return;
     // A column that left draws no box, and a column of the group stands for
     // each column that is drawn, in order.
     /* eslint-disable no-restricted-syntax -- every column at the width the reader saw while a row is open */

@@ -1,5 +1,4 @@
 from dataclasses import replace
-from datetime import timedelta
 from unittest import mock
 
 from django.contrib.auth import get_user_model
@@ -11,8 +10,12 @@ from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 from hq_sdk.testing import plain
 
-from ..containers import BEHIND, CURRENT, UNKNOWN, VULNERABLE, Running, Tally, attention, containers, tally
+from ..attention import infrastructure
+from ..container_findings import ADVISORY, UPDATE
+from ..containers import BEHIND, CURRENT, UNKNOWN, VULNERABLE, Running, Tally, containers, tally
+from ..derivation_testing import uncached
 from ..exposure import OPEN, PRIVATE, Exposure, RouteExposure, front_door_names, listening_ports
+from ..findings import rule_of
 from ..github_estate import Repository
 from .markup import elements, text
 
@@ -21,9 +24,17 @@ def exposed(level):
     """Every container reached at ``level``, through one synthetic name."""
 
     return mock.patch(
-        "hq.platform.application.container_attention.exposure_of_container",
+        "hq.platform.application.container_findings.exposure_of_container",
         return_value=Exposure((RouteExposure("app.example.com", level, "", ""),)),
     )
+
+
+def queued(rule=""):
+    """The containers' findings as the queue carries them, each keyed by its rule."""
+
+    with uncached():
+        found = [item for item in infrastructure() if rule_of(item.key) in {ADVISORY, UPDATE}]
+    return tuple(item for item in found if not rule or rule_of(item.key) == rule)
 
 
 def inventory(kind, records):
@@ -135,22 +146,25 @@ class StandingTests(TestCase):
 
         self.assertEqual(self.standings()["web"].state, UNKNOWN)
 
-    def test_an_advisory_is_one_item_per_version_and_updates_are_one_item(self):
+    def test_an_advisory_and_an_update_are_each_one_item_about_their_container(self):
         estate(advisories=[HIGH])
 
         with exposed(OPEN):
-            items = {item.key: item for item in attention()}
+            (advisory,) = queued(ADVISORY)
+            (update,) = queued(UPDATE)
 
-        self.assertEqual(set(items), {"container-advisory:ghcr.io/example/app:v1.2.0", "container-updates"})
-        advisory = items["container-advisory:ghcr.io/example/app:v1.2.0"]
-        self.assertEqual((advisory.status, advisory.magnitude), ("serious", 1))
+        self.assertEqual((advisory.part, advisory.subject.label, advisory.status), ("app", "example-box", "serious"))
         self.assertIn("Fixed in 1.2.1", advisory.body)
         # The body is the images. What to do is a step, and why HQ does not
         # do it is one sentence that names no machine.
-        self.assertEqual(items["container-updates"].body, "example/kuma:1 to 2.")
-        steps = items["container-updates"].workflow.steps
+        self.assertEqual((update.part, update.body), ("kuma", "example/kuma:1 to 2."))
+        # A card says how old its reading is, and leads with the containers' page.
+        self.assertIsNotNone(update.observed_at)
+        self.assertEqual((update.action, update.url), ("Open containers", reverse("control_plane:containers")))
+        self.assertIn("v1.3.0", advisory.action)
+        steps = update.workflow.steps
         self.assertEqual(
-            [(step.phase, step.summary) for step in steps],
+            [(step.phase, step.summary) for step in steps if step.phase in ("do", "cannot")],
             [
                 (
                     "do",
@@ -162,18 +176,6 @@ class StandingTests(TestCase):
                 ("cannot", "HQ cannot apply an update itself yet."),
             ],
         )
-
-    def test_every_item_is_as_old_as_the_oldest_reading_it_is_drawn_from(self):
-        estate(advisories=[HIGH])
-        swept = timezone.now() - timedelta(hours=3)
-        ProviderInventory.objects.filter(kind="portainer.container").update(observed_at=swept)
-
-        with exposed(OPEN):
-            items = attention()
-
-        self.assertTrue(items)
-        for item in items:
-            self.assertLessEqual(item.observed_at, swept, item.key)
 
     def test_an_update_names_the_command_when_its_compose_project_was_read(self):
         estate()
@@ -200,7 +202,7 @@ class StandingTests(TestCase):
             ],
         )
 
-        (item,) = [item for item in attention() if item.key == "container-updates"]
+        (item,) = [item for item in queued(UPDATE) if item.part == "kuma"]
 
         (step,) = [step for step in item.workflow.steps if step.phase == "run"]
         self.assertEqual(
@@ -223,7 +225,7 @@ class StandingTests(TestCase):
 
         estate(advisories=[HIGH])
 
-        for item in attention():
+        for item in queued():
             if item.workflow is None:
                 continue
             said = " ".join([item.body, *(step.summary for step in item.workflow.steps)])
@@ -235,15 +237,14 @@ class StandingTests(TestCase):
     def test_many_advisories_are_one_thing_to_do(self):
         estate(advisories=[HIGH, {**HIGH, "id": "GHSA-high-2"}, {**HIGH, "id": "GHSA-high-3"}])
 
-        (advisory,) = [item for item in attention() if item.key.startswith("container-advisory:")]
-
-        self.assertEqual(advisory.magnitude, 1)
+        with exposed(OPEN):
+            self.assertEqual(len(queued(ADVISORY)), 1)
 
     def test_an_advisory_no_release_fixes_yet_is_said_not_raised(self):
         estate(advisories=[HIGH], app_tags=("v1.2.0",))
 
         with exposed(OPEN):
-            (advisory,) = [item for item in attention() if item.key.startswith("container-advisory:")]
+            (advisory,) = queued(ADVISORY)
 
         self.assertEqual(advisory.status, "attention")
         self.assertIn("no release fixes it yet", advisory.title)
@@ -252,7 +253,7 @@ class StandingTests(TestCase):
         estate(advisories=[HIGH])
 
         def status():
-            (advisory,) = [item for item in attention() if item.key.startswith("container-advisory:")]
+            (advisory,) = queued(ADVISORY)
             return advisory.status, advisory.body
 
         with exposed(OPEN):
@@ -265,14 +266,14 @@ class StandingTests(TestCase):
             unrouted = status()
 
         self.assertEqual(opened[0], "serious")
-        self.assertIn("open to the internet as app.example.com", opened[1])
+        self.assertIn("Open to the internet as app.example.com", opened[1])
         self.assertEqual(private[0], "attention")
         # A gap in what HQ read is not evidence nothing reaches it.
         self.assertEqual(unknown[0], "serious")
-        self.assertIn("not known who can reach it", unknown[1])
+        self.assertIn("Not known who can reach it", unknown[1])
         # Nothing routes to it, and HQ read everything that could: information.
         self.assertEqual(unrouted[0], "neutral")
-        self.assertIn("not reachable", unrouted[1])
+        self.assertIn("Not reachable", unrouted[1])
 
     def test_nothing_known_asks_for_nothing(self):
         estate(app_tags=("v1.2.0",))
@@ -285,7 +286,7 @@ class StandingTests(TestCase):
             ],
         )
 
-        self.assertEqual(attention(), ())
+        self.assertEqual(queued(), ())
 
 
 class ToneTests(TestCase):
@@ -501,6 +502,33 @@ class PageTests(TestCase):
         self.assertEqual(response.context["standings"]["kuma"].latest, "2")
         self.assertIn("2 available", text(response))
         self.assertIn("1 known", plain(response.content))
+
+    def test_a_machine_draws_each_problem_where_its_rule_declares(self):
+        from types import SimpleNamespace
+
+        from ..machine_context import problems_by_part
+
+        machine = SimpleNamespace(url="/machines/example-box/", containers=("kuma",), presence=object())
+        keys = {
+            "restart": "hq.infrastructure:finding:reboot-pending:machine:example-box",
+            "key": "hq.infrastructure:finding:tailnet-key-expiring:machine:example-box",
+            "image": "hq.infrastructure:finding:container-image-update:machine:example-box:kuma",
+        }
+        items = [{"key": key, "status": "attention"} for key in keys.values()]
+        with mock.patch("hq.platform.application.machine_context.problems_about", return_value=items):
+            drawn = {part: [item["key"] for item in found] for part, found in problems_by_part(machine, None).items()}
+
+        self.assertEqual(drawn, {"page": [keys["restart"]], "containers": [keys["image"]], "tailnet": [keys["key"]]})
+
+    def test_a_machine_draws_a_containers_update_under_its_containers(self):
+        estate()
+
+        with uncached():
+            response = self.client.get(reverse("control_plane:machine", args=["example-box"]))
+
+        drawn = {part: [item["key"] for item in items] for part, items in response.context["problems_in"].items()}
+        (update,) = [key for keys in drawn.values() for key in keys if key.endswith(":kuma") and "update" in key]
+        self.assertIn(update, drawn["containers"])
 
     def test_a_container_running_an_image_by_id_stays_listed_and_says_why(self):
         inventory("portainer.container", [running("orphan", "sha256:0123456789abcdef0123")])

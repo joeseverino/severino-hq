@@ -1,16 +1,22 @@
-"""Every real-browser test is run by a browser gate: a class no task names never
-runs. The gates' `--fallback-face` still finds the face it withholds."""
+"""Every real-browser test is run by a browser gate: a class no task runs never
+runs, and CI's shares of a gate run all of it. The gates' `--fallback-face`
+still finds the face it withholds."""
 
 import os
+import shlex
 import tomllib
+import unittest
 from collections import Counter
 from pathlib import Path
 from typing import Any
 from unittest import mock
 
 from django.test import SimpleTestCase, tag
+from django.test.runner import DiscoverRunner
 
 from hq.platform.application.tests.facts import grouped, scan
+from hq.platform.core.test_runner import in_this_share, tests_in
+from hq.platform.core.tests.browser import shards
 from hq.platform.core.tests.browser.serving import in_the_face
 from hq.platform.core.tests.browser_modules import browser_modules
 from tests.mise_tasks import body, mise_tasks
@@ -75,37 +81,65 @@ def browser_tasks() -> dict[str, dict]:
     return {name: task for name, task in mise_tasks().items() if name.startswith("browser:")}
 
 
-def browser_labels() -> set[str]:
-    """Every word the ``browser:*`` tasks run."""
+def engine(task: dict) -> str:
+    """The engine a browser task draws in, as `BrowserGate` reads it from the environment."""
 
-    return {word for task in browser_tasks().values() for word in body(task).split()}
+    return dict(entry.split("=", 1) for entry in task["env"] if "=" in entry).get("HQ_BROWSER_ENGINE", "webkit")
+
+
+def gate_tests(task: dict) -> list[unittest.TestCase]:
+    """The tests a Django browser task runs, loaded as its ``manage.py test`` loads them."""
+
+    words = shlex.split(body(task))
+    labels = [word for word in words if word.startswith("hq.")]
+    pattern = words[words.index("--pattern") + 1] if "--pattern" in words else None
+    return list(tests_in(DiscoverRunner(pattern=pattern, verbosity=0).build_suite(labels)))
+
+
+def django_browser_tasks() -> dict[str, dict]:
+    return {name: task for name, task in browser_tasks().items() if "manage.py test" in body(task)}
 
 
 @tag("source", "tree")
 class BrowserGateTaskTests(SimpleTestCase):
-    def test_every_browser_test_class_is_named_by_a_browser_task(self):
-        classes = gate_classes()
-        labels = browser_labels()
-
+    def test_every_browser_test_class_runs_in_webkit_and_another_engine_runs_only_what_webkit_runs(self):
+        classes = set(gate_classes())
         self.assertTrue(classes)
-        unnamed = sorted(name for name, module in classes.items() if name not in labels and module not in labels)
+        ran = {name: {test.id() for test in gate_tests(task)} for name, task in django_browser_tasks().items()}
+        webkit = set().union(*(ids for name, ids in ran.items() if engine(browser_tasks()[name]) == "webkit"))
+        run_classes = {test_id.rsplit(".", 1)[0] for test_id in webkit}
         self.assertEqual(
-            unnamed, [], "no browser:* task runs these: name each in one leg's vars.classes in mise-tasks/browser.toml"
+            sorted(classes - run_classes), [], "no WebKit browser task runs these: see mise-tasks/browser.toml"
         )
-        # Once per engine: a WebKit leg names its classes, and a leg in
-        # another engine runs a WebKit leg rather than naming any.
-        named = Counter(
-            name
-            for task in browser_tasks().values()
-            for name, module in classes.items()
-            if {name, module} & set(body(task).split())
-        )
-        self.assertEqual(sorted(name for name, count in named.items() if count > 1), [], "two browser tasks run these")
-        run = Counter(
-            word for name, task in browser_tasks().items() if "chromium" in name for word in body(task).split()
-        )
-        legs = [name for name in browser_tasks() if name.startswith("browser:layout-") and "chromium" not in name]
-        self.assertEqual({leg: run[leg] for leg in legs}, dict.fromkeys(legs, 1), "Chromium runs each layout leg once")
+        for name, ids in ran.items():
+            if engine(browser_tasks()[name]) != "webkit":
+                with self.subTest(task=name):
+                    self.assertTrue(ids, "a leg in another engine names the tests it runs")
+                    self.assertEqual(sorted(ids - webkit), [], "no WebKit leg runs these")
+
+    def test_the_shares_of_a_split_gate_run_the_whole_gate_each_page_and_test_once(self):
+        """However many shares CI splits a gate into, each test that is not a
+        sweep runs in exactly one, and a sweep in all, each reading a share of
+        its pages that no other reads, together every page."""
+
+        for name, task in django_browser_tasks().items():
+            tests = gate_tests(task)
+            for total in range(1, 13):
+                with self.subTest(task=name, shares=total):
+                    shares = []
+                    for index in range(1, total + 1):
+                        with mock.patch.dict(os.environ, {shards.VARIABLE: f"{index}/{total}"}):
+                            shares.append({test.id() for test in tests if in_this_share(test)})
+                    sweeping = {test.id() for test in tests if shards.sweeps(test)}
+                    counted = Counter(test_id for share in shares for test_id in share)
+                    self.assertEqual(set(counted), {test.id() for test in tests})
+                    self.assertEqual(
+                        {test_id for test_id, count in counted.items() if count != 1}, sweeping if total > 1 else set()
+                    )
+                    self.assertTrue(all(counted[test_id] == total for test_id in sweeping))
+                    for test_id in sweeping:
+                        pages = [shards.share(range(50), test_id, (index, total)) for index in range(1, total + 1)]
+                        self.assertEqual(sorted(page for share in pages for page in share), list(range(50)))
 
     def test_a_browser_gate_s_template_restates_django_s_env(self):
         """A template extends none, so the browser gate template carries the

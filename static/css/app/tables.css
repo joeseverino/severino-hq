@@ -142,6 +142,11 @@
 @container style(--box: narrow) {
   .data-table > tbody td[data-long]::before { inline-size: min(16ch, var(--hold)); }
 }
+/* A row's words beside its controls (`data-words`, table_cells.ROW_WORDS) keep a line of `--row-words`: words that fit one stay on it and longer ones hold out for it, so a table with no room for both gives way (tables.js), or scrolls with no script, rather than read a few words a line beside a column of buttons. A narrow box has no column left to give, so there the floor would only push the table past its region. */
+@container not style(--box: narrow) {
+  .data-table > tbody > tr > :is(td, th)[data-words="line"] { white-space: nowrap; }
+  .data-table > tbody > tr > :is(td, th)[data-words="floor"]::before { content: ""; display: block; inline-size: var(--row-words); }
+}
 /* Outside a narrow box the columns showing have the room they ask (tables.js), so such a line keeps it. */
 @container style(--box: whole) {
   /* The region wraps what such a cell says in one `.kept-line`, as wide as its line up to the share and the icon it opens with (`--hang`, figures.css); an identifier in it breaks past the share, a pill or a time never wraps. */
@@ -216,6 +221,8 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 .data-table :is(td.row-actions, tbody > tr > [data-kind="control"]):has(> :is(.btn, .icon-link, form, [data-ask])) > :is(.btn, .icon-link, form, [data-ask]),
 .data-table :is(td.row-actions, tbody > tr > [data-kind="control"]) > [data-ask] > .btn { vertical-align: top; translate: none; }
 .data-table td.row-actions > * + * { margin-inline-start: var(--space-4); }
+/* A row with nothing to press gives its words the room the cell's padding would keep. */
+.data-table td.row-actions:not(:has(> *)) { padding-inline: 0; }
 /* An ask's controls flow as words do in a cell (partials/_ask.html), so its own line there would break theirs and stand the next control under it. The cell keeps the line under all its controls instead, and what the ask says stands in it out of the flow, as wide as the cell and asking it for no width, so a press moves nothing. */
 .data-table td:has(> [data-ask]) { position: relative; padding-block-end: calc(var(--row-pad) + 1lh); }
 .data-table td > [data-ask] > :has(> [data-ask-note]) { position: absolute; inset-inline: var(--space-6); inset-block-end: var(--row-pad); }
@@ -227,6 +234,33 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 .data-table > tbody > tr > [data-kind="control"] > :is(a, button, .btn, form),
 .data-table > tbody > tr > [data-kind="control"] > [data-ask] > [data-ask-button] { vertical-align: top; translate: 0 calc(var(--row-line) / 2 - 50%); }
 .data-table > tbody > tr > [data-kind="control"] > :is(a, button, .btn, form) + :is(a, button, .btn, form) { margin-inline-start: var(--space-4); }
+/* A row's first line (`row-line`) is its title, then the marks after it (an urgency's pill, a tip's target), each a box of its own, so a mark that no longer fits wraps under the title whole rather than sit inside a wrapped link's box, where it would be no target of its own ("small targets"). */
+.data-table .row-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-3); font-weight: 600; }
+/* What the row says under its title stands as close to it as a line's own leading. */
+.data-table .row-line ~ :is(p, .dot-list) { margin: var(--space-1) 0 0; }
+/* A row's words fill each line they are given, as its title does: WebKit's `pretty` evens the rag of a whole paragraph, which in a cell's measure ends every line short of the room beside it. */
+.data-table > tbody > tr > * :is(p, li, dd) { text-wrap: wrap; }
+/* A table whose rows are their words and their controls alone (the queue) shares no column between its rows: each row is a line of its own, its words taking what its own controls leave and its controls the line beneath where they would leave the words less than `--row-words`, set where the words start. A folded row stays folded. */
+@container not style(--box: narrow) {
+  .data-table:has(> * > tr > [data-beneath]):not(:has(> * > tr > :nth-child(3))) > * > tr:has(> :nth-child(2)):not([data-folded]:not([data-open])) { display: flex; flex-wrap: wrap; }
+  .data-table:has(> * > tr > [data-beneath]):not(:has(> * > tr > :nth-child(3))) > * > tr:has(> :nth-child(2)):not([data-folded]:not([data-open])) > * { min-width: 0; }
+  .data-table:has(> * > tr > [data-beneath]):not(:has(> * > tr > :nth-child(3))) > * > tr:has(> :nth-child(2)):not([data-folded]:not([data-open])) > :first-child { flex: 1 0 var(--row-words); box-sizing: content-box; }
+  .data-table:has(> * > tr > [data-beneath]):not(:has(> * > tr > :nth-child(3))) > * > tr:has(> :nth-child(2)):not([data-folded]:not([data-open])) > [data-beneath] { flex: none; width: auto; }
+  .data-table:has(> * > tr > [data-beneath]):not(:has(> * > tr > :nth-child(3))):has(> tbody > tr > * > [data-row-toggle]) > tbody > tr:has(> .row-gutter) > [data-beneath] { padding-inline-start: var(--row-gutter); }
+}
+/* In a narrow box a row that offers controls stacks, the stacked row of a responsive table: the cells drawn once each, its words (`data-words`, table_cells) taking the first line beside its other values, and its controls (`data-beneath`) the line beneath, start-aligned with the words, each as wide as its label. Only the row is a flex box: the table and its sections stay a table, so each cell is still a cell under its heading (WebKit keeps a table's semantics under a display change from Safari 17), and a row's open line, one cell across, still spans the table. The heading of the controls' column keeps its place on the first line at no width, its words unseen (cuts.css); the heading of each column of words (`data-words`) takes the line's room as its words do, and a row with none gives it to its first cell; words that fit a line grow no wider than they are where longer words in their row take the rest. The controls' line asks the table for no width (`contain: inline-size`), so a long label is cut at the line's edge (cuts.css) rather than widen the table past its region. The cells of the first line are as tall as it is, so a row's tint fills it. */
+@container style(--box: narrow) {
+  .data-table:has(> * > tr > [data-beneath]) > * > tr:has(> :nth-child(2)):not([data-folded]:not([data-open])) { display: flex; flex-wrap: wrap; }
+  .data-table:has(> * > tr > [data-beneath]) > * > tr:has(> :nth-child(2)) > * { flex: none; width: auto; min-width: 0; }
+  .data-table:has(> * > tr > [data-beneath]) > tbody > tr:has(> [data-beneath]) > :not([data-beneath]) { border-bottom: 0; }
+  .data-table:has(> * > tr > [data-beneath]) > * > tr:has(> :nth-child(2)) > [data-words],
+  .data-table:has(> * > tr > [data-beneath]) > * > tr:has(> :nth-child(2)):not(:has(> [data-words])) > :nth-child(1 of :not(.select-column)) { flex: 1 1 0; }
+  .data-table:has(> * > tr > [data-beneath]) > tbody > tr:has(> :nth-child(2)):has(> [data-words="floor"]) > [data-words="line"] { max-width: max-content; }
+  .data-table:has(> * > tr > [data-beneath]) > tbody > tr:has(> :nth-child(2)) > [data-beneath] { display: flex; flex: 1 0 100%; flex-wrap: wrap; align-items: flex-start; gap: var(--space-3); order: 1; contain: inline-size; padding-block-start: 0; text-align: start; white-space: normal; }
+  .data-table:has(> * > tr > [data-beneath]) > tbody > tr:has(> :nth-child(2)) > [data-beneath] > *,
+  .data-table:has(> * > tr > [data-beneath]) > tbody > tr:has(> :nth-child(2)) > [data-beneath] > [data-ask] > [data-ask-button] { margin: 0; translate: none; }
+  .data-table:has(> tbody > tr > * > [data-row-toggle]) > tbody > tr:has(> .row-gutter) > [data-beneath] { padding-inline-start: var(--row-gutter); }
+}
 
 /* A pill fits the cell's line, so a row holding one is no taller than one without. */
 .data-table td .pill { vertical-align: top; line-height: 1.4; }
@@ -405,10 +439,10 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 /* The server draws a toggle in every row that can open; the stylesheet shows it only where the row holds something back now (a dropped column, a part, a cut value, or open already). */
 .data-table tr.is-expanded > * > [data-row-toggle],
 .data-table tr:has(> * .row-more) > * > [data-row-toggle],
-.data-table tr:has(> * .row-below) > * > [data-row-toggle] { display: inline-grid; }
+.data-table tr[data-below] > * > [data-row-toggle] { display: inline-grid; }
 /* The gutter the toggle stands in is kept in every row and the heading of a table where any row opens, so names share one edge; every rule reads only what the server drew and the box's width (`--gutter`), so nothing marked after paint moves a name. */
 .data-table .row-gutter { position: relative; }
-.data-table:is(:has(> tbody > tr.is-expanded), :has(> tbody > tr > * :is(.row-more, .line-rest)), :has(> tbody > tr > * .row-below), :has(> tbody > tr > * > [data-fold-toggle])) > * > tr > .row-gutter { padding-left: var(--row-gutter); --gutter: kept; }
+.data-table:is(:has(> tbody > tr.is-expanded), :has(> tbody > tr > * :is(.row-more, .line-rest)), :has(> tbody > tr[data-below]), :has(> tbody > tr > * > [data-fold-toggle])) > * > tr > .row-gutter { padding-left: var(--row-gutter); --gutter: kept; }
 /* A value found cut opens its row only where the gutter is already kept; elsewhere it reads whole on hover, by the title tables.js gives it (`markCut`). */
 @container style(--gutter: kept) {
   .data-table tr[data-cut] > .row-gutter > [data-row-toggle] { display: inline-grid; }
@@ -462,6 +496,8 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
   .data-table :is(.table-sort-link, time, .date-col, .nowrap, .cell-part, .pill) { white-space: normal; }
   /* A pill that wraps (tight, or in an opened row, below) flows as text: as a flex box its words and an identifier among them are items side by side, each squeezed until it breaks inside a word. Its corners round by half of one line, so it is a capsule on one line and a rounded box on several. */
   .data-table td .pill { display: inline-block; border-radius: calc(.5lh + 2px); }
+  /* A status no longer holds out for its whole pill here, so its column asks for the pill's whole length as a wrapping column does: a fixed width would keep it at its narrowest and hand the room its pill could show to the columns beside it. */
+  .data-table > thead th[data-kind="status"] { width: auto; }
 }
 /* A row's controls side by side are a kept line too, so tight they wrap where the cell is too narrow for them all, each line ending the cell. Only a table the script measured lets them go: in one no script measures, the words beside them wrap first, so controls with room stay on one line. */
 .data-table[data-tight] > tbody > tr > :is(td.row-actions, [data-kind="control"]) { white-space: normal; }
@@ -511,8 +547,7 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 .row-columns dd > .narrow-more:first-child > br:first-child { display: none; }
 /* Where a cell stands, for a part drawn in it to ask (`@container style(--cell: line)`) without naming the table: on its row's own line, or in the line beneath an open row (`open`, above). */
 .data-table > tbody > tr:not(.row-detail) > td { --cell: line; }
-/* What a row keeps for that line at any width (`row-below`): its tall parts, on the name's edge. */
-.data-table > tbody > tr:not(.row-detail) .row-below { display: none; }
+/* What a row keeps for that line at any width (`row-below`, which the server moves there and marks the row `data-below`): its tall parts, on the name's edge. */
 .row-detail .row-below + :is(.row-below, .row-columns) { margin-top: var(--space-5); }
 /* Rows folded under the row that heads them (`data-folds`), shown while it is open; with no script every row shows. In a whole box, rows folded under a row rather than a group's heading, and their open lines, are set in under it. */
 @container style(--box: whole) {
@@ -548,7 +583,7 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 :where(.data-table[data-line="flat"]) .row-columns > dd > .narrow-more { display: contents; }
 @container style(--box: narrow) {
   :where(.data-table[data-line="flat"]) .row-columns > dd { display: grid; grid-template-columns: minmax(0, 1fr); }
-  .data-table[data-line="flat"] .row-columns > dd .btn { justify-content: center; white-space: normal; text-align: center; }
+  .data-table[data-line="flat"] .row-columns > dd .btn { white-space: normal; text-align: center; }
 }
 .data-table .row-detail:hover { background: none; }
 

@@ -34,7 +34,7 @@ plugin = PluginManifest(
     distribution="example-notes",
     source_repository="example/example-notes",
     source_workflow=".github/workflows/admit-plugin.yml",
-    api_version=12,
+    api_version=13,
     integration_provider="example_notes.plugin:integration",
     django_apps=("example_notes",),
     url_prefix="notes/",
@@ -173,7 +173,12 @@ operation as its row's `cause`, so a chain of operations is followed from
 either end. A model whose rows are about another record (an operation on a
 declaration, a decision on one) passes `register_audit(..., subject=...)`, a
 function returning that record's key, so one indexed read of the log's
-`subject` is the record's whole story.
+`subject` is the record's whole story. A change to a row is written by its
+model's registration alone: the code saving it sets `audit_said` on the row
+(`audit_gone` before a delete) for the sentence its row says, and
+`register_audit(..., required=True)` fails the save when its row cannot be
+written. `record_event` is for an act that changes no row: a sign-in, an
+export, a refusal.
 
 Every extension's `.github/workflows/admit-plugin.yml` is the same, because it
 names nothing about the extension:
@@ -910,6 +915,10 @@ the refusal, whose `status` the view answers with, or None when the write ran.
 A post no page is drawn for answers `refusal_response(answer)`: the refusal's
 sentence at its status. A form view whose write is a service call of
 its own inherits `hq_sdk.writes`' mixins, which run it once under the same key.
+A service refuses in words the person reads by raising
+`hq_sdk.capabilities.InputError(sentence)`, a sentence the extension wrote
+(`PLUGIN_API_VERSION` 13); any other exception's text stays in the log, and
+the person reads that the capability could not be executed.
 A test that posts a form without opening its page first sends
 `hq_sdk.testing.form_keyed(data)`.
 
@@ -967,7 +976,7 @@ Script hooks: `data-chart`, `data-sort`, `data-submit-busy`, `data-submit-label`
 | `hand-drawn-empty-state` | An empty state drawn by hand, where the empty state part draws it. | Write `{% include "partials/_empty_state.html" with message="..." %}`. |
 | `hand-drawn-facts` | Label and value facts drawn by hand, where the facts part draws them. | Write `{% facts %}` around each `{% fact "Label" value=... %}`, or `{% facts layout="band" %}` for a band. |
 | `hand-drawn-figure` | A figure drawn by hand, where the figure part draws it. | Write `{% include "partials/_kpi_grid.html" %}` from hq_sdk.ui.Kpi. |
-| `hand-drawn-filter-bar` | A filter bar drawn by hand, where the filter bar part draws it. | Write `{% filter_bar filtered=... clear=... %}`controls`{% summary %}`count`{% endfilter_bar %}`. |
+| `hand-drawn-filter-bar` | A filter bar drawn by hand, where the filter bar part draws it. | Write `{% filter_bar filtered=... clear=... %}`search`{% choices %}`controls`{% summary %}`count`{% endfilter_bar %}`. |
 | `hand-drawn-findings` | A list of findings drawn by hand, where the work queue part draws it. | Write `{% include "partials/_work_queue.html" with items=... %}` from the queue's items (hq_sdk.ui.Insight), with dense=True for problems inside a section. |
 | `hand-drawn-fold` | A fold drawn by hand, where the section part draws it. | Write `{% section "Heading" fold=True %}`body`{% endsection %}`. |
 | `hand-drawn-form` | A form that writes drawn by hand, where the form part draws it. | Write `{% include "partials/_form.html" %}`, or `{% post_button %}` for a single verb. |
@@ -977,6 +986,7 @@ Script hooks: `data-chart`, `data-sort`, `data-submit-busy`, `data-submit-label`
 | `hand-drawn-notice` | A notice drawn by hand, where the notice part draws it. | Write `{% notice %}`body`{% endnotice %}`, with tone= and a `{% title %}` part where it has them. |
 | `hand-drawn-row-actions` | A row's actions drawn by hand, where the row actions part draws them. | Write `{% row_actions actions %}` from hq_sdk.pages.PageAction, which draws the row's cell. |
 | `hand-drawn-row-group` | A group of rows headed by hand, where the row group tag heads it. | Write `{% row_group label count %}`. |
+| `hand-drawn-run-state` | How work stands is drawn by hand, where the ask or the status part draws it. | Draw the work as an Ask (`partials/_ask.html`), or its state with `{% status run.word tone=run.tone data_ask_label=True %}` from job\|job_run. |
 | `hand-drawn-section` | A `<section>` element drawn by hand, where the section part draws it. | Write `{% section "Heading" %}`body`{% endsection %}`, or a `<div>` for one that only groups a layout. |
 | `hand-drawn-split-count` | A count split from its words, where the counted filter writes them as one. | Write {{ n\|counted:"thing" }}, the figure and its words as one, or `{% fact "Label" value=n %}`. |
 | `hand-drawn-split-figure` | A figure apart from its word, where a value filter writes them as one. | Write {{ n\|counted:"thing" }} for a count, or {{ x\|measured:"mi" }} for a unit or a word the count leaves alone ("more"), the figure and its word as one value. |

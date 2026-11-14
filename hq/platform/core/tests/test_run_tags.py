@@ -32,10 +32,12 @@ class RunEvidenceTagTests(SimpleTestCase):
                 events=(
                     {"host": "example-01", "task": "Example task", "outcome": "failed", "message": "Example <b>m</b>"},
                 ),
+                stated=("example.reading", "example.other_reading"),
             )
         )
 
-        self.assertEqual(set(drawn), {"Machines", "Correlation", "Lease", "Tasks"})
+        self.assertEqual(set(drawn), {"Machines", "Correlation", "Lease", "Readings", "Tasks"})
+        self.assertIn("example.other_reading", drawn["Readings"])
         self.assertIn("example-investigation-7", drawn["Correlation"])
         self.assertIn("example-worker", drawn["Lease"])
         self.assertIn("Example task", drawn["Tasks"])

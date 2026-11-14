@@ -13,6 +13,7 @@ from django.views.generic import TemplateView, View
 
 from hq.domains.contacts import inbox
 from hq.platform.application import action_items as queue_state, fragments, getting_started
+from hq.platform.application.asks import AskMixin, Took
 from hq.platform.application.attention import APPROVAL_KEY
 from hq.platform.application.cadence import controller_standing
 from hq.platform.application.calendar import calendar_month, month_of
@@ -26,6 +27,7 @@ from hq.platform.application.glance import (
     DASHBOARD_REFRESH,
     DASHBOARD_REFRESH_STALE,
     DASHBOARD_SETTINGS,
+    asked_refresh,
     dashboard_configuration,
     glance_context,
 )
@@ -243,28 +245,35 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
         return ctx
 
 
-class DashboardGlanceView(View):
+class DashboardGlanceView(AskMixin, View):
+    """The strip, and where a panel's Refresh asks for every panel (an ask)."""
+
+    http_method_names: ClassVar[list[str]] = ["get", "post"]
     template_name = "core/_dashboard_glance.html"
+    capability = DASHBOARD_REFRESH
+    back_to = "dashboard"
 
     def get(self, request):
         """The strip as it stands; "unchanged" to a poll while nothing was written."""
 
         return fragments.render(request, self.template_name, glance_context, revision=every_revision())
 
-    def post(self, request):
-        """Request a refresh: of every panel, or with ``scope=stale`` of stale ones.
+    @override
+    def post(self, request, *args, **kwargs):
+        """A panel's Refresh, or with ``scope=stale`` the due panels, which the
+        page posts when it opens on one and is answered with the strip."""
 
-        The page posts the stale request when it opens on a stale reading; the
-        button posts the full one.
-        """
-
-        name = DASHBOARD_REFRESH_STALE if request.POST.get("scope") == "stale" else DASHBOARD_REFRESH
-        result = execute_posted(request, name, {})
+        if request.POST.get("scope") != "stale":
+            return super().post(request, *args, **kwargs)
+        result = execute_posted(request, DASHBOARD_REFRESH_STALE, {})
         if not result["ok"]:
             return render(request, self.template_name, glance_context(), status=403)
         # Drawn after the ask, so each panel asked for shows its refresh.
-        status = 202 if name == DASHBOARD_REFRESH or result["requested"] else 200
-        return render(request, self.template_name, glance_context(), status=status)
+        return render(request, self.template_name, glance_context(), status=202 if result["requested"] else 200)
+
+    @override
+    def asked(self, result, at) -> Took:
+        return asked_refresh(result)
 
 
 def _settings_of(configuration) -> dict[str, str]:

@@ -43,23 +43,16 @@ from hq.platform.application.resource_context import (
     record_summary,
     resource_context,
 )
-from hq.platform.application.resource_operations import (
-    ACTION_CAPABILITY,
-    HISTORY_WINDOW,
-    asked_by as operations_asked_by,
-    changes,
-    operation_summary,
-    resource_history,
-    supervision,
-)
+from hq.platform.application.resource_operations import ACTION_CAPABILITY, HISTORY_ROWS, changes, supervision
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import safe_next, web_principal
-from hq.platform.application.timestamps import moment
+from hq.platform.application.service_context import operation_history
 from hq.platform.application.topology_model import RELATIONS
 from hq.platform.application.ui import counted
 from hq.platform.application.visit_refresh import page_visit
 from hq.platform.application.web_writes import execute_posted, refusal_response, refused
 from hq.platform.application.whereabouts import whereabouts
+from hq.platform.application.work_runs import run_rows
 from hq.platform.core.templatetags.nav_tags import returning_to
 lazy from hq.platform.application.page_relations import for_container
 
@@ -269,17 +262,10 @@ class InfrastructureListView(PageMixin, ListView):
             # The name the row's link shows, and the line under it.
             resource.shown_name = record_name(resource.kind, resource.spec, resource.key)
             resource.summary = record_summary(resource, resource.shown_name)
-        listed = changes(OperationRequest.objects.select_related("resource")[:HISTORY_WINDOW], 12)
-        who = operations_asked_by(listed)
+        listed = changes(OperationRequest.objects.all(), 12)
         context["changes"] = [
-            {
-                "resource": operation.resource.key,
-                "action": operation.get_action_display(),
-                "summary": (summary := operation_summary(operation, who.get(str(operation.pk), NOBODY))),
-                "by": summary["by"],
-                "at": operation.created_at,
-            }
-            for operation in listed
+            {"resource": operation.resource.key, "run": run}
+            for operation, run in zip(listed, run_rows(listed), strict=True)
         ]
         context["provider_catalog"] = describe_providers()
         context["records"] = record_list(
@@ -502,11 +488,8 @@ class InfrastructureDetailView(PageMixin, DetailView):
         context["relationships"] = self.relationships
         context["spec_rows"] = _spec_rows(self.object, beside_readout=True)
         context["renewal_at"] = derived.expiry.renewal_at if derived.expiry else None
-        context["operations"] = resource_history(self.object)
-        for operation in context["operations"]:
-            operation["created_at"] = moment(operation["created_at"], naive="keep")
-            operation["completed_at"] = moment(operation["completed_at"], naive="keep")
-            operation["raw_result"] = _json(operation["raw_result"])
+        history = operation_history(run_rows(changes(self.object.operations.all(), HISTORY_ROWS)))
+        context["history"] = (history,) if history else ()
         context["resolved_spec"] = derived.resolved_spec
         context["resolution_error"] = derived.resolution_error
         context["display_consumers"] = derived.display_consumers

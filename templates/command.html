@@ -26,7 +26,7 @@ that work stands in its own row.
   {% section "Raw JSON" fold=True open=result_json_open id="command-result-json" %}<pre tabindex="0"><code>{{ result_json|breakable }}</code></pre>{% endsection %}
 {% aside %}
   {% if return_url %}<a class="btn compact" href="{{ return_url }}">Back</a>{% endif %}
-  {% if resource_url %}<a class="btn compact ghost" href="{{ resource_url }}">Open {{ resource_label|breakable }}</a>{% endif %}
+  {% if resource_url %}<a class="btn compact ghost" href="{{ resource_url }}">{{ resource_open|button_words }}</a>{% endif %}
 {% endsection %}
 </div>
 {% endif %}

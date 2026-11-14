@@ -13,7 +13,7 @@ from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AgentIdentity, AuditLog
 
 from ..agent_access import AGENT_BLOCKED, AGENTS_PAUSED, SET_AGENT_BLOCK, blocked, refusal
-from ..capabilities import execute_capability
+from ..capabilities import CAPABILITY_AUDIT_TYPE, execute_capability
 from ..linked_accounts import bind_sign_in
 from ..security import (
     OPERATOR_CAPABILITIES,
@@ -157,7 +157,9 @@ class BlockControlTests(TestCase):
 
     def _said(self) -> list[str]:
         return list(
+            # The changes, apart from the act of a click that changed nothing.
             AuditLog.objects.filter(metadata__operation=SET_AGENT_BLOCK)
+            .exclude(object_type=CAPABILITY_AUDIT_TYPE)
             .order_by("id")
             .values_list("message", flat=True)
         )

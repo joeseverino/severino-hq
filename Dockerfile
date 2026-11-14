@@ -196,7 +196,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     SEVERINO_DATABASE_PATH=/data/severino.sqlite3 \
     SEVERINO_MEDIA_ROOT=/media \
     SEVERINO_EXPORTS_ROOT=/exports \
-    DJANGO_STATIC_ROOT=/static
+    DJANGO_STATIC_ROOT=/static \
+    SEVERINO_DESIGN_GALLERY=/usr/local/share/hq/design-gallery.html
 
 # Install Python deps from the build stage.
 COPY --from=build /install /usr/local
@@ -225,9 +226,14 @@ RUN mkdir -p /data /media /exports /run/hq-bridge \
     && chmod 0700 /run/hq-bridge
 
 # The image carries what a start would otherwise make: the collected, hashed
-# and compressed assets in /static, and the application's bytecode. Both are
-# root's and read-only to the account HQ runs as, like the source they come
-# from, so a start collects and compiles nothing.
+# and compressed assets in /static, the Design page's gallery, and the
+# application's bytecode. Each is root's and read-only to the account HQ runs
+# as, like the source it comes from, so a start collects and compiles nothing.
+#
+# The gallery is every shared part drawn once from the component catalog,
+# which is test code the web process never imports, after the assets are
+# collected so its addresses are the hashed ones. It is written outside /app,
+# where image:verify:tree holds every file to the checkout.
 #
 # Bytecode is validated by nothing at run time (unchecked-hash): the source
 # beside it cannot change in an image, and a timestamp would make the bytes
@@ -240,6 +246,8 @@ RUN mkdir -p /data /media /exports /run/hq-bridge \
 # image:verify:assets holds.
 RUN DJANGO_SECRET_KEY="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')" \
         python manage.py collectstatic --noinput --clear --verbosity 0 \
+    && DJANGO_SECRET_KEY="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')" \
+        python -W ignore manage.py design_gallery \
     && PYTHONHASHSEED=0 python -m compileall -q --invalidation-mode unchecked-hash \
         -x '/tests/' hq hq_sdk
 

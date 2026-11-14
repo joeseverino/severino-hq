@@ -320,6 +320,19 @@ def could_hold(interface: str, capabilities: Iterable[Capability | str]) -> bool
     return True
 
 
+class Requires:
+    """What a spec that names the capabilities it needs says them as: a tuple, however it declared them."""
+
+    __slots__ = ()
+    required_capability: Capability | str | tuple[Capability | str, ...]
+
+    @property
+    def required_capabilities(self) -> tuple[Capability | str, ...]:
+        if isinstance(self.required_capability, tuple):
+            return self.required_capability
+        return (self.required_capability,)
+
+
 def require_all(principal: Principal, capabilities: Iterable[Capability | str]) -> None:
     """``Principal.require`` for a set: raise on the first capability it lacks.
 

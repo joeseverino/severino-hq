@@ -15,7 +15,7 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ManagedResource, OperationRequest, ProviderInventory, ReadRequest
 from hq.platform.core.templatetags.value_tags import dot
 
-from ..cadence import ControllerStanding
+from ..cadence import WorkerStanding
 from ..controller_page import controller_page
 from .commands import commands_on
 from .markup import select, texts
@@ -56,8 +56,8 @@ class ControllerPageTests(TestCase):
         page = controller_page()
         seen = timezone.now()
 
-        self.assertEqual(replace(page, standing=ControllerStanding(seen, silent=True)).standing_tone, "serious")
-        self.assertEqual(replace(page, standing=ControllerStanding(seen, silent=False)).standing_tone, "good")
+        self.assertEqual(replace(page, standing=WorkerStanding(seen, silent=True)).standing_tone, "serious")
+        self.assertEqual(replace(page, standing=WorkerStanding(seen, silent=False)).standing_tone, "good")
         self.assertEqual(replace(page, overdue=True).overdue_tone, "serious")
 
     def test_a_controller_never_seen_is_given_its_start_steps_and_one_that_ran_is_not(self):

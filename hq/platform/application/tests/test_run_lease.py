@@ -330,8 +330,11 @@ class RunReportTests(LeasedRunTestCase):
 
         self.report(success=False, events=[event(), event("failed", host=DB), event("ok", host=DB)])
 
+        # Each task's row names its event; the run's own ending row names none.
         outcomes = AuditLog.objects.filter(
-            object_id=self.operation_id, action__in=(AuditLog.Action.DONE, AuditLog.Action.FAILED)
+            object_id=self.operation_id,
+            action__in=(AuditLog.Action.DONE, AuditLog.Action.FAILED),
+            metadata__has_key="event",
         )
         self.assertEqual(
             sorted((row.action, row.metadata["event"]["host"]) for row in outcomes),
@@ -340,6 +343,20 @@ class RunReportTests(LeasedRunTestCase):
         for row in outcomes:
             self.assertEqual(row.operation_id, self.operation_id)
             self.assertEqual(row.metadata["cause"], asked.operation_id)
+
+    def test_a_run_s_end_is_one_typed_row_and_never_a_change_to_its_state(self):
+        before = AuditLog.objects.order_by("-pk").values_list("pk", flat=True).first()
+
+        self.report(success=False, message="It stopped.", events=[event("failed", host=DB)])
+
+        rows = AuditLog.objects.filter(pk__gt=before, object_id=self.operation_id).exclude(metadata__has_key="event")
+        (ended,) = rows
+        self.assertEqual(ended.action, AuditLog.Action.FAILED)
+        self.assertEqual(ended.message, "It stopped.")
+        self.assertEqual(ended.operation_id, self.operation_id)
+        self.assertIn("timing", ended.metadata)
+        self.assertEqual(ended.metadata["failure"]["message"], "It stopped.")
+        self.assertEqual(self.operation().state, OperationRequest.State.FAILED)
 
     def test_a_report_over_the_contract_s_bound_is_refused_at_the_bridge(self):
         from hq.domains.control_plane.bridge_contract import limit

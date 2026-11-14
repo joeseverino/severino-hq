@@ -7,7 +7,7 @@ every module that adds edges gives them the same stable id and phrase.
 from dataclasses import dataclass
 from datetime import datetime
 from hashlib import sha256
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 from hq.domains.control_plane.providers import PROVIDERS
 
@@ -17,6 +17,9 @@ from .describe import Describe, listed
 from .entity_links import EntityLink
 from .timestamps import moment
 from .ui import ended
+
+if TYPE_CHECKING:
+    from .cadence import WorkerStanding
 
 
 @dataclass(frozen=True, slots=True)
@@ -280,6 +283,10 @@ class Topology:
     # ``observed_at`` also moves when HQ applies or adopts it, so "when was this
     # kind last read" is answered from here, carried so a rule costs no query.
     kinds_read: tuple[tuple[str, datetime], ...] = ()
+    # When HQ's playbook worker last arrived, and whether it is late
+    # (``cadence.automation_standing``), carried so its rule costs no query;
+    # None where automation was never set up (``topology._automation_worker``).
+    automation_worker: WorkerStanding | None = None
 
 
 @dataclass(frozen=True, slots=True)

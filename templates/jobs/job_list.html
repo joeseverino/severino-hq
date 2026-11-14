@@ -11,7 +11,7 @@ cancel it.
 {% endcomment %}
 {% block summary %}
 {% if ended_badly %}
-  {% notice tone="warning" title=ended_badly_title %}
+  {% notice tone=ended_badly_tone title=ended_badly_title %}
     {% for word, titles in ended_badly %}<p>{% if ended_badly|length > 1 %}{{ word|breakable:":" }} {% endif %}{{ titles|join:", "|breakable }}</p>{% endfor %}
   {% endnotice %}
 {% endif %}

@@ -132,23 +132,17 @@ a.kpi, a.kpi:hover { text-decoration: none; color: inherit; }
 
 
 /* ── The queue ──────────────────────────────────────────────────────
-   What awaits a decision, scanned top-down in severity order. Wherever it is
-   drawn it is the table primitive (partials/_queue_rows.html): a dot, what is
-   wrong, what can be pressed, so every row's parts share one edge. */
+   What awaits a decision, scanned top-down in severity order. Its rows are
+   the table's own (partials/_queue_rows.html): the words in the cell that
+   names the row, what can be pressed in its row's actions (tables.css). What
+   stays here is the queue's alone: the urgency's word, what a row holds
+   beneath, and a row dismissed in place. */
 
-.attention-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-5); }
-
-/* Since when, and how old the reading behind it is: quiet while current, in
-   the attention tone once out of date, at the row's far edge as every list
-   row's date is. */
-.attention-meta { margin-inline-start: auto; display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-5); color: var(--muted); font-size: var(--text-xs); }
-.attention-meta > a { overflow-wrap: anywhere; }
+/* How old the reading behind it is: quiet while current, in the attention
+   tone once out of date. */
 .reading-age.is-stale { color: var(--tone-caution-ink); }
-.attention-title { min-width: 0; max-width: 100%; font-size: var(--text-md); font-weight: 650; color: var(--ink); letter-spacing: -.005em; overflow-wrap: break-word; }
-/* What it means, then what to do, then the reason it cannot be done from
-   here, then what can be pressed. */
-.attention-detail { margin: var(--space-3) 0 0; font-size: var(--text-sm); line-height: 1.65; color: var(--ink-2); overflow-wrap: anywhere; }
-.attention-advice { margin: var(--space-3) 0 0; font-size: var(--text-sm); color: var(--muted); overflow-wrap: anywhere; }
+/* The reason it cannot be done from here, and what can be pressed, in a row's
+   opened line and on an insight card. */
 .attention-reason { margin: var(--space-3) 0 0; font-size: var(--text-xs); line-height: 1.55; color: var(--muted); overflow-wrap: anywhere; }
 .attention-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-4); }
 .attention-actions form { margin: 0; }
@@ -163,54 +157,15 @@ a.kpi, a.kpi:hover { text-decoration: none; color: inherit; }
 :root:has(.origin-panel:popover-open) .chart-tip { display: none; }
 /* One of HQ's modals; what it lists sits flat inside it. */
 .origin-panel { --surface-border: 0 none; --surface-radius: 0; --surface-bg: transparent; --surface-shadow: none; --surface-inset: 0; }
-/* The queue's table: the title leads since it is what a reader presses, the urgency is one quiet word after it only when urgent (the pill keeps its word for a screen reader and its tip), the meaning wraps under it to the buttons, and the buttons end the row. */
+/* The urgency, one quiet word after the title only when urgent (the pill
+   keeps its word for a screen reader and its tip). */
 .pill.is-mark { padding: 0 var(--space-3); font-size: var(--text-xs); line-height: 1.5; font-weight: 600; }
-.queue-table .attention-title { font-weight: 600; }
-.queue-table a.attention-title:hover { text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
-.queue-table .attention-detail { margin: var(--space-1) 0 0; font-size: var(--text-sm); line-height: 1.5; color: var(--muted); }
-/* The dense form (`_work_queue.html`'s `dense`), for problems inside a section
-   of a page about something else: a line of the table's own size and weight,
-   so the section's own rows stay what it is about. */
-.queue-table.is-dense .attention-title { font-size: var(--text-sm); font-weight: 500; }
-/* The words keep a line of `--row-words` beside the buttons; a table that has
-   not that room is wider than its region, so it takes its narrow box, where
-   the buttons wait in the line beneath and the words keep the row. */
-.queue-table .queue-what { min-width: var(--row-words); }
-@container style(--box: narrow) {
-  .queue-table .queue-what { min-width: 10rem; }
-}
-.queue-table .queue-act { width: 1%; text-align: right; white-space: nowrap; padding-block-start: calc(var(--row-pad) - var(--space-1)); padding-inline-end: var(--space-4); }
-/* What a row offers, then the reader's own dismiss, side by side on one line whatever the cell's white-space says, so the column asks for that line and the other columns give way; the dismiss is one word and never gives way. */
-.queue-table .queue-buttons { display: inline-flex; gap: var(--space-3); vertical-align: top; text-align: start; }
-.queue-table .queue-buttons > [data-triage] { flex: none; }
-.queue-table .queue-buttons > * { display: flex; flex-wrap: nowrap; align-items: flex-start; gap: var(--space-3); margin: 0; }
-.queue-table .queue-act form { margin: 0; }
-/* A row with nothing to press, or whose buttons wait in the line beneath in a
-   narrow table, gives the title the room its padding would keep. */
-.queue-table .queue-act:not(:has(> *)) { padding: 0; }
-@media (scripting: enabled) {
-  @container style(--box: narrow) {
-    .queue-table .queue-act:not(:has(> :not(.narrow-more, .queue-buttons), .queue-buttons > :not(.narrow-more))) { padding: 0; }
-    /* On a phone the title has the row: Dismiss is a mark at its end, still
-       named by its word. */
-    .queue-table :is(.queue-row:not([data-dismissed]), .queue-family) .queue-dismiss { width: 2rem; max-width: none; padding: 0; justify-content: center; font-size: 0; }
-    .queue-table :is(.queue-row:not([data-dismissed]), .queue-family) .queue-dismiss::before { content: "\00d7" / ""; font-size: var(--text-lg); line-height: 1; }
-  }
-}
-/* The opened line (table_tags._detail_row) is flat (`data-line`, tables.css): what the row holds back, then one place for every button the row holds. */
-.queue-more > :first-child { margin-top: 0; }
-/* A family: how bad, what kind and how many, opening to its rows (set in
-   under it as any folded row is, tables.css). Its name heads them, so it
-   reads below a title. */
-.queue-family { cursor: pointer; }
-.queue-family-name { font-size: var(--text-sm); font-weight: 600; color: var(--ink-2); }
-.queue-table .count { margin-inline-start: var(--space-1); color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; white-space: nowrap; }
-/* A row dismissed in place: its title, quiet, and the way back. */
-.queue-row[data-dismissed] :is(.attention-detail, .queue-more, .queue-what > [data-row-toggle]),
-.queue-row[data-dismissed] .queue-buttons > :not([data-triage]),
-.queue-row[data-dismissed] :is(.attention-meta, .pill.is-mark) { display: none; }
-.queue-row[data-dismissed] .attention-title { color: var(--muted); font-weight: 400; }
-.queue-row[data-dismissed] .attention-title::before { content: "Dismissed: " / "Dismissed: "; }
+/* A row dismissed in place (app.js): its title, quiet, and the way back, the button that posts its key (action_tags.triage). */
+[data-attention-item][data-dismissed] > .row-gutter > :not(.row-line),
+[data-attention-item][data-dismissed] > .row-actions > :not(button[name="key"]),
+[data-attention-item][data-dismissed] .pill.is-mark { display: none; }
+[data-attention-item][data-dismissed] [data-attention-title] { color: var(--muted); font-weight: 400; }
+[data-attention-item][data-dismissed] [data-attention-title]::before { content: "Dismissed: " / "Dismissed: "; }
 .attention-clear { margin: var(--space-2) 0 0; color: var(--muted); font-size: var(--text-sm); }
 /* The urgent ones: their box above the page. */
 .problems-here { padding-block: var(--space-5); margin-bottom: var(--space-6); border-left: 3px solid var(--tone-ink); }

@@ -19,7 +19,7 @@ from hq.platform.core.test_runner import plugin_test_modules
 
 from ..routes import routed
 from .source import source_files
-from .writers import DECLARED_SERVICE, DIRECT, view_writes
+from .writers import DECLARED_SERVICE, DIRECT, OUTSIDE, UNFOLLOWED, view_writes
 
 ROOT = Path(settings.BASE_DIR).resolve()
 EXAMPLE_URLS = "tests.fixtures.example_hq_plugin.urls"
@@ -127,21 +127,26 @@ class ThingView:
 }
 
 
-# Form mixins as ``writes`` declares them: a write through the view's declared
-# service or a record's save, run under the posted key or not.
+# Form mixins as ``writes`` declares them: a capability through the runner, a
+# write outside it that the one named way runs, and a write of the view's own;
+# beside them a host view writing outside the runner two ways.
 PLANTED_FORMS = {
     "hq/platform/application/records.py": """
-def save_form(form, *, principal):
+def save_record(form, *, principal):
     return form.save()
 """,
     "hq/platform/application/writes.py": """
-from hq.platform.application.records import save_form
-from hq.platform.application.web_writes import write_once
+from hq.platform.application.records import save_record
+from hq.platform.application.web_writes import execute_posted, write_once
 
 
-class KeyedCreate:
+def outside_the_runner(request, write, operation):
+    return write_once(request, operation)
+
+
+class Runs:
     def form_valid(self, form):
-        return write_once(self.request, lambda: self.service(form.cleaned_data))
+        return execute_posted(self.request, "example.thing.save", form.cleaned_data)
 
 
 class KeyedCommand:
@@ -149,7 +154,7 @@ class KeyedCommand:
         return self.service(command)
 
     def form_valid(self, form):
-        return write_once(self.request, lambda: self.run(form.cleaned_data))
+        return outside_the_runner(self.request, "", lambda: self.run(form.cleaned_data))
 
     def form_invalid(self, form):
         return self.run(form.cleaned_data)
@@ -162,24 +167,46 @@ class BareCreate:
 
 class BareRecord:
     def form_valid(self, form):
-        return save_form(form, principal=None)
+        return save_record(form, principal=None)
 """,
     "hq/example/forms.py": """
 from hq.example.services import save_thing
+from hq.platform.application.records import deleter
 from hq.platform.application.web_writes import write_once
+from hq.platform.application.writes import KeyedCommand
 
 
 class ThingForm:
     def form_valid(self, form):
         return write_once(self.request, lambda: save_thing(form.cleaned_data))
+
+
+class ThingCommand(KeyedCommand):
+    def run(self, command):
+        return save_thing(command)
+
+
+class ThingDelete:
+    def form_valid(self, form):
+        return deleter("things")(form.cleaned_data, principal=None)
 """,
 }
 
 
 # An extension, installed outside the checkout, reaching the host through
 # hq_sdk's re-exports: a capability, a form mixin's hook it overrides, an
-# audit row, and a service of its own.
+# audit row, a helper of a routed host module its hook calls, and a service
+# of its own.
 PLANTED_SDK = {
+    "hq/example/guard.py": """
+def refuse(reason):
+    return None
+
+
+def rules_document(request):
+    return None
+""",
+    "hq_sdk/pages.py": "from hq.example.guard import refuse\n",
     "hq_sdk/audit.py": "from hq.platform.core.audit import record_event\n",
     "hq_sdk/capabilities.py": "from hq.platform.application.web_writes import execute_posted\n",
     "hq_sdk/writes.py": "from hq.platform.application.writes import KeyedCommand\n",
@@ -192,6 +219,7 @@ def save_other(payload):
     "example_extension/views.py": """
 from hq_sdk import capabilities
 from hq_sdk.audit import record_event
+from hq_sdk.pages import refuse
 from hq_sdk.writes import KeyedCommand
 
 from .services import save_other
@@ -211,6 +239,7 @@ class OtherForm(KeyedCommand):
         return self._saved(command)
 
     def _saved(self, command):
+        refuse("an effect")
         return save_other(command)
 """,
 }
@@ -226,7 +255,7 @@ def _planted(root: Path, files: dict[str, str]) -> None:
 @tag("source", "tree")
 @reads("**/*.py")
 class ViewWriteTests(SimpleTestCase):
-    def test_no_view_writes_outside_the_chokepoint(self):
+    def test_no_view_writes_outside_the_runner(self):
         modules = routed_modules(ROOT)
         self.assertTrue(modules, "the walk found no routed views")
 
@@ -235,8 +264,8 @@ class ViewWriteTests(SimpleTestCase):
         self.assertEqual(
             [f"{write.path}.{write.function} -> {write.service}" for write in found],
             [],
-            "Route each through execute_posted (a form mixin's through write_once), "
-            "or move a GET's effect to a POST or a sweep.",
+            "Route each through run_posted (execute_posted is its answer alone), a record's form "
+            "through writes.CapabilityFormMixin, or move a GET's effect to a POST or a sweep.",
         )
 
     def test_a_planted_write_is_caught_and_an_audit_row_or_the_chokepoint_is_not(self):
@@ -255,7 +284,7 @@ class ViewWriteTests(SimpleTestCase):
             ],
         )
 
-    def test_a_form_mixin_writing_without_the_posted_key_is_caught_and_one_under_it_is_not(self):
+    def test_a_host_form_writing_outside_the_runner_is_caught_and_one_through_it_is_not(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             _planted(root, {**PLANTED, **PLANTED_FORMS})
@@ -265,22 +294,44 @@ class ViewWriteTests(SimpleTestCase):
         self.assertEqual(
             sorted((write.path, write.function, write.service) for write in found),
             [
-                # A view's own module keys nothing: its write goes through a capability.
+                ("hq.example.forms", "ThingCommand.run", OUTSIDE),
+                ("hq.example.forms", "ThingDelete.form_valid", UNFOLLOWED),
                 ("hq.example.forms", "ThingForm.form_valid", "hq.example.services.save_thing"),
                 ("hq.example.forms", "ThingForm.form_valid", "hq.platform.application.web_writes.write_once"),
                 ("hq.platform.application.writes", "BareCreate.form_valid", DECLARED_SERVICE),
                 (
                     "hq.platform.application.writes",
                     "BareRecord.form_valid",
-                    "hq.platform.application.records.save_form",
+                    "hq.platform.application.records.save_record",
                 ),
-                # The hook a keyed lambda runs, called outside one.
+                # The hook the way around the runner runs, called outside it.
                 (
                     "hq.platform.application.writes",
                     "KeyedCommand.form_invalid",
                     "hq.platform.application.writes.KeyedCommand.run",
                 ),
             ],
+        )
+
+    def test_no_view_of_the_hosts_takes_a_published_form_mixin(self):
+        """Those mixins run a service that is no capability outside the runner;
+        the host's own views name their capabilities."""
+
+        from ..writes import CommandFormMixin, ServiceWriteMixin
+
+        views = {
+            route.view for route in routed() if isinstance(route.view, type) and route.view.__module__.startswith("hq.")
+        }
+        self.assertTrue(views, "the walk found no routed views")
+        self.assertEqual(
+            sorted(
+                f"{view.__module__}.{view.__qualname__}"
+                for view in views
+                if issubclass(view, (CommandFormMixin, ServiceWriteMixin))
+            ),
+            [],
+            "Name the view's capabilities and run them through run_posted: "
+            "writes.CapabilityFormMixin, writes.CapabilityDeleteMixin, or execute_posted in its form_valid.",
         )
 
     def test_an_installed_extension_is_read_through_hq_sdk_and_held_as_the_host_is(self):
@@ -290,7 +341,7 @@ class ViewWriteTests(SimpleTestCase):
             _planted(root, {**PLANTED, **PLANTED_FORMS, **PLANTED_SDK})
             _planted(package.parent, PLANTED_EXTENSION)
 
-            found = view_writes(root, [package / "views.py"], [package])
+            found = view_writes(root, [package / "views.py", root / "hq/example/guard.py"], [package])
 
         self.assertEqual(
             [(write.path, write.function, write.service) for write in found],

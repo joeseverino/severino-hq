@@ -1,0 +1,23 @@
+# How asked-for work stands is said in the run table's words and tones
+# (work_runs), drawn by the shared parts: the ask's note (partials/_ask.html)
+# and the status part, which a job's panel draws its state through. A state
+# label a script rewrites (data-ask-label), a job-state span, or a failure
+# worded or pilled by hand ("Refresh failed", {% status "Running" %}) says it
+# in a page's own words and color.
+id: hand-drawn-run-state
+language: html
+severity: error
+message: How work stands is drawn by hand, where the ask or the status part draws it.
+note: >-
+  Draw the work as an Ask (partials/_ask.html), or its state with
+  {% status run.word tone=run.tone data_ask_label=True %} from job|job_run.
+files:
+  - "**/templates/**/*.html"
+rule:
+  any:
+    - kind: text
+      regex: '\b[Rr]efresh failed\b|\{% status "(?:Running|Stopped early)"'
+    - kind: attribute
+      regex: '^data-ask-label\b'
+    - kind: attribute
+      regex: '^class=["''](?:[^"'']*[\s}])?job-state\b'

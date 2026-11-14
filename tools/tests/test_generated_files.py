@@ -13,6 +13,7 @@ from hq.domains.control_plane import bridge_contract
 from hq.domains.control_plane.management.commands.connections_reference import reference_path
 from hq.platform.api.openapi import DOCUMENT_PATH, EXAMPLES_PATH
 from hq.platform.application.procedure_schema import SCHEMA_PATH
+from hq.platform.application.tests.reads import reads
 from hq_sdk.contract import CONTRACT_PATH
 from hq_sdk.text_contract import EXAMPLES_PATH as TEXT_EXAMPLES_PATH
 from tests.mise_tasks import ROOT
@@ -25,6 +26,7 @@ def tracked(*pathspec: str) -> set[str]:
 
 
 @tag("source", "tree")
+@reads(".gitattributes", "hq/domains/control_plane/bridge_base.json", lists=("**",))
 class GeneratedAttributeTests(SimpleTestCase):
     def test_the_attribute_marks_exactly_what_the_writers_write(self) -> None:
         written = {

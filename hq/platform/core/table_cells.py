@@ -25,6 +25,10 @@ _CELL_KINDS = frozenset({"numeric", "control"})
 # The characters a line of prose or a status keeps whole; one longer wraps,
 # and its cell holds out for a floor (`data-long`, tables.css).
 LONG = 48
+# The characters of a line that fits `--row-words` (tokens.css), the line a
+# row's words keep beside its controls: one no longer stays whole there, and
+# a longer one holds out for that line (`data-words`, tables.css).
+ROW_WORDS = 30
 
 # The tags that end a line of a cell.
 _LINE_ENDS = frozenset({"br", "div", "p", "li", "dt", "dd"})
@@ -37,6 +41,9 @@ ROLE_CLASSES = {"cell-data": "data", "cell-prose": "prose"}
 
 # The tags of a control: a cell holding one and no heading is named "Actions".
 _CONTROLS = frozenset({"a", "button", "select", "input"})
+# The input types that are no field a reader fills in: a cell holding a field
+# holds a value of the row (a choice of a rule), not what the row offers.
+_UNFILLED = frozenset({"hidden", "submit", "button"})
 # What a row holds back for its open line: a part of a column that stays in a
 # narrow box, a block kept beneath the row at any width, and the row's editor
 # (`{% row_editor %}`), which is moved there and opens the row.
@@ -108,6 +115,8 @@ class _Cell:
     # A heading's sort control, as the spans that take it off again.
     sort: list[tuple[Point, Point]] = field(default_factory=list)
     sort_mark: Position | None = None
+    # Whether it holds a field a reader fills in.
+    fields: bool = False
 
 
 @dataclass(slots=True)
@@ -176,7 +185,7 @@ class Cells(HTMLParser):
         self.unsaid: int | None = None
         self.off_line: int | None = None
         self.part: int | None = None
-        # Where each cell starts, with what is written into it there.
+        # Where each cell or row starts, with what is written into it there.
         self.marks: dict[tuple[int, int], list[str]] = {}
         # Where each element or cell with a role starts, and its roles.
         self.roles: dict[tuple[int, int], set[str]] = {}
@@ -251,8 +260,11 @@ class Cells(HTMLParser):
         classes = _classes(given)
         if tag in _LINE_ENDS:
             cell.line = 0
-        if tag in _CONTROLS:
+        # A control refused here stands as a button that cannot be pressed.
+        if tag in _CONTROLS or given.get("role") == "button":
             cell.controls = True
+        if tag in ("select", "textarea") or (tag == "input" and given.get("type") not in _UNFILLED):
+            cell.fields = True
         if "data-row-toggle" in given and cell.toggle is None and len(self.open) == 1:
             cell.toggle = self.getpos()
         if "data-row-toggle" in given:
@@ -371,6 +383,12 @@ class Cells(HTMLParser):
         empty = _empty_columns(heads, named, records)
         width = _width(heads, records)
         names, drops, gutter = _columns(heads[-1] if heads else [])
+        # The columns of the row's controls, which stand beneath its words in
+        # a narrow box (tables.css) and so never leave for its open line.
+        beneath = {place for row in records for place, _ in _row_controls(row, kinds, named)}
+        # The columns of the words beside them, whose heading takes the room
+        # of its row's first line there as the words do.
+        words = {place for row in records for place, _ in _row_words(row, kinds)}
         if not (self.sorts and _sorts(records)):
             self.cuts += _sort_controls(heads)
         for row in self.rows:
@@ -381,8 +399,17 @@ class Cells(HTMLParser):
             self._name(row)
             if gutter is not None and row.section != "thead":
                 self._gutter(row, gutter)
+            if row.section == "thead":
+                for place in beneath:
+                    if cell := _at_place(row.cells, place):
+                        self.marks.setdefault(cell.start, []).append(" data-beneath")
+                for place in words if beneath else ():
+                    if cell := _at_place(row.cells, place):
+                        self.marks.setdefault(cell.start, []).append(" data-words")
             if row.section == "tbody" and row.end:
-                self._detail(row, width, names, drops - empty)
+                for _, cell in _row_controls(row, kinds, named):
+                    self.marks.setdefault(cell.start, []).append(" data-beneath")
+                self._detail(row, width, names, drops - empty - beneath)
 
     def _open_row(self, row: _Row) -> None:
         """Mark the row open: its editor stands open on the line beneath it."""
@@ -431,6 +458,16 @@ class Cells(HTMLParser):
                 )
             if marks:
                 self.marks[cell.start] = marks
+        if body:
+            self._mark_words(row, kinds)
+
+    def _mark_words(self, row: _Row, kinds: dict[int, str]) -> None:
+        """Mark the words a row stands beside its controls, which keep a line
+        of their own there rather than wrap a few to a line beside buttons."""
+
+        for _, cell in _row_words(row, kinds):
+            mark = ' data-words="line"' if cell.longest <= ROW_WORDS else ' data-words="floor"'
+            self.marks.setdefault(cell.start, []).append(mark)
 
     def _column_marks(self, cell: _Cell, kind: str | None, *, body: bool, blank: bool, named: bool) -> list[str]:
         """What a cell that stands in one column says of itself there, and the
@@ -464,6 +501,7 @@ class Cells(HTMLParser):
         blocks: list[Span] = []
         entries: list[LineEntry] = []
         labeled: list[LineEntry] = []
+        held_below = False
         for index, cell in enumerate(row.cells):
             if "colspan" in cell.attrs or not cell.closed:
                 continue
@@ -471,11 +509,17 @@ class Cells(HTMLParser):
             editors = [span for _, span in _finished(cell, "editor")]
             self.cuts += [((start, 0), (end, None)) for start, end in editors]
             blocks[:0] = editors
+            # A block kept beneath the row is moved there too: the row's line
+            # never shows it, and the row says it holds one (`data-below`).
             below = _finished(cell, "below")
+            self.cuts += [((start, 0), (end, None)) for _, (start, end) in below]
+            held_below = held_below or bool(below)
             blocks += [span for label, span in below if not label]
             labeled += [LineEntry(label, [span], "label") for label, span in below if label]
             if entry := _column_entry(index, cell, (cell.opened, cell.closed), names, dropped=index in drops):
                 entries.append(entry)
+        if held_below:
+            self.marks.setdefault(row.start, []).append(" data-below")
         if blocks or entries or labeled:
             self.details.append((row.end, width, blocks, entries + labeled))
         if any(_finished(cell, "editor") for cell in row.cells):
@@ -491,6 +535,46 @@ class Cells(HTMLParser):
 
 def _classes(attrs: dict[str, str | None]) -> list[str]:
     return (attrs.get("class") or "").split()
+
+
+def _row_words(row: _Row, kinds: dict[int, str]) -> list[tuple[int, _Cell]]:
+    """Each cell of words a row stands beside its controls, by its place; none
+    in a row that offers no controls. A column of tick-boxes is no control a
+    row offers."""
+
+    place, controls, words = 0, False, []
+    for cell in row.cells:
+        at, kind = place, kinds.get(place)
+        place += int(cell.attrs.get("colspan") or 1)
+        classes = _classes(cell.attrs)
+        if "colspan" in cell.attrs or "select-column" in classes:
+            continue
+        if "control" in (kind, cell.attrs.get("data-kind")) or "row-actions" in classes:
+            controls = True
+        elif kind not in _KEPT_KINDS and not cell.says_nothing:
+            words.append((at, cell))
+    return words if controls else []
+
+
+def _row_controls(row: _Row, kinds: dict[int, str], named: int) -> list[tuple[int, _Cell]]:
+    """Each cell of the row's controls, by its place: a row's actions or a
+    cell of a column of controls, holding a control and no field a reader
+    fills in (a choice of a rule is a value of the row, not what it offers).
+    Never the cell that names the row, nor a column of tick-boxes."""
+
+    found, place = [], 0
+    for cell in row.cells:
+        at, kind = place, kinds.get(place)
+        place += int(cell.attrs.get("colspan") or 1)
+        classes = _classes(cell.attrs)
+        if at == named or "colspan" in cell.attrs or "select-column" in classes:
+            continue
+        if not cell.closed:
+            continue
+        controls = "control" in (kind, cell.attrs.get("data-kind")) or "row-actions" in classes
+        if controls and cell.controls and not cell.fields:
+            found.append((at, cell))
+    return found
 
 
 def _kept_naming_column(heads: list[list[_Cell]]) -> int:

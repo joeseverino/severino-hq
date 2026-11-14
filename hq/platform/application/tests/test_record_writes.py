@@ -1,11 +1,10 @@
-"""A plain record's web form and its command are held to the one model rule."""
+"""A plain record's web form and its command are held to the one model rule, through its capabilities."""
 
 from datetime import date
 from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from django.forms import modelform_factory
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from django.views.generic import CreateView, DeleteView, UpdateView
@@ -14,14 +13,9 @@ from hq.domains.expenses.models import Expense
 
 from ..domains import host_records, load
 from ..expenses import ExpenseCommand, save_expense
-from ..records import save_form
 from ..routes import routed
-from ..security import AuthorizationError, Principal, cli_principal
-from ..writes import RecordDeleteMixin, RecordFormMixin, ServiceCreateMixin, WriteMessages
-
-# Receipts carry a private file: the web upload validates and stores the bytes,
-# which a ModelForm save does not, so it keeps its service.
-SERVICE_WRITTEN = {"receipts"}
+from ..security import cli_principal
+from ..writes import CapabilityDeleteMixin, CapabilityFormMixin, RecordFormMixin, ServiceCreateMixin, WriteMessages
 
 
 def _views():
@@ -62,34 +56,10 @@ class OneRuleTests(TestCase):
             self.assertIn("vendor", caught.exception.error_dict)
         self.assertFalse(Expense.objects.exists())
 
-    def test_the_web_write_validates_fields_the_form_does_not_show(self):
-        form = modelform_factory(Expense, fields=("date", "vendor", "item"))(
-            {"date": "2026-07-25", "vendor": "V", "item": "I"},
-            instance=Expense(category="not-a-category"),
-        )
-        self.assertTrue(form.is_valid())
-        with self.assertRaises(ValidationError) as caught:
-            save_form(form, principal=cli_principal())
-        self.assertIn("category", caught.exception.error_dict)
-        self.assertFalse(Expense.objects.exists())
-
-    def test_the_web_write_needs_the_declared_permission(self):
-        form = modelform_factory(Expense, fields=("date", "vendor", "item"))(
-            {"date": "2026-07-25", "vendor": "V", "item": "I"}
-        )
-        self.assertTrue(form.is_valid())
-        with self.assertRaises(AuthorizationError):
-            save_form(form, principal=Principal("nobody", "web", frozenset()))
-        self.assertFalse(Expense.objects.exists())
-
 
 class RecordViewTests(TestCase):
-    def test_every_record_form_and_delete_view_writes_through_the_record_path(self):
-        models = {
-            load(records.model): records.resource
-            for records in host_records()
-            if records.resource not in SERVICE_WRITTEN
-        }
+    def test_every_record_form_and_delete_view_writes_through_its_capabilities(self):
+        models = {load(records.model): records.resource for records in host_records()}
         wrong, seen = [], set()
         for view in set(_views()):
             resource = models.get(
@@ -99,9 +69,9 @@ class RecordViewTests(TestCase):
             if resource is None:
                 continue
             seen.add(resource)
-            if issubclass(view, (CreateView, UpdateView)) and not issubclass(view, RecordFormMixin):
+            if issubclass(view, (CreateView, UpdateView)) and not issubclass(view, CapabilityFormMixin):
                 wrong.append(view.__qualname__)
-            if issubclass(view, DeleteView) and not issubclass(view, RecordDeleteMixin):
+            if issubclass(view, DeleteView) and not issubclass(view, CapabilityDeleteMixin):
                 wrong.append(view.__qualname__)
         self.assertEqual(wrong, [])
         self.assertEqual(seen, set(models.values()))

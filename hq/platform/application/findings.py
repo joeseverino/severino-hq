@@ -27,8 +27,10 @@ lazy from hq.domains.control_plane.observations import OBSERVATIONS
 lazy from hq.domains.control_plane.provider_adapters.declarations import MACHINE_KIND
 
 from . import (
+    automation_findings,
     certificate_expiry,
     connection_findings,
+    container_findings,
     contradiction_findings,
     controller_findings,
     credential_findings,
@@ -42,6 +44,7 @@ from . import (
     reference_findings,
     registration_findings,
     render_status_findings,
+    tailnet_device_findings,
     tailnet_findings,
     unit_findings,
 )
@@ -174,6 +177,7 @@ def _estate(topology: Topology) -> FindingEstate:
 # This is the closed set, in the order pages list the rules.
 RULE_MODULES = (
     docker_estate,
+    container_findings,
     perimeter_findings,
     connection_findings,
     credential_findings,
@@ -187,9 +191,11 @@ RULE_MODULES = (
     reference_findings,
     controller_findings,
     tailnet_findings,
+    tailnet_device_findings,
     dns_findings,
     contradiction_findings,
     posture_findings,
+    automation_findings,
 )
 RULES: tuple[FindingRule, ...] = tuple(rule for module in RULE_MODULES for rule in module.RULES)
 
@@ -252,10 +258,9 @@ def rule_origin(name: str) -> dict[str, Any] | None:
         return None
     where = ""
     try:
-        source = Path(inspect.getsourcefile(rule.detect) or "")
-        line = inspect.getsourcelines(rule.detect)[1]
+        source, line = _declared_at(rule.detect)
         where = f"{source.relative_to(settings.BASE_DIR)}:{line}"
-    except OSError, TypeError, ValueError:
+    except OSError, StopIteration, TypeError, ValueError:
         where = ""
     return {
         "rule": rule.name,
@@ -264,6 +269,21 @@ def rule_origin(name: str) -> dict[str, Any] | None:
         "subsumes": list(rule.subsumes),
         "where": where,
     }
+
+
+def _declared_at(detect: Callable[..., Any]) -> tuple[Path, int]:
+    """A detector's file and line: a function's own, or for a declaration such
+    as an ``OnEachMachine``, which ``inspect`` cannot place, the line binding
+    it in the rule module that holds it."""
+
+    if inspect.isfunction(detect):
+        return Path(inspect.getsourcefile(detect) or ""), inspect.getsourcelines(detect)[1]
+    module = next(module for module in RULE_MODULES if any(rule.detect is detect for rule in module.RULES))
+    name = next(name for name, value in vars(module).items() if value is detect)
+    lines, _start = inspect.getsourcelines(module)
+    return Path(inspect.getsourcefile(module) or ""), next(
+        number for number, text in enumerate(lines, 1) if text.startswith(f"{name} =")
+    )
 
 
 def _permitted(capability: str, principal: Principal, graph: IntegrationGraph) -> tuple[bool, str]:
@@ -321,7 +341,7 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
             )
         )
     resolved_remedies = tuple(kept)
-    offers = tuple(
+    offers = finding.offers + tuple(
         action for action in (subject.actions if subject else ()) if action.effect == "read" and action.method == "GET"
     )
     investigations = topology_investigation_links(subject.id) if subject else ()
@@ -348,24 +368,17 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
         remedies=remedy_actions,
         verification=verification,
     )
-    return Finding(
-        rule=finding.rule,
-        subject=finding.subject,
-        title=finding.title,
-        severity=finding.severity,
-        explanation=finding.explanation,
-        evidence=finding.evidence,
+    # Every field the detector set carries through; only what derivation adds changes.
+    return replace(
+        finding,
         remedies=resolved_remedies,
         offers=offers,
         investigations=investigations,
-        scope=finding.scope,
-        affected_scopes=finding.affected_scopes,
         workflow=workflow,
         steps=finding_steps(finding),
         no_help_reason=_no_help_reason(finding),
         subject_link=ActionLink("subject", subject.label, "read", subject.url) if subject and subject.url else None,
         read_capabilities=_held_to(finding, subject, principal),
-        part=finding.part,
         read_now=read_now,
     )
 
@@ -385,12 +398,13 @@ def read_gate(finding: Finding, subject: TopologyNode | None) -> tuple[str, ...]
     """What a reader must hold to be told ``finding``; None when it cannot be derived.
 
     The union of its subject node's gate, each scope's and what its detector
-    carried for the evidence it names. A subject that names no node, or a
-    scope no resource reads, leaves it underivable.
+    carried for the evidence it names, which alone gates a claim about none
+    of them. A subject that names no node, a scope no resource reads, or a
+    claim about nothing that carries no gate leaves it underivable.
     """
 
     scopes = _finding_scopes(finding)
-    if (finding.subject and subject is None) or not (subject or scopes):
+    if (finding.subject and subject is None) or not (subject or scopes or finding.read_capabilities):
         return None
     gates = [finding.read_capabilities]
     if subject is not None:

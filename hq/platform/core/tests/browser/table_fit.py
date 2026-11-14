@@ -8,10 +8,11 @@ import re
 from typing import Any, override
 
 from hq.platform.core.stylesheets import stylesheet
-from hq.platform.core.tests.browser.estate import READ_AT, ExampleEstateGate
+from hq.platform.core.tests.browser.estate import ExampleEstateGate
 from hq.platform.core.tests.browser.gate import BrowserGate, add_css
 from hq.platform.core.tests.browser.reading import probe
 from hq.platform.core.tests.browser.selectors import SELECTORS
+from hq.platform.core.tests.browser.shards import sweep
 from hq.platform.core.tests.browser.widths import (
     LARGEST,
     NARROWEST,
@@ -23,19 +24,18 @@ from hq.platform.core.tests.browser.widths import (
 )
 
 
-class ExampleEstateTableFit(ExampleEstateGate):
-    """Every table of the example estate keeps the table checks at every
-    width. Its pages are swept in three classes, each a third of the
-    navigation, so three workers sweep them side by side."""
+class ExampleEstateTableFitTests(ExampleEstateGate):
+    """Every table of the example estate keeps the table checks at every width."""
 
-    def sweep(self, paths):
+    @sweep
+    def test_every_table_keeps_every_table_check_at_every_width(self):
         """From the narrowest phone up, with every disclosure open, its rows
         as drawn and with every row a reader can open opened: a width the
         layout sweep skips is where a table ran past its card, or a cell past
         its column, unseen."""
 
-        self.assertTrue(paths, "the navigation led nowhere")
-        for path in paths:
+        self.assertTrue(self.navigation, "the navigation led nowhere")
+        for path in self.mine(self.navigation):
             with self.subTest(page=path):
                 self.visit(path, NARROWEST)
                 self.page.evaluate(
@@ -47,26 +47,11 @@ class ExampleEstateTableFit(ExampleEstateGate):
                     self.fail(json.dumps(found, indent=1))
 
 
-class ExampleEstateTableFitFirstTests(ExampleEstateTableFit):
-    def test_the_first_third_of_the_tables_keep_every_table_check_at_every_width(self):
-        self.sweep(self.navigation[0::3])
-
-
-class ExampleEstateTableFitSecondTests(ExampleEstateTableFit):
-    def test_the_second_third_of_the_tables_keep_every_table_check_at_every_width(self):
-        self.sweep(self.navigation[1::3])
-
-
-class ExampleEstateTableFitThirdTests(ExampleEstateTableFit):
-    def test_the_last_third_of_the_tables_keep_every_table_check_at_every_width(self):
-        self.sweep(self.navigation[2::3])
-
-
 def unsampled_span():
     """The first span between two of the stylesheet's viewport-query edges
     that holds none of the widths the other gates read a page at."""
 
-    sampled = {*READ_AT, *SPARSE_WIDTHS, *WIDTHS, *WIDE_TABLES}
+    sampled = {*SPARSE_WIDTHS, *WIDTHS, *WIDE_TABLES}
     edges = query_edges(viewport_queries(stylesheet()))
     for low, high in zip(edges, [*(edge - 1 for edge in edges[1:]), LARGEST], strict=True):
         if not any(low <= width <= high for width in sampled):

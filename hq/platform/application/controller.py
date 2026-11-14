@@ -1,7 +1,7 @@
 """Lease and report protocol for the privileged homelab controller."""
 
 import hashlib
-from contextlib import AbstractContextManager
+import json
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any
@@ -21,10 +21,12 @@ from hq.domains.control_plane.providers import (
     controller_capability_registry,
     enabled_controller_actions,
 )
-from hq.platform.core.attribution import bound
-from hq.platform.core.audit import audit_events, audit_operation, audited_labels, record_event
-from hq.platform.core.models import AuditLog
+from hq.platform.core.attribution import own_operation
+from hq.platform.core.audit import Outcome, work_ended
+from hq.platform.core.facets import Failure
+lazy from hq.domains.control_plane.bridge_contract import declared_names, departs, limit
 lazy from hq.domains.control_plane.provider_adapters.declarations import DELIVERY_TARGET_KIND
+lazy from hq.domains.control_plane.secret_shapes import struck
 
 from . import agent_access
 from .adoption import manages_through, observes_only
@@ -56,6 +58,9 @@ class ControllerReport:
     events: list[dict[str, Any]] = field(default_factory=list)
     # What a scan found (``SourceCatalog``); no other operation reports one.
     catalog: dict[str, Any] | None = None
+    # What a run's playbook stated beside its result (``RunStated``); no other
+    # operation reports any.
+    stated: dict[str, Any] | None = None
 
 
 def _confirm_delivery_targets(resource: ManagedResource, status: dict[str, Any]) -> None:
@@ -87,30 +92,6 @@ def _confirm_delivery_targets(resource: ManagedResource, status: dict[str, Any])
     now = timezone.now()
     ManagedResource.objects.filter(kind=DELIVERY_TARGET_KIND, spec__connection_ref__in=reached).update(
         last_observed_at=now, updated_at=now
-    )
-
-
-def _as_its_own(operation: OperationRequest) -> AbstractContextManager[None]:
-    """The controller's work on one queued request, bound under the request's
-    own id and caused by the operation that queued it, so its claim and report
-    read as one operation headed by the request's own rows, and lead back to
-    the ask, as an approval's rows run under the approval's id."""
-
-    queued_by = (
-        audit_events()
-        .filter(
-            object_type=audited_labels()[OperationRequest],
-            object_id=str(operation.pk),
-            action=AuditLog.Action.CREATED,
-        )
-        .values_list("operation_id", flat=True)
-        .first()
-    )
-    outer = bound()
-    return audit_operation(
-        operation=outer.operation if outer is not None else "",
-        operation_id=str(operation.pk),
-        cause=queued_by or "",
     )
 
 
@@ -150,15 +131,11 @@ def _fail_lapsed_runs(now) -> None:
     for operation in lapsed:
         retry = str(operation.resource.spec.get("retry") or "never")
         message = _UNKNOWN_OUTCOME.get(retry, _UNKNOWN_OUTCOME["never"])
-        operation.state = OperationRequest.State.CANCELLED
-        operation.completed_at = now
-        operation.lease_expires_at = None
-        operation.claim_attempt = ""
-        operation.result = {"ok": False, "message": message, "reason": OUTCOME_UNKNOWN, "retry": retry}
-        operation.audit_said = message
-        with _as_its_own(operation):
-            operation.save(
-                update_fields=("state", "completed_at", "lease_expires_at", "claim_attempt", "result", "updated_at")
+        with own_operation(operation):
+            _end(
+                operation,
+                OperationRequest.State.CANCELLED,
+                {"ok": False, "message": message, "reason": OUTCOME_UNKNOWN, "retry": retry},
             )
 
 
@@ -468,7 +445,7 @@ def claim_next_operation(
     # what it asks next. Left queued, so lifting the brake resumes it.
     operations = operations.exclude(agent_access.held_askers())
     operations = _compatible_operations(operations, capabilities)
-    operation, contract = _next_resolvable(operations, now)
+    operation, contract = _next_resolvable(operations)
     if operation is None:
         return {"ok": True, "operation": None}
     operation.state = OperationRequest.State.CLAIMED
@@ -477,7 +454,7 @@ def claim_next_operation(
     operation.lease_expires_at = now + timedelta(seconds=lease_seconds)
     operation.claim_attempt = attempt
     operation.attempt_count += 1
-    with _as_its_own(operation):
+    with own_operation(operation):
         operation.save(
             update_fields=(
                 "state",
@@ -494,7 +471,7 @@ def claim_next_operation(
     return result
 
 
-def _next_resolvable(operations, now):
+def _next_resolvable(operations):
     """The first queued operation HQ can actually describe, failing the rest.
 
     A resource whose spec cannot be resolved is not work waiting to happen; it
@@ -508,16 +485,12 @@ def _next_resolvable(operations, now):
         try:
             return operation, controller_contract(operation.resource)
         except (KeyError, TypeError, ValueError) as exc:
-            operation.state = OperationRequest.State.FAILED
-            operation.completed_at = now
-            operation.result = {
-                "ok": False,
-                "message": str(exc),
-                "reason": "Unresolvable",
-            }
-            operation.audit_said = str(exc)
-            with _as_its_own(operation):
-                operation.save(update_fields=("state", "completed_at", "result", "updated_at"))
+            with own_operation(operation):
+                _end(
+                    operation,
+                    OperationRequest.State.FAILED,
+                    {"ok": False, "message": str(exc), "reason": "Unresolvable"},
+                )
     return None, {}
 
 
@@ -609,6 +582,10 @@ def report_operation(
         raise ValueError("A run reports what its tasks did as events, never a status for its record.")
     if report.events and not run:
         raise ValueError("Only a run reports events.")
+    if report.stated is not None:
+        if not run:
+            raise ValueError("Only a run reports what its playbook stated.")
+        _hold_stated(operation, report.stated)
     scan = operation.action == OperationRequest.Action.SCAN
     if report.catalog is not None and not scan:
         raise ValueError("Only a scan reports the playbooks it found.")
@@ -617,7 +594,7 @@ def report_operation(
     if scan and report.success and report.catalog is None:
         raise ValueError("A scan that succeeded reports the playbooks it found.")
 
-    with _as_its_own(operation):
+    with own_operation(operation):
         if run:
             return _settle_run(operation, report)
         if scan:
@@ -628,39 +605,57 @@ def report_operation(
 def _finish(
     operation: OperationRequest, report: ControllerReport, result: dict[str, Any], *, unknown: bool = False
 ) -> None:
-    operation.result = result
-    operation.completed_at = timezone.now()
-    operation.lease_expires_at = None
-    operation.claim_attempt = ""
-    operation.state = (
-        OperationRequest.State.SUCCEEDED
-        if report.success
-        # Stopped early, as a run whose lease lapsed ends (``_fail_lapsed_runs``).
-        else OperationRequest.State.CANCELLED
-        if unknown
-        else OperationRequest.State.FAILED
-    )
-    # The finishing row says what the controller said.
-    operation.audit_said = report.message
-    operation.save(
-        update_fields=(
-            "result",
-            "completed_at",
-            "lease_expires_at",
-            "claim_attempt",
-            "state",
-            "updated_at",
-        )
-    )
+    # Stopped early, as a run whose lease lapsed ends (``_fail_lapsed_runs``).
+    failed = OperationRequest.State.CANCELLED if unknown else OperationRequest.State.FAILED
+    _end(operation, OperationRequest.State.SUCCEEDED if report.success else failed, result)
+
+
+def _end(operation: OperationRequest, state: str, result: dict[str, Any]) -> None:
+    """End ``operation`` in ``state``, said by its one ending row (``work_ended``)
+    under the binding in force, so its record is written past its audit signal."""
+
+    now = timezone.now()
+    fields = {"state": state, "result": result, "completed_at": now, "lease_expires_at": None, "claim_attempt": ""}
+    OperationRequest.objects.filter(pk=operation.pk).update(**fields, updated_at=now)
+    for name, value in {**fields, "updated_at": now}.items():
+        setattr(operation, name, value)
+    # What the controller said, else the state it ended in.
+    message = str(result.get("message") or "") or operation.get_state_display()
+    ok = state == OperationRequest.State.SUCCEEDED
+    failure = Failure(message=message[:400], kind=str(result.get("reason") or state))
+    seconds = (now - operation.claimed_at).total_seconds() if operation.claimed_at else 0
+    work_ended(operation, Outcome(message=message, seconds=seconds, ok=ok, facets=() if ok else (failure,)))
 
 
 # The task outcomes a run's audit trail records one row each: what changed a
 # machine or went wrong. Every outcome stays in the run's result.
-_AUDITED_OUTCOMES = {
-    "changed": AuditLog.Action.DONE,
-    "failed": AuditLog.Action.FAILED,
-    "unreachable": AuditLog.Action.FAILED,
-}
+_AUDITED_OUTCOMES = frozenset({"changed", "failed", "unreachable"})
+
+
+def _hold_stated(operation: OperationRequest, stated: dict[str, Any]) -> None:
+    """Refuse what a run's playbook stated unless it keeps to ``RunStated``
+    and names only the run's own machines.
+
+    So a run states nothing about a machine it was not asked on: a worker,
+    even a compromised one, misstates only the machines of the runs it
+    claims. Held here as well as at the bridge's door, so a report built
+    outside a request keeps to the same bounds.
+    """
+
+    violation = departs("RunStated", stated)
+    if violation is not None:
+        raise ValueError(violation)
+    hosts = set((operation.input or {}).get("hosts") or ())
+    if any(set(stated.get(stat) or {}) - hosts for stat in ("readings", "preview")):
+        raise ValueError("A run states only what it found on the machines it was run on.")
+    if _stated_bytes(stated) > limit("StatedBytes", "maxLength"):
+        raise ValueError("What the run's playbook stated is larger than the bridge accepts.")
+
+
+def _stated_bytes(stated: dict[str, Any]) -> int:
+    """How many bytes ``stated`` is as ``StatedBytes`` measures it: compact JSON in UTF-8."""
+
+    return len(json.dumps(stated, separators=(",", ":"), ensure_ascii=False).encode())
 
 
 def _settle_run(operation: OperationRequest, report: ControllerReport) -> dict[str, Any]:
@@ -669,28 +664,32 @@ def _settle_run(operation: OperationRequest, report: ControllerReport) -> dict[s
     A procedure's record holds the manifest it is pinned to, never what a run
     found, so nothing here writes it. The events arrive bounded by the bridge
     contract (``RunEvent``) and struck of secrets at its door
-    (``secret_shapes``).
+    (``secret_shapes``); what its playbook stated (``RunStated``) is kept as
+    ``stated``, held to its bounds (``_hold_stated``) and struck again here,
+    so one built outside a request holds no secret either.
     """
 
     events = [dict(event) for event in report.events]
+    result: dict[str, Any] = {"message": report.message, "conditions": report.conditions, "events": events}
+    if report.stated:
+        result["stated"] = struck(report.stated, declared_names())[0]
     _finish(
         operation,
         report,
-        {"message": report.message, "conditions": report.conditions, "events": events},
+        result,
         unknown=any(condition.get("reason") == OUTCOME_UNKNOWN for condition in report.conditions),
     )
     for event in events:
-        action = _AUDITED_OUTCOMES.get(event["outcome"])
-        if action is None:
-            continue
-        record_event(
-            action=action,
-            obj=operation,
-            type_label=audited_labels()[OperationRequest],
-            message=f"{event['host']}: {event['task']} {event['outcome']}",
-            metadata={"event": {name: event[name] for name in ("host", "task", "outcome")}},
-            required=True,
-        )
+        if event["outcome"] in _AUDITED_OUTCOMES:
+            said = {name: event[name] for name in ("host", "task", "outcome")}
+            work_ended(
+                operation,
+                Outcome(
+                    message=f"{event['host']}: {event['task']} {event['outcome']}",
+                    ok=event["outcome"] == "changed",
+                    detail={"event": said},
+                ),
+            )
     return {"ok": True, "operation": serialize_operation(operation)}
 
 

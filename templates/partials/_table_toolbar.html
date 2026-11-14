@@ -1,8 +1,9 @@
 {% filter_bar filtered=table.active_count clear="?" data_table_toolbar=True %}
   <input type="search" name="q" value="{{ table.query }}" placeholder="{{ table.search_placeholder }}" aria-label="{{ table.search_placeholder }}">
+  {% choices %}
   {% for filter in table.filters %}
     <div class="table-filter-menu">
-      <button type="button" popovertarget="table-filter-{{ filter.name }}">{{ filter.label|breakable }}{% if filter.selected_count %} <span class="filter-count">{{ filter.selected_count|breakable }}</span>{% endif %}</button>
+      <button type="button" popovertarget="table-filter-{{ filter.name }}">{{ filter.label|button_words }}{% if filter.selected_count %} <span class="filter-count">{{ filter.selected_count|breakable }}</span>{% endif %}</button>
       <div class="table-filter-options" id="table-filter-{{ filter.name }}" popover>
         {% for option in filter.options %}
           <label><input type="checkbox" name="{{ filter.name }}" value="{{ option.value }}"{% if option.selected %} checked{% endif %}> {{ option.label|breakable }}</label>

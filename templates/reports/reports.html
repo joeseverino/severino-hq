@@ -37,9 +37,9 @@ A year with no expenses is said by the count above; its breakdowns do not draw.
 {% endif %}
 
 {% comment %}
-Small readings and the exports share rows: each is a few lines, and a card
-across the page would be mostly empty card. A reading with nothing in it is
-not drawn.
+Small readings share rows: each is a few lines, and a card across the page
+would be mostly empty card. The exports, longer than any of them, take the
+row after, their facts across it. A reading with nothing in it is not drawn.
 {% endcomment %}
 <div class="section-flow">
   {% if status_groups %}
@@ -63,17 +63,17 @@ not drawn.
     {% include "partials/_record_list.html" with rows=docs_needing_review %}
   {% endsection %}
   {% endif %}
-
-  {% comment %}Each export once, by what it holds, its files beside it: a list on a card, not a wall of buttons.{% endcomment %}
-  {% section "Exports" lede="Leaves out secrets, sensitive text and receipts." %}
-    {% facts %}
-      {% fact "Expenses" %}<ul class="dot-list"><li><a href="{% url 'reports:expenses_csv' %}?year={{ year }}">{{ year|breakable }} CSV</a></li><li><a href="{% url 'reports:expenses_csv' %}">All years CSV</a></li></ul>{% endfact %}
-      {% fact "Assets" %}<ul class="dot-list"><li><a href="{% url 'reports:assets_csv' %}?year={{ year }}">{{ year|breakable }} CSV</a></li><li><a href="{% url 'reports:assets_csv' %}">All years CSV</a></li></ul>{% endfact %}
-      {% fact "Year summary" %}<ul class="dot-list"><li><a href="{% url 'reports:year_summary_json' %}?year={{ year }}">{{ year|breakable }} JSON</a></li><li><a href="{% url 'reports:year_summary_md' %}?year={{ year }}">{{ year|breakable }} Markdown</a></li></ul>{% endfact %}
-      {% fact "Writeups and pages" %}<a href="{% url 'reports:content_csv' %}">CSV</a>{% endfact %}
-      {% fact "Projects" %}<a href="{% url 'reports:projects_csv' %}">CSV</a>{% endfact %}
-      {% fact "Documents" %}<a href="{% url 'reports:documentation_csv' %}">CSV</a>{% endfact %}
-    {% endfacts %}
-  {% endsection %}
 </div>
+
+{% comment %}Each export once, by what it holds, its files beside it: a list on a card, not a wall of buttons.{% endcomment %}
+{% section "Exports" lede="Leaves out secrets, sensitive text and receipts." %}
+  {% facts %}
+    {% fact "Expenses" %}<ul class="dot-list"><li><a href="{% url 'reports:expenses_csv' %}?year={{ year }}">{{ year|breakable }} CSV</a></li><li><a href="{% url 'reports:expenses_csv' %}">All years CSV</a></li></ul>{% endfact %}
+    {% fact "Assets" %}<ul class="dot-list"><li><a href="{% url 'reports:assets_csv' %}?year={{ year }}">{{ year|breakable }} CSV</a></li><li><a href="{% url 'reports:assets_csv' %}">All years CSV</a></li></ul>{% endfact %}
+    {% fact "Year summary" %}<ul class="dot-list"><li><a href="{% url 'reports:year_summary_json' %}?year={{ year }}">{{ year|breakable }} JSON</a></li><li><a href="{% url 'reports:year_summary_md' %}?year={{ year }}">{{ year|breakable }} Markdown</a></li></ul>{% endfact %}
+    {% fact "Writeups and pages" %}<a href="{% url 'reports:content_csv' %}">CSV</a>{% endfact %}
+    {% fact "Projects" %}<a href="{% url 'reports:projects_csv' %}">CSV</a>{% endfact %}
+    {% fact "Documents" %}<a href="{% url 'reports:documentation_csv' %}">CSV</a>{% endfact %}
+  {% endfacts %}
+{% endsection %}
 {% endblock %}

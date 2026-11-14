@@ -78,6 +78,22 @@ class ReferencePageTests(TestCase):
         self.assertIn("script-src 'nonce' 'strict-dynamic' 'self'", _directives(page))
         self.assertNotIn("unsafe-eval", page)
 
+    def test_no_engine_refuses_a_style_the_viewer_writes(self):
+        """A <style> the bundle writes and a style attribute it sets are
+        admitted in every engine: CSP Level 3 voids 'unsafe-inline' in a
+        directive that also names a nonce or a hash, so neither does."""
+
+        self._sign_in()
+        policy = dict(
+            [*directive.split(maxsplit=1), ""][:2]
+            for directive in _directives(self.client.get(self.url)["Content-Security-Policy"])
+        )
+        for name in ("style-src-elem", "style-src-attr"):
+            with self.subTest(directive=name):
+                sources = policy[name].split()
+                self.assertIn("'unsafe-inline'", sources)
+                self.assertEqual([s for s in sources if s.startswith(("'nonce", "'sha"))], [])
+
     def test_a_stranger_is_sent_to_sign_in(self):
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 302)

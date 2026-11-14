@@ -119,6 +119,8 @@ class QueueItem(TypedDict):
     # ISO 8601, or "" when unknown.
     since: str
     observed_at: str
+    # The kind of reading observed_at dates, or "".
+    reads: str
     # Each a label and its value.
     facts: list[list[str]]
     links: list[WrittenAction]
@@ -146,6 +148,7 @@ def queue_item(source_id: str, source: str, item: Insight) -> QueueItem:
         "family": item.family,
         "since": item.since.isoformat() if item.since else "",
         "observed_at": item.observed_at.isoformat() if item.observed_at else "",
+        "reads": item.reads,
         "facts": [list(fact) for fact in item.facts],
         "links": [asdict(link) for link in item.links],
         "read_capabilities": list(item.read_capabilities),

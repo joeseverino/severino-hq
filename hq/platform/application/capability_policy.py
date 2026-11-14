@@ -17,8 +17,7 @@ from django.utils import timezone
 from django.utils.text import get_text_list
 
 from hq.domains.control_plane.models import CapabilityRule
-from hq.platform.core.audit import record_event
-from hq.platform.core.models import AgentIdentity, AuditLog
+from hq.platform.core.models import AgentIdentity
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
 from .approvals import DESTRUCTIVE_EFFECT, READ_EFFECT, is_destructive, no_rule_allows, waits
@@ -41,8 +40,6 @@ lazy from . import capabilities
 lazy from .agent_registry import identity_of
 lazy from .entity_links import kind_label
 lazy from .integrations import integration_graph
-
-AUDIT_LABEL = "Capability policy"
 
 Rule = CapabilityRule.Rule
 
@@ -133,28 +130,17 @@ def set_rule(
         before = existing.rule if existing else None
         if before == rule:
             return False
+        said = dotted(subject, f"{spec.name}: from {_name(before)} to {_name(rule)}")
         if rule is None:
+            existing.audit_gone = said
             existing.delete()
-        elif existing is None:
-            CapabilityRule.objects.create(subject=subject, capability=spec.name, rule=rule, changed_by=user)
         else:
-            existing.rule = rule
-            existing.changed_by = user
-            existing.changed_at = timezone.now()
-            existing.save(update_fields=["rule", "changed_by", "changed_at"])
-        record_event(
-            action=AuditLog.Action.SETTINGS_CHANGED,
-            type_label=AUDIT_LABEL,
-            message=dotted(subject, f"{spec.name}: from {_name(before)} to {_name(rule)}"),
-            metadata={
-                "subject": subject,
-                "capability": spec.name,
-                "from": before,
-                "to": rule,
-            },
-            user=user,
-            required=True,
-        )
+            row = existing or CapabilityRule(subject=subject, capability=spec.name)
+            row.rule = rule
+            row.changed_by = user
+            row.changed_at = timezone.now()
+            row.audit_said = said
+            row.save()
     return True
 
 

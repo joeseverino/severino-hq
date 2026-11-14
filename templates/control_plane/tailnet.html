@@ -10,8 +10,6 @@
     {% fact "Policy tests" value=tailnet.policy.tests|length %}
   {% endfacts %}
 
-  {% comment %}The settings and the grants share a row.{% endcomment %}
-  <div class="section-flow">
   {% section "Settings" %}{% if tailnet.settings %}
     {% facts %}
       {% for setting in tailnet.settings %}
@@ -39,7 +37,6 @@
   {% endif %}
   {% empty %}No grants.
   {% endsection %}
-  </div>
 
   {% section "Groups and tags" count=tailnet.group_rows %}
   {% if tailnet.group_rows %}

@@ -248,6 +248,9 @@ RESOURCE_TONES = {
 # What a drifted resource reads as. The finding that offers the two ways out
 # keys on it, so the wording and the test for it are one value.
 DRIFT_LABEL = "Changed outside HQ"
+# What a record whose kind is read reads as while it reports no state of its
+# own. The finding that says HQ could not check it keys on it.
+NOT_READ_LABEL = "Not read yet"
 
 
 def is_drifted(resource: ManagedResource) -> bool:
@@ -295,7 +298,7 @@ def resource_health(resource: ManagedResource) -> HealthPart:
         }
     return {
         "state": "unknown",
-        "label": "Not read yet",
+        "label": NOT_READ_LABEL,
         "reason": "",
         "message": "HQ has not read it yet.",
     }
