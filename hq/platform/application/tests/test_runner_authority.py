@@ -43,6 +43,12 @@ TRUSTING = (
     ("project.dependency_updates.run", None, records_of("projects").write),
     ("receipt.update", 1, records_of("receipts").write),
     ("project.refresh", "example-target", records_of("projects").write),
+    ("project.create", None, records_of("projects").write),
+    ("project.update", "example-target", records_of("projects").write),
+    ("project.delete", "example-target", records_of("projects").delete),
+    ("calendar.entry.create", None, Capability.WRITE_CALENDAR),
+    ("calendar.entry.delete", "example-target", Capability.DELETE_CALENDAR),
+    ("documentation.sync", None, Capability.SYNC_DOCUMENTATION),
 )
 
 

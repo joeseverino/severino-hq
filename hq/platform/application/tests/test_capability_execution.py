@@ -17,7 +17,6 @@ from hq_sdk.capabilities import StrictCommand
 from ..capabilities import CapabilitySpec, describe_capabilities, execute_capability
 from ..documentation import sync_documentation
 from ..integration_testing import commands_registered
-from ..projects import ProjectCommand, save_project
 from ..security import AuthorizationError, Capability, Principal, agent_principal, cli_principal
 from .writers import keyed
 
@@ -52,11 +51,13 @@ class CapabilityTests(TestCase):
         self.assertIn("name", project["input_schema"]["properties"])
 
     def test_an_agent_not_granted_a_write_is_refused_it(self):
-        with self.assertRaisesRegex(AuthorizationError, "write_projects"):
-            save_project(
-                ProjectCommand(name="Denied", slug="denied"),
-                principal=agent_principal("example-agent", "mcp", frozenset({"read"})),
-            )
+        result = execute_capability(
+            "project.create",
+            {"name": "Denied", "slug": "denied"},
+            principal=agent_principal("example-agent", "mcp", frozenset({"read"})),
+        )
+        self.assertEqual(result["error"]["code"], "insufficient_scope", result)
+        self.assertIn("write_projects", result["error"]["message"])
         self.assertFalse(Project.objects.filter(slug="denied").exists())
 
     def test_json_executor_returns_canonical_error_envelope(self):

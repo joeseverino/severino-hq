@@ -9,8 +9,6 @@ from textwrap import dedent
 from django.test import SimpleTestCase, tag
 
 from hq.domains.control_plane.bridge_actions import ACTIONS
-from hq.platform.application.domains import host_records
-from hq.platform.application.resource_capabilities import LIFECYCLE_VERBS
 from hq.platform.application.tests.apart import apart
 from hq.platform.application.tests.reads import reads
 
@@ -33,19 +31,10 @@ def named_by(template: str) -> list[str]:
     parts come from. A binding missing here fails: say where its names come from."""
 
     actions = [action.name for action in ACTIONS]
-    records = list(host_records())
     families = {
         "f'bridge.{action.name}'": [f"bridge.{name}" for name in actions],
         "f'bridge.{action.name}.refused'": [f"bridge.{name}.refused" for name in actions],
         "f'bridge.{action}'": [f"bridge.{name}" for name in actions],
-        "f'{records.noun}.{verb}'": [
-            f"{entry.noun}.{verb}"
-            for entry in records
-            for verb in ("create", "update")
-            if verb != "create" or entry.create
-        ],
-        "f'{records.noun}.delete'": [f"{entry.noun}.delete" for entry in records],
-        "f'infrastructure.{action}.request'": [f"infrastructure.{verb}.request" for verb in sorted(LIFECYCLE_VERBS)],
     }
     return families[template]
 

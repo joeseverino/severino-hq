@@ -17,8 +17,6 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.db.models import Model
 
-from hq.platform.core.audit import audit_operation
-
 from .describe import Describe
 from .domains import Records, load, records_of
 from .integration_specs import TARGET_KINDS, Kept, keeps
@@ -201,27 +199,24 @@ def _saved(
     refusals: Held,
     links: Mapping[str, Link],
 ) -> Any:
-    principal.require(records.write)
     model = load(records.model)
-    operation = f"{records.noun}.{'create' if current is None else 'update'}"
-    with audit_operation(operation=operation, principal=principal):
-        record = model() if current is None else held(model, refusals, {records.lookup: current}, expected_updated_at)
-        values = written(command, sent if current is not None else None)
-        sets = {}
-        for name, link in links.items():
-            if name not in values:
-                continue
-            field = model._meta.get_field(name)
-            if field.many_to_many:
-                sets[name] = _linked_set(field.related_model, link, values.pop(name))
-            else:
-                values[name] = _linked_one(field.related_model, link, values.pop(name))
-        for name, value in values.items():
-            setattr(record, name, value)
-        record.full_clean()
-        record.save()
-        for name, found in sets.items():
-            getattr(record, name).set(found)
+    record = model() if current is None else held(model, refusals, {records.lookup: current}, expected_updated_at)
+    values = written(command, sent if current is not None else None)
+    sets = {}
+    for name, link in links.items():
+        if name not in values:
+            continue
+        field = model._meta.get_field(name)
+        if field.many_to_many:
+            sets[name] = _linked_set(field.related_model, link, values.pop(name))
+        else:
+            values[name] = _linked_one(field.related_model, link, values.pop(name))
+    for name, value in values.items():
+        setattr(record, name, value)
+    record.full_clean()
+    record.save()
+    for name, found in sets.items():
+        getattr(record, name).set(found)
     return record
 
 

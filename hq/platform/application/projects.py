@@ -20,7 +20,7 @@ from django.db import transaction
 from hq.domains.content.content_sync import ContentSyncError, sync_content_index
 from hq.domains.projects.github import GitHubMetadataError, fetch_last_push
 from hq.domains.projects.models import PROJECT_CATEGORY_CHOICES, Project
-from hq.platform.core.audit import audit_operation, record_event
+from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
 lazy from hq.domains.projects.specs import ProjectRecord
 lazy from hq.platform.application.routes import reverse
@@ -232,7 +232,6 @@ def refresh_project(
     public read of when it was last pushed.
     """
 
-    principal.require(records_of("projects").write)
     try:
         project = Project.objects.get(slug=slug)
     except Project.DoesNotExist as exc:
@@ -241,15 +240,14 @@ def refresh_project(
     result: dict[str, Any] = {"ok": True, "content": None, "github": None, "github_app": None}
     if slug == settings.CONTENT_INDEX_PROJECT_SLUG:
         try:
-            with audit_operation(operation="project.refresh_content", principal=principal):
-                stats = content_sync()
-                record_event(
-                    action=AuditLog.Action.UPDATED,
-                    obj=project,
-                    type_label="Project",
-                    message="Updated the site's content.",
-                    metadata=stats,
-                )
+            stats = content_sync()
+            record_event(
+                action=AuditLog.Action.UPDATED,
+                obj=project,
+                type_label="Project",
+                message="Updated the site's content.",
+                metadata=stats,
+            )
             result["content"] = {"ok": True, **stats}
         except ContentSyncError as exc:
             result["content"] = {"ok": False, "error": str(exc)}
@@ -327,10 +325,7 @@ def _record_push(project: Project, pushed_at: datetime | None, principal: Princi
 
     if pushed_at is None:
         return {"ok": True, "last_push_at": iso(project.last_push_at) or None}
-    with (
-        transaction.atomic(),
-        audit_operation(operation="project.refresh", principal=principal),
-    ):
+    with transaction.atomic():
         project = held(Project, _PROJECT, {"pk": project.pk}, None)
         project.last_push_at = pushed_at
         # `updated_at` is left out on purpose: it is the "Updated" column, the

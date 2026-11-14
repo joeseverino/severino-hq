@@ -34,7 +34,7 @@ plugin = PluginManifest(
     distribution="example-notes",
     source_repository="example/example-notes",
     source_workflow=".github/workflows/admit-plugin.yml",
-    api_version=14,
+    api_version=15,
     integration_provider="example_notes.plugin:integration",
     django_apps=("example_notes",),
     url_prefix="notes/",
@@ -158,19 +158,17 @@ the boundary instead of being dropped. Class-based views inherit
 `@capability_required(...)`. Either only names the capability. The host's page
 gate refuses a person who does not hold it, and records the refusal, before the
 view runs. It also refuses to serve a mixin view that names none. Bulk work
-uses `audit_operation` with `record_operation`, so adapter and actor
-attribution match without a domain-owned wrapper. Every row it writes carries
-one operation id: the id it is given, else the one of the operation it runs
-inside, else a new one. Without a principal it is the operation of whoever its
-door bound (a request, a job, a command), and with nothing bound it is refused,
-as `record_event` is. Every door binds who acted where it starts, so a row
-nobody bound is a door's defect and fails where it runs. Once an actor is bound, a binding opened inside
-it that names another actor is refused. A job's work runs under its job's
-binding and a command under the shell's. A step that needs a principal is
-handed the requester's. The same actor may name another interface. A
-binding given an id of its own inside another operation records that
-operation as its row's `cause`, so a chain of operations is followed from
-either end. A model whose rows are about another record (an operation on a
+records one summary with `record_operation`. Who acted and which operation a
+row belongs to are the door's: the capability runner names every row a
+handler writes by its capability and its caller, and the job runner every row
+a job writes by its job and its requester. An extension binds neither, and
+`hq_sdk.audit` exports no binding (`PLUGIN_API_VERSION` 15). A write a command
+line makes runs its capability through `execute_capability` with
+`cli_principal()`, so it is authorized, named and recorded as any door's is.
+A handler leaves its authority to the runner, which checks what the spec
+requires before it calls the handler. A row written with nothing bound is
+refused, as `record_event` is, so a row nobody bound is a door's defect and
+fails where it runs. A model whose rows are about another record (an operation on a
 declaration, a decision on one) passes `register_audit(..., subject=...)`, a
 function returning that record's key, so one indexed read of the log's
 `subject` is the record's whole story. A change to a row is written by its
@@ -883,6 +881,8 @@ and `section-period`.
 parts are always `<li>` elements.
 `PLUGIN_API_VERSION` 14 retires `partials/_line_chart.html` and
 `partials/_stacked_bar_chart.html`: `partials/_chart.html` draws either chart.
+`PLUGIN_API_VERSION` 15 retires `hq_sdk.audit`'s `audit_operation` and
+`operation_context`: the runner that runs a capability or a job binds its rows.
 
 A notice is `{% notice tone=... title=... %}body{% endnotice %}`, with a
 title the page composes as its `{% title %}` part after the body

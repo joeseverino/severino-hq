@@ -31,7 +31,6 @@ lazy from hq.domains.control_plane.models import (
 lazy from hq.domains.control_plane.provider_adapters.automation import OPERATION_KIND
 lazy from hq.domains.control_plane.provider_adapters.declarations import MACHINE_KIND
 lazy from hq.domains.control_plane.providers import validate_spec
-lazy from hq.platform.core.audit import audit_operation
 lazy from hq.platform.core.templatetags.value_tags import seconds
 
 from .automation_manifest import OperationManifest, OperationRegistry, sorted_unique
@@ -464,34 +463,33 @@ def request_run(
     untaken = automation_standing().cannot("run", now=timezone.now())
     if untaken:
         raise PolicyError(untaken)
-    with audit_operation(operation="automation.run.request", principal=principal):
-        resource = _record(manifest, principal=principal)
-        if not resource.enabled:
-            raise PolicyError("This playbook is switched off in HQ.")
-        # A claim whose lease ran out is ended or put back first, by the rule
-        # a claim applies too, so a worker that went quiet holds nothing.
-        release_lapsed(timezone.now())
-        holder = _holding(resource, bound["hosts"])
-        if holder is not None:
-            raise PolicyError(
-                "Another run holds this playbook or one of these machines; details.holding is that run. "
-                "Ask again once it ends.",
-                details=_held_by(holder, resource, bound["hosts"]),
-            )
-        # No run of this procedure is active and the key is new, so this
-        # queues one.
-        operation, _ = enqueue(
-            resource,
-            OperationRequest.Action.RUN,
-            idempotency_key=idempotency_key,
-            requested_actor=principal.actor,
-            requested_interface=principal.interface,
-            requested_device=principal.device,
-            requested_person_key=principal.person_key,
-            reason=command.reason,
-            input={"generation": resource.generation, **asked},
+    resource = _record(manifest, principal=principal)
+    if not resource.enabled:
+        raise PolicyError("This playbook is switched off in HQ.")
+    # A claim whose lease ran out is ended or put back first, by the rule
+    # a claim applies too, so a worker that went quiet holds nothing.
+    release_lapsed(timezone.now())
+    holder = _holding(resource, bound["hosts"])
+    if holder is not None:
+        raise PolicyError(
+            "Another run holds this playbook or one of these machines; details.holding is that run. "
+            "Ask again once it ends.",
+            details=_held_by(holder, resource, bound["hosts"]),
         )
-        OperationHost.objects.bulk_create(OperationHost(operation=operation, host=host) for host in bound["hosts"])
+    # No run of this procedure is active and the key is new, so this
+    # queues one.
+    operation, _ = enqueue(
+        resource,
+        OperationRequest.Action.RUN,
+        idempotency_key=idempotency_key,
+        requested_actor=principal.actor,
+        requested_interface=principal.interface,
+        requested_device=principal.device,
+        requested_person_key=principal.person_key,
+        reason=command.reason,
+        input={"generation": resource.generation, **asked},
+    )
+    OperationHost.objects.bulk_create(OperationHost(operation=operation, host=host) for host in bound["hosts"])
     # The worker pulls the run over the bridge; the ring only says one waits,
     # and only once it is stored for the claim to find.
     transaction.on_commit(ring_automation_doorbell)

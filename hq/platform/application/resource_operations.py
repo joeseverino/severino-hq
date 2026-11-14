@@ -17,7 +17,7 @@ from hq.domains.control_plane.desired_state import advance_dependents
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND
 from hq.domains.control_plane.providers import PROVIDERS, controller_action_policy
-from hq.platform.core.audit import audit_operation, audited_labels
+from hq.platform.core.audit import audited_labels
 lazy from hq.platform.core.models import AuditLog
 
 from .adoption import keep_out_declaration, observes_only, require_writable
@@ -411,13 +411,12 @@ def request_reconcile(
 
     if PROVIDERS[resource.kind].public_effect and not public_dns_enabled():
         raise PolicyError("Public DNS changes are off on this server.")
-    with audit_operation(operation="infrastructure.reconcile.request", principal=principal):
-        return _queue_operation(
-            resource,
-            command,
-            principal=principal,
-            action=OperationRequest.Action.RECONCILE,
-        )
+    return _queue_operation(
+        resource,
+        command,
+        principal=principal,
+        action=OperationRequest.Action.RECONCILE,
+    )
 
 
 @transaction.atomic
@@ -453,31 +452,30 @@ def _forget_declaration(
     only observes. Nothing is queued and nothing is deleted at the provider.
     """
 
-    with audit_operation(operation="infrastructure.resource.forget", principal=principal):
-        # The declarations inside it go too. Left behind, HQ would keep
-        # reconciling records in a domain it is no longer responsible for. They
-        # are forgotten rather than deleted: the records stay exactly as they
-        # are at the provider, which is what stepping back means.
-        contained = _contained_keys(resource)
-        ManagedResource.objects.filter(key__in=contained).delete()
-        key = resource.key
-        kind = resource.kind
-        # The next sweep would adopt it again. The operator's choice is kept
-        # until they manage it again.
-        keep_out_declaration(kind, resource.spec, principal=principal)
-        resource.delete()
-        # Removing one changes what others resolve to as much as editing one,
-        # so dependents advance here too.
-        provider = PROVIDERS.get(kind)
-        if provider is not None and provider.resolution_input:
-            advance_dependents(delivery_targets())
-        return {
-            "ok": True,
-            "queued": False,
-            "forgotten": key,
-            "released": contained,
-            "reason": command.reason,
-        }
+    # The declarations inside it go too. Left behind, HQ would keep
+    # reconciling records in a domain it is no longer responsible for. They
+    # are forgotten rather than deleted: the records stay exactly as they
+    # are at the provider, which is what stepping back means.
+    contained = _contained_keys(resource)
+    ManagedResource.objects.filter(key__in=contained).delete()
+    key = resource.key
+    kind = resource.kind
+    # The next sweep would adopt it again. The operator's choice is kept
+    # until they manage it again.
+    keep_out_declaration(kind, resource.spec, principal=principal)
+    resource.delete()
+    # Removing one changes what others resolve to as much as editing one,
+    # so dependents advance here too.
+    provider = PROVIDERS.get(kind)
+    if provider is not None and provider.resolution_input:
+        advance_dependents(delivery_targets())
+    return {
+        "ok": True,
+        "queued": False,
+        "forgotten": key,
+        "released": contained,
+        "reason": command.reason,
+    }
 
 
 @transaction.atomic
@@ -499,11 +497,10 @@ def _request_lifecycle(
     gap = unit_gap(resource)
     if gap:
         raise PolicyError(gap)
-    with audit_operation(operation=f"infrastructure.{action}.request", principal=principal):
-        # Which verbs exist is the capability registry's to say, so a verb the
-        # controller does not implement is refused here rather than queued for
-        # work nothing will claim.
-        result = _queue_operation(resource, command, principal=principal, action=action)
+    # Which verbs exist is the capability registry's to say, so a verb the
+    # controller does not implement is refused here rather than queued for
+    # work nothing will claim.
+    result = _queue_operation(resource, command, principal=principal, action=action)
     # The page that asked shows the state the sweep last read, so the run that
     # applies this reads the kind again after it, rather than leaving the old
     # state up until the cadence comes round. Only a kind the sweep reads:
@@ -603,15 +600,12 @@ def accept_observed(
     kept = {
         field: resource.spec[field] for field in PROVIDERS[resource.kind].unobservable_fields if field in resource.spec
     }
-    with audit_operation(operation="infrastructure.resource.accept_observed", principal=principal):
-        result = save_managed_resource(
-            ManagedResourceCommand(
-                key=resource.key, kind=resource.kind, spec={**found, **kept}, enabled=resource.enabled
-            ),
-            principal=principal,
-            current_key=resource.key,
-            copied_from_live=True,
-        )
+    result = save_managed_resource(
+        ManagedResourceCommand(key=resource.key, kind=resource.kind, spec={**found, **kept}, enabled=resource.enabled),
+        principal=principal,
+        current_key=resource.key,
+        copied_from_live=True,
+    )
     return {**result, "reason": command.reason}
 
 
@@ -635,18 +629,17 @@ def request_removal(
     allowed, explanation = controller_action_policy(resource.kind, OperationRequest.Action.DELETE)
     if not allowed:
         raise PolicyError(explanation)
-    with audit_operation(operation="infrastructure.resource.remove", principal=principal):
-        # Bypasses the enabled check in _queue_operation on purpose: that guard
-        # exists to stop HQ converging a paused declaration, and removal is the
-        # opposite of converging it. A switched-off record is exactly what is
-        # left just before an operator decides to be rid of it.
-        return _queue_operation(
-            resource,
-            command,
-            principal=principal,
-            action=OperationRequest.Action.DELETE,
-            require_enabled=False,
-        )
+    # Bypasses the enabled check in _queue_operation on purpose: that guard
+    # exists to stop HQ converging a paused declaration, and removal is the
+    # opposite of converging it. A switched-off record is exactly what is
+    # left just before an operator decides to be rid of it.
+    return _queue_operation(
+        resource,
+        command,
+        principal=principal,
+        action=OperationRequest.Action.DELETE,
+        require_enabled=False,
+    )
 
 
 def certificate_renewal_allowed(resource: ManagedResource) -> tuple[bool, Sentence]:
@@ -696,13 +689,12 @@ def request_route_approval(
     """
 
     resource = _resource_for_operation(current_key)
-    with audit_operation(operation="tailnet.routes.approve.request", principal=principal):
-        return _queue_operation(
-            resource,
-            command,
-            principal=principal,
-            action=OperationRequest.Action.APPROVE_ROUTES,
-        )
+    return _queue_operation(
+        resource,
+        command,
+        principal=principal,
+        action=OperationRequest.Action.APPROVE_ROUTES,
+    )
 
 
 def request_reach_allow(
@@ -786,11 +778,10 @@ def request_certificate_renewal(
     allowed, explanation = certificate_renewal_allowed(resource)
     if not allowed:
         raise PolicyError(explanation)
-    with audit_operation(operation="certificate.renew.request", principal=principal):
-        result = _queue_operation(
-            resource,
-            command,
-            principal=principal,
-            action=OperationRequest.Action.RENEW,
-        )
+    result = _queue_operation(
+        resource,
+        command,
+        principal=principal,
+        action=OperationRequest.Action.RENEW,
+    )
     return {**result, "policy": {"allowed": True, "explanation": explanation}}

@@ -20,7 +20,6 @@ from hq.domains.control_plane.desired_state import desired_fingerprint
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_adapters.cloudflare import CONTACT_CHANGES_LIMIT, ContactStatus
 from hq.domains.control_plane.providers import validate_spec
-from hq.platform.core.audit import audit_operation
 
 from .adoption import WriteGap, require_writable, write_gap
 from .cadence import request_reading
@@ -213,12 +212,11 @@ def execute_contact_review(
     }
     status = review["status"] = _status(review["status"])
     review["assigned_to"] = review["assigned_to"].strip()
-    with audit_operation(operation=REVIEW, principal=principal):
-        _declare(
-            _change(current, review),
-            principal=principal,
-            said=f"Asked for contact submission #{current_id} to be reviewed.",
-        )
+    _declare(
+        _change(current, review),
+        principal=principal,
+        said=f"Asked for contact submission #{current_id} to be reviewed.",
+    )
     return {"ok": True, "id": current_id, "status": status, "queued": True}
 
 
@@ -256,10 +254,9 @@ def execute_contact_delete(
         # Already gone, or already waiting to be deleted: the requested end
         # state either way, so a retry succeeds.
         return {"ok": True, "deleted": {"id": current_id, "already_absent": True}}
-    with audit_operation(operation=DELETE, principal=principal):
-        _declare(
-            _change(current, {"delete": current_id}),
-            principal=principal,
-            said=f"Asked for contact submission #{current_id} to be deleted.",
-        )
+    _declare(
+        _change(current, {"delete": current_id}),
+        principal=principal,
+        said=f"Asked for contact submission #{current_id} to be deleted.",
+    )
     return {"ok": True, "deleted": {"id": current_id, "already_absent": False}, "queued": True}

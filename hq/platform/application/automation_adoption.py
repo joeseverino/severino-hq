@@ -57,7 +57,6 @@ from pydantic import (
 
 from hq.domains.control_plane.models import AdoptedCatalog, SourceProposal
 from hq.platform.core.digests import digest
-lazy from hq.platform.core.audit import audit_operation
 
 from . import automation_sources
 from .automation_manifest import PLAYBOOK, REVISION, OperationManifest, ProcedureTerms, Statement
@@ -816,28 +815,27 @@ def adopt(command: AdoptProposal, *, principal: Principal) -> Adopted:
     that waits, so each runs from the proposal's commit; every other playbook
     stays as it was adopted."""
 
-    with audit_operation(operation=ADOPT, principal=principal):
-        planned = plan(command.proposal, command.playbook or "")
-        chosen = _decided(planned, command.playbook)
-        current = adopted()
-        if not chosen:
-            return {"ok": True, "adopted": False, "digest": current.digest if current else "", "widened": []}
-        catalog = dict(planned.before)
-        for change in chosen:
-            if change.procedure is None:
-                catalog.pop(change.key, None)
-            else:
-                catalog[change.key] = change.procedure
-        ordered = [catalog[key] for key in sorted(catalog)]
-        proposal = planned.proposal
-        row = AdoptedCatalog.objects.create(
-            proposal=proposal,
-            branch=proposal.branch,
-            revision=proposal.revision,
-            committer=proposal.committer,
-            procedures=[procedure.model_dump(mode="json") for procedure in ordered],
-            digest=_digest(ordered),
-        )
+    planned = plan(command.proposal, command.playbook or "")
+    chosen = _decided(planned, command.playbook)
+    current = adopted()
+    if not chosen:
+        return {"ok": True, "adopted": False, "digest": current.digest if current else "", "widened": []}
+    catalog = dict(planned.before)
+    for change in chosen:
+        if change.procedure is None:
+            catalog.pop(change.key, None)
+        else:
+            catalog[change.key] = change.procedure
+    ordered = [catalog[key] for key in sorted(catalog)]
+    proposal = planned.proposal
+    row = AdoptedCatalog.objects.create(
+        proposal=proposal,
+        branch=proposal.branch,
+        revision=proposal.revision,
+        committer=proposal.committer,
+        procedures=[procedure.model_dump(mode="json") for procedure in ordered],
+        digest=_digest(ordered),
+    )
     # Every caller's commands moved: this process builds its own anew once
     # the row commits, every other at its next request (``generation``), and
     # a stream is told.
@@ -875,22 +873,21 @@ def reject(command: RejectProposal, *, principal: Principal) -> Rejected:
     as adopted, or the whole scan result, so nothing of it waits to be
     adopted until the next Refresh reads another."""
 
-    with audit_operation(operation=REJECT, principal=principal):
-        proposal = SourceProposal.objects.select_for_update().filter(pk=command.proposal).first()
-        if proposal is None:
-            raise RecordNotFound("No scan result has that ID. Refresh to scan again.")
-        if proposal.rejected_at is not None or command.playbook in proposal.rejected_playbooks:
-            return {"ok": True, "rejected": False}
-        chosen = _decided(judged(proposal.pk), command.playbook)
-        if not chosen:
-            raise PolicyError("Nothing in this scan result waits to be adopted, so there is nothing to reject.")
-        if command.playbook is not None:
-            proposal.rejected_playbooks = [*proposal.rejected_playbooks, command.playbook]
-            proposal.save(update_fields=("rejected_playbooks", "updated_at"))
-        else:
-            proposal.rejected_at = timezone.now()
-            proposal.rejected_by = principal.actor
-            proposal.save(update_fields=("rejected_at", "rejected_by", "updated_at"))
+    proposal = SourceProposal.objects.select_for_update().filter(pk=command.proposal).first()
+    if proposal is None:
+        raise RecordNotFound("No scan result has that ID. Refresh to scan again.")
+    if proposal.rejected_at is not None or command.playbook in proposal.rejected_playbooks:
+        return {"ok": True, "rejected": False}
+    chosen = _decided(judged(proposal.pk), command.playbook)
+    if not chosen:
+        raise PolicyError("Nothing in this scan result waits to be adopted, so there is nothing to reject.")
+    if command.playbook is not None:
+        proposal.rejected_playbooks = [*proposal.rejected_playbooks, command.playbook]
+        proposal.save(update_fields=("rejected_playbooks", "updated_at"))
+    else:
+        proposal.rejected_at = timezone.now()
+        proposal.rejected_by = principal.actor
+        proposal.save(update_fields=("rejected_at", "rejected_by", "updated_at"))
     return {"ok": True, "rejected": True}
 
 

@@ -11,6 +11,7 @@ from typing import Any
 
 from django.db import transaction
 
+from hq.platform.core.audit import audit_operation
 lazy from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 lazy from hq.domains.control_plane.observations.portainer import IMAGE_KIND
 lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
@@ -29,6 +30,8 @@ lazy from .projects import sync_repositories
 lazy from .public_registry import registry_due
 
 logger = logging.getLogger("severino.sweep")
+# The capability a sweep's adoption is, run by HQ itself.
+ADOPT = "infrastructure.resource.adopt"
 
 
 # Held here because the guarantee is about the pair: a failure partway through
@@ -47,14 +50,17 @@ def record_sweep(payload: dict[str, Any], *, principal, controller_id: str = "")
     # observes adopts nothing, and a record an operator stopped managing stays
     # out. See ``application.adoption``.
     adopted: list[str] = []
-    for kind in _adoptable_kinds():
-        adopted += adopt_discovered(kind, principal=principal)["adopted"]
-    # Records last, and separately, because they are the one kind whose
-    # adoption is scoped by something other than the credential: a record
-    # belongs to a domain, so `zones` takes the ones inside domains HQ holds.
-    # Run after the loop above so a zone adopted moments ago already counts,
-    # otherwise its records would wait a whole sweep for no reason.
-    adopted += adopt_discovered_records(principal=principal)["adopted"]
+    # HQ's own act inside the controller's report, so its rows say HQ took
+    # the records on, as an adoption a person asks for says who did.
+    with audit_operation(operation=ADOPT, principal=principal):
+        for kind in _adoptable_kinds():
+            adopted += adopt_discovered(kind, principal=principal)["adopted"]
+        # Records last, and separately, because they are the one kind whose
+        # adoption is scoped by something other than the credential: a record
+        # belongs to a domain, so `zones` takes the ones inside domains HQ holds.
+        # Run after the loop above so a zone adopted moments ago already counts,
+        # otherwise its records would wait a whole sweep for no reason.
+        adopted += adopt_discovered_records(principal=principal)["adopted"]
     # Every repository the GitHub App reads is a project, from the reading
     # just stored.
     if REPOSITORY_KIND in payload:

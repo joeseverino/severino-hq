@@ -7,6 +7,7 @@ from asgiref.sync import async_to_sync
 from django.test import TestCase
 from mcp import Client
 
+from hq.platform.application.automation_adoption import catch_up
 from hq.platform.application.card_items import Insight
 from hq.platform.application.dashboard import operating_snapshot
 from hq.platform.application.integration_specs import typed_keys
@@ -99,6 +100,8 @@ class DashboardAnswerTests(TestCase):
         self.assertLessEqual(PAGE_ONLY, set(item))
 
     def test_each_list_it_leaves_out_is_named_by_a_call_that_reads_its_records(self):
+        # The adopted catalog the page's request reads, as each tool call reads it.
+        catch_up()
         page = operating_snapshot(principal=READER)
         answer = self._answered().structured_content
         lists = answer["lists"]

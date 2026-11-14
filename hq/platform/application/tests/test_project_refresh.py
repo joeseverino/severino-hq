@@ -109,16 +109,6 @@ class RefreshAsksTheAppTests(TestCase):
         self.assertEqual(fetcher.asked, [self.project.repository_url])
         self.assertTrue(result["github"]["ok"])
 
-    def test_a_principal_that_may_not_write_projects_is_refused_before_anything(self):
-        read_by_app()
-        reader = Principal("agent", "mcp", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
-
-        from ..security import AuthorizationError
-
-        with self.assertRaises(AuthorizationError):
-            self.refresh(reader)
-        self.assertFalse(ReadRequest.objects.exists())
-
     def test_a_repository_the_app_does_not_read_uses_the_public_read(self):
         read_by_app("example/other")
 

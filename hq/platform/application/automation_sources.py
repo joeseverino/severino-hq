@@ -33,7 +33,7 @@ from pydantic import (
 
 lazy from hq.domains.control_plane import models
 lazy from hq.domains.control_plane.provider_adapters.automation import SOURCE_KIND
-lazy from hq.platform.core.audit import audit_operation, audited_labels
+lazy from hq.platform.core.audit import audited_labels
 lazy from hq.platform.core.models import AuditLog
 
 from .automation_manifest import DottedName, ProcedureTerms
@@ -219,19 +219,18 @@ def refresh(command: RefreshCommand, *, principal: Principal) -> OperationQueued
     untaken = automation_standing().cannot("refresh", now=timezone.now())
     if untaken:
         raise PolicyError(untaken)
-    with audit_operation(operation=REFRESH, principal=principal):
-        resource = _source(principal)
-        operation, created = enqueue(
-            resource,
-            models.OperationRequest.Action.SCAN,
-            idempotency_key=key,
-            requested_actor=principal.actor,
-            requested_interface=principal.interface,
-            requested_device=principal.device,
-            requested_person_key=principal.person_key,
-            reason=command.reason,
-            input={"generation": resource.generation},
-        )
+    resource = _source(principal)
+    operation, created = enqueue(
+        resource,
+        models.OperationRequest.Action.SCAN,
+        idempotency_key=key,
+        requested_actor=principal.actor,
+        requested_interface=principal.interface,
+        requested_device=principal.device,
+        requested_person_key=principal.person_key,
+        reason=command.reason,
+        input={"generation": resource.generation},
+    )
     if created:
         # The worker pulls the scan over the bridge; the ring only says one
         # waits, and only once it is stored for the claim to find.

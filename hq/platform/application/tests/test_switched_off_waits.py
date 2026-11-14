@@ -15,8 +15,8 @@ from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.platform.core.models import AuditLog
 
 from ..adoption_testing import managing_everything
+from ..capabilities import execute_capability
 from ..controller import claim_next_operation, peek_next_operation
-from ..infrastructure import ManagedResourceCommand, save_managed_resource
 from ..resource_operations import OperationCommand, request_reconcile, request_removal
 from ..security import cli_principal
 from ..sweep import record_sweep
@@ -27,12 +27,10 @@ RECONCILES = ((KIND, "reconcile"),)
 
 
 def switch(resource: ManagedResource, *, enabled: bool) -> None:
-    save_managed_resource(
-        ManagedResourceCommand(key=resource.key, kind=resource.kind, spec=resource.spec, enabled=enabled),
-        principal=cli_principal(),
-        current_key=resource.key,
-        sent=frozenset({"enabled"}),
+    answer = execute_capability(
+        "infrastructure.resource.update", {"enabled": enabled}, principal=cli_principal(), target=resource.key
     )
+    assert answer["ok"], answer
 
 
 class SwitchedOffRecord(TestCase):

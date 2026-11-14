@@ -72,8 +72,7 @@ class CapabilityRunTests(TestCase):
 
         for rows in (first, second):
             self.assertGreaterEqual(len(rows), 2)
-            # Written by the service's own binding, nested in the run.
-            self.assertEqual({row.metadata["operation"] for row in rows}, {"infrastructure.resource.create"})
+            self.assertEqual({row.metadata["operation"] for row in rows}, {NAME})
         first_ids = {row.operation_id for row in first}
         second_ids = {row.operation_id for row in second}
         self.assertEqual(len(first_ids), 1)

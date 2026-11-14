@@ -84,8 +84,9 @@ def _said(row: ChangeRow) -> str:
 
 
 # The operations HQ binds that no capability, job or controller action
-# declares, by name, in a person's words. A name bound anywhere in the host
-# resolves through ``title_of`` (``test_audit_words`` reads every binding).
+# declares, by name, in a person's words, and the names stored rows written
+# inside a capability's handler carry. A name bound anywhere in the host
+# resolves through ``title_of`` (``test_operation_titles`` reads every binding).
 TITLES: dict[str, str] = {
     "approval.request": "Asked for a change a person approves",
     "approval.lapse": "A held change lapsed",

@@ -25,7 +25,6 @@ from hq.domains.control_plane.providers import (
     spec_withheld,
     validate_spec,
 )
-from hq.platform.core.audit import audit_operation
 lazy from hq.domains.control_plane.provider_spec import ProviderResolutionContext
 
 from .adoption import require_writable
@@ -417,58 +416,54 @@ def save_managed_resource(
     leave every public record unadopted.
     """
 
-    operation = "infrastructure.resource.create" if current_key is None else "infrastructure.resource.update"
-    with audit_operation(operation=operation, principal=principal):
-        created = current_key is None
-        resource = (
-            ManagedResource()
-            if created
-            else held(ManagedResource, MANAGED_RECORD, {"key": current_key}, expected_updated_at)
-        )
-        # HQ's copy as the change found it, which an apply by hand may only replace.
-        replaced = {} if created else dict(resource.spec)
-        if not created:
-            command = ManagedResourceCommand(
-                **{**as_sent(resource, ManagedResourceCommand, {}), **written(command, sent)}
-            )
-        _refuse_withheld(command.kind, resource.kind)
-        validated_spec = validate_spec(command.kind, command.spec)
-        if not copied_from_live:
-            _refuse_authored(command, validated_spec, principal=principal)
-        provider = PROVIDERS[command.kind]
-        changed = (
-            created
-            or resource.key != command.key
-            or resource.kind != command.kind
-            or resource.spec != validated_spec
-            or resource.enabled != command.enabled
-        )
-        resource.key = command.key
-        resource.kind = command.kind
-        resource.spec = validated_spec
-        resource.enabled = command.enabled
-        # Desired state is the authored spec plus whatever it resolves to, so a
-        # certificate whose target moved is out of date without having been
-        # edited. One function decides that, and every writer calls it.
-        resource.desired_fingerprint = desired_fingerprint(
-            resource.kind,
-            resource.spec,
-            enabled=resource.enabled,
-            targets=delivery_targets(),
-            resource_key=resource.key,
-        )
-        if not created and changed:
-            resource.generation += 1
-        resource.full_clean()
-        resource.save()
-        if not created and not resource.enabled:
-            _call_off_waiting(resource)
-        # A target says how a place takes a certificate. Editing one changes
-        # what every certificate installed there resolves to, so their desired
-        # state is recomputed here rather than waiting for each to be saved.
-        if changed and provider.resolution_input:
-            advance_dependents(delivery_targets())
-        applying = _apply_saved(resource, replaced, principal=principal) if changed and not copied_from_live else None
+    created = current_key is None
+    resource = (
+        ManagedResource()
+        if created
+        else held(ManagedResource, MANAGED_RECORD, {"key": current_key}, expected_updated_at)
+    )
+    # HQ's copy as the change found it, which an apply by hand may only replace.
+    replaced = {} if created else dict(resource.spec)
+    if not created:
+        command = ManagedResourceCommand(**{**as_sent(resource, ManagedResourceCommand, {}), **written(command, sent)})
+    _refuse_withheld(command.kind, resource.kind)
+    validated_spec = validate_spec(command.kind, command.spec)
+    if not copied_from_live:
+        _refuse_authored(command, validated_spec, principal=principal)
+    provider = PROVIDERS[command.kind]
+    changed = (
+        created
+        or resource.key != command.key
+        or resource.kind != command.kind
+        or resource.spec != validated_spec
+        or resource.enabled != command.enabled
+    )
+    resource.key = command.key
+    resource.kind = command.kind
+    resource.spec = validated_spec
+    resource.enabled = command.enabled
+    # Desired state is the authored spec plus whatever it resolves to, so a
+    # certificate whose target moved is out of date without having been
+    # edited. One function decides that, and every writer calls it.
+    resource.desired_fingerprint = desired_fingerprint(
+        resource.kind,
+        resource.spec,
+        enabled=resource.enabled,
+        targets=delivery_targets(),
+        resource_key=resource.key,
+    )
+    if not created and changed:
+        resource.generation += 1
+    resource.full_clean()
+    resource.save()
+    if not created and not resource.enabled:
+        _call_off_waiting(resource)
+    # A target says how a place takes a certificate. Editing one changes
+    # what every certificate installed there resolves to, so their desired
+    # state is recomputed here rather than waiting for each to be saved.
+    if changed and provider.resolution_input:
+        advance_dependents(delivery_targets())
+    applying = _apply_saved(resource, replaced, principal=principal) if changed and not copied_from_live else None
 
     return {
         "ok": True,

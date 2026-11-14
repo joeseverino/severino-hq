@@ -1,5 +1,5 @@
 {
-  "api_version": 14,
+  "api_version": 15,
   "modules": {
     "audit": {
       "AuditAction": {
@@ -125,25 +125,6 @@
       "audit_events": {
         "kind": "function",
         "parameters": []
-      },
-      "audit_operation": {
-        "kind": "function",
-        "parameters": [
-          "*",
-          "operation",
-          "principal=",
-          "operation_id="
-        ]
-      },
-      "operation_context": {
-        "kind": "function",
-        "parameters": [
-          "*",
-          "interface",
-          "actor",
-          "operation",
-          "operation_id="
-        ]
       },
       "record_event": {
         "kind": "function",

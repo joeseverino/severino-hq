@@ -1,9 +1,10 @@
-"""For an extension's writes: register a model's audit, and record an event or a bulk operation."""
+"""For an extension's writes: register a model's audit, and record an event or a bulk operation.
 
-from collections.abc import Iterator
-from contextlib import contextmanager
+Who acted and which operation a row belongs to are bound by the door that ran
+the work: the capability runner names each row by its capability, the job
+runner by its job. An extension binds neither, so it has no binding to call.
+"""
 
-from hq.platform.core import audit
 from hq.platform.core.audit import (
     audit_events,
     record_event,
@@ -24,29 +25,6 @@ from hq.platform.core.seeds import seeded_by_hand
 AuditAction = AuditLog.Action
 
 
-# The two bindings are the host's without its doors' powers: writing a change
-# as someone other than whoever started the operation (``rebinds``) is the
-# host's approvals' alone, and opening a door that starts afresh (an empty
-# actor) the host's doors', so an extension's nested binding keeps the actor in force.
-@contextmanager
-def audit_operation(*, operation: str, principal: object | None = None, operation_id: str = "") -> Iterator[None]:
-    """Attribute an operation to the principal that made it, or to the bound caller without one."""
-
-    with audit.audit_operation(operation=operation, principal=principal, operation_id=operation_id):
-        yield
-
-
-@contextmanager
-def operation_context(*, interface: str, actor: str, operation: str, operation_id: str = "") -> Iterator[None]:
-    """Bind who acts, through which door, for the rows written in the block."""
-
-    # An empty actor is a door awaiting sign-in, which only the host's doors open.
-    if not actor:
-        raise ValueError(f"{operation!r} names nobody: an extension's binding names who acts.")
-    with audit.operation_context(interface=interface, actor=actor, operation=operation, operation_id=operation_id):
-        yield
-
-
 __all__ = [
     "AuditAction",
     "Counts",
@@ -55,8 +33,6 @@ __all__ = [
     "Steps",
     "Timing",
     "audit_events",
-    "audit_operation",
-    "operation_context",
     "record_event",
     "record_operation",
     "register_audit",

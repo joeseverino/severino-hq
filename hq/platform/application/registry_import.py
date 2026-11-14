@@ -15,7 +15,7 @@ from pydantic import ConfigDict, TypeAdapter, ValidationError as PydanticValidat
 
 from hq.domains.assets.models import Asset
 from hq.domains.projects.models import Project
-from hq.platform.core.audit import audit_operation, record_event
+from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
 
 from .answer_fields import BusinessUseShare, RecordSlug
@@ -387,10 +387,7 @@ def import_registry(command: HQImportCommand, *, principal: Principal) -> HqImpo
         "summary": summary,
     }
     try:
-        with (
-            transaction.atomic(),
-            audit_operation(operation="hq.import", principal=principal),
-        ):
+        with transaction.atomic():
             for planned in (*projects, *assets):
                 _apply(planned, principal)
             record_event(

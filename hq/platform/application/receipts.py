@@ -15,7 +15,7 @@ from hq.domains.assets.models import Asset
 from hq.domains.expenses.models import Expense
 from hq.domains.receipts.models import Receipt
 from hq.domains.receipts.validation import MAX_RECEIPT_BASE64_CHARS, validate_receipt_file
-from hq.platform.core.audit import audit_operation, record_event
+from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
 lazy from hq.domains.receipts.specs import ReceiptRow
 
@@ -187,8 +187,7 @@ def update_receipt(
     expected_updated_at: str | None = None,
     sent: frozenset[str] | None = None,
 ) -> ReceiptSaved:
-    with audit_operation(operation=UPDATE, principal=principal):
-        receipt = _save(command, current_id=current_id, expected_updated_at=expected_updated_at, sent=sent)
+    receipt = _save(command, current_id=current_id, expected_updated_at=expected_updated_at, sent=sent)
     return {"ok": True, "created": False, "receipt": serialize_receipt(receipt)}
 
 

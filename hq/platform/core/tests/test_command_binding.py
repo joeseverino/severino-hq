@@ -10,7 +10,6 @@ from hq.platform.application.security import CLI_ACTOR, CLI_INTERFACE
 from hq.platform.core.attribution import Rebound, bound
 from hq.platform.core.audit import operation_context, record_operation
 from hq.platform.core.models import AuditLog
-from hq_sdk import audit as sdk_audit
 
 
 class _Writes(BaseCommand):
@@ -20,7 +19,7 @@ class _Writes(BaseCommand):
 
 class _BindsSomeoneElse(BaseCommand):
     def handle(self, *args, **options):
-        with sdk_audit.operation_context(interface="cli", actor="someone-else", operation="example.import"):
+        with operation_context(interface="cli", actor="someone-else", operation="example.import"):
             record_operation("example.command", "as someone else", action=AuditLog.Action.UPDATED)
 
 

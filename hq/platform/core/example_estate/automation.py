@@ -36,16 +36,16 @@ from hq.domains.control_plane.models import (
 from hq.domains.control_plane.provider_adapters.automation import OPERATION_KIND, SOURCE_KIND
 from hq.platform.application.agent_registry import observe
 from hq.platform.application.approvals import is_held
-from hq.platform.application.automation_adoption import AdoptProposal, adopt, catch_up
+from hq.platform.application.automation_adoption import ADOPT, catch_up
 from hq.platform.application.automation_manifest import OperationManifest
-from hq.platform.application.automation_runs import capability_name, command_type, operation_registry, request_run
-from hq.platform.application.automation_sources import RefreshCommand, refresh
+from hq.platform.application.automation_runs import capability_name, operation_registry
+from hq.platform.application.automation_sources import REFRESH
 from hq.platform.application.cadence import AUTOMATION_HEARTBEAT, AUTOMATION_WORK, note_automation
-from hq.platform.application.capabilities import run_capability
+from hq.platform.application.capabilities import command_spec, execute_approved, run_capability, validate_command
 from hq.platform.application.controller import ControllerReport, claim_next_operation, renew_operation, report_operation
-from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
 from hq.platform.application.integration_specs import IDEMPOTENCY_FIELD
 from hq.platform.application.machines import machine_catalog
+from hq.platform.application.refusal_status import refused
 from hq.platform.application.security import MCP_INTERFACE, Principal, cli_principal, web_principal
 from hq.platform.application.tokens import token_principal
 from hq.platform.core.audit import stamped
@@ -268,7 +268,7 @@ def _scanned(
     note_automation()
     with stamped(lambda *_: {"created_at": at} if at is not None else None):
         with doors.page("command", name="automation.source.refresh"):
-            queued = refresh(RefreshCommand(idempotency_key=key), principal=person)["operation"]
+            queued = _ran(REFRESH, {}, principal=person, key=key)["operation"]
         with doors.controller("claim"):
             claimed = claim_next_operation(WORKER, capabilities=CLAIMS_SCANS)["operation"]
         if claimed is None or claimed["id"] != queued["id"]:
@@ -293,7 +293,7 @@ def adopted(person: Principal) -> None:
 
     scan = _scanned(person, "example-refresh", catalog(), "Read the playbooks.", timedelta(days=20))
     with doors.page("command", name="automation.source.adopt"):
-        adopt(AdoptProposal(proposal=scan.result["proposal"]), principal=person)
+        _ran(ADOPT, {"proposal": scan.result["proposal"]}, principal=person, key=f"example-adopt-{scan.pk}")
     # Adopted the day it was read, as the scan was.
     adopted_at = scan.created_at + timedelta(hours=1)
     AdoptedCatalog.objects.filter(proposal_id=scan.result["proposal"]).update(
@@ -331,7 +331,7 @@ def scanning(owner) -> None:
 
     note_automation()
     with doors.page("command", name="automation.source.refresh"):
-        refresh(RefreshCommand(idempotency_key="example-refresh-scanning"), principal=web_principal(owner))
+        _ran(REFRESH, {}, principal=web_principal(owner), key="example-refresh-scanning")
     with doors.controller("claim"):
         claim_next_operation(WORKER, capabilities=CLAIMS_SCANS)
 
@@ -486,22 +486,41 @@ def _asked(manifest, host, principal, ago, carried_out, *, correlation="") -> No
 
     at = timezone.now() - ago
     key = f"example-run-{manifest.id}-{int(ago.total_seconds())}"
-    command = command_type(manifest).model_validate(
-        {"hosts": [host], "correlation": correlation, **({IDEMPOTENCY_FIELD: key} if manifest.effect != "read" else {})}
-    )
     # Each ask through its asker's own door, as the command page or the MCP server binds one.
     door = (
         doors.mcp()
         if principal.interface == MCP_INTERFACE
         else doors.request(f"/commands/{capability_name(manifest.id)}/")
     )
+    spec = command_spec(capability_name(manifest.id))
+    payload = {
+        "hosts": [host],
+        "correlation": correlation,
+        **({IDEMPOTENCY_FIELD: key} if manifest.effect != "read" else {}),
+    }
     with stamped(lambda *_: {"created_at": at}):
         with door:
-            queued = request_run(manifest, command, principal=principal, idempotency_key=key)["operation"]
+            # Past the consent an agent's ask waits on: the history this
+            # writes has settled it, by the asker or the person who approved.
+            queued = execute_approved(
+                spec, validate_command(spec, payload), None, principal=principal, sent=frozenset(payload)
+            )["operation"]
         run = OperationRequest.objects.get(pk=queued["id"])
         OperationRequest.objects.filter(pk=run.pk).update(created_at=at, updated_at=at)
         carried_out(run)
     _dated(run.pk, at)
+
+
+def _ran(
+    name: str, payload: dict[str, Any], *, principal: Principal, key: str | None, target: str | None = None
+) -> dict[str, Any]:
+    """What ``principal`` pressing ``name`` answers, through the runner as its page asks it;
+    the estate stops where a step it builds on is refused."""
+
+    answer = run_capability(name, payload, principal=principal, target=target, idempotency_key=key).answer
+    if refused(answer):
+        raise RuntimeError(f"The estate's {name} was refused: {answer}")
+    return answer
 
 
 @contextmanager
@@ -555,9 +574,14 @@ def _called_off(person: Principal) -> Callable[[OperationRequest], None]:
     def carry_out(run: OperationRequest) -> None:
         resource = ManagedResource.objects.get(key=run.resource.key)
         for enabled in (False, True):
-            command = ManagedResourceCommand(key=resource.key, kind=resource.kind, spec=resource.spec, enabled=enabled)
             with doors.page("control_plane:detail", key=resource.key):
-                save_managed_resource(command, principal=person, current_key=resource.key)
+                _ran(
+                    "infrastructure.resource.update",
+                    {"enabled": enabled},
+                    principal=person,
+                    target=resource.key,
+                    key=f"example-switch-{run.pk}-{enabled}",
+                )
 
     return carry_out
 

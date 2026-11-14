@@ -14,7 +14,7 @@ from hq.domains.docs_index.importer import (
 )
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.projects.models import Project
-from hq.platform.core.audit import audit_operation, record_event
+from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
 
 from .command_fields import Describe, Names
@@ -288,7 +288,6 @@ def sync_documentation(
 ) -> DocumentationSynced | RefusalEnvelope:
     """Validate and atomically synchronize vault metadata into HQ."""
 
-    principal.require(Capability.SYNC_DOCUMENTATION)
     if prune_orphans:
         principal.require(Capability.PRUNE_DOCUMENTATION)
     if len(manifest) > MAX_MANIFEST_ITEMS:
@@ -301,19 +300,18 @@ def sync_documentation(
     if prune_orphans and not confirm_prune:
         raise PolicyError("confirm_prune must be true when prune_orphans is true")
 
-    with audit_operation(operation=SYNC, principal=principal):
-        stats = import_manifest_data(
-            manifest,
-            update_existing=update_existing,
-            report_orphans=report_orphans or prune_orphans,
-            prune_orphans=prune_orphans,
-        )
-        record_event(
-            action=AuditLog.Action.IMPORTED,
-            type_label="DocumentationRecord",
-            message="Updated the list of docs.",
-            metadata={"stats": stats},
-        )
+    stats = import_manifest_data(
+        manifest,
+        update_existing=update_existing,
+        report_orphans=report_orphans or prune_orphans,
+        prune_orphans=prune_orphans,
+    )
+    record_event(
+        action=AuditLog.Action.IMPORTED,
+        type_label="DocumentationRecord",
+        message="Updated the list of docs.",
+        metadata={"stats": stats},
+    )
     return {"ok": True, "stats": stats}
 
 

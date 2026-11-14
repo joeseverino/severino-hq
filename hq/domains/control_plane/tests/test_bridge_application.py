@@ -450,6 +450,7 @@ class ReportAttributionTests(TestCase):
             attributed,
             {
                 (AuditLog.Action.CREATED, "internal", "controller"),
+                (AuditLog.Action.UPDATED, "internal", "controller"),
                 (AuditLog.Action.UPDATED, "controller", "controller"),
             },
         )
