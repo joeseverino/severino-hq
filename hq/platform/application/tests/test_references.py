@@ -421,7 +421,7 @@ class ChoicesTests(TestCase):
         offered = self.offered()
 
         (group,) = offered
-        self.assertEqual(group.casefold(), "tls certificates")
+        self.assertEqual(group, "TLS certificates")
         self.assertEqual([value for value, _name in offered[group]], ["tls.certificate:a-certificate"])
 
     def test_a_kind_with_nothing_in_it_is_no_group(self):

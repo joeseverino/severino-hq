@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Annotated, Any
 
 from django.db import transaction
 from django.utils import timezone
+from django.utils.text import Truncator
 from pydantic import (
     AfterValidator,
     BaseModel,
@@ -129,10 +130,6 @@ class ProcedureDeclaration(ProcedureTerms):
     )
 
 
-def _clip(text: str) -> str:
-    return text if len(text) <= PROBLEM_LIMIT else text[: PROBLEM_LIMIT - 1] + "…"
-
-
 def _declaration_problems(declaration: Any) -> list[str]:
     if declaration is None:
         return []
@@ -141,7 +138,9 @@ def _declaration_problems(declaration: Any) -> list[str]:
         ProcedureDeclaration.model_validate_json(json.dumps(declaration))
     except ValidationError as exc:
         return [
-            _clip(ended(f"Its sidecar's {'.'.join(str(part) for part in error['loc']) or 'value'}: {error['msg']}"))
+            Truncator(
+                ended(f"Its sidecar's {'.'.join(str(part) for part in error['loc']) or 'value'}: {error['msg']}")
+            ).chars(PROBLEM_LIMIT)
             for error in exc.errors(include_url=False)
         ]
     return []

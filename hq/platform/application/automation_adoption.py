@@ -42,6 +42,7 @@ from typing import Annotated, Any, Literal, TypedDict
 from django.conf import settings
 from django.db import DatabaseError, transaction
 from django.utils import timezone
+from django.utils.text import capfirst
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -454,7 +455,7 @@ def _procedure(
         manifest(procedure)
     except (ValidationError, ValueError) as exc:
         said = exc.errors(include_url=False)[0]["msg"] if isinstance(exc, ValidationError) else str(exc)
-        problems.append(ended(said[:1].upper() + said[1:]))
+        problems.append(ended(capfirst(said)))
         return None
     return procedure
 

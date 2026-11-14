@@ -4,6 +4,7 @@ from dataclasses import KW_ONLY, dataclass
 
 from django.conf import settings
 from django.utils.csp import CSP
+from django.utils.text import capfirst
 
 from hq.domains.control_plane.names import is_hostname
 from hq.platform.application.labels import dotted
@@ -302,7 +303,7 @@ def _policy_layer(
             layer_id,
             label,
             holds=False,
-            detail=f"{missing[:1].upper()}{missing[1:]} is not on the tailnet HQ read.",
+            detail=f"{capfirst(missing)} is not on the tailnet HQ read.",
             evidence=dotted(f"port {port}", f"{missing} not found"),
             boundary="Zero trust policy",
             mechanism="The tailnet policy",

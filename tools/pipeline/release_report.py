@@ -18,6 +18,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from django.utils.text import capfirst
+
 from hq.platform.core.tests.task import RefError, commit_of, usage
 from tools.perf import report as perf_report
 from tools.perf.table import SERVER, SUMMARY
@@ -112,7 +114,7 @@ def perf_rows(made: Report, doc: dict[str, Any]) -> None:
     made.moved = perf_report.verdict(here)
     made.perf.append(("server time, page by page", "", "", made.moved))
     if reused := perf_report.kept_from(doc):
-        made.notes.append(f"{reused[0].upper()}{reused[1:]}")
+        made.notes.append(capfirst(reused))
     made.notes.append(f"Every page: var/perf/{doc['run']}.table")
 
 

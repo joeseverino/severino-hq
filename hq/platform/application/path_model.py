@@ -8,6 +8,8 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any
 
+from django.utils.text import capfirst
+
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.providers import PROVIDERS
 
@@ -109,7 +111,7 @@ class Certificate:
     @property
     def line(self) -> str:
         if self.unread:
-            return self.unread[:1].upper() + self.unread[1:]
+            return capfirst(self.unread)
         detail = dotted(self.name, self.issuer)
         text = f"{self.role} certificate {detail}".strip()
         return f"{text}, expires {self.expiry}" if self.expiry else text

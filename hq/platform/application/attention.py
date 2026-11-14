@@ -7,8 +7,8 @@ nothing outstanding returns ``()`` rather than a zero, so the queue holds only
 real work and its length is the number of areas needing attention.
 """
 
-import re
 from collections.abc import Iterable, Mapping
+from functools import cmp_to_key
 from typing import Any
 
 from django.db.models import BooleanField, Count, ExpressionWrapper, Q
@@ -29,6 +29,7 @@ from .entity_links import EntityLink, entity_link, kind_label
 from .estate import subject_link
 from .findings import estate_findings, finding_key, rule_for
 from .first_seen import dated
+from .images import compare, version
 from .infrastructure import enabled_resources, resource_health
 from .item_help import commands, finding_plan, instructions, remedy_link
 from .labels import lower_first
@@ -254,34 +255,28 @@ KEY_EXPIRY_ATTENTION_DAYS = 45
 KEY_EXPIRY_SERIOUS_DAYS = 14
 
 
-_VERSION = re.compile(r"\d+(?:\.\d+)*")
+def _release(reported: str) -> str:
+    """The numeric release a client reports, "1.102.3-t0abc" as "1.102.3"."""
+
+    return ".".join(str(part) for part in version(reported))
 
 
-def _version(text: str) -> tuple[int, ...]:
-    """The numeric release a client reports, "1.102.3-t0abc" as (1, 102, 3)."""
-
-    found = _VERSION.match(str(text or "").strip())
-    return tuple(int(part) for part in found.group().split(".")) if found else ()
+# Releases by number, so 1.80 and 1.80.0 are one release.
+_BY_RELEASE = cmp_to_key(lambda one, other: compare(version(one), version(other)))
 
 
 def _newest_client(presences) -> str:
-    """The newest client release any device reports, as it reports it."""
+    """The newest client release any device reports."""
 
-    reported = [
-        (_version(presence.client_version), presence.client_version)
-        for _name, presence in presences
-        if _version(presence.client_version)
-    ]
-    newest = max(reported, default=((), ""))
-    return _VERSION.match(newest[1]).group() if newest[1] else ""
+    reported = [presence.client_version for _name, presence in presences if version(presence.client_version)]
+    return _release(max(reported, key=_BY_RELEASE, default=""))
 
 
 def _update_body(presence, newest: str) -> str:
     if not presence.client_version:
         return "Current version not reported."
-    current = _VERSION.match(presence.client_version)
-    running = current.group() if current else presence.client_version
-    if newest and _version(newest) > _version(running):
+    running = _release(presence.client_version) or presence.client_version
+    if newest and compare(version(newest), version(running)) > 0:
         return ended(f"Runs {running}; {newest} is out")
     return ended(f"Runs {running}")
 

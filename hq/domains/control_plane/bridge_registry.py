@@ -10,6 +10,7 @@ import re
 from collections.abc import Iterable, Mapping
 from typing import Any
 
+from django.utils.text import capfirst
 from pydantic.json_schema import JsonSchemaMode
 
 from hq.platform.application.json_schemas import json_schema
@@ -59,7 +60,7 @@ def go_name(value: str) -> str:
     it, and the controller then fails to build wherever it used the old one.
     """
 
-    return "".join(_CASING.get(word, word[:1].upper() + word[1:]) for word in re.split(r"[._]", value.lower()) if word)
+    return "".join(_CASING.get(word, capfirst(word)) for word in re.split(r"[._]", value.lower()) if word)
 
 
 def _enumeration(description: str, values: Iterable[str], prefix: str, *, blank: str = "") -> dict[str, Any]:

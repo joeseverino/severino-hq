@@ -631,27 +631,32 @@ class FindingEvidence(TypedDict):
     value: Annotated[Any, Describe("What was found, most often a name or a sentence.")]
 
 
+# What running a suggested remedy does, as the API and MCP both say it.
+type RemedyEffect = Annotated[
+    str,
+    Describe(
+        "What running it does, in its command's own terms: `read`, `remote_write` or "
+        "`infrastructure_change`. A `destructive` one is never suggested."
+    ),
+]
+
+
 class SuggestedRemedy(TypedDict):
     """A capability that would answer a finding, and the target it runs on."""
 
     capability: Annotated[str, Describe("The command that would fix it, run with `target` as its target.")]
     target: Annotated[Any, Describe("The record the command runs on.")]
     label: Annotated[str, Describe("What running it does here, in the remedy's own words or its command's.")]
-    effect: Annotated[
-        str,
-        Describe(
-            "What running it does, in its command's own terms: `read`, `remote_write` or "
-            "`infrastructure_change`. A `destructive` one is never suggested."
-        ),
-    ]
+    effect: RemedyEffect
     auto: Annotated[
         bool,
         Describe("Whether HQ runs it unattended. A problem only proposes, so it reads false."),
     ]
 
 
-class SerializedFinding(TypedDict):
-    """One finding as the API answers it; MCP's `get_findings` makes its actions tool calls."""
+class FindingFacts(TypedDict):
+    """What a finding says the same at every door: what it is about, what it
+    rests on, and what the operator does by hand. Each door adds its actions."""
 
     id: Annotated[
         str,
@@ -671,19 +676,6 @@ class SerializedFinding(TypedDict):
     severity: Annotated[str, Describe(f"How serious it is: {listed(SEVERITIES)}, most severe first.")]
     explanation: Annotated[str, Describe("Why it matters and what it rests on, in sentences.")]
     evidence: Annotated[list[FindingEvidence], Describe("What it rests on, a labeled line each.")]
-    remedies: Annotated[
-        list[SuggestedRemedy],
-        Describe("The commands that would fix it which this reader may run, none of them destructive."),
-    ]
-    offers: Annotated[list[WrittenAction], Describe("Reads of its subject this reader may run before acting.")]
-    investigations: Annotated[
-        list[WrittenAction],
-        Describe("Where on the map to look around its subject: its neighborhood and what it affects."),
-    ]
-    workflow: Annotated[
-        WrittenWorkflow | None,
-        Describe("The plan that resolves it, a fix and then the check that confirms it; null when it has neither."),
-    ]
     operator_steps: Annotated[
         list[Annotated[dict[str, Any], Written(OperatorStep)]],
         Describe("What you do by hand to resolve it, in order. HQ never runs these."),
@@ -698,7 +690,25 @@ class SerializedFinding(TypedDict):
     ]
 
 
-def serialize_finding(finding: Finding) -> SerializedFinding:
+class SerializedFinding(FindingFacts):
+    """One finding as the API answers it; MCP's `get_findings` makes its actions tool calls."""
+
+    remedies: Annotated[
+        list[SuggestedRemedy],
+        Describe("The commands that would fix it which this reader may run, none of them destructive."),
+    ]
+    offers: Annotated[list[WrittenAction], Describe("Reads of its subject this reader may run before acting.")]
+    investigations: Annotated[
+        list[WrittenAction],
+        Describe("Where on the map to look around its subject: its neighborhood and what it affects."),
+    ]
+    workflow: Annotated[
+        WrittenWorkflow | None,
+        Describe("The plan that resolves it, a fix and then the check that confirms it; null when it has neither."),
+    ]
+
+
+def finding_facts(finding: Finding) -> FindingFacts:
     return {
         "id": claim_identity(_CLAIM_NAMESPACE, finding.rule, finding.subject, finding.scope),
         "rule": finding.rule,
@@ -709,6 +719,15 @@ def serialize_finding(finding: Finding) -> SerializedFinding:
         "severity": finding.severity,
         "explanation": finding.explanation,
         "evidence": [{"label": label, "value": value} for label, value in finding.evidence],
+        "operator_steps": [asdict(step) for step in finding.steps],
+        "no_help_reason": finding.no_help_reason or None,
+        "since": finding.since.isoformat() if finding.since else None,
+    }
+
+
+def serialize_finding(finding: Finding) -> SerializedFinding:
+    return {
+        **finding_facts(finding),
         "remedies": [
             {
                 "capability": remedy.capability,
@@ -722,9 +741,6 @@ def serialize_finding(finding: Finding) -> SerializedFinding:
         "offers": [asdict(action) for action in finding.offers],
         "investigations": [asdict(action) for action in finding.investigations],
         "workflow": serialize_workflow(finding.workflow),
-        "operator_steps": [asdict(step) for step in finding.steps],
-        "no_help_reason": finding.no_help_reason or None,
-        "since": finding.since.isoformat() if finding.since else None,
     }
 
 

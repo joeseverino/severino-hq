@@ -20,6 +20,7 @@ from django.core.serializers.json import DjangoJSONEncoder
 from django.db import transaction
 from django.db.models.signals import post_delete, post_init, post_save
 from django.dispatch import receiver
+from django.utils.text import Truncator
 lazy from django.contrib.auth.base_user import AbstractBaseUser
 lazy from django.db.models import Max, Model, Q, QuerySet
 lazy from django.utils import timezone
@@ -98,15 +99,14 @@ def _readable(value):
     return str(value)[:VALUE_CHARS]
 
 
-def _cut(words: str) -> str:
-    return words if len(words) <= VALUE_CHARS else f"{words[: VALUE_CHARS - 1]}…"
-
-
 def _inner_changes(before, after) -> dict[str, list[str]]:
     """A record or list that moved, as each value in it that moved, in words,
     by where it is inside the field ("" for the field as a whole).
     """
-    return {row.label: [_cut(row.before), _cut(row.after)] for row in changed_words(before, after)}
+    return {
+        row.label: [Truncator(row.before).chars(VALUE_CHARS), Truncator(row.after).chars(VALUE_CHARS)]
+        for row in changed_words(before, after)
+    }
 
 
 # Types whose values cannot change in place. Holding one is the same as

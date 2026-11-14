@@ -20,6 +20,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q, Value
 from django.db.models.functions import Cast
+from django.utils.text import capfirst
 
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
@@ -27,6 +28,7 @@ lazy from . import entity_links, security
 lazy from .card_items import Insight, ListRow
 lazy from .demo import showing_demo
 lazy from .entity_links import NODE_KINDS, entity_link, kind_label, node_name
+lazy from .labels import plural
 lazy from .projection import read_once
 lazy from .security import Principal, cli_principal
 lazy from .topology import derive_topology
@@ -608,7 +610,7 @@ def _estate_groups(field: ReferenceField, principal: Principal) -> list[_Group]:
     estate = _estate(principal) if kinds else {}
     return [
         (
-            _plural(kind).capitalize(),
+            capfirst(_plural(kind)),
             _by_name((str(Reference(kind, identity)), name) for identity, name in estate.get(kind, {}).items()),
         )
         for kind in kinds
@@ -640,7 +642,7 @@ def _record_groups(field: ReferenceField, principal: Principal) -> list[_Group]:
 def _plural(kind: str) -> str:
     """An infrastructure kind's plural noun: its page's, or its registry noun's."""
 
-    return NODE_KINDS[kind].plural if kind in NODE_KINDS else f"{_noun(kind).lower()}s"
+    return NODE_KINDS[kind].plural if kind in NODE_KINDS else plural(_noun(kind))
 
 
 def _by_name(options: Iterable[tuple[str, str]]) -> list[tuple[str, str]]:

@@ -12,6 +12,8 @@ from collections.abc import Iterable, Mapping
 from typing import Any
 lazy from dataclasses import replace
 
+from django.utils.text import Truncator
+
 from hq.domains.control_plane.names import in_zone, normalized_hostname
 from hq.domains.control_plane.providers import PROVIDERS
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
@@ -361,7 +363,7 @@ def _served_not_held() -> tuple[Finding, ...]:
                 evidence=tuple(
                     (
                         str(item.get("consumer") or item.get("domain") or ""),
-                        f"serves {str(item.get('fingerprint_sha256', ''))[:12]}…",
+                        f"serves {Truncator(item.get('fingerprint_sha256', '')).chars(13)}",
                     )
                     for item in wrong
                 ),

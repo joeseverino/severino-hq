@@ -15,6 +15,7 @@ from typing import Any
 
 from django.db import IntegrityError, transaction
 from django.utils import timezone
+from django.utils.text import capfirst
 lazy from django.contrib.auth.base_user import AbstractBaseUser
 lazy from django.contrib.auth.models import AnonymousUser
 
@@ -331,7 +332,7 @@ def _audit(job: Job, action: str, outcome: str, detail: dict, ended, facets=()) 
             obj=job,
             type_label=AUDIT_TYPE,
             # The row names the job already, so the message is how it ended.
-            message=f"{outcome[:1].upper()}{outcome[1:]}{took}",
+            message=f"{capfirst(outcome)}{took}",
             # Timing as a facet rather than baked into the message, so how long a
             # job takes is a number that can be compared with the last one rather
             # than a phrase that has to be read.
