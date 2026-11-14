@@ -592,7 +592,13 @@ WHOLE_PARTS_MOVED_BY_OPENING = """async (scroll) => {
     }
     return true;
   };
-  const edges = (part) => [part.getBoundingClientRect().left, part.getBoundingClientRect().width].map(Math.round).join(' ');
+  // Where its words are drawn: a part with no box of its own (`display: contents`) still draws them.
+  const words = document.createRange();
+  const edges = (part) => {
+    words.selectNodeContents(part);
+    const drawn = words.getBoundingClientRect();
+    return [drawn.left, drawn.width].map(Math.round).join(' ');
+  };
   const moved = [];
   for (const table of document.querySelectorAll('main ' + scroll + ' > table')) {
     const toggle = [...table.querySelectorAll('tbody button[aria-expanded="false"]:not([data-fold-toggle])')].find((el) => el.checkVisibility());
