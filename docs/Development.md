@@ -1074,8 +1074,8 @@ or reach out is refused and reported instead.
 `--rule survey` runs every check the gates hold (`BrowserGate.findings`), so
 what it finds on a page the gates read is what they fail on. Markup a vendored
 script draws (`data-vendored` on its mount, `SELECTORS["vendored"]`: the API
-reference's viewer) is styled by its own rules alone, and held by its own
-tests instead. With `--open-folds`, a page with a fold closed is surveyed
+reference's viewer) is styled by its own rules alone, and the gates read
+none of it. With `--open-folds`, a page with a fold closed is surveyed
 again with every fold open, a fold within a fold and one a region brings in
 included (`survey.open_every_fold`), and only what that adds is said, under
 "with every fold open"; the folds close again before a dialog opens.

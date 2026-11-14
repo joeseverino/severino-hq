@@ -278,8 +278,8 @@ reference, not a client:
   follows the operator's theme (`data-theme` on `<html>`, else the system's)
   with no toggle of its own. No rule of HQ's own stylesheet reaches the
   markup the viewer draws: its mount carries `data-vendored`, where each of
-  HQ's layers gives way (`tokens.css`), and `ReferenceBrowserTests` reads
-  every element it draws for a property an HQ rule gave it.
+  HQ's layers gives way (`tokens.css`), and `VendoredMountTests` reads every
+  rule of the stylesheet for one that could still reach it.
 - **Facts are fields.** A capability's `x-hq-effect` and
   `x-hq-required-capabilities` are drawn on its operation (`showExtensions`),
   and each refusal's codes are its `code` field's `const`, or its `enum`
@@ -292,10 +292,15 @@ reference, not a client:
 - **Nothing is fetched from, or links to, the vendor.** The policy is HQ's
   minus Trusted Types, which the viewer cannot satisfy.
 
-`hq/platform/api/tests/test_reference.py` holds the configuration and the sheet to
-the bundle (every option and variable is one the bundle reads, every sample
-target it ships is hidden but curl), and `ReferenceBrowserTests` in the browser
-gate holds what is drawn. After replacing the bundle, both say what moved.
+`hq/platform/api/tests/test_reference.py` holds the configuration, the sheet
+and the policy to the bundle (every option and variable is one the bundle
+reads, every sample target it ships is hidden but curl, every style it writes
+admitted). `ReferenceBrowserTests` in the browser gate holds only what HQ gives
+the page, once each at the widest width in WebKit: the frame, the loading line,
+both palettes, the sidebar's outline and that nothing leaves HQ. The viewer's
+own markup is the vendor's, and the gate reads none of it; the document it
+draws is held by `lint:drift-api-document`, `lint:openapi` and the API's own
+tests. After replacing the bundle, `test_reference.py` says what moved.
 
 ### Descriptions
 

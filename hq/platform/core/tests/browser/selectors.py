@@ -178,11 +178,9 @@ SELECTORS = {
     "disclosure": "main details",
     # Where the API reference mounts its viewer.
     "reference": "#api-reference-root",
-    # A block of code the reference's viewer draws: a request or answer.
-    "reference_sample": "#api-reference-root pre",
     # Where a vendored script draws markup HQ does not write, which HQ's
     # stylesheet leaves to the vendor's own rules (tokens.css): the API
-    # reference's viewer, which ReferenceBrowserTests holds to its own rules.
+    # reference's viewer.
     "vendored": "[data-vendored]",
     # A check of a check ladder: what it says, then what it was read from.
     "check_statement": ".ladder-statement",

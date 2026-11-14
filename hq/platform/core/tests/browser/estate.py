@@ -51,7 +51,7 @@ lazy from hq.platform.core.example_estate.testing import as_production, sign_in
 READ_AT = tuple(sorted((*WIDTHS, WIDEST, *WIDE_TABLES)))
 THEMES = ("light", "dark")
 # The API reference mounts a vendored viewer, whose markup is not HQ's to hold
-# to these rules; ReferenceBrowserTests holds it to its own.
+# to these rules; ReferenceBrowserTests holds only what HQ gives the page.
 _NOT_HQS_MARKUP = {"api_reference:reference"}
 # Reached from the header on every page rather than from the navigation.
 _HEADER = ("action_items",)

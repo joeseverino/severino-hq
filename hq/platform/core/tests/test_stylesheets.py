@@ -2,11 +2,12 @@
 
 import re
 
+from django.contrib.auth import get_user_model
 from django.templatetags.static import static
 from django.test import SimpleTestCase, TestCase, tag
 from django.urls import reverse
 
-from hq.platform.application.tests.markup import elements
+from hq.platform.application.tests.markup import elements, select
 from hq.platform.core.stylesheets import DIRECTORY, SHEETS, STATIC, sheet_paths, stylesheet
 
 LAYER_ORDER = re.compile(r"@layer\s+([\w\s,.-]+);")
@@ -77,6 +78,109 @@ def container_query_faults(css: str) -> tuple[list[str], list[str]]:
         elif named.group(1) not in declared:
             undeclared.append(prelude)
     return unnamed, undeclared
+
+
+def _leaf_rules(css: str) -> list[tuple[tuple[str, ...], str, str]]:
+    """Each rule of ``css`` that holds declarations and no rule of its own:
+    the preludes around it (``@layer base``, ``@media print``, a rule it is
+    nested in), its selector and its declarations."""
+
+    rules = []
+    # Each open block's prelude, and whether a block has opened inside it.
+    stack: list[tuple[str, bool]] = []
+    start = 0
+    for match in re.finditer(r"[{}]", css):
+        if match.group() == "{":
+            if stack:
+                stack[-1] = (stack[-1][0], True)
+            # A prelude follows the declaration or statement (`@layer a, b;`) before it.
+            stack.append((" ".join(css[start : match.start()].rsplit(";", 1)[-1].split()), False))
+        elif stack:
+            prelude, holds_blocks = stack.pop()
+            if not holds_blocks and not prelude.startswith("@"):
+                rules.append((tuple(p for p, _ in stack), prelude, css[start : match.start()]))
+        start = match.end()
+    return rules
+
+
+# A vendored app's mount: what each of HQ's layers gives way at (tokens.css).
+VENDORED_MOUNT = ":where([data-vendored])"
+# What styles the root alone, or the view transition's tree drawn over it.
+ROOT_ONLY = (":root", "::view-transition")
+ID_SELECTOR = re.compile(r"#[A-Za-z_][\w-]*")
+CLASS_SELECTOR = re.compile(r"\.([A-Za-z_][\w-]*)")
+NEGATION = re.compile(r":not\((?:[^()]|\([^()]*\))*\)")
+# A reader's own setting, which holds for a vendor's markup as for HQ's.
+READERS_OWN = ("@media print", "@media (prefers-reduced-motion: reduce)")
+
+
+def _selector_list(selector: str) -> set[str]:
+    """Each complex selector of a list, its commas inside `:is()` or
+    `:not()` kept, whitespace collapsed."""
+
+    parts, depth, start = [], 0, 0
+    for at, char in enumerate(selector):
+        depth += {"(": 1, ")": -1}.get(char, 0)
+        if char == "," and not depth:
+            parts.append(selector[start:at])
+            start = at + 1
+    return {" ".join(part.split()) for part in [*parts, selector[start:]]}
+
+
+class VendoredMountTests(TestCase):
+    def test_no_rule_of_hqs_reaches_a_vendored_mount(self):
+        """No rule of HQ's stylesheet reaches markup a vendored app draws
+        (`data-vendored` on its mount: the API reference's viewer), so the
+        vendor's own rules alone style it. Each layer that holds a rule for
+        any element but the root reverts all of its own declarations there,
+        with one rule, the same in each, that outranks every other rule of
+        the layer: no other selector names two ids. A rule no revert undoes
+        (unlayered, or an important declaration) names a class that neither
+        the vendored bundle nor the page around the mount writes, but for
+        the reader's own settings (print, reduced motion), which hold for the
+        vendor's markup too."""
+
+        self.client.force_login(get_user_model().objects.create_user("operator"))
+        page = self.client.get(reverse("api_reference:reference"))
+        (mount,) = select(page, "data-vendored")
+        around = {name for ancestor in mount.ancestors for name in ancestor.classes}
+        bundle = (STATIC / "vendor" / "scalar" / "standalone.js").read_text(encoding="utf-8")
+
+        def written(name):
+            return name in around or re.search(rf"(?<![\w-]){re.escape(name)}(?![\w-])", bundle) is not None
+
+        def layer_of(preludes):
+            return next((p.removeprefix("@layer ") for p in reversed(preludes) if p.startswith("@layer ")), "")
+
+        reverts: dict[str, set[str]] = {}
+        styled: set[str] = set()
+        outranking, reaching = [], []
+        for preludes, selector, body in _leaf_rules(_uncommented(stylesheet())):
+            parts = _selector_list(selector)
+            layer = layer_of(preludes)
+            if "all: revert-layer" in " ".join(body.split()) and all(p.startswith(VENDORED_MOUNT) for p in parts):
+                reverts.setdefault(layer, set()).update(parts)
+                continue
+            outranking += [part for part in parts if len(ID_SELECTOR.findall(part)) > 1]
+            reach = {part for part in parts if not part.startswith(ROOT_ONLY)}
+            if layer and reach:
+                styled.add(layer)
+            if (not layer or "!important" in body) and not set(READERS_OWN) & set(preludes):
+                # A class named outside a negation, here or in a rule this one
+                # is nested in, is one the element or a box around it carries.
+                nesting = " ".join(p for p in preludes if not p.startswith("@"))
+                reaching += [
+                    part
+                    for part in reach
+                    if all(map(written, CLASS_SELECTOR.findall(NEGATION.sub("", f"{nesting} {part}"))))
+                ]
+
+        self.assertTrue(styled)
+        self.assertEqual(sorted(styled - set(reverts)), [], "a layer that styles elements gives way at the mount")
+        self.assertEqual(len({frozenset(parts) for parts in reverts.values()}), 1, "every layer gives way alike")
+        self.assertIn(f"{VENDORED_MOUNT} :not(#_):not(#_)", next(iter(reverts.values())))
+        self.assertEqual(outranking, [], "a selector of two ids ties the revert at the mount")
+        self.assertEqual(sorted(reaching), [], "a rule no revert undoes names a class the vendor never writes")
 
 
 class SheetTests(SimpleTestCase):

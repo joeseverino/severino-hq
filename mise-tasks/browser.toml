@@ -79,19 +79,9 @@ run = [
 ]
 
 ["browser:navigation"]
-description = "Real-browser invariants over the example estate, the frame around a page and its fragments, in WebKit, the reference also in Chromium"
+description = "Real-browser invariants over the example estate, the frame around a page and its fragments, in WebKit"
 hide = true
 extends = "django-browser"
-# The template's, and Chromium, which the reference is also opened in.
-depends = [
-  { task = "setup:browser", args = [
-    "webkit",
-  ] },
-  { task = "setup:browser", args = [
-    "chromium",
-  ] },
-  "setup:lint-tools",
-]
 vars.classes = """\
   hq.platform.core.tests.browser.estate.ExampleEstateBrowserTests \
   hq.platform.core.tests.browser.estate.ExampleEstateControlTests \
