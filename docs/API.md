@@ -278,8 +278,7 @@ reference, not a client:
   follows the operator's theme (`data-theme` on `<html>`, else the system's)
   with no toggle of its own. No rule of HQ's own stylesheet reaches the
   markup the viewer draws: its mount carries `data-vendored`, where each of
-  HQ's layers gives way (`tokens.css`), and `VendoredMountTests` reads every
-  rule of the stylesheet for one that could still reach it.
+  HQ's layers gives way (`tokens.css`).
 - **Facts are fields.** A capability's `x-hq-effect` and
   `x-hq-required-capabilities` are drawn on its operation (`showExtensions`),
   and each refusal's codes are its `code` field's `const`, or its `enum`
