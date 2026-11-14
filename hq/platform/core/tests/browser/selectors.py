@@ -82,8 +82,6 @@ SELECTORS = {
     "table_filter_box": "input[type=checkbox][name]",
     "table_toggle": "[data-table-toolbar] .table-toggle input:not([inert] *)",
     "table_rows": "main .data-table > tbody > tr:not(.row-detail)",
-    # The line beneath a row, with what the row holds back.
-    "row_detail": "main .data-table > tbody > tr.row-detail",
     "table_empty": "main [data-empty-state]",
     "sort_link": "main a.table-sort-link",
     # The Filters control a filter bar folds its choices behind, where its

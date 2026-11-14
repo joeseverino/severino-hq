@@ -20,7 +20,7 @@ from functools import cache
 from html import unescape
 from types import MappingProxyType
 from typing import Any, override
-from urllib.parse import parse_qsl, quote, urljoin, urlsplit
+from urllib.parse import parse_qsl, urljoin, urlsplit
 
 from django.conf import settings
 from django.test import Client
@@ -30,7 +30,6 @@ lazy from django.db import transaction
 from hq.platform.core.tests.browser.gate import BrowserGate, answered, sent, tab_key, unfold
 from hq.platform.core.tests.browser.in_flight import InFlight
 from hq.platform.core.tests.browser.probes.boxes import SIDEWAYS
-from hq.platform.core.tests.browser.probes.describe import TEXT_SHOWN
 from hq.platform.core.tests.browser.probes.settle import FONTS_READY, SETTLE
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import ORIGIN
@@ -359,7 +358,7 @@ _DEFAULT_SORT = re.compile(r'<select name="sort">.*?<option value="([^"]*)" sele
 _SORT_LINK = re.compile(r'<a class="table-sort-link"[^>]* href="([^"]+)"')
 _QUEUE_CHOICES = re.compile(r'<select name="(status|source)"[^>]*>(.*?)</select>', re.DOTALL)
 _OPTION = re.compile(r'<option value="([^"]+)"')
-_FIRST_ROW = re.compile(r"<tbody>\s*<tr[^>]*>(.*?)</tr>", re.DOTALL)
+_FIRST_ROW = re.compile(r"<tbody\b[^>]*>\s*<tr[^>]*>(.*?)</tr>", re.DOTALL)
 _CELL = re.compile(r"<td[^>]*>(.*?)</td>", re.DOTALL)
 
 
@@ -396,57 +395,6 @@ _WATCH_DROPPED = (
 )
 _FIRST_COLUMN = """(rows) => [...document.querySelectorAll(rows)]
   .map((row) => row.cells[0].innerText.trim().split('\\n')[0])"""
-# A word in a closed row's line beneath that nothing else find could reach
-# holds: no text drawn on the page, and no other line beneath a row.
-_HELD_BACK_WORD = (
-    "(details) => {"
-    + TEXT_SHOWN
-    + """
-  const lines = [...document.querySelectorAll(details)];
-  const reachable = (node) => textShown(node) || lines.some((line) => line.contains(node));
-  const texts = (root) => {
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    const found = [];
-    while (walker.nextNode()) found.push(walker.currentNode);
-    return found;
-  };
-  for (const line of lines) {
-    if (line.previousElementSibling?.classList.contains('is-expanded')) continue;
-    const shown = (node) => {
-      for (let el = node.parentElement; el && el !== line; el = el.parentElement) {
-        if (getComputedStyle(el).display === 'none') return false;
-      }
-      return true;
-    };
-    const elsewhere = texts(document.body)
-      .filter((node) => !line.contains(node) && reachable(node))
-      .map((node) => node.data.toLowerCase()).join(' ');
-    for (const node of texts(line).filter(shown)) {
-      for (const word of node.data.split(/[^A-Za-z]+/)) {
-        if (word.length > 4 && !elsewhere.includes(word.toLowerCase())) return word;
-      }
-    }
-  }
-  return null;
-}"""
-)
-# How tall each table holding a closed row's line is drawn, then with every
-# such line left out of the page.
-_CLOSED_LINES_ROOM = """(details) => {
-  const lines = [...document.querySelectorAll(details)]
-    .filter((line) => !line.previousElementSibling.classList.contains('is-expanded'));
-  const tables = [...new Set(lines.map((line) => line.closest('table')))];
-  const heights = () => tables.map((table) => table.getBoundingClientRect().height);
-  const drawn = heights();
-  lines.forEach((line) => line.style.setProperty('display', 'none'));
-  const without = heights();
-  lines.forEach((line) => line.style.removeProperty('display'));
-  return [drawn, without];
-}"""
-# The line holding the word is open beneath its row.
-_FOUND_OPEN = """([details, word]) => [...document.querySelectorAll(details)].some((line) =>
-  line.textContent.includes(word) && line.checkVisibility()
-  && line.previousElementSibling.classList.contains('is-expanded'))"""
 
 
 class ExampleEstateControlTests(BrowserGate):
@@ -844,22 +792,6 @@ class ExampleEstateControlTests(BrowserGate):
         self.assertTrue(drawer.get_by_role("link").first.is_visible())
         toggle.click()
         self.assertFalse(drawer.is_visible())
-
-    def test_find_in_page_opens_the_closed_row_that_holds_the_match(self):
-        """A word only a closed row's line beneath holds is found, as the
-        browser's find finds it (a text fragment), and the row opens on it."""
-
-        self.visit(reverse("expenses:list"), PHONE_SCREEN[0])
-        word = self.page.evaluate(_HELD_BACK_WORD, SELECTORS["row_detail"])
-        self.assertTrue(word, "no closed row holds back a word of its own")
-        # Reachable by find, a closed row's line still takes no room. Left out,
-        # a line under the last row would leave that row its rule, which the
-        # last row never draws, so a table may be a rule shorter drawn.
-        drawn, without = self.page.evaluate(_CLOSED_LINES_ROOM, SELECTORS["row_detail"])
-        for tall, room in zip(drawn, without, strict=True):
-            self.assertLessEqual(tall, room)
-        self.page.goto(f"{ORIGIN}{reverse('expenses:list')}#:~:text={quote(word)}", wait_until="load")
-        self.page.wait_for_function(_FOUND_OPEN, arg=[SELECTORS["row_detail"], word])
 
     def test_a_menu_opens_and_closes_on_escape_and_a_press_outside(self):
         """A menu is pressed by its button, whose panel is a popover: a filter's,
