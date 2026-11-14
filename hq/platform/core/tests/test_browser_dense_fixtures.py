@@ -14,6 +14,7 @@ hostnames it serves. Every name is example.*; every address is a documentation
 or shared-address range (192.0.2.0/24, 198.51.100.0/24, 100.64.0.0/10).
 """
 
+import json
 import tempfile
 from contextlib import ExitStack
 from datetime import timedelta
@@ -43,6 +44,7 @@ from hq.platform.application import readings
 from hq.platform.application.approvals import entry_event, is_held
 from hq.platform.application.asks import REFRESHING
 from hq.platform.application.capabilities import execute_capability
+from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
 from hq.platform.application.pins import SERVICE as PINNED_SERVICE, toggle
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.report_testing import report_connections
@@ -726,6 +728,51 @@ def _held():
     )
     if not is_held(answer):
         raise AssertionError(f"the agent's removal was answered {answer}, not held for a person")
+    _held_policy_insert(remover)
+
+
+# The declared tailnet policy an agent asks to amend (`_held_policy_insert`).
+POLICY = "an-example-tailnet-policy-with-a-long-name"
+
+
+def _policy_grant(index: int) -> dict:
+    return {"src": [f"group:an-example-group-{index}"], "dst": ["tag:server"], "ip": ["tcp:443"], "via": ["tag:exit"]}
+
+
+def _held_policy_insert(agent: Principal) -> None:
+    """An amendment that inserts one grant in the middle of eight and widens
+    one test, so its diff reads one grant added and one test changed, never
+    every later grant shifted."""
+
+    tests = [{"src": f"user-{index}@example.com", "accept": ["tag:server:443"]} for index in range(3)]
+    declared = {"grants": [_policy_grant(index) for index in range(8)], "tests": tests}
+    save_managed_resource(
+        ManagedResourceCommand(key=POLICY, kind="tailscale.policy", spec={"document": json.dumps(declared, indent=2)}),
+        principal=cli_principal(),
+        copied_from_live=True,
+    )
+    grants = declared["grants"]
+    inserted = {"src": ["group:an-example-group-of-administrators"], "dst": ["tag:server"], "ip": ["*"]}
+    asked = {
+        "grants": [*grants[:4], inserted, *grants[4:]],
+        "tests": [*tests[:2], {**tests[2], "accept": ["tag:server:443", "tag:server:22"]}],
+    }
+    CapabilityRule.objects.create(subject=agent.actor, capability="infrastructure.resource.update", rule="approve")
+    answer = execute_capability(
+        "infrastructure.resource.update",
+        keyed(
+            {
+                "key": POLICY,
+                "kind": "tailscale.policy",
+                "spec": {"document": json.dumps(asked, indent=2)},
+                "enabled": True,
+            }
+        ),
+        principal=agent,
+        target=POLICY,
+    )
+    if not is_held(answer):
+        raise AssertionError(f"the agent's policy amendment was answered {answer}, not held for a person")
 
 
 def _starred(user):
@@ -914,6 +961,14 @@ DENSE_PAGES = {
         lambda: reverse(
             "core:audit_detail",
             args=[entry_event(ApprovalRequest.objects.get(capability="infrastructure.resource.remove").pk).pk],
+        ),
+        ExitStack,
+    ),
+    # A held amendment that inserts one entry mid-list, said as that one entry.
+    "dense/amendment": (
+        lambda: reverse(
+            "core:audit_detail",
+            args=[entry_event(ApprovalRequest.objects.get(capability="infrastructure.resource.update").pk).pk],
         ),
         ExitStack,
     ),

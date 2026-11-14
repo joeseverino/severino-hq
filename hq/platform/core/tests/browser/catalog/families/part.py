@@ -1,5 +1,6 @@
 """The catalog's parts: the page frame and every shared part no other family names."""
 
+import json
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
@@ -65,6 +66,25 @@ _RECORDS = {
     "example.first": {"example_effect": "read", "example_timeout_seconds": 60},
     "example.second": {"example_effect": "read", "example_timeout_seconds": 120, "example_retry": "safe"},
 }
+
+
+def _list_insert() -> tuple[dict[str, str], dict[str, str]]:
+    """A policy document before and after one grant is inserted among six and one test is widened."""
+
+    grants = [{"src": [f"group:example-{index}"], "dst": ["tag:example"], "ip": ["tcp:443"]} for index in range(6)]
+    tests = [{"src": f"user-{index}@example.com", "accept": ["tag:example:443"]} for index in range(2)]
+    inserted = {"src": ["group:example-admins"], "dst": ["tag:example"], "ip": ["*"]}
+    after = {
+        "grants": [*grants[:3], inserted, *grants[3:]],
+        "tests": [tests[0], {**tests[1], "accept": ["tag:example:443", "tag:example:22"]}],
+    }
+    return (
+        {"document": json.dumps({"grants": grants, "tests": tests})},
+        {"document": json.dumps(after)},
+    )
+
+
+_LIST_INSERT = _list_insert()
 
 
 class _Drawn:
@@ -1650,6 +1670,13 @@ ENTRIES = {
                 ),
             )
         },
+    ),
+    # A document whose list gains one entry mid-way and has another edited:
+    # the new entry is one row, the edited one its field, and the entries
+    # after the insert stay unsaid.
+    "part/change-table-list": Entry(
+        "{% change_table preview %}",
+        {"preview": compare(*_LIST_INSERT, label="Would change", amends=True)},
     ),
     # Agents' rules (core/_policy_table.html), each setting a toned select
     # (core/_policy_setting.html): every state a rule can be in, and a cell

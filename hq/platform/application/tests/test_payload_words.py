@@ -46,3 +46,64 @@ class ValueWordsTests(SimpleTestCase):
         self.assertEqual(field_label("confirm_prune"), "Confirm prune")
         self.assertEqual(field_label("dns_name"), "DNS name")
         self.assertEqual(field_label("doc_id", "Document"), "Document")
+
+
+def _grant(source: str, *, via: str = "") -> dict:
+    return {"src": [source], "dst": ["tag:example"], "ip": ["443"], **({"via": [via]} if via else {})}
+
+
+class ChangedWordsTests(SimpleTestCase):
+    """Entries of a list of records are matched by content, as ``git diff`` matches lines."""
+
+    def changes(self, before, after) -> dict[str, tuple[str, str, str]]:
+        from ..payload_words import changed_words
+
+        return {row.label: (row.change, row.before, row.after) for row in changed_words(before, after)}
+
+    def test_an_entry_inserted_mid_list_is_one_entry_added(self):
+        grants = [_grant(f"group:example-{index}", via="tag:exit") for index in range(8)]
+        inserted = [*grants[:4], _grant("group:admins"), *grants[4:]]
+
+        said = self.changes({"grants": grants}, {"grants": inserted})
+
+        self.assertEqual(list(said), ["Grants › Entry 5"])
+        change, before, after = said["Grants › Entry 5"]
+        self.assertEqual((change, before), ("added", ""))
+        self.assertIn("group:admins", after)
+
+    def test_an_entry_removed_mid_list_is_one_entry_removed(self):
+        grants = [_grant(f"group:example-{index}") for index in range(6)]
+
+        said = self.changes({"grants": grants}, {"grants": [*grants[:2], *grants[3:]]})
+
+        self.assertEqual([(label, row[0]) for label, row in said.items()], [("Grants › Entry 3", "removed")])
+
+    def test_an_entry_edited_beside_an_insert_is_said_field_by_field_where_it_now_stands(self):
+        tests = [{"src": f"user@example-{index}.com", "accept": ["tag:example:443"]} for index in range(4)]
+        edited = [*tests[:1], {"src": "group:admins", "accept": ["tag:admin:22"]}, *tests[1:]]
+        edited[3] = {**tests[2], "accept": ["tag:example:443", "tag:example:80"]}
+
+        said = self.changes({"tests": tests}, {"tests": edited})
+
+        self.assertEqual(said["Tests › Entry 2"][0], "added")
+        self.assertEqual(
+            said["Tests › Entry 4 › Accept"], ("changed", "tag:example:443", "tag:example:443, tag:example:80")
+        )
+        self.assertEqual(len(said), 2)
+
+    def test_an_entry_replaced_by_one_unlike_it_reads_as_its_place_changing(self):
+        before = [_grant("group:example"), {"name": "example", "port": 1}]
+        after = [_grant("group:example"), {"other": True}]
+
+        said = self.changes({"items": before}, {"items": after})
+
+        self.assertEqual([(label, row[0]) for label, row in said.items()], [("Items › Entry 2", "changed")])
+
+    def test_a_long_list_of_alike_entries_still_matches_by_content(self):
+        # Past two hundred entries, SequenceMatcher's own heuristic would treat a
+        # common entry as junk and match nothing.
+        grants = [_grant("group:example") for _ in range(250)]
+
+        said = self.changes({"grants": grants}, {"grants": [_grant("group:admins"), *grants]})
+
+        self.assertEqual([(label, row[0]) for label, row in said.items()], [("Grants › Entry 1", "added")])
