@@ -268,11 +268,13 @@
 .calendar-sources { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
 /* A source is a toggle ({% post_button %} with `pressed`): the whole line is
    the button, its box drawn before the name and filled in its color when
-   checked. What it shows and how it failed stand under the name, past the box. */
+   checked, both at the line's start where a button would center them. What
+   it shows and how it failed stand under the name, past the box. */
 .calendar-sources > li { display: grid; --check: 14px; --check-gap: var(--space-3); --check-inset: var(--space-2); }
 .calendar-source {
   display: flex;
   align-items: center;
+  justify-content: start;
   gap: var(--check-gap);
   width: 100%;
   min-height: 0;

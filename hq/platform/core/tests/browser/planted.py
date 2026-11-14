@@ -75,6 +75,20 @@ _ASK = (
     "Example</button></span>"
 )
 
+# A line cut with an ellipsis, its words set in a span of the display given.
+_ELLIPSIS = (
+    '<div style="inline-size: 8rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis">'
+    '<span style="display: {}; max-inline-size: 100%">Example value far wider than its box</span></div>'
+)
+# A share's bar behind one long word, at the share given.
+_FILLED = (
+    '<div style="position: relative; inline-size: 20rem; overflow: hidden; white-space: nowrap">'
+    '<meter style="position: absolute; inset: 0; inline-size: 100%; block-size: 100%" min="0" max="100" value="{}">'
+    '</meter><span style="position: relative">/example/a-path-long-enough-to-run-past-the-middle/</span></div>'
+)
+# A toggle's label set in its line as given, and its note under it.
+_NOTED = '<ul><li style="display: grid"><span style="justify-self: {}">Example label</span><small>Example note</small></li></ul>'
+
 # Each check of the survey, by name, and its smallest defect.
 PLANTS = {
     # A box that hides what it holds past its edge, as clipped-content finds a card.
@@ -286,6 +300,18 @@ PLANTS = {
     "button edges": Plant('<button type="button" style="border: 1px solid var(--field-line)">Example</button>'),
     # A fill the light palette shows and the dark one drops.
     "fills": Plant('<p><span style="background: light-dark(#ccc, transparent)">Example</span></p>'),
+    # A name cut with an ellipsis, its words a box of their own.
+    "cut with no ellipsis": Plant(_ELLIPSIS.format("inline-block")),
+    # A bold run in a line already bold, asking past the font's heaviest
+    # weight, once the font it asks is loaded (an optional face a page drawn
+    # before it arrives does without).
+    "faked weights": Plant(
+        '<p style="font-weight: 600; font-synthesis-weight: auto"><strong>Example</strong></p>',
+        then="() => document.fonts.load('900 1em Inter')",
+    ),
+    "words across a fill": Plant(_FILLED.format(50)),
+    # A toggle's label set at the end of its line, its note at the start.
+    "notes apart": Plant(_NOTED.format("end")),
 }
 
 _FLOWS = (
@@ -299,6 +325,17 @@ _FLOWS = (
 # differs from, so a check that finds everything is caught as surely as one
 # that finds nothing.
 PASSES = {
+    # The same cut, its words running inline, where the ellipsis is drawn.
+    "cut with no ellipsis": Plant(_ELLIPSIS.format("inline")),
+    # A bold run in a plain line, inside the font's weights.
+    "faked weights": Plant(
+        '<p style="font-synthesis-weight: auto"><strong>Example</strong></p>',
+        then="() => document.fonts.load('700 1em Inter')",
+    ),
+    # A whole share, its bar ending past the words.
+    "words across a fill": Plant(_FILLED.format(100)),
+    # The label at the start of its line, its note under it.
+    "notes apart": Plant(_NOTED.format("start")),
     # An ask of the section's own under a table of row asks, asking for
     # other work than any row does.
     "asks outside their rows": Plant(
@@ -350,6 +387,11 @@ PASSES = {
         '<p style="inline-size: 20rem">Example words then <code style="padding-inline: 6rem">name</code></p>'
         '<p style="inline-size: 20rem">Example words then <code style="display: inline-block">'
         "example chip of words held whole</code></p>"
+        # A chip that wraps, its padding drawn on each line: "bb" would fit
+        # after "aaaa" but for the padding that would close the line after it.
+        '<p style="inline-size: 12ch; font: 16px monospace"><code style="display: inline; font: inherit; '
+        'padding: 0 3ch; border: 0; margin: 0; box-decoration-break: clone; -webkit-box-decoration-break: clone">'
+        "aaaa bb cc</code></p>"
         '<p style="inline-size: 20rem">Example words <br>then more</p>'
         "</td></tr></tbody></table>"
     ),

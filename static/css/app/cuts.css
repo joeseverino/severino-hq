@@ -220,7 +220,10 @@
   .command-center-copy > .muted { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 }
 
-/* A context line, a relation's ends, a bar's label: one line each. */
+/* A context line, a relation's ends, a bar's label: one line each. An
+   identifier in one runs inline, its parts too, since an ellipsis stands in
+   for text alone and a part drawn as a box of its own is cut with no mark. */
+:is(.relation-other, .relation-kind, .bar-label) :is(.token, .whole) { display: inline; }
 .relation-other {
   grid-area: 2 / 2 / 3 / 3;
   white-space: nowrap; color: var(--ink); overflow: hidden; text-overflow: ellipsis;
@@ -235,10 +238,9 @@
    A part of it flows as its words do, so the clamp cuts at a word. WebKit
    lays a value's parts out past its clamp, so the box holds one line too. */
 .bar-label {
-  position: relative; flex: 1 1 auto; min-inline-size: 0; overflow-wrap: anywhere;
+  min-inline-size: 0; overflow-wrap: anywhere;
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; line-clamp: 1; max-block-size: 1lh; overflow: hidden;
 }
-.bar-label :is(.token, .whole) { display: inline; }
 /* A line that is a label, not prose: cut with an ellipsis, whole on hover. */
 .one-line { white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 

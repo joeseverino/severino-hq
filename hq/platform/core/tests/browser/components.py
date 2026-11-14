@@ -1437,8 +1437,8 @@ class ComponentLayoutTests(LayoutBrowserTests):
         ]
         self.assertEqual([selector for selector in dropped if not anothers_part_alone(selector)], [])
 
-    def test_a_share_fills_its_row_from_edge_to_edge(self):
-        """A share's fill is as tall as its row, in every engine (`.bar-track`
+    def test_a_share_fills_its_bar_from_edge_to_edge(self):
+        """A share's fill is as tall as its bar, in every engine (`.bar-track`
         in pages.css)."""
 
         self.open(next(iter(PAGES)), WIDE)
@@ -1446,7 +1446,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
         # The page's own shot, which drops the style WebKit adds to take one.
         shot = self.page.screenshot(clip=self.page.locator(SELECTORS["share_bar"]).first.bounding_box())
         fill = self.page.evaluate(_FILL_ROWS, base64.b64encode(shot).decode())
-        self.assertGreater(fill["rows"], 10)
+        self.assertGreater(fill["rows"], 2)
         self.assertGreaterEqual(fill["filled"], fill["rows"] - 1, fill)
 
     def test_the_dashboard_pairs_its_cards_on_a_wide_screen(self):

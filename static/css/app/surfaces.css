@@ -148,8 +148,11 @@
   /* A figure's token never breaks, so on a phone three supporting figures
      would run into each other: each sizes its value to its own column, a
      nine-character amount taking nine tenths of it, the rest for the pixel or
-     two one engine's text runs wider than another's. */
-  .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :not(:first-child) { container: figure / inline-size; }
+     two one engine's text runs wider than another's. The column it measures
+     is the value's own line: a container on the stat would lay the stat's
+     lines out alone, off the row's shared tracks (WebKit), so a label that
+     wraps would drop its value below its neighbors'. */
+  .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :not(:first-child) > .kpi-figure { container: figure / inline-size; }
   .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :not(:first-child) .value {
     font-size: clamp(var(--text-sm), 18cqi, var(--text-2xl));
     color: var(--ink);

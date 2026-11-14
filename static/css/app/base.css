@@ -22,6 +22,10 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   font-feature-settings: "cv11", "ss01", "ss03";
+  /* A weight past the heaviest the face is served in (a `strong` asking
+     `bolder` in a line already bold) is drawn in that heaviest weight,
+     never smeared thicker by the browser. */
+  font-synthesis-weight: none;
   /* A word too long for its line (a URL, a key, a digest) breaks rather than
      pushing the page wide. It breaks only where it would overflow, and does
      not change how wide a table cell asks to be. */

@@ -594,21 +594,27 @@ LINES_SHORT_OF_THEIR_ROOM = (
     // The edges of the inline boxes a piece of a word opens and closes (a
     // `code`'s padding and border): those whose words start or end with it.
     const bare = document.createRange();
+    // A box that clones its edges onto each line it is drawn on (a chip that
+    // wraps, `box-decoration-break: clone`) closes the line a word ends with
+    // its padding and border, wherever in the box the word stands.
     const edges = (node, start, end) => {
       let before = 0;
       let after = 0;
+      let closes = 0;
       for (let el = node.parentElement; el && el !== block; el = el.parentElement) {
         const css = getComputedStyle(el);
         if (css.display === 'contents') continue;
         if (css.display !== 'inline') break;
+        const right = parseFloat(css.borderRightWidth) + parseFloat(css.paddingRight);
         bare.setStart(el, 0);
         bare.setEnd(node, start);
         if (!bare.toString().trim()) before += parseFloat(css.marginLeft) + parseFloat(css.borderLeftWidth) + parseFloat(css.paddingLeft);
         bare.setStart(node, end);
         bare.setEnd(el, el.childNodes.length);
-        if (!bare.toString().trim()) after += parseFloat(css.marginRight) + parseFloat(css.borderRightWidth) + parseFloat(css.paddingRight);
+        if (!bare.toString().trim()) after += parseFloat(css.marginRight) + right;
+        else if ((css.boxDecorationBreak || css.webkitBoxDecorationBreak) === 'clone') closes += right;
       }
-      return [before, after];
+      return [before, after, closes];
     };
     // An inline block (a chip an open row sets whole) moves to the next line
     // as one box, so it is one word, as wide as its box.
@@ -641,11 +647,12 @@ LINES_SHORT_OF_THEIR_ROOM = (
         range.setEnd(node, end);
         const rects = [...range.getClientRects()].filter((rect) => rect.width > 0);
         if (!rects.length) continue;
-        const [before, after] = edges(node, match.index, end);
+        const [before, after, closes] = edges(node, match.index, end);
         const pieces = rects.map((rect, index) => ({
           rect,
           before: index ? 0 : before,
           after: index === rects.length - 1 ? after : 0,
+          closes: index === rects.length - 1 ? closes : 0,
         }));
         if (open && match.index === 0 && words.length) words.at(-1).push(...pieces);
         else words.push(pieces);
@@ -660,7 +667,7 @@ LINES_SHORT_OF_THEIR_ROOM = (
       const last = lastPiece.rect;
       const next = words[at + 1];
       if (next[0].rect.top < last.bottom - 1) continue;
-      const width = next.reduce((sum, piece) => sum + piece.before + piece.rect.width + piece.after, 0);
+      const width = next.reduce((sum, piece) => sum + piece.before + piece.rect.width + piece.after, 0) + (next.at(-1).closes ?? 0);
       const edge = edgeOf(last);
       const right = last.right + lastPiece.after;
       if (right + space + width < edge - 1) {
