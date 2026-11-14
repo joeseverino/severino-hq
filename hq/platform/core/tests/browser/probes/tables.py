@@ -369,7 +369,9 @@ CUT_BESIDE_ROOM = (
       const own = Math.max(0, inner(cell).right - end);
       const asksNothing = boxes.some((box) => /flex/.test(getComputedStyle(box.parentElement).display)
         && getComputedStyle(box).flexGrow !== '0' && parseFloat(getComputedStyle(box).flexBasis) === 0);
-      const others = asksNothing ? 0 : [...slack].reduce((sum, [place, room]) => sum + (place === cell.cellIndex ? 0 : room), 0);
+      // A cell that stands beneath its row spans it, beside no other column.
+      const spans = getComputedStyle(cell).gridColumnEnd === '-1';
+      const others = asksNothing || spans ? 0 : [...slack].reduce((sum, [place, room]) => sum + (place === cell.cellIndex ? 0 : room), 0);
       const room = own + others;
       if (room < 1) continue;
       // Each box that cuts it given the room, to see whether it then shows

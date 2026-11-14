@@ -55,7 +55,10 @@ MARKUP_ATTRIBUTES = {
     "errors": "a form's error list, as Django renders it",
     "non_field_errors": "a form's error list, as Django renders it",
 }
-MARKUP_FILTERS = {"safe": "markup its author wrote"}
+MARKUP_FILTERS = {
+    "safe": "markup its author wrote",
+    "title_parts": "the list items a title's line is given, refused when they are anything else",
+}
 
 # Elements whose text is never a token: a span inside one is not markup, is
 # not drawn (an SVG drawing), or is not shown on the page; and a `<time>`,

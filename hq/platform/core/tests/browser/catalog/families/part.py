@@ -2179,17 +2179,17 @@ ENTRIES = {
         },
         heads_the_page=True,
     ),
-    # The facts on a title's line ({% title_meta %}): a run of parts with a
-    # dot between each, long enough to wrap under the title on a phone; and
-    # as a list whose parts each wrap whole. A new option of the tag comes
-    # with an entry here (test_title_tags).
+    # The facts on a title's line ({% title_meta %}): a list of parts with a
+    # dot between each, long enough to wrap under the title on a phone, each
+    # part wrapping whole. A new option of the tag comes with an entry here
+    # (test_title_tags).
     "part/title-meta": Entry(
         '{% include "partials/_page_head.html" %}{% section "Example section 3" %}<p>An example line.</p>{% endsection %}',
         {
             "page": Page(title="example-host-01"),
             "page_aside": _Drawn(
-                '{% title_meta %}{% status "Online" tone="good" %} since 3 days ago{% dot %}example role'
-                "{% dot %}<code>192.0.2.10</code>{% dot %}also known as <code>example-host-01.example.com</code>"
+                '{% title_meta %}<li>{% status "Online" tone="good" %} since 3 days ago</li><li>example role</li>'
+                "<li><code>192.0.2.10</code></li><li>also known as <code>example-host-01.example.com</code></li>"
                 "{% endtitle_meta %}"
             ),
         },
@@ -2200,7 +2200,7 @@ ENTRIES = {
         {
             "page": Page(title="Example record"),
             "page_aside": _Drawn(
-                '{% title_meta element="ul" data_example="example" %}'
+                '{% title_meta data_example="example" %}'
                 '<li><strong>{% status "Out of date" tone="attention" pill=False %}</strong> since 2 hours ago</li>'
                 '<li>{% status "An example sentence that says what the state means." tone="attention" pill=False %}</li>'
                 "{% endtitle_meta %}"

@@ -448,7 +448,9 @@ class Cells(HTMLParser):
         ]
         if not (self.sorts and _sorts(records)):
             self.cuts += _sort_controls(heads)
-        self.marks.setdefault(self.table_at, []).append(_layout(kinds, named, empty, ranked, beneath, width, frozenset(self.stacked)))
+        self.marks.setdefault(self.table_at, []).append(
+            _layout(kinds, named, empty, ranked, beneath, width, frozenset(self.stacked))
+        )
         # A row group drawn as `display: contents` loses the role its tag
         # gives it; a table, row or cell on a grid keeps its own.
         for start in self.sections:
@@ -472,9 +474,7 @@ class Cells(HTMLParser):
                     if at in states and cell.closed and "colspan" not in cell.attrs
                 ]
                 stated += [
-                    (at, cell)
-                    for at, cell in _placed(row)
-                    if at in self.stacked and "colspan" not in cell.attrs
+                    (at, cell) for at, cell in _placed(row) if at in self.stacked and "colspan" not in cell.attrs
                 ]
                 for cell in dict(stated + _row_controls(row, kinds, named)).values():
                     self.marks.setdefault(cell.start, []).append(" data-beneath")

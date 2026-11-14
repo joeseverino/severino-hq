@@ -876,6 +876,8 @@ shared parts drew it: `chart-card`, `danger-link`, `domain-head`,
 `domain-head-copy`, `domain-stack`, `field-row`, `figure-hero`,
 `figure-hero-note`, `figure-stats`, `finding-evidence`, `pie-chart`, `pie-row`
 and `section-period`.
+`PLUGIN_API_VERSION` 13 retires `{% title_meta %}`'s `element` option: its
+parts are always `<li>` elements.
 
 A notice is `{% notice tone=... title=... %}body{% endnotice %}`, with a
 title the page composes as its `{% title %}` part after the body
@@ -995,7 +997,7 @@ Script hooks: `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit
 | `hand-drawn-stack-list` | A stack list drawn by hand, where the stack list part draws it. | Write `{% stack_list %}``<li>`...`</li>``{% endstack_list %}`, with below="Label" for a list the open row shows. |
 | `hand-drawn-stretched-shape` | A round shape or text inside a stretched drawing, which distorts it. | Draw a dot as a zero-length line of class chart-dot, and a label in the unscaled svg.chart-labels layer. |
 | `hand-drawn-table` | A table drawn outside its region. | Write `{% table_region "Label" %}` around its `<table class="data-table">`. |
-| `hand-drawn-title-meta` | A title's line of facts drawn by hand, where the title meta part draws it. | Write `{% title_meta %}`parts`{% endtitle_meta %}`, with element="ul" for `<li>` parts. |
+| `hand-drawn-title-meta` | A title's line of facts drawn by hand, where the title meta part draws it. | Write `{% title_meta %}`parts`{% endtitle_meta %}`, each part an `<li>`. |
 | `hand-drawn-toned-value` | A toned value drawn by hand, where the status part draws it. | Write `{% status value tone=tone pill=False %}`. |
 
 <!-- /sdk_contract -->

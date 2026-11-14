@@ -3,17 +3,15 @@ filled by one rule, so the API reference and the Design page cannot drift
 apart, and a third such page is the same page."""
 
 import re
-from pathlib import Path
 
-from django.conf import settings
 from django.test import SimpleTestCase, tag
 
 from hq.platform.application.tests.reads import reads
+from hq.platform.application.tests.source import template_files
 from hq.platform.core.stylesheets import STATIC
 
-ROOT = Path(settings.BASE_DIR)
 # The one template that empties the footer, and the one sheet that fills the view.
-PRIMITIVE = "templates/document_page.html"
+PRIMITIVE = "document_page.html"
 FILL_SHEET = "css/app/page.css"
 EMPTIED_FOOTER = re.compile(r"{%\s*block\s+site_footer\s*%}\s*{%\s*endblock")
 RULE = re.compile(r"([^{}]+)\{([^{}]*)\}")
@@ -29,9 +27,7 @@ FILLS = re.compile(r"max-width\s*:\s*none|(?<![-\w])padding\s*:\s*0\s*;|100dvh\s
 class DocumentPageTests(SimpleTestCase):
     def test_only_the_document_page_empties_the_footer(self):
         found = sorted(
-            path.relative_to(ROOT).as_posix()
-            for path in ROOT.glob("**/templates/**/*.html")
-            if "node_modules" not in path.parts and EMPTIED_FOOTER.search(path.read_text(encoding="utf-8"))
+            name for name, path in template_files() if EMPTIED_FOOTER.search(path.read_text(encoding="utf-8"))
         )
 
         self.assertEqual(found, [PRIMITIVE], "a page that is one document extends document_page.html")

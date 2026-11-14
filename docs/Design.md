@@ -557,7 +557,8 @@ is one line when each has room and a list when not.
 
 The facts a page states on its title's line (a record's state, a machine's
 addresses) are `{% title_meta %}`, written by the template its view names as
-`page_aside`; `element="ul"` takes `<li>` parts that each wrap whole.
+`page_aside`. Its parts are `<li>` elements with a dot between each, and each
+wraps whole, so no line opens on a dot.
 
 **A route reads in one direction.** A path from one thing to another
 (`control_plane/_path_hops.html`) is one surface, each hop a stop on one
