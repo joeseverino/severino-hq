@@ -162,9 +162,9 @@ span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-
   /* Matches the collapsed search button and the account chip exactly, so it
      reads as the same kind of control as the ones beside it. */
   .nav-toggle { display: inline-flex; grid-area: toggle; align-items: center; justify-content: center;
-    inline-size: var(--control-size); block-size: var(--control-size); min-height: 0; padding: 0;
+    inline-size: var(--control-size); block-size: var(--control-size);
     border: 1px solid var(--bar-control-line); border-radius: var(--radius-sm);
-    background: var(--bar-control-bg); color: var(--ink-2); box-shadow: none;
+    background: var(--bar-control-bg); color: var(--ink-2);
   }
   .nav-toggle > svg { width: 15px; height: 12px; }
   .nav-toggle:hover { border-color: var(--bar-control-line); background: var(--bar-control-bg-hover); }
@@ -189,12 +189,12 @@ span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-
   box-shadow: var(--shadow-pop);
 }
 .primary-nav:popover-open > a,
-.primary-nav:popover-open .nav-group > button {
+.primary-nav:popover-open .nav-group-button {
   min-height: 44px;
   padding: var(--space-4) var(--space-5);
   font-size: var(--text-md);
 }
-.primary-nav:popover-open .nav-group > button { display: flex; inline-size: 100%; }
+.primary-nav:popover-open .nav-group-button { display: flex; inline-size: 100%; }
 /* A section's own links fly out beside the list, from its row down: a
    popover is drawn over the page, never in the list's flow. The list is
    anchored to the right edge, so the room is to its left; a screen with

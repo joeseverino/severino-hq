@@ -204,10 +204,10 @@ select.toned:not(.toned-neutral) { border-color: currentColor; }
 .modal-head { display: flex; align-items: center; gap: var(--space-6); margin-bottom: var(--space-2); }
 .modal-head h2 { margin: 0; flex: 1; font-size: var(--text-xl); letter-spacing: -.01em; }
 .modal-close {
-  padding: 0 var(--space-3); line-height: 1; font-size: var(--text-3xl);
-  background: none; border: 0; color: var(--muted); box-shadow: none;
+  display: inline-flex; align-items: center; min-height: var(--control-size); padding: 0 var(--space-3);
+  border-radius: var(--radius-sm); color: var(--muted); font-size: var(--text-3xl); font-weight: 500; line-height: 1;
 }
-.modal-close:hover { color: var(--ink); background: var(--bg-tint); border-color: transparent; }
+.modal-close:hover { color: var(--ink); background: var(--bg-tint); }
 .modal-lede { margin: 0 0 var(--space-7); font-size: var(--text-sm); color: var(--muted); line-height: 1.5; }
 .modal-foot { margin-top: var(--space-7); text-align: end; font-size: var(--text-xs); color: var(--muted); }
 .modal .form { background: none; border: 0; padding: 0; box-shadow: none; }

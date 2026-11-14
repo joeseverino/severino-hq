@@ -227,15 +227,9 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
   inline-size: 100%;
   min-block-size: calc(2 * var(--space-3) + var(--reading-lead) + 3 * var(--quiet-line));
   padding: var(--space-3);
-  border: 0;
   border-radius: var(--radius);
-  background: none;
-  box-shadow: none;
-  color: inherit;
-  font: inherit;
   text-align: start;
   white-space: normal;
-  cursor: pointer;
 }
 /* Under 12rem its subject and its parts may each take a second line, so a reading there holds the room of four quiet lines, and one that lands saying more still moves nothing. */
 @container reading (width < 12rem) {
@@ -369,7 +363,10 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
 
 /* ── Buttons ────────────────────────────────────────────────────── */
 
-.btn, button {
+/* The push button is `.btn`, and a `<button>` with no class of its own. A
+   button with a class (a menu row, a toggle, a close mark) is drawn by its
+   own rule from the reset in base.css, so nothing here is taken back off. */
+.btn, :where(button:not([class])) {
   /* A button its box stretches (a line of a row's buttons on a phone) keeps
      its label at its center. */
   display: inline-flex; align-items: center; justify-content: center; gap: var(--space-3);
@@ -401,10 +398,10 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
 /* A button tints under a pointer that hovers: a touch screen keeps the
    last button touched hovered, so it would stay tinted beside its
    neighbors after a tap. */
-@media (hover: hover) { .btn:hover, button:hover { border-color: var(--line-strong); background: var(--surface-2); text-decoration: none; } }
-.btn.primary, button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); box-shadow: none; }
-@media (hover: hover) { .btn.primary:hover, button.primary:hover { background: var(--accent-2); border-color: var(--accent-2); } }
-.btn.danger, button.danger { background: var(--danger); color: var(--accent-ink); border-color: var(--danger); }
+@media (hover: hover) { .btn:hover, :where(button:not([class])):hover { border-color: var(--line-strong); background: var(--surface-2); text-decoration: none; } }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); box-shadow: none; }
+@media (hover: hover) { .btn.primary:hover { background: var(--accent-2); border-color: var(--accent-2); } }
+.btn.danger { background: var(--danger); color: var(--accent-ink); border-color: var(--danger); }
 /* A quiet control: words only until hovered. */
 .btn.ghost { background: transparent; border-color: transparent; color: var(--muted); box-shadow: none; }
 @media (hover: hover) { .btn.ghost:hover { color: var(--ink); background: var(--bg-tint); border-color: transparent; } }
@@ -473,20 +470,20 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
    controls as sections are added, instead of overflowing behind a hidden
    scrollbar where the tail becomes unreachable. A group's button reads as
    the bar's links do, and its panel hangs from its left edge. */
-.nav-group > button {
-  min-height: 0;
+.nav-group-button {
+  display: inline-flex;
+  align-items: center;
   padding: var(--space-2) var(--space-5);
-  border: 0;
   border-radius: 6px;
-  background: none;
-  box-shadow: none;
   color: var(--muted);
-  line-height: inherit;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  white-space: nowrap;
   -webkit-user-select: none;
   user-select: none;
   transition: background .12s ease, color .12s ease;
 }
-.nav-group > button:is(:hover, [aria-current], :has(+ :popover-open)) { color: var(--ink); background: var(--bg-tint); }
+.nav-group-button:is(:hover, [aria-current], :has(+ :popover-open)) { color: var(--ink); background: var(--bg-tint); }
 .nav-group > .nav-group-panel {
   position-area: block-end span-inline-end;
   min-width: 176px; display: flex; flex-direction: column; gap: 1px;
@@ -552,24 +549,15 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
 .menu-item {
   display: flex;
   width: 100%;
-  min-height: 0;
   align-items: center;
-  margin: 0;
   padding: var(--space-3) var(--space-5);
-  border: 0;
   border-radius: 4px;
-  background: none;
-  box-shadow: none;
   color: var(--ink);
-  cursor: pointer;
-  font: inherit;
   font-size: var(--text-sm);
   font-weight: 500;
-  line-height: inherit;
   text-align: left;
 }
 .menu-item:hover {
-  border: 0;
   background: var(--bg-tint);
   color: var(--ink);
   text-decoration: none;
@@ -616,11 +604,10 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
    a menu row a paragraph. */
 .menu-theme-options { justify-self: start; margin-left: var(--space-5); display: inline-flex; gap: var(--space-1); padding: var(--space-1); border-radius: 999px; background: var(--bg-tint); }
 .menu-item.menu-theme-option {
-  display: grid; place-items: center; width: 26px; height: 26px; min-height: 0; padding: 0;
-  border: 0; border-radius: 999px; background: none; box-shadow: none;
-  color: var(--muted); font-size: var(--text-md); cursor: pointer;
+  display: grid; place-items: center; width: 26px; height: 26px; padding: 0;
+  border-radius: 999px; color: var(--muted); font-size: var(--text-md);
 }
-.menu-item.menu-theme-option:hover { background: var(--surface); color: var(--ink); border: 0; }
+.menu-item.menu-theme-option:hover { background: var(--surface); color: var(--ink); }
 .menu-item.menu-theme-option[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-sm); }
 
 }

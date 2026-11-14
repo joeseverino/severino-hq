@@ -16,10 +16,10 @@ arrow. Drawn by the services table (_service_rows.html).
     <span class="pin-move">
       {% url 'control_plane:service_move' service.hostname as move_url %}
       {% if not first %}
-        {% post_button "↑" move_url name="direction" value="up" css="" hit=True title="Move "|add:service.hostname|add:" up" %}
+        {% post_button "↑" move_url name="direction" value="up" css="pin-step" hit=True title="Move "|add:service.hostname|add:" up" %}
       {% endif %}
       {% if not last %}
-        {% post_button "↓" move_url name="direction" value="down" css="" hit=True title="Move "|add:service.hostname|add:" down" %}
+        {% post_button "↓" move_url name="direction" value="down" css="pin-step" hit=True title="Move "|add:service.hostname|add:" down" %}
       {% endif %}
     </span>
   {% endif %}

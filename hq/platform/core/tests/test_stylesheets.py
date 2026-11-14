@@ -29,6 +29,8 @@ WRAPS = re.compile(r"white-space\s*:\s*(?:normal|pre-wrap|pre-line|break-spaces)
 # A selector whose subject is a control: a `.btn` or a `button`, last in it.
 BUTTON = re.compile(r"(?:\.btn\b|(?<![\w.#-])button\b)[^\s>+~,]*\)?\s*(?:,|$)")
 CLIPPED = re.compile(r"overflow(?:-x)?\s*:\s*(?:hidden|clip)")
+# The push button's rule (page.css).
+PUSH_BUTTON = ".btn, :where(button:not([class]))"
 # The one-pixel clip that keeps text for a screen reader alone.
 CLIP_RECIPE = re.compile(r"clip-path\s*:\s*inset\(50%\)")
 # The sheets the table primitive is drawn in (docs/Design.md).
@@ -164,14 +166,11 @@ class SheetTests(SimpleTestCase):
             for path in sheet_paths()
             for selector, body in RULE.findall(_uncommented(path.read_text(encoding="utf-8")))
         ]
-        held = [name for name, selector, body in rules if selector == ".btn, button" and NOWRAP.search(body)]
+        held = [name for name, selector, body in rules if selector == PUSH_BUTTON and NOWRAP.search(body)]
         restated = [
             f"{name}: {selector}"
             for name, selector, body in rules
-            if selector != ".btn, button"
-            and BUTTON.search(selector)
-            and NOWRAP.search(body)
-            and not CLIPPED.search(body)
+            if selector != PUSH_BUTTON and BUTTON.search(selector) and NOWRAP.search(body) and not CLIPPED.search(body)
         ]
 
         # A flat line beneath an opened row on a phone stands its buttons one

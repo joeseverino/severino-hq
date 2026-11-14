@@ -45,6 +45,9 @@ p, li, dd, blockquote, figcaption { text-wrap: pretty; }
   list-style: none; margin: 0; padding: 0;
 }
 a { color: var(--accent-2); text-decoration: none; }
+/* A button starts from none of the browser's paint: one with a class of its
+   own draws itself, and the push button's look is `.btn`'s (page.css). */
+button { margin: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
 /* Every control's focus ring, drawn inside its own box as Primer's is: a ring
    outside would be cut by any box above that clips what it holds (a band's
    rim, a day of the month, a scroller), and inside, nothing around it can. */

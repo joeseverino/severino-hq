@@ -700,6 +700,20 @@ class ExampleEstateControlTests(BrowserGate):
         self.page.keyboard.press("Escape")
         self.assertFalse(drawer.is_visible())
 
+    def test_each_category_in_the_phone_drawer_starts_where_a_plain_section_does(self):
+        """A category's button is a row of the list, so its name starts at
+        the list's edge as a plain section's link does, never centered."""
+
+        self.visit(reverse("expenses:list"), PHONE_SCREEN[0])
+        self.page.locator(SELECTORS["nav_toggle"]).click()
+        starts = self.page.evaluate(
+            "(drawer) => [...document.querySelector(drawer).querySelectorAll(':scope > a, .nav-group-label')]"
+            ".map((entry) => { const range = document.createRange(); range.selectNodeContents(entry);"
+            " return Math.round(range.getClientRects()[0].left); })",
+            SELECTORS["nav_drawer"],
+        )
+        self.assertEqual(len(set(starts)), 1, starts)
+
     def test_a_hovered_section_opens_a_press_keeps_it_and_leaving_closes_it(self):
         """Where the pointer hovers, a section group opens under it; a press
         then keeps it open after the pointer leaves, and one only hovered
