@@ -719,7 +719,7 @@ def _apply(held: ApprovalRequest, principal: Principal) -> ApprovalApplied:
                 spec, command, locked.target or None, principal=acting, sent=frozenset(held.payload)
             )
         _record(locked, ApprovalRequest.State.APPROVED, decider=principal, result=result)
-    return {"ok": True, "approved": str(locked.id), "result": result}
+    return {"ok": True, "approved": str(locked.id), "result": result, "message": "Approved and applied."}
 
 
 def answered[**P, R](decide: Callable[P, R]) -> Callable[P, R | dict[str, Any]]:
@@ -772,7 +772,7 @@ def reject(command: RejectCommand, *, principal: Principal) -> ApprovalRejected:
     with own_operation(held, operation=REJECT, principal=principal), transaction.atomic():
         locked = _lock_pending(held)
         _record(locked, ApprovalRequest.State.REJECTED, decider=principal, decision_note=command.note.strip()[:300])
-    return {"ok": True, "rejected": str(locked.id)}
+    return {"ok": True, "rejected": str(locked.id), "message": "Rejected. Nothing was applied."}
 
 
 def for_audit_event(event) -> ApprovalRequest | None:

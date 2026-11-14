@@ -28,7 +28,8 @@
               "vendor": "",
               "warranty_date": null
             },
-            "created": false
+            "created": false,
+            "message": "Asset \u201cExample box\u201d updated."
           },
           "ok": true
         },
@@ -3335,6 +3336,7 @@
         "dataValue": {
           "data": {
             "created": true,
+            "message": "Project \u201cGranted\u201d created.",
             "project": {
               "category": "other",
               "dependency_updates": false,
@@ -3455,6 +3457,7 @@
         "dataValue": {
           "data": {
             "created": false,
+            "message": "Project \u201cRenamed\u201d updated.",
             "project": {
               "category": "other",
               "dependency_updates": false,
@@ -6512,11 +6515,15 @@
           },
           "created": {
             "$ref": "#/components/schemas/Created"
+          },
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
           }
         },
         "required": [
           "created",
-          "asset"
+          "asset",
+          "message"
         ],
         "type": "object"
       },
@@ -7137,6 +7144,10 @@
           "payload"
         ],
         "type": "object"
+      },
+      "CallMessage": {
+        "description": "What the call did, in a sentence.",
+        "type": "string"
       },
       "CapabilityDescription": {
         "additionalProperties": false,
@@ -8115,6 +8126,9 @@
           "deleted": {
             "$ref": "#/components/schemas/ContactDeletedPart"
           },
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
+          },
           "queued": {
             "const": true,
             "description": "That the delete was handed to the inbox; absent when nothing was asked.",
@@ -8122,7 +8136,8 @@
           }
         },
         "required": [
-          "deleted"
+          "deleted",
+          "message"
         ],
         "type": "object"
       },
@@ -8153,6 +8168,9 @@
             "description": "The id of the message reviewed.",
             "type": "integer"
           },
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
+          },
           "queued": {
             "const": true,
             "description": "That the review was handed to the inbox.",
@@ -8166,7 +8184,8 @@
         "required": [
           "id",
           "status",
-          "queued"
+          "queued",
+          "message"
         ],
         "type": "object"
       },
@@ -8720,11 +8739,15 @@
           },
           "created": {
             "$ref": "#/components/schemas/Created"
+          },
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
           }
         },
         "required": [
           "created",
-          "content"
+          "content",
+          "message"
         ],
         "type": "object"
       },
@@ -9174,7 +9197,14 @@
       "DashboardSettingsSaved": {
         "additionalProperties": false,
         "description": "The dashboard's settings, saved.",
-        "properties": {},
+        "properties": {
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
+          }
+        },
+        "required": [
+          "message"
+        ],
         "type": "object"
       },
       "DashboardSettingsUpdateRequest": {
@@ -9221,6 +9251,9 @@
             "description": "The key of the record HQ stopped managing.",
             "type": "string"
           },
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
+          },
           "queued": {
             "const": false,
             "description": "That nothing was queued, since the service holding it is left as it is.",
@@ -9241,7 +9274,8 @@
           "queued",
           "forgotten",
           "released",
-          "reason"
+          "reason",
+          "message"
         ],
         "type": "object"
       },
@@ -9665,11 +9699,15 @@
           },
           "documentation": {
             "$ref": "#/components/schemas/DocumentationRow"
+          },
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
           }
         },
         "required": [
           "created",
-          "documentation"
+          "documentation",
+          "message"
         ],
         "type": "object"
       },
@@ -9744,12 +9782,16 @@
         "additionalProperties": false,
         "description": "What syncing the vault's docs into HQ did, as the command answers it.",
         "properties": {
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
+          },
           "stats": {
             "$ref": "#/components/schemas/SyncStats"
           }
         },
         "required": [
-          "stats"
+          "stats",
+          "message"
         ],
         "type": "object"
       },
@@ -10040,6 +10082,9 @@
           "created": {
             "$ref": "#/components/schemas/Created"
           },
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
+          },
           "resource": {
             "$ref": "#/components/schemas/ManagedResourceItem"
           }
@@ -10048,6 +10093,7 @@
           "created",
           "resource",
           "applying",
+          "message",
           "change"
         ],
         "type": "object"
@@ -10198,11 +10244,15 @@
           },
           "entry": {
             "$ref": "#/components/schemas/EntryRecord"
+          },
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
           }
         },
         "required": [
           "created",
-          "entry"
+          "entry",
+          "message"
         ],
         "type": "object"
       },
@@ -10622,11 +10672,15 @@
           },
           "expense": {
             "$ref": "#/components/schemas/ExpenseRow"
+          },
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
           }
         },
         "required": [
           "created",
-          "expense"
+          "expense",
+          "message"
         ],
         "type": "object"
       },
@@ -13369,6 +13423,9 @@
           "created": {
             "$ref": "#/components/schemas/Created"
           },
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
+          },
           "reason": {
             "$ref": "#/components/schemas/OperationReason"
           },
@@ -13380,6 +13437,7 @@
           "created",
           "resource",
           "applying",
+          "message",
           "reason"
         ],
         "type": "object"
@@ -13537,6 +13595,9 @@
         "additionalProperties": false,
         "description": "An operation asked of the controller, and whether this call queued it.",
         "properties": {
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
+          },
           "operation": {
             "$ref": "#/components/schemas/OperationItem"
           },
@@ -14838,13 +14899,17 @@
           "created": {
             "$ref": "#/components/schemas/Created"
           },
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
+          },
           "project": {
             "$ref": "#/components/schemas/ProjectRecord"
           }
         },
         "required": [
           "created",
-          "project"
+          "project",
+          "message"
         ],
         "type": "object"
       },
@@ -15604,13 +15669,17 @@
           "created": {
             "$ref": "#/components/schemas/Created"
           },
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
+          },
           "receipt": {
             "$ref": "#/components/schemas/ReceiptRow"
           }
         },
         "required": [
           "created",
-          "receipt"
+          "receipt",
+          "message"
         ],
         "type": "object"
       },
@@ -15695,10 +15764,14 @@
         "properties": {
           "deleted": {
             "$ref": "#/components/schemas/DeletedPart"
+          },
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
           }
         },
         "required": [
-          "deleted"
+          "deleted",
+          "message"
         ],
         "type": "object"
       },
@@ -15881,6 +15954,9 @@
         "additionalProperties": false,
         "description": "A certificate renewal asked of the controller, and why it is allowed.",
         "properties": {
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
+          },
           "operation": {
             "$ref": "#/components/schemas/OperationItem"
           },
@@ -16226,6 +16302,9 @@
           "created": {
             "$ref": "#/components/schemas/Created"
           },
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
+          },
           "resource": {
             "$ref": "#/components/schemas/ManagedResourceItem"
           }
@@ -16233,7 +16312,8 @@
         "required": [
           "created",
           "resource",
-          "applying"
+          "applying",
+          "message"
         ],
         "type": "object"
       },
@@ -16851,11 +16931,15 @@
           "hostname": {
             "description": "The name whose records were adopted.",
             "type": "string"
+          },
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
           }
         },
         "required": [
           "hostname",
-          "adopted"
+          "adopted",
+          "message"
         ],
         "type": "object"
       },
@@ -18711,13 +18795,17 @@
             },
             "type": "array"
           },
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
+          },
           "resource": {
             "$ref": "#/components/schemas/ManagedResourceItem"
           }
         },
         "required": [
           "resource",
-          "adopted"
+          "adopted",
+          "message"
         ],
         "type": "object"
       },

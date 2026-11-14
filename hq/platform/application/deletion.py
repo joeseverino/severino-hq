@@ -11,6 +11,7 @@ from django.db import transaction
 
 from hq.domains.calendars.models import Entry
 
+from .answer_fields import CallMessage
 from .command_fields import Describe
 from .record_saves import Held, held
 from .security import Principal
@@ -37,6 +38,7 @@ class RecordDeleted(TypedDict):
 
     ok: Literal[True]
     deleted: DeletedPart
+    message: CallMessage
 
 
 def delete_record(
@@ -46,6 +48,7 @@ def delete_record(
     target: str,
     command: DeleteCommand,
     type_name: str,
+    called: str,
     expected_updated_at: str | None = None,
     after_commit=None,
 ) -> RecordDeleted:
@@ -61,6 +64,7 @@ def delete_record(
     return {
         "ok": True,
         "deleted": {"type": type_name, "target": target, "label": label},
+        "message": f"{called} “{label}” deleted.",
     }
 
 
@@ -74,5 +78,6 @@ def delete_calendar_entry(
         target=target,
         command=command,
         type_name="calendar entry",
+        called="Event",
         expected_updated_at=expected_updated_at,
     )

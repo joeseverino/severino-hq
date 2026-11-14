@@ -6,7 +6,6 @@ from urllib.parse import quote, urlencode
 lazy from datetime import timedelta
 
 from django.conf import settings
-from django.contrib import messages
 from django.contrib.auth.views import LoginView
 from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpResponseForbidden
 from django.shortcuts import redirect, render
@@ -385,17 +384,12 @@ class AgentPolicyView(PageMixin, TemplateView):
         )
         if refusal := refused(request, result, form=form):
             return self.render_to_response(self.get_context_data(form=form), status=refusal.status)
-        changed, problems = result["changed"], result["problems"]
-        if changed:
-            messages.success(request, f"Saved {counted(changed, 'change')}. Each is in the audit log.")
         # A rule that could not change is said over the tables, drawn as they
         # now hold, beside the ones that did.
-        if problems:
+        if problems := result["problems"]:
             for problem in problems:
                 form.add_error(None, problem)
             return self.render_to_response(self.get_context_data(form=form), status=400)
-        if not changed:
-            messages.info(request, "Nothing changed.")
         return redirect("agent_policy")
 
 

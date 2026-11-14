@@ -23,6 +23,7 @@ from hq.domains.control_plane.names import normalized_hostname
 from hq.domains.control_plane.providers import PROVIDERS, record_spec, registry_label, service_facets
 lazy from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS, connection_credential
 
+from .answer_fields import CallMessage
 from .command_fields import Describe, Names
 from .conditions import READY, stamped
 from .inventory import record_identity, record_token, service_hostnames
@@ -48,6 +49,8 @@ logger = logging.getLogger("severino.adoption")
 ADOPT = "infrastructure.resource.adopt"
 ADOPT_SERVICE = "infrastructure.service.adopt"
 
+# What every adoption says of the live record, which it only reads.
+NOTHING_LIVE_CHANGED: Sentence = "Nothing live was changed."
 
 NO_CONNECTION: Sentence = (
     "No connection for this change has reported, so HQ cannot make it. The Connections page says how to set one up."
@@ -454,6 +457,7 @@ class ServiceAdopted(TypedDict):
     ok: Literal[True]
     hostname: Annotated[str, Describe("The name whose records were adopted.")]
     adopted: Annotated[list[str], Describe("The keys of the records adopted.")]
+    message: CallMessage
 
 
 @transaction.atomic
@@ -491,7 +495,12 @@ def adopt_service(
         )["resource"]["key"]
         for item in writable
     ]
-    return {"ok": True, "hostname": found.hostname, "adopted": adopted}
+    return {
+        "ok": True,
+        "hostname": found.hostname,
+        "adopted": adopted,
+        "message": f"HQ now manages {found.hostname} as {ended(', '.join(adopted))} {NOTHING_LIVE_CHANGED}",
+    }
 
 
 @dataclass(frozen=True, slots=True)
@@ -540,10 +549,11 @@ def adopt(
         principal=principal,
         copied_from_live=True,
     )
-    _record_as_observed(result.get("resource", {}).get("key", ""), found)
+    key = result.get("resource", {}).get("key", "")
+    _record_as_observed(key, found)
     # Adopting is the operator managing it again.
     let_in(found.kind, found.token)
-    return result
+    return {**result, "message": f"HQ now manages “{key}”. {NOTHING_LIVE_CHANGED}"}
 
 
 def _record_as_observed(key: str, found: Unmanaged) -> None:

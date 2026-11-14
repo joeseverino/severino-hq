@@ -34,7 +34,7 @@ lazy from .capabilities import command_spec
 lazy from .moments import moment
 lazy from .refusal_status import refusal_of
 lazy from .security import safe_next
-lazy from .web_writes import execute_posted
+lazy from .web_writes import execute_posted, run_posted
 lazy from .work_runs import standing_tone, standing_word
 
 IDLE = "idle"
@@ -224,20 +224,27 @@ class AskMixin:
         page, which says the same from what is stored, and the ask's sentence."""
 
         at = timezone.now()
+        # A script's ask is answered in JSON and draws no page, so its answer's
+        # sentence is said only to a plain post, and then in place of the ask's.
+        scripted = request.headers.get("X-Requested-With") == "XMLHttpRequest"
+        result: dict[str, Any] = {}
         if said := self.cannot():
             took = Took(Standing(FAILED, said))
-        elif (result := execute_posted(request, self.capability, self.payload(), target=self.target())).get("ok"):
-            took = self.asked(result, at)
         else:
-            took = Took(Standing(FAILED, refusal_of(result).message))
+            asked = (request, self.capability, self.payload())
+            target = self.target()
+            result = run_posted(*asked, target=target).answer if scripted else execute_posted(*asked, target=target)
+            ok = result.get("ok")
+            took = self.asked(result, at) if ok else Took(Standing(FAILED, refusal_of(result).message))
         standing = took.standing
-        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        if scripted:
             return JsonResponse(
                 {**standing.as_json(), "status": took.status_url if standing.live else ""},
                 status=202 if standing.live else 200,
             )
-        if said := took.message or standing.note:
-            (messages.error if standing.state == FAILED else messages.success)(request, said)
+        failed = standing.state == FAILED
+        if (failed or not result.get("message")) and (said := took.message or standing.note):
+            (messages.error if failed else messages.success)(request, said)
         return redirect(safe_next(request, fallback=self.back()))
 
 

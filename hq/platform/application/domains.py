@@ -13,6 +13,7 @@ from typing import Any, NamedTuple
 
 from django.core.exceptions import ImproperlyConfigured
 from django.utils.module_loading import import_string
+from django.utils.text import capfirst
 
 from .derivations import derivation
 from .derived_inputs import DASHBOARD_READS, QUEUE_READS, composed_variant, estate_variant
@@ -84,6 +85,12 @@ class Records:
     # (verb, summary, label) where the derived wording would say less than it
     # should; an empty one keeps the derived.
     wording: tuple[tuple[str, str, str], ...] = ()
+
+    @property
+    def called(self) -> str:
+        """What a sentence calls one record as it opens: "Content item", "Expense"."""
+
+        return capfirst(self.title or self.noun)
 
     @property
     def write(self) -> str:

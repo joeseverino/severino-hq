@@ -12,7 +12,8 @@ of them, and answers a resend from ``posted_answer`` before its form is
 validated again. Only a published form mixin whose write is no capability
 (``writes.outside_the_runner``) runs it through ``write_once`` instead.
 
-A refused answer reaches the person through ``refused``, said on the form or
+What a write that ran says reaches the person through ``said``, on the next
+page. A refused answer reaches them through ``refused``, said on the form or
 the next page, or as the whole response through ``refusal_response``.
 """
 
@@ -88,9 +89,24 @@ def execute_posted(
     target: str | int | None = None,
     expected_updated_at: str | None = None,
 ) -> dict[str, Any]:
-    """``run_posted``'s answer alone, as ``execute_capability`` is ``run_capability``'s."""
+    """``run_posted``'s answer alone, its ``message`` said on the next page.
 
-    return run_posted(request, name, payload, target=target, expected_updated_at=expected_updated_at).answer
+    A capability says what it did once, as its answer's ``message``, which
+    every door carries: an agent reads it in the answer, the audit log keeps it,
+    and here the person reads it among the page's messages. A refusal is
+    ``refused``'s to say.
+    """
+
+    answer = run_posted(request, name, payload, target=target, expected_updated_at=expected_updated_at).answer
+    said(request, answer)
+    return answer
+
+
+def said(request: HttpRequest, answer: dict[str, Any]) -> None:
+    """Put what a write that ran says (its answer's ``message``) on the next page."""
+
+    if answer.get("ok") and (message := str(answer.get("message") or "")):
+        messages.success(request, message)
 
 
 def refused(request: HttpRequest, answer: dict[str, Any], *, form: BaseForm | None = None) -> Refusal | None:

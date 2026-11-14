@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import override
 from urllib.parse import urlencode
 
-from django.contrib import messages
 from django.db.models import Count
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect
@@ -33,7 +32,6 @@ from hq.platform.application.money import money
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.receipts import REPLACE, UPDATE, UPLOAD, serialize_receipt
 from hq.platform.application.tables import TableColumn, TableListMixin, TableToggle
-from hq.platform.application.ui import ended
 from hq.platform.application.web_writes import execute_posted, refused
 from hq.platform.application.writes import CapabilityFormMixin, CommandFormPage, RecordDeleteMixin
 from hq.platform.core.audit import record_event
@@ -232,8 +230,7 @@ class ReceiptMatchView(ReceiptPage, TemplateView):
                 {field: details[field] for field in _DETAILS} | {"related_expense": expense.id},
                 target=receipt.id,
             )
-            if not refused(request, result):
-                messages.success(request, ended(f"Receipt linked to {expense.label}"))
+            refused(request, result)
 
         return redirect(receipt.get_absolute_url())
 
@@ -252,12 +249,9 @@ class ReceiptFormPage(CommandFormPage, ReceiptPage, CapabilityFormMixin):
     extra_context = FORM_PAGE
     model = Receipt
     form_class = ReceiptUploadForm
-    noun = "Receipt"
     result_key = "receipt"
     identity_attr = "pk"
     identity_result_key = "id"
-    created_message = "Receipt uploaded."
-    updated_message = "Receipt updated."
 
     @override
     def capability(self, form):
@@ -290,7 +284,6 @@ class ReceiptDeleteView(ReceiptPage, RecordDeleteMixin, DeleteView):
     template_name = "receipts/receipt_confirm_delete.html"
     success_url = reverse_lazy("receipts:list")
     context_object_name = "receipt"
-    deleted_message = "Receipt deleted."
 
 
 def stored_file(receipt: Receipt) -> Path | None:

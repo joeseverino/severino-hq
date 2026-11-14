@@ -44,7 +44,7 @@ class HeldAsReadTests(TestCase):
         for save, command, keyword, key in _saves():
             with self.subTest(save.__name__):
                 created = save(command, principal=cli_principal())
-                (record,) = (value for name, value in created.items() if name not in {"ok", "created"})
+                (record,) = (value for name, value in created.items() if name not in {"ok", "created", "message"})
                 with self.assertRaises(RecordConflict):
                     save(command, principal=cli_principal(), expected_updated_at=STALE, **{keyword: record[key]})
                 updated = save(
@@ -157,7 +157,7 @@ class RefusalWordingTests(TestCase):
         ):
             with self.subTest(prefix):
                 created = save(command, principal=cli_principal())
-                (record,) = (value for name, value in created.items() if name not in {"ok", "created"})
+                (record,) = (value for name, value in created.items() if name not in {"ok", "created", "message"})
                 error = _refused(f"{prefix}.update", payload, target=record[key], expected_updated_at=STALE)
                 self.assertEqual(error["code"], "conflict")
                 self.assertIn(word, error["message"])

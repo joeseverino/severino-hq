@@ -281,7 +281,7 @@ class MatchViewTests(TestCase):
     def test_a_link_keeps_the_details_and_is_recorded_under_the_operator(self):
         response = self.link()
 
-        self.assertIn(f"Receipt linked to {self.expense.vendor} · {self.expense.item}", text(response))
+        self.assertIn(f"{self.receipt.file.name}” updated.", text(response))
         self.receipt.refresh_from_db()
         self.assertEqual((self.receipt.related_expense, self.receipt.notes), (self.expense, "Kept"))
         updated = AuditLog.objects.get(action=AuditLog.Action.UPDATED, object_type="Receipt")
@@ -292,7 +292,7 @@ class MatchViewTests(TestCase):
             with self.subTest(interface=principal.interface), as_principal(principal):
                 response = self.link()
 
-                self.assertNotIn("Receipt linked", text(response))
+                self.assertNotIn("updated.", text(response))
         self.receipt.refresh_from_db()
         self.assertIsNone(self.receipt.related_expense)
         self.assertEqual(denials(UPDATE), 3)

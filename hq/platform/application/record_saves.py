@@ -17,12 +17,14 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.db.models import Model
 
+from .answer_fields import CallMessage
 from .describe import Describe
 from .domains import Records, load, records_of
 from .integration_specs import TARGET_KINDS, Kept, keeps
 from .record_errors import RecordConflict, RecordNotFound, Sentence
 from .security import Principal
 lazy from .resources import resource_registry
+lazy from .ui import ended
 
 Save = Callable[..., dict[str, Any]]
 
@@ -44,7 +46,7 @@ def saved_type(resource: str) -> Any:
     record = spec.record_type or spec.row_type
     saved: Any = TypedDict(  # type: ignore[operator]
         _saved_name(records),
-        {"ok": Literal[True], "created": Created, records.noun: record},
+        {"ok": Literal[True], "created": Created, records.noun: record, "message": CallMessage},
     )
     saved.__doc__ = f"The {records.title or records.noun} as saved, and whether the call created it."
     saved.__module__ = __name__
@@ -173,7 +175,13 @@ def linked_saver(
         current = target.get(keyword)
         with transaction.atomic():
             record = _saved(records, command, principal, current, expected_updated_at, sent, refusals, links)
-            return {"ok": True, "created": current is None, records.noun: serialize(record)}
+            done = "created" if current is None else "updated"
+            return {
+                "ok": True,
+                "created": current is None,
+                records.noun: serialize(record),
+                "message": ended(f"{records.called} “{record}” {done}"),
+            }
 
     save.__name__ = save.__qualname__ = f"save_{records.noun}"
     declared = save.__annotate__

@@ -183,7 +183,7 @@ class AdapterParityTests(TestCase):
             },
         )
 
-        self.assertEqual(set(mcp_result), {"ok", "created", "project"})
+        self.assertEqual(set(mcp_result), {"ok", "created", "project", "message"})
         self.assertEqual(
             AuditLog.objects.get(object_repr="Web Project").metadata["interface"],
             "web",
@@ -266,7 +266,7 @@ class AssetApplicationServiceTests(TestCase):
             },
         )
 
-        self.assertEqual(set(mcp_result), {"ok", "created", "asset"})
+        self.assertEqual(set(mcp_result), {"ok", "created", "asset", "message"})
         self.assertEqual(
             AuditLog.objects.get(object_repr="Web Asset").metadata["interface"],
             "web",

@@ -10,6 +10,7 @@ from typing import Literal, TypedDict
 from hq.domains.projects.specs import ProjectRecord
 from hq.domains.receipts.specs import ReceiptRow
 
+from .answer_fields import CallMessage
 from .calendar_specs import EntryRecord
 from .receipts import StoredReceiptFile
 from .record_saves import Created
@@ -28,6 +29,7 @@ class EntrySaved(TypedDict):
     ok: Literal[True]
     created: Created
     entry: EntryRecord
+    message: CallMessage
 
 
 class ReceiptSaved(TypedDict):
@@ -36,6 +38,7 @@ class ReceiptSaved(TypedDict):
     ok: Literal[True]
     created: Created
     receipt: ReceiptRow
+    message: CallMessage
 
 
 class ReceiptUploaded(ReceiptSaved):

@@ -5,7 +5,7 @@ from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from django.test import SimpleTestCase, TestCase
+from django.test import TestCase
 from django.urls import reverse
 from django.views.generic import CreateView, DeleteView, UpdateView
 
@@ -15,7 +15,7 @@ from ..domains import host_records, load
 from ..expenses import ExpenseCommand, save_expense
 from ..routes import routed
 from ..security import cli_principal
-from ..writes import CapabilityDeleteMixin, CapabilityFormMixin, RecordFormMixin, ServiceCreateMixin, WriteMessages
+from ..writes import CapabilityDeleteMixin, CapabilityFormMixin
 
 
 def _views():
@@ -75,12 +75,3 @@ class RecordViewTests(TestCase):
                 wrong.append(view.__qualname__)
         self.assertEqual(wrong, [])
         self.assertEqual(seen, set(models.values()))
-
-
-class WriteMessageTests(SimpleTestCase):
-    def test_a_rewording_mixin_wins_over_the_default_in_either_order(self):
-        reworded = type("Reworded", (WriteMessages,), {"created_message": "{noun} {target} added."})
-        for write in (ServiceCreateMixin, RecordFormMixin):
-            for bases in ((reworded, write), (write, reworded)):
-                with self.subTest(bases=[base.__name__ for base in bases]):
-                    self.assertEqual(type("AView", bases, {}).created_message, "{noun} {target} added.")

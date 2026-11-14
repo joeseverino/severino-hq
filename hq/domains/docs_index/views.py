@@ -241,9 +241,4 @@ class ManifestImportView(View):
             if refusal.code == "invalid_input" and refusal.details:
                 messages.error(request, f"Fix these entries first: {refusal.details}")
             return self.render_form(request, form)
-        stats = result["stats"]
-        messages.success(
-            request,
-            (f"Manifest imported: {stats['created']} new, {stats['updated']} changed, {stats['skipped']} unchanged."),
-        )
         return redirect("docs_index:list")

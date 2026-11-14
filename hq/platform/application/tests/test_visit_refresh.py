@@ -24,7 +24,7 @@ from hq.platform.core.models import AuditLog
 
 from .. import cadence, visit_refresh
 from ..asks import REFRESHING, Standing, read_standing, watched
-from ..capabilities import execute_capability
+from ..capabilities import Ran, execute_capability
 from ..freshness import VISIT_EVERY
 from ..record_errors import PolicyError, RecordNotFound
 from ..security import Capability, Principal, cli_principal
@@ -533,7 +533,7 @@ class VisitRefreshViewTests(TestCase):
 
         with (
             page(FAST),
-            patch("hq.platform.application.asks.execute_posted", return_value=raw),
+            patch("hq.platform.application.asks.run_posted", return_value=Ran(raw)),
             self.assertLogs("severino.capabilities", "ERROR"),
         ):
             response = self.post()

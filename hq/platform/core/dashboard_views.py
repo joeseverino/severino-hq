@@ -4,7 +4,6 @@ from collections.abc import Callable
 from datetime import timedelta
 from typing import Any, ClassVar, override
 
-from django.contrib import messages
 from django.shortcuts import redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse
@@ -299,6 +298,5 @@ class DashboardGlanceSettingsView(View):
             DASHBOARD_SETTINGS,
             {field: request.POST.get(field, "") for field in DashboardSettingsForm.base_fields},
         )
-        if not refused(request, result):
-            messages.success(request, "Dashboard settings saved.")
+        refused(request, result)
         return redirect("dashboard")

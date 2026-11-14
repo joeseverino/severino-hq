@@ -19,6 +19,7 @@ lazy from hq.platform.application.routes import reverse
 lazy from hq.platform.application.ui import STATUS_VALUES
 
 from . import readings
+from .answer_fields import CallMessage
 from .asks import FAILED, QUEUED, REFRESHING, RUNNING, Ask, Standing, Took
 from .cadence import ring_glance_doorbell
 from .command_fields import Describe
@@ -292,6 +293,7 @@ class DashboardSettingsSaved(TypedDict):
     """The dashboard's settings, saved."""
 
     ok: Literal[True]
+    message: CallMessage
 
 
 @transaction.atomic
@@ -304,7 +306,7 @@ def save_dashboard_settings(command: DashboardSettingsCommand, *, principal: Pri
     configuration.infrastructure_label = command.infrastructure_label.strip()[:40] or "Homelab"
     configuration.audit_said = "Dashboard settings saved"
     configuration.save()
-    return {"ok": True}
+    return {"ok": True, "message": "Dashboard settings saved."}
 
 
 def _panel(

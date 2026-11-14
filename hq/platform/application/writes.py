@@ -2,7 +2,8 @@
 
 The write side of what ``TableListMixin`` is for the read side: a record's
 create, update and delete share the same steps (its capability run under the
-key its form posted, reload, announce, redirect), so they are declared once.
+key its form posted, reload, say its answer's ``message``, redirect), so they
+are declared once.
 A view names its capabilities (``CapabilityFormMixin``,
 ``CapabilityDeleteMixin``), or for a plain ``Records`` domain only its form,
 and the runner authorizes, audits and runs the write once per drawing of the
@@ -22,7 +23,6 @@ in a ``run`` of its own, goes ``outside_the_runner``.
 from collections.abc import Callable, Mapping
 from typing import Any, override
 
-from django.contrib import messages
 from django.core.exceptions import ImproperlyConfigured
 from django.http import Http404
 from django.shortcuts import redirect
@@ -37,34 +37,13 @@ from .domains import load
 from .integration_specs import command_adapter
 from .labels import SAVE_CHANGES
 from .record_errors import RecordConflict, RecordNotFound
-from .records import described, display_noun, records_for
+from .records import described, records_for
 from .security import web_principal
-from .ui import ended
-from .web_writes import form_payload, posted_answer, refused, run_posted, write_once
+from .web_writes import form_payload, posted_answer, refused, run_posted, said, write_once
 lazy from .capabilities import Ran, capability_registry, capability_words, command_spec
 lazy from .domains import Records
 lazy from .integrations import held_graph
 lazy from .security import Principal
-
-
-def announce(request, template: str, noun: str, target: object) -> None:
-    """Say a write landed: ``template`` names the record as ``{target}``, closed by ``ended``."""
-
-    messages.success(request, ended(template.format(noun=noun, target=target)))
-
-
-class WriteMessages:
-    """What a write says when the view does not say it differently.
-
-    A view rewords one by declaring it. A mixin that rewords one for several
-    views subclasses this root, which then sits after it in any view's order
-    of bases, so the mixin wins whatever order the bases were written in. Each
-    names the record as ``{target}`` and what it is as ``{noun}``.
-    """
-
-    created_message = "{noun} “{target}” created."
-    updated_message = "{noun} “{target}” updated."
-    deleted_message = "{noun} “{target}” deleted."
 
 
 class PostedOnce:
@@ -145,17 +124,16 @@ def _command_payload(name: str, command: Any) -> dict[str, Any]:
     return adapter.dump_python(adapter.validate_python(command), mode="json")
 
 
-class _RecordWrite(PostedOnce, WriteMessages):
-    """What a record's write declares: what it is called, and how an answer names it.
+class _RecordWrite(PostedOnce):
+    """What a record's write declares: how an answer names it.
 
     ``result_key`` is where the answer nests the record, ``identity_attr`` the
     model field its capabilities target it by, and ``identity_result_key``
     that identity in the answer where it is named otherwise. Each write
-    declares the first three, as a value or a property, so no base holds a
+    declares the first two, as a value or a property, so no base holds a
     value of them another base contradicts.
     """
 
-    noun: str
     result_key: str
     identity_attr: str
     identity_result_key = ""
@@ -177,9 +155,9 @@ class _RecordWrite(PostedOnce, WriteMessages):
         key = self.identity_result_key or self.identity_attr
         return self.record_model._default_manager.get(**{self.identity_attr: answer[self.result_key][key]})
 
-    def _went_to(self, answer: dict[str, Any], template: str) -> HttpResponse:
+    def _went_to(self, answer: dict[str, Any]) -> HttpResponse:
         self.object = self.reload(answer)
-        announce(self.request, template, self.noun, self.object)
+        said(self.request, answer)
         return redirect(self.object.get_absolute_url())
 
 
@@ -211,14 +189,13 @@ class CapabilityFormMixin(_RecordWrite):
         return self._answered(form, run_posted(self.request, name, payload, target=target).answer)
 
     def _replay(self, answer: dict[str, Any]) -> HttpResponse:
-        return self._went_to(answer, self.created_message if answer["created"] else self.updated_message)
+        return self._went_to(answer)
 
 
 class CapabilityDeleteMixin(_RecordWrite):
     """Delete a record through its capability (``deletes``), confirmed by its own identity.
 
-    For ``DeleteView``. The label comes from the answer rather than from the
-    object, because by the time there is something to announce the record is gone.
+    For ``DeleteView``.
     """
 
     deletes = ""
@@ -232,7 +209,7 @@ class CapabilityDeleteMixin(_RecordWrite):
         return self._answered(form, ran.answer)
 
     def _replay(self, answer: dict[str, Any]) -> HttpResponse:
-        announce(self.request, self.deleted_message, self.noun, answer["deleted"]["label"])
+        said(self.request, answer)
         return redirect(self.success_url)
 
     @override
@@ -261,7 +238,7 @@ def _refused_delete(view: Any, form: BaseForm, answer: dict[str, Any], refuse: C
 
 
 class _Records(_RecordWrite):
-    """A plain record domain's capabilities, noun and identity, read off its ``Records`` declaration.
+    """A plain record domain's capabilities and identity, read off its ``Records`` declaration.
 
     It is a record write itself, so its model and identity override the
     defaults the write mixins it is composed with inherit.
@@ -274,10 +251,6 @@ class _Records(_RecordWrite):
     @property
     def record_model(self) -> Any:
         return load(self.records.model)
-
-    @property
-    def noun(self) -> str:
-        return display_noun(self.records)
 
     @property
     def result_key(self) -> str:
@@ -296,8 +269,7 @@ class RecordFormMixin(_Records, CapabilityFormMixin):
     """Create or update a plain record domain's record from its ``ModelForm``.
 
     For ``CreateView`` and ``UpdateView``, through the create and update
-    capabilities its declaration derives. ``created_message`` and
-    ``updated_message`` may reword the announcement. Its help, its verb and
+    capabilities its declaration derives. Its help, its verb and
     its way back come from the declaration too, so it reads as the command's
     page does, and its page is the form page frame.
     """
@@ -331,7 +303,7 @@ class RecordFormMixin(_Records, CapabilityFormMixin):
 class RecordDeleteMixin(_Records, CapabilityDeleteMixin):
     """Delete a plain record domain's record through its declared delete capability.
 
-    For ``DeleteView``; ``deleted_message`` may reword the announcement.
+    For ``DeleteView``.
     """
 
     @property
@@ -368,22 +340,22 @@ def form_close(stored: Any, adds: str, listed: str) -> dict[str, str]:
     return {"form_verb": SAVE_CHANGES, "cancel_url": stored.get_absolute_url()}
 
 
-class ServiceWriteMixin(PostedOnce, WriteMessages):
+class ServiceWriteMixin(PostedOnce):
     """Shared spine for a view whose mutation is one service call, run as the capability it is registered as.
 
-    A subclass declares ``service`` (wrapped in ``staticmethod``), ``noun``
-    (``"Content item"``), ``result_key`` (where the service nests its record),
+    A subclass declares ``service`` (wrapped in ``staticmethod``),
+    ``result_key`` (where the service nests its record),
     ``identity_attr`` (``"slug"`` or ``"pk"``) and, to amend, ``identity_kwarg``;
     ``identity_result_key`` names the identity in the result when it differs.
     """
 
     # No default for any of them: a placeholder collides with the real value on
     # whichever base supplies it, so base order picks the winner and reordering
-    # breaks the view silently, and a missing noun reads as a blank in a message.
+    # breaks the view silently.
     # A slug default for identity_attr fails the same way, sending a record's
     # redirect to a slug it does not have. Read through getattr, so a subclass
     # that omits one is an error naming the attribute.
-    REQUIRED = ("service", "noun", "result_key", "identity_attr")
+    REQUIRED = ("service", "result_key", "identity_attr")
     identity_result_key = ""
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
@@ -421,12 +393,9 @@ class ServiceWriteMixin(PostedOnce, WriteMessages):
         key = self.identity_result_key or self.identity_attr
         return self.model._default_manager.get(**{self.identity_attr: result[self.result_key][key]})
 
-    def announce(self, template: str, target: object) -> None:
-        announce(self.request, template, self.noun, target)
-
-    def _went_to(self, answer: dict[str, Any], template: str) -> HttpResponse:
+    def _went_to(self, answer: dict[str, Any]) -> HttpResponse:
         self.object = self.reload(answer)
-        self.announce(template, self.object)
+        said(self.request, answer)
         return redirect(self.object.get_absolute_url())
 
     # Whether the service's capability takes a target: an update's and a delete's do.
@@ -458,7 +427,7 @@ class ServiceCreateMixin(ServiceWriteMixin):
         return self._answered(form, self._served(self.command_from_cleaned_data(form.cleaned_data)))
 
     def _replay(self, answer: dict[str, Any]) -> HttpResponse:
-        return self._went_to(answer, self.created_message)
+        return self._went_to(answer)
 
 
 class ServiceUpdateMixin(ServiceWriteMixin):
@@ -475,15 +444,11 @@ class ServiceUpdateMixin(ServiceWriteMixin):
         return self._answered(form, self._served(command, {self.identity_kwarg: self.current_identity()}))
 
     def _replay(self, answer: dict[str, Any]) -> HttpResponse:
-        return self._went_to(answer, self.updated_message)
+        return self._went_to(answer)
 
 
 class ServiceDeleteMixin(ServiceWriteMixin):
-    """Delete through a service, then go back to the list.
-
-    The label comes from the result rather than from the object, because by the
-    time there is something to announce the record is gone.
-    """
+    """Delete through a service, then go back to the list."""
 
     _targeted = True
 
@@ -496,7 +461,7 @@ class ServiceDeleteMixin(ServiceWriteMixin):
         return self._answered(form, self._served(command, {self.identity_kwarg: identity}))
 
     def _replay(self, answer: dict[str, Any]) -> HttpResponse:
-        self.announce(self.deleted_message, answer["deleted"]["label"])
+        said(self.request, answer)
         return redirect(self.success_url)
 
     @override
@@ -511,14 +476,15 @@ class CommandFormMixin(PostedOnce):
 
     A domain's refusal becomes a form error beside its field rather than a 500.
     Subclasses declare ``service`` (as a ``staticmethod``), ``command`` (the
-    command class, when the cleaned data maps straight onto one),
-    ``success_url_name`` and ``success_message``.
+    command class, when the cleaned data maps straight onto one) and
+    ``success_url_name``. What the write says is its answer's ``message``: the
+    capability's, or for a write of the view's own the ``message`` of the
+    mapping its ``run`` returns.
     """
 
     service: Callable[..., Any] | None = None
     command: type[Any] | None = None
     success_url_name = ""
-    success_message = ""
     # Which exceptions mean "the domain said no" rather than "HQ broke", for a
     # write outside the runner, which answers every other one itself. Kept
     # narrow and overridable: catching more than this turns a real fault into
@@ -530,9 +496,6 @@ class CommandFormMixin(PostedOnce):
 
     def get_success_url(self) -> str:
         return reverse(self.success_url_name)
-
-    def get_success_message(self, result: Any) -> str:
-        return self.success_message
 
     def run(self, command: Any) -> Any:
         if self.service is None:
@@ -552,28 +515,22 @@ class CommandFormMixin(PostedOnce):
             answer = run_posted(self.request, name, _command_payload(name, self.build_command(form))).answer
             return self._answered(form, answer)
         try:
-            ran = outside_the_runner(
-                self.request, self._write, lambda: {_SAID: self._said(self.run(self.build_command(form)))}
-            )
+            ran = outside_the_runner(self.request, self._write, lambda: _said(self.run(self.build_command(form))))
         except self.domain_errors as error:
             form.add_error(None, str(error))
             return self.form_invalid(form)
         return self._answered(form, ran.answer)
 
-    def _said(self, result: Any) -> str:
-        """What the write says, as text a resend can say again."""
-
-        return str(self.get_success_message(result) or "")
-
     def _replay(self, answer: dict[str, Any]) -> HttpResponse:
-        said = self._said(answer) if self._capability() else answer[_SAID]
-        if said:
-            messages.success(self.request, said)
+        said(self.request, answer)
         return redirect(self.get_success_url())
 
 
-# Where a write outside the runner keeps what it said, for a resend to say again.
-_SAID = "said"
+def _said(result: Any) -> dict[str, Any]:
+    """What a write outside the runner answers, for a resend to say again: the
+    ``message`` of the mapping it returned, and nothing of anything else."""
+
+    return {"message": str(result.get("message") or "")} if isinstance(result, Mapping) else {}
 
 
 __all__ = [
@@ -586,6 +543,5 @@ __all__ = [
     "ServiceDeleteMixin",
     "ServiceUpdateMixin",
     "ServiceWriteMixin",
-    "WriteMessages",
     "outside_the_runner",
 ]

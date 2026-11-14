@@ -9,7 +9,6 @@ second truth, only a second way of slicing the first.
 
 from dataclasses import replace
 
-from django.contrib import messages
 from django.http import Http404
 from django.shortcuts import redirect, render
 from django.utils.html import format_html
@@ -18,7 +17,6 @@ from django.views import View
 from hq.domains.control_plane.forms import MailFailuresForm, MailPolicyForm, MailSendersForm
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.names import normalized_hostname
-from hq.platform.application.asks import APPLIES_SHORTLY
 from hq.platform.application.capabilities import capability_words
 from hq.platform.application.entity_links import entity_link
 from hq.platform.application.inventory import inventory_state
@@ -206,7 +204,6 @@ class ZoneMailView(View):
         )
         if refusal := refused(request, result, form=form):
             return self._page(request, found, form, status=refusal.status)
-        messages.success(request, f"{form.record} saved. {APPLIES_SHORTLY}")
         return redirect("zones:mail", zone=found.zone)
 
 
@@ -353,13 +350,5 @@ class ZoneAdoptView(View):
     """
 
     def post(self, request, zone):
-        result = execute_posted(request, ADOPT_ZONE, {"zone": zone, "token": request.POST.get("token", "")})
-        if refused(request, result):
-            return redirect("zones:detail", zone=zone)
-        adopted = len(result["adopted"])
-
-        messages.success(
-            request,
-            f"HQ now manages {zone} and {counted(adopted, 'record')} in it. Nothing changed at Cloudflare.",
-        )
+        refused(request, execute_posted(request, ADOPT_ZONE, {"zone": zone, "token": request.POST.get("token", "")}))
         return redirect("zones:detail", zone=zone)

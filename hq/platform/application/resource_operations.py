@@ -8,7 +8,7 @@ before the controller runs it.
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Annotated, Any, Literal, TypedDict, cast
+from typing import Annotated, Any, Literal, NotRequired, TypedDict, cast
 
 from django.db import transaction
 from django.db.models import QuerySet
@@ -20,7 +20,8 @@ from hq.domains.control_plane.providers import PROVIDERS, controller_action_poli
 from hq.platform.core.audit import audited_labels
 lazy from hq.platform.core.models import AuditLog
 
-from .adoption import keep_out_declaration, observes_only, require_writable
+from .adoption import NOTHING_LIVE_CHANGED, keep_out_declaration, observes_only, require_writable
+from .answer_fields import CallMessage
 from .cadence import request_reading, ring_doorbell, swept
 from .command_fields import Describe
 from .conditions import DRIFTED, PROBLEMS, holding
@@ -49,14 +50,15 @@ from .resource_records import (
     RequestedInterface,
 )
 from .security import CONTROLLER_INTERFACE, Principal
-from .ui import counted
+from .ui import counted, ended
 lazy from . import tailnet
 lazy from .containers import Running
 lazy from .history import Acts, who_did_each
+lazy from .integration_specs import requested
 lazy from .inventory import live_spec
 lazy from .machines import Machine, container_context
 lazy from .moments import when_day
-lazy from .resource_capabilities import public_dns_enabled
+lazy from .resource_capabilities import public_dns_enabled, verb_words
 lazy from .tailnet import POLICY_KIND, device_at, may_reach, observer, policy_allowing
 lazy from .work_runs import WorkRun, run_rows, seen_as_runs, shown_result
 
@@ -102,6 +104,7 @@ class ResourceSaved(TypedDict):
     created: Created
     resource: ManagedResourceItem
     applying: Applying
+    message: CallMessage
 
 
 type Queued = Annotated[bool, Describe("Whether this call queued it; false when the same one was already waiting.")]
@@ -113,6 +116,7 @@ class OperationQueued(TypedDict):
     ok: Literal[True]
     queued: Queued
     operation: OperationItem
+    message: NotRequired[CallMessage]
 
 
 class RenewalAllowed(TypedDict):
@@ -138,6 +142,7 @@ class DeclarationForgotten(TypedDict):
     forgotten: Annotated[str, Describe("The key of the record HQ stopped managing.")]
     released: Annotated[list[str], Describe("The keys of the records inside it that HQ stopped managing too.")]
     reason: OperationReason
+    message: CallMessage
 
 
 class ObservedAccepted(ResourceSaved):
@@ -372,14 +377,15 @@ def _queue_operation(
     )
     if operation.resource_id != resource.id or operation.action != action:
         raise PolicyError("Idempotency key is already used by another operation.")
+    said = requested(verb_words(action), resource.key, again=not queued)
     if not queued:
-        return {"ok": True, "queued": False, "operation": serialize_operation(operation)}
+        return {"ok": True, "queued": False, "operation": serialize_operation(operation), "message": said}
     # Every operation a person or credential asks for is created here, so this
     # is the one place that has to ring. The controller still pulls the work;
     # this only says there is some, which is what removes the wait between
     # pressing Save and anything happening.
     transaction.on_commit(ring_doorbell)
-    return {"ok": True, "queued": True, "operation": serialize_operation(operation)}
+    return {"ok": True, "queued": True, "operation": serialize_operation(operation), "message": said}
 
 
 def queue_reconcile(
@@ -469,12 +475,14 @@ def _forget_declaration(
     provider = PROVIDERS.get(kind)
     if provider is not None and provider.resolution_input:
         advance_dependents(delivery_targets())
+    inside = f" and {counted(len(contained), 'record')} in it" if contained else ""
     return {
         "ok": True,
         "queued": False,
         "forgotten": key,
         "released": contained,
         "reason": command.reason,
+        "message": f"{ended(f'Stopped tracking “{key}”{inside}')} {NOTHING_LIVE_CHANGED}",
     }
 
 

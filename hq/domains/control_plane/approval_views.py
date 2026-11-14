@@ -21,21 +21,15 @@ class ApprovalDecisionView(View):
     def post(self, request, approval_id, decision=None):
         decision = decision or request.POST.get("decision", "")
         if decision == "approve":
-            asked = (APPROVE, {"approval_id": str(approval_id)}, "Approved and applied.")
+            asked = (APPROVE, {"approval_id": str(approval_id)})
         elif decision == "reject":
-            asked = (
-                REJECT,
-                {"approval_id": str(approval_id), "note": request.POST.get("note", "")},
-                "Rejected. Nothing was applied.",
-            )
+            asked = (REJECT, {"approval_id": str(approval_id), "note": request.POST.get("note", "")})
         else:
             messages.error(request, "Choose whether to approve or reject.")
             return self._back(request)
-        name, payload, done = asked
         # An approval that cannot be applied says why, on the page, with
         # the request left as it was.
-        if not refused(request, execute_posted(request, name, payload)):
-            messages.success(request, done)
+        refused(request, execute_posted(request, *asked))
         return self._back(request)
 
     @staticmethod

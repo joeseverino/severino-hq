@@ -31,7 +31,7 @@ from .record_errors import RecordNotFound
 from .record_fields import Notes
 from .record_saves import Held, as_sent, found, held, written
 from .security import Principal, person
-from .ui import counted
+from .ui import counted, ended
 lazy from . import calendar
 lazy from .calendar_specs import EntryRecord
 lazy from .record_answers import EntrySaved
@@ -289,7 +289,8 @@ def save_entry(
         setattr(entry, name, value)
     entry.full_clean()
     entry.save()
-    return {"ok": True, "created": created, "entry": serialize_entry(entry)}
+    said = ended(f"Event “{entry}” {'created' if created else 'updated'}")
+    return {"ok": True, "created": created, "entry": serialize_entry(entry), "message": said}
 
 
 def calendar_choices(user: Any) -> dict[str, bool]:

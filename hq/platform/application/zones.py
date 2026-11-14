@@ -26,7 +26,8 @@ from hq.domains.control_plane.provider_adapters.cloudflare import (
 lazy from hq.domains.control_plane.providers import PROVIDERS, read_record, record_spec
 lazy from hq.platform.application.resource_capabilities import offered_changes
 
-from .adoption import AdoptCommand, unmanaged
+from .adoption import NOTHING_LIVE_CHANGED, AdoptCommand, unmanaged
+from .answer_fields import CallMessage
 from .card_items import ListRow
 from .command_fields import Describe
 from .entity_links import entity_link
@@ -34,6 +35,7 @@ from .infrastructure import enabled_resources, resource_health
 from .record_errors import PolicyError, RecordNotFound
 from .resource_records import ManagedResourceItem
 from .security import Principal
+from .ui import counted
 lazy from . import adoption, plugins
 lazy from .facts import snapshots_of, stored_snapshots
 lazy from .projection import read_once
@@ -623,6 +625,7 @@ class ZoneAdopted(TypedDict):
     adopted: Annotated[
         list[str], Describe("The keys of the domain's records adopted with it; empty when none could be.")
     ]
+    message: CallMessage
 
 
 def adopt_zone(command: AdoptZoneCommand, *, principal: Principal) -> ZoneAdopted:
@@ -637,7 +640,12 @@ def adopt_zone(command: AdoptZoneCommand, *, principal: Principal) -> ZoneAdopte
         records = adopt_zone_records(command.zone, principal=principal)["adopted"]
     except RecordNotFound, PolicyError, ValidationError:
         records = []
-    return {"ok": True, "resource": declared["resource"], "adopted": records}
+    return {
+        "ok": True,
+        "resource": declared["resource"],
+        "adopted": records,
+        "message": f"HQ now manages {command.zone} and {counted(len(records), 'record')} in it. {NOTHING_LIVE_CHANGED}",
+    }
 
 
 def public_answers_for(hostname: str) -> tuple[str, ...]:

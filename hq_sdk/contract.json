@@ -2678,13 +2678,6 @@
               "form"
             ]
           },
-          "get_success_message": {
-            "kind": "method",
-            "parameters": [
-              "self",
-              "result"
-            ]
-          },
           "get_success_url": {
             "kind": "method",
             "parameters": [
@@ -2701,10 +2694,6 @@
           "service": {
             "kind": "attribute",
             "type": "NoneType"
-          },
-          "success_message": {
-            "kind": "attribute",
-            "type": "str"
           },
           "success_url_name": {
             "kind": "attribute",
@@ -2769,8 +2758,7 @@
       },
       "ServiceWriteMixin": {
         "bases": [
-          "PostedOnce",
-          "WriteMessages"
+          "PostedOnce"
         ],
         "constructor": [],
         "kind": "class",
@@ -2778,14 +2766,6 @@
           "REQUIRED": {
             "kind": "attribute",
             "type": "tuple"
-          },
-          "announce": {
-            "kind": "method",
-            "parameters": [
-              "self",
-              "template",
-              "target"
-            ]
           },
           "current_identity": {
             "kind": "method",
@@ -2809,25 +2789,6 @@
             "parameters": [
               "self"
             ]
-          }
-        }
-      },
-      "WriteMessages": {
-        "bases": [],
-        "constructor": [],
-        "kind": "class",
-        "members": {
-          "created_message": {
-            "kind": "attribute",
-            "type": "str"
-          },
-          "deleted_message": {
-            "kind": "attribute",
-            "type": "str"
-          },
-          "updated_message": {
-            "kind": "attribute",
-            "type": "str"
           }
         }
       }

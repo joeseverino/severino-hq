@@ -195,7 +195,6 @@ class EntryWrite:
     """How an event's write names it; each write names its own capabilities,
     so no base holds a placeholder for them that another base contradicts."""
 
-    noun = "Event"
     result_key = "entry"
     identity_attr = "uid"
 

@@ -538,44 +538,15 @@ def the_deployment() -> None:
     testing.plain(2)  # type: ignore[arg-type]
 
 
-class Renamed(writes.ServiceCreateMixin):
-    """A write view rewords what it says by overriding the defaults it inherits."""
-
-    created_message = "{noun} {target} added."
-
-
-class Welcoming(writes.WriteMessages):
-    """A mixin that rewords a message for several views subclasses the root,
-    so it wins in whichever order a view writes its bases."""
-
-    created_message = "{noun} {target} is in."
-
-
-class WelcomedFirst(Welcoming, writes.ServiceCreateMixin):
-    pass
-
-
-class WelcomedLast(writes.ServiceCreateMixin, Welcoming):
-    pass
-
-
-class Miscounted(writes.WriteMessages):
-    created_message = 3  # type: ignore[assignment]
-
-
-class Unsaid(writes.ServiceDeleteMixin):
-    deleted_message = None  # type: ignore[assignment]
-
-
 def saving(command: Any, *, principal: Any) -> dict[str, Any]:
-    return {}
+    return {"ok": True, "message": "Saved."}
 
 
 class Saved(writes.CommandFormMixin):
-    """A command view names its service as a staticmethod, which the declaration takes."""
+    """A command view names its service as a staticmethod, which the declaration
+    takes; what the write says is the service's answer's ``message``."""
 
     service = staticmethod(saving)
-    success_message = "Saved."
 
 
 class Unserviced(writes.CommandFormMixin):
@@ -583,14 +554,7 @@ class Unserviced(writes.CommandFormMixin):
 
 
 def announcements() -> None:
-    assert_type(writes.ServiceWriteMixin.created_message, str)
-    assert_type(writes.ServiceWriteMixin.updated_message, str)
-    assert_type(writes.ServiceWriteMixin.deleted_message, str)
     assert_type(writes.ServiceWriteMixin.identity_result_key, str)
-    assert_type(Renamed.created_message, str)
-    assert_type(writes.WriteMessages.created_message, str)
-    assert_type(WelcomedFirst.created_message, str)
-    assert_type(WelcomedLast.created_message, str)
 
 
 def a_manifest() -> None:

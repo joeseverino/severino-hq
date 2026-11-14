@@ -59,6 +59,7 @@ from hq.domains.control_plane.models import AdoptedCatalog, SourceProposal
 from hq.platform.core.digests import digest
 
 from . import automation_sources
+from .answer_fields import CallMessage
 from .automation_manifest import PLAYBOOK, REVISION, OperationManifest, ProcedureTerms, Statement
 from .automation_sources import InputBound, ProcedureDeclaration
 from .command_fields import Describe
@@ -770,6 +771,7 @@ class Adopted(TypedDict):
     adopted: Annotated[bool, Describe("False when nothing it names waited to be adopted.")]
     digest: Annotated[str, Describe("The digest that names the adopted playbooks.")]
     widened: Annotated[list[str], Describe("What runs may now do that they could not before.")]
+    message: CallMessage
 
 
 # A playbook as a change of a scan names it: its id, or its sidecar where two declare one id.
@@ -819,7 +821,13 @@ def adopt(command: AdoptProposal, *, principal: Principal) -> Adopted:
     chosen = _decided(planned, command.playbook)
     current = adopted()
     if not chosen:
-        return {"ok": True, "adopted": False, "digest": current.digest if current else "", "widened": []}
+        return {
+            "ok": True,
+            "adopted": False,
+            "digest": current.digest if current else "",
+            "widened": [],
+            "message": "Already adopted.",
+        }
     catalog = dict(planned.before)
     for change in chosen:
         if change.procedure is None:
@@ -842,7 +850,7 @@ def adopt(command: AdoptProposal, *, principal: Principal) -> Adopted:
     transaction.on_commit(catch_up, robust=True)
     agent_registry.tools_changed(_everyone)
     widened = _widens(planned.before, planned.procedures, (change.key for change in chosen))
-    return {"ok": True, "adopted": True, "digest": row.digest, "widened": widened}
+    return {"ok": True, "adopted": True, "digest": row.digest, "widened": widened, "message": "Adopted."}
 
 
 class Rejected(TypedDict):
@@ -850,6 +858,7 @@ class Rejected(TypedDict):
 
     ok: Literal[True]
     rejected: Annotated[bool, Describe("False when what it names was already rejected.")]
+    message: CallMessage
 
 
 class RejectProposal(BaseModel):
@@ -877,7 +886,7 @@ def reject(command: RejectProposal, *, principal: Principal) -> Rejected:
     if proposal is None:
         raise RecordNotFound("No scan result has that ID. Refresh to scan again.")
     if proposal.rejected_at is not None or command.playbook in proposal.rejected_playbooks:
-        return {"ok": True, "rejected": False}
+        return {"ok": True, "rejected": False, "message": "Already rejected."}
     chosen = _decided(judged(proposal.pk), command.playbook)
     if not chosen:
         raise PolicyError("Nothing in this scan result waits to be adopted, so there is nothing to reject.")
@@ -888,7 +897,7 @@ def reject(command: RejectProposal, *, principal: Principal) -> Rejected:
         proposal.rejected_at = timezone.now()
         proposal.rejected_by = principal.actor
         proposal.save(update_fields=("rejected_at", "rejected_by", "updated_at"))
-    return {"ok": True, "rejected": True}
+    return {"ok": True, "rejected": True, "message": "Rejected."}
 
 
 def prune_proposals() -> int:

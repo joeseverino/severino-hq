@@ -916,7 +916,11 @@ A form that posts carries `{% write_token %}` where Django's own form carries
 `{% csrf_token %}`: the CSRF field and a retry key drawn for that drawing of
 the form. A view runs the write through `hq_sdk.capabilities.execute_posted(request, name, payload)`,
 which acts as the signed-in person under that key, so the form sent twice acts
-once; HQ refuses a change from the browser that posts no key. A refused
+once; HQ refuses a change from the browser that posts no key. What a write
+that ran says is its answer's `message`, which the handler words once and
+every door carries: `execute_posted` puts it on the next page's messages, so a
+view says nothing of its own (`PLUGIN_API_VERSION` 15 retires `WriteMessages`
+and `CommandFormMixin`'s `success_message`). A refused
 answer reaches the person through `hq_sdk.capabilities.refused(request,
 answer, form=form)`. It puts the answer on the form drawn again (each detail
 beside its field) or, without a form, on the next page's messages. It returns

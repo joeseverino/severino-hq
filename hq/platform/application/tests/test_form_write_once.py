@@ -327,7 +327,6 @@ def _command_view(service=save_expense):
         form_class = ExpenseCommandForm
         command = ExpenseCommand
         success_url_name = "expenses:list"
-        success_message = "Expense saved."
 
         def render_to_response(self, context, **response_kwargs):
             page = Template(
@@ -365,7 +364,9 @@ class CommandFormTests(TestCase):
         self.assertRedirects(first, reverse("expenses:list"), fetch_redirect_response=False)
         self.assertEqual(again["Location"], first["Location"])
         self.assertEqual(Expense.objects.count(), 1)
-        self.assertEqual([str(message) for message in get_messages(request)], ["Expense saved."])
+        said = [str(message) for message in get_messages(request)]
+        self.assertEqual(len(said), 1)
+        self.assertIn(str(Expense.objects.get()), said[0])
 
     def test_a_registered_service_is_run_as_its_capability(self):
         with as_principal(Principal("operator", "web", OPERATOR_CAPABILITIES - {"write_expenses"})):

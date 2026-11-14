@@ -52,6 +52,7 @@ def deleter(resource: str) -> Callable[..., RecordDeleted]:
             target=str(value),
             command=command,
             type_name=records.noun,
+            called=records.called,
             expected_updated_at=expected_updated_at,
             after_commit=load(records.on_delete) if records.on_delete else None,
         )
@@ -139,13 +140,6 @@ def _as_field_declares(field: Any, declared: dict[str, Any]) -> dict[str, Any]:
     if field.get_internal_type() == "TextField":
         return {**declared, "format": "textarea"}
     return declared
-
-
-def display_noun(records: Records) -> str:
-    """What a message calls one record: "Content item", "Expense"."""
-
-    name = records.title or records.noun
-    return capfirst(name)
 
 
 def _specs(records: Records) -> tuple[CapabilitySpec, ...]:

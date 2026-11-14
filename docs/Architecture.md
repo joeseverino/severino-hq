@@ -52,7 +52,10 @@ A view reaches a domain write only through `run_posted` or `execute_posted`
 (`hq/platform/application/web_writes.py`), which run `execute_capability`.
 `test_view_writes` follows every call made from the module of each view the
 URL configuration routes, and of its bases. An audit row, a refusal or an
-agent's identity observation is not a domain write.
+agent's identity observation is not a domain write. What a write that ran
+says is its answer's `message`, worded once by its handler: the API and MCP
+answer carry it, the audit log keeps it for a write with no row of its own,
+and `execute_posted` puts it on the next page's messages.
 
 A job whose process stopped and an approval nobody answered in time are
 computed by the read that shows them, and marked by the hourly `due` work.

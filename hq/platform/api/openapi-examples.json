@@ -32,7 +32,8 @@
             "vendor": "",
             "warranty_date": null
           },
-          "created": false
+          "created": false,
+          "message": "Asset \u201cExample box\u201d updated."
         },
         "ok": true
       }
@@ -3259,6 +3260,7 @@
       "200": {
         "data": {
           "created": true,
+          "message": "Project \u201cGranted\u201d created.",
           "project": {
             "category": "other",
             "dependency_updates": false,
@@ -3376,6 +3378,7 @@
       "200": {
         "data": {
           "created": false,
+          "message": "Project \u201cRenamed\u201d updated.",
           "project": {
             "category": "other",
             "dependency_updates": false,

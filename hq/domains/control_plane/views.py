@@ -2,7 +2,6 @@ import json
 from functools import cached_property
 from typing import Any, override
 
-from django.contrib import messages
 from django.http import HttpResponse, HttpResponseNotAllowed, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
@@ -21,7 +20,6 @@ from hq.platform.application.infrastructure import (
     serialize_public_status,
     serialize_resource,
 )
-from hq.platform.application.integration_specs import requested as requested_note
 from hq.platform.application.inventory import service_hostnames
 from hq.platform.application.labels import field_label
 from hq.platform.application.pages import PageAction, PageMixin, page_context
@@ -48,7 +46,6 @@ from hq.platform.application.routes import reverse
 from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.service_context import operation_history
 from hq.platform.application.topology_model import RELATIONS
-from hq.platform.application.ui import counted
 from hq.platform.application.visit_refresh import page_visit
 from hq.platform.application.web_writes import execute_posted, refusal_response, refused
 from hq.platform.application.whereabouts import whereabouts
@@ -209,18 +206,7 @@ class ResourceRemoveView(View):
         if refused(request, result):
             return redirect("control_plane:detail", key=key)
         if "forgotten" in result:
-            # Nothing was queued because nothing exists at the provider that HQ
-            # made. Saying "queued removal" here would promise a deletion that
-            # is neither happening nor wanted.
-            released = len(result["released"])
-            messages.success(
-                request,
-                f"Stopped tracking “{result['forgotten']}”"
-                + (f" and {counted(released, 'record')} in it" if released else "")
-                + ". Nothing live was changed.",
-            )
             return redirect("control_plane:list")
-        messages.success(request, requested(OperationRequest.Action.DELETE, resource.key, queued=result["queued"]))
         return redirect("control_plane:detail", key=key)
 
 
@@ -499,12 +485,6 @@ class InfrastructureDetailView(PageMixin, DetailView):
         return context
 
 
-def requested(action: str, key: str, *, queued: bool) -> str:
-    """What a press of one of a resource's verbs says, in the verb's own words."""
-
-    return requested_note(verb_words(action), key, again=not queued)
-
-
 def is_destructive(verb: str) -> bool:
     """Whether a resource's verb takes something away from whoever is using it,
     as its capability declares: asked for by name on a page of its own, never
@@ -570,10 +550,7 @@ class OperationView(View):
         # container) and send `next`. Validated through the shared helper, so
         # the field cannot become an open redirect.
         destination = safe_next(request, fallback=reverse("control_plane:detail", kwargs={"key": key}))
-        result = _web_operation(request, resource, self.action)
-        if refused(request, result):
-            return redirect(destination)
-        messages.success(request, requested(self.action, resource.key, queued=result["queued"]))
+        refused(request, _web_operation(request, resource, self.action))
         return redirect(destination)
 
 

@@ -40,6 +40,7 @@ lazy from . import capabilities
 lazy from .agent_registry import identity_of
 lazy from .entity_links import kind_label
 lazy from .integrations import held_graph
+lazy from .ui import counted
 
 Rule = CapabilityRule.Rule
 
@@ -403,6 +404,9 @@ class PolicyApplied(TypedDict):
     problems: Annotated[
         list[str], Describe("Why each rule that did not change was refused, a sentence each; empty when none was.")
     ]
+    message: Annotated[
+        str, Describe("What the call did, in a sentence; empty when it changed nothing and refused some.")
+    ]
 
 
 def apply_changes(command: PolicyCommand, *, principal: Principal) -> PolicyApplied:
@@ -429,4 +433,8 @@ def apply_changes(command: PolicyCommand, *, principal: Principal) -> PolicyAppl
                 changed += 1
         except ValueError as exc:
             problems.append(str(exc))
-    return {"ok": True, "changed": changed, "problems": problems}
+    if changed:
+        said = f"Saved {counted(changed, 'change')}. Each is in the audit log."
+    else:
+        said = "" if problems else "Nothing changed."
+    return {"ok": True, "changed": changed, "problems": problems, "message": said}

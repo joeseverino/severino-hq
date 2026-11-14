@@ -27,6 +27,7 @@ from .record_fields import Notes
 from .record_saves import Held, as_sent, found, held, written
 from .security import Principal
 lazy from .record_answers import ReceiptSaved, ReceiptUploaded
+lazy from .ui import ended
 
 UPLOAD = "receipt.upload"
 REPLACE = "receipt.replace"
@@ -188,7 +189,7 @@ def update_receipt(
     sent: frozenset[str] | None = None,
 ) -> ReceiptSaved:
     receipt = _save(command, current_id=current_id, expected_updated_at=expected_updated_at, sent=sent)
-    return {"ok": True, "created": False, "receipt": serialize_receipt(receipt)}
+    return {"ok": True, "created": False, "receipt": serialize_receipt(receipt), "message": _said(receipt, "updated")}
 
 
 @keeps(_REPLACED)
@@ -206,7 +207,13 @@ def replace_receipt(
     del principal
     upload, sha256 = _decoded(command.file)
     receipt = _save(command, current_id=current_id, expected_updated_at=expected_updated_at, sent=sent, upload=upload)
-    return {"ok": True, "created": False, "receipt": serialize_receipt(receipt), "file": _uploaded(receipt, sha256)}
+    return {
+        "ok": True,
+        "created": False,
+        "receipt": serialize_receipt(receipt),
+        "file": _uploaded(receipt, sha256),
+        "message": _said(receipt, "replaced"),
+    }
 
 
 @transaction.atomic
@@ -227,7 +234,19 @@ def upload_receipt(command: ReceiptUploadCommand, *, principal: Principal) -> Re
     _hold_file(receipt, upload)
     receipt.full_clean()
     receipt.save()
-    return {"ok": True, "created": True, "receipt": serialize_receipt(receipt), "file": _uploaded(receipt, sha256)}
+    return {
+        "ok": True,
+        "created": True,
+        "receipt": serialize_receipt(receipt),
+        "file": _uploaded(receipt, sha256),
+        "message": _said(receipt, "uploaded"),
+    }
+
+
+def _said(receipt: Receipt, done: str) -> str:
+    """What a receipt's write says it did."""
+
+    return ended(f"Receipt “{receipt}” {done}")
 
 
 def file_cleanup(receipt: Receipt):

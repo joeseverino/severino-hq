@@ -4,7 +4,6 @@ import logging
 from typing import get_origin
 from urllib.parse import urlencode
 
-from django.contrib import messages
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
@@ -27,7 +26,6 @@ from hq.platform.application.provider_forms import (
 )
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import safe_next
-from hq.platform.application.ui import ended
 from hq.platform.application.web_writes import execute_posted, refused
 from hq.platform.core import secrets
 
@@ -213,10 +211,6 @@ class ResourceFormView(View):
             # say which half landed rather than reporting success.
             if refused(request, stored):
                 return redirect("control_plane:upload_certificate", key=saved)
-        messages.success(
-            request,
-            f"{'Added' if result['created'] else 'Updated'} “{saved}”. {APPLIES_SHORTLY}",
-        )
         # Back where the operator was working. Publishing a service
         # takes two or three declarations, and landing on each one's
         # own page after saving would make the next step a navigation
@@ -422,11 +416,6 @@ class AdoptView(View):
         result = execute_posted(request, ADOPT_SERVICE, {"hostname": hostname})
         if refused(request, result):
             return redirect("control_plane:services")
-        adopted = ", ".join(result["adopted"])
-        messages.success(
-            request,
-            f"HQ now manages {hostname} as {ended(adopted)} Nothing live was changed.",
-        )
         return redirect("control_plane:service", hostname=result["hostname"])
 
 
@@ -463,10 +452,6 @@ class CertificateUploadView(View):
         if form.is_valid():
             stored = execute_posted(request, UPLOAD, dict(form.cleaned_data), target=resource.key)
             if not refused(request, stored, form=form):
-                messages.success(
-                    request,
-                    f"Stored a certificate for {ended(', '.join(stored['domains']))} {APPLIES_SHORTLY}",
-                )
                 return redirect("control_plane:detail", key=resource.key)
         return render(
             request,
@@ -490,10 +475,5 @@ class AdoptRecordView(View):
     """
 
     def post(self, request, kind, token):
-        result = execute_posted(request, ADOPT, {"kind": kind, "token": token})
-        if not refused(request, result):
-            messages.success(
-                request,
-                f"HQ now manages “{result['resource']['key']}”. Nothing live was changed.",
-            )
+        refused(request, execute_posted(request, ADOPT, {"kind": kind, "token": token}))
         return redirect(safe_next(request, fallback=reverse("control_plane:list")))

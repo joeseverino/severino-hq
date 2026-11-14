@@ -36,6 +36,7 @@ from .projection import keyset_page, read_once
 from .record_errors import PolicyError
 from .record_saves import Held, as_sent, found, held, written
 from .security import Principal
+lazy from .asks import APPLIES_SHORTLY
 lazy from .cadence import request_reading, swept
 lazy from .delivery_progress import deploying_label
 lazy from .locate import names_by_connection
@@ -470,6 +471,8 @@ def save_managed_resource(
         "created": created,
         "resource": serialize_resource(resource),
         "applying": applying,
+        "message": f"{'Added' if created else 'Updated'} “{resource.key}”."
+        + (f" {APPLIES_SHORTLY}" if applying else ""),
     }
 
 

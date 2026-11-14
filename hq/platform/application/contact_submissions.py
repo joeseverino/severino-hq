@@ -22,6 +22,7 @@ from hq.domains.control_plane.provider_adapters.cloudflare import CONTACT_CHANGE
 from hq.domains.control_plane.providers import validate_spec
 
 from .adoption import WriteGap, require_writable, write_gap
+from .answer_fields import CallMessage
 from .cadence import request_reading
 from .command_fields import Choices, Describe
 from .integration_specs import Kept, keeps
@@ -30,6 +31,8 @@ from .record_errors import PolicyError, RecordNotFound
 from .record_saves import written
 from .resource_operations import queue_reconcile
 from .security import Principal
+from .ui import ended
+lazy from .asks import APPLIES_SHORTLY
 
 CONTACT_STATUSES = frozenset(get_args(ContactStatus))
 ASSIGNEE_LENGTH = 120
@@ -192,6 +195,7 @@ class ContactReviewed(TypedDict):
     id: Annotated[int, Describe("The id of the message reviewed.")]
     status: Annotated[str, Describe("The review status the message was given.")]
     queued: Annotated[Literal[True], Describe("That the review was handed to the inbox.")]
+    message: CallMessage
 
 
 @keeps(Kept(lambda current_id: _review_of(_submission(current_id, inbox.current()))))
@@ -217,7 +221,15 @@ def execute_contact_review(
         principal=principal,
         said=f"Asked for contact submission #{current_id} to be reviewed.",
     )
-    return {"ok": True, "id": current_id, "status": status, "queued": True}
+    marked = status != _review_of(before)["status"]
+    done = f"marked {ended(dict(STATUS_CHOICES)[status].lower())}" if marked else "saved."
+    return {
+        "ok": True,
+        "id": current_id,
+        "status": status,
+        "queued": True,
+        "message": f"Message {done} {APPLIES_SHORTLY}",
+    }
 
 
 class ContactDeletedPart(TypedDict):
@@ -237,6 +249,7 @@ class ContactDeleted(TypedDict):
     queued: NotRequired[
         Annotated[Literal[True], Describe("That the delete was handed to the inbox; absent when nothing was asked.")]
     ]
+    message: CallMessage
 
 
 @transaction.atomic
@@ -253,10 +266,15 @@ def execute_contact_delete(
     if before is None:
         # Already gone, or already waiting to be deleted: the requested end
         # state either way, so a retry succeeds.
-        return {"ok": True, "deleted": {"id": current_id, "already_absent": True}}
+        return {"ok": True, "deleted": {"id": current_id, "already_absent": True}, "message": "Message deleted."}
     _declare(
         _change(current, {"delete": current_id}),
         principal=principal,
         said=f"Asked for contact submission #{current_id} to be deleted.",
     )
-    return {"ok": True, "deleted": {"id": current_id, "already_absent": False}, "queued": True}
+    return {
+        "ok": True,
+        "deleted": {"id": current_id, "already_absent": False},
+        "queued": True,
+        "message": f"Message deleted. {APPLIES_SHORTLY}",
+    }

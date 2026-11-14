@@ -17,6 +17,7 @@ from hq.domains.projects.models import Project
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
 
+from .answer_fields import CallMessage
 from .command_fields import Describe, Names
 from .entity_links import EntityLink, entity_link
 from .labels import plural
@@ -275,6 +276,7 @@ class DocumentationSynced(DocumentationSync):
     """What syncing the vault's docs into HQ did, as the command answers it."""
 
     ok: Literal[True]
+    message: CallMessage
 
 
 def sync_documentation(
@@ -312,7 +314,8 @@ def sync_documentation(
         message="Updated the list of docs.",
         metadata={"stats": stats},
     )
-    return {"ok": True, "stats": stats}
+    said = f"Manifest imported: {stats['created']} new, {stats['updated']} changed, {stats['skipped']} unchanged."
+    return {"ok": True, "stats": stats, "message": said}
 
 
 def execute_documentation_sync(

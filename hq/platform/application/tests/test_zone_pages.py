@@ -379,17 +379,13 @@ class NewVerbReadinessTests(TestCase):
         self.assertFalse(hasattr(views, "RenewCertificateView"))
         self.assertTrue(hasattr(views, "OperationView"))
 
-    def test_a_verbs_press_is_announced_in_its_buttons_words(self):
-        """Its press is announced in the words its button uses."""
-
-        from hq.domains.control_plane.views import requested
-
-        self.assertEqual(
-            requested(OperationRequest.Action.RENEW, "example-cert", queued=True),
-            "Renew certificate requested for example-cert.",
-        )
-
     def test_the_routes_carry_the_verb_rather_than_the_class(self):
+        """A press runs its verb, and says so in the words its button uses."""
+
+        from django.contrib.messages import get_messages
+
+        from ..resource_capabilities import verb_words
+
         managing_everything()
         user = get_user_model().objects.create_user("op", password="x" * 20)
         self.client.force_login(user)
@@ -405,6 +401,10 @@ class NewVerbReadinessTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertTrue(OperationRequest.objects.filter(action=OperationRequest.Action.RECONCILE).exists())
+        said = [str(message) for message in get_messages(response.wsgi_request)]
+        self.assertEqual(len(said), 1)
+        self.assertIn(verb_words(OperationRequest.Action.RECONCILE), said[0])
+        self.assertIn("a-rewrite", said[0])
 
 
 class PendingRemovalTests(TestCase):
