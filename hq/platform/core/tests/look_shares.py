@@ -33,7 +33,6 @@ from typing import TextIO
 from django.db import connections
 
 from hq.platform.core.file_clones import checkpoint
-from hq.platform.core.stalls import block_on_output
 from hq.platform.core.tests.browser.shards import VARIABLE, shard, share as dealt
 from hq.platform.core.tests.look_report import Found, Measured
 
@@ -208,11 +207,8 @@ class Started:
 
 
 def say(printed: dict[Key, list[str]]) -> None:
-    """Every page's lines, page by page. Written in a burst, they would fill
-    a pipe Playwright's driver left non-blocking and lose what did not fit,
-    so writes wait for room first."""
+    """Every page's lines, page by page."""
 
-    block_on_output()
     for lines in printed.values():
         if lines:
             print(*lines, sep="\n", flush=True)
@@ -223,8 +219,6 @@ def _relayed(process: subprocess.Popen[str], prefix: str, kept: Path, out: TextI
         for line in process.stdout or ():
             sink.write(line)
             sink.flush()
-            # The browser this run starts may leave the pipe non-blocking at any point.
-            block_on_output()
             out.write(f"{prefix}{line}")
             out.flush()
 

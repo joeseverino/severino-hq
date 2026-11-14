@@ -1,0 +1,25 @@
+# Playwright's driver is Node, which makes the stderr it inherits
+# non-blocking. Started anywhere but the browser gate's start_driver
+# (hq/platform/core/tests/browser/gate.py), which hands it a stderr of its own,
+# it inherits the test run's: every worker and the parent then write a long
+# failure into a non-blocking pipe, and it stops part way.
+id: browser-driver-started-by-start-driver
+language: python
+severity: error
+message: Playwright's driver is started outside the browser gate's start_driver.
+note: Start it with start_driver (hq.platform.core.tests.browser.gate), as BrowserGate.setUpClass does.
+files:
+  - "hq/**"
+ignores:
+  - "hq/platform/core/tests/browser/gate.py"
+rule:
+  kind: call
+  has:
+    field: function
+    any:
+      - kind: identifier
+        regex: ^(sync|async)_playwright$
+      - kind: attribute
+        has:
+          field: attribute
+          regex: ^(sync|async)_playwright$

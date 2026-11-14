@@ -7,6 +7,7 @@ import os
 import pickle
 import re
 import shlex
+import sys
 import tempfile
 from collections import deque
 from collections.abc import Mapping
@@ -372,19 +373,43 @@ DRIVER_LOG_SHOWN = 80
 
 
 def start_driver(owner, sync_playwright):
-    """Playwright's driver for ``owner``'s class, its log shown in a stall report."""
+    """Playwright's driver for ``owner``'s class, on a stderr of its own, its log shown in a stall report.
 
-    if not stall_watch.enabled:
-        return sync_playwright().start()
-    handle, log = tempfile.mkstemp(prefix="hq-playwright-", suffix=".log")
-    os.close(handle)
-    owner.addClassCleanup(os.unlink, log)
-    with mock.patch.dict(os.environ, {"DEBUG": DRIVER_DEBUG, "DEBUG_FILE": log}):
+    The driver is Node, which makes the stderr it inherits non-blocking while
+    it runs. Playwright hands it ``sys.stderr``'s descriptor, or the process's
+    own when that has none (``_get_stderr_fileno`` in its ``transport.py``):
+    the pipe every worker and the run's parent share, where a failure longer
+    than the pipe holds would then stop part way with ``BlockingIOError``. So
+    the driver starts with ``sys.stderr`` a file of its own, which the class
+    repeats on the process's stderr once the driver is gone.
+    """
+
+    said = tempfile.TemporaryFile()  # noqa: SIM115 - open for the class's life, closed by its cleanup
+    owner.addClassCleanup(repeat_on_stderr, said)
+    environment = {}
+    if stall_watch.enabled:
+        handle, log = tempfile.mkstemp(prefix="hq-playwright-", suffix=".log")
+        os.close(handle)
+        owner.addClassCleanup(os.unlink, log)
+        environment = {"DEBUG": DRIVER_DEBUG, "DEBUG_FILE": log}
+    with mock.patch.object(sys, "stderr", said), mock.patch.dict(os.environ, environment):
         driver = sync_playwright().start()
-    evidence = partial(driver_log, log)
-    stall_watch.evidence.append(evidence)
-    owner.addClassCleanup(stall_watch.evidence.remove, evidence)
+    if environment:
+        evidence = partial(driver_log, environment["DEBUG_FILE"])
+        stall_watch.evidence.append(evidence)
+        owner.addClassCleanup(stall_watch.evidence.remove, evidence)
     return driver
+
+
+def repeat_on_stderr(said) -> None:
+    """What the driver wrote to its stderr, on the process's own, where it would have gone."""
+
+    with said:
+        said.seek(0)
+        # None only under pythonw, which no test runs under.
+        if (text := said.read().decode(errors="replace")) and (stream := sys.__stderr__):
+            stream.write(text)
+            stream.flush()
 
 
 def driver_log(path, stream):

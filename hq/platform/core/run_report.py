@@ -19,7 +19,7 @@ from django.test.runner import RemoteTestResult, RemoteTestRunner
 from hq.platform.core import stalls
 from hq.platform.core.coverage_contexts import ModuleContexts
 from hq.platform.core.isolation_testing import CompositionIsolation
-from hq.platform.core.stalls import StallMarks, block_on_output
+from hq.platform.core.stalls import StallMarks
 
 # A gate names a folder here, and the run writes each test that failed into
 # it, for the gate's closing line. tools/gate/verdict.py, which runs without
@@ -130,9 +130,7 @@ class Costs:
 class CompositionTextResult(
     FailureRecord, StallMarks, CompositionIsolation, ClassTimes, Costs, unittest.TextTestResult
 ):
-    def printErrors(self):
-        block_on_output()
-        super().printErrors()
+    pass
 
 
 @dataclass(frozen=True)
@@ -265,7 +263,6 @@ def report_class_times(result, stream, began_load: tuple[float, ...]) -> None:
     times = sorted(vars(result).get("class_times", {}).items(), key=lambda item: item[1], reverse=True)
     if not times:
         return
-    block_on_output()
     load = " / ".join(f"{a:.2f} {b:.2f} {c:.2f}" for a, b, c in (began_load, os.getloadavg()))
     stream.write(f"\nSlowest test classes (load average at start / end: {load}):\n")
     for name, seconds in times[:SLOWEST_SHOWN]:
@@ -279,7 +276,6 @@ def report_costs(result, stream) -> None:
     ledgers = vars(result).get("costs", {})
     if not ledgers:
         return
-    block_on_output()
     for ledger, rows in ledgers.items():
         stream.write(f"\n{ledger}:\n  {'total':>9}  {'runs':>6}  {'mean':>9}  {'slowest':>9}  row (where slowest)\n")
         for row, cost in sorted(rows.items(), key=lambda item: item[1].seconds, reverse=True):

@@ -5,7 +5,6 @@ stalls")."""
 import contextlib
 import faulthandler
 import functools
-import io
 import os
 import signal
 import sys
@@ -20,22 +19,6 @@ lazy from collections.abc import Callable
 lazy from multiprocessing.sharedctypes import Synchronized
 
 from hq.platform.core.live_objects import live
-
-
-def block_on_output() -> None:
-    """Make writes to stdout and stderr wait for room again.
-
-    A child that shares the run's pipes (Playwright's driver does) can leave
-    them non-blocking, and a long report written then stops part way with
-    ``BlockingIOError``, its failures never printed.
-    """
-
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            os.set_blocking(stream.fileno(), True)
-        except OSError, ValueError, io.UnsupportedOperation:  # noqa: S112 - a stream with no descriptor has no blocking mode to set
-            continue
-
 
 # Seconds a test process may go without progress (a test, a class fixture or a
 # subtest starting, a subtest ending, or its process tree spending CPU) before
@@ -341,7 +324,6 @@ class StallWatch:
     def report(self, label: str) -> None:
         """Write what has stalled, the evidence for it, and every thread's stack."""
 
-        block_on_output()
         # The process's own stderr: the test's may be --buffer's, printed only once it fails.
         stream = self.stream or sys.__stderr__
         stream.write(f"\n=== stalled {self.seconds:g}s: {label} (pid {os.getpid()}) ===\n")

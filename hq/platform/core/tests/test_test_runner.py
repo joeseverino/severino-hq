@@ -16,7 +16,6 @@ from django.test.runner import DiscoverRunner
 
 from hq.platform.application import agent_limits
 from hq.platform.core.run_report import REPORTS, CompositionTextResult
-from hq.platform.core.stalls import block_on_output
 from hq.platform.core.test_runner import (
     BROWSER_TESTS,
     SOURCE,
@@ -258,20 +257,6 @@ class RunFolderTests(SimpleTestCase):
         own = Path(settings.DATABASES["default"]["TEST"]["NAME"])
         self.assertEqual(nested.parent, own.parent)
         self.assertNotEqual(nested, own)
-
-
-class BlockingOutputTests(SimpleTestCase):
-    def test_a_pipe_left_non_blocking_waits_for_room_again_before_the_report(self):
-        read, write = os.pipe()
-        self.addCleanup(os.close, read)
-        with os.fdopen(write, "w") as stream:
-            os.set_blocking(write, False)
-            with (
-                unittest.mock.patch.object(sys, "stdout", stream),
-                unittest.mock.patch.object(sys, "stderr", io.StringIO()),
-            ):
-                block_on_output()
-            self.assertTrue(os.get_blocking(write))
 
 
 class _Held:

@@ -6,7 +6,6 @@ and the processes never take more of the heavy turn than the machine holds."""
 import io
 import os
 import tempfile
-import threading
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -148,37 +147,6 @@ class ShareRunsTheLookTests(SimpleTestCase):
                 with self.subTest(share=f"{index}/{total}"), mock.patch.dict(os.environ, env, clear=True):
                     self.assertTrue(test_runner.in_this_share(test))
                     self.assertEqual(look_shares.this_share(), (index, total))
-
-
-@tag("source")
-class SaidWholeTests(SimpleTestCase):
-    def test_every_pages_lines_wait_for_room_in_a_pipe_left_non_blocking(self):
-        """Playwright's driver shares the run's pipe and leaves it non-blocking,
-        where stdout's unbuffered text layer drops what a full pipe refuses."""
-
-        from hq.platform.core.tests import look_shares
-
-        printed = {
-            (f"example/page-{number}", 402): [f"Looking at example/page-{number} at 402"] for number in range(50)
-        }
-        read, write = os.pipe()
-        heard = bytearray()
-        reader = threading.Thread(target=lambda: heard.extend(b"".join(iter_read(read))))
-        reader.start()
-        # As PYTHONUNBUFFERED leaves stdout: text written straight through to the descriptor.
-        with io.TextIOWrapper(io.FileIO(write, "w"), write_through=True) as stream:
-            os.set_blocking(write, False)
-            with mock.patch("sys.stdout", stream), mock.patch("sys.stderr", io.StringIO()):
-                look_shares.say(printed)
-            self.assertTrue(os.get_blocking(write))
-        reader.join()
-        os.close(read)
-        self.assertEqual(heard.decode().splitlines(), [line for lines in printed.values() for line in lines])
-
-
-def iter_read(descriptor):
-    while chunk := os.read(descriptor, 4096):
-        yield chunk
 
 
 @tag("source")
