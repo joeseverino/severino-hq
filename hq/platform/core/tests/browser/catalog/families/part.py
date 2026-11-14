@@ -704,15 +704,6 @@ ENTRIES = {
     "part/site-header": Entry(
         '{% include "partials/_site_header.html" %}', _signed_in(), address="/example/", frame="before"
     ),
-    # A section's heading with a long name, the line under it, and states beside it.
-    "part/section-head": Entry(
-        "{% card %}"
-        '{% section_head lede="An example lede, the line that says what the section holds." %}'
-        "An example heading long enough to need the row"
-        '{% aside %}<span class="pill pill-good">Example state</span>'
-        '<span class="pill pill-neutral">Another example state</span>'
-        "{% endsection_head %}<p>Example.</p>{% endcard %}"
-    ),
     # A table in a section of its own name, one that fits and one that
     # scrolls in a card of its own name, as a record page and a ledger draw
     # them: each name is one landmark on the page.
@@ -1366,19 +1357,6 @@ ENTRIES = {
         "{% endfacts %}",
         {"lines": ("Example issuer", "24 example days left")},
     ),
-    # A band beside a name in a card that lays out its parts in a flex row,
-    # as a GitHub profile's counts sit beside its account: the band, whose
-    # width is its frame's and never its facts', still holds them.
-    "part/facts-band-in-a-row": Entry(
-        '{% card %}<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 1rem 2rem">'
-        "<p>An example account, and a line about it</p>"
-        '{% facts layout="band" label="Example account" %}'
-        '{% fact "Example followers" value=12 url="https://example.com/followers" %}'
-        '{% fact "Example following" value=9 url="https://example.com/following" %}'
-        '{% fact "Example repositories" value=4 url="https://example.com/repositories" %}'
-        '{% fact "Example starred" value=38 url="https://example.com/stars" %}'
-        "{% endfacts %}</div>{% endcard %}"
-    ),
     # A card's summary line under its head: a zero, a linked count, a toned
     # count. Its labels read on from the value, so they are lower case.
     "part/facts-inline": Entry(
@@ -1526,7 +1504,6 @@ ENTRIES = {
         "{% title %}{{ name|breakable }} cannot be used here{% endnotice %}",
         {"name": "example-target.example.com"},
     ),
-    "part/notice-info": Entry('{% notice tone="info" %}An example line of news.{% endnotice %}'),
     # A notice holding a switch, as a trace's says what it shows: a link in
     # its words is underlined, a choice's chip is not.
     "part/notice-switch": Entry(
@@ -1535,7 +1512,6 @@ ENTRIES = {
         '{% choice url="/example/both/" current=True %}Example both{% endchoice %}{% endswitch %}'
         "{% title %}Showing example-host-01{% endnotice %}"
     ),
-    "part/notice-success": Entry('{% notice tone="success" %}Example saved.{% endnotice %}'),
     "part/notice-error": Entry(
         '{% notice tone="error" %}An example failure long enough to take more than one line on a phone, '
         "so its wrapping is read too.{% endnotice %}"
@@ -1709,14 +1685,20 @@ ENTRIES = {
         '<p><small class="muted">An example closing line.</small></p>{% endcard %}',
         heads_the_page=True,
     ),
-    # An account named as whose it is, in a card above its band of counts, as
+    # An account named as whose it is, in a card beside its band of counts, as
     # the Starred page draws your GitHub profile: its picture, its name with
-    # a state beside it, its handle and a line in its own words.
+    # a state beside it, its handle and a line in its own words. The card lays
+    # the two out in a row, and the band, whose width is its frame's and never
+    # its facts', still holds its four counts.
     "part/identity": Entry(
         '{% card label="Example profile" %}{% include "partials/_identity.html" with picture=picture '
         'name="Example Person" handle="@example" url="https://example.com/example" badge="Your account" '
         'tone="good" tip="An example reason it is yours." about="Runs an example homelab." only %}'
-        '{% facts layout="band" %}{% fact "Example followers" value=12 %}{% fact "Example repos" value=4 %}'
+        '{% facts layout="band" label="Example account" %}'
+        '{% fact "Example followers" value=12 url="https://example.com/followers" %}'
+        '{% fact "Example following" value=9 url="https://example.com/following" %}'
+        '{% fact "Example repositories" value=4 url="https://example.com/repositories" %}'
+        '{% fact "Example starred" value=38 url="https://example.com/stars" %}'
         "{% endfacts %}{% endcard %}",
         {
             "picture": (
@@ -2181,26 +2163,16 @@ ENTRIES = {
     ),
     # The facts on a title's line ({% title_meta %}): a list of parts with a
     # dot between each, long enough to wrap under the title on a phone, each
-    # part wrapping whole. A new option of the tag comes with an entry here
+    # part wrapping whole, a state as a pill and as words among them. A new option of the tag comes with an entry here
     # (test_title_tags).
     "part/title-meta": Entry(
         '{% include "partials/_page_head.html" %}{% section "Example section 3" %}<p>An example line.</p>{% endsection %}',
         {
             "page": Page(title="example-host-01"),
             "page_aside": _Drawn(
-                '{% title_meta %}<li>{% status "Online" tone="good" %} since 3 days ago</li><li>example role</li>'
-                "<li><code>192.0.2.10</code></li><li>also known as <code>example-host-01.example.com</code></li>"
-                "{% endtitle_meta %}"
-            ),
-        },
-        heads_the_page=True,
-    ),
-    "part/title-meta-list": Entry(
-        '{% include "partials/_page_head.html" %}{% section "Example section 4" %}<p>An example line.</p>{% endsection %}',
-        {
-            "page": Page(title="Example record"),
-            "page_aside": _Drawn(
-                '{% title_meta data_example="example" %}'
+                '{% title_meta data_example="example" %}<li>{% status "Online" tone="good" %} since 3 days ago</li>'
+                "<li>example role</li><li><code>192.0.2.10</code></li>"
+                "<li>also known as <code>example-host-01.example.com</code></li>"
                 '<li><strong>{% status "Out of date" tone="attention" pill=False %}</strong> since 2 hours ago</li>'
                 '<li>{% status "An example sentence that says what the state means." tone="attention" pill=False %}</li>'
                 "{% endtitle_meta %}"

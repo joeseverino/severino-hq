@@ -694,7 +694,6 @@ def card_frame(name: str, given: dict) -> dict:
     }
 
 
-slotted("section_head", "partials/_section_head.html", ("heading", "aside"), frozenset(("id", "lede")))
 slotted(
     "outside_link",
     OUTSIDE_LINK,
