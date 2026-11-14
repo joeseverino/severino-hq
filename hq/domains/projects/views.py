@@ -321,7 +321,7 @@ class WatchingView(PageMixin, TemplateView):
     template_name = "projects/watching.html"
     page_title = "Starred repos"
 
-    @property
+    @cached_property
     def login(self) -> str:
         return linked_login(self.request.user, GITHUB)
 
@@ -365,7 +365,7 @@ class WatchingView(PageMixin, TemplateView):
         )
         return context
 
-    @property
+    @cached_property
     def app_repositories(self):
         """The repositories this account owns that HQ's GitHub App reads: a
         second proof the account is yours, from GitHub rather than the sign-in."""
