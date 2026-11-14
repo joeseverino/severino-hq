@@ -25,11 +25,7 @@ its chart's own figure, so the strip stands over the frame of the one shown.
   </div>
   {% for chart in charts %}
     <div class="chart-panel chart-panel-{{ forloop.counter }}">
-      {% if chart.bars %}
-        {% include "partials/_stacked_bar_chart.html" with chart=chart %}
-      {% else %}
-        {% include "partials/_line_chart.html" with chart=chart %}
-      {% endif %}
+      {% include "partials/_chart.html" with chart=chart %}
     </div>
   {% endfor %}
 </div>

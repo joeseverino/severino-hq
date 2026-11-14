@@ -19,11 +19,12 @@ class PatchTagTests(SimpleTestCase):
         )
 
         (patch,) = select(html, "id", "example")
-        (button,) = select(html, "data-copy-target")
+        (button,) = select(html, "data-copy")
         (code,) = elements(html, "pre")
-        self.assertEqual(code.attrs["id"], button.attrs["data-copy-target"])
         self.assertIn("<b>escaped</b>", code.words)
-        self.assertTrue(all(patch in element.ancestors for element in (button, code)))
+        # app.js copies the <pre> of the nearest box around the button that holds one: the patch's own.
+        self.assertEqual(code.ancestors[-1], patch)
+        self.assertIn(patch, button.ancestors)
         self.assertIn("compose.yaml", html)
         self.assertEqual([item.words for item in elements(html, "li")], ["An example note"])
         (notes,) = with_class(html, "stack-list")
@@ -32,13 +33,12 @@ class PatchTagTests(SimpleTestCase):
     def test_with_no_code_its_notes_stand_alone(self):
         html = _render('{% patch id="example" %}{% notes %}<li>An example note</li>{% endpatch %}')
 
-        self.assertEqual(select(html, "data-copy-target"), [])
+        self.assertEqual(select(html, "data-copy"), [])
         self.assertEqual(elements(html, "pre"), [])
         self.assertEqual([item.words for item in elements(html, "li")], ["An example note"])
 
-    def test_a_patch_without_an_id_or_with_an_unknown_option_is_refused(self):
+    def test_a_patch_with_an_unknown_option_is_refused(self):
         for source in (
-            "{% patch %}code{% endpatch %}",
             '{% patch id="example" css="example" %}code{% endpatch %}',
             '{% patch id="example" data_example="x" %}code{% endpatch %}',
         ):

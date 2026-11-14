@@ -10,7 +10,7 @@ reading; nothing here calls GitHub.
       {% entity repo.head.url|outside code=True label=repo.head.sha|slice:":7" %}
     {% detail %}
       <small class="one-line" title="{{ repo.head.message }}">{{ repo.head.message|breakable }}</small>
-      <small>{% if repo.head.author %}{{ repo.head.author|breakable }}{% if repo.head.date %}{% dot %}{% endif %}{% endif %}{% if repo.head.date %}{{ repo.head.date|ago_short }}{% endif %}</small>
+      <small>{% if repo.head.author %}{{ repo.head.author|breakable }}{% if repo.head.date %}{% dot %}{% endif %}{% endif %}{% if repo.head.date %}{{ repo.head.date|when_text:"ago" }}{% endif %}</small>
     {% endfact %}
     {% fact "Checks" icon="check-circle" tone=repo.checks_tone %}
       {% if repo.checks.state == 'failure' %}Failing{% elif repo.checks.state == 'pending' %}Running{% elif repo.checks.state == 'success' %}Passing{% else %}None{% endif %}
@@ -26,7 +26,7 @@ reading; nothing here calls GitHub.
       {% else %}None{% endif %}
     {% detail %}
       {% if repo.production %}
-        <small><code>{{ repo.production.sha|slice:":7"|breakable }}</code>{% dot %}{{ repo.production.created_at|ago_short }}{% if repo.production.sha != repo.head.sha %}{% dot %}{{ repo.default_branch|breakable }} has newer commits{% endif %}</small>
+        <small><code>{{ repo.production.sha|slice:":7"|breakable }}</code>{% dot %}{{ repo.production.created_at|when_text:"ago" }}{% if repo.production.sha != repo.head.sha %}{% dot %}{{ repo.default_branch|breakable }} has newer commits{% endif %}</small>
         {% if repo.production.verified %}<small>{% if repo.production_verified %}{% status "Verified before deploying" tone=repo.verified_tone pill=False tip=repo.verification_tip %}{% else %}{% status "Verification failed" tone=repo.verified_tone pill=False tip=repo.verification_tip %}{% endif %}</small>{% endif %}
       {% else %}
         <small>No deployments on GitHub.</small>

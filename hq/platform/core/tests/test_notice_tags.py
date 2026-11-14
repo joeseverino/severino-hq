@@ -13,7 +13,7 @@ from django.test import RequestFactory, SimpleTestCase, tag
 
 from hq.platform.application.tests.markup import all_elements, elements, select, with_class
 from hq.platform.application.tests.reads import reads
-from hq.platform.core.tests.test_part_tags import _catalog_templates
+from hq.platform.core.tests.browser.catalog import CATALOG
 from hq_sdk.testing import plain
 
 # A tone's look is its class, which the stylesheet's tone assignment colors.
@@ -134,11 +134,18 @@ class NoticeCatalogTests(SimpleTestCase):
             for name, parameter in inspect.signature(takes).parameters.items()
             if parameter.kind is inspect.Parameter.KEYWORD_ONLY and name != "tone"
         ]
-        notices = [t for name, t in _catalog_templates().items() if name.startswith("part/notice-")]
+        entries = [entry for name, entry in CATALOG.items() if name.startswith("part/notice-")]
+        notices = [entry.template for entry in entries]
         opened = " ".join(" ".join(re.findall(r"\{% notice (.*?)%\}", t)) for t in notices)
         drawn_options = {word for word in [*options, "data_"] if re.search(rf"\b{re.escape(word)}", opened)}
-        written = " ".join(notices)
-        drawn_tones = {tone for tone in TONES if tone and (f'tone="{tone}"' in written or f'"{tone}"' in written)}
+        # A tone counts where an entry draws it, as the page's messages draw each of theirs.
+        drawn = {
+            name
+            for entry in entries
+            for each in all_elements(_render(entry.template, **entry.context))
+            for name in each.classes
+        }
+        drawn_tones = {tone for tone, classes in TONES.items() if tone and classes.split()[-1] in drawn}
 
         self.assertEqual(sorted({*options, "data_"} - drawn_options), [], "add a part/notice-* entry that draws it")
         self.assertEqual(sorted(set(filter(None, TONES)) - drawn_tones), [], "add a part/notice-* entry in it")

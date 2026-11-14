@@ -1,11 +1,13 @@
 {% comment %}
-Line chart: a measure over time, on an axis fitted to the measure.
+A chart: its section, the drawing, the axis over it, its data in a fold and
+its legend beside the heading.
 
-  {% include "partials/_line_chart.html" with chart=my_chart %}
+  {% include "partials/_chart.html" with chart=my_chart %}
 
-`chart` is application.ui.LineChart. Use _stacked_bar_chart.html for
-quantities that add up; this is for anything that varies around a level, where
-a zero-based axis would draw every reading as the same height.
+`chart` is application.ui.LineChart, a measure that varies around a level on
+an axis fitted to it, or StackedBarChart, quantities that add up on a
+zero-based axis. The two differ only in their marks (lines or bars), so this
+one frame draws both.
 {% endcomment %}
 {% section chart.title lede=chart.description figure=True %}
   {% if not chart.empty %}
@@ -13,9 +15,15 @@ a zero-based axis would draw every reading as the same height.
       <div class="chart-frame{% if chart.dense %} chart-frame-dense{% endif %}">
       {% comment %}
       aria-hidden in effect: the exact numbers are in the table below, which a
-      screen reader can navigate. Announcing ninety points one at a time is not
-      a chart, it is a recitation.
+      screen reader can navigate. Announcing ninety points or sixty bars one at
+      a time is not a chart, it is a recitation.
       {% endcomment %}
+      {% if chart.stacked %}
+      <svg class="bar-chart" preserveAspectRatio="none" viewBox="0 0 {{ chart.width }} {{ chart.height }}" role="img" aria-label="{{ chart.title }}. {{ chart.description }}" data-chart>
+        {% for tick in chart.ticks %}<line class="chart-grid" x1="{{ chart.plot_left }}" x2="{{ chart.plot_right }}" y1="{{ tick.y }}" y2="{{ tick.y }}"></line>{% endfor %}
+        {% for bar in chart.bars %}{% if bar.height %}<rect class="chart-series-{{ bar.slot }}" x="{{ bar.x }}" y="{{ bar.y }}" width="{{ bar.width }}" height="{{ bar.height }}" data-tip="{{ bar.tooltip }}"></rect>{% endif %}{% endfor %}
+      </svg>
+      {% else %}
       <svg class="line-chart" viewBox="0 0 {{ chart.width }} {{ chart.height }}" preserveAspectRatio="none" role="img" aria-label="{{ chart.title }}. {{ chart.description }}" data-chart>
         {% for tick in chart.ticks %}<line class="chart-grid" x1="{{ chart.plot_left }}" x2="{{ chart.plot_right }}" y1="{{ tick.y }}" y2="{{ tick.y }}"></line>{% endfor %}
         {% for mark in chart.marks %}<line class="chart-mark" x1="{{ mark.x }}" x2="{{ mark.x }}" y1="{{ chart.plot_top }}" y2="{{ chart.plot_bottom }}"></line>{% endfor %}
@@ -34,6 +42,7 @@ a zero-based axis would draw every reading as the same height.
         {% endcomment %}
         {% for series in chart.series %}{% for point in series.points %}<line class="chart-hit" x1="{{ point.x }}" y1="{{ point.y }}" x2="{{ point.x }}" y2="{{ point.y }}" data-tip="{{ point.tooltip }}"></line>{% endfor %}{% endfor %}
       </svg>
+      {% endif %}
         {% comment %}
         The axis, over the drawing in a layer of its own with no viewBox: each
         label is placed at the same percentages the geometry above is drawn at,
@@ -45,7 +54,7 @@ a zero-based axis would draw every reading as the same height.
         <!-- ast-grep-ignore: hand-drawn-icon --> a chart part's own drawing
         {% endcomment %}<svg class="chart-labels" aria-hidden="true">
           {% for tick in chart.axis_y %}<text class="chart-axis chart-tick" x="{{ chart.gutter }}%" y="{{ tick.at }}%">{{ tick.label }}</text>{% endfor %}
-          {% for mark in chart.axis_marks %}<text class="chart-axis chart-mark-label" x="{{ mark.at }}%" y="{{ chart.mark_row }}%">{{ mark.label }}</text>{% endfor %}
+          {% if not chart.stacked %}{% for mark in chart.axis_marks %}<text class="chart-axis chart-mark-label" x="{{ mark.at }}%" y="{{ chart.mark_row }}%">{{ mark.label }}</text>{% endfor %}{% endif %}
           <g class="chart-cats">{% for category in chart.axis_x %}<text class="chart-axis chart-category" x="{{ category.at }}%" y="100%">{{ category.label }}</text>{% endfor %}</g>
         </svg>
       </div>
@@ -53,12 +62,13 @@ a zero-based axis would draw every reading as the same height.
     {% section "View chart data" fold=True %}
       {% table_region chart.title chart=True %}
         <table class="data-table compact-table">
-          <thead><tr>{% table_heading "Date" "status" %}{% for heading in chart.table_headings %}{% table_heading heading "numeric" %}{% endfor %}</tr></thead>
+          <thead><tr>{% if chart.stacked %}{% table_heading "Period" "status" %}{% else %}{% table_heading "Date" "status" %}{% endif %}{% for heading in chart.table_headings %}{% table_heading heading "numeric" %}{% endfor %}</tr></thead>
           <tbody>{% for row in chart.table_rows %}<tr><th>{{ row.label|breakable }}</th>{% for cell in row.cells %}<td>{{ cell|breakable }}</td>{% endfor %}</tr>{% endfor %}</tbody>
         </table>
       {% endtable_region %}
     {% endsection %}
   {% endif %}
-{% aside %}{% if not chart.empty and chart.series|length > 1 %}<div class="chart-legend" aria-label="Legend">{% for series in chart.series %}<span><i class="chart-series-{{ series.slot }}" aria-hidden="true"></i>{{ series.label|breakable }}</span>{% endfor %}</div>{% endif %}
-{% empty %}Not enough readings to chart yet.
+{% comment %}A line chart of one series is named by its heading, so only bars or several lines carry a legend.{% endcomment %}
+{% aside %}{% if not chart.empty %}{% if chart.stacked or chart.series|length > 1 %}<div class="chart-legend" aria-label="Legend">{% for series in chart.series %}<span><i class="chart-series-{{ series.slot }}" aria-hidden="true"></i>{{ series.label|breakable }}</span>{% endfor %}</div>{% endif %}{% endif %}
+{% empty %}{% if chart.stacked %}Not enough data to chart yet.{% else %}Not enough readings to chart yet.{% endif %}
 {% endsection %}

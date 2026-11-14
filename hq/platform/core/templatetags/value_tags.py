@@ -26,10 +26,7 @@ from hq.platform.application.entity_links import (
 from hq.platform.application.labels import DOT_MARKUP, human_bytes
 from hq.platform.application.moments import (
     WHEN_FORMS as _WORDS_FORMS,
-    ago as _ago,
-    elapsed as _elapsed,
     span as said,
-    when_day as _when_day,
     when_exact as _when_exact,
 )
 from hq.platform.application.money import money as _money
@@ -88,7 +85,8 @@ def counted_phrases(phrases) -> tuple[str, str | None]:
 
 @register.simple_tag
 def empty_value():
-    """The mark for a value that is not there, where there is no value to test."""
+    """The mark for a value that is not there, where there is no value to test:
+    its one markup, which ``or_empty`` and ``entity`` draw too."""
     return format_html('<span class="empty-value" title="None">{}</span>', MISSING)
 
 
@@ -145,7 +143,7 @@ def or_empty(value):
     passes as it is; anything else is what ``breakable`` makes of it.
     """
     if value is None or value == "":
-        return format_html('<span class="empty-value" title="None">{}</span>', MISSING)
+        return empty_value()
     if not isinstance(value, bool) and isinstance(value, Number):
         return value
     return breakable(value)
@@ -228,25 +226,18 @@ def last_read(value):
 
 
 @register.filter
-def ago(value):
-    """``{{ moment|ago }}``: an age as bare words, for a sentence or an attribute.
+def when_text(value, form=""):
+    """``{{ moment|when_text:"ago" }}``: the words ``when`` writes in a form,
+    as plain text, where a ``<time>`` cannot stand: an attribute, or a line
+    in a table cell, which sorts on the first ``<time>`` it holds. Nothing for
+    a missing moment or text that names none."""
 
-    A datetime or an ISO stamp, in ``application.ui``'s phrasing. On its own
-    in a cell or a readout, ``{{ moment|when:"ago" }}`` says the same words
-    and keeps the exact moment behind them.
-    """
-
-    if isinstance(value, datetime):
-        return _ago(value)
-    return _elapsed(str(value or ""))
-
-
-@register.filter
-def day(value):
-    """``{{ moment|day }}``: the day ``when:"day"`` names, as bare words, for
-    a day written where only text may go."""
-
-    return _when_day(value)
+    if form not in _WORDS_FORMS:
+        raise template.TemplateSyntaxError(
+            f"when_text takes {', '.join(repr(name) for name in _WORDS_FORMS if name)} or nothing; got {form!r}."
+        )
+    found = _instant(value)
+    return _WORDS_FORMS[form](found) if found is not None else ""
 
 
 @register.filter
@@ -304,15 +295,6 @@ def expiry(value):
     """``{{ not_after|expiry }}``: "22 Dec 2026 · 87 days", the one phrasing HQ uses for an end date."""
 
     return held(expiry_phrase(str(value or "")))
-
-
-@register.filter
-def ago_short(value):
-    """``ago``, saying nothing rather than the missing mark when there is no moment."""
-
-    # A datetime, or an ISO stamp as a provider wrote it, like ``ago``.
-    found = value if isinstance(value, datetime) else moment(str(value or ""))
-    return _ago(found) if found else ""
 
 
 @register.filter
@@ -375,9 +357,7 @@ def entity(context, link, code=False, label="", mark=""):
     (or a list's ``forloop``), held to it as ``breakable`` holds it.
     """
     if link is None:
-        return format_html('<span class="empty-value" title="None">{}</span>', MISSING) + conditional_escape(
-            mark_text(mark)
-        )
+        return empty_value() + conditional_escape(mark_text(mark))
     # A count of nothing is still a name to show.
     if label is not None and label != "":
         link = replace(link, label=str(label))
@@ -442,14 +422,13 @@ def reference(context, row, field):
 
 
 @register.inclusion_tag("partials/_related.html", takes_context=True)
-def referenced_by(context, thing, identity="", cards=True):
+def referenced_by(context, thing, identity=""):
     """Everything that names a thing, for that thing's page: a card per kind
     of reference, as every related list is drawn (``partials/_related.html``).
 
     ``{% referenced_by vehicle %}`` for a row of a model that can be referred
     to; ``{% referenced_by "machine" machine.name %}`` for a kind and what its
-    page is addressed by. ``cards`` has one value left, the one extensions
-    still pass. One statement, whatever names it.
+    page is addressed by. One statement, whatever names it.
     """
 
     principal = _viewer(context)
@@ -715,7 +694,6 @@ def card_frame(name: str, given: dict) -> dict:
     }
 
 
-slotted("section_head", "partials/_section_head.html", ("heading", "aside"), frozenset(("id", "lede")))
 slotted(
     "outside_link",
     OUTSIDE_LINK,

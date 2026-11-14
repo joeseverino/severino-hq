@@ -593,14 +593,12 @@ document.addEventListener("input", (event) => {
 
 // A block meant to be pasted somewhere else: its button copies it. One
 // listener for the page, so a block drawn later (a fragment, an opened row)
-// copies the same way. The button names its block (`data-copy-target`) or
-// sits beside it (`data-copy`); the block is plain selectable text either way.
+// copies the same way. The button (`data-copy`) copies the <pre> of the
+// nearest box around it that holds one, which is plain selectable text too.
 document.addEventListener("click", async (event) => {
-  const button = event.target.closest("[data-copy], [data-copy-target]");
+  const button = event.target.closest("[data-copy]");
   if (!button) return;
-  const source = button.dataset.copyTarget
-    ? document.getElementById(button.dataset.copyTarget)
-    : button.parentElement.querySelector("pre");
+  const source = button.closest(":has(> pre)")?.querySelector(":scope > pre");
   if (!source) return;
   try {
     await navigator.clipboard.writeText(source.textContent.trim());

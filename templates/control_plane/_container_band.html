@@ -15,14 +15,14 @@ of its repository instead: the production deploy, and the repository's alerts.
   {% detail %}
     <small>{{ standing.image.short|breakable }}</small>
     <small>{% if standing.pinned %}<span tabindex="0" data-tip="{{ standing.image.digest }}">Pinned by digest</span>{% else %}Tag only{% endif %}</small>
-    {% if standing.built %}<small>Built {{ standing.built|ago_short }}</small>{% endif %}
+    {% if standing.built %}<small>Built {{ standing.built|when_text:"ago" }}</small>{% endif %}
     {% if standing.moved_to %}<small>{% status "Its tag now names a newer build." tone="attention" pill=False %}</small>{% endif %}
   {% endfact %}
   {% if standing.repository %}{% with deploy=standing.repository.production %}
     {% fact "Production deploy" icon="deploy" tone=standing.repository.verified_tone %}
       {% if standing.repository.production_verified %}Verified{% elif standing.repository.production_verified is False %}Failed its checks{% elif deploy %}Deployed{% else %}No deploy found{% endif %}
     {% detail %}
-      {% if deploy %}<ul class="dot-list"><li>{% entity standing.repository.url|add:"/commit/"|add:deploy.sha|outside code=True label=deploy.sha|slice:":7" %}</li>{% if deploy.created_at %}<li>{{ deploy.created_at|ago_short }}</li>{% endif %}</ul>{% endif %}
+      {% if deploy %}<ul class="dot-list"><li>{% entity standing.repository.url|add:"/commit/"|add:deploy.sha|outside code=True label=deploy.sha|slice:":7" %}</li>{% if deploy.created_at %}<li>{{ deploy.created_at|when_text:"ago" }}</li>{% endif %}</ul>{% endif %}
       <small>{% if standing.repository.production_verified %}Passed its checks before deploying.{% else %}From {{ standing.repository.name|breakable:"." }}{% endif %}</small>
     {% endfact %}
     {% fact "Security" icon="shield" tone=standing.alerts_tone %}
@@ -35,7 +35,7 @@ of its repository instead: the production deploy, and the repository's alerts.
       {% if standing.newer %}{% entity standing.release.url|outside label=standing.latest code=True %}{% elif standing.update_state == "current" %}Up to date{% else %}Unknown{% endif %}
     {% detail %}
       {% if standing.newer %}
-        <small>{{ standing.newer|length|counted:"newer release,newer releases" }} available{% if standing.release.published %}, the newest {{ standing.release.published|ago_short }}{% endif %}</small>
+        <small>{{ standing.newer|length|counted:"newer release,newer releases" }} available{% if standing.release.published %}, the newest {{ standing.release.published|when_text:"ago" }}{% endif %}</small>
       {% elif standing.update_state == "current" %}
         <small>No newer version.</small>
       {% else %}

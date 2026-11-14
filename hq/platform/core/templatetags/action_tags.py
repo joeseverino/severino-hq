@@ -121,8 +121,13 @@ def remedies(context, actions):
     ]
 
 
-@register.simple_tag
-def post_button(label, url, *, name="action", value="", css="btn", title="", disabled=False, pressed=None, hit=False):
+def post_button_markup(
+    label, url, *, name="action", value="", css="btn", title="", disabled=False, pressed=None, hit=False, shared=True
+):
+    """The button ``post_button`` draws, for Python that builds a page's
+    markup: posting through the shared form, or the one form it stands in
+    (``shared=False``)."""
+
     # A button of words is named by them, so its title only describes it; a
     # glyph (an arrow, a star) says nothing aloud and is named by its title.
     # A toggle (`pressed`, true or false) says aloud which way it stands. A
@@ -133,9 +138,8 @@ def post_button(label, url, *, name="action", value="", css="btn", title="", dis
     if pressed is not None:
         attributes["aria-pressed"] = "true" if pressed else "false"
     return format_html(
-        '<button type="submit" form="{}" formaction="{}" class="{}"{}{}{}>{}</button>',
-        POST_FORM_ID,
-        url,
+        '<button type="submit"{} class="{}"{}{}{}>{}</button>',
+        format_html(' form="{}" formaction="{}"', POST_FORM_ID, url) if shared else "",
         css,
         format_html_join("", ' {}="{}"', ((key, val) for key, val in attributes.items() if val)),
         mark_safe(" data-hit") if hit else "",
@@ -145,28 +149,39 @@ def post_button(label, url, *, name="action", value="", css="btn", title="", dis
 
 
 @register.simple_tag(takes_context=True)
-def post_form(context, action, extra=""):
-    """A POST ``PageAction`` that sends ``fields`` besides its button's own: a
-    form of its own, since the shared form carries only the button's field.
-    It returns to the page it was pressed on unless its fields name a
-    ``next``. Its token is the request's, which an ``{% include ... only %}``
-    keeps when it drops the context processors' values."""
+def post_button(
+    context,
+    label,
+    url,
+    *,
+    name="action",
+    value="",
+    css="btn",
+    title="",
+    disabled=False,
+    pressed=None,
+    hit=False,
+    fields=None,
+):
+    """One button that posts. ``fields``, what it sends besides its own
+    field, make it a form of its own, since the shared form carries only the
+    button's field; it then returns to the page it was pressed on unless they
+    name a ``next``. Its token is the request's, which an ``{% include ...
+    only %}`` keeps when it drops the context processors' values."""
 
+    options = {"name": name, "value": value, "css": css, "title": title, "disabled": disabled, "pressed": pressed}
+    if not fields:
+        return post_button_markup(label, url, hit=hit, **options)
     request = _request(context)
-    sent = {"next": request.get_full_path(), **action.fields}
+    sent = {"next": request.get_full_path(), **fields}
     with context.push(csrf_token=get_token(request)):
         token = write_token(context)
-    attributes = {"name": action.field, "value": action.value, "title": action.title}
     return (
-        format_html('<form method="post" action="{}" class="post-form">', action.url)
+        format_html('<form method="post" action="{}" class="post-form">', url)
         + token
         + format_html_join("", '<input type="hidden" name="{}" value="{}">', sent.items())
-        + format_html(
-            '<button type="submit" class="{}"{}>{}</button></form>',
-            " ".join(part for part in (action.css, extra) if part),
-            format_html_join("", ' {}="{}"', ((key, val) for key, val in attributes.items() if val)),
-            button_words(action.label),
-        )
+        + post_button_markup(label, url, hit=hit, shared=False, **options)
+        + mark_safe("</form>")
     )
 
 

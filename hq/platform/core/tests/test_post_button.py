@@ -8,7 +8,7 @@ from hq.platform.application.pages import PageAction
 from hq.platform.application.tests.markup import elements
 
 
-class PostFormTests(SimpleTestCase):
+class PostButtonFieldsTests(SimpleTestCase):
     def draw(self, *actions: PageAction) -> str:
         request = RequestFactory().get("/example/?page=2")
         return Template("<table><tr>{% row_actions actions %}</tr></table>").render(

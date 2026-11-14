@@ -63,7 +63,7 @@ Each domain's leading chart, a row of its own as a domain's page draws its
 charts, so however many there are they never break up the row under them.
 {% endcomment %}
 {% if dashboard_charts %}<div class="domain-charts">
-  {% for chart in dashboard_charts %}{% include "partials/_stacked_bar_chart.html" with chart=chart %}{% endfor %}
+  {% for chart in dashboard_charts %}{% include "partials/_chart.html" with chart=chart %}{% endfor %}
 </div>{% endif %}
 
 {% comment %}

@@ -108,7 +108,7 @@ class UiProjectionTests(TestCase):
         self.assertFalse(chart.empty)
         self.assertEqual(chart.rows[1].values, (45.0, 30.0))
         self.assertEqual(len(chart.bars), 4)
-        rendered = render_to_string("partials/_stacked_bar_chart.html", {"chart": chart})
+        rendered = render_to_string("partials/_chart.html", {"chart": chart})
         self.assertIn("Training", rendered)
         self.assertIn("View chart data", rendered)
         # The tooltip names its period as well as its series: hovering a bar
@@ -285,7 +285,7 @@ class LineChartTests(TestCase):
 
     def test_a_marks_label_is_drawn_unscaled_over_its_rule(self):
         chart = line_chart("Resting", "", self.SERIES, unit="bpm", marks=((date(2026, 1, 15), "Care"),))
-        rendered = render_to_string("partials/_line_chart.html", {"chart": chart})
+        rendered = render_to_string("partials/_chart.html", {"chart": chart})
         # The drawing is stretched to its card, so lettering inside it would
         # be pulled wide; the label goes in the layer with no viewBox, at the
         # share of the width its rule is drawn at.
@@ -301,7 +301,7 @@ class LineChartTests(TestCase):
 
     def test_the_line_is_stroked_rather_than_filled(self):
         chart = line_chart("Resting", "", self.SERIES, unit="bpm", trend=True)
-        rendered = render_to_string("partials/_line_chart.html", {"chart": chart})
+        rendered = render_to_string("partials/_chart.html", {"chart": chart})
         # `.chart-series-N` sets `fill`, which would render the path as a
         # filled blob. Lines use the stroke classes.
         paths = elements(rendered, "path")
@@ -315,7 +315,7 @@ class LineChartTests(TestCase):
 
     def test_each_point_has_a_target_big_enough_to_hit(self):
         chart = line_chart("Resting", "", self.SERIES, unit="bpm")
-        rendered = render_to_string("partials/_line_chart.html", {"chart": chart})
+        rendered = render_to_string("partials/_chart.html", {"chart": chart})
         # The visible dot is smaller than a pointer can be aimed: the tip
         # belongs to an invisible target of its own, one per point.
         drawn = [element for element in all_elements(rendered) if element.tag in {"path", "line"}]
@@ -329,7 +329,7 @@ class LineChartTests(TestCase):
 
     def test_every_point_carries_the_hosts_own_tooltip(self):
         chart = line_chart("Resting", "", self.SERIES, unit="bpm")
-        rendered = render_to_string("partials/_line_chart.html", {"chart": chart})
+        rendered = render_to_string("partials/_chart.html", {"chart": chart})
         self.assertIn(
             "Jan 1, 2026\xa0· Resting heart rate: 52 bpm",
             [mark.attrs["data-tip"] for mark in select(rendered, "data-tip")],
@@ -398,7 +398,7 @@ class ChartDataTableTests(TestCase):
             unit="bpm",
         )
 
-        table = self.table("partials/_line_chart.html", chart)
+        table = self.table("partials/_chart.html", chart)
 
         self.assertIn("52.2", table)
         self.assertIn("1,250", table)
@@ -416,7 +416,7 @@ class ChartDataTableTests(TestCase):
             unit="minutes",
         )
 
-        table = self.table("partials/_stacked_bar_chart.html", chart)
+        table = self.table("partials/_chart.html", chart)
 
         self.assertIn("30", table)
         self.assertIn("45.5", table)
@@ -431,7 +431,7 @@ class ChartDataTableTests(TestCase):
             unit="$",
         )
 
-        table = self.table("partials/_line_chart.html", chart)
+        table = self.table("partials/_chart.html", chart)
 
         self.assertIn("$12,346", table)
         self.assertIn(money(-980, cents=False), table)
