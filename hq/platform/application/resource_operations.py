@@ -146,14 +146,15 @@ class ObservedAccepted(ResourceSaved):
 
 
 def serialize_operation(operation: OperationRequest) -> OperationItem:
+    who = asked_by((operation,)).get(str(operation.pk), NOBODY)
     return {
         "id": str(operation.id),
         "resource": operation.resource.key,
         "action": operation.action,
         "state": operation.state,
         "reason": operation.reason,
-        "requested_actor": operation.requested_actor,
-        "requested_interface": operation.requested_interface,
+        "requested_actor": who.actor,
+        "requested_interface": who.interface,
         "created_at": operation.created_at.isoformat(),
         "completed_at": (operation.completed_at.isoformat() if operation.completed_at else None),
         "claimed_by": operation.claimed_by,

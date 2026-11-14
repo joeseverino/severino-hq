@@ -10,13 +10,14 @@ from hq.domains.control_plane.models import (
     ManagedResource,
     ProviderConnection,
     ProviderInventory,
-    WeatherObservation,
 )
 from hq.domains.projects.models import Project
 from hq.platform.application.security import cli_principal
 from hq.platform.application.tests.host_only import host_only
+from hq.platform.core.models import UpstreamReading
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
+from .. import readings
 from ..dashboard import dashboard_highlights, operating_snapshot
 from ..projection import projection_scope
 
@@ -148,9 +149,9 @@ def populate(size: int = 8) -> None:
             observed_at=now,
         )
     DashboardConfiguration.objects.create(pk=1, weather_point="41.8781,-87.6298")
-    WeatherObservation.objects.create(
-        point="41.8781,-87.6298",
-        payload={"metrics": [{"label": "Now", "value": "Clear"}]},
+    readings.record(
+        readings.weather("41.8781,-87.6298"),
+        {"metrics": [{"label": "Now", "value": "Clear"}]},
         observed_at=now,
     )
 
@@ -174,7 +175,7 @@ def repopulate(size: int) -> None:
     for model in (ManagedResource, ProviderConnection, ProviderInventory, Project):
         model.objects.all().delete()
     DashboardConfiguration.objects.all().delete()
-    WeatherObservation.objects.all().delete()
+    UpstreamReading.objects.all().delete()
     populate(size=size)
 
 

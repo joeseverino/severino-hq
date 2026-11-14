@@ -8,7 +8,7 @@ import re
 from typing import Any, override
 
 from hq.platform.core.stylesheets import stylesheet
-from hq.platform.core.tests.browser.estate import READ_AT, ExampleEstateGate
+from hq.platform.core.tests.browser.estate import ExampleEstateGate
 from hq.platform.core.tests.browser.gate import BrowserGate, add_css
 from hq.platform.core.tests.browser.reading import probe
 from hq.platform.core.tests.browser.selectors import SELECTORS
@@ -66,7 +66,7 @@ def unsampled_span():
     """The first span between two of the stylesheet's viewport-query edges
     that holds none of the widths the other gates read a page at."""
 
-    sampled = {*READ_AT, *SPARSE_WIDTHS, *WIDTHS, *WIDE_TABLES}
+    sampled = {*SPARSE_WIDTHS, *WIDTHS, *WIDE_TABLES}
     edges = query_edges(viewport_queries(stylesheet()))
     for low, high in zip(edges, [*(edge - 1 for edge in edges[1:]), LARGEST], strict=True):
         if not any(low <= width <= high for width in sampled):

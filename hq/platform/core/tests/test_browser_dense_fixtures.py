@@ -31,7 +31,6 @@ from hq.domains.control_plane.models import (
     DashboardMachine,
     ManagedResource,
     ProviderInventory,
-    WeatherObservation,
 )
 from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 from hq.domains.control_plane.observations.portainer import IMAGE_KIND as PULLED_KIND
@@ -428,9 +427,9 @@ def _glance():
             },
             observed_at=now,
         )
-    WeatherObservation.objects.create(
-        point="41.0000,-87.0000",
-        payload={
+    readings.record(
+        readings.weather("41.0000,-87.0000"),
+        {
             "status": "serious",
             "summary": "Example City, EX",
             "metrics": [
@@ -562,7 +561,7 @@ def build_dense_estate(user):
     _inventory_pass()
     _unbroken_words(user)
     _starred(user)
-    _operations(user)
+    _operations()
     _unmanaged()
     _tailnet_policy()
     _held()
@@ -578,7 +577,7 @@ OPERATED = "an-example-proxy-host-whose-operations-are-recorded"
 REMOVED = f"{OPERATED}-and-queued"
 
 
-def _operations(user):
+def _operations():
     from hq.domains.control_plane.models import OperationRequest
 
     now = timezone.now()
@@ -590,7 +589,6 @@ def _operations(user):
             resource=resource,
             action=action,
             state=state,
-            requested_by=user,
             requested_actor="an-example-operator-with-a-long-name@example.com",
             requested_interface=interface,
             idempotency_key=f"{resource.key}-{action}-{state}-{message[:12]}",

@@ -14,7 +14,6 @@ from hq.domains.control_plane.models import (
     DashboardConfiguration,
     ManagedResource,
     ProviderConnection,
-    WeatherObservation,
 )
 from hq.platform.application.derivation_testing import uncached
 from hq.platform.application.security import cli_principal
@@ -22,6 +21,7 @@ from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
+from .. import readings
 from ..attention import infrastructure, tailnet
 from ..command_center import command_center
 from ..connection_lifecycle import Lifecycle
@@ -469,17 +469,15 @@ class StaleGlanceTests(TestCase):
         machine_spec = ManagedResource.objects.create(key="example-host", kind="machine", spec={"name": "example-host"})
         from hq.domains.control_plane.models import DashboardMachine
 
-        from .. import readings
-
         DashboardMachine.objects.create(machine=machine_spec, position=0)
         readings.record(
             readings.machine_telemetry("example-host"),
             {"metrics": [{"label": "CPU", "value": "4%"}]},
             observed_at=timezone.now() - timedelta(days=26),
         )
-        WeatherObservation.objects.create(
-            point="41.8781,-87.6298",
-            payload={"metrics": [{"label": "Now", "value": "Clear"}]},
+        readings.record(
+            readings.weather("41.8781,-87.6298"),
+            {"metrics": [{"label": "Now", "value": "Clear"}]},
             observed_at=timezone.now() - timedelta(minutes=1),
         )
 
@@ -496,9 +494,9 @@ class StaleGlanceTests(TestCase):
         from ..freshness import DASHBOARD_GLANCE, stale_after
 
         DashboardConfiguration.objects.create(pk=1, weather_point="41.8781,-87.6298")
-        WeatherObservation.objects.create(
-            point="41.8781,-87.6298",
-            payload={"metrics": [{"label": "Now", "value": "Clear"}]},
+        readings.record(
+            readings.weather("41.8781,-87.6298"),
+            {"metrics": [{"label": "Now", "value": "Clear"}]},
             observed_at=timezone.now() - stale_after(DASHBOARD_GLANCE) + timedelta(minutes=1),
         )
 
@@ -510,12 +508,10 @@ class StaleGlanceTests(TestCase):
 class OldGlanceTests(TestCase):
     def test_an_old_reading_stays_on_the_dashboard_with_its_age(self):
         DashboardConfiguration.objects.create(pk=1, weather_point="41.8781,-87.6298")
-        WeatherObservation.objects.update_or_create(
-            point="41.8781,-87.6298",
-            defaults={
-                "payload": {"metrics": [{"label": "Now", "value": "Clear"}]},
-                "observed_at": timezone.now() - timedelta(days=20),
-            },
+        readings.record(
+            readings.weather("41.8781,-87.6298"),
+            {"metrics": [{"label": "Now", "value": "Clear"}]},
+            observed_at=timezone.now() - timedelta(days=20),
         )
         weather = next(panel for panel in dashboard_panels() if panel["id"] == "weather")
 

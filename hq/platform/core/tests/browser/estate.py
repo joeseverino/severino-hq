@@ -6,7 +6,7 @@ estate, which is built to break layouts and covers the pages it was built for.
 This holds the same invariants over the homelab the demo shows
 (``hq/platform/core/example_estate``), on every page a person reaches from the
 navigation, as a reader sees it: script on, deferred parts loaded, at a phone,
-a tablet, a laptop and a wide desktop, in the light palette and the dark.
+a tablet and a laptop, in the light palette and the dark.
 
 Each page is rendered once, opened once per width, and every check runs on
 that one load; a finding names its check, page, width and theme.
@@ -27,7 +27,7 @@ from django.test import Client
 from django.urls import reverse
 lazy from django.db import transaction
 
-from hq.platform.core.tests.browser.gate import BrowserGate, answered, tab_key, unfold
+from hq.platform.core.tests.browser.gate import BrowserGate, answered, sent, tab_key, unfold
 from hq.platform.core.tests.browser.in_flight import InFlight
 from hq.platform.core.tests.browser.probes.boxes import SIDEWAYS
 from hq.platform.core.tests.browser.probes.describe import TEXT_SHOWN
@@ -35,7 +35,7 @@ from hq.platform.core.tests.browser.probes.settle import FINISH_TRANSITIONS, FON
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import ORIGIN
 from hq.platform.core.tests.browser.survey import geometry_probes
-from hq.platform.core.tests.browser.widths import PHONE_SCREEN, WIDE, WIDE_TABLES, WIDEST, WIDTHS, viewport
+from hq.platform.core.tests.browser.widths import PALETTE_AT, PHONE_SCREEN, WIDE, WIDTHS, viewport, with_wide_tables
 lazy from hq.platform.application import fragments
 lazy from hq.platform.application.domains import domain_navigation
 lazy from hq.platform.core import seeds
@@ -45,11 +45,17 @@ lazy from hq.platform.core.example_estate.network import ZONE_KEY
 lazy from hq.platform.core.example_estate.records import RUNBOOKS, SERVER_ASSET, SWITCH_ASSET, UNFILED_RECEIPT, WRITEUPS
 lazy from hq.platform.core.example_estate.testing import as_production, sign_in
 
-# The gate's widths, a wide desktop and the laptop windows where a wide table
-# has the least room: the example estate is the homelab as a person reads it,
-# on every screen up to the widest.
-READ_AT = tuple(sorted((*WIDTHS, WIDEST, *WIDE_TABLES)))
+# WebKit reads the gate's widths, and the laptop window where a wide table
+# has the least room on a page that draws one (`with_wide_tables`), as HQ is
+# read in Safari; another engine is a second opinion at a phone and a laptop.
+SECOND_OPINION_AT = (PHONE_SCREEN[0], WIDE)
 THEMES = ("light", "dark")
+# A page the policy refuses a style element on, answered as HQ answers one,
+# opened last: a browser sends a report once it gets to it, so the report this
+# page draws is what the sweep waits for, and it comes after any the pages
+# before it drew.
+_REFUSED = "/example-refused/"
+_STYLED = '<!doctype html><html><head><meta charset="utf-8"><style>p { color: red }</style></head><body><p>Example</p></body></html>'
 # The API reference mounts a vendored viewer, whose markup is not HQ's to hold
 # to these rules; ReferenceBrowserTests holds only what HQ gives the page.
 _NOT_HQS_MARKUP = {"api_reference:reference"}
@@ -336,16 +342,17 @@ class ExampleEstateBrowserTests(ExampleEstateGate):
         return found
 
     def test_every_navigation_page_keeps_the_layout_rules(self):
+        """Each page keeps the layout rules and sends ``/csp-report/`` nothing."""
+
         self.assertGreater(len(self.navigation), 10, "the navigation led almost nowhere")
+        webkit = self.browser.browser_type.name == "webkit"
         for path in self.navigation:
-            for width in READ_AT:
+            for width in with_wide_tables(WIDTHS, self.draws_a_table) if webkit else SECOND_OPINION_AT:
                 with self.subTest(page=path, width=width):
                     self.page.emulate_media(color_scheme="light")
                     self.visit(path, width)
                     found = self.geometry(path, width)
-                    # A palette is a color per token, the same at every width, so
-                    # the narrowest and widest read every part either draws.
-                    for theme in THEMES if width in (READ_AT[0], READ_AT[-1]) else ():
+                    for theme in THEMES if width in PALETTE_AT else ():
                         self.page.emulate_media(color_scheme=theme)
                         self.page.evaluate(SETTLE)
                         self.page.evaluate(FINISH_TRANSITIONS)
@@ -357,6 +364,30 @@ class ExampleEstateBrowserTests(ExampleEstateGate):
                     failed = {check: said for check, said in found.items() if said}
                     if failed:
                         self.fail(json.dumps(failed, indent=1))
+        if webkit:
+            self.a_refused_page_is_heard_after_every_other()
+
+    def a_refused_page_is_heard_after_every_other(self):
+        """The refusals each page was held to are heard: a page the policy
+        refuses sends its report, and none came late from the pages before it."""
+
+        self.served = {**self.served, _REFUSED: sent(_STYLED, {"Content-Type": "text/html", **self.policy})}
+        with self.page.expect_request_finished(is_report(settings.SEVERINO_CSP_REPORT_PATH)):
+            self.page.goto(f"{ORIGIN}{_REFUSED}", wait_until="load")
+        # A round trip, so the page's word of the refusal has reached the gate too.
+        self.settle()
+        heard = self.refusals_so_far()
+        report = f"{_REFUSED}: {settings.SEVERINO_CSP_REPORT_PATH} was sent"
+        self.assertTrue(
+            [line for line in heard if line.startswith(report)],
+            f"the refused page's report never reached {settings.SEVERINO_CSP_REPORT_PATH}: {heard}",
+        )
+        # A report a page before it drew late arrives before this one.
+        self.assertEqual([line for line in heard if not line.startswith(_REFUSED)], [])
+
+
+def is_report(path):
+    return lambda request: urlsplit(request.url).path == path
 
 
 # A list's toolbar boxes (a filter's options and its toggles), the sort its

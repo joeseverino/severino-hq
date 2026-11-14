@@ -14,7 +14,6 @@ from hq.domains.control_plane.models import (
     DashboardRefreshRequest,
     ManagedResource,
     ProviderConnection,
-    WeatherObservation,
 )
 from hq.platform.core.audit import record_event
 lazy from hq.platform.application.routes import reverse
@@ -415,13 +414,16 @@ def dashboard_panels(
     machine_resources = dashboard_machines()
     routes = _machine_routes(machine_resources) if machine_resources else {}
     point = configuration.weather_point
-    weather = WeatherObservation.objects.filter(point=point).first() if point else None
-    telemetry = readings.stored_many(readings.machine_telemetry(resource.key) for resource in machine_resources)
+    weather_key = readings.weather(point) if point else ""
+    stored = readings.stored_many(
+        [*(readings.machine_telemetry(resource.key) for resource in machine_resources), weather_key]
+    )
+    weather = stored.get(weather_key)
     pending = set(DashboardRefreshRequest.objects.filter(completed_at__isnull=True).values_list("panel_id", flat=True))
     panels = []
     for resource in machine_resources:
         panel_id = f"machine-{resource.pk}"
-        reading = telemetry.get(readings.machine_telemetry(resource.key))
+        reading = stored.get(readings.machine_telemetry(resource.key))
         # Several machines' readings read alike, so each head names its own.
         name = str(resource.spec.get("name") or resource.key) if len(machine_resources) > 1 else ""
         spec = replace(
@@ -452,7 +454,7 @@ def dashboard_panels(
         panels.append(
             _panel(
                 specs["weather"],
-                payload=weather.payload if weather else {},
+                payload=weather.value if weather else {},
                 observed_at=weather.observed_at if weather else None,
                 refreshing="weather" in pending and bool(routes),
                 # Weather rides with a machine's refresh, so it can be asked
@@ -715,14 +717,14 @@ def _record_weather_reading(
     point = str(item.get("point", "")).strip()
     if not point or point != configuration.weather_point:
         raise ValueError("Weather was reported without a configured point.")
-    stored = WeatherObservation.objects.filter(point=point).first()
+    stored = readings.stored(readings.weather(point))
     payload, since = _settle(
         _clean_panel(item),
-        previous=stored.payload if stored else None,
+        previous=stored.value if stored else None,
         previous_at=stored.observed_at if stored else None,
         now=observed_at,
     )
-    WeatherObservation.objects.update_or_create(point=point, defaults={"payload": payload, "observed_at": since})
+    readings.record(readings.weather(point), payload, observed_at=since)
     _answer("weather", as_of=as_of, observed_at=observed_at)
 
 

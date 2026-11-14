@@ -109,7 +109,8 @@ its own fixture writes into a sheet it serves (`gate.lifted`).
 `RenderedPageTests` over every page and fragment, an extension's included;
 the template contract, for an extension's template; every browser test,
 which fails on a refusal or a report to `/csp-report/`, and
-`PolicyReportBrowserTests` over the navigation.
+`ExampleEstateBrowserTests`, which hears a refused page's report after
+every navigation page.
 
 **One frame per thing.** A box that holds content is a *surface*: one border,
 one radius, one background, one shadow, drawn by the single surface rule in
@@ -191,7 +192,8 @@ cells stand closer. Still wider, its identifiers break where they must
 (`data-break`). A table wider than its region even then scrolls in it
 (`data-scrolls`), so no table runs past its card at any width. The gates fail
 one that does: the narrowest phone (320px) and every width above it hold every
-table the gates draw. `a_table_fits_its_box_at_every_width` and the example
+table of the example estate and of each derived list.
+`a_table_fits_its_box_at_every_width` over the derived lists and the example
 estate's `ExampleEstateTableFit` classes sweep each page from 320px up, reading it
 at the first width of each shape its layout and its tables take
 (`TABLE_LAYOUT`: the viewport queries, the boxes around each region, and how

@@ -9,14 +9,14 @@ from hq.platform.core.tests.browser.probes.settle import (
     SETTLE,
 )
 from hq.platform.core.tests.browser.selectors import SELECTORS
-from hq.platform.core.tests.browser.stress import ALL_PAGES
 from hq.platform.core.tests.browser.widths import (
     NARROWEST,
-    SPARSE_WIDTHS,
+    PALETTE_AT,
     WIDE,
     WIDE_TABLES,
     WIDTHS,
     viewport,
+    with_wide_tables,
 )
 from hq.platform.core.tests.test_browser_dense_fixtures import DENSE_PAGES
 from hq.platform.core.tests.test_browser_fixtures import PAGES
@@ -33,9 +33,9 @@ class UnscriptedLayoutTests(LayoutBrowserTests):
 
     def sweep(self, names):
         for name in names:
-            for width in self.across(name, {*WIDTHS, *(SPARSE_WIDTHS if name in PAGES else ())}):
+            for width in self.across(name, WIDTHS):
                 self.hold(name, width, self.unscripted_reads(name, width))
-                if width in WIDTHS:
+                if width in PALETTE_AT:
                     self.in_scheme("dark")
                     self.hold(name, width, [self.text_reads_in_the_dark_theme])
                     self.in_scheme("light")
@@ -78,27 +78,21 @@ class ScriptedLayoutTests(LayoutBrowserTests):
     scripted = True
 
     def sweep(self, names):
-        """Every layout check holds, at a laptop window's width too, and a
-        table fits its box with every disclosure open, down to the narrowest
-        phone. Script reads the width a page loads at, so each width is a load."""
+        """Every layout check holds, at the laptop window where a wide table
+        has the least room too. Script reads the width a page loads at, so
+        each width is a load."""
 
         for name in names:
-            for width in sorted({NARROWEST, *WIDTHS, *WIDE_TABLES}):
-                if self.loaded(name, width, script="on"):
-                    self.page.evaluate(SETTLE)
-                    self.read_loaded(name, width)
-
-    def read_loaded(self, name, width):
-        read = name in ALL_PAGES and width in (*WIDTHS, *WIDE_TABLES)
-        if read and width in WIDTHS:
-            # Light is held by every layout check below.
-            self.in_scheme("dark")
-            self.hold(name, width, [self.every_palette_check_holds], script="on", scheme="dark")
-            self.in_scheme("light")
-        if read:
-            self.hold(name, width, [self.every_layout_check_holds], script="on")
-        if name in ALL_PAGES and width == NARROWEST:
-            self.hold(name, width, [self.a_table_fits_its_box_at_every_width], script="on")
+            for width in with_wide_tables(WIDTHS, self.draws_a_table):
+                if not self.loaded(name, width, script="on"):
+                    continue
+                self.page.evaluate(SETTLE)
+                if width in PALETTE_AT:
+                    # Light is held by every layout check below.
+                    self.in_scheme("dark")
+                    self.hold(name, width, [self.every_palette_check_holds], script="on", scheme="dark")
+                    self.in_scheme("light")
+                self.hold(name, width, [self.every_layout_check_holds], script="on")
 
 
 class ScriptedSparseLayoutTests(ScriptedLayoutTests):

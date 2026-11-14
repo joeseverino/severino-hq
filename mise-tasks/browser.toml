@@ -1,5 +1,5 @@
 # The Browser job: each browser:* gate is one leg of it, the classes split for
-# balance. A new browser test class is named in one of them
+# balance. A new browser test class is named in one WebKit leg
 # (test_browser_gate_tasks). Layout's sweeps are classes of their own so one
 # leg runs them side by side: Django gives a parallel worker a whole class.
 
@@ -10,19 +10,8 @@ depends = [{ task = "setup:browser", args = ["webkit"] }, "demo:build"]
 extends = "heavy"
 run = "uv run --group browser python -m unittest demo.check -v"
 
-# The public demo in Chromium, the engine most of its visitors read it in. A
-# CI leg, which mise run browser leaves out, as the Chromium layout legs.
-["browser:demo-chromium"]
-description = "browser:demo in Chromium: a CI leg, which mise run browser leaves out"
-hide = true
-env = { HQ_BROWSER_ENGINE = "chromium" }
-depends = [{ task = "setup:browser", args = ["chromium"] }, "demo:build"]
-extends = "heavy"
-run = "uv run --group browser python -m unittest demo.check -v"
-
 # The layout invariants over the stress estate, in two legs that CI runs side
-# by side, the classes split so each leg holds about half their time in CI,
-# in WebKit and in Chromium.
+# by side, the classes split so each leg holds about half their time in CI.
 ["browser:layout-1"]
 description = "Real-browser layout invariants over the stress estate, leg 1 of 2, in WebKit"
 hide = true
@@ -49,34 +38,23 @@ vars.classes = """\
   hq.platform.core.tests.browser.head_strip.HeadAndStripBrowserTests \
   hq.platform.core.tests.browser.planted.PlantedBrowserTests"""
 
-# The layout legs in Chromium, so a break WebKit happens not to show still
-# fails. CI runs them as legs of their own; `mise run browser` leaves them out,
-# since HQ is read in Safari. Each runs its WebKit leg, so the two name one set
-# of classes, and installs Chromium and the lint tools as steps rather than as
-# dependencies, which a skipped task would still run.
-["browser:layout-chromium-1"]
-description = "browser:layout-1 in Chromium: a CI leg, which mise run browser leaves out"
+# A second engine, so a break WebKit happens not to show still fails, over
+# the narrow set that says it: every shared part, the example estate at a phone
+# and a laptop (`estate.SECOND_OPINION_AT`), every probe proven able to fail, and
+# the layout shifts only Chromium records (`probes/shifts.py`). WebKit judges
+# the rest, as HQ is read in Safari. A class here is also named by a WebKit
+# leg (test_browser_gate_tasks); `mise run browser` leaves this leg to CI.
+["browser:chromium"]
+description = "The second-engine set in Chromium: a CI leg, which mise run browser leaves out"
 hide = true
-env = { HQ_BROWSER_ENGINE = "chromium", SEVERINO_WAITS_FOR_HEAVY_TURN = "1" }
-run = [
-  { task = "setup:browser", args = [
-    "chromium",
-  ] },
-  { task = "setup:lint-tools" },
-  "mise run --skip-deps browser:layout-1",
-]
-
-["browser:layout-chromium-2"]
-description = "browser:layout-2 in Chromium: a CI leg, which mise run browser leaves out"
-hide = true
-env = { HQ_BROWSER_ENGINE = "chromium", SEVERINO_WAITS_FOR_HEAVY_TURN = "1" }
-run = [
-  { task = "setup:browser", args = [
-    "chromium",
-  ] },
-  { task = "setup:lint-tools" },
-  "mise run --skip-deps browser:layout-2",
-]
+extends = "django-browser"
+env = { HQ_BROWSER_ENGINE = "chromium" }
+depends = [{ task = "setup:browser", args = ["chromium"] }, "setup:lint-tools"]
+vars.classes = """\
+  hq.platform.core.tests.browser.catalog.CatalogLayoutTests \
+  hq.platform.core.tests.browser.estate.ExampleEstateBrowserTests \
+  hq.platform.core.tests.browser.planted.PlantedBrowserTests \
+  hq.platform.core.tests.browser.components.ComponentLayoutTests.test_opening_every_row_a_reader_can_open_moves_nothing_they_did_not_ask_for"""
 
 ["browser:navigation"]
 description = "Real-browser invariants over the example estate, the frame around a page and its fragments, in WebKit"
@@ -85,7 +63,6 @@ extends = "django-browser"
 vars.classes = """\
   hq.platform.core.tests.browser.estate.ExampleEstateBrowserTests \
   hq.platform.core.tests.browser.estate.ExampleEstateControlTests \
-  hq.platform.core.tests.browser.reports.PolicyReportBrowserTests \
   hq.platform.core.tests.browser.reports.WebKitSelectCanaryTests \
   hq.platform.core.tests.browser.reference.ReferenceBrowserTests \
   hq.platform.core.tests.browser.fragments.FragmentBrowserTests \

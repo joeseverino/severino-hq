@@ -17,7 +17,6 @@ from hq.domains.control_plane.models import (
     DashboardRefreshRequest,
     ManagedResource,
     ProviderConnection,
-    WeatherObservation,
 )
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.writers import keyed
@@ -217,7 +216,7 @@ class DashboardGlanceTests(TestCase):
             principal=cli_principal(),
             controller_id="app-server",
         )
-        return WeatherObservation.objects.get(point="41.0000,-87.0000")
+        return readings.stored(readings.weather("41.0000,-87.0000"))
 
     GOOD = {"status": "good", "summary": "A town", "metrics": [{"label": "Now", "value": "Clear"}]}
     FAILED = {
@@ -232,9 +231,9 @@ class DashboardGlanceTests(TestCase):
 
         kept = self._weather(**self.FAILED)
 
-        self.assertEqual(kept.payload["metrics"], good.payload["metrics"])
-        self.assertEqual(kept.payload["status"], "good")
-        self.assertEqual(kept.payload["refresh_failed"], "HTTPError")
+        self.assertEqual(kept.value["metrics"], good.value["metrics"])
+        self.assertEqual(kept.value["status"], "good")
+        self.assertEqual(kept.value["refresh_failed"], "HTTPError")
         self.assertEqual(kept.observed_at, good.observed_at)
 
     def test_the_next_good_refresh_clears_the_failure(self):
@@ -243,18 +242,18 @@ class DashboardGlanceTests(TestCase):
 
         fresh = self._weather(**self.GOOD)
 
-        self.assertNotIn("refresh_failed", fresh.payload)
+        self.assertNotIn("refresh_failed", fresh.value)
 
     def test_with_nothing_to_keep_the_failure_is_what_is_shown(self):
         failed = self._weather(**self.FAILED)
 
-        self.assertEqual(failed.payload["status"], "serious")
-        self.assertEqual(failed.payload["refresh_failed"], "HTTPError")
+        self.assertEqual(failed.value["status"], "serious")
+        self.assertEqual(failed.value["refresh_failed"], "HTTPError")
 
     def test_a_failure_marker_carries_only_the_error_type(self):
         failed = self._weather(**{**self.FAILED, "refresh_failed": "HTTPError: <b>/secret/path</b>"})
 
-        self.assertEqual(failed.payload["refresh_failed"], "HTTPErrorbsecretpathb")
+        self.assertEqual(failed.value["refresh_failed"], "HTTPErrorbsecretpathb")
 
     def test_a_machine_keeps_its_last_good_telemetry_through_a_failed_refresh(self):
         def report(reading):
@@ -288,9 +287,9 @@ class DashboardGlanceTests(TestCase):
             },
             observed_at=observed,
         )
-        WeatherObservation.objects.create(
-            point="41.0000,-87.0000",
-            payload={
+        readings.record(
+            readings.weather("41.0000,-87.0000"),
+            {
                 "status": "good",
                 "summary": "Chicago, IL",
                 "metrics": [
@@ -337,15 +336,10 @@ class DashboardGlanceTests(TestCase):
             (15, True, True),
         ):
             with self.subTest(age=age):
-                WeatherObservation.objects.update_or_create(
-                    point="41.0000,-87.0000",
-                    defaults={
-                        "payload": {
-                            "status": "good",
-                            "metrics": [{"label": "Now", "value": "Clear"}],
-                        },
-                        "observed_at": now - timedelta(minutes=age),
-                    },
+                readings.record(
+                    readings.weather("41.0000,-87.0000"),
+                    {"status": "good", "metrics": [{"label": "Now", "value": "Clear"}]},
+                    observed_at=now - timedelta(minutes=age),
                 )
                 with patch("hq.platform.application.glance.timezone.now", return_value=now):
                     panels = dashboard_panels()
@@ -611,9 +605,9 @@ class GlanceRenderingTests(TestCase):
             weather_label="Example weather",
             infrastructure_label="Example lab",
         )
-        WeatherObservation.objects.create(
-            point="0.0000,0.0000",
-            payload={
+        readings.record(
+            readings.weather("0.0000,0.0000"),
+            {
                 "status": "attention",
                 "metrics": [
                     {"label": "Now", "value": "Clear"},
@@ -672,8 +666,9 @@ class GlanceRenderingTests(TestCase):
         self.assertIn("2 alerts", text(html))
 
     def test_weather_leads_with_the_temperature_and_names_what_is_coming(self):
-        WeatherObservation.objects.filter(point="0.0000,0.0000").update(
-            payload={
+        readings.record(
+            readings.weather("0.0000,0.0000"),
+            {
                 "summary": "Example Town, EX",
                 "metrics": [
                     {"label": "Now", "value": "Mostly Cloudy"},
@@ -686,7 +681,7 @@ class GlanceRenderingTests(TestCase):
                     {"time": "4 PM", "temperature": "84°", "forecast": "Showers", "precipitation": "60%"},
                     {"time": "5 PM", "temperature": "82°", "forecast": "Cloudy", "precipitation": "0%"},
                 ],
-            }
+            },
         )
         weather = next(p for p in dashboard_panels() if p["id"] == "weather")
         html = render_to_string("core/_dashboard_glance.html", {"dashboard_panels": [weather]})
@@ -700,9 +695,7 @@ class GlanceRenderingTests(TestCase):
         self.assertNotIn("0%", hours["Cloudy"])
 
     def test_a_zero_alert_count_is_dropped_by_the_spec_alert_metric(self):
-        WeatherObservation.objects.filter(point="0.0000,0.0000").update(
-            payload={"metrics": [{"label": "Alerts", "value": "0"}]}
-        )
+        readings.record(readings.weather("0.0000,0.0000"), {"metrics": [{"label": "Alerts", "value": "0"}]})
         weather = next(p for p in dashboard_panels() if p["id"] == "weather")
 
         self.assertEqual(weather["readings"], ())

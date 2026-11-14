@@ -75,6 +75,19 @@ def browser_tasks() -> dict[str, dict]:
     return {name: task for name, task in mise_tasks().items() if name.startswith("browser:")}
 
 
+def engine(task: dict) -> str:
+    """The engine a browser task draws in, as `BrowserGate` reads it from the environment."""
+
+    return dict(entry.split("=", 1) for entry in task["env"] if "=" in entry).get("HQ_BROWSER_ENGINE", "webkit")
+
+
+def enclosing(label: str) -> list[str]:
+    """``label`` and every dotted label that runs it: its class, its module, its package."""
+
+    parts = label.split(".")
+    return [".".join(parts[:end]) for end in range(len(parts), 0, -1)]
+
+
 def browser_labels() -> set[str]:
     """Every word the ``browser:*`` tasks run."""
 
@@ -92,20 +105,21 @@ class BrowserGateTaskTests(SimpleTestCase):
         self.assertEqual(
             unnamed, [], "no browser:* task runs these: name each in one leg's vars.classes in mise-tasks/browser.toml"
         )
-        # Once per engine: a WebKit leg names its classes, and a leg in
-        # another engine runs a WebKit leg rather than naming any.
+        # WebKit judges: one WebKit leg names each class, and a leg in another
+        # engine runs only what a WebKit leg runs too.
+        webkit = [task for task in browser_tasks().values() if engine(task) == "webkit"]
         named = Counter(
-            name
-            for task in browser_tasks().values()
-            for name, module in classes.items()
-            if {name, module} & set(body(task).split())
+            name for task in webkit for name, module in classes.items() if {name, module} & set(body(task).split())
         )
-        self.assertEqual(sorted(name for name, count in named.items() if count > 1), [], "two browser tasks run these")
-        run = Counter(
-            word for name, task in browser_tasks().items() if "chromium" in name for word in body(task).split()
-        )
-        legs = [name for name in browser_tasks() if name.startswith("browser:layout-") and "chromium" not in name]
-        self.assertEqual({leg: run[leg] for leg in legs}, dict.fromkeys(legs, 1), "Chromium runs each layout leg once")
+        self.assertEqual(sorted(name for name, count in named.items() if count > 1), [], "two WebKit legs run these")
+        judged = {word for task in webkit for word in body(task).split()}
+        for name, task in browser_tasks().items():
+            if engine(task) != "webkit":
+                with self.subTest(task=name):
+                    labels = [word for word in body(task).split() if word.startswith("hq.")]
+                    self.assertTrue(labels, "a leg in another engine names the tests it runs")
+                    alone = [label for label in labels if not set(enclosing(label)) & judged]
+                    self.assertEqual(alone, [], "no WebKit leg runs these")
 
     def test_a_browser_gate_s_template_restates_django_s_env(self):
         """A template extends none, so the browser gate template carries the

@@ -820,7 +820,7 @@ It checks what a reader would lose:
   is so a page's policy never meets it
   (`hq/platform/core/tests/browser/probes/axe.py`, whose `LEFT_OUT` names each
   rule it does not hold, and why);
-- in the Chromium legs, each page's Cumulative Layout Shift stays within 0.1.
+- in the Chromium leg, each page's Cumulative Layout Shift stays within 0.1.
 
 `setup:lint-tools` installs the axe-core `tools/lint/package.json` pins before
 every browser gate. Taste (evenness, placement, row height) is written in
@@ -879,9 +879,11 @@ the day it exists (`dev:look derived/<app>/<name>` shows one).
 The example estate (`hq/platform/core/example_estate/`, the homelab the demo
 and `manage.py seed showcase` show) is read by
 `hq.platform.core.tests.browser.estate` on every page the navigation declares.
-It is read with script on and deferred parts loaded, at 402, 820, 1360 and
-1680 pixels and at `WIDE_TABLES`, in the light palette and the dark. A finding
-names its check, page, width and theme.
+It is read with script on and deferred parts loaded, at 402, 820 and 1360
+pixels and, on a page that draws a table, at `WIDE_TABLES`, in the light
+palette at each and the dark at 402 and 1360 (in
+Chromium at 402 and 1360 only). A finding names its check, page, width and
+theme.
 
 Its tables are also read at every shape of the layout, in a leg of their own
 (`browser:table-fit`, `hq.platform.core.tests.browser.table_fit`): from 320
@@ -911,12 +913,15 @@ host name outside the reserved and shared ranges it names.
 | both estates in another engine | `HQ_BROWSER_ENGINE=chromium` or `firefox` |
 | the legs named | `mise run browser <leg>...` (`layout-1`, `demo`) |
 | one browser test | `mise run test <label>`, once `mise run setup:browser webkit` has installed the engine |
-| a failure only CI's Linux shows | `mise run browser --linux` with a leg (`layout-chromium-1`) or test labels |
+| a failure only CI's Linux shows | `mise run browser --linux` with a leg (`chromium`) or test labels |
 
 CI runs the layout gate in two legs side by side (`browser:layout-1`,
-`browser:layout-2`) and runs them and the demo in Chromium as well
-(`browser:layout-chromium-1`, `-2`, `browser:demo-chromium`), which `mise run
-browser` leaves to CI.
+`browser:layout-2`). WebKit judges every leg, since HQ is read in Safari.
+Chromium is a second opinion in one leg, `browser:chromium`, which `mise run
+browser` leaves to CI: the catalog of shared parts, the example estate at a
+phone and a laptop, the planted proofs of every probe, and the layout shifts
+only Chromium records. Every test it runs is also run by a WebKit leg
+(`test_browser_gate_tasks`).
 
 `browser --linux` draws in Chromium unless `--engine` names another. It runs
 on this checkout inside the Playwright image `ci.yml` gives the browser job, as

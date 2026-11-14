@@ -1,23 +1,14 @@
-"""What HQ's policy reports back from the navigation's pages: nothing. And the
-WebKit defect that holds its style attributes open, watched until it is fixed."""
+"""The WebKit defect that holds HQ's policy open to style attributes, watched
+until it is fixed."""
 
 from typing import override
-from urllib.parse import urlsplit
 
 from django.conf import settings
 from django.utils.csp import CSP
 
-from hq.platform.core.tests.browser.estate import ExampleEstateGate
+from hq.platform.core.tests.browser.estate import is_report
 from hq.platform.core.tests.browser.gate import BrowserGate, sent
 from hq.platform.core.tests.browser.serving import ORIGIN
-from hq.platform.core.tests.browser.widths import WIDE
-
-# A page the policy refuses a style element on, answered as HQ answers one,
-# opened last: a browser sends a report once it gets to it, so the report this
-# page draws is what the test waits for, and it comes after any the pages
-# before it drew.
-_REFUSED = "/example-refused/"
-_STYLED = '<!doctype html><html><head><meta charset="utf-8"><style>p { color: red }</style></head><body><p>Example</p></body></html>'
 
 _SELECT = "/example-select/"
 _A_SELECT = (
@@ -25,32 +16,6 @@ _A_SELECT = (
     '<select aria-label="Example"><option>Example</option></select></body></html>'
 )
 _HELD_OPEN = f"style-src-attr {CSP.UNSAFE_INLINE}"
-
-
-def is_report(path):
-    return lambda request: urlsplit(request.url).path == path
-
-
-class PolicyReportBrowserTests(ExampleEstateGate):
-    """Every navigation page of the example estate, under the headers HQ sent
-    it, sends ``/csp-report/`` nothing."""
-
-    def test_no_navigation_page_sends_a_report(self):
-        self.assertGreater(len(self.navigation), 10, "the navigation led almost nowhere")
-        for path in self.navigation:
-            self.visit(path, WIDE)
-        self.served = {**self.served, _REFUSED: sent(_STYLED, {"Content-Type": "text/html", **self.policy})}
-        with self.page.expect_request_finished(is_report(settings.SEVERINO_CSP_REPORT_PATH)):
-            self.page.goto(f"{ORIGIN}{_REFUSED}", wait_until="load")
-        # A round trip, so the page's word of the refusal has reached the gate too.
-        self.settle()
-        heard = self.refusals_so_far()
-        report = f"{_REFUSED}: {settings.SEVERINO_CSP_REPORT_PATH} was sent"
-        self.assertTrue(
-            [line for line in heard if line.startswith(report)],
-            f"the refused page's report never reached {settings.SEVERINO_CSP_REPORT_PATH}: {heard}",
-        )
-        self.assertEqual([line for line in heard if not line.startswith(_REFUSED)], [])
 
 
 class WebKitSelectCanaryTests(BrowserGate):

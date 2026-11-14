@@ -17,7 +17,7 @@ from ..entity_links import entity_link, record_name
 from ..inventory import confirm_observed
 from ..projection import projection_scope
 from ..resource_context import record_status
-from ..resource_operations import changes, operation_summary, resource_history
+from ..resource_operations import changes, operation_summary, resource_history, serialize_operation
 from .inventory_records import kind_read
 from .markup import all_elements, select, texts
 
@@ -377,3 +377,12 @@ class HistoryShowsChangesTests(TestCase):
                 f"example-controller, {door_words('controller')}",
             ],
         )
+
+    def test_an_operations_answer_says_who_asked_as_its_audit_row_does(self):
+        operation = self.ran("Unchanged.", by="mcp")
+        OperationRequest.objects.filter(pk=operation.pk).update(requested_actor="a-copy", requested_interface="web")
+        operation.refresh_from_db()
+
+        item = serialize_operation(operation)
+
+        self.assertEqual((item["requested_actor"], item["requested_interface"]), ("operator", "mcp"))

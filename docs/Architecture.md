@@ -94,7 +94,10 @@ and storage are stored as the machine's telemetry reading
 machine page, the resource API and the dashboard summarize one timestamped
 fact. The operator picks the machine with "Show on dashboard" on its edit form;
 the choice lives in `DashboardConfiguration`. Weather is the configured point's
-`WeatherObservation`, edited in the dashboard's Settings popover.
+reading (`weather:<point>`), the point edited in the dashboard's Settings popover.
+Every value HQ reads from outside is an `UpstreamReading` under a key that
+`readings.py` names, and `test_readings.py` fails a model that keeps one of
+its own.
 
 `GET /dashboard/glance/` only reads. A refresh is a CSRF-protected POST to the
 same address:

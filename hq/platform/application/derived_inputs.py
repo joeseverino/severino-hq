@@ -25,7 +25,6 @@ ESTATE_READS: tuple[str, ...] = (
     "control_plane.ApprovalRequest",
     "control_plane.ReadRequest",
     "control_plane.CertificateMaterial",
-    "control_plane.AddressReading",
     "control_plane.CapabilityRule",
     "control_plane.RefusedReport",
     # The adopted playbooks, which offer themselves as a finding's remedy.

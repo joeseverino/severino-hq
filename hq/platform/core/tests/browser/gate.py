@@ -993,6 +993,11 @@ class BrowserGate(SimpleTestCase):
         self.page.emulate_media(color_scheme=scheme)
         self.page.evaluate(FINISH_TRANSITIONS)
 
+    def draws_a_table(self):
+        """Whether the page holds a table, shown or not at this width."""
+
+        return self.page.locator("table").count() > 0
+
     def palette(self):
         """What depends on the palette: text, and the edges of fields and
         buttons, against what they sit on."""
