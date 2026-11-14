@@ -95,7 +95,7 @@ What it is read with is how HQ knows: the relationships card's last line.
 {% endcomment %}
 <div class="section-flow">
 {% include "partials/_relationships.html" %}
-{% referenced_by "zone" zone.zone cards=True %}
+{% referenced_by "zone" zone.zone %}
 </div>
 {% if read_with and not relationships %}
   <p class="muted relation-source">Read with {% for link in read_with %}{% entity link mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}</p>

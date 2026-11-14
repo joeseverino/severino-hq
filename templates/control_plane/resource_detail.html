@@ -241,7 +241,7 @@ certificate, so the relation reads from both ends.
     {% endsection %}
   {% endif %}
 {% include "partials/_relationships.html" %}
-{% referenced_by resource.kind resource.key cards=True %}
+{% referenced_by resource.kind resource.key %}
 </div>
 
 {% section "Raw data" fold=True %}

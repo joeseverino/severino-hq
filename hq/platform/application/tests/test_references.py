@@ -636,7 +636,7 @@ class PageTests(TestCase):
 
         request = RequestFactory().get("/")
         request.user = self.user
-        drawn = Template('{% referenced_by "machine" "lab-1" cards=True %}').render(Context({"request": request}))
+        drawn = Template('{% referenced_by "machine" "lab-1" %}').render(Context({"request": request}))
 
         self.assertIn("Assets 1", texts(drawn, "h2"))
         self.assertIn(self.asset.get_absolute_url(), hrefs(drawn))

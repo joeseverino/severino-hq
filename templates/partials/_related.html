@@ -3,7 +3,7 @@ What a thing is related to, one section per group, for a page's `.section-flow`:
 the one shape every page draws its related records in.
 
   {% include "partials/_related.html" with groups=related %}
-  {% referenced_by "machine" machine.name cards=True %}
+  {% referenced_by "machine" machine.name %}
 
 `groups` are application.references.Mentions (`related(...)` drops the empty
 ones): a heading and its items, a link and a few words beside it. Nothing

@@ -231,7 +231,7 @@ it relates comes last, as on the machine page.
 <div class="section-flow">
 {% include "partials/_page_sections.html" with spans_row=True %}
 {% include "partials/_page_sections.html" with spans_row=False %}
-{% referenced_by "service" service.hostname cards=True %}
+{% referenced_by "service" service.hostname %}
 {% include "partials/_relationships.html" %}
 </div>
 

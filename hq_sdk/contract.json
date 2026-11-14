@@ -3486,8 +3486,7 @@
         "classes": [],
         "parameters": [
           "thing",
-          "identity=",
-          "cards="
+          "identity="
         ],
         "parts": []
       },

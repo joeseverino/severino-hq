@@ -422,14 +422,13 @@ def reference(context, row, field):
 
 
 @register.inclusion_tag("partials/_related.html", takes_context=True)
-def referenced_by(context, thing, identity="", cards=True):
+def referenced_by(context, thing, identity=""):
     """Everything that names a thing, for that thing's page: a card per kind
     of reference, as every related list is drawn (``partials/_related.html``).
 
     ``{% referenced_by vehicle %}`` for a row of a model that can be referred
     to; ``{% referenced_by "machine" machine.name %}`` for a kind and what its
-    page is addressed by. ``cards`` has one value left, the one extensions
-    still pass. One statement, whatever names it.
+    page is addressed by. One statement, whatever names it.
     """
 
     principal = _viewer(context)
