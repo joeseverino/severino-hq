@@ -92,7 +92,7 @@ class NamesTests(TestCase):
         worst = {"label": "10.9.9.9 does not answer", "status": "serious"}
 
         def about(url, _principal):
-            return (worst,) if "site-dns" in url else ()
+            return [worst] if "site-dns" in url else []
 
         with mock.patch("hq.platform.application.machine_context.problems_about", side_effect=about):
             row = row_for(a_machine("site.test"), "site.test")

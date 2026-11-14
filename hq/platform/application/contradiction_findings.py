@@ -429,6 +429,7 @@ RULES: tuple[FindingRule, ...] = (
         carried("served-certificate-not-held"),
         operator_action="Install HQ's certificate again, or point the site at it.",
         no_help_reason="HQ cannot tell why the site is serving another certificate.",
+        bars={"serious": "a site serves a certificate other than the one HQ holds for it"},
     ),
     FindingRule(
         "public-name-served-by-nothing",
@@ -437,6 +438,7 @@ RULES: tuple[FindingRule, ...] = (
         carried("public-name-served-by-nothing"),
         operator_action="Remove the public record, or add the proxy route that should serve the name.",
         no_help_reason="HQ cannot tell whether the name should still exist.",
+        bars={"attention": "a public name has no proxy route behind it"},
     ),
     FindingRule(
         "route-to-stopped-container",
@@ -445,6 +447,7 @@ RULES: tuple[FindingRule, ...] = (
         carried("route-to-stopped-container"),
         operator_action="Start the container, or point the proxy route at what replaced it.",
         no_help_reason="HQ cannot start containers.",
+        bars={"serious": "a proxy route leads to a container that is not running"},
     ),
     FindingRule(
         "gate-guards-nothing",
@@ -453,6 +456,7 @@ RULES: tuple[FindingRule, ...] = (
         carried("gate-guards-nothing"),
         operator_action="Remove the name from the rule.",
         no_help_reason="HQ cannot edit Access applications or access lists.",
+        bars={"neutral": "an access rule names a name that no longer exists"},
     ),
     FindingRule(
         "split-horizon-disagrees",
@@ -461,6 +465,7 @@ RULES: tuple[FindingRule, ...] = (
         carried("split-horizon-disagrees"),
         operator_action="Point the internal and public records at the same machine.",
         no_help_reason="HQ cannot tell which one is right.",
+        bars={"attention": "a name's internal and public records point at different machines"},
     ),
     FindingRule(
         "published-port-unfronted",
@@ -469,6 +474,7 @@ RULES: tuple[FindingRule, ...] = (
         carried("published-port-unfronted"),
         operator_action="Bind the published ports to 127.0.0.1, or put a proxy route in front of them.",
         no_help_reason=CANNOT_EDIT_COMPOSE,
+        bars={"serious": "a container publishes a port to the internet with no proxy in front"},
     ),
     FindingRule(
         "service-wiring-incomplete",
@@ -477,5 +483,6 @@ RULES: tuple[FindingRule, ...] = (
         _wiring_incomplete,
         operator_action="Change the service's records on its page so they agree.",
         no_help_reason="HQ cannot tell which of the records is meant.",
+        bars={"attention": "a service's records disagree about how it is reached"},
     ),
 )

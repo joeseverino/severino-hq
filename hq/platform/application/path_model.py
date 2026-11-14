@@ -117,7 +117,7 @@ class Certificate:
         return f"{text}, expires {self.expiry}" if self.expiry else text
 
 
-# What each kind of hop looks like: a name in partials/_icon.html.
+# What each kind of hop looks like: a symbol of static/img/icons.svg.
 _HOP_ICONS = {
     "device": "laptop",
     "dns": "globe",

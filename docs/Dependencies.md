@@ -8,7 +8,7 @@ Where every pin lives, and how to move one.
 | :--- | :--- | :--- |
 | Tools: Go, uv, CodeQL, Scorecard and the rest | [`mise.toml`](../mise.toml), checksums in [`mise.lock`](../mise.lock). The images install Go and uv from the same lock, with mise copied from its image at `min_version`, by digest | `lint:toolchain`; CodeQL also `lint:codeql-bundle`, the bundle the pinned action runs |
 | Python packages | `pyproject.toml`, resolved with hashes in `uv.lock` | `lint:lockfile`, `lint:audit` |
-| npm tools: Redocly, the browser and stylesheet lints; browser-compat-data apart, for `audit:bcd` alone | `tools/lint/package.json` and `tools/lint/bcd/package.json`, exact, each resolved with hashes in its `package-lock.json` | `npm ci`, which refuses a lock its `package.json` has moved past; `lint:audit` |
+| npm tools: Redocly, the browser and stylesheet lints, and browser-compat-data, which the stylesheet lint's browser floor and `audit:bcd` read | `tools/lint/package.json`, exact, resolved with hashes in its `package-lock.json` | `npm ci`, which refuses a lock its `package.json` has moved past; `lint:audit` |
 | Go and its modules | the release `controller/go.mod`'s `toolchain` line names, which `mise.toml` reads; modules in `go.sum` | `lint:toolchain`, `lint:controller`, `test:controller`, `lint:audit`; `MiseConfigTravelsTests`, every image that copies `mise.toml` copies `go.mod` beside it |
 | The Python base image, every stage's start | `Dockerfile` and `composition/Dockerfile`, by digest | `image:build`; `lint:toolchain` refuses any other image |
 | GitHub Actions | each workflow, by commit with its version beside it | `ActionPinTests` |

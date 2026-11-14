@@ -1,11 +1,10 @@
 """An MCP write is as safe to retry as an API write: it carries a key, and a repeat acts once."""
 
-from unittest import mock
-
 from django.test import TestCase
 
 from hq.domains.projects.models import Project
 from hq.platform.application.capabilities import CapabilitySpec
+from hq.platform.application.integration_testing import commands_registered
 from hq.platform.application.security import Capability, Principal
 from hq_sdk.capabilities import StrictCommand
 
@@ -60,9 +59,7 @@ class RetryKeyTests(TestCase):
             StrictCommand,
             lambda _command, **_bound: ran.append(True) or {"ok": True},
         )
-        self.enterContext(
-            mock.patch("hq.platform.application.capabilities.capability_registry", return_value={spec.name: spec})
-        )
+        self.enterContext(commands_registered({spec.name: spec}))
 
         result = services.execute_capability(spec.name, {})
 

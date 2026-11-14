@@ -777,6 +777,7 @@ RULES: tuple[FindingRule, ...] = (
             "If it stays, fix the side that departs from the contract."
         ),
         no_help_reason="HQ cannot change what the controller sends.",
+        bars={"serious": "the controller's report breaks the contract, so nothing new is read"},
     ),
     FindingRule(
         "connections-lost",
@@ -788,6 +789,7 @@ RULES: tuple[FindingRule, ...] = (
             f"run the refresh job, then press {CONTROLLER_REFRESH.words()}."
         ),
         no_help_reason="HQ cannot read the vault.",
+        bars={"serious": "the controller reports no connections at all"},
     ),
     FindingRule(
         "work-that-keeps-failing",
@@ -796,6 +798,7 @@ RULES: tuple[FindingRule, ...] = (
         _work_that_keeps_failing,
         operator_action=("Read the controller's log for this connection and fix what it names."),
         no_help_reason="HQ cannot read the controller's log.",
+        bars={"attention": "work sent through a connection that answers keeps failing"},
     ),
     FindingRule(
         "controller-sweep-stale",
@@ -805,6 +808,7 @@ RULES: tuple[FindingRule, ...] = (
         operator_action=f"On its machine, check the controller is running, then press {CONTROLLER_REFRESH.words('all')}.",
         no_help_reason="HQ cannot start the controller.",
         subsumes=("kind-never-swept",),
+        bars={"serious": "one controller is behind on two or more types of record"},
     ),
     FindingRule(
         "environment-read-empty",
@@ -816,6 +820,7 @@ RULES: tuple[FindingRule, ...] = (
             f"then press {CHECK_AGAIN}."
         ),
         no_help_reason="HQ restarts containers through Portainer, which cannot reach Docker there now.",
+        bars={"serious": "a Docker environment that had containers lists none"},
     ),
     FindingRule(
         "skipped-by-a-sweep",
@@ -825,6 +830,7 @@ RULES: tuple[FindingRule, ...] = (
         operator_action=("If it is gone, remove it from HQ. If it only runs sometimes, mark it so."),
         no_help_reason="HQ cannot tell whether it was removed on purpose.",
         subsumes=("resource-unchecked",),
+        bars={"serious": "the last read found its siblings but not it"},
     ),
     FindingRule(
         "kind-never-swept",
@@ -836,6 +842,7 @@ RULES: tuple[FindingRule, ...] = (
         # When the sweep itself is the fault, every record of the kind looks
         # skipped. Saying it once about the kind beats saying it about each.
         subsumes=("skipped-by-a-sweep", "never-observed", "environment-read-empty", "resource-unchecked"),
+        bars={"serious": "a type of record has gone unread past the interval HQ reads it at"},
     ),
     FindingRule(
         "reporting-a-fault",
@@ -844,6 +851,10 @@ RULES: tuple[FindingRule, ...] = (
         _reporting_a_fault,
         operator_action="Open it, read the error, fix it, then apply again.",
         no_help_reason="HQ cannot tell what to change from the error alone.",
+        bars={
+            "serious": "the service reports a serious error",
+            "attention": "the service reports an error",
+        },
     ),
     FindingRule(
         "reconciled-but-still-wrong",
@@ -852,6 +863,7 @@ RULES: tuple[FindingRule, ...] = (
         _reconciled_but_still_wrong,
         operator_action=("Change HQ's config to something the service accepts, then apply again."),
         no_help_reason="HQ cannot tell which setting was refused.",
+        bars={"serious": "HQ applied its config and the service still differs"},
     ),
     FindingRule(
         "weakly-verified",
@@ -861,6 +873,7 @@ RULES: tuple[FindingRule, ...] = (
         operator_action="Apply HQ's config, so HQ sets them and reads them back.",
         no_help_reason="HQ cannot read this setting from the service.",
         subsumes=("resource-unchecked",),
+        bars={"attention": "HQ cannot read back a setting it holds"},
     ),
     FindingRule(
         "never-observed",
@@ -870,6 +883,7 @@ RULES: tuple[FindingRule, ...] = (
         operator_action=("Check it exists on the service under this exact name, or remove it from HQ."),
         no_help_reason="HQ cannot tell whether it exists under another name.",
         subsumes=("resource-unchecked",),
+        bars={"attention": "a record added to HQ has never been found on its service"},
     ),
     FindingRule(
         "resource-unchecked",
@@ -878,5 +892,6 @@ RULES: tuple[FindingRule, ...] = (
         _unchecked,
         operator_action="Apply HQ's config to it, so HQ reads it back.",
         no_help_reason="HQ does not change this type. Change it at its source.",
+        bars={"attention": "HQ has no way to check a record against its service"},
     ),
 )

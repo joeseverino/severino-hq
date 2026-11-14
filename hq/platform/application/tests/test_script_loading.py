@@ -1,4 +1,4 @@
-"""Every script carries the response's nonce, and waits for the page, except the two that must answer before it is drawn."""
+"""Every script carries the response's nonce, and waits for the page, except the one that must answer before it is drawn."""
 
 import re
 from pathlib import Path
@@ -18,11 +18,14 @@ NONCE = "{% csp_nonce_attr %}"
 # `pagereveal` fires before the new page's first frame, which is before a
 # deferred script runs, so its listener loads in the head without `defer`.
 TRANSITION = "js/transitions.js"
-# A table too wide for its region lets columns go in the frame it is laid out,
-# which only a script watching each region from the moment it is parsed sees:
-# CSS has no query for "this content overflows".
+BEFORE_DRAWING = (TRANSITION,)
+# A table is laid out by the stylesheet alone (tables.css), so no script
+# measures one, watches one resize or writes a style onto it.
 TABLES = "js/tables.js"
-BEFORE_DRAWING = (TRANSITION, TABLES)
+MEASURES = re.compile(
+    r"getBoundingClientRect|getClientRects|offset(Width|Height)|client(Width|Height)|scroll(Width|Height)"
+    r"|ResizeObserver|\.style\b|setProperty"
+)
 # A script only one page uses loads on that page, keyed by the attribute that
 # marks the element it binds, so a page drawing that element without it is
 # found here rather than as a control that does nothing.
@@ -32,7 +35,7 @@ PAGE_SCRIPTS = {"js/topology.js": "data-topology"}
 @tag("source", "tree")
 @reads("**/*.py", "**/templates/**", "static/js/**")
 class ScriptLoadingTests(SimpleTestCase):
-    def test_every_script_is_deferred_but_the_two_answering_before_the_first_frame(self):
+    def test_every_script_is_deferred_but_the_one_answering_before_the_first_frame(self):
         blocking = [
             f"{name}: {tag_}"
             for name, path in template_files()
@@ -53,7 +56,7 @@ class ScriptLoadingTests(SimpleTestCase):
         ]
         self.assertEqual(unnonced, [])
 
-    def test_the_two_load_in_the_head_without_waiting(self):
+    def test_the_one_loads_in_the_head_without_waiting(self):
         base = (ROOT / "templates" / "base.html").read_text(encoding="utf-8")
         head = base[: base.index("</head>")]
         for name in BEFORE_DRAWING:
@@ -69,13 +72,9 @@ class ScriptLoadingTests(SimpleTestCase):
         ]
         self.assertEqual(listeners, [Path(TRANSITION).name])
 
-    def test_a_table_is_fitted_only_where_it_loads_in_time(self):
-        fitters = [
-            path.name
-            for path in source_files(ROOT / "static" / "js", "*.js")
-            if "data-dropped" in path.read_text(encoding="utf-8")
-        ]
-        self.assertEqual(fitters, [Path(TABLES).name])
+    def test_the_table_script_lays_nothing_out(self):
+        script = (ROOT / "static" / TABLES).read_text(encoding="utf-8")
+        self.assertEqual([found.group() for found in MEASURES.finditer(script)], [])
 
     def test_a_page_script_loads_wherever_its_element_is_drawn(self):
         base = (ROOT / "templates" / "base.html").read_text(encoding="utf-8")

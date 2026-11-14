@@ -174,7 +174,8 @@ class EarlyRefusalTests(SimpleTestCase):
             except SystemExit as exited:
                 self.assertEqual(exited.code, 2)
                 return err.getvalue()
-        self.assertEqual(out.getvalue(), "", "a page left out is the run's to name")
+        # All it says is the tokens the run takes: a page left out is the run's to name.
+        self.assertRegex(out.getvalue(), r"\A\d+\n\Z")
         return ""
 
     def test_a_page_that_is_none_is_refused_naming_the_nearest_route(self):

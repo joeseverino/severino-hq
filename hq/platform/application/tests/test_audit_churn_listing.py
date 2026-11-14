@@ -1,6 +1,7 @@
 """audit:churn counts each tracked file's commits, leaving out what .gitattributes marks generated or vendored."""
 
 import os
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -71,3 +72,25 @@ class AuditChurnListingTests(SimpleTestCase):
         *listed, closing = run.stdout.splitlines()
         self.assertEqual(listed, ["3\ta.py", "1\t.gitattributes", "1\tb.py"])
         self.assertRegex(closing, r"^3 files")
+
+
+# A sort command in a shell line, never jq's sort_by or Python's sorted.
+SORT = re.compile(r"(?<![\w.=-])(?:LC_ALL=C )?sort(?= |$)")
+
+
+@tag("source")
+class AuditListingsSortByBytesTests(SimpleTestCase):
+    """An audit's listing is compared by a diff, so its order is the same under every locale."""
+
+    def test_every_sort_an_audit_script_runs_is_by_bytes(self):
+        scripts = [
+            path for path in (ROOT / "mise-tasks" / "audit").iterdir() if path.read_text().startswith("#!/bin/sh")
+        ]
+        self.assertTrue(scripts)
+        for script in scripts:
+            for number, line in enumerate(script.read_text().splitlines(), 1):
+                if line.lstrip().startswith("#"):
+                    continue
+                for found in SORT.finditer(line):
+                    with self.subTest(script=script.name, line=number):
+                        self.assertTrue(found.group().startswith("LC_ALL=C "), line)

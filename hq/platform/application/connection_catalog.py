@@ -33,7 +33,7 @@ from .contracts import SCOPE_NAME, endpoint_has_private_parts
 from .derivations import passed, present
 from .freshness import last_read
 from .integration_validation import safe_connection_url
-from .integrations import integration_graph
+from .integrations import held_graph
 from .moments import ago
 from .projection import read_once
 from .security import Principal
@@ -407,9 +407,7 @@ def connection_catalog(*, principal: Principal) -> tuple[ConnectionGroup, ...]:
 def _permitted(principal: Principal) -> tuple[ConnectionSpec, ...]:
     """The families ``principal`` may read, whose providers alone may run for it."""
 
-    return tuple(
-        spec for spec in integration_graph().connections.values() if principal.permits(*spec.required_capabilities)
-    )
+    return tuple(spec for spec in held_graph().connections.values() if principal.permits(*spec.required_capabilities))
 
 
 def _connection_instances(spec: ConnectionSpec) -> tuple[ConnectionInstance, ...]:

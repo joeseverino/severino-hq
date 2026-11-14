@@ -44,6 +44,8 @@ _MOST_PAGES = 800
 _HREF = re.compile(r'(?:href|data-[\w-]+-url)="(/[^"#?]*)')
 # An image a page draws from one of HQ's own addresses, not a static file.
 _PICTURE = re.compile(r'(<img\b[^>]*\ssrc=")(/(?!static/)[^"#?]*/)(")')
+# A document of HQ's own a page frames (the Design page's gallery).
+_FRAMED = re.compile(r'<iframe\b[^>]*\ssrc="(/(?!static/)[^"#?]*/)"')
 # Inserted right after the charset tag, before HQ's own scripts.
 _INJECT = '<script src="/static/js/demo-theme.js"></script><script defer src="/static/js/demo.js"></script>'
 # A static page has no response to draw a nonce for: one saved into the HTML is
@@ -422,6 +424,8 @@ class DemoBuild(TestCase):
             offered.read(path, fragment)
         offered.read(path, page)
         page = _PICTURE.sub(lambda found: self._save_picture(client, found), page)
+        for framed in _FRAMED.findall(page):
+            self._save_framed(client, unescape(framed))
         _write(path, _inject(page, response))
         links.extend(unescape(href) for href in _HREF.findall(page))
         return links
@@ -438,6 +442,16 @@ class DemoBuild(TestCase):
         target = address.rstrip("/") + (mimetypes.guess_extension(kind) or "")
         _write(target, b"".join(response.streaming_content) if response.streaming else response.content, page=False)
         return f"{found.group(1)}{target}{found.group(3)}"
+
+    def _save_framed(self, client: Client, address: str) -> None:
+        """A document a page frames, saved under its policy as HQ sends it and
+        nothing of the demo's: it runs no script, and its links are its own
+        examples, which lead nowhere in HQ either."""
+
+        response = client.get(address)
+        if response.status_code == 200 and _is_page(response):
+            page = response.content.decode()
+            _write(address, page.replace(_CHARSET, _CHARSET + _meta_policy(response), 1).encode())
 
     def _save_fragments(self, client: Client, address: str, page: str, fragments: dict[str, str]) -> list[str]:
         """Save each partial-load response of the page at ``address``, and the

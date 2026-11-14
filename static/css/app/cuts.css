@@ -2,11 +2,11 @@
    (`lint:css` refuses a cut in any other sheet). A value is cut one of two
    ways: on its line with an ellipsis (`text-overflow: ellipsis` in a box that
    clips), or at its last line by a clamp (`line-clamp`, which draws its own).
-   Either way the reader is shown there is more, and the value reads whole
-   where its row opens or, outside a narrow box, on hover (tables.js titles a
-   cut it finds). Every other text wraps. Linked straight after base.css, so a
-   variant of a value at another size, written beside the rule it varies in
-   its own sheet, still comes after it; an open row's lift is `!important`. */
+   Either way the reader is shown there is more, and a table's cell reads
+   whole on hover (its title, table_cells) and where its row opens. Every
+   other text wraps. Linked straight after base.css, so a variant of a value
+   at another size, written beside the rule it varies in its own sheet, still
+   comes after it. */
 @layer base {
 .search-label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 }
@@ -16,10 +16,6 @@
 /* A row's controls beneath its words in a narrow box (tables.css) keep their
    labels on one line: one longer than the line is cut at its button's edge. */
 .data-table > tbody > tr > [data-beneath] > * { overflow: hidden; }
-/* The heading of their column keeps its place on the row's first line at no width (tables.css), its words there for a screen reader and cut away by its own edge, which is none. */
-@container style(--box: narrow) {
-  .data-table:has(> * > tr > [data-beneath]) > thead > tr:has(> :nth-child(2)) > [data-beneath] { flex-basis: 0; padding-inline: 0; contain: inline-size; overflow: hidden; white-space: nowrap; }
-}
 /* A head is one short line, and stays so: what one of its controls says is
    said over the head's reading line (ask.js, partials/_ask.html), in the room the words the
    server drew there keep, hidden and not removed, and cut to their width,
@@ -71,9 +67,8 @@
   min-height: 0;
   box-shadow: none;
   flex-flow: row-reverse wrap;
-  align-content: flex-start;
+  place-content: flex-start center;
   align-items: stretch;
-  justify-content: center;
   gap: 0 var(--space-3);
   height: var(--control-size);
   padding: 0 var(--space-5);
@@ -95,43 +90,83 @@
 /* What a row's status says in a word, after its mark, and light. */
 .menu-item-note { color: var(--muted); font-size: var(--text-2xs); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* A name or `.cell-line` in a cell takes two lines at most, breaking where it must so its column can narrow; a link of code is clamped by its code (tables.css), since clamped again it would count the strut's unseen lines. */
-.data-table td [data-entity]:not(:has(> code)),
-.data-table td .cell-line {
-  display: -webkit-inline-box;
-  max-width: 100%;
-  vertical-align: top;
-  -webkit-box-orient: vertical; overflow: hidden; -webkit-line-clamp: 2; line-clamp: 2;
+/* A closed row's cell is cut at its column by its kind (`data-kind`,
+   table_cells): a name or a sentence at its third line, an identifier at the
+   end of its line, each with its mark. The server says the whole value in the
+   cell's title, and the open row shows it whole: it lifts the clamp and
+   leaves the rest of these rules, which read only a closed row. Only a row
+   that can open (one holding its toggle) is cut, since nothing else shows
+   the value whole where no pointer hovers. A value broken anywhere is cut
+   rather than run past its cell.
+   The clamp weighs no more than the rule that lets a column go (tables.css,
+   linked after this sheet), so a cell its region let go stays undrawn. A
+   clamp counts the lines of its own text, so a cell holding a run of parts
+   (`line_list`), a list or a change of version, each laid out in lines of
+   its own, takes none, nor does one whose first line (`row-line`) clamps
+   its own words (below) or sets its name in a grid with its controls
+   (`name-line`), where a clamp counts no line, and a chip in a cut cell is one line, cut at its end. */
+@container style(--opens: 1) {
+.data-table > tbody > tr > :is([data-kind="name"], [data-kind="prose"]):where(:not(:has(.line-list, .change, ul, ol, .row-line, .name-line))) {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden;
+  /* A clamp stretched to its row's height would show the lines past it, and
+     so would its own padding, which it clips past: the space below its last
+     line is a margin. */
+  align-self: start; padding-block-end: 0; margin-block-end: var(--row-pad);
 }
-/* A `.cell-line` of one line (`lines=1`, value_tags.cell_line) is cut once, so its row stays as tall as its neighbors. */
-.data-table td .cell-line[data-lines="1"] { --cut-lines: 1; -webkit-line-clamp: 1; line-clamp: 1; }
-/* The row's own name tells it from the next, and names share prefixes, so it is never cut: it wraps at its hyphens and the names beside it give way. */
-.data-table td strong > [data-entity],
-.data-table td strong > .cell-line { display: inline; overflow: visible; -webkit-line-clamp: none; line-clamp: none; }
-.data-table td .name-line > strong > [data-entity] { min-width: 0; padding-inline-end: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* Any other one-token name, and a `.cell-line`, is cut inside a hyphenated part rather than broken there: the box that draws it (`.cut`, line_breaks._token, value_tags.cell_line) fills a grid track its strut sizes (figures.css), which asks for its whole length and holds out for none, down to `--cut-floor` (tables.css); a link or a line around the name is the grid, its token no box, and an external link's arrow is a column of its own. */
-.data-table td :is(
-  [data-entity]:not(strong > *, .row-gutter > *, .row-gutter > br + .muted > *):is(:has(> .token[data-sole] > .cut .whole), td .muted > :has(> .token[data-sole])),
-  .token[data-sole]:not([data-entity] *, .cell-line *, .row-gutter > br + .muted > *):is(:has(> .cut .whole), td .muted > *),
-  .cell-line:not(strong > *):has(> :is(.cut, .token[data-sole]))
-):not(code *, [data-cell~=name] *, [data-cell~=data] *) {
-  display: inline-grid; grid-template-columns: minmax(0, max-content); grid-auto-flow: column; grid-auto-columns: max-content;
-  min-width: var(--cut-floor); vertical-align: baseline;
-  & > .token[data-sole] { display: contents; }
-  & > .cut, & > .token[data-sole] > .cut {
-    grid-area: 1 / 1; display: -webkit-box; -webkit-box-orient: vertical;
-    /* It cuts what overruns its line, so nothing in it needs breaking where no seam is; Chromium would otherwise break a held part at an element's edge. */
-    overflow-wrap: normal; -webkit-line-clamp: var(--cut-lines); line-clamp: var(--cut-lines); overflow: hidden; text-overflow: ellipsis;
-  }
-  /* A part longer than the track is cut inside itself, so the name keeps the lines its seams give it rather than losing every part after the cut. */
-  & > .cut .whole, & > .token[data-sole] > .cut .whole { display: inline-block; max-width: 100%; white-space: nowrap; vertical-align: top; overflow: hidden; text-overflow: ellipsis; }
 }
-/* In a phrase a part is a box (`.part`, line_breaks._whole) in a track that asks for its whole length and holds out for none: it moves whole, is cut only where longer than its cell, and never widens the table; a word the phrase ends on after it (line_breaks._line) is a column of its own, never cut. An opened row (surfaces.css) and screen-reader text (cadence.css) make it text again. */
-.data-table td .token:not([data-sole]) > .whole:not([data-cell~=name] *, [data-cell~=prose] *, [data-cell~=data] *, code *, [data-entity] *, .cut *, .btn *, .table-clamp *, tr.is-expanded *, .visually-hidden *) {
-  display: inline-grid; grid-template-columns: minmax(0, max-content); grid-auto-flow: column; grid-auto-columns: max-content; vertical-align: top;
-  /* An engine may measure a part's max-content a fraction short of the text it draws (WebKit on Linux), so a float of no height asks the track for a pixel more and a part with room is never cut. */
-  & > .part::before { content: ""; float: inline-end; inline-size: 1px; }
-  & > .part { overflow: hidden; text-overflow: ellipsis; }
+/* A row that cannot open shows its words whole, breaking a value longer than its cell where it must, and holds what cannot wrap (a box wider than its cell) to its cell. */
+@container not style(--opens: 1) { .data-table > tbody > tr > :is([data-kind="name"], [data-kind="prose"], [data-kind="identifier"]) { overflow: clip; overflow-wrap: anywhere; } }
+/* In a narrow box (tables.css) a row's state and controls stand beneath its words, so the heading of their column, with no column of its own to head, is still read but drawn as nothing, its words kept on their line. */
+@container style(--whole: 0) {
+  .data-table > thead > tr > [data-beneath] { padding-inline: 0; contain: inline-size; overflow: clip; white-space: nowrap; }
+}
+/* A clamp counts no line inside a flex line, so the words on a row's first line (`row-line`) are clamped there. */
+@container style(--opens: 1) {
+.data-table > tbody > tr > :is([data-kind="name"], [data-kind="prose"]) .row-line > .cell-prose {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden;
+}
+}
+/* An open row lifts the clamp and keeps the box, so its cells ask their columns for what they asked closed and opening it moves no column. */
+.data-table > tbody > tr.is-expanded > :is([data-kind="name"], [data-kind="prose"]),
+.data-table > tbody > tr.is-expanded > :is([data-kind="name"], [data-kind="prose"]) .row-line > .cell-prose,
+.data-table > tbody > tr.is-expanded .table-clamp { -webkit-line-clamp: none; line-clamp: none; overflow: visible; }
+/* One box cuts a value, and what it holds is text: a part of a value (`|breakable`'s `.whole`, `.part`, `.cut`) is a box of its own nowhere inside a box that cuts, since an ellipsis stands in for text alone and a box crossing the cut is clipped with no mark. The boxes that cut are the cell's clamp, a cell or chip of one line, and a value standing alone (`.token[data-sole]`), which moves to the next line whole and is never broken while its row can open to show it. */
+.data-table > tbody > tr > :is([data-kind="name"], [data-kind="prose"], [data-kind="identifier"]) :is(.tag, .pill, code:not(.cell-whole), .token[data-sole]:not(code *)) { display: inline-block; max-inline-size: 100%; vertical-align: bottom; }
+.data-table > tbody > tr > :is([data-kind="name"], [data-kind="prose"], [data-kind="identifier"]) :is(.tag, .pill, code:not(.cell-whole), .token[data-sole]:not(code *)) :is(.token, .whole, .part) { display: inline; max-inline-size: none; }
+@container style(--opens: 1) { .data-table > tbody > tr:not(.is-expanded) > :is([data-kind="name"], [data-kind="prose"], [data-kind="identifier"]) :is(.token, .whole, .part):not([data-sole]) { display: inline; max-inline-size: none; } }
+/* In a sentence (`cell-prose`) a value is text of the words in every row, so the word set before it ("on" a machine) never stands alone above it. */
+.data-table > tbody > tr > :is([data-kind="name"], [data-kind="prose"]) .cell-prose :is(.token, .whole, .part):not([data-sole]) { display: inline; max-inline-size: none; }
+/* After words on its line (`data-in-line`, table_cells) a value is a word of that line, broken at its seams as the words around it wrap and cut by what cuts the line, so the word before it never stands alone above it. */
+.data-table > tbody > tr > :is([data-kind="name"], [data-kind="prose"], [data-kind="identifier"]) .token[data-sole][data-in-line]:not(.tag *, .pill *, code *) { display: inline; white-space: inherit; overflow: visible; }
+/* A row that is open, or cannot open, breaks a value standing alone or a chip where it must, inside its box. */
+.data-table > tbody > tr > :is([data-kind="name"], [data-kind="prose"], [data-kind="identifier"]) :is(code:not(.cell-whole), .token[data-sole]) { overflow-wrap: anywhere; }
+/* A part of a run (`line_list`) is whole on its line while the line holds it (the run wraps between its parts); one longer than the line takes the line and wraps at its words. */
+.data-table > tbody > tr > td .line-list > :not(.line-rest) { min-inline-size: 0; }
+.data-table > tbody > tr > td .line-list > :not(.line-rest) > .cell-part { white-space: normal; }
+/* A row's first line (`row-line`, a flex line of the title and its marks, or `name-line`, its name among its controls) lets its title give way, so a name longer than the cell is cut there rather than hold the line past it. */
+.data-table > tbody > tr > :is([data-kind="name"], [data-kind="prose"]) :is(.row-line, .name-line) > * { min-inline-size: 0; }
+/* A link on a line of its own there is text of the clamp's lines, its
+   target as tall as its line (figures.css) by its padding. */
+.data-table > tbody > tr > :is([data-kind="name"], [data-kind="prose"]) a:is(:has(+ br), br + *) {
+  display: inline; padding-block: calc((var(--target-min) - 1.25em) / 2);
+}
+/* Closed, an identifier's cell cuts each of its lines itself, so all it holds is text of those lines: a link there is hit only within the cell, which clips it. */
+@container style(--opens: 1) { .data-table > tbody > tr:not(.is-expanded) > [data-kind="identifier"] :is(a, .token, .token[data-sole], .whole, .part, .cut, code, .tag, .pill, br + *) { display: inline; white-space: inherit; max-inline-size: none; overflow: visible; } }
+/* A box a reader presses or tabs to is a target tall, as a link on a line of its own is (figures.css). */
+.data-table > tbody > tr > [data-kind="identifier"] > :is(a[href], [tabindex]) { line-height: var(--target-min); }
+/* Words that open a tip are a box of their own a target tall, no wider than the cell, and in a closed row the box that cuts them. */
+.data-table > tbody > tr > td > :is(span, code)[data-tip][tabindex]:not(.pill) { display: inline-block; max-inline-size: 100%; line-height: var(--target-min); vertical-align: top; }
+@container style(--opens: 1) { .data-table > tbody > tr:not(.is-expanded) > [data-kind="identifier"] > :is(span, code)[data-tip][tabindex] { display: inline-block; max-inline-size: 100%; overflow: hidden; text-overflow: ellipsis; } }
+/* An identifier's link stays text of its line, a target tall by its padding as a name's is. */
+.data-table > tbody > tr > [data-kind="identifier"] > a[href] { padding-block: calc((var(--target-min) - 1.25em) / 2); }
+/* A fact on one line (`{% cell_line lines=1 %}`). */
+.data-table > tbody > tr > td .cell-line[data-lines="1"] { display: block; }
+.data-table > tbody > tr > td .cell-line[data-lines="1"] :is(.token, .whole, .part) { display: inline; max-inline-size: none; }
+/* Closed, each is cut at its end. */
+@container style(--opens: 1) {
+.data-table > tbody > tr:not(.is-expanded) > :is([data-kind="name"], [data-kind="prose"]) :is(.tag, .pill, code:not(.cell-whole), .token[data-sole]:not(code *)),
+.data-table > tbody > tr:not(.is-expanded) > [data-kind="identifier"],
+.data-table > tbody > tr:not(.is-expanded) > td .cell-line[data-lines="1"] { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 }
 /* A control's label is the control's to cut, as one line at its end: its words (`button_words`, one box) are cut where the control ends, a part among them text of that line so the cut lands inside it; a part alone, longer than the control, is held to it and cut there, set on the line by its top since a box that clips takes its bottom edge as its baseline. */
 .data-table td .btn > .button-words { min-width: 0; overflow: hidden; text-overflow: ellipsis; & .whole { display: contents; } }
@@ -139,37 +174,10 @@
   max-width: 100%;
   & > .whole { vertical-align: top; overflow: hidden; text-overflow: ellipsis; }
 }
-/* A line clamped to a preview (`.table-clamp`) is cut by its clamp, and WebKit draws a grid on a line past the clamp, so there a part is an inline box held to its column's share; outside a narrow box a column may be wider than its share, and the part takes its whole line there, so it is cut only where longer than its cell. */
-.data-table td .table-clamp .token:not([data-sole]) > .whole:not(code *, [data-entity] *, .cut *) {
-  display: inline-block; max-width: var(--hold); vertical-align: top; overflow: hidden; text-overflow: ellipsis;
-  @container style(--box: whole) { & { max-width: max(var(--hold), 100%); } }
-}
-/* The muted line under a row's name: one line. */
-.data-table td .muted [data-entity] { -webkit-line-clamp: 1; line-clamp: 1; }
-/* The muted line under the row's name is one line cut at the column's edge, asking no width of its own (`contain: inline-size`) so the name alone sizes it; `narrow-only` words in it are never cut away. A name in it, and a part of an identifier, is text of the line (no box of its own, figures.css), so its words ("on") stay on the line with it and the line's ellipsis cuts it. A chip (`code`) is a box of its own, where the line's ellipsis cannot land, so a line holding one is left to the chip's own cut; a description (`.table-clamp`) keeps its two lines and asks for its length, so its column takes the room its row has. */
-.data-table td.row-gutter > br + .muted:not(.table-clamp, :has(.narrow-only, code)) { display: block; contain: inline-size; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; & .whole { display: contents; } }
-@container style(--box: whole) {
-  .data-table td.row-gutter > br + .muted:not(.table-clamp, :has(code)) { display: block; contain: inline-size; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; & .whole { display: contents; } }
-}
-.data-table td.row-gutter > br + .muted [data-entity] { display: inline; }
-/* What the line holds wraps as the line does: a time a tight table lets wrap would otherwise open a break inside the one cut line and split a word at its edge. */
-.data-table td.row-gutter > br + .muted:not(.table-clamp) :is(time, .pill, .cell-part) { white-space: inherit; }
 /* A match's context is a line of the row's own, two lines at most. WebKit lays a value's parts out past its clamp, so the box holds two lines too. */
 .list-rows .row-snippet { flex-basis: 100%; margin: 0; color: var(--muted); overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; max-block-size: 2lh; overflow: hidden; }
 /* A snippet is a run of prose cut from a record, so a value in it flows as its words do: a box of its own would set a word the match splits in two apart from its matched half. */
 .list-rows .row-snippet :is(.token, .whole) { display: inline; }
-/* A cell's own identifier (one in a sentence, a `p` or `li` or free text marked data or prose, wraps as a page's does and is never cut) never breaks across lines and never takes more than --identifier-max, a share of the region (`cqi`) since a percentage counts for nothing while columns are sized; past it, it is cut and the opened row shows it whole. Code of plain words (no part `breakable` marks, value_tags) is words no longer than a word may be, so it wraps between them as text does and is never cut. */
-.data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *):where(:has(.token, .whole)) { white-space: nowrap; overflow-wrap: normal; display: inline-block; max-width: min(var(--identifier-max), var(--hold)); vertical-align: bottom; overflow: hidden; text-overflow: ellipsis; }
-/* The chip is the name's box, its baseline the grid's first row, ahead of
-   the strut's rows, whose text has none of the chip's padding. */
-.data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole) > .token[data-sole] > .cut {
-  display: block; justify-self: start; order: -1; max-width: 100%;
-  padding: 1px calc(var(--space-2) + 1px) 1px var(--space-2); border-radius: 4px; background: var(--bg-tint); overflow: hidden; text-overflow: ellipsis;
-}
-.data-table th[scope=row] > code > .token[data-sole] > .cut {
-  display: block; white-space: nowrap;
-  padding: 1px calc(var(--space-2) + 1px) 1px var(--space-2); border-radius: 4px; background: var(--bg-tint); overflow: hidden; text-overflow: ellipsis;
-}
 
 /* The calendar: a day's events on one line each, inside the day. */
 /* A span is one bar across its days: rounded only where it starts and ends,
@@ -220,7 +228,10 @@
   .command-center-copy > .muted { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 }
 
-/* A context line, a relation's ends, a bar's label: one line each. */
+/* A context line, a relation's ends, a bar's label, the signed-in name: one line each. An
+   identifier in one runs inline, its parts too, since an ellipsis stands in
+   for text alone and a part drawn as a box of its own is cut with no mark. */
+:is(.relation-other, .relation-kind, .bar-label, .user-name, .menu-identity-who strong) :is(.token, .whole) { display: inline; }
 .relation-other {
   grid-area: 2 / 2 / 3 / 3;
   white-space: nowrap; color: var(--ink); overflow: hidden; text-overflow: ellipsis;
@@ -235,10 +246,9 @@
    A part of it flows as its words do, so the clamp cuts at a word. WebKit
    lays a value's parts out past its clamp, so the box holds one line too. */
 .bar-label {
-  position: relative; flex: 1 1 auto; min-inline-size: 0; overflow-wrap: anywhere;
+  min-inline-size: 0; overflow-wrap: anywhere;
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; line-clamp: 1; max-block-size: 1lh; overflow: hidden;
 }
-.bar-label :is(.token, .whole) { display: inline; }
 /* A line that is a label, not prose: cut with an ellipsis, whole on hover. */
 .one-line { white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 
@@ -275,26 +285,13 @@
    one to a line are (figures.css). */
 .data-table td .line-list:has(a) { line-height: var(--target-min); }
 @media (scripting: enabled) {
-  /* Open, the rest's parts join the first ones in one run, which wraps as
-     any run does: a separator that would open a line is clipped there. */
-  .data-table :is(tr.is-expanded > td, .row-columns) :is(.line-rest, .line-run) { display: contents; }
-  .data-table > tbody > tr:not(.is-expanded, .row-detail) > td .line-rest { flex: 1 1 0; inline-size: 0; max-block-size: calc(1lh + .5em); overflow: clip; }
-  .data-table > tbody > tr:not(.is-expanded, .row-detail) > td .line-run { flex: 1 1 0; row-gap: 1lh; overflow-x: clip; }
+  /* Open, the rest keeps its box and its run wraps on lines of its own,
+     still asking for no width, so opening a row moves no column. */
+  .data-table > tbody > tr.is-expanded > td .line-rest { flex: 1 1 0; contain: inline-size; }
+  /* Only a row that opens clips its rest: one that cannot shows it on lines below, as without script. */
+  .data-table > tbody > tr:not(.is-expanded, .row-detail):has(> * > [data-row-toggle]) > td .line-rest { flex: 1 1 0; inline-size: 0; max-block-size: calc(1lh + .5em); overflow: clip; }
+  .data-table > tbody > tr:not(.is-expanded, .row-detail):has(> * > [data-row-toggle]) > td .line-run { flex: 1 1 0; row-gap: 1lh; overflow-x: clip; }
   /* A link the clip hides shows them all once the keyboard reaches it. */
-  .data-table > tbody > tr:not(.is-expanded, .row-detail) > td .line-rest:focus-within { max-block-size: none; overflow: visible; }
-}
-
-/* An open row lifts every cut in it, and in the line beneath it, at once;
-   the cuts it lifts are each specific to a column, so this one outranks
-   them on purpose. A panel a cell shows (a popover, drawn over the page) is
-   no part of the column, so what it says is never cut, open row or not. A
-   run's clip hides only the separator that would open a line, so it stays. */
-.data-table :is(tr.is-expanded, tr.is-expanded + tr.row-detail) :is(td, th),
-.data-table :is(tr.is-expanded, tr.is-expanded + tr.row-detail) :is(td, th) *:not(.visually-hidden, .visually-hidden *, .line-list),
-.data-table :is(td, th) [popover] *:not(.visually-hidden, .visually-hidden *) {
-  overflow: visible !important;
-  text-overflow: clip !important;
-  -webkit-line-clamp: unset !important;
-  line-clamp: none !important;
+  .data-table > tbody > tr:not(.is-expanded, .row-detail):has(> * > [data-row-toggle]) > td .line-rest:focus-within { max-block-size: none; overflow: visible; }
 }
 }

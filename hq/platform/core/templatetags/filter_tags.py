@@ -160,20 +160,31 @@ _HOOKS = frozenset(("id", "name", "for", "href", "popovertarget", "autofocus", "
 
 class _Unnamed(HTMLParser):
     """Markup again, each tag without the attributes that make it a working
-    control of the page: ``_HOOKS`` and every ``data-`` hook."""
+    control of the page: ``_HOOKS`` and every ``data-`` hook. A popover is
+    copied empty: closed, the browser gives it no box (``display: none``), and
+    in the copy nothing can open it, so its contents would hold no room."""
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=False)
         self.parts: list[str] = []
+        # The popover being copied empty, by its tag, and how deep in its own
+        # tag the parser is inside it.
+        self.emptied: tuple[str, int] | None = None
 
     @override
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if self.emptied is not None:
+            if tag == self.emptied[0]:
+                self.emptied = (tag, self.emptied[1] + 1)
+            return
         kept = "".join(
             f" {name}" if value is None else f' {name}="{escape(value)}"'
             for name, value in attrs
             if name not in _HOOKS and not name.startswith("data-")
         )
         self.parts.append(f"<{tag}{kept}>")
+        if any(name == "popover" for name, _value in attrs):
+            self.emptied = (tag, 0)
 
     @override
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
@@ -181,19 +192,29 @@ class _Unnamed(HTMLParser):
 
     @override
     def handle_endtag(self, tag: str) -> None:
+        if self.emptied is not None:
+            if tag != self.emptied[0]:
+                return
+            if self.emptied[1]:
+                self.emptied = (tag, self.emptied[1] - 1)
+                return
+            self.emptied = None
         self.parts.append(f"</{tag}>")
 
     @override
     def handle_data(self, data: str) -> None:
-        self.parts.append(data)
+        if self.emptied is None:
+            self.parts.append(data)
 
     @override
     def handle_entityref(self, name: str) -> None:
-        self.parts.append(f"&{name};")
+        if self.emptied is None:
+            self.parts.append(f"&{name};")
 
     @override
     def handle_charref(self, name: str) -> None:
-        self.parts.append(f"&#{name};")
+        if self.emptied is None:
+            self.parts.append(f"&#{name};")
 
 
 @register.filter

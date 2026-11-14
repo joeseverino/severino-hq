@@ -16,8 +16,12 @@ from tools.tests.test_task_references import MISE_RUN, MISE_RUN_LIST, a_task, ta
 
 # The mark, an env entry of the task's own, as mise lists it.
 MARK = "SEVERINO_WAITS_FOR_HEAVY_TURN=1"
-# The task a run that weighed itself runs its heavy part through.
-TURN = "turn"
+# What stands for a share of the turn among the tasks a script runs: a script
+# that runs `tools.gate.turn --share` or a landing's `--landing`, which waits
+# behind the run in the turn, or a module that builds a share with
+# ``in_share``, waits for the turn without its lock.
+SHARE = "(a share of the turn)"
+SHARE_RUN = re.compile(r"\btools\.gate\.turn --(?:share|landing)\b")
 
 
 def named_files(script: str) -> list[Path]:
@@ -28,18 +32,18 @@ def named_files(script: str) -> list[Path]:
 
 def run_by_python(path: Path) -> list[str]:
     """The tasks a Python module runs: a `mise run` command it builds as a list,
-    and the turn for each command it hands to ``in_turn``."""
+    and a share for each command it hands to ``in_share``."""
 
     source = path.read_text()
     called = [
         name for match in MISE_RUN_LIST.finditer(source) for name in tasks_named(re.findall(r'"([^"]*)"', match[1]))
     ]
-    in_turn = [
+    in_share = [
         node
         for node in ast.walk(ast.parse(source))
-        if isinstance(node, ast.Call) and getattr(node.func, "id", getattr(node.func, "attr", None)) == "in_turn"
+        if isinstance(node, ast.Call) and getattr(node.func, "id", getattr(node.func, "attr", None)) == "in_share"
     ]
-    return [*called, *([TURN] if in_turn else [])]
+    return [*called, *([SHARE] if in_share else [])]
 
 
 def run_by(script: str, seen: set[Path]) -> list[str]:
@@ -47,6 +51,7 @@ def run_by(script: str, seen: set[Path]) -> list[str]:
 
     script = code(script)
     called = [name for match in MISE_RUN.finditer(script) for name in tasks_named(match[1].split())]
+    called += [SHARE] if SHARE_RUN.search(script) else []
     for path in named_files(script):
         if path in seen:
             continue
@@ -59,16 +64,18 @@ def run_by(script: str, seen: set[Path]) -> list[str]:
 
 
 def waiting(tasks: dict[str, dict[str, Any]]) -> set[str]:
-    """Each task that holds no heavy lock and runs the turn, a task that holds
-    it, or one of these, from its script: mise reports no edge for a `mise run`
-    in a script, so the reader has only the mark."""
+    """Each task that holds no heavy lock and takes a share of the turn, runs a
+    task that holds it, or runs one of these, from its script: mise reports no
+    edge for a `mise run` in a script, so the reader has only the mark."""
 
     holding = {name for name in tasks if HEAVY_LOCK in locks(name)}
     calls = {}
+    found: set[str] = set()
     for name, task in tasks.items():
         named = run_by(body(task), set())
         calls[name] = {other for other in tasks if other != name and any(a_task(n, {other}) for n in named)}
-    found: set[str] = set()
+        if SHARE in named and name not in holding:
+            found.add(name)
     while grown := {
         name for name, called in calls.items() if name not in holding | found and called & (holding | found)
     }:
@@ -83,7 +90,6 @@ class TurnMarkTests(GateTestCase):
         from the listing alone."""
         tasks = mise_tasks()
         derived = waiting(tasks)
-        self.assertIn(TURN, {name for name in tasks if HEAVY_LOCK in locks(name)})
         self.assertGreater(len(derived), 5)
         marked = {name for name, task in tasks.items() if MARK in task["env"]}
         self.assertEqual(

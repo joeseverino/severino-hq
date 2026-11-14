@@ -9,8 +9,9 @@ entries, confirm prune to yes".
 import json
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
+from difflib import SequenceMatcher
 from typing import Any
 
 from .labels import field_label, lower_first
@@ -30,6 +31,12 @@ _STAMP = re.compile(r"\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?
 
 def _scalar(value: Any) -> bool:
     return value is None or isinstance(value, (str, int, float, bool))
+
+
+def _plain(value: Any) -> bool:
+    """A value said in a few words: a scalar, or a list of them."""
+
+    return _scalar(value) or (isinstance(value, (list, tuple, set, frozenset)) and all(_scalar(item) for item in value))
 
 
 def _items_title(schema: Mapping[str, Any] | None) -> str:
@@ -64,9 +71,10 @@ def value_words(value: Any, schema: Mapping[str, Any] | None = None) -> str:
 
 
 def _record_words(record: Mapping[Any, Any]) -> str:
-    """A small record of plain facts said whole, any other counted by its fields."""
+    """A small record of plain facts (a list of words among them) said whole,
+    any other counted by its fields."""
 
-    if len(record) > SAID_WHOLE or not all(_scalar(child) for child in record.values()):
+    if len(record) > SAID_WHOLE or not all(_plain(child) for child in record.values()):
         return counted(len(record), "field")
     return ", ".join(
         f"{lower_first(field_label(str(key)))} {value_words(child) or 'empty'}" for key, child in record.items()
@@ -181,26 +189,134 @@ def changed_words(before: Any, after: Any, *, within: tuple[str, ...] = ()) -> t
     """The values that differ between two documents, each named by where it is.
 
     Absent and empty are the same nothing: a validated record carries an unset
-    field as a blank where a request omits it, and that is no change.
+    field as a blank where a request omits it, and that is no change. The
+    entries of a list of records are matched by content (``_entries``), so one
+    inserted reads as one entry added, never as every later entry shifted.
     """
 
-    was_all = _leaves(before, within)
-    now_all = _leaves(after, within)
-    rows = []
-    # In the document's own order, then what only the new one holds.
-    for path in [*was_all, *(path for path in now_all if path not in was_all)]:
-        was = was_all.get(path, _ABSENT)
-        now = now_all.get(path, _ABSENT)
-        was_words = "" if was is _ABSENT else value_words(was)
-        now_words = "" if now is _ABSENT else value_words(now)
-        if was_words == now_words:
+    return _coalesced(_differences(before, after, within))
+
+
+def _record_list(value: Any) -> bool:
+    return isinstance(value, (list, tuple)) and not all(_scalar(item) for item in value)
+
+
+def _differences(before: Any, after: Any, path: tuple[str | int, ...]) -> list[ChangeRow]:
+    before, after = document(before), document(after)
+    if isinstance(before, Mapping) and before and isinstance(after, Mapping) and after:
+        # In the document's own order, then what only the new one holds.
+        keys = [*before, *(key for key in after if key not in before)]
+        return [
+            row
+            for key in keys
+            for row in _differences(before.get(key, _ABSENT), after.get(key, _ABSENT), (*path, str(key)))
+        ]
+    if _record_list(before) and _record_list(after):
+        return _entries(list(before), list(after), path)
+    return _leaf_rows(before, after, path)
+
+
+def _leaf_rows(before: Any, after: Any, path: tuple[str | int, ...]) -> list[ChangeRow]:
+    """Each value two documents hold at the same place that differs, where
+    their shapes give nothing to match: a record or list on one side only is
+    opened by key and position (``_leaves``)."""
+
+    was_all = {} if before is _ABSENT else _leaves(before, path)
+    now_all = {} if after is _ABSENT else _leaves(after, path)
+    return [
+        row
+        for at in [*was_all, *(at for at in now_all if at not in was_all)]
+        if (row := _row(at, was_all.get(at, _ABSENT), now_all.get(at, _ABSENT))) is not None
+    ]
+
+
+def _row(path: tuple[str | int, ...], was: Any, now: Any) -> ChangeRow | None:
+    was_words = "" if was is _ABSENT else value_words(was)
+    now_words = "" if now is _ABSENT else value_words(now)
+    if was_words == now_words:
+        return None
+    return ChangeRow(
+        label=path_words(path),
+        before=was_words,
+        after=now_words,
+        change="added" if was is _ABSENT else "removed" if now is _ABSENT else "changed",
+    )
+
+
+def _canonical(value: Any) -> str:
+    """An entry as text that two equal entries share, to match it by."""
+
+    try:
+        return json.dumps(document(value), sort_keys=True, default=str)
+    except TypeError:
+        return repr(value)
+
+
+# How alike two entries' texts must be to be read as one entry changed rather
+# than one removed and another added, and how far apart in their lists they may
+# stand: ``difflib.Differ``'s own cutoff and window for pairing similar lines.
+_ALIKE = 0.75
+_WINDOW = 10
+
+
+def _entries(before: list[Any], after: list[Any], path: tuple[str | int, ...]) -> list[ChangeRow]:
+    """Two lists of records compared as ``git diff`` compares lines: the
+    longest runs of equal entries are matched (``difflib.SequenceMatcher``,
+    without its heuristic that treats a common entry of a long list as junk),
+    and in what lies between, an entry alike enough to one on the other side
+    is read as that entry changed, field by field, and named where it now
+    stands. Every other entry comes or goes whole, as one row."""
+
+    was, now = [_canonical(entry) for entry in before], [_canonical(entry) for entry in after]
+    rows: list[ChangeRow] = []
+
+    def whole(index: int, entry: Any, *, added: bool) -> None:
+        row = _row((*path, index), _ABSENT if added else entry, entry if added else _ABSENT)
+        if row is not None:
+            rows.append(row)
+
+    def unpaired(alo: int, ahi: int, blo: int, bhi: int) -> None:
+        for index in range(alo, ahi):
+            whole(index, before[index], added=False)
+        for index in range(blo, bhi):
+            whole(index, after[index], added=True)
+
+    for tag, alo, ahi, blo, bhi in SequenceMatcher(None, was, now, autojunk=False).get_opcodes():
+        if tag == "equal":
             continue
-        rows.append(
-            ChangeRow(
-                label=path_words(path),
-                before=was_words,
-                after=now_words,
-                change="added" if was is _ABSENT else "removed" if now is _ABSENT else "changed",
-            )
-        )
-    return tuple(rows)
+        # As ``difflib.Differ._fancy_replace`` pairs lines: each new entry in
+        # turn takes the most alike old one near it, past the last pair.
+        alike = SequenceMatcher(autojunk=False)
+        done_a, done_b = alo, blo
+        for j in range(blo, bhi):
+            alike.set_seq2(now[j])
+            best, best_ratio = None, _ALIKE
+            start = alo + (j - blo)
+            for i in range(max(start - _WINDOW, done_a), min(start + _WINDOW + 1, ahi)):
+                alike.set_seq1(was[i])
+                if alike.real_quick_ratio() <= best_ratio or alike.quick_ratio() <= best_ratio:
+                    continue
+                if (ratio := alike.ratio()) > best_ratio:
+                    best, best_ratio = i, ratio
+            if best is None:
+                continue
+            unpaired(done_a, best, done_b, j)
+            rows.extend(_differences(before[best], after[j], (*path, j)))
+            done_a, done_b = best + 1, j + 1
+        unpaired(done_a, ahi, done_b, bhi)
+    return rows
+
+
+def _coalesced(rows: list[ChangeRow]) -> tuple[ChangeRow, ...]:
+    """One row per place: an entry removed where another is added, at the same
+    position, reads as that position changing from one to the other."""
+
+    found: dict[str, ChangeRow] = {}
+    for row in rows:
+        was = found.get(row.label)
+        if was is None:
+            found[row.label] = row
+        else:
+            gone, came = (was, row) if was.change == "removed" else (row, was)
+            found[row.label] = replace(gone, after=came.after, change="changed")
+    return tuple(found.values())

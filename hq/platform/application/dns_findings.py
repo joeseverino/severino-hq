@@ -118,6 +118,7 @@ RULES: tuple[FindingRule, ...] = (
         detect=protection_off,
         operator_action="Turn protection back on in AdGuard.",
         no_help_reason=_CANNOT_SWITCH_ON,
+        bars={"attention": "AdGuard's protection is switched off"},
     ),
     FindingRule(
         name="dns-filtering-off",
@@ -126,6 +127,7 @@ RULES: tuple[FindingRule, ...] = (
         detect=filtering_off,
         operator_action="Turn filtering on under Filters, DNS blocklists in AdGuard.",
         no_help_reason=_CANNOT_SWITCH_ON,
+        bars={"attention": "AdGuard's filtering is switched off"},
     ),
     FindingRule(
         name="dns-plain-upstream",
@@ -136,6 +138,7 @@ RULES: tuple[FindingRule, ...] = (
             "Replace each one with its DNS-over-TLS or DNS-over-HTTPS address under Settings, DNS settings in AdGuard."
         ),
         no_help_reason="HQ cannot change AdGuard's upstream servers.",
+        bars={"neutral": "an upstream server takes lookups unencrypted"},
     ),
     FindingRule(
         name="dns-name-unused",
@@ -146,5 +149,6 @@ RULES: tuple[FindingRule, ...] = (
             "If nothing uses it, remove the service. If something should, check that device uses AdGuard for DNS."
         ),
         no_help_reason="HQ cannot tell whether anything still needs it.",
+        bars={"neutral": "nothing has looked up a name AdGuard answers"},
     ),
 )

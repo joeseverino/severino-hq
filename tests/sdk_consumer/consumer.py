@@ -657,6 +657,17 @@ def an_insight_about_one_part() -> None:
     ui.Insight("attention", "Finding", "Example", "", "", part=("example-web",))  # type: ignore[arg-type]
 
 
+def an_insight_that_says_why() -> None:
+    # An item says why it is as urgent as it is, which the panel behind its
+    # urgency leads with.
+    said = ui.Insight("serious", "Renewals", "Passport expires", "", "", why="It expires in 20 days.")
+    assert_type(said.why, str)
+    ui.Insight("serious", "Renewals", "Passport", "", "", why=("It expires.",))  # type: ignore[arg-type]
+    # One a threshold raises says what clears it.
+    held = ui.Insight("attention", "Renewals", "Passport", "", "", why="Under 90 days.", clears="it is renewed")
+    assert_type(held.clears, str)
+
+
 def a_section(hosts: int) -> None:
     # A page built in code draws the section a template writes as {% section %}:
     # its body from a template, or its empty line when it has none.

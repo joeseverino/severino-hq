@@ -12,6 +12,7 @@ from django.test import SimpleTestCase, tag
 
 from hq.domains.control_plane.models import OperationState
 from hq.domains.jobs.models import JobState
+from hq.platform.application.tests.reads import reads
 
 from .. import work_runs
 from .facts import Found, scan
@@ -54,6 +55,7 @@ def restated(*paths: Path) -> list[str]:
 
 
 @tag("source", "tree")
+@reads("hq/**/*.py", lists=("hq/**",))
 class WorkStateWordsTests(SimpleTestCase):
     def test_no_other_module_keys_a_table_by_work_states(self):
         """Read the word, tone or standing from ``work_runs`` (``TONES``, ``STANDS``, ``job_run``)."""

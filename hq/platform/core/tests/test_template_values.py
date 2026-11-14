@@ -952,6 +952,7 @@ class UnheldBuilderTests(SimpleTestCase):
 
 
 @tag("source", "tree")
+@reads("hq/**/*.py", "hq_sdk/**/*.py", lists=("hq/**", "hq_sdk/**"))
 class BuilderValueTests(SimpleTestCase):
     def test_every_value_a_builder_prints_as_text_holds_its_names(self):
         root = Path(settings.BASE_DIR)

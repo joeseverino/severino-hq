@@ -1,0 +1,13 @@
+id: threshold-says-what-clears-it
+valid:
+  - 'Insight(title="Example", why="GitHub reports a failed check.")'
+  - 'Insight(title="Example", why=f"{repo} failed on {branch}.")'
+  - 'Insight(title="Example", why=f"Older than {span(STALE_DAYS)}.", clears=f"a balance is newer than {span(STALE_DAYS)}")'
+  - 'FindingRule("example", "Example", "attention", detect, "Do it.", bars={"attention": "it failed"})'
+  - 'FindingRule("example", "Example", "attention", detect, "Do it.", bars={"attention": f"under {FLOOR}"}, clears=f"above {FLOOR}")'
+  - 'Insight(title="Example", why=f"Older than {STALE_DAYS}.", **said)'
+invalid:
+  - 'Insight(title="Example", why=f"The newest balance is older than {span(STALE_DAYS)}.")'
+  - 'Insight(title="Example", why=(f"Waiting past " f"{duration(WAITING_AFTER)} is urgent."))'
+  - 'FindingRule("example", "Example", "attention", detect, "Do it.", bars={"attention": f"free space is under {human_bytes(FLOOR)}"})'
+  - '_backlog(model, why=f"Older than {LIMIT_DAYS} days.")'

@@ -453,7 +453,7 @@ class _Template:
         # Each tag reads as one mark, keeping its line breaks so lines still count.
         markup = _TEMPLATE_TAG.sub(lambda tag: "\0" + "\n" * tag.group().count("\n"), text)
         classes = set(self.contract["classes"])
-        hooks = set(self.contract["hooks"])
+        hooks = set(self.contract["hooks"]) | set(self.contract["styled"])
         for match in _CLASS.finditer(markup):
             line = markup.count("\n", 0, match.start()) + 1
             # A name built around a value (``pill-{{ tone }}``) is decided when
@@ -464,7 +464,7 @@ class _Template:
         for match in _HOOK.finditer(markup):
             if match.group(1) not in hooks:
                 line = markup.count("\n", 0, match.start()) + 1
-                self.problem(line, f"{match.group(1)} is not a public script hook")
+                self.problem(line, f"{match.group(1)} is not a public hook")
         # HQ's policy refuses a style attribute, so the page would draw without
         # it; a value drawn to scale goes through a host partial.
         for match in _STYLE.finditer(markup):

@@ -11,6 +11,7 @@ from django.test import SimpleTestCase, tag
 from fontTools.ttLib import TTFont
 
 from hq.platform.application.tests.facts import scan
+from hq.platform.application.tests.reads import reads
 from tools.fonts.subset import ROOT, SERVED, stylesheet_features
 
 # Unicode's Default_Ignorable_Code_Point (DerivedCoreProperties.txt, Unicode
@@ -128,6 +129,15 @@ def _layout_features(font: Path) -> set[str]:
 
 
 @tag("source", "tree")
+@reads(
+    "hq/**/*.py",
+    "hq_sdk/**/*.py",
+    "static/**/*.css",
+    "static/js/**/*.js",
+    "static/fonts/inter/inter-variable-latin.woff2",
+    "templates/**/*.html",
+    lists=("hq/**", "hq_sdk/**", "static/**", "templates/**"),
+)
 class ServedFontTests(SimpleTestCase):
     def test_every_character_hq_prints_has_a_glyph(self):
         missing = undrawn(ROOT, SERVED)
@@ -139,7 +149,7 @@ class ServedFontTests(SimpleTestCase):
             {},
             "The served font has no glyph for these, so a page draws them in another face: add each to "
             "CODEPOINTS in tools/fonts/subset.py and run `mise run lint:drift-font --fix`, or, when Inter has none, "
-            "draw it as an icon (templates/partials/_icon.html).",
+            "draw it as an icon (a symbol of static/img/icons.svg).",
         )
 
     def test_every_feature_the_stylesheets_ask_for_is_in_the_font(self):

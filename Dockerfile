@@ -218,13 +218,6 @@ COPY --from=programs /hq-secrets /hq-host /app/deploy/bin/
 # installs it on an edge by hand (docs/Deployment.md, Remote targets).
 COPY --from=programs /hq-edge /app/deploy/bin/
 
-# Mounted volumes; create empty so the container can boot before a host mount.
-# The bridge socket's directory is this account's alone: a volume first mounted
-# there takes that owner and mode, and HQ refuses to serve from anything wider.
-RUN mkdir -p /data /media /exports /run/hq-bridge \
-    && chown -R severino:severino /data /media /exports /run/hq-bridge \
-    && chmod 0700 /run/hq-bridge
-
 # The image carries what a start would otherwise make: the collected, hashed
 # and compressed assets in /static, the Design page's gallery, and the
 # application's bytecode. Each is root's and read-only to the account HQ runs
@@ -250,6 +243,18 @@ RUN DJANGO_SECRET_KEY="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')" \
         python -W ignore manage.py design_gallery \
     && PYTHONHASHSEED=0 python -m compileall -q --invalidation-mode unchecked-hash \
         -x '/tests/' hq hq_sdk
+
+# Mounted volumes; create empty so the container can boot before a host mount.
+# The bridge socket's directory is this account's alone: a volume first mounted
+# there takes that owner and mode, and HQ refuses to serve from anything wider.
+# Made after every step that runs HQ, and refused if one left a file there: a
+# new volume starts as a copy of the image's directory, so a file a root step
+# wrote would be root's in the volume, where HQ's account cannot write it.
+RUN mkdir -p /data /media /exports /run/hq-bridge \
+    && left="$(find /data /media /exports /run/hq-bridge -mindepth 1)" \
+    && if [ -n "$left" ]; then echo "A build step left files in HQ's volumes: $left" >&2; exit 1; fi \
+    && chown -R severino:severino /data /media /exports /run/hq-bridge \
+    && chmod 0700 /run/hq-bridge
 
 USER severino
 EXPOSE 8000

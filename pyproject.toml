@@ -45,9 +45,6 @@ non_dev_dependency_groups = ["runner"]
 [tool.deptry.per_rule_ignores]
 # Runtime dependencies no host code imports, and why each is installed anyway.
 DEP002 = [
-    # WhiteNoise's compressor imports it when collectstatic runs, in the image
-    # build as well, and writes each asset's .br copy with it.
-    "brotli",
     # Django's parallel test runner pickles a failure's traceback with it, in
     # the image as well.
     "tblib",
@@ -225,7 +222,7 @@ tools = [
     "vulture==2.16",
 ]
 browser = [
-    "playwright==1.64.1",
+    "playwright==1.65.2",
 ]
 # The automation worker's runtime (hq_runner), which no default group and no
 # web image installs: ansible-runner, and the ansible-playbook it runs.
@@ -261,6 +258,8 @@ extend-include = ["deploy/targets/severino-hq-cpanel-controller"]
 "tools/gate/verdict.py" = "py312"
 # The deploy host's python3, sent there over SSH by release:report.
 "tools/pipeline/release_readings.py" = "py312"
+# A gate machine's python3, sent there over SSH by the gate's sender (remote-host.sh room).
+"tools/gate/room.py" = "py312"
 "deploy/targets/severino-hq-cpanel-controller" = "py37"
 
 [tool.ruff.lint]

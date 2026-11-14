@@ -301,16 +301,39 @@ class ReadsTests(SimpleTestCase):
     @tag("tree")
     def test_a_program_is_held_to_what_it_can_read(self):
         config = str(ROOT / "mise.toml")
+        attributes = ["git", "ls-files", "-z", "--", ":(attr:linguist-generated)"]
+        tasks = ["git", "ls-files", "-z", "--format=%(objectmode) %(path)", "--", "mise-tasks"]
+        rule = ["ast-grep", "scan", "--inline-rules", '{"id": "x", "language": "Python", "rule": {"pattern": "x()"}}']
+        tools = ["tools/gate/**/*.py"]
+        vale = ["vale", f"--config={ROOT / 'tools/lint/vale/.vale.ini'}", "--output=JSON"]
         with TemporaryDirectory() as directory:
+            page = Path(directory) / "page.md"
+            page.write_text("A page.\n")
             cases = {
                 "a list of every tracked path, declared so": (((), ("**",)), ["git", "ls-files", "-z"], ROOT, False),
                 "a list of every tracked path, declared less": ((("docs/**",),), ["git", "ls-files", "-z"], ROOT, True),
+                "a list of a pathspec, declared so": (((), ("docs/**",)), ["git", "ls-files", "-z", "--", "docs"], ROOT, False),
+                "a list of a pathspec, declared less": (((), ("docs/*.md",)), ["git", "ls-files", "-z", "docs"], ROOT, True),
+                "a list of a glob, below where it starts": (((), ("docs/**",)), ["git", "ls-files", "-z", "*.md"], ROOT, True),
+                "a list by attribute, declared so": (((".gitattributes",), ("**",)), attributes, ROOT, False),
+                "a list by attribute, its attributes undeclared": (((), ("**",)), attributes, ROOT, True),
+                "a list of modes, declared listed": (((), ("mise-tasks/**",)), tasks, ROOT, True),
+                "a list of modes, declared read": ((("mise-tasks/**",),), tasks, ROOT, False),
+                "git's own path": (((),), ["git", "rev-parse", "--git-path", "info/x"], ROOT, False),
+                "a file of a revision": (((),), ["git", "rev-parse", "HEAD:mise.toml"], ROOT, True),
+                "a scan of a directory, declared so": (((*tools,), ("tools/gate/**",)), [*rule, "tools/gate"], ROOT, False),
+                "a scan of a directory, its files undeclared": ((("docs/**",), ("tools/gate/**",)), [*rule, "tools/gate"], ROOT, True),
+                "a scan of a directory, its adds undeclared": (((*tools,),), [*rule, "tools/gate"], ROOT, True),
+                "a scan of a fixture": (((),), [*rule, directory], ROOT, False),
+                "a scan by the project's rules": ((("**",), ("**",)), ["ast-grep", "scan", "tools/gate"], ROOT, True),
+                "prose read by its declared config and styles": ((("tools/lint/vale/**",), ("tools/lint/vale/**",)), [*vale, str(page)], directory, False),
+                "prose read by an undeclared config": (((),), [*vale, str(page)], directory, True),
                 "a program in the checkout": ((("**",),), ["git", "status"], ROOT, True),
                 "a program pointed at the checkout": ((("**",),), ["git", "-C", str(ROOT), "status"], directory, True),
                 "a program in a fixture": (((),), ["git", "--version"], directory, False),
                 "a program handed a path here": (((),), ["cat", config], directory, True),
                 "a program handed a declared one": ((("mise.toml",),), ["cat", config], directory, False),
-            }
+            }  # fmt: skip
             for case, (declared, argv, cwd, refused) in cases.items():
                 with self.subTest(case):
                     run = partial(subprocess.run, argv, cwd=cwd, capture_output=True, check=False)

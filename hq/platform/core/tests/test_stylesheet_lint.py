@@ -179,7 +179,7 @@ PASSED = [
     ("static/css/app/page.css", ".btn.a-variant { color: var(--ink); }"),
     (CUTS, ".data-table td .btn > .token:not([data-sole]) > .whole { overflow: hidden; }"),
     (REFERENCE, ".scalar-app .section-header { color: var(--ink); }"),
-    (APP, ".a { overflow: auto; } .b { overflow-x: visible; overflow-y: scroll; }"),
+    (APP, ".a { overflow: auto; } .b { overflow-x: visible; } .c { overflow-y: scroll; }"),
     (APP, ".a { max-width: 100%; max-inline-size: 24rem; inline-size: 16ch; } .b { max-width: max-content; }"),
     (APP, f"{WHY} -- a frame's corners clip its fill */\n.a {{ overflow: hidden; }}"),
     (APP, ".a { grid-template-columns: repeat(3, minmax(0, 1fr)); }"),
@@ -226,3 +226,31 @@ class StylesheetLintTests(SimpleTestCase):
         for sheet, css in PASSED:
             with self.subTest(sheet=sheet, css=css):
                 self.assertEqual(lint(sheet, css), [])
+
+    def test_a_feature_newer_than_the_browser_floor_passes_only_behind_supports_or_declared(self):
+        """The floor moves with the data, so each feature is the data's own
+        pick: a property some engine's floor release lacks, and one the
+        config declares the floor lets degrade."""
+
+        picked = subprocess.run(
+            ["node", "--input-type=module", "-e", FLOOR_PICKS], capture_output=True, text=True, cwd=ROOT, check=True
+        )
+        newer, declared = json.loads(picked.stdout)
+        self.assertIn(FLOOR, lint(APP, f".a {{ {newer}: inherit; }}"))
+        self.assertEqual(lint(APP, f"@supports ({newer}: inherit) {{ .a {{ {newer}: inherit; }} }}"), [])
+        self.assertEqual(lint(APP, f".a {{ {declared}: inherit; }}"), [])
+
+
+FLOOR = "hq/browser-floor"
+# A standard property newer than the floor that `degrades` leaves out, and a
+# property `degrades` names.
+FLOOR_PICKS = """
+import { bcd, belowFloor } from "./tools/lint/browser-floor.mjs";
+import config from "./tools/lint/stylelint.config.mjs";
+const declared = Object.keys(config.rules["hq/browser-floor"].degrades);
+const newer = Object.keys(bcd.css.properties).find((name) =>
+  !name.startsWith("-") && !declared.includes(`css.properties.${name}`)
+  && bcd.css.properties[name].__compat?.status?.standard_track && belowFloor(`css.properties.${name}`).length);
+const named = declared.find((path) => /^css[.]properties[.][a-z-]+$/.test(path));
+console.log(JSON.stringify([newer, named.split(".").at(-1)]));
+"""

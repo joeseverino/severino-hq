@@ -102,6 +102,67 @@ ROW_ACTIONS_BEHIND_THE_TOGGLE = (
 )
 
 
+# An ask drawn beside a table whose rows hold the same ask: the row's button
+# again, outside every row, which reads as a control nothing in the table
+# owns.
+ASKS_OUTSIDE_THEIR_ROWS = (
+    "() => {"
+    + DESCRIBE
+    + """
+  const found = [];
+  const asked = (button) => button.getAttribute('formaction');
+  for (const table of document.querySelectorAll('table')) {
+    const rows = new Set([...table.querySelectorAll('tbody [data-ask] [data-ask-button]')].map(asked));
+    if (!rows.size) continue;
+    const scope = table.closest('section, main') ?? document.body;
+    for (const button of scope.querySelectorAll('[data-ask] [data-ask-button]')) {
+      if (button.closest('table') || !rows.has(asked(button)) || !button.checkVisibility()) continue;
+      found.push(`${describe(button)} asks what a row of the table beside it asks, outside every row`);
+    }
+  }
+  return [...new Set(found)];
+}"""
+)
+
+
+# A heading in a run of columns starts the column that holds what it heads:
+# the first words after its head are drawn below it, never at the top of the
+# next column while the head ends the one before. Its head is the box the
+# heading stands in with what sits beside it (a section's head, a summary).
+HEADINGS_PARTED = (
+    "() => {"
+    + DESCRIBE
+    + """
+  const found = [];
+  const range = document.createRange();
+  const columned = [...document.querySelectorAll('main *')].filter((el) => {
+    const style = getComputedStyle(el);
+    return style.columnCount !== 'auto' || style.columnWidth !== 'auto';
+  });
+  for (const flow of columned) {
+    for (const heading of flow.querySelectorAll('h1, h2, h3, h4, h5, h6')) {
+      if (!heading.checkVisibility()) continue;
+      const head = heading.closest('header, summary, figcaption, hgroup') ?? heading;
+      const h = box(head);
+      const walker = document.createTreeWalker(flow, NodeFilter.SHOW_TEXT);
+      walker.currentNode = head;
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        if (head.contains(node) || !node.data.trim() || !node.parentElement.checkVisibility()) continue;
+        range.selectNodeContents(node);
+        const first = [...range.getClientRects()].find((r) => r.width && r.height);
+        if (!first) continue;
+        if (first.top < h.bottom - 1) {
+          found.push(`${describe(heading)} "${heading.textContent.trim().replace(/\\s+/g, ' ')}" ends one column; "${node.data.trim().slice(0, 30)}" under it starts another`);
+        }
+        break;
+      }
+    }
+  }
+  return found;
+}"""
+)
+
+
 def reading_problems(readings):
     """What a reader loses of the readings: a line drawn under its mark, or
     cut short."""
@@ -284,6 +345,10 @@ CHECKS = {
         (_READINGS_OF, SELECTORS["readings"]),
         findings=reading_problems,
         reader_sees="a reading's line cut short or pushed under its mark",
+    ),
+    "headings parted": Check(HEADINGS_PARTED, reader_sees="a heading at a column's foot, what it heads in the next"),
+    "asks outside their rows": Check(
+        ASKS_OUTSIDE_THEIR_ROWS, reader_sees="a row's button drawn again beside its table, owned by no row"
     ),
     "row actions behind the toggle": Check(
         (

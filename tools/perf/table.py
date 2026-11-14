@@ -14,13 +14,27 @@ from tools.perf.measure import TYPES, past_spread, uncompressed
 Report = dict[str, Any]
 Read = Callable[[dict[str, Any]], float | None]
 
-# The server's columns, read from a page's `server`: header, value, decimals.
+
+def _per_row(server: dict[str, Any]) -> float | None:
+    """The HTML each record's rows take, on average; nothing where the page drew none."""
+
+    return server["row_html_bytes"] / server["rows"] if server.get("rows") else None
+
+
+# The server's columns, read from a page's `server`: header, value, decimals. What a page costs
+# once (`page`) stands apart from what it costs per record it draws (`row`), so a page that drew
+# more records reads as more rows, never as a heavier page: its queries, the first of each
+# statement against every repeat of one, and its HTML, outside its records' rows against their
+# bytes per record.
 SERVER: tuple[tuple[str, Read, int], ...] = (
     ("p50 ms", lambda server: server.get("p50_ms"), 1),
     ("p95 ms", lambda server: server.get("p95_ms"), 1),
-    ("queries", lambda server: server.get("queries"), 0),
+    ("page q", lambda server: server["queries"] - server["repeated_queries"], 0),
+    ("row q", lambda server: server["repeated_queries"], 0),
     ("rows", lambda server: server.get("rows"), 0),
     ("HTML KB", lambda server: _kilobytes(server.get("html_bytes")), 1),
+    ("page KB", lambda server: _kilobytes(server["html_bytes"] - server["row_html_bytes"]), 1),
+    ("B/row", _per_row, 0),
 )
 # Beside a base, the server time's round-by-round difference from the base's, and a mark past its spread.
 PAIRED: tuple[tuple[str, Read, int], ...] = (
@@ -145,24 +159,41 @@ def _page(entry: dict[str, Any]) -> str:
     return entry["page"] if status == 200 else f"{entry['page']} ({status})"
 
 
-def _total(entries: list[dict[str, Any]], read: Read, key: str, width: str | None) -> float | None:
-    values = [_read(read, entry.get(key) if width is None else entry.get(key, {}).get(width)) for entry in entries]
+def _total(entries: list[dict[str, Any]], read: Read, width: str) -> float | None:
+    values = [_read(read, entry.get("browser", {}).get(width)) for entry in entries]
     present = [value for value in values if value is not None]
     return sum(present) if present else None
+
+
+def _summed(entries: list[dict[str, Any]]) -> dict[str, Any]:
+    """Every page's server numbers added up, each over the pages that have it, so a column of a
+    ratio totals as the ratio of its sums: all the records' bytes over all the records."""
+
+    sums: dict[str, float] = {}
+    for entry in entries:
+        for key, value in (entry.get("server") or {}).items():
+            if isinstance(value, int | float) and not isinstance(value, bool):
+                sums[key] = sums.get(key, 0) + value
+    return sums
+
+
+def server_totals(entries: list[dict[str, Any]]) -> dict[str, float | None]:
+    """Each server column's total over ``entries``, by its header, as the total row shows it."""
+
+    summed = _summed(entries)
+    return {name: _read(read, summed) for name, read, _ in SERVER}
 
 
 def _totals(report: Report, base: Report | None, width: str, *, first: bool) -> list[str]:
     compared = base is not None
     mine, theirs = report["pages"], (base or {"pages": []})["pages"]
+    total, total_before = server_totals(mine), server_totals(theirs)
     server = [
-        cell(_total(mine, read, "server", None), _total(theirs, read, "server", None), places, compared=compared)
-        if first
-        else ""
-        for _, read, places in SERVER
+        cell(total[name], total_before[name], places, compared=compared) if first else "" for name, _, places in SERVER
     ]
     server += [""] * (len(server_headers(compared=compared)) - len(SERVER))
     browser = [
-        cell(_total(mine, read, "browser", width), _total(theirs, read, "browser", width), places, compared=compared)
+        cell(_total(mine, read, width), _total(theirs, read, width), places, compared=compared)
         for _, read, places in BROWSER
     ]
     return ["total" if first else "", width, *server, *browser]
@@ -194,9 +225,13 @@ def _summary(report: Report, base: Report | None) -> list[str]:
 
 
 def _title(report: Report, base: Report | None) -> str:
-    title = f"{report['commit']} ({report['target']}, {report['plan']['seed']}, {report['requests']} requests a page)"
+    machine = report["plan"].get("machine")
+    title = f"{report['commit']} ({report['target']}, {report['plan']['seed']}, {report['requests']} requests a page"
+    title += f", on {machine})" if machine else ")"
     if base:
         title += f", beside {base['commit']}, the two servers asked in turn"
+        if (theirs := base["plan"].get("machine")) != machine:
+            title += f", measured on {theirs or 'an unnamed machine'}"
     if memory := (report.get("memory") or {}).get("measured"):
         title += f"; memory is {memory}"
     if any(_live(each) for each in (report, base) if each):

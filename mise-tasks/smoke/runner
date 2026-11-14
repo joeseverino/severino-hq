@@ -14,6 +14,8 @@ if [ -z "${usage_image:-}" ]; then
     exit
 fi
 
+# Docker's VM holds memory of its own, so the run takes every token.
+turn_share=all
 turn_bound=30m
 # shellcheck source=tools/lib/heavy-turn.sh
 . ./tools/lib/heavy-turn.sh

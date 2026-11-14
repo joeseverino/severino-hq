@@ -69,34 +69,60 @@ class RowControlsTests(SimpleTestCase):
 
     def test_the_column_of_controls_never_leaves(self):
         """Its cells and heading are marked for the narrow box to stack, so no
-        rank sends its controls behind the row's toggle; its part of the open
-        line holds only what the row keeps there."""
+        rank sends its controls behind the row's toggle; what it offers only
+        on an open row stays in its cell, shown there once the row opens."""
 
         html = _table(_ROW)
-        self.assertEqual([each.tag for each in _marked(html)], ["th", "td"])
-        line = [each for each in all_elements(html) if "row-columns" in each.classes]
-        self.assertEqual([each.words for each in line], ["Do Later"])
+        marked = _marked(html)
+        self.assertEqual([each.tag for each in marked], ["th", "td"])
+        later = [each for each in all_elements(html) if "row-later" in each.classes]
+        self.assertEqual([marked[1] in each.ancestors for each in later], [True])
+        self.assertEqual([each for each in all_elements(html) if "row-columns" in each.classes], [])
 
-    def test_the_heading_of_each_column_of_words_is_marked_as_its_words(self):
-        """A narrow box gives a stacked row's room to its words, and their
-        heading takes it on the heading's line too; a figure's never does, nor
-        any heading of a table whose rows offer no controls."""
-
-        def words(head, row):
-            html = _table(row, head)
-            return [each.words for each in all_elements(html) if each.tag == "th" and "data-words" in each.attrs]
-
-        head = '{% table_heading "#" "numeric" gutter=True %}{% table_heading "Name" %}'
-        row = "<tr><td>1</td><td>Example words</td>{}</tr>"
-        control = '<td class="row-actions"><a class="btn compact" href="/example/">Open</a></td>'
-        self.assertEqual(words(head + '{% table_heading "Do" "control" hidden=True %}', row.format(control)), ["Name"])
-        self.assertEqual(words(head, row.format("")), [])
-
-    def test_a_column_of_choices_is_no_rows_controls(self):
-        """A choice is a value the row holds, so it keeps its column."""
+    def test_a_column_of_choices_stands_beneath_as_controls_do(self):
+        """A choice a reader makes is a control of the row, so in a narrow box
+        it stacks beneath the row's words under its column's name."""
 
         row = '<tr><td>Example</td><td><select name="example"><option>One</option></select></td></tr>'
-        self.assertEqual(_marked(_table(row)), [])
+        self.assertEqual([each.tag for each in _marked(_table(row))], ["th", "td"])
+
+    def test_the_words_a_column_of_choices_holds_stand_beneath_under_its_name(self):
+        """A row with no choice to make says so in the column of choices, and
+        in a narrow box those words stack beneath with the choices of the
+        other rows, under the column's name: left in their column they would
+        hold it open beside every row's words."""
+
+        rows = (
+            '<tr><td>Example</td><td><select name="example"><option>One</option></select></td></tr>'
+            '<tr><td>Example two</td><td><span class="muted">Not granted</span></td></tr>'
+        )
+        html = _table(rows, head='{% table_heading "Name" gutter=True %}{% table_heading "Rule" "control" %}')
+        cells = [each for each in _marked(html) if each.tag == "td"]
+        self.assertEqual([each.attrs.get("data-label") for each in cells], ["Rule", "Rule"])
+
+    def test_a_column_of_choices_never_leaves_with_its_rank(self):
+        """A choice a reader makes is what the row is for, so the narrow box
+        keeps its column whatever rank its heading gives it."""
+
+        row = '<tr><td>Example</td><td><select name="example"><option>One</option></select></td></tr>'
+        html = _table(row, head='{% table_heading "Name" gutter=True %}{% table_heading "Rule" drop=1 %}')
+        self.assertEqual([each.attrs.get("data-drop") for each in all_elements(html) if each.tag == "td"], [None, None])
+
+    def test_a_rows_state_never_leaves_and_stands_beneath_its_words(self):
+        """A pill says what the row is, so its column takes no rank and, in a
+        narrow box, stands beneath the row's words as its controls do."""
+
+        row = '<tr><td>Example</td><td><span class="pill pill-good">Done</span></td></tr>'
+        html = _table(row, head='{% table_heading "Name" gutter=True %}{% table_heading "Status" "status" drop=1 %}')
+        cells = [each for each in all_elements(html) if each.tag in {"th", "td"}]
+        self.assertEqual([each.attrs.get("data-drop") for each in cells], [None, None, None, None])
+        self.assertEqual([each.tag for each in _marked(html)], ["th", "td"])
+
+    def test_a_pill_beside_a_value_is_a_note_whose_column_may_leave(self):
+        row = '<tr><td>Example</td><td>192.0.2.10 <span class="pill pill-bad">Missing</span></td></tr>'
+        html = _table(row, head='{% table_heading "Name" gutter=True %}{% table_heading "Address" drop=1 %}')
+        self.assertEqual([each.attrs.get("data-drop") for each in all_elements(html) if each.tag == "td"], [None, "1"])
+        self.assertEqual(_marked(html), [])
 
     def test_a_list_never_ranks_its_column_of_controls_to_leave(self):
         columns = ranked((TableColumn("Name"), TableColumn("Note"), TableColumn("", css="actions-col")))

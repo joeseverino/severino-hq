@@ -788,6 +788,7 @@ def _dangling_item(field: ReferenceField, row: models.Model, source: Callable[[m
         title=f"{source(row)} links to {name}, which HQ does not have",
         value="",
         body="Choose something else for it, or clear the link.",
+        why="HQ's records hold a link to something it no longer has, so the record points nowhere.",
         action="Open record",
         url=row.get_absolute_url(),
         key=f"reference:{field.model._meta.label_lower}:{row.pk}:{field.attname}",

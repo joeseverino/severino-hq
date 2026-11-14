@@ -8,6 +8,7 @@ from unittest import mock
 from django.test import SimpleTestCase, tag
 from django.urls import reverse
 
+from hq.platform.application.tests.reads import reads
 from hq.platform.core.tests import task
 from hq.platform.core.tests.task import PageRefused, RefError, Usage
 
@@ -202,6 +203,7 @@ def _commit(folder: Path) -> None:
 
 
 @tag("source", "tree")
+@reads()
 class ChangedTestsTests(SimpleTestCase):
     def test_a_test_file_whose_name_git_quotes_in_a_list_of_lines_is_named_as_it_is(self):
         """systemd's escaping writes a backslash into a unit's name, which git quotes unless asked for -z."""

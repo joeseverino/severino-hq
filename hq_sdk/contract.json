@@ -2182,7 +2182,9 @@
           "reads=",
           "facts=",
           "links=",
-          "read_capabilities="
+          "read_capabilities=",
+          "why=",
+          "clears="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -3111,7 +3113,6 @@
       }
     },
     "hooks": [
-      "data-chart",
       "data-sort",
       "data-submit-busy",
       "data-submit-label",
@@ -3251,10 +3252,10 @@
       },
       "partials/_icon.html": {
         "about": "One of the host's icons, by `name`, the height of the text beside it.",
-        "optional": [
+        "optional": [],
+        "required": [
           "name"
-        ],
-        "required": []
+        ]
       },
       "partials/_insight_grid.html": {
         "about": "Readings that need interpreting, each with its next step.",
@@ -3330,6 +3331,9 @@
         ]
       }
     },
+    "styled": [
+      "data-chart"
+    ],
     "tags": {
       "arrow": {
         "classes": [],

@@ -9,6 +9,7 @@ from django.test import SimpleTestCase, TestCase, override_settings, tag
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
+from hq.platform.application.tests.reads import reads
 from hq_sdk.testing import plain
 
 from ..capabilities import execute_capability
@@ -138,6 +139,7 @@ BUILDS_INSIGHT = {
 
 
 @tag("source", "tree")
+@reads("hq/**/*.py", lists=("hq/**",))
 class OneWayToRaiseAProblemTests(SimpleTestCase):
     def test_an_infrastructure_problem_is_raised_by_a_finding_rule(self):
         """A problem built as an ``Insight`` reaches the queue alone: never

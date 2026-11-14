@@ -12,13 +12,12 @@ import re
 import shlex
 import subprocess
 import tempfile
-import unittest
 import zipfile
 from contextlib import redirect_stdout
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, override
-from unittest import mock
+from unittest import TestResult, mock
 
 from django.conf import settings
 
@@ -68,7 +67,28 @@ _OPEN_READINGS = (
     + "</div>"
 )
 
-_TABLE = '<table class="data-table" style="table-layout: fixed; inline-size: 10rem"><tbody><tr><td>{}</td></tr></tbody></table>'
+# A table of one column 10rem wide, its track written as the server writes one.
+_TABLE = '<table class="data-table" style="--tracks: minmax(0px, auto); inline-size: 10rem"><tbody><tr><td>{}</td></tr></tbody></table>'
+
+# An ask as partials/_ask.html draws one, asking for the work at its address.
+_ASK = (
+    '<span class="ask" data-ask><button type="submit" formaction="{}" class="btn compact" data-ask-button>'
+    "Example</button></span>"
+)
+
+# A line cut with an ellipsis, its words set in a span of the display given.
+_ELLIPSIS = (
+    '<div style="inline-size: 8rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis">'
+    '<span style="display: {}; max-inline-size: 100%">Example value far wider than its box</span></div>'
+)
+# A share's bar behind one long word, at the share given.
+_FILLED = (
+    '<div style="position: relative; inline-size: 20rem; overflow: hidden; white-space: nowrap">'
+    '<meter style="position: absolute; inset: 0; inline-size: 100%; block-size: 100%" min="0" max="100" value="{}">'
+    '</meter><span style="position: relative">/example/a-path-long-enough-to-run-past-the-middle/</span></div>'
+)
+# A toggle's label set in its line as given, and its note under it.
+_NOTED = '<ul><li style="display: grid"><span style="justify-self: {}">Example label</span><small>Example note</small></li></ul>'
 
 # Each check of the survey, by name, and its smallest defect.
 PLANTS = {
@@ -114,16 +134,14 @@ PLANTS = {
         '<p><code style="display: inline-block; inline-size: 4ch; block-size: 1lh; background: #eee">Example overrun</code></p>'
     ),
     "tables": Plant(_TABLE.format("Example").replace('style="', 'style="display: block; ', 1)),
-    # Held only once script has run, which alone fits a table to its box.
     "tables fit": Plant(
         '<div class="table-scroll" style="inline-size: 10rem"><table class="data-table" style="min-inline-size: 20rem">'
-        "<tbody><tr><td>Example</td></tr></tbody></table></div>",
-        scripted=True,
+        "<tbody><tr><td>Example</td></tr></tbody></table></div>"
     ),
     # A column hidden while a cell still spans it, so the table keeps its width.
     "unseen columns": Plant(
-        '<div class="table-scroll"><table class="data-table" style="inline-size: 100%">'
-        '<colgroup><col><col style="inline-size: 50%"></colgroup><thead><tr>'
+        '<div class="table-scroll"><table class="data-table" style="--tracks: minmax(0px, auto) minmax(0px, auto)">'
+        "<thead><tr>"
         '<th>Example</th><th style="display: none">Gone</th></tr></thead><tbody>'
         '<tr><td>Example</td><td style="display: none">Gone</td></tr>'
         '<tr><td colspan="2">Example spanning both</td></tr></tbody></table></div>'
@@ -156,26 +174,34 @@ PLANTS = {
         '<p>Example <code style="display: inline-block; max-inline-size: 4ch; overflow: hidden; white-space: nowrap">'
         "example_identifier</code> words.</p>"
     ),
-    # A short name cut in a table with room to spare.
-    "cut with room": Plant(
-        '<div class="table-scroll"><table class="data-table"><tbody><tr><td>'
-        '<span class="token" data-sole style="display: inline-block; max-inline-size: 3ch; overflow: hidden; '
-        'white-space: nowrap">example-name</span></td><td>Example</td></tr></tbody></table></div>'
-    ),
     # A value cut short of the room its cell holds, beside a column wider than it asks.
     "cut beside room": Plant(
         '<div class="table-scroll"><table class="data-table"><tbody><tr><td>'
         '<span style="display: block; max-inline-size: 6ch; overflow: hidden; text-overflow: ellipsis; '
         'white-space: nowrap">Example value cut short</span></td><td>Example</td></tr></tbody></table></div>'
     ),
+    # A column of a short word handed the table's room while the column of
+    # prose beside it is held narrower than its words ask.
+    "room unshared": Plant(
+        '<div class="table-scroll" style="inline-size: 30rem">'
+        '<table class="data-table" style="--tracks: minmax(0px, 1fr) minmax(0px, 6rem)"><tbody><tr>'
+        '<td data-kind="name">Example</td>'
+        '<td data-kind="prose">An example value broken over lines in its narrow column</td>'
+        "</tr></tbody></table></div>"
+    ),
+    # A row's state let go with a column its region dropped.
+    "row state kept": Plant(
+        '<table class="data-table" style="--tracks: minmax(0px, auto) minmax(0px, auto)"><tbody><tr><td>Example</td>'
+        '<td data-drop="1" data-label="Status" style="display: none"><span class="pill pill-good">Done</span></td>'
+        "</tr></tbody></table>"
+    ),
     # A value cut with an ellipsis in a row with no toggle to open it, and no
-    # title, which only script gives a cut.
+    # title, which the server gives a cut cell of the region's own.
     "cut and closed": Plant(
         _TABLE.format(
             '<span style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">'
             "an-example-value-far-too-long-for-its-cell</span>"
-        ),
-        scripted=True,
+        )
     ),
     # The same in a row drawn open, held past the stylesheet's lifting of an
     # open row's cuts.
@@ -199,6 +225,10 @@ PLANTS = {
     "links at rest": Plant('<div><a href="#" style="text-decoration: underline">Example</a></div>'),
     "dialogs": Plant('{% include "partials/_modal.html" with id="orphan" title="Orphan" %}'),
     "gutter": Plant('<div style="inline-size: calc(100% + 2rem)">Example</div>'),
+    # Two columns, the line a heading heads sent to the second.
+    "headings parted": Plant(
+        '<div style="columns: 2"><h2>Example heading</h2><p style="break-before: column">Example line</p></div>'
+    ),
     # A box cut to four lines that scrolls the rest, with no cap that says so.
     "audit": Plant(
         '<div style="display: flex; flex-direction: column; block-size: 4rem">'
@@ -230,6 +260,12 @@ PLANTS = {
         f"<td>{_LINES}</td>"
         '<td class="row-actions" style="white-space: nowrap"><button type="button" class="btn compact">Example one</button> '
         '<button type="button" class="btn compact">Example two</button></td></tr></tbody></table>'
+    ),
+    # A row's ask drawn again under its table, outside every row.
+    "asks outside their rows": Plant(
+        '<section><table class="data-table"><tbody><tr><td>Example</td>'
+        f"<td>{_ASK.format('/example/read/')}</td></tr></tbody></table>"
+        f"<p>{_ASK.format('/example/read/')}</p></section>"
     ),
     # A row in a narrow box whose button shows only in a whole box, so in the
     # narrow one it waits behind the row's toggle.
@@ -271,6 +307,18 @@ PLANTS = {
     "button edges": Plant('<button type="button" style="border: 1px solid var(--field-line)">Example</button>'),
     # A fill the light palette shows and the dark one drops.
     "fills": Plant('<p><span style="background: light-dark(#ccc, transparent)">Example</span></p>'),
+    # A name cut with an ellipsis, its words a box of their own.
+    "cut with no ellipsis": Plant(_ELLIPSIS.format("inline-block")),
+    # A bold run in a line already bold, asking past the font's heaviest
+    # weight, once the font it asks is loaded (an optional face a page drawn
+    # before it arrives does without).
+    "faked weights": Plant(
+        '<p style="font-weight: 600; font-synthesis-weight: auto"><strong>Example</strong></p>',
+        then="() => document.fonts.load('900 1em Inter')",
+    ),
+    "words across a fill": Plant(_FILLED.format(50)),
+    # A toggle's label set at the end of its line, its note at the start.
+    "notes apart": Plant(_NOTED.format("end")),
 }
 
 _FLOWS = (
@@ -284,6 +332,24 @@ _FLOWS = (
 # differs from, so a check that finds everything is caught as surely as one
 # that finds nothing.
 PASSES = {
+    # The same cut, its words running inline, where the ellipsis is drawn.
+    "cut with no ellipsis": Plant(_ELLIPSIS.format("inline")),
+    # A bold run in a plain line, inside the font's weights.
+    "faked weights": Plant(
+        '<p style="font-synthesis-weight: auto"><strong>Example</strong></p>',
+        then="() => document.fonts.load('700 1em Inter')",
+    ),
+    # A whole share, its bar ending past the words.
+    "words across a fill": Plant(_FILLED.format(100)),
+    # The label at the start of its line, its note under it.
+    "notes apart": Plant(_NOTED.format("start")),
+    # An ask of the section's own under a table of row asks, asking for
+    # other work than any row does.
+    "asks outside their rows": Plant(
+        '<section><table class="data-table"><tbody><tr><td>Example</td>'
+        f"<td>{_ASK.format('/example/read/')}</td></tr></tbody></table>"
+        f"<p>{_ASK.format('/example/read-all/')}</p></section>"
+    ),
     # A row in a narrow box whose button leaves its cell and shows in the
     # words' cell instead, as the region copies it beneath the row's words.
     "row actions behind the toggle": Plant(
@@ -328,6 +394,11 @@ PASSES = {
         '<p style="inline-size: 20rem">Example words then <code style="padding-inline: 6rem">name</code></p>'
         '<p style="inline-size: 20rem">Example words then <code style="display: inline-block">'
         "example chip of words held whole</code></p>"
+        # A chip that wraps, its padding drawn on each line: "bb" would fit
+        # after "aaaa" but for the padding that would close the line after it.
+        '<p style="inline-size: 12ch; font: 16px monospace"><code style="display: inline; font: inherit; '
+        'padding: 0 3ch; border: 0; margin: 0; box-decoration-break: clone; -webkit-box-decoration-break: clone">'
+        "aaaa bb cc</code></p>"
         '<p style="inline-size: 20rem">Example words <br>then more</p>'
         "</td></tr></tbody></table>"
     ),
@@ -389,7 +460,7 @@ PASSES = {
     ),
     # A value cut at its cell's edge beside a sentence that wraps: its row has
     # no room left. The second fills a padded box, whose padding is no room;
-    # the third is cut beside room too narrow to show it whole. Last, a tight
+    # the third is cut beside room too narrow to show it whole. Last, a narrow
     # table's status pill, a header's name too long for its column at its
     # narrowest, beside a short address whose column has room past it: the
     # pill's column takes that room and shows the name.
@@ -407,7 +478,7 @@ PASSES = {
         'white-space: nowrap">an-example-value-far-longer-than-the-room-its-cell-leaves-beside-it</span></td>'
         f"<td>{_LINES}</td></tr></tbody></table></div>"
         '<div style="inline-size: 15rem">{% table_region "Example" %}'
-        '<table class="data-table" data-narrow data-tight><thead><tr>'
+        '<table class="data-table"><thead><tr>'
         '{% table_heading "Value" "identifier" %}{% table_heading "Type" "status" %}</tr></thead><tbody>'
         '<tr><td><code class="cell-whole">{{ address|breakable }}</code></td>'
         '<td>{% status header tone="neutral" %}</td></tr></tbody></table>{% endtable_region %}</div>',
@@ -500,6 +571,11 @@ _FOLDED_TABLE = (
 )
 
 
+# A mark the stylesheet writes before a line, hung past the page's gutter, as
+# a fold's chevron hangs before a heading.
+_HUNG = "planted/a-mark-hung-past-the-gutter"
+_HUNG_MARK = '[data-probe="hung"]::before { content: "\\203A"; margin-inline-start: -4rem }'
+
 # A catalog entry `dev:look` draws by name, and a defect laid over it as CSS,
 # which the look lays as well (`--css`): what a failure's look is proven on.
 _LOOKED = "part/section-bare"
@@ -515,6 +591,10 @@ _LOOK_WITHIN = 900
 # arguments, the gate's record of failed tests, the engine and database the
 # look sets for itself.
 _RUN_OWN = ("usage_", "HQ_", "SEVERINO_TEST_", "MISE_TASK_", "DJANGO_")
+# What it does inherit of those: the heavy turn or share the run holds
+# (tools/gate/turn.py's HELD and SHARE), which the look would otherwise wait
+# on for as long as the run holds it.
+_TURN = ("MISE_TASK_LOCKS", "HQ_TURN_SHARE")
 
 
 def _said(finding):
@@ -548,6 +628,7 @@ class PlantedBrowserTests(LayoutBrowserTests):
             _LEFT: probe(_LEFT_BEHIND),
             _RESTS: probe(_RESTED),
             _FOLDED: probe(_FOLDED_TABLE),
+            _HUNG: probe('<p data-probe="hung">Example</p>'),
             **{name: probe(markup) for name, markup in _SHIFTS.items()},
         }
 
@@ -591,6 +672,10 @@ class PlantedBrowserTests(LayoutBrowserTests):
         found = self.found(_RESTS, Plant("")).get("cut beside room", [])
         self.assertTrue([said for said in found if '"example-capped' in said], found)
         self.assertFalse([said for said in found if '"example-full' in said], found)
+
+    def test_a_mark_the_stylesheet_hangs_past_the_gutter_is_past_the_gutter(self):
+        found = self.found(_HUNG, Plant("", css=_HUNG_MARK)).get("gutter", [])
+        self.assertTrue([said for said in found if "::before" in said], found)
 
     def test_a_page_whose_only_table_is_folded_away_holds_the_table_rule(self):
         """A table in a closed disclosure is one the table probe skips as
@@ -702,7 +787,7 @@ class PlantedBrowserTests(LayoutBrowserTests):
 
         if self.browser.browser_type.name != "webkit":
             self.skipTest("proven in WebKit, the engine dev:look draws in by default")
-        result = unittest.TestResult()
+        result = TestResult()
         said = io.StringIO()
         with (
             tempfile.TemporaryDirectory() as folder,
@@ -727,7 +812,7 @@ class PlantedBrowserTests(LayoutBrowserTests):
 
         argv = shlex.split(command)
         self.assertEqual(argv[:3], ["mise", "run", "dev:look"])
-        env = {name: value for name, value in os.environ.items() if not name.startswith(_RUN_OWN)}
+        env = {name: value for name, value in os.environ.items() if name in _TURN or not name.startswith(_RUN_OWN)}
         ran = subprocess.run(
             argv, cwd=settings.BASE_DIR, env=env, capture_output=True, text=True, timeout=_LOOK_WITHIN, check=False
         )

@@ -287,6 +287,6 @@ def _row(page: str, client_id: str) -> str:
 
     start = page.index(f'data-agent="{client_id}"')
     end = page.index("</tr>", start)
-    if page[end:].partition(">")[2].lstrip().startswith('<tr class="row-detail" data-row-detail>'):
+    if page[end:].partition(">")[2].lstrip().startswith('<tr class="row-detail"'):
         end = page.index("</tr>", end + 1)
     return page[start:end]

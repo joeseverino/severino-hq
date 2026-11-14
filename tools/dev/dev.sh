@@ -143,8 +143,9 @@ if [ "$profile" = scratch ] && [ ! -f "$state/login" ]; then
     # written in one process, with the settings the set is shown under.
     password=$(openssl rand -hex 12)
     DJANGO_SUPERUSER_PASSWORD=$password uv run python manage.py seed "${usage_seed:-empty}" \
-        --owner operator --env-file "$state/seed.env" --verbosity 0
-    (umask 077 && echo "operator $password" > "$state/login")
+        --owner "${HQ_DEV_ACCOUNT:?}" --env-file "$state/seed.env" --verbosity 0
+    (umask 077 && echo "$HQ_DEV_ACCOUNT $password" > "$state/login")
+    echo "${usage_seed:-empty}" > "$state/seed"
 else
     [ -z "${usage_seed:-}" ] || die "--seed fills a new database, and --keep keeps the last one as it was seeded."
     uv run python manage.py migrate --noinput --verbosity 0
@@ -156,14 +157,17 @@ if [ "$profile" = scratch ]; then
     . "$state/seed.env"
     set +a
     echo "Sign in as: $(cat "$state/login")" >&2
+    # The data set, which the server's closing lines name when it is empty;
+    # unknown for a database kept from before it was recorded.
+    HQ_DEV_SEED=$(cat "$state/seed" 2>/dev/null || :)
+    export HQ_DEV_SEED
 fi
 
 # Uvicorn watches with watchfiles (the dev group), the reloader that reads
-# --reload-include and --reload-exclude. A template edit restarts it too: with
-# DEBUG off, as `dev` runs, templates are cached until the server restarts.
+# --reload-dir and --reload-exclude.
 set --
 if [ "${usage_reload:-}" != false ]; then
-    set -- --reload --reload-include '*.html'
+    set -- --reload
     for dir in $reload_dirs; do
         set -- "$@" --reload-dir "$dir"
     done
@@ -191,8 +195,7 @@ if [ "$runner" = true ]; then
     . ./tools/lib/runner-environment.sh
     "$python" -m tools.dev.scratch_automation watch "$$" "$root/$runner_venv/bin/python" &
 fi
-# --no-proxy-headers, as the image's: the application reads its proxy's
-# forwarded headers itself, after recording the peer they replace. The
-# migration above made the database file before any server opens it; the
-# factory applies what a reload brings before the new worker serves.
-exec "$python" -m uvicorn --factory hq.config.dev_asgi:migrated_application --host "$host" --port "$port" --no-proxy-headers "$@"
+# Uvicorn on both loopback stacks (tools/dev/serve.py). The migration above
+# made the database file before any server opens it; the factory applies what
+# a reload brings before the new worker serves.
+exec "$python" -m tools.dev.serve --host "$host" --port "$port" "$@"

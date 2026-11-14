@@ -24,9 +24,10 @@ mise install
 mise run dev:scratch --seed showcase
 ```
 
-The log names the address and the throwaway account to sign in as. Nothing
-reads a `.env` file: production's configuration is in
-[Deployment](Deployment.md#configuration).
+The log ends on an `Open:` link at `http://localhost:<port>`, which signs a
+browser in as the throwaway account; without `--seed`, the line before it
+says the database is empty. Nothing reads a `.env` file:
+production's configuration is in [Deployment](Deployment.md#configuration).
 
 ## Tasks
 
@@ -71,8 +72,8 @@ since `changed_tests` lists files with git.
 The `audit:` tasks measure without writing anything tracked, so a read-only
 auditor may run any of them. mise runs each in its OS sandbox (the `audit`
 template), where a write outside the temporary and Go build cache paths
-fails; `audit:memory` also writes `var/perf`. `audit:image` and `audit:mcp`
-write as they measure, so they run outside it. A `.venv` out of sync with
+fails; `audit:memory` also writes `var/perf`. `audit:image`, `audit:mcp`
+and `audit:css-usage` write as they measure, so they run outside it. A `.venv` out of sync with
 `uv.lock` fails an audit, since uv cannot sync it there: run `uv sync`.
 
 | Task | What it answers | Example |
@@ -91,7 +92,9 @@ write as they measure, so they run outside it. A `.venv` out of sync with
 | `audit:image [image]` | a built image's layers (size, instruction, the parts of HQ each holds), what a container sees by part, site-packages' largest, and dive's wasted bytes | `mise run audit:image severino-hq:ci-local` |
 | `audit:ci-timings <run>...` | where CI runs' time went, each job's end lag included | `mise run audit:ci-timings 41175916328` |
 | `audit:docs-readability` | each doc's Flesch-Kincaid grade, prose words, and longest paragraph and sentence, longest paragraph first (`tools/lint/vale/audit.ini`) | `mise run audit:docs-readability` |
-| `audit:bcd <feature>...` | each browser's first supporting version, from browser-compat-data, Safari first | `mise run audit:bcd css.properties.container-type` |
+| `audit:bcd [feature]...` | each browser's first supporting version, from browser-compat-data, Safari first, and whether the browser floor (docs/Design.md, Browsers) has it; with none, every place the stylesheet writes a feature newer than the floor | `mise run audit:bcd css.properties.container-type` |
+| `audit:supports <engine> <condition>...` | what the browser gates' own WebKit and Chromium answer to `CSS.supports`, one line per engine per condition; reach for it over `audit:bcd` to know what the gates draw, since their WebKit is ahead of every Safari release | `mise run audit:supports gates 'selector(:heading)' 'color: alpha(from red / 50%)'` |
+| `audit:css-usage [pages]...` | each app stylesheet's bytes and the bytes of the rules no page `dev:look` draws matches, read in Chromium at every width in both themes with everything opened, then each unused rule as file:line: dead (a class or data attribute nothing writes), unreached (a state no seed raises) and apart (a media query, feature test or selector that never held); takes the heavy turn. Reach for it before and after any CSS cut, and in a UI pass's inventory | `mise run audit:css-usage all` |
 
 A path or glob narrows a count, and `!glob` leaves files out, so
 `mise run audit:ruff SLF001 '!**/tests/**'` and
@@ -110,9 +113,10 @@ database it opens; `tools/dev/dev.sh` refuses what env cannot express.
 | `dev` | the long-lived server behind a TLS proxy, configured by the gitignored `dev.local.toml` (copy `tools/dev/dev.local.example.toml`), with the automation worker always beside it |
 
 Every one collects versioned assets and runs Uvicorn with reload on the
-production ASGI path. It watches this checkout and each extension's sources
-through watchfiles (the `dev` group): a Python file or a template restarts
-it. Nothing under `.claude/worktrees`, `.venv` or `var/` does, so another
+production ASGI path, through `tools/dev/serve.py`, which answers a loopback
+host on both 127.0.0.1 and ::1, so `localhost` loads in every browser. It
+watches this checkout and each extension's sources through watchfiles (the
+`dev` group): a Python file or a template restarts it. Nothing under `.claude/worktrees`, `.venv` or `var/` does, so another
 worktree's edits leave it running. The extension set is the one
 `mise.local.toml` names ([The extension set](#the-extension-set)).
 
@@ -128,9 +132,16 @@ database, so servers in different worktrees run side by side; a second server
 on one database is refused. `dev` refuses a linked worktree and a bind past
 loopback and the tailnet range; scratch refuses anything but loopback.
 
-Every loopback server shares the browser's cookies for `127.0.0.1` whatever the
-port, so signing in to a second one signs the first out: open the second as
-`http://localhost:<port>`.
+The scratch server's `Open:` link signs in its throwaway account
+(`hq/platform/core/dev_sign_in.py`, as Jupyter's token URL does). It works
+once and expires after its `LIFETIME`, and each worker a reload starts
+prints a new one. The account's password is in the log above, for a second
+browser. The link is routed only on a scratch server with DEBUG on and bound
+to loopback, and answers a caller on loopback alone.
+
+Every loopback server shares the browser's cookies for one host name whatever
+the port, so signing in to a second one at `localhost` signs the first out:
+open the second's link with `127.0.0.1` in place of `localhost`.
 
 ### The automation worker beside a development server
 
@@ -345,16 +356,19 @@ Ruff's fixes and format, `lint:css` with Stylelint's, `lint:js` with
 ESLint's, `lint:mise-format` with `mise fmt`, `lint:ast-grep` with each
 rule's `fix:`, `lint:controller` with gofmt, `go fix` and `go generate`, and
 each `lint:drift-*` gate with its file's writer), and the run names the files
-they rewrote. The gates then check the fixed files, so formatting or a stale
-derived file never fails a run, and the tree the run judges is the one the
-fixes left. What a tool cannot fix, its gate still reports. Only fast and
-`mise run fix` pass `--fix`, so CI's gates only check.
+they rewrote. A run whose fixes rewrote a file then fails on them, before any
+test, so the tree a run passes is always the tree it was given, the one a
+landing compares with the commit: the fixed files are in the checkout, ready
+to commit, and the next run judges them. `mise run fast --fix` judges the tree
+the fixes leave in the same run instead. What a tool cannot fix, its gate
+still reports. Only fast and `mise run fix` pass `--fix`, so CI's gates only
+check.
 
 A gate tagged `recording` (`lint:drift-api-examples`) is a serial run of the
 tests its run names, compared with a file. Its fix records over the file,
-which every gate would wait on, so fast runs it only once the check has
-failed; the gates and tests the rewritten files select then run again, and
-they decide the run. A change to Python files alone runs a recording only
+which every gate would wait on, so `fast --fix` runs it only once the check
+has failed; the gates and tests the rewritten files select then run again,
+and they decide the run. Without `--fix`, its failure stands. A change to Python files alone runs a recording only
 when it selects one of the tests the recording runs.
 
 The tests it selects are:
@@ -403,7 +417,11 @@ The tests it selects are:
   on every change. The declaration holds the class as it runs, as Bazel's
   sandbox holds a test to its declared inputs: an open, a listing, a stat or a program
   that reaches past it fails the test, naming each path, so a declaration that
-  falls short fails in CI's whole run rather than going unselected;
+  falls short fails in CI's whole run rather than going unselected. A program
+  is held by what its own tool says it reads of the paths it is handed
+  (ast-grep's `--inspect entity`, Vale's `ls-config`, the pathspecs of a
+  git listing, in `hq/platform/application/tests/program_reads.py`), and one
+  read nowhere there keeps its test running on every change;
 - the extensions' suites, composed, when `mise.local.toml` names a set and the
   change reaches what extensions render through (`templates/`, `static/`,
   `hq_sdk/`, the shared table, page, UI and moment modules, template tags).
@@ -466,11 +484,10 @@ by side, before the tests are selected, and the tests start only once every
 one has passed, so a lint or drift finding fails the run in the seconds they
 take. A recording waits for the selection, which says whether it runs. The tests then run
 beside each selected gate that runs in the heavy turn ([Heavy gates take
-turns](#heavy-gates-take-turns)): with one, fast takes the turn once, through
-the hidden task `turn`, for the tests and those gates together, and mise hands
-its lock down to every task under it, so a gate that takes the lock itself
-goes ahead at once, beside the rest. With none, the tests take the turn
-themselves when their run is more than one process, and a share otherwise. Both runs' output is kept in
+turns](#heavy-gates-take-turns)), in one share of the turn sized by what they
+run, and the share tells every task under it that it holds the turn, as mise
+hands a lock down, so a gate that takes the lock itself goes ahead at once,
+beside the rest. Both runs' output is kept in
 `var/gate/fast.log` ([The gates](#the-gates)), and both run in the config
 environment `mise.fast.toml` sets: mise's summary output, where a gate that
 passed prints its `passed in` line as it ends and one that failed prints
@@ -692,15 +709,16 @@ first. The global pre-push hook runs it with git's refs on stdin.
 ### Heavy gates take turns
 
 Two suites at once exhaust a small machine's memory. So every step that loads
-the machine (a suite, a browser, an image build, CodeQL) waits for one turn
-shared by every checkout and worktree, and a waiting task names the holder.
-A run of tests or a look of one process takes a share of the turn instead,
-and shares run side by side up to the machine's budget.
+the machine takes a share of its budget sized by what it runs, shared by every
+checkout and worktree, and shares run side by side up to the budget. Only a
+step that needs the whole machine whatever it is given (an image build, the
+browser gates, CodeQL) takes the turn to itself. A waiting task names the
+holder.
 
 A step of one process that holds little (a Django command, a linter) runs
 beside the holder. A gate whose one process still loads the machine
 through most of a fast run (`lint:mypy` is one) carries the tag `heavy`, which only fast reads: fast
-runs it beside its tests in the turn it takes for them, never among its
+runs it beside its tests in the share it takes for them, never among its
 quick gates, while a direct `mise run` of it, `lint` and CI run it as a step
 of one process. `FastGateStageTests` (`tools/gate/tests/test_fast_stages.py`)
 holds every gate fast runs to one side: tagged `fast` as a quick gate, or
@@ -720,7 +738,9 @@ browser:demo`) queue on the turn and each runs in full, and a hung holder
 is stopped. A heavy task started inside a turn runs at once, since mise hands
 the lock down (`MISE_TASK_LOCKS`), and a holder killed outright frees it.
 `HeavyTaskTests` (`tools/gate/tests/test_turn.py`) holds every task to its
-side of the line, and `tests/shell/test-heavy.sh` the turn's promises.
+side of the line, `WholeMachineTests` there holds each task that takes the
+turn to itself, or every token, to the list that says why it needs the whole
+machine, and `tests/shell/test-heavy.sh` the turn's promises.
 
 A landing goes first. Every task that takes the turn passes the lock `gate`
 first, which mise takes in sorted order, so a task waiting there holds
@@ -732,27 +752,42 @@ mise polls. The command's own heavy tasks inherit the gate
 (`MISE_TASK_LOCKS`) and take turns on `heavy` among themselves.
 `test_landing.py` (`tools/gate/tests/`) runs that order against mise.
 
-A run of tests takes a share of a token for each process it runs tests in
+A run of tests takes a token for each process it runs tests in
 (`tools/gate/turn.py`): one when it is serial (`--parallel 1`), and
 otherwise as many as the workers Django starts, one for each test class up to
-the workers asked for. So `mise run test <module>.<Class>` takes a share of
-one, and a run across the cores (fast's selection, a module of many classes,
-the suite) waits for the whole turn. The decision weighs the arguments the
-run passes: a task hands it its run's own options before the labels
-(`test_arguments`), which `HeavyTaskTests` holds to the run. `dev:look` is
-one process whatever pages it names and declares its share
-(`turn_share=2`), save with `--base` or `--perf`, which run perf in the whole
-turn. A task whose weight depends on what it is given (`test`, `fast`'s
-tests, `lint:source`, the composed suite, `dev:look`, `browser --linux`) runs
-its whole runs through the hidden task `turn`, which holds the lock, and its
-shares through `python -m tools.gate.turn --share` (`tools/lib/heavy-turn.sh`
-for a file task), each under the gate's own bound: `mise run --timeout` would
-count the wait too.
+the workers asked for, two where a browser draws beside one. A run asking
+past the budget takes all of it, so a small machine runs no more at once than
+it holds. So `mise run test <module>.<Class>` takes one, and a run across the
+cores (a module of many classes, the suite) takes every token. The decision
+weighs the arguments the run passes: a task hands it its run's own options
+before the labels (`test_arguments`), which `HeavyTaskTests` holds to the run.
+`test --at` takes what its labels weigh here, since the ref's runs of them
+come one at a time; `test --go` and the shell suites take every token.
+fast's tests and its `heavy` gates take one share: what the tests weigh, one
+token for each such gate, and every token beside a gate that takes the lock.
+`dev:look` declares its share (`turn_share`): a browser's two tokens for each
+process it splits its pages among, one for each twenty pages up to what the
+machine holds, or perf's when `--base` or `--perf` runs perf after it and it
+draws more. perf takes what it draws: two for this tree's server and the
+Chromium that reads it, one more for a base's server beside it, and every
+token with `--image`, whose Docker VM holds memory of its own; its page bytes
+and query counts do not move with load, and its times fail nothing. A task
+whose weight depends on what it is given (`test`, `fast`'s tests,
+`lint:source`, the composed suite, `dev:look`, `perf`, `browser --linux`)
+takes its share through `python -m tools.gate.turn --share`
+(`tools/lib/heavy-turn.sh` for a file task, `turn_share=all` for every token),
+under the gate's own bound: `mise run --timeout` would count the wait too.
 
-A share counts in tokens out of the machine's four (`CAPACITY`), each about
+A share counts in tokens out of the machine's budget (`CAPACITY`), each about
 a core and 600 MB: a process that runs tests takes one, one beside which a
-browser draws (a look, a survey) two, so two surveys or four test runs fit together beside
-the dev server and a browser on an 8 GB Mac. mise's task lock is one
+browser draws (a look, a survey) two. The budget is derived from the machine,
+a token for each core and no more than one for each 2 GB, so two surveys or
+four test runs fit together beside the dev server and a browser on an 8 GB
+Mac, and a 12-core, 32 GB machine holds twelve. That count takes every core
+as equal, so a machine whose cores are slow or throttled declares the count
+measured on it instead, once, in its clone's git config
+(`git config hq.gateTokens <tokens>`), which `tools/gate/room.py` reads
+before the fallback. mise's task lock is one
 exclusive flock with no shared or counted mode
 ([task_lock.rs](https://github.com/jdx/mise/blob/v2026.11.8/src/task/task_lock.rs)),
 so a share is the counting semaphore the kernel's flock(2) makes, as
@@ -763,9 +798,13 @@ share of two is never starved by shares of one. A whole run waiting for the
 turn holds the gate while it waits (mise takes `gate`, then polls `heavy`),
 and a share passes the gate before it takes its tokens, so a waiting whole
 run lets the shares it waits for end and lets no new one start: no run
-starves. A run inside a share, like one inside the turn, goes ahead at once
-(`HQ_TURN_SHARE`). A share waits, names who holds what it waits for and gives
-up after `MISE_TASK_LOCK_TIMEOUT` as mise's own waits do.
+starves. A run inside a share, like one inside the turn, goes ahead at once:
+a share tells its command its tokens (`HQ_TURN_SHARE`) and that it holds
+`gate` and `heavy` as mise hands a lock down (`MISE_TASK_LOCKS`), so a task
+under it that takes the lock in its header runs inside it rather than waiting
+on it. A share waits, names who holds what it waits for and gives up after
+`MISE_TASK_LOCK_TIMEOUT` as mise's own waits do, and a gate's closing line
+counts its wait, as it counts mise's.
 
 A task that waits for the turn without holding the lock (each of those, and
 an aggregate whose script runs `mise run` on one that waits) declares
@@ -802,15 +841,106 @@ wrapper that names it), its workers, and children under them such as a walk
 run apart. A worker's and a child's line also gives the most
 one process of its role held. The sampling's own CPU is stated last and kept
 out of the tree's. The template's `shell`, the line every heavy file task
-sources, the `turn` task and a share each run their command under it, and
-`HeavyTaskTests` holds every task that takes the lock to one of the three. A
+sources and a share each run their command under it, and `HeavyTaskTests`
+holds every task that takes the lock to one of the first two. A
 heavy run inside a measured one adds no line of its own, so measuring one
 label is that one command.
 
 The line is a report, never a check: load and the mix of tests move both
 memory and time, so nothing fails on them, and the command's exit status is
-the run's whatever the measuring did. A measurement it cannot take (no
+the run's whatever the measuring did, unless it stopped a run of tests that
+made no progress ([Policy, fonts and stalls](#policy-fonts-and-stalls)). A measurement it cannot take (no
 `footprint`, a sample that failed) is named in the line in its place.
+
+### Gates on a second machine
+
+A second machine you reach over SSH can take the gates a person types:
+`fast`, `test` (the composed suite and `--at` included), `dev:look`,
+`browser` and `perf`. One setting in the repository's git config, which every
+worktree shares however it was made, turns it on:
+
+```sh
+git config hq.gateRemote gates:hq
+```
+
+It names the machine as git names a repository over SSH, the host then
+HQ's checkout there. Each of those tasks then starts on whichever machine
+has the tokens it takes free now, with nothing new to type. The task weighs
+its run first, by the same line the machine that runs it reads again
+(`turn_share`, before it sources `tools/lib/remote.sh`); a run it does not
+weigh (fast, the composed suite, `browser`) takes every token. The sender
+reads both machines' free tokens and capacity with one function,
+`tools/gate/room.py`, here in process and there through the host half's
+`room` step, and sends the run there when that machine has room for it, else
+keeps it here when this one has, else waits on the machine that lacks the
+fewest tokens. A weight of this machine's whole budget is the whole of the
+other machine's too. One sender chooses at a time, and each run it sent holds
+its tokens until its share there holds them, so runs started together
+spread across both machines. A run there runs under that machine's own
+heavy turn, never taking this one's. Its output reads as a run here, paths
+named in this checkout, after one line naming where it runs:
+
+```text
+[fast] runs on gates, tree 928ba11e2
+```
+
+A run kept here or left waiting says why, with each machine's free tokens:
+
+```text
+[dev:look] runs here: it takes 2 tokens, and gates has 0 of 6 tokens free
+```
+
+A machine that does not answer within five seconds leaves the run here, after
+one line saying so; so does a run inside a turn here, one whose flag acts on
+this machine (`--open`, `--docs`, `browser --linux`, `perf --image`, `fast --fix`), and one
+typed with `HQ_GATE_REMOTE=` before it. A task the release check runs that
+reads a secret or the deploy host (`failure-logs`, `mint`, the host check)
+never asks.
+
+How a run goes (`tools/gate/remote.py`, and `tools/gate/remote-host.sh` there):
+
+1. The tree to judge, committed or not, is the one `var/gate/` names
+   (`tools/gate/tree.py`). It is pushed with git over SSH as a commit on
+   HEAD, or HEAD itself when it holds the tree, with each commit an argument
+   names (fast's base, `--at`), which are resolved here: a branch there is
+   not this one. The push skips the repository's pre-push hook, which guards
+   a push to its forge, since these refs publish nothing. fast's default base is resolved here too, from this
+   checkout's chain of passed trees, which is also synced there with its maps,
+   so it selects what it would select here. A run that may compose (the
+   composed suite, fast) sends the extension checkout `HQ_LOCAL_PYTHONPATH`
+   names the same way, to the clone of the same name beside HQ's there, with
+   `HQ_LOCAL_PLUGINS`; one that cannot send it runs here.
+2. There, the run takes the first free worktree of this checkout's under
+   `~/.cache/hq-gates` (the checkout is keyed by its machine and path), held
+   with `flock` until the run ends, so two runs at once never share one and
+   each tree a checkout sends finds the environment and caches the last one
+   warmed. The worktree is reset to the commit sent, everything an earlier
+   run left that git tracks or does not ignore removed, and the pushed refs
+   are deleted. A new one holds the files `.worktreeinclude` names as that
+   checkout has them. A file under `var/` that an argument names (a `--eval`
+   probe) is staged before the run and laid in. A worktree untouched for a
+   day is removed as the next run starts.
+3. The same `mise run <task> <arguments>` runs in it, the arguments as mise
+   parsed them here, with each variable of this run that changes what a gate
+   does (`CARRIED`, such as `HQ_BROWSER_ENGINE`) and this run's output mode,
+   since the run there writes to no terminal. Every other variable a gate
+   reads is named in `LEFT` with why the run there reads its own, and
+   `test_remote.py` fails on one in neither. Closing the connection stops it.
+   The run only checks, as CI's gates do: fast writes no fix there, and a
+   run that leaves the worktree holding any tree but the one sent fails,
+   naming each file it changed.
+4. What it wrote comes back, archived there as the run ends, while the
+   worktree is still its own: each `var/gate/` verdict that names the tree
+   sent (any other is left there, and said so), the logs and `var/look/`.
+   A pass fast recorded there is recorded here only then, its file naming the
+   machine it ran on.
+
+One SSH connection carries every step (`ControlMaster`), with no agent or
+display forwarded. The machine needs mise, `flock` (util-linux), a `python3`
+for its room and the
+checkouts (the extension
+clone for fast and the composed suite), and nothing that writes to GitHub or reaches
+production; a run of browser tests installs the engine it draws in.
 
 ### What the gates need
 
@@ -920,14 +1050,12 @@ palette at each and the dark at 402 and 1360 (in
 Chromium at 402 and 1360 only). A finding names its check, page, width and
 theme.
 
-Its tables are also read at every shape of the layout
-(`hq.platform.core.tests.browser.table_fit`): from 320
-pixels up, at each edge of the stylesheet's viewport queries and wherever a
-box around a table changes shape between two, every row a reader can open is
-opened and every table check is read, with what opening the rows moved. A
-finding names its check and the first width it was found at.
-`TableSweepPlantedTests` plants a defect of each kind in a span of widths no
-other gate reads, and requires the sweep to find it there.
+A list's tables are also read at every shape of the layout
+(`a_table_fits_its_box_at_every_width`): from 320 pixels up, at each edge
+of the stylesheet's viewport queries and wherever a box around a table
+changes shape or its table lets a rank go between two, every row a reader
+can open is opened and every table check is read, with what opening the rows
+moved. A finding names its check and the first width it was found at.
 
 `WIDE_TABLES` is read from the stylesheet: the narrowest window where a
 table's region, on the page and in a card, has passed the breakpoint its wide
@@ -948,7 +1076,7 @@ host name outside the reserved and shared ranges it names.
 | both estates in another engine | `HQ_BROWSER_ENGINE=chromium` or `firefox` |
 | the legs named | `mise run browser <leg>...` (`webkit`, `demo`) |
 | one CI share of a leg | `HQ_BROWSER_SHARD=2/7 mise run browser:webkit` |
-| one browser test | `mise run test <label>`, once `mise run setup:browser webkit` has installed the engine |
+| one browser test | `mise run test <label>`, which installs the engine first |
 | a failure only CI's Linux shows | `mise run browser --linux` with a leg (`chromium`) or test labels |
 
 `browser:webkit` runs every browser test in WebKit, which judges, since HQ is
@@ -1024,6 +1152,20 @@ turn or a CI job until its bound. A loop that spins (a renderer inside
 `page.evaluate`) spends CPU, so the watch keeps it; its job's
 `timeout-minutes` bounds it on CI.
 
+A hang outside every test process's watch (a worker that never starts, a
+parent waiting on a pipe, a process stuck on its way out) is the measurer's
+(`tools/lib/measured`, which runs every heavy gate). Once its tree holds a
+test run, a test beginning in any process (each mark is left in the folder
+`HQ_TEST_MARKS` names) or the tree spending 1% of a core is progress. With
+neither for twice `HQ_TEST_STALL_SECONDS`, so a test's own watch fails it
+first, it names the test each process was in, has each dump its stacks
+(faulthandler, on `SIGUSR1`), stops the whole tree and exits 124, which
+frees the heavy turn:
+
+```text
+heavy: no test began and the run spent under 1% of a core for 10m00s, so it is stopped; hung in example.tests.Hung.test_forever (pid 4121, for 10m02s)
+```
+
 #### Looking at a page
 
 `mise run dev:look <pages>...` is the same browser for looking rather than
@@ -1048,15 +1190,23 @@ page that answers anything but 200 fails the run. A query rides on the page's na
 server answers, so a page drawn from its query (Command Center's results, a
 filtered list) is a name like any other.
 
+A look of many pages (`all`) is split among processes, each with its own
+browser and a copy of the test database, its pages dealt as CI deals a
+browser gate's sweep (`hq/platform/core/tests/look_shares.py`). Each says
+the page it is on as it starts, after its share (`share 2/4:`); every page's
+lines then follow in the order asked, as one process prints them, and a
+line names how many processes looked. A share that ends early fails the
+run, naming its pages. `--deep` stays one process.
+
 A component catalog entry (`part/notice-error`, `table/figures`, every key of
 `CATALOG`, which `hq/platform/core/tests/browser/catalog/` gathers from its
 families' modules) is drawn by the
 catalog gate's own `catalog.page`, so a look and that gate never
 draw an entry apart. `gallery` is every entry on one page, each in a region
-named for it, after a map of its families: the gate holds it to the survey
-each entry alone is held to, so a finding there that no entry has alone is
-one entry disturbing another. HQ's System > Design page frames the same
-gallery as a document of its own, drawn by a checkout's server from the catalog it runs on each request, and
+named for it under its name, after a map of its families, each part in a
+shadow root of its own, so no entry reaches another: the gate holds the
+page around them to the survey. HQ's System > Design page draws the same
+gallery as its content, drawn by a checkout's server from the catalog it runs on each request, and
 read from the image build's copy in the image. An entry is answered from memory as a gate page is, with no
 server or estate behind it, so a look at one entry is the quick way to see a
 change to a shared part, ahead of the catalog's whole browser class. A name that begins entries
@@ -1209,10 +1359,17 @@ chain of ancestors with their widths:
 `mise tasks info perf` gives its flags. It is a report, not a gate. It
 measures:
 
-- on the server: time, queries, the rows its tables hold and its HTML size;
+- on the server: time, the rows its tables hold, and its queries and HTML
+  split into what the page costs once and what it costs per row;
 - in Chromium: bytes, requests, first and largest contentful paint (first
   visit and repeat), script time and layout shift;
 - memory and cold start.
+
+A page's queries are `page q`, the first of each SQL statement it sends, and
+`row q`, every repeat of one (N+1), which grows with the rows it draws. Its
+HTML is `page KB`, outside its records' rows, and `B/row`, their bytes per
+record. Each ref is measured on its own seed, so a page that drew more rows at
+the same cost moves only `rows`, `row q` and its total HTML.
 
 A first load's bytes are also shown by type (document, stylesheet, script,
 font, image). A load whose stylesheets and scripts all came uncompressed, as a
@@ -1230,11 +1387,14 @@ failed one is recorded with its error and the rest go on, and each step says
 how long it took. `<run>.txt`, which the session log shows, is the summary,
 and `<run>.table` has every page.
 
-Memory is what the server allocated: a scratch server's footprint, or an
-image's cgroup `anon`, the same reading `release:report` takes of production,
-so the three compare. A container's `memory.current`, `docker stats` and a
-process's RSS add clean pages of the files it mapped or read (the shared
-libraries, the database), charged to whichever container read them first.
+Memory is what the server allocated: a scratch server's footprint on macOS
+and its proportional set size with its swapped share on Linux, the readings
+the heavy gates' peak memory takes, or an image's cgroup `anon`, the same
+reading `release:report` takes of production. A container's
+`memory.current`, `docker stats` and a process's RSS add clean pages of the
+files it mapped or read (the shared libraries, the database), charged to
+whichever container read them first. The title names the machine measured,
+and a run kept on another machine never stands in for a base.
 
 Production holds more than a pass over the pages does: the bridge and the
 signing-key keeper it runs, and the MCP server. The MCP server starts on an

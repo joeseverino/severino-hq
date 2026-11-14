@@ -215,6 +215,7 @@ class PostButtonTests(SimpleTestCase):
 
 
 @tag("source", "tree")
+@reads("**/*.py", "tools/lint/ast-grep/rules/page-trail-declared.yml")
 class PageTrailTests(SimpleTestCase):
     """A view says its trail with ``page_trail`` and ``trail_label``, not a ``get_page_trail`` that restates them.
 

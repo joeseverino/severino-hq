@@ -1520,7 +1520,7 @@
       "listActionItemsV2OK": {
         "dataValue": {
           "data": {
-            "count": 12,
+            "count": 13,
             "items": [
               {
                 "action": "Review docs",
@@ -1533,7 +1533,7 @@
               }
             ],
             "next": null,
-            "total": 12,
+            "total": 13,
             "truncated": false
           },
           "ok": true

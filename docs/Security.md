@@ -635,6 +635,16 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
   while it waits (`approval.withdraw`, or MCP's `tasks/cancel`), which
   applies nothing and frees its place among the ten; another caller's reads
   as no request at all.
+- An approved change to a record is applied by the approval itself: the save
+  queues the reconcile under the same attribution, and nobody is asked again
+  (`_apply_saved` in `infrastructure.py`). For a kind the controller does not
+  converge on its own, the reconcile writes HQ's whole copy over what is
+  live, so it never does more than the diff approved: it carries the copy it
+  replaces and is claimed only once a read made after the approval finds the
+  live record as that copy. A live record that drifted, or a copy changed
+  again, fails it, and applying it is asked again with the whole difference
+  shown (`over_live` in `controller.py`). A kind nothing reads live is not
+  applied this way.
 - The change runs as the agent that asked, so its audit events name that
   agent. The person who approved or declined it is the request's
   `decided_actor`, which a decided request cannot be saved without.

@@ -218,6 +218,31 @@ class FilterBarFoldTests(SimpleTestCase):
             '<a class="btn" aria-label="A &amp; B">Go &lt;on&gt;</a>',
         )
 
+    def test_the_sizer_copies_a_closed_popover_empty_and_the_panel_keeps_its_choices(self):
+        from hq.platform.core.templatetags.filter_tags import unnamed
+
+        menu = (
+            '<div class="table-filter-menu"><button type="button" popovertarget="example-menu">Kind</button>'
+            '<div class="table-filter-options" id="example-menu" popover><div><label>'
+            '<input type="checkbox" name="kind" value="host"> Example host</label></div></div></div>'
+        )
+        html = _render(
+            '{% filter_bar %}<input type="search" name="q">{% choices %}{{ menu|safe }}{% endfilter_bar %}', menu=menu
+        )
+
+        # The sizer is hidden from the reader, so its copy is read on its own.
+        live, copy = html.split('<div class="filter-bar-sizer"', 1)
+        (shown,) = with_class(live, "table-filter-options")
+        (choice,) = [e for e in elements(live, "input") if shown in e.ancestors]
+        self.assertEqual(choice.attrs["name"], "kind")
+        (copied,) = with_class(copy, "table-filter-options")
+        self.assertIn("popover", copied.attrs)
+        self.assertEqual([e for e in elements(copy, "label") if copied in e.ancestors], [])
+        # The menu's own control still holds its room in the copy.
+        self.assertIn("Kind", [e.words for e in elements(copy, "button")])
+        # What follows the popover is copied whole.
+        self.assertEqual(str(unnamed("<b><i popover><i>x</i></i>y</b>")), "<b><i popover></i>y</b>")
+
     def test_a_bar_with_no_choices_draws_no_fold(self):
         html = _render('{% filter_bar %}<input type="search" name="q">{% endfilter_bar %}')
 

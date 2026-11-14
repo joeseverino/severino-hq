@@ -710,6 +710,7 @@ class RequestPath:
                     title=hop.label,
                     value="",
                     body=hop.check.detail,
+                    why="This request disagrees with what HQ declares for this step, so the step is not doing what HQ expects.",
                     workflow=instructions(f"request-path:{hop.step}", hop.check.step),
                     key=f"request-path:{hop.step}",
                     # A hop is judged from this request beside several readings, none of whose age is the finding's.

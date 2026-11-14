@@ -19,8 +19,18 @@ a host reached only over the tailnet, behind cookies that are SameSite=Lax.
 Nothing here pads a body to a random length, so no property above leans on one.
 """
 
+import brotli
 from starlette.datastructures import Headers, MutableHeaders
 from starlette_compress import CompressMiddleware
+
+# How hard a page is compressed in brotli, the coding every browser HQ serves takes.
+BROTLI_QUALITY = 5
+
+
+def as_sent(body: bytes) -> bytes:
+    """``body`` as a browser receives it: what a budget on a page's weight reads."""
+
+    return brotli.compress(body, quality=BROTLI_QUALITY)
 
 
 class Compressed:
@@ -34,7 +44,7 @@ class Compressed:
 
     def __init__(self, app):
         self.app = app
-        self.compressing = CompressMiddleware(self._answering, zstd=False, brotli_quality=5, gzip_level=6)
+        self.compressing = CompressMiddleware(self._answering, zstd=False, brotli_quality=BROTLI_QUALITY, gzip_level=6)
 
     async def _answering(self, scope, receive, send):
         # Notes whether the answer came encoded, so only an encoding added here

@@ -1,25 +1,31 @@
 {% comment %}
-How urgent a card is, and behind it what raised it (`item.origin`): Cmd- or
-Ctrl-click opens the rule, its severity, what it stands in for and the line
-it is defined at; hovering says the rule and its line in a tooltip. A plain
-click does nothing; the panel is the page's own markup, opened by app.js and
-dismissed like any popover. With `mark` (a queue row) it is a small word in its tone
-after the title when the item is urgent, and for a screen reader only when it
-is not or when the row is `quiet`.
+How urgent a card is, and behind it why (`item.origin`, from
+`application.decisions`): Cmd- or Ctrl-click opens a panel whose one list says
+why in its raiser's words, then what raised it (the domain, a finding's rule,
+severity and the line it is defined at, and the key), all in view; when its
+reading was taken and since when close the panel in a quiet line at its
+bottom right. Hovering says why in a tooltip. A
+plain click does nothing; the panel is the page's own markup (`#panel`, drawn
+by the caller after the line the pill sits in, never inside its words), opened
+by app.js and dismissed like any popover. With `mark` (a queue row) it is a small word
+in its tone after the title when the item is urgent, and for a screen reader
+only when it is not or when the row is `quiet`.
 {% endcomment %}
 {% partialdef origin %}
 {% facts %}
+  {% fact "Why" value=item.origin.why %}
+  {% fact "Domain" value=item.origin.source %}
   {% if item.origin.rule %}
     {% fact "Rule" %}{{ item.origin.title|breakable }} <code>{{ item.origin.rule|breakable }}</code>{% endfact %}
     {% fact "Severity" value=item.origin.severity %}
     {% if item.origin.where %}{% fact "Defined at" %}<code>{{ item.origin.where|breakable }}</code>{% endfact %}{% endif %}
-    {% if item.origin.subsumes %}{% fact "Stands in for" %}{% for name in item.origin.subsumes %}<code>{{ name|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endfact %}{% endif %}
   {% endif %}
-  {% fact "From" value=item.origin.source %}
   {% fact "Key" %}<code>{{ item.origin.key|breakable }}</code>{% endfact %}
+  {% if item.origin.subsumes %}{% fact "Stands in for" %}{% for name in item.origin.subsumes %}<code>{{ name|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endfact %}{% endif %}
 {% endfacts %}
 {% endpartialdef %}
-{% with panel="origin-"|add:item.origin.key|slugify %}{% with dialog="modal-"|add:panel %}
+{% partialdef read %}{% if item.observed_at %}{% include "partials/_reading_age.html" with at=item.observed_at only %}{% endif %}{% if item.observed_at and item.since %}{% dot %}{% endif %}{% if item.since %}Since {{ item.since|when:"day" }}{% endif %}{% endpartialdef %}
+{% partialdef panel %}{% if item.observed_at or item.since %}{% include "partials/_modal.html" with id=item.origin.panel title=item.label body_template="partials/_urgency_pill.html#origin" foot_template="partials/_urgency_pill.html#read" modal_class="origin-panel" popover=True %}{% else %}{% include "partials/_modal.html" with id=item.origin.panel title=item.label body_template="partials/_urgency_pill.html#origin" modal_class="origin-panel" popover=True %}{% endif %}{% endpartialdef %}
+{% with dialog="modal-"|add:item.origin.panel %}
 {% if not mark %}{% status item.urgency tone=item|urgency_tone tip=item|origin_tip data_origin=dialog %}{% elif quiet or item.notice or item.status != "serious" %}{% status item.urgency tone=item|urgency_tone css="is-mark visually-hidden" tip=item|origin_tip:"mark" data_origin=dialog %}{% else %}{% status item.urgency tone=item|urgency_tone css="is-mark" tip=item|origin_tip:"mark" data_origin=dialog %}{% endif %}
-{% include "partials/_modal.html" with id=panel title=item.label body_template="partials/_urgency_pill.html#origin" modal_class="origin-panel" popover=True %}
-{% endwith %}{% endwith %}
+{% endwith %}

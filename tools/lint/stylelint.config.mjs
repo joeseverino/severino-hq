@@ -122,7 +122,7 @@ const primitives = [
     names: String.raw`(?:\.(?:data-table|row-detail|row-columns)(?![-\w])|(?<![-\w.#])(?:table|caption|thead|tbody|tfoot|tr|td|th)(?![-\w]))`,
     sheets: ["base", "cuts", "figures", "tables", "surfaces"],
     parts: [
-      "btn", "button-words", "cell-line", "cell-part", "cell-whole", "cut", "external-link", "icon-link", "is-expanded", "kept-line", "line-list", "line-rest", "line-run", "muted",
+      "btn", "button-words", "cell-line", "cell-part", "cell-whole", "cut", "external-link", "icon-link", "is-expanded", "line-list", "line-rest", "line-run", "muted",
       "name-line", "narrow-more", "narrow-only", "part", "pill", "readout", "row-actions", "row-below", "row-gutter",
       "row-editor", "row-later", "row-less", "row-more", "select-column", "strut", "table-clamp", "table-scroll", "token", "visually-hidden", "whole",
     ],
@@ -150,19 +150,12 @@ const cellRoles = [
   `/(?:${cell})[\\s\\S]*\\.(?!(?:${[table.classes, ...table.parts].join("|")})(?![-\\w]))[a-zA-Z][\\w-]*/`,
 ];
 
-// A table's narrow box is a property, `--box`, which the script's mark
-// (`data-narrow`, tables.js) sets and a phone's region with no script sets
-// too, so a rule reads the property (`@container style(--box: narrow)`): one
-// that read the mark would miss the box no script measures.
-const narrowMark = String.raw`/\.data-table(?![-\w])[^\s,>+~]*\[data-narrow\]/`;
-const narrowMessage = "a table's narrow box is `--box` (`@container style(--box: narrow)` or `whole`), never the script's `[data-narrow]` mark, which a page with no script never gets";
 // A child of one parent that `:is()` asks to be a child of another: both
 // parents are the one element's, so the selector names a parent twice and
 // matches nothing a page draws (`.btn > :is(.words > .token)`).
 const childInIs = String.raw`/>\s*:is\([^()]*>/`;
 const childInIsMessage = "a child combinator before `:is()` and another inside it ask one element's parent to be both: write each path whole inside `:is()` (`:is(.a > .b, .a > .c > .b)`)";
 const selectorMessage = (selector, message) => {
-  if (new RegExp(narrowMark.slice(1, -1)).test(selector)) return narrowMessage;
   if (new RegExp(childInIs.slice(1, -1)).test(selector)) return childInIsMessage;
   return message(selector);
 };
@@ -178,6 +171,7 @@ export default {
   plugins: [
     "./stylelint-ground-cover.mjs",
     "./stylelint-restyled-primitive.mjs",
+    "./stylelint-browser-floor.mjs",
   ],
   // The app sheets share one set of tokens, so a property one sheet reads may
   // be defined in another.
@@ -188,6 +182,17 @@ export default {
   reportNeedlessDisables: true,
   rules: {
     "hq/ground-cover": true,
+    // A feature newer than the browser floor (docs/Design.md, "Browsers") is
+    // written inside @supports, or named here with what an engine without it
+    // draws instead.
+    "hq/browser-floor": {
+      degrades: {
+        "css.properties.text-wrap.pretty": "the engine's own line breaks",
+        "css.properties.baseline-source": "the last line's baseline, and a row-columns pair set by its top (tables.css)",
+        "css.at-rules.view-transition": "a navigation with no cross-fade",
+        "css.properties.break-after.avoid": "a printed heading that may end a page",
+      },
+    },
     // Any other sheet draws none.
     "hq/restyled-primitive": { primitives },
     // CSS resolves an undefined custom property to an invalid value without
@@ -199,6 +204,17 @@ export default {
     // A selector's rule is written once per file and at-rule block. The test
     // beside StyleContractTests holds it across sheets and `@layer` blocks.
     "no-duplicate-selectors": true,
+    // A declaration says its value once: a second copy in the same block is
+    // a stale edit the first silently loses to, and longhands a shorthand
+    // says in one declaration are bytes and lines with nothing to add.
+    // no-descending-specificity stays off: it compares rules only within the
+    // nearest at-rule block, so it reads a sheet's `@layer` block as a media
+    // context and never compares across the sheets one layer spans, where the
+    // cascade HQ orders is.
+    "declaration-block-no-duplicate-properties": true,
+    "declaration-block-no-duplicate-custom-properties": true,
+    "declaration-block-no-redundant-longhand-properties": true,
+    "shorthand-property-no-redundant-values": true,
     // Color lives in tokens, so a theme is a set of token overrides; a literal
     // anywhere else stays a light-mode value on a dark page.
     "color-no-hex": true,
@@ -224,7 +240,7 @@ export default {
     "declaration-property-value-allowed-list": { "font-display": ["optional"] },
     "property-disallowed-list": disallowedProperties(caseProperties),
     "rule-selector-property-disallowed-list": { [`/${inTable}/`]: boxWidth },
-    "selector-disallowed-list": selectorRule([narrowMark], () => narrowMessage),
+    "selector-disallowed-list": selectorRule([], () => childInIsMessage),
   },
   overrides: [
     {
@@ -233,7 +249,7 @@ export default {
       rules: {
         "rule-selector-property-disallowed-list": null,
         "selector-disallowed-list": selectorRule(
-          [...cellRoles, narrowMark],
+          cellRoles,
           (selector) =>
             `"${selector}" tells a cell's part by a page's class or its tags: key it on its role (\`[data-cell~=name|prose|data]\`, table_tags.mark_cells) or a part the table primitive draws`,
         ),

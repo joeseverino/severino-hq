@@ -18,6 +18,7 @@ from tempfile import TemporaryDirectory
 from django.test import SimpleTestCase, tag
 
 from hq.domains.control_plane.models import OperationRequest
+from hq.platform.application.tests.reads import reads
 
 from ..action_links import capability_action_link, command_action, read_now_link
 from ..capabilities import capability_registry
@@ -169,6 +170,7 @@ class CommandBuilderTests(SimpleTestCase):
 
 
 @tag("source", "tree")
+@reads("hq/**/*.py", "templates/**/*.html", lists=("hq/**", "templates/**"))
 class CallSiteWordsTests(SimpleTestCase):
     """No button, link or toast for a command brings text of its own.
 
@@ -244,6 +246,7 @@ class CallSiteWordsTests(SimpleTestCase):
 
 
 @tag("source", "tree")
+@reads("hq/**/*.py", "templates/**/*.html", lists=("hq/**", "templates/**"))
 class DeclaredWordsTests(SimpleTestCase):
     """Every action has the words a surface asks it for."""
 

@@ -72,7 +72,7 @@ from .finding_model import (
 )
 from .first_seen import recorded
 from .integration_validation import required_capability_names
-from .integrations import IntegrationGraph, integration_graph
+from .integrations import IntegrationGraph, held_graph, integration_graph
 from .json_schemas import Written
 from .projection import QUERY
 from .security import Capability, Principal
@@ -380,6 +380,8 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
         subject_link=ActionLink("subject", subject.label, "read", subject.url) if subject and subject.url else None,
         read_capabilities=_held_to(finding, subject, principal),
         read_now=read_now,
+        # Where no one reading dates it, its subject's last read does.
+        observed_at=finding.observed_at or (parse_stamp(subject.observed_at) if subject else None),
     )
 
 
@@ -433,7 +435,7 @@ def _scope_resource(scope: str) -> str | None:
 
 
 def _resource_gate(name: str) -> tuple[str, ...]:
-    return required_capability_names(integration_graph().resources[name])
+    return required_capability_names(held_graph().resources[name])
 
 
 def _no_help_reason(finding: Finding) -> str:

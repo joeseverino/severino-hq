@@ -36,6 +36,7 @@ from .projection import keyset_page, read_once
 from .record_errors import PolicyError
 from .record_saves import Held, as_sent, found, held, written
 from .security import Principal
+lazy from .cadence import request_reading, swept
 lazy from .delivery_progress import deploying_label
 lazy from .locate import names_by_connection
 lazy from .resource_capabilities import kind_converges
@@ -432,6 +433,8 @@ def save_managed_resource(
             if created
             else held(ManagedResource, MANAGED_RECORD, {"key": current_key}, expected_updated_at)
         )
+        # HQ's copy as the change found it, which an apply by hand may only replace.
+        replaced = {} if created else dict(resource.spec)
         if not created:
             command = ManagedResourceCommand(
                 **{**as_sent(resource, ManagedResourceCommand, {}), **written(command, sent)}
@@ -473,7 +476,7 @@ def save_managed_resource(
         # state is recomputed here rather than waiting for each to be saved.
         if changed and provider.resolution_input:
             advance_dependents(delivery_targets())
-        applying = _apply_saved(resource, principal=principal) if changed and not copied_from_live else None
+        applying = _apply_saved(resource, replaced, principal=principal) if changed and not copied_from_live else None
 
     return {
         "ok": True,
@@ -505,16 +508,29 @@ def _call_off_waiting(resource: ManagedResource) -> None:
         operation.save(update_fields=("state", "completed_at", "result", "updated_at"))
 
 
-def _apply_saved(resource: ManagedResource, *, principal: Principal) -> OperationItem | None:
-    """Queue the reconcile that applies a saved declaration, as the operation queued.
+SAVED_REASON = "HQ's copy of it changed."
 
-    Only for a kind the controller applies on its own, which it would queue at
-    its next pass anyway; queued with the write, the doorbell rings and the
-    change is applied now rather than at the controller's floor. A kind whose
-    reconcile is asked for by hand stays that way.
+
+def _apply_saved(resource: ManagedResource, replaced: dict[str, Any], *, principal: Principal) -> OperationItem | None:
+    """Queue the reconcile that applies a saved declaration, as the save's own act.
+
+    Every kind's change is applied by the save that made it, so one consent
+    (a person's save, an approval) covers the apply and nothing is asked twice.
+    A kind the controller converges on its own would be queued at its next
+    pass anyway. A kind applied only by hand writes HQ's whole copy over what
+    is live, so its reconcile carries the copy it ``replaced``, and the claim
+    applies it only over a live record read since then as that copy
+    (``controller.over_live``): the live change is then exactly the change
+    that was saved or approved, and a live record that drifted is refused.
     """
 
-    automatic = enabled_controller_actions(automatic_only=True)
-    if not resource.enabled or (resource.kind, OperationRequest.Action.RECONCILE) not in automatic:
+    kind_action = (resource.kind, OperationRequest.Action.RECONCILE)
+    if not resource.enabled or kind_action not in enabled_controller_actions():
         return None
-    return queue_reconcile(resource, principal=principal, reason="HQ's copy of it changed.")["operation"]
+    if kind_action in enabled_controller_actions(automatic_only=True):
+        return queue_reconcile(resource, principal=principal, reason=SAVED_REASON)["operation"]
+    if not swept(resource.kind):
+        # Nothing reads it live, so nothing could show the apply stays within the change.
+        return None
+    transaction.on_commit(lambda: request_reading(resource.kind))
+    return queue_reconcile(resource, principal=principal, reason=SAVED_REASON, replaces=replaced)["operation"]

@@ -11,7 +11,6 @@ every row, and ``{% row_state %}`` says how a row stands among the others. Which
 show is the browser's to say (docs/Design.md, A table fits its box).
 """
 
-import html
 import inspect
 import re
 from functools import wraps
@@ -27,7 +26,6 @@ from django.utils.text import slugify
 from hq.platform.application.page_parts import html_attributes
 from hq.platform.application.tables import TableColumn, check_drop, column_kind, ranked
 from hq.platform.core.table_cells import (
-    SAYS_NOTHING,
     Cells,
     LineEntry,
     Point,
@@ -71,16 +69,11 @@ class _Markup:
         found = _END_TAG.match(self.markup, at)
         return found.end() if found else at
 
-    def content(self, span: Span, cut: list[Span] = [], *, whole: bool = False) -> str:  # noqa: B006 (never written)
+    def content(self, span: Span, *, whole: bool = False) -> str:
         """The markup from ``span``'s start to its end tag, which a ``whole``
-        element includes, with the elements in ``cut`` taken out."""
+        element includes."""
 
-        parts, last = [], self.at(span[0])
-        for start, end in sorted(cut, key=lambda each: self.at(each[0])):
-            parts.append(self.marked(last, self.at(start)))
-            last = self.after(end)
-        parts.append(self.marked(last, self.after(span[1]) if whole else self.at(span[1])))
-        return "".join(parts)
+        return self.marked(self.at(span[0]), self.after(span[1]) if whole else self.at(span[1]))
 
     def marked(self, start: int, end: int) -> str:
         """The markup from ``start`` to ``end``, with the marks written inside it."""
@@ -94,30 +87,16 @@ class _Markup:
         return "".join(parts)
 
 
-def _says_something(markup: str) -> bool:
-    return not SAYS_NOTHING.fullmatch(html.unescape(_TAGS.sub("", markup)))
-
-
 def _detail_row(markup: _Markup, width: int, blocks: list[Span], entries: list[LineEntry]) -> str:
     """A row's open line, drawn after it and shown while it is open: a cell
     the table's width holding the blocks the row keeps beneath itself, then
-    the parts it holds back, each named by its column. A column's part shows
-    while the column has left (``data-dropped``, tables.js), a narrow part in
-    a narrow box, a labeled block always."""
+    each labeled block under its label."""
 
     drawn = [markup.content(block, whole=True) for block in blocks]
-    listed = []
-    for entry in entries:
-        shown = "".join(markup.content(span, entry.cut, whole=entry.whole) for span in entry.spans)
-        if entry.how == "column" and not _says_something(shown):
-            continue
-        how = f' data-column="{entry.column}"' if entry.how == "column" else f" data-{entry.how}"
-        term = ' class="visually-hidden"' if entry.unseen else ""
-        css = f' class="{" ".join(entry.css)}"' if entry.css else ""
-        css += ' data-cell="data"' if entry.data else ""
-        listed.append(f"<dt{how}{term}>{escape(entry.name)}</dt><dd{how}{css}>{shown}</dd>")
-    if not drawn and not listed:
-        return ""
+    listed = [
+        f"<dt>{escape(entry.name)}</dt><dd data-label>{markup.content(entry.span, whole=True)}</dd>"
+        for entry in entries
+    ]
     columns = f'<dl class="row-columns">{"".join(listed)}</dl>' if listed else ""
     return f'<tr class="row-detail" data-row-detail><td colspan="{width}">{"".join(drawn)}{columns}</td></tr>'
 
@@ -129,12 +108,13 @@ def _unnamed(roles: list[tuple[int, str]]) -> list[tuple[int, str]]:
 def mark_cells(markup: str, *, sorts: bool = True) -> str | None:
     """The region's tables with each cell marked for what the stylesheet reads.
 
-    A blank body cell is ``data-blank``, a cell of a column blank in every row
-    ``data-blank-column``, prose or a status past its floor ``data-long``, a
-    status said by one pill alone ``data-pill-only``, and a group's heading row
-    spans every declared column. What a kept line says is
-    one ``.kept-line``, and after each row that holds something back is its open
-    line (``_detail_row``), so opening a row moves nothing of the row itself.
+    The table is a grid: its tracks and the widths its region gives way at
+    are custom properties on it (``table_cells._layout``), and each row group,
+    drawn as `display: contents`, keeps its role. A blank body cell is
+    ``data-blank``, a cell of a column blank in every row ``data-blank-column``; a body cell says its column's
+    kind, rank and name, a cut one its whole value in its title, and a group's
+    heading row spans every declared column. After each row that keeps a block
+    beneath itself is its open line (``_detail_row``).
     What a part of a cell is, which decides how it wraps, is its ``data-cell``:
     ``name`` for what names the row, else the role its class declares
     (``table_cells.ROLE_CLASSES``), so the stylesheet never reads a cell's content.
@@ -147,7 +127,7 @@ def mark_cells(markup: str, *, sorts: bool = True) -> str | None:
     cells.close()
     if cells.bodies and not any(cells.bodies):
         return None
-    if not any((cells.marks, cells.held, cells.details, cells.roles, cells.cuts, cells.gutters, cells.toggles)):
+    if not any((cells.marks, cells.details, cells.roles, cells.cuts, cells.gutters, cells.toggles)):
         return markup
     text = _Markup(markup)
     cuts = sorted((text.point(start), text.point(end)) for start, end in cells.cuts)
@@ -176,11 +156,8 @@ def _inserts(cells: Cells, markup: str, text: _Markup) -> list[tuple[int, str]]:
     inserts += [(offset, f' data-cell="{role}"') for offset, role in roles]
     # A copy on the open line keeps what each part is, but names no row there.
     text.marks = sorted((offset, f' data-cell="{role}"') for offset, role in _unnamed(roles) if role)
-    for opened, closed in cells.held:
-        inserts += [(text.at(opened), '<span class="kept-line">'), (text.at(closed), "</span>")]
     for point, mark in cells.gutters + cells.opened:
         inserts.append((after_name(point[0]) if point[1] is None else text.point(point), mark))
-    # After the kept line's end at the same place, so the toggle stays the cell's own child.
     if cells.toggles:
         # A row drawn open (its editor open) says so on its toggle.
         toggles = {shown: render_to_string("partials/_row_toggle.html", {"open": shown}) for shown in (False, True)}
@@ -225,15 +202,12 @@ def _region(
 ) -> dict[str, Any]:
     """The region a table sits in: the box it fits, named by ``label``.
 
-    An identifier in it is cut at a share of the region's width, and ``room``
-    names a smaller one (docs/Design.md, A table is laid out before any script
-    runs). A ``compare`` table sets two values side by side in each row, after
-    the row's name, and they share the room evenly. Only a ``pane`` (a box of its own height, or a table sized to its
-    content) scrolls in it. A ``chart``'s table fits its box as any table
-    does, read whole with no row held back and in the chart's own order, so
-    no heading sorts it. Every region is drawn as a stop for the keyboard;
-    once script has run, only a pane, a chart's and one whose table scrolls
-    stay one.
+    A table fits its region by letting ranked columns go (docs/Design.md, A
+    table fits its box); ``room`` is accepted and says nothing more. A
+    ``compare`` table sets two values side by side in each row, after the
+    row's name. Only a ``pane`` (a box of its own height) and a ``chart``'s
+    table scroll in it, and each is a stop for the keyboard. A chart's table
+    is read whole in the chart's own order, so no heading sorts it.
 
     Tables with no row are drawn as the one empty state instead
     (docs/Design.md, Nothing empty takes space): ``empty`` says what is
@@ -260,7 +234,7 @@ def _region(
             "action_url": action_url,
             "action_label": action_label,
         }
-    return {"label": label, "css": " ".join(classes), "chart": chart, "empty": nothing}
+    return {"label": label, "css": " ".join(classes), "chart": chart, "scrolls": pane or chart, "empty": nothing}
 
 
 class RegionNode(template.Node):
@@ -288,12 +262,9 @@ class RegionNode(template.Node):
                 region = _region(label, **options, remedy=self.options["remedy"].resolve(context))
             return render_to_string("partials/_empty_state.html", region["empty"])
         # A box that scrolls is a stop for the keyboard, named so the stop says
-        # what it holds. Without script any region may scroll, so every one is
-        # drawn as a stop, and tables.js takes it off a region whose table
-        # fits, which holds nothing a reader needs to reach. It is a group and
-        # no landmark: a landmark around it (its section, its card) already
-        # has its place in the page's outline, often by the same name
-        # (docs/Design.md, A table fits its box).
+        # what it holds. It is a group and no landmark: a landmark around it
+        # (its section, its card) already has its place in the page's outline,
+        # often by the same name. A region that never scrolls is no stop.
         # A table whose rows open an editor ({% row_editor %}) is a region of
         # the page's own (docs/Design.md, A read is a fragment), found by its
         # id in the page that answers it, so an editor opens, saves and closes
@@ -302,7 +273,7 @@ class RegionNode(template.Node):
         return format_html(
             '<div class="table-scroll{}"{}{}{}>{}</div>',
             f" {region['css']}" if region["css"] else "",
-            format_html(' role="group" aria-label="{}" tabindex="0"', region["label"]),
+            format_html(' role="group" aria-label="{}" tabindex="0"', region["label"]) if region["scrolls"] else "",
             mark_safe(" data-chart") if region["chart"] else "",
             format_html(' id="table-{}" data-fragment=""', slugify(region["label"])) if edits else "",
             # The region's own content, rendered and escaped already; the mark

@@ -1,7 +1,7 @@
 """Dashboard + audit-log views."""
 
 import re
-from typing import ClassVar, cast, override
+from typing import ClassVar, override
 from urllib.parse import quote, urlencode
 lazy from datetime import timedelta
 
@@ -12,11 +12,7 @@ from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpRespo
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.csp import CSP
 from django.utils.text import capfirst
-from django.views.decorators.clickjacking import xframe_options_sameorigin
-from django.views.decorators.csp import csp_override
-from django.views.decorators.http import require_safe
 from django.views.generic import TemplateView, View
 
 from hq.domains.contacts import inbox
@@ -678,38 +674,8 @@ class DesignView(PageMixin, TemplateView):
     @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        name = design_gallery.located()
-        context["gallery"] = reverse("design_gallery", args=[name]) if name else ""
+        context["gallery"] = design_gallery.markup()
         return context
-
-
-# The gallery document's policy, derived from the application's so tightening
-# that cannot leave a stale copy here: it runs no script and sends no form,
-# so no example in it acts, and only HQ's own pages may frame it.
-_APPLICATION = cast("dict[str, list[str]]", settings.SECURE_CSP)
-GALLERY_POLICY = _APPLICATION | {
-    "script-src": [CSP.NONE],
-    "frame-ancestors": [CSP.SELF],
-    "form-action": [CSP.NONE],
-}
-
-
-@require_safe
-@xframe_options_sameorigin
-@csp_override(GALLERY_POLICY)
-def design_gallery_document(_request, digest):
-    """The gallery the Design page frames, as a document of its own: its
-    examples (their ids, headings, links and forms) are the catalog's, held to
-    the catalog's survey, and never part of the page around them. A built
-    gallery's address carries its digest, so a browser may keep it for good;
-    one drawn on each request is asked for again each time."""
-
-    body = design_gallery.document(digest)
-    if body is None:
-        raise Http404
-    response = HttpResponse(body, content_type="text/html; charset=utf-8")
-    response["Cache-Control"] = "no-cache" if digest == design_gallery.LIVE else "private, max-age=31536000, immutable"
-    return response
 
 
 # A refused GET is recorded, and the fragment is drawn on every connection page

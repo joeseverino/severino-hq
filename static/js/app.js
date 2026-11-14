@@ -611,10 +611,16 @@ document.addEventListener("click", async (event) => {
 });
 
 // What raised a card: Cmd- or Ctrl-click on its urgency opens the panel drawn
-// beside it (partials/_urgency_pill.html). A plain click is left alone.
+// beside it (partials/_urgency_pill.html). A queue row says its urgency aloud
+// only when urgent, so the rest of its row stands in for the word it keeps
+// for a screen reader; a link or button in it keeps its own Cmd-click. A
+// plain click is left alone.
 document.addEventListener("click", (event) => {
   if (!(event.metaKey || event.ctrlKey)) return;
-  const pill = event.target.closest("[data-origin]");
+  const pill =
+    event.target.closest("[data-origin]") ||
+    (!event.target.closest("a, button, input, select, label, [popover]") &&
+      event.target.closest("[data-attention-item]")?.querySelector("[data-origin]"));
   const panel = pill && document.getElementById(pill.dataset.origin);
   if (!panel || !panel.showPopover) return;
   event.preventDefault();

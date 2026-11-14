@@ -158,6 +158,7 @@ RULES: tuple[FindingRule, ...] = (
         _perimeter_open,
         operator_action=(f"Close them in the machine's firewall. {THEN_CHECK_AGAIN}"),
         no_help_reason=("HQ cannot change the firewall."),
+        bars={"serious": "a port answers from the internet"},
     ),
     FindingRule(
         "perimeter-unchecked",
@@ -166,6 +167,7 @@ RULES: tuple[FindingRule, ...] = (
         _perimeter_unchecked,
         operator_action=(f"Make the machine report its public addresses and published ports. {THEN_CHECK_AGAIN}"),
         no_help_reason=("HQ cannot change what the machine reports."),
+        bars={"attention": "HQ cannot test a machine for ports open to the internet"},
     ),
     FindingRule(
         "firewall-stopped",
@@ -174,6 +176,7 @@ RULES: tuple[FindingRule, ...] = (
         _firewall_stopped,
         operator_action=("Start the firewall on the machine and check it stays running."),
         no_help_reason=cannot_run_commands(),
+        bars={"serious": "a machine's firewall is not running"},
     ),
     FindingRule(
         "reached-but-unmeasured",
@@ -182,5 +185,6 @@ RULES: tuple[FindingRule, ...] = (
         _reached_but_unmeasured,
         operator_action=("Turn on analytics for the name where the other names on its domain are measured."),
         no_help_reason=("HQ cannot turn analytics on."),
+        bars={"attention": "a name visitors reach has no visitor counts"},
     ),
 )

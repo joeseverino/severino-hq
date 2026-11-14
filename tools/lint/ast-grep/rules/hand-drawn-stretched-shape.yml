@@ -1,0 +1,35 @@
+# A drawing stretched to its box with preserveAspectRatio="none" scales x and
+# y apart, so a circle inside it draws as an oval and its lettering is pulled
+# wide or squeezed. A dot is a zero-length line whose round cap, under
+# `vector-effect: non-scaling-stroke`, stays a circle at any scale (the
+# `.chart-dot` rule), and a label goes in the unscaled layer over the drawing
+# (`svg.chart-labels`), placed in percentages. No fix: where the shape goes
+# is the part's to say.
+id: hand-drawn-stretched-shape
+language: html
+severity: error
+message: A round shape or text inside a stretched drawing, which distorts it.
+note: Draw a dot as a zero-length line of class chart-dot, and a label in the unscaled svg.chart-labels layer.
+files:
+  - "**/templates/**/*.html"
+rule:
+  kind: element
+  has:
+    any:
+      - kind: start_tag
+      - kind: self_closing_tag
+    has:
+      kind: tag_name
+      regex: ^(?:circle|ellipse|text)$
+  inside:
+    stopBy: end
+    kind: element
+    has:
+      kind: start_tag
+      all:
+        - has:
+            kind: tag_name
+            regex: ^svg$
+        - has:
+            kind: attribute
+            regex: '^preserveAspectRatio=["'']none["'']$'

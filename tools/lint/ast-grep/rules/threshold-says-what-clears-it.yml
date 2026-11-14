@@ -1,0 +1,52 @@
+# An item a threshold raises says what clears it, worded from that same
+# threshold: a why or a finding rule's bars that name a constant (a number of
+# days, a share of a disk) carry clears= beside them, which the panel behind
+# the item's urgency says after its why (decisions._origin). Without it a
+# reader learns the line was crossed and never where it lies on the way back.
+# The plugin check runs it over an extension's src/ as well.
+id: threshold-says-what-clears-it
+language: python
+severity: error
+message: An item a threshold raises does not say what clears it.
+note: Give it clears=, a clause after "Clears once" worded from the same constant (card_items.Insight.clears, FindingRule.clears).
+files:
+  - "hq/**"
+  - "demo/**"
+  - "tools/**"
+  - "src/**"
+ignores:
+  - "**/tests/**"
+  - "**/test*.py"
+  - "**/migrations/**"
+utils:
+  names-a-constant:
+    has:
+      stopBy: end
+      kind: interpolation
+      has:
+        stopBy: end
+        kind: identifier
+        regex: ^[A-Z][A-Z0-9_]{2,}$
+rule:
+  kind: call
+  has:
+    field: arguments
+    all:
+      - has:
+          kind: keyword_argument
+          all:
+            - has:
+                field: name
+                regex: ^(why|bars)$
+            - has:
+                field: value
+                matches: names-a-constant
+      - not:
+          has:
+            kind: keyword_argument
+            has:
+              field: name
+              regex: ^clears$
+      - not:
+          has:
+            kind: dictionary_splat

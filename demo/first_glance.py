@@ -1,9 +1,12 @@
 """The example estate settled for a first-time visitor, as the demo's healthy
 first glance promises; what it does and why is in ``demo/README.md``."""
 
+from datetime import timedelta
+
 from hq.domains.control_plane.bridge_actions import CONTROLLER
 from hq.domains.control_plane.models import ApprovalRequest, OperationRequest, ProviderInventory
 from hq.domains.control_plane.observations.host import EDGE_REBOOT_KIND, FILESYSTEM_KIND, REBOOT_KIND, UNIT_KIND
+from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND
 from hq.domains.expenses.models import Expense
 from hq.domains.receipts.models import Receipt
 from hq.platform.application.action_items import SET_ASIDE
@@ -19,8 +22,8 @@ from hq.platform.application.receipts import UPDATE as RECEIPT_UPDATE, serialize
 from hq.platform.application.refused_reports import READINGS_ACTION
 from hq.platform.application.security import internal_principal, web_principal
 from hq.platform.application.sweep import record_sweep
-from hq.platform.core.example_estate import automation, doors
-from hq.platform.core.example_estate.names import stamp
+from hq.platform.core.example_estate import automation, doors, network
+from hq.platform.core.example_estate.names import iso, stamp
 from hq.platform.core.example_estate.sweep import CONTROLLER as CONTROLLER_ID
 
 # The sets that are the example estate; the empty one has nothing to settle.
@@ -30,7 +33,7 @@ _KEPT_REQUEST = "infrastructure.resource.update"
 # The rest of what is left to do on purpose, by the start of its queue key:
 # an image with an update, an image run by tag alone, a certificate to renew.
 _KEPT = (
-    "hq.containers:container-updates",
+    "hq.infrastructure:finding:container-image-update:",
     "hq.infrastructure:finding:container-image-unpinned:",
     "hq.estate:estate-certificate:",
 )
@@ -121,16 +124,19 @@ def _run_again_what_did_not_finish(person) -> None:
 
 def _swept_since() -> None:
     """The controller's next sweep, after the machine restarted for its
-    updates, a build's leftovers were cleared from its root and the service
-    systemd kept restarting was fixed, which leaves it off the reading."""
+    updates, a build's leftovers were cleared from its root, the service
+    systemd kept restarting was fixed, which leaves it off the reading, and
+    each device whose tailnet key runs out was signed in again."""
 
     now = stamp()
+    renewed = iso(-timedelta(days=network.SETTINGS["devicesKeyDurationDays"]))
     restarted = {"pending": False, "since": "", "packages": [], "scheduled_action": "", "scheduled_at": ""}
     healthy = {
         REBOOT_KIND: lambda record: {**record, **restarted},
         EDGE_REBOOT_KIND: lambda record: {**record, **restarted},
         FILESYSTEM_KIND: lambda record: {**record, "free_bytes": max(record["free_bytes"], record["total_bytes"] // 2)},
         UNIT_KIND: lambda record: None if record.get("foreign") else record,
+        TAILNET_KIND: lambda record: {**record, "key_expires": renewed} if record.get("key_expires") else record,
     }
     payload = {}
     for kind, settled in healthy.items():

@@ -7,7 +7,7 @@ from django.test import SimpleTestCase
 from django.test.runner import RemoteTestResult
 
 from hq.platform.core.tests.browser import gate
-from hq.platform.core.tests.browser.shots import TALLEST, shoot_page
+from hq.platform.core.tests.browser.shots import shoot_page
 
 # What Chromium refuses an image past on either side.
 _LARGEST_IMAGE = 32_767
@@ -46,11 +46,11 @@ class ShootPageTests(SimpleTestCase):
         self.assertEqual(shoot_page(page, "example.png"), "")
         self.assertEqual(page.clips, [{"x": 0, "y": 0, "width": 1360, "height": 2400}])
 
-    def test_a_band_inside_the_shot_is_shot_as_asked(self):
+    def test_a_band_past_where_a_whole_shot_stops_is_shot_as_asked(self):
         page = _Page(4 * _LARGEST_IMAGE)
 
-        self.assertEqual(shoot_page(page, "example.png", band=(TALLEST - 900, 900)), "")
-        self.assertEqual(page.clips, [{"x": 0, "y": TALLEST - 900, "width": 1360, "height": 900}])
+        self.assertEqual(shoot_page(page, "example.png", band=(3 * _LARGEST_IMAGE, 900)), "")
+        self.assertEqual(page.clips, [{"x": 0, "y": 3 * _LARGEST_IMAGE, "width": 1360, "height": 900}])
 
 
 class _Gone(Exception):

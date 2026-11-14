@@ -18,7 +18,7 @@ from hq.platform.core.tests.browser.catalog.common import Entry
 _WEEK = date(2026, 1, 5)
 
 
-def _readings(title, lede, *names, unit="min"):
+def _readings(title, lede, *names, unit="min", marks=()):
     """A line chart of a week's readings, one line for each name."""
 
     return line_chart(
@@ -29,6 +29,7 @@ def _readings(title, lede, *names, unit="min"):
             for slot, name in enumerate(names, 1)
         ),
         unit=unit,
+        marks=marks,
     )
 
 
@@ -95,6 +96,30 @@ ENTRIES = {
     "chart/line": Entry(
         '{% include "partials/_line_chart.html" %}',
         {"chart": _readings("Example pace", "Example readings over a week, two of them.", "Easy", "Hard")},
+    ),
+    # A rule at a day something began, its label over the rule.
+    "chart/line-marked": Entry(
+        '{% include "partials/_line_chart.html" %}',
+        {"chart": _readings("Example pace", "", "Easy", marks=((_WEEK + timedelta(days=3), "Example start"),))},
+    ),
+    # Two years of readings, so each label carries its year and the last one,
+    # the longest an axis draws, ends at the plot's right edge.
+    "chart/line-years": Entry(
+        '{% include "partials/_line_chart.html" %}',
+        {
+            "chart": line_chart(
+                "Example weight",
+                "",
+                (
+                    (
+                        "Weight",
+                        tuple((_WEEK + timedelta(days=36 * step), float(70 + step % 4)) for step in range(21)),
+                        1,
+                    ),
+                ),
+                unit="kg",
+            )
+        },
     ),
     "chart/line-empty": Entry(
         '{% include "partials/_line_chart.html" %}',

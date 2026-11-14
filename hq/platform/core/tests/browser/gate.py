@@ -32,7 +32,8 @@ from hq.platform.core.run_report import Cost, tally
 from hq.platform.core.speculation import rules_document
 from hq.platform.core.stalls import stall_watch
 from hq.platform.core.stylesheets import stylesheet
-from hq.platform.core.test_runner import browser_failures
+from hq.platform.core.table_cells import sets_only_custom_properties
+from hq.platform.core.test_runner import browser_engine, browser_failures
 from hq.platform.core.tests.browser.probes.axe import rules_read
 from hq.platform.core.tests.browser.probes.palette import (
     FILL_PAINTERS,
@@ -68,6 +69,7 @@ from hq.platform.core.tests.browser.survey import (
 )
 from hq.platform.core.tests.browser.uncaught import Uncaught
 from hq.platform.core.tests.browser.widths import LARGEST, NARROWEST, query_edges, viewport, viewport_queries
+lazy from hq.platform.core.tests.browser import catalog
 
 # Named for annotations alone: a class's annotations can be read as it is made
 # (a dataclass's are), which would load a lazy import at once.
@@ -167,18 +169,6 @@ class _Watched:
         self.result.addSubTest(test, subtest, err)
 
 
-@cache
-def cuts_marked_after():
-    """How long after a resize tables.js measures the tables' cuts again
-    (`markTablesSoon`), in milliseconds, read from the script itself."""
-
-    asset = static_file("js/tables.js")
-    said = re.search(r"setTimeout\(markTables, (\d+)\)", asset[1].decode() if asset else "")
-    if not said:
-        raise AssertionError("tables.js no longer measures cuts on a timer after a resize the way the sweep waits for")
-    return int(said[1])
-
-
 def tab_key(browser):
     """The key that moves focus to every control: Option-Tab in WebKit, as
     Safari has it (plain Tab there skips buttons and links), Tab elsewhere."""
@@ -274,7 +264,8 @@ def answered(response):
 # and in a layer named before HQ's, where an !important one outranks HQ's own
 # as an inline one does. A page HQ answered is never lifted: a style it writes
 # is refused, which is the policy's point, and test_rendered holds HQ's markup
-# to writing none.
+# to writing none but the custom properties a table's layout hands its sheet,
+# which the gate leaves where HQ writes them.
 _STYLE_ATTRIBUTE = re.compile(r'(<[a-zA-Z][^>]*?)\sstyle="([^"]*)"')
 _HEAD = re.compile(r"<head\b[^>]*>", re.IGNORECASE)
 _DOCTYPE = re.compile(r"<!doctype html>", re.IGNORECASE)
@@ -299,7 +290,10 @@ def lifted(body):
     declared = []
 
     def named(match):
-        declared.append(unescape(match[2]))
+        style = unescape(match[2])
+        if sets_only_custom_properties(style):
+            return match[0]
+        declared.append(style)
         return f'{match[1]} data-gate-style="{len(declared)}"'
 
     body = _STYLE_ATTRIBUTE.sub(named, body)
@@ -402,6 +396,73 @@ def driver_log(path, stream):
     stream.writelines(tail)
 
 
+# Each popover's kind: its classes and the table and column it sits in. Popovers
+# of one kind are drawn by one partial in one place, so one of them stands for
+# all, and a pass over them costs a run per kind rather than per record.
+POPOVER_KINDS = """() => {
+  const tables = [...document.querySelectorAll('table')];
+  return [...document.querySelectorAll('[popover]')].map((popover) => {
+    const table = popover.closest('table');
+    return [popover.className, tables.indexOf(table), popover.closest('td, th')?.cellIndex ?? -1].join(' ');
+  });
+}"""
+# The popover at a place in the page shown as a reader shows it: the folds and
+# popovers that hold its opener opened, the opener brought to the middle of the
+# view, then the popover. A popover hung from an anchor is placed against what
+# the view leaves room for beside its opener, so one shown with its opener off
+# screen has no room on either side and is drawn where no reader sees it.
+# What names it in a finding and its shot, and whether it hangs from an anchor;
+# nothing for one no reader can show, its opener drawn nowhere.
+SHOW_POPOVER = """(place) => {
+  const popover = document.querySelectorAll('[popover]')[place];
+  const id = popover.id && CSS.escape(popover.id);
+  const opener = id && document.querySelector(
+    `[popovertarget="${id}"]:not([popovertargetaction=hide]), [commandfor="${id}"]:is([command=show-popover], [command=toggle-popover])`
+  );
+  const held = [];
+  for (let up = opener?.parentElement; up; up = up.parentElement) {
+    if (up.matches('details:not([open]), [popover]:not(:popover-open)')) held.unshift(up);
+  }
+  const was = {held: [], x: scrollX, y: scrollY};
+  const putBack = () => {
+    was.held.reverse().forEach((up) => {
+      if (up.matches('details')) up.open = false;
+      else if (up.matches(':popover-open')) up.hidePopover();
+    });
+    scrollTo(was.x, was.y);
+  };
+  try {
+    held.forEach((up) => {
+      if (up.matches('details')) up.open = true;
+      else up.showPopover();
+      was.held.push(up);
+    });
+    if (opener && !opener.getClientRects().length) throw new Error('its opener is drawn nowhere');
+    opener?.scrollIntoView({block: 'center', inline: 'nearest'});
+    popover.showPopover();
+  } catch {
+    putBack();
+    return null;
+  }
+  popover.lookPutBack = putBack;
+  const placed = getComputedStyle(popover);
+  const hung = ![undefined, 'auto', 'none', 'normal'].includes(placed.positionAnchor)
+    || ![undefined, 'none', 'normal'].includes(placed.positionArea);
+  return [popover.id ? `#${popover.id}` : `popover ${place + 1}`, popover.id || `${place + 1}`, hung];
+}"""
+# The popover SHOW_POPOVER showed hidden alone, the view and what was opened
+# to show it left as they stand, so the page beneath reads as it did with the
+# popover shown.
+SET_ASIDE = "() => [...document.querySelectorAll('[popover]')].find((p) => p.lookPutBack)?.hidePopover()"
+# The popover at a place hidden, and what was opened to show it closed again.
+HIDE_POPOVER = """(place) => {
+  const popover = document.querySelectorAll('[popover]')[place];
+  if (popover.matches(':popover-open')) popover.hidePopover();
+  popover.lookPutBack?.();
+  delete popover.lookPutBack;
+}"""
+
+
 # The ledgers a browser test keeps for the run's report (`report_costs`): each
 # check's time in the page, a probe timed where it runs (`_in_one_trip`), and
 # each rule's subtest, its probes' time in the page included (`hold`).
@@ -486,9 +547,7 @@ class BrowserGate(SimpleTestCase):
             raise RuntimeError("Playwright is not installed. Run: mise run browser") from exc
         cls.playwright = start_driver(cls, sync_playwright)
         cls.addClassCleanup(cls.playwright.stop)
-        engine = os.environ.get("HQ_BROWSER_ENGINE", "webkit")
-        if engine not in {"chromium", "firefox", "webkit"}:
-            raise ValueError("HQ_BROWSER_ENGINE must be chromium, firefox, or webkit.")
+        engine = browser_engine()
         options: dict[str, object] = {"headless": True, "timeout": _LAUNCH_WITHIN}
         if channel := os.environ.get("HQ_BROWSER_CHANNEL"):
             options["channel"] = channel
@@ -916,7 +975,7 @@ class BrowserGate(SimpleTestCase):
         with the folds open, so every row is read open."""
 
         loaded = self.page.viewport_size
-        layout = [SELECTORS["table_scroll"], viewport_queries(stylesheet()), cuts_marked_after()]
+        layout = [SELECTORS["table_scroll"], viewport_queries(stylesheet())]
         probes = table_probes()
         sources, args = zip(*probes.values(), strict=True)
         script = tables_read(hushed(_in_one_trip(sources)))
@@ -956,7 +1015,7 @@ class BrowserGate(SimpleTestCase):
             for width in [NARROWEST, *(width for before, width in pairwise(widths) if shapes[width] != shapes[before])]:
                 self.page.set_viewport_size(viewport(width))
                 states, moved = self.page.evaluate(
-                    script, [layout[0], layout[2], state, rows, SELECTORS["own_records"], list(args)]
+                    script, [layout[0], state, rows, SELECTORS["own_records"], list(args)]
                 )
                 for said_state, outcomes in states:
                     where = f"at {width}px" + (f", {said_state}" if said_state else "")
@@ -1047,12 +1106,13 @@ class BrowserGate(SimpleTestCase):
         self.spent(CHECK_COSTS, "fills", perf_counter() - began, self.where_and_width())
         return {check: said for check, said in found.items() if said}
 
-    def left_out_on(self, _path) -> tuple[str, ...]:
-        """The axe rules the page at ``_path`` declares it leaves out, beside
-        those every page does (probes/axe.py's LEFT_OUT): none but where a
-        page's class says."""
+    def left_out_on(self, path) -> tuple[str, ...]:
+        """The axe rules the page at ``path`` declares it leaves out, beside
+        those every page does (probes/axe.py's LEFT_OUT): the gallery's on the
+        Design page, which draws it, and else none but where a page's class
+        says."""
 
-        return ()
+        return catalog.left_out_on(catalog.GALLERY) if path == reverse("design") else ()
 
     def checked(self, probes):
         """Each check's findings, read in one round trip, each check's time
@@ -1067,3 +1127,37 @@ class BrowserGate(SimpleTestCase):
                 self.spent(CHECK_COSTS, check, seconds, where)
             found[check] = AS_FINDINGS.get(check, _as_is)(value) if returned else [f"the probe threw: {value}"]
         return found
+
+    @contextmanager
+    def popover_shown(self, place):
+        """The popover at ``place`` shown as a reader shows it
+        (``SHOW_POPOVER``) for as long as the block runs: what names it in a
+        finding and in a shot, and whether it hangs from an anchor; None for
+        one no reader can show."""
+
+        shown = self.page.evaluate(SHOW_POPOVER, place)
+        try:
+            yield shown
+        finally:
+            if shown is not None:
+                self.page.evaluate(HIDE_POPOVER, place)
+
+    def each_popover_kind(self, *, anchored=False):
+        """Each kind of popover on the page shown on its own in turn, as a
+        reader shows one: what names it in a finding and in a shot, and how
+        many more of its kind it stands for. Shown all at once they would lie
+        over one another, which no reader sees, and where each lands would
+        hang on which drew last. ``anchored``, only those hung from an anchor
+        in the page (a menu's panel, a filter's choices): a centered one, a
+        modal, covers the page by design and is held by the dialog checks."""
+
+        kinds = self.page.evaluate(POPOVER_KINDS)
+        judged = set()
+        for place, kind in enumerate(kinds):
+            if kind in judged:
+                continue
+            with self.popover_shown(place) as shown:
+                if shown is None or (anchored and not shown[2]):
+                    continue
+                judged.add(kind)
+                yield tuple(shown[:2]), kinds.count(kind) - 1

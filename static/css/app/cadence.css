@@ -306,7 +306,7 @@
      grid a gray rather than nothing. */
   .chart-line, .chart-line-1, .chart-line-2, .chart-line-3, .chart-line-4,
   .chart-line-5 { stroke: var(--print-ink) !important; }
-  .chart-dot, .chart-series-1, .chart-series-2, .chart-series-3,
+  .chart-series-1, .chart-series-2, .chart-series-3,
   .chart-series-4, .chart-series-5 { fill: var(--print-ink) !important; }
   .chart-grid, .chart-mark {
     stroke: var(--print-faint) !important;

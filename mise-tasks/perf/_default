@@ -17,8 +17,12 @@
 set -eu
 # The data set and the pages asked are checked before the heavy turn, which
 # may wait behind other runs; where a page lands is asked of the seed in it.
-uv run --group browser python -c 'from tools.perf.report import refuse_early; refuse_early()'
+# Its last line is the share of the turn the run takes (tools/perf/report.py, tokens).
+weight="$(uv run --group browser python -c 'from tools.perf.report import refuse_early; refuse_early()')"
+turn_share="$(printf '%s\n' "${weight}" | tail -n 1)"
 turn_bound=2h
+# shellcheck source=tools/lib/remote.sh
+. ./tools/lib/remote.sh
 # shellcheck source=tools/lib/heavy-turn.sh
 . ./tools/lib/heavy-turn.sh
 

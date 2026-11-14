@@ -124,6 +124,7 @@ RULES: tuple[FindingRule, ...] = (
         _connection_not_answering,
         operator_action=(f"Open the connection and fix what its error says. {THEN_CHECK_AGAIN}"),
         no_help_reason=("HQ cannot change 1Password or your network."),
+        bars={"attention": "a connection fails its check"},
     ),
     FindingRule(
         "unreachable-consumer",
@@ -135,5 +136,6 @@ RULES: tuple[FindingRule, ...] = (
         # Says the same thing with the name of the consumer in it. The generic
         # rule would otherwise put this in front of an operator twice.
         subsumes=("reporting-a-fault",),
+        bars={"serious": "HQ cannot reach where a certificate is installed to check it"},
     ),
 )

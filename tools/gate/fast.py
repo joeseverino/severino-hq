@@ -22,7 +22,7 @@ from typing import Any
 
 from hq.platform.core.tests.task import Usage, changed_paths, usage
 from tests.mise_tasks import HEAVY_LOCK, body, locks, mise_tasks
-from tools.gate import chain, testmap
+from tools.gate import chain, testmap, turn as gate_turn
 from tools.gate.chain import fast_base, maps, record_pass
 from tools.gate.selection import (
     affected,
@@ -37,7 +37,7 @@ from tools.gate.selection import (
     whole_suite,
     with_tree,
 )
-from tools.gate.turn import IN_TURN
+from tools.gate.turn import ONE, in_share, weighed
 from tools.gate.verdict import Gate, Step, run
 
 # The tag of the quick gates: each declares the files it reads as its sources,
@@ -45,12 +45,12 @@ from tools.gate.verdict import Gate, Step, run
 # by side, in one mise run, before any test starts; each Django gate opens a
 # database of its own (the django task template).
 QUICK = "fast"
-# The tag of a gate fast runs beside its tests in the heavy turn rather than
-# among the quick gates (docs/Development.md, Heavy gates take turns), as it
-# does a gate that takes the turn's lock itself.
+# The tag of a gate fast runs beside its tests in its share of the heavy turn
+# rather than among the quick gates (docs/Development.md, Heavy gates take
+# turns), as it does a gate that takes the turn's lock itself.
 HEAVY = "heavy"
-# How long fast's tests and the gates beside them may hold the turn, as long as
-# fast:tests may hold it on its own.
+# How long fast's tests and the gates beside them may hold their share, as long
+# as fast:tests may hold one on its own.
 TURN_BOUND = "30m"
 # The shell gate also reads every file its lister names, which no glob can, so
 # a change selects it when the lister names a path it touched: as this tree has
@@ -106,6 +106,8 @@ def _quick_tasks(root: Path) -> dict[str, dict[str, Any]]:
 # A quick gate whose tool fixes what it finds declares this flag, which writes
 # the fixes instead of checking (mise-tasks/lint.toml); fast runs it first.
 FIX = re.compile(r'^flag "--fix"', re.MULTILINE)
+# The tree a run on the second machine was sent, which tools/gate/remote-host.sh names to it.
+SENT = "HQ_GATE_SENT"
 # A file task declares its usage in its own header, which mise's listing leaves out.
 FILE_USAGE = re.compile(r"^#USAGE (.*)$", re.MULTILINE)
 
@@ -125,19 +127,32 @@ def usage_of(task: dict[str, Any]) -> str:
     return task.get("usage") or ""
 
 
+# The step that fails a run whose fixes rewrote a file it was not asked to fix, naming each.
+UNASKED = "the quick gates' fixes rewrote"
+
+
 def fixed_first(
-    gate: Gate, tasks: tuple[str, ...], base: str, paths: tuple[list[str], list[str]]
-) -> tuple[list[str], list[str]]:
+    gate: Gate, tasks: tuple[str, ...], base: str, paths: tuple[list[str], list[str]], *, asked: bool
+) -> tuple[tuple[list[str], list[str]], list[str]]:
     """The changed and deleted paths once the fix modes of ``tasks`` but the
-    recordings' have run, and the gate set to judge the tree they left, saying
-    what they rewrote."""
+    recordings' have run, saying what they rewrote, and the files they rewrote
+    unasked. Asked (``--fix``), the gate is set to judge the tree they left;
+    unasked, the run fails on them, since the tree it passed would not be the
+    tree it was given, which a landing then refuses."""
 
     fixed = fix(tuple(task for task in tasks if task not in recordings()))
     if not fixed:
-        return paths
+        return paths, []
+    if not asked:
+        print(
+            f"[fast] the quick gates' fixes rewrote: {' '.join(fixed)}. Commit them and run again, "
+            "or run fast --fix to judge the fixed tree",
+            flush=True,
+        )
+        return paths, fixed
     print(f"[fast] the quick gates' fixes rewrote: {' '.join(fixed)}", flush=True)
     gate.restart()
-    return changed_paths(base, chain.ROOT)
+    return changed_paths(base, chain.ROOT), []
 
 
 def fix(tasks: tuple[str, ...]) -> list[str]:
@@ -146,7 +161,9 @@ def fix(tasks: tuple[str, ...]) -> list[str]:
     formatting never fails a run. What a fixer still finds, its gate reports."""
 
     fixing = fixers(tasks)
-    if not fixing:
+    # A run sent from another machine only checks, as CI does: a fix written there never reaches the checkout
+    # that sent it, and the run would pass on a tree it changed (tools/gate/remote-host.sh).
+    if not fixing or os.environ.get(SENT):
         return []
     before = dirty()
     words = [word for task in fixing for word in (":::", task, "--fix")][1:]
@@ -199,13 +216,14 @@ def unreached_recordings(tasks: tuple[str, ...], paths: list[str], labels: list[
     ]
 
 
-def fixed_after(gate: Gate, steps: list[Step], files: list[Path], parallel: str) -> list[Step]:
-    """``steps``, and when a recording failed in one, its fix and the run
-    again of the gates and tests the files it rewrote select, the fixed
-    recordings among them. A step's failure stands unless it failed on the
-    fixed recordings alone, and the run judges the tree the fix left."""
+def fixed_after(gate: Gate, steps: list[Step], files: list[Path], parallel: str, *, asked: bool) -> list[Step]:
+    """``steps``, and when a recording failed in one and the run was asked to
+    fix (``--fix``), its fix and the run again of the gates and tests the
+    files it rewrote select, the fixed recordings among them. A step's failure
+    stands unless it failed on the fixed recordings alone, and the run judges
+    the tree the fix left. Unasked, the recording's failure stands."""
 
-    failed = [task for each in steps for task in each.tasks if task in recordings()]
+    failed = [task for each in steps for task in each.tasks if task in recordings()] if asked else []
     fixed = fix(tuple(failed)) if failed else []
     if not fixed:
         return steps
@@ -317,18 +335,30 @@ def quick_command(tasks: tuple[str, ...], parallel: str) -> list[str]:
     return mise_run([word for task in tasks for word in (task, ":::")][:-1], parallel)
 
 
+def stage_tokens(tasks: tuple[str, ...], source: list[str], labels: list[str], parallel: str) -> int:
+    """The tokens of the share fast's tests and the gates beside them (``tasks``) take, side by side: what
+    tools/gate/turn.py weighs the tests at (the source checks before them run serially, in one process), and
+    one for each gate tagged HEAVY, whose one process loads the machine. A gate that takes the turn's lock
+    itself needs the whole machine, so beside one the stage takes every token."""
+
+    if any(HEAVY_LOCK in locks(task) for task in tasks):
+        return gate_turn.CAPACITY
+    tests = weighed(["--noinput", "--parallel", parallel, *labels], chain.ROOT) if labels else 0
+    return min(max(tests, ONE if source else 0) + ONE * len(tasks), gate_turn.CAPACITY)
+
+
 def run_command(
     tasks: tuple[str, ...], source: list[str], labels: list[str], parallel: str, *, record: bool = False
 ) -> list[str]:
     """The run of the tests beside the gates that run in the heavy turn
-    (``tasks``), in one run of mise. With such a gate it runs inside the turn,
-    taken once: mise hands the lock down to every task under it, so each gate
-    that takes the lock itself and the tests' task go ahead at once and side
-    by side, never queued on the turn their own run holds. Without one the
-    tests' task takes the turn itself when its run is heavy. A test both
-    selected and tagged tree runs once, since Django's runner drops a repeated
-    test. A recording run (``record``) measures the tests for the map of the
-    tests that ran each file (``record_map``).
+    (``tasks``), in one run of mise, in one share of the turn sized by
+    ``stage_tokens``. The share tells each task under it that it holds the
+    turn, as mise hands a lock down, so each gate that takes the lock itself
+    and the tests' task go ahead at once and side by side, never queued on the
+    share their own run holds. A test both selected and tagged tree runs once,
+    since Django's runner drops a repeated test. A recording run (``record``)
+    measures the tests for the map of the tests that ran each file
+    (``record_map``).
 
     A task's own output setting outranks the config's but not ``--output``, so
     the summary is the environment's: the tests' task prints as it runs, beside
@@ -337,7 +367,8 @@ def run_command(
     gates = [word for task in tasks for word in (task, ":::")]
     tests = [TESTS, "--parallel", parallel, *(["--map", str(chain.ROOT / testmap.DATA)] if record else []), *labels]
     command = ["env", f"{SOURCE}={' '.join(source)}", *mise_run([*gates, *tests], parallel)]
-    return ["env", f"HQ_TURN_BOUND={TURN_BOUND}", *IN_TURN, *command] if tasks else command
+    tokens = stage_tokens(tasks, source, labels, parallel)
+    return [*in_share(tokens, TURN_BOUND), *command] if tokens else command
 
 
 def quick_stage(tasks: tuple[str, ...], parallel: str, again: str = "") -> list[Step]:
@@ -437,7 +468,9 @@ def main(asked: Usage) -> int:
     early: tuple[str, ...] = ()
     first: list[Step] = []
     if gate:
-        changed, deleted = fixed_first(gate, selected, base, (changed, deleted))
+        (changed, deleted), unasked = fixed_first(gate, selected, base, (changed, deleted), asked=asked.switch("fix"))
+        if unasked:
+            return judge(gate, [Step(f"{UNASKED} {' '.join(unasked)}", ok=False)], base, whole=False)
         early = tuple(task for task in (quick_gates() if whole_asked else selected) if task not in recordings())
         early = tuple(task for task in early if task not in heavy_gates(early))
         first = quick_stage(early, parallel)
@@ -472,7 +505,7 @@ def main(asked: Usage) -> int:
     whole_run = every_test and set(tasks) == set(whole)
     rest = tuple(task for task in tasks if task not in early)
     steps = [*first, *gates_and_tests(rest, labels, files, parallel, record=whole_run)]
-    steps = fixed_after(gate, steps, files, parallel)
+    steps = fixed_after(gate, steps, files, parallel, asked=asked.switch("fix"))
     if touches_shared_ui([*changed, *deleted]):
         steps.extend(extension_suites(parallel))
     steps.append(step("patch integrity", ["git", "diff", "--check", base]))

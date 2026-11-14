@@ -126,6 +126,11 @@ class FailingRunTests(TestCase):
 
         self.assertEqual(item.url, "https://github.com/example/alpha/commit/abc")
 
+    def test_the_failing_job_is_named_as_what_it_is(self):
+        item = self.failing()
+
+        self.assertEqual(item.body, "Failing job: lint")
+
     def test_without_the_run_in_the_reading_the_item_offers_the_command_that_lists_it(self):
         item = self.failing()
 

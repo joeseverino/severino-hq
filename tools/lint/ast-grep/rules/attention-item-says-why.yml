@@ -1,0 +1,37 @@
+# Every item the queue shows says why it is as urgent as it is, in plain
+# words: the panel behind its urgency leads with Insight.why, and an item
+# without one opens on its key alone. An Insight built with no why=, and no **
+# that could carry one, is a problem a stranger cannot read. The plugin check
+# runs it over an extension's src/ as well. A mail policy's stages are cards on
+# a domain's page, never queued, so they carry none.
+id: attention-item-says-why
+language: python
+severity: error
+message: An attention item is built without saying why it is this urgent.
+note: Give it why=, one sentence on what HQ read and what makes that this urgent (card_items.Insight.why).
+files:
+  - "hq/**"
+  - "demo/**"
+  - "tools/**"
+  - "src/**"
+ignores:
+  - "**/tests/**"
+  - "**/test*.py"
+  - "**/migrations/**"
+  - "hq/platform/application/mail_policy.py"
+rule:
+  kind: call
+  has:
+    field: function
+    regex: (^|\.)Insight$
+  not:
+    has:
+      field: arguments
+      any:
+        - has:
+            kind: dictionary_splat
+        - has:
+            kind: keyword_argument
+            has:
+              field: name
+              regex: ^why$

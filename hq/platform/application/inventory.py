@@ -366,6 +366,23 @@ def live_spec(kind: str, spec: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
+def read_as(kind: str, replaced: dict[str, Any], current: dict[str, Any]) -> bool:
+    """Whether the last read found the record as ``replaced`` declares it, by
+    the comparison rule (``_differences``), or found none where ``replaced`` is
+    empty, the copy of a record not yet made, which ``current`` declares."""
+
+    found = live_spec(kind, replaced or current)
+    if not replaced:
+        return found is None
+    return found is not None and not _differences(kind, replaced, found)
+
+
+def read_since(kind: str, moment: datetime) -> bool:
+    """Whether a read of ``kind`` answered at or after ``moment``."""
+
+    return ProviderInventory.objects.filter(kind=kind, observed_at__gte=moment).exists()
+
+
 def strike_removed(kind: str, spec: dict[str, Any]) -> None:
     """Take a record HQ has removed at its provider off the kind's stored list.
 

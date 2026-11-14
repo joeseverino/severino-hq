@@ -18,6 +18,7 @@ lazy from .freshness import cadence, freshness
 lazy from .moments import duration
 lazy from .routes import reverse
 lazy from .timestamps import moment
+lazy from .ui import ended
 
 # How urgent, in the words a card's pill says.
 URGENCY = {"serious": "Urgent", "attention": "Needs attention", "neutral": "Note", "good": "Fine"}
@@ -155,19 +156,33 @@ def _facts(pairs: Any) -> list[dict[str, Any]]:
 
 
 def _origin(item: dict[str, Any]) -> dict[str, Any]:
-    """What raised an item: a finding's rule and where it is declared, or the
-    domain that raised anything else and the key it raised it under."""
+    """Why an item is as urgent as it is, in its raiser's words (``Insight.why``)
+    and what clears it (``Insight.clears``), then what raised it: the domain and
+    the key it raised it under, and for a finding its rule and where that is
+    declared. ``panel`` is the id its panel and the pill that opens it share,
+    short since a page writes it five times for each item."""
 
     key = str(item.get("key", ""))
     _, finding, rest = key.partition(":finding:")
     rule = rule_origin(rest.split(":", 1)[0]) if finding else None
-    return {"source": item.get("source", ""), "key": key, **(rule or {})}
+    why, clears = item.get("why", ""), item.get("clears", "")
+    return {
+        "why": f"{why} {ended(f'Clears once {clears}')}" if why and clears else why,
+        "source": item.get("source", ""),
+        "key": key,
+        "panel": f"origin-{_digest(key)}",
+        **(rule or {}),
+    }
 
 
 def item_anchor(key: str) -> str:
     """Where an item's card is on the queue page, stable while its key is."""
 
-    return "item-" + hashlib.sha256(key.encode()).hexdigest()[:12]
+    return f"item-{_digest(key)}"
+
+
+def _digest(key: str) -> str:
+    return hashlib.sha256(key.encode()).hexdigest()[:12]
 
 
 def _own_page(item: dict[str, Any], subject: dict[str, Any], actions: list[dict[str, Any]], anchor: str) -> str:

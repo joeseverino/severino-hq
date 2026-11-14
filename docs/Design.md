@@ -16,10 +16,21 @@ look up the primitive you need under [Rules](#rules), one rule to a part, and
 
 The stylesheet is the sheets `hq/platform/core/stylesheets.py` lists, each
 one responsibility under the file-size ceiling (`SEVERINO_FILE_LINE_LIMIT`), linked in that order. The
-first declares the cascade layers (`tokens`, `base`, `components`) and the
-rest fill them. Inside a layer a later sheet wins a tie, so a sheet is added
+first declares the cascade layers (`tokens`, `base`, `components`, `fit`)
+and the rest fill them; `fit` holds what a table lets go as its region
+narrows, so it outranks any component's own display. Inside a layer a later sheet wins a tie, so a sheet is added
 to the list where its rules belong in the cascade, and every check of the
 stylesheet reads it through that list.
+
+**Browsers.** HQ's floor is the current and the previous release of each
+engine: Safari (on the Mac and on iOS), Chromium and Firefox, read from
+browser-compat-data's release dates as the package moves, never written as
+numbers (`tools/lint/browser-floor.mjs`). A feature newer than the floor is
+written inside `@supports`, or named in the browser floor rule's `degrades`
+(`tools/lint/stylelint.config.mjs`) with what an engine without it draws;
+`lint:css` refuses one written any other way. `mise run audit:bcd` says what
+the floor has, and `mise run audit:supports` what the gates' own engines
+answer.
 
 Each rule names its gate where one enforces it. A lower-case gate without
 `test_` is a rule of `LayoutBrowserTests` (`hq/platform/core/tests/browser/layout.py`), held on
@@ -140,12 +151,18 @@ transitions from nothing, so every button fades in on load.
 `test_viewport_breakpoints_only_go_down`, a ceiling that only falls.
 
 **A table fits its box, at every width.** No screen width is asked anywhere
-in the table primitive. A table takes its box's width and wraps, the browser
-sizing each column from what it holds. Only script fits a table to its box.
-With no script nothing leaves, gives way or breaks, and a table wider than
-its region scrolls in it, at any width. The gates hold it inside its card,
-with no word broken and no column narrower than its words; a survey check
-declared `scripted` (`browser/probes`) is held only once script has run.
+in the table primitive, and nothing is measured: a table is a grid on the
+browser's own layout, the same with script and without. The server writes
+its tracks on it as custom properties alone (`--tracks`,
+`table_cells._layout`), one per column from the column's kind
+(`table_cells.TRACKS`): a status, a figure or a control is as wide as what
+it holds, and the naming column, prose and identifiers share what is left.
+Each row is a subgrid of those tracks, so a column is one width down the
+table. A table, row or cell drawn on a grid keeps the role its tag gives
+it; a row group drawn as `display: contents` does not, so it says its role.
+Every column is in the markup, so a reader counts each cell's place itself
+(no `aria-colindex` or `aria-colcount`), and the stylesheet places each cell
+by its place among its row's cells (`sibling-index()`).
 
 Each column that may leave has a rank, 1 first
 (`{% table_heading ... drop=N %}`). A list's ranks are derived by `ranked`:
@@ -153,31 +170,29 @@ Each column that may leave has a rank, 1 first
 names the row, one marked `key-col`, or the closing figure of a table that
 marks none.
 
-Only the browser knows how wide a table is, so `tables.js` decides what shows,
-the established responsive-table pattern:
+The server writes, for each rank, the sum of the floors of the columns the
+table draws while it keeps that rank (`--need-<rank>`), and the sum for every
+column it keeps (`--need-0`). The stylesheet turns each into an integer, 1
+while the region is at least that wide and 0 once it is narrower
+(`--keep-<rank>`, `--whole`, tables.css), and a style query lets go the
+columns of each rank whose integer is 0, rank 1 first. What leaves shows in
+the row once it opens. Once `--whole` is 0 the table is in a narrow box: a
+row's controls stand beneath its words (below). A table still wider than its
+region cuts what its shared columns hold (cuts.css) rather than run past it.
+The gates fail one that runs past its card: the narrowest phone (320px) and
+every width above it hold every table of each derived list.
+`a_table_fits_its_box_at_every_width` sweeps each from 320px up, reading it
+at the first width of each shape its layout and its tables take
+(`TABLE_LAYOUT`: the viewport queries, the boxes around each region, and
+which ranks each table keeps), with its rows as drawn, its folds open and
+every row opened. `test_a_table_keeps_its_promises_on_every_catalog_entry`
+holds every promise of this section on the table's catalog entries, in each
+engine, with script and without.
 
-- While a table is wider than its region, its next ranked column leaves (rank
-  1 first, the rightmost of a rank first, `data-dropped` on its cells).
-- Once none is left to go, the table is in a narrow box (`data-narrow`), then
-  tight (below).
-- As the region grows they come back, the last to leave first, each only if
-  the table still fits.
-- What leaves is in the row's toggle.
-
-A ResizeObserver on every region does it in the frame the table is laid out,
-before that frame is painted. The script loads in the head without `defer`,
-so every region is watched from the moment it is parsed and nothing moves once
-a page is drawn.
-
-The columns showing set `--showing`, which bounds what a held line asks for
-(`--hold`).
-
-In a narrow box (`--box: narrow`, else `whole`, read by `@container style()`)
-a table gets roomier rows and holds back what is marked `narrow-more`. What is
-marked `narrow-only` shows there alone: a few words in the cell that names the
-row, standing in for the columns that left (the audit log's action under its
-name). What is marked `wide-only` leaves a narrow box outright, held for no
-toggle, since what it says is on a page of its own.
+What is marked `narrow-only` shows in a narrow box alone: a few words in the
+cell that names the row, standing in for the columns that left (the audit
+log's action under its name). What is marked `wide-only` leaves a narrow box
+outright, held for no toggle, since what it says is on a page of its own.
 
 A table of marks (`data-marks` on the table: one row a thing, one column a
 period, a mark in each cell, as the cadence matrix is) centers every heading
@@ -185,53 +200,26 @@ but the names over its column, and its cells stand closer in a narrow box
 and where it shares a row with a chart (`data-marks="compact"`). Its older
 periods are `wide-only`, so a narrow box keeps the newest three.
 
-A table with no headings has none to count, so it says how many columns its
-rows hold (`data-columns="2"` on the table), and the share is counted from
-that.
-
-A table still wider in a narrow box is tight (`data-tight`). Its headings,
-times, statuses and a value's parts wrap at their spaces, and the name gives up
-the room it holds out for. Its row's controls stand one above another (only
-where the script measured the table), each label whole on its line, and its
-cells stand closer. Still wider, its identifiers break where they must
-(`data-break`). A table wider than its region even then scrolls in it
-(`data-scrolls`), so no table runs past its card at any width. The gates fail
-one that does: the narrowest phone (320px) and every width above it hold every
-table of the example estate and of each derived list.
-`a_table_fits_its_box_at_every_width` over the derived lists and the example
-estate's `ExampleEstateTableFitTests` sweep each page from 320px up, reading it
-at the first width of each shape its layout and its tables take
-(`TABLE_LAYOUT`: the viewport queries, the boxes around each region, and how
-far each table has given way), where a table has the least room, with its
-rows as drawn, its folds open and every row opened.
-
 The region marks each body cell that says nothing (`data-blank`) and every
 cell of a column blank in every row (`data-blank-column`), which is not drawn.
-Each cell of a column whose heading is `numeric` carries that kind too, so a
-figure aligns under its heading on fixed digit widths with nothing written on
-the cell.
+Each body cell carries its column's kind (`data-kind`), so a figure aligns
+under its heading on fixed digit widths and a value is cut by its kind, with
+nothing written on the cell by hand.
 
 Since a table fits, its region is no scroll box and its heading pins under the
-page's chrome (a scroll box in either axis would pin it to the region). A table
-that scrolls once it has given all it can (`data-scrolls`) is in such a box, so
-its heading sticks to nothing and stays on its first row. *Gate:*
-`test_a_rows_controls_stay_in_its_card_and_a_table_that_cannot_fit_scrolls`.
-Only a region declared a pane, or a chart's (`chart=True`), scrolls by design
-and pins its heading to its own edge. A region that scrolls takes focus, named
-by its table's label so the stop says what it holds, as the focusable scroll
-box of the usual responsive-table pattern is. Without script any region may
-scroll, so the server draws every one as that stop; once script has run, only
-a pane, a chart's and one whose table scrolls (`data-scrolls`) keep it, and a
-region that fits is a plain box. The stop is a `group` where that pattern
-writes `region`, so it is no landmark: the section or card around a table is
-one already, often by the same name. *Gates:*
-`test_every_region_is_drawn_as_a_stop_named_for_its_table`,
-`test_a_rows_controls_stay_in_its_card_and_a_table_that_cannot_fit_scrolls`,
+page's chrome (a scroll box in either axis would pin it to the region). Only a
+region declared a pane, or a chart's (`chart=True`), scrolls, and pins its
+heading to its own edge. A region that scrolls takes focus, named by its
+table's label so the stop says what it holds, as the focusable scroll box of
+the usual responsive-table pattern is; a region that fits is a plain box. The
+stop is a `group` where that pattern writes `region`, so it is no landmark:
+the section or card around a table is one already, often by the same name.
+*Gates:* `test_a_region_that_scrolls_is_a_stop_named_for_its_table`,
 `test_a_section_and_the_table_in_it_are_one_landmark`. A pane (`pane=True`) is
 as tall as its rows up to a fixed reading height, as the topology ledger is,
 and scrolls past it. A table never stacks into cards and is not swiped through:
 a row that offers controls sets them on a line beneath its words in a narrow
-box, each cell still a cell under its heading (below).
+box, each cell still a cell of its row (below).
 
 A key/value table (row headers, no `thead`) sizes its label column to its
 longest label.
@@ -251,20 +239,18 @@ row's record ends the row as `{% row_actions actions %}`, under a heading of
 kind `control`. Each is a `PageAction` drawn as a compact control with its
 middle on the first line's. A page never draws a button in a cell (*Gate:* the
 `hand-drawn-row-actions` rule). A row's controls stand side by side on one
-line, which their column asks for, and wrap only in a tight table, where every
-kept line does. Beside them the row's words keep a line of
-`--row-words` (`data-words`), so a table without room for both takes its narrow
-box rather than wrap a few words a line.
+line, which their column asks for. Beside them the column that names the row
+holds out for a line of `--row-words` in `--need-0`, so a table without room
+for both takes its narrow box rather than wrap a few words a line.
 
 **A row's controls stand beneath its words in a narrow box.** The region marks
 the cells of a row's actions, or of a column of kind `control` holding no
 field a reader fills in, `data-beneath`; in a narrow box the row stacks, the
 stacked row of a responsive table: its words take the first line, and its
 controls, drawn once in their own cell, take the line beneath, starting where
-the words start, each as wide as its label. Only the row changes its display,
-so each cell stays a cell under its heading and the row's open line still
-spans the table. So a column of controls never leaves for the row's open
-line, whatever rank it is given, and a reader never opens a row to find what
+the words start, each as wide as its label, after any column the open row
+shows. Each cell stays a cell of its row, in the row's order. So a column of
+controls never leaves for the row's open line, whatever rank it is given, and a reader never opens a row to find what
 it offers. The reader's way to set a row aside (`row_actions put_away=`,
 the queue's Dismiss) is the last of its buttons, drawn as they are, so a row
 whose only control it is still offers it as a button beneath its words. A choice (a select) is a value of the row and keeps its column. *Gates:* the survey's `row actions beside
@@ -305,34 +291,27 @@ class of the page's:
   `tr` with `{% row_state emphasized=True %}`: its cells are tinted and its
   links weigh more.
 
-**Opening a row moves nothing.** What a row holds back (the columns that
-left, the `narrow-more` parts and the `row-below` blocks) is in a line of its
-own beneath the row. The server draws it after the row (`tr.row-detail`,
-`table_tags._detail_row`), and it shows while the row is open: the blocks
-first, then each part under its column's name (`dl.row-columns`).
+**Opening a row moves nothing.** A row's first line holds a cell in each
+column it keeps. Once it opens, each cell of a column that left, and each
+`narrow-more` part, stands on a line of its own beneath that first line,
+under its column's name (`data-label`), asking its columns for no width; a
+value cut on the closed row shows whole. So every column keeps its edges and
+every other row its height. *Gate:*
+`test_opening_a_row_moves_no_column_and_no_other_row`.
 
-- A column's part shows while the column is gone (`data-dropped`, which
-  `tables.js` sets on it as on the cells), a narrow part in a narrow box, a
-  labeled block always. A line with nothing to show is a blank row of no
-  height.
-- The line holds a copy of a column or a narrow part, which the row's own
-  cells show at other widths, so those cells stay as they were. A
-  `row-below` block, which the row's line never shows, and the row's editor
-  are moved there instead, and a row holding a block says so on its `tr`
-  (`data-below`), which shows its toggle.
-- A narrow part also marked `row-later` waits in the line at any width, and
-  its row opens at any width for it: a row's buttons past the first few.
+- A `row-below` block, which the row's line never shows, and the row's editor
+  are moved into a line the server draws after the row (`tr.row-detail`,
+  `table_tags._detail_row`), shown while the row is open: the blocks first,
+  then each labeled block under its label. A row holding a block says so on
+  its `tr` (`data-below`), which shows its toggle.
+- A narrow part also marked `row-later` waits for the open row at any width,
+  and its row opens at any width for it: a row's buttons past the first few.
 - A table whose line is the rest of what a row says and does
   (`data-line="flat"` on the table) draws it flat: one column on no panel,
   the buttons of its parts side by side, and on a phone each the line's
   width, one to a line.
-- The browser's find reaches a closed row's line: `tables.js` hides its parts
-  `until-found` (never the server, since a browser without it would hide the
-  line for good), and a match opens the row through `beforematch`.
-- The columns are held at their widths for as long as any row is open, so
-  every other row keeps its place. A table with a row open, however it was
-  opened, is fitted as it would stand with its rows closed and held there, in
-  a table without headings too.
+- The browser's find does not reach into a closed row: what it holds back is
+  not drawn until the row opens.
 - A part that reads differently on the row's line and on the line beneath
   asks where it stands (`@container style(--cell: line)`, or `open`), which
   the table primitive sets on its cells, and never names the table: an ask's
@@ -344,7 +323,7 @@ it, last in the row's cell under the heading that keeps the gutter
 a toggle written by hand there is refused. Only a table with no headings to
 name its gutter draws its own (`{% row_toggle %}`). It shows only where the row holds something back now: a
 column that left with something in it, a `narrow-more`, `row-later` or `row-below` part, a
-fold, or a value `tables.js` found cut (`data-cut`).
+fold, or a value whose line the server found longer than its column shows at its floor (`data-long`).
 
 A run of short parts in a cell (a project's technologies, what a connection
 reads or reaches) is `{% line_list values as value %}…{% endline_list %}`, with
@@ -356,16 +335,7 @@ the row opens only when one is cut. A list folded at a fixed number behind
 
 The toggle stands in a gutter that every row of the table keeps while any row
 opens, so names share one edge whether or not a given row opens. The gutter
-follows from the server's markup and the box's width alone. A cut value shows
-its toggle only in a gutter already kept, so nothing the script marks moves a
-name.
-
-In a narrow box every table whose rows the server made openable keeps its
-gutter, since touch has no hover title and a value cut there must still open.
-
-With no script a toggle opens nothing, so nothing is held back for one: every
-column and part stays, and the table is sized to its content inside its region.
-*Gate:* `test_a_wide_table_fits_a_phone_and_opening_a_row_moves_nothing`.
+follows from the server's markup and the box's width alone.
 
 **A row's editor opens under it.** A row edited on the page holds `{%
 row_editor form key label=... action=... verb=... field=value %}` in a cell: a
@@ -398,9 +368,8 @@ suite runs it over every installed extension's templates.
 `test_every_table_is_declared_through_the_tags`.
 
 **A table is laid out before any script runs.** Nothing is measured to lay
-a table out. `tables.js` asks only whether a value is cut (`data-cut`), which
-shows a toggle in a gutter already kept, and holds the columns still while a
-row is open or the rows are refreshed.
+a table out: `tables.js` only sorts, selects and opens rows, and loads
+deferred (*Gate:* `test_the_table_script_lays_nothing_out`).
 
 Text is cut in one sheet, `css/app/cuts.css`, in one of two ways that each
 show the reader there is more: on its line with an ellipsis, or at its last
@@ -409,42 +378,25 @@ styled in one place. Every other text wraps. A box that
 clips something other than text (a frame's corners, a scroll region) says why
 beside its declaration.
 *Gate:* `lint:css` (`cutText` in `tools/lint/stylelint.config.mjs`), and the
-layout survey's `cut and closed`, `cut when open`, `cut with room` and
-`cut beside room`.
+layout survey's `cut and closed`, `cut when open` and `cut beside room`.
 
-A long identifier is one line, cut with an ellipsis at a share of its region's
-width (`--identifier-max`, in container units between a floor and a ceiling).
-Its whole value is in its title and in the open row.
-
-A region whose rows leave an identifier less of the row names it with `room=`
-(a list view says it as `table_room`):
-
-| `room=` | When the identifier sits beside | What it gets |
-| --- | --- | --- |
-| `shared` | wide columns | little until the region is wide |
-| `snug` | other identifiers | each is held near one short length |
+On a closed row a name or prose is cut at its third line, an identifier at
+the end of its first, each with its whole value in its cell's title (written
+by the server) and in the open row, which lifts the cut and keeps every
+part's box. Only a row that can open (one holding its toggle) is cut: a row
+that cannot shows its values whole, breaking a long one where it must. A
+status or a figure is never cut: its column is as wide as it is. `room=` on
+a region is accepted and asks for nothing more.
 
 An identifier the row is read by, in a row of many columns (a container's
-image), is `code.cell-whole`. It wraps at its seams instead, so its column
-gives way without hiding any of it.
-
-Outside a narrow box a status keeps its line and a one-token name is never
-cut. A value told in several parts marks each `cell-part`, and where its line
-is short it wraps only between them. The region wraps what a status or figure
-cell says in one `.kept-line` for the stylesheet to bound. A description cut
-to a preview is a `.table-clamp`.
+image), is `code.cell-whole`. A value told in several parts marks each
+`cell-part`. A description cut to a preview is a `.table-clamp`.
 
 A few words that read wrong split (an age, a hyphenated word) are one `.whole`,
 the box `|breakable` gives each part of a name, or a `.nowrap`. A line that
 must stay one line (a commit's message) is a `.one-line`, cut with an ellipsis.
 A key to press is said in a `.keyboard-only`, which a touch screen hides;
 `.visually-hidden` is the other way round, read only by a screen reader.
-
-Every such hold, and an identifier's cut, asks for at most its column's even
-share of the region (`--hold`). The share is counted from the columns the box
-draws, the naming column's half a share more. So the holds of a table never
-sum past its box: what fits its share stays whole, and what does not wraps or
-is cut.
 
 What each part of a cell is decides how it wraps, and the region marks it
 (`data-cell`, `table_tags.mark_cells`). The stylesheet keys its cuts, holds and
@@ -483,12 +435,9 @@ An intrinsic size (`max-content`, `min-content`) goes on an element inside a
 cell, never on the `td`. Chromium ignores it on a table cell and WebKit does
 not, so the two engines would size the column differently.
 
-Outside a narrow box an identifier in a cell is one line, never broken at a
-seam. One that breaks only at its seams (an address with a port, a host name)
-holds its whole length, so its table lets a ranked column go before the name
-would break. A name the cell cuts shows one line, cut. A narrow box has no
-column left to let go, so there it wraps at its seams. The row's own name,
-free text, a preview and a context line wrap as they always do.
+An identifier in a cell is one line, never broken at a seam: cut with an
+ellipsis on a closed row, whole in its title and in its open row. The row's
+own name, free text, a preview and a context line wrap as they always do.
 *Gate:* `broken identifiers` in the layout survey,
 `test_an_identifier_in_a_table_is_whole_while_a_column_can_leave`.
 
@@ -713,10 +662,6 @@ so no page draws headings over nothing. Its `empty=` says what is missing in
 the page's words, with `remedy=` (or `action_url=` and `action_label=`).
 `filtered=` with `clear=` says its filter emptied it, with the way back.
 
-**A document whose markup must stay apart from the page is framed.**
-`partials/_framed_document.html` (`src`, `title`) draws one of HQ's own
-documents, the Design page's gallery, in a frame as wide as the column and as
-tall as the view, so its ids, headings and links never become the page's.
 The message is the fact alone, one sentence ("No playbooks adopted yet."), with
 no how-to after it: the action and the page's controls say what to do.
 
@@ -770,9 +715,16 @@ one.
 **The content column is drawn by `{% page_main %}`.** base.html draws every
 page's content in it (`partials/_page_main.html`), and the component catalog
 draws each of its entries in the same part, so an entry stands where a page's
-content does. A page's own sheet that lays the column out for one page (the
-API reference's) reaches it as `.content`, the class the part writes. It is the
-host's frame; an extension's page is drawn in it and never writes it.
+content does. It is the host's frame; an extension's page is drawn in it and
+never writes it.
+
+**A page that is one document extends `document_page.html`.** The API
+reference and the Design page's gallery are each one document under the site
+header: no page head and no footer, the title spoken alone, the document
+filling the view edge to edge and scrolled as the page scrolls
+(`[data-document-page]`, page.css), bringing its own gutters. The page fills
+`{% block document %}`; `test_document_page.py` fails any other template that
+empties the footer and any other rule that fills the view from the column.
 
 **A card is drawn by `{% card %}`.** `{% card css="example"
 heading="example-heading" %}...{% endcard %}` frames what it encloses

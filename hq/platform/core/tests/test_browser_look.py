@@ -800,6 +800,9 @@ class _Pages:
     by the time it began."""
 
     look_at_every_page = look.Look.look_at_every_page
+    look_once = look.Look.look_once
+    # One process, as a look of few pages is.
+    share_at, unlooked, unlooked_pages = look.Look.share_at, (), ()
 
     def __init__(self, asked, said, heard=None):
         self.asked, self.said, self.began, self.errors = asked, said, [], {}
@@ -859,6 +862,8 @@ class _Unanswered:
 
     close = look.Look.close
     shooting = True
+    # One process, as a look of few pages is.
+    share_at, unlooked, unlooked_pages = look.Look.share_at, (), ()
 
     def __init__(self):
         self.base, self.base_errors, self.errors = None, {}, {("estate/example", 402): []}

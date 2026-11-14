@@ -8,7 +8,9 @@
 
 # Named as a dependency, { task = "setup:browser", args = ["webkit"] }, so
 # `mise tasks validate` sees it; mise keeps the sources' freshness per
-# argument, so each engine installs once. A browser removed by hand comes back with
+# argument, so each engine installs once. The test runner runs it too, for the
+# engine a run of browser tests draws in, since `mise run test <label>` names no
+# browser to depend on (install_browser). A browser removed by hand comes back with
 # `mise run --force setup:browser <engine>`. CI's browser jobs run in
 # Playwright's image, which carries the engines and their system libraries, so
 # there this finds them installed.

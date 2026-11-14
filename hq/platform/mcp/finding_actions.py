@@ -16,7 +16,7 @@ from pydantic import ConfigDict, with_config
 
 from hq.platform.application.action_links import INVESTIGATIONS, READ_NOW_CAPABILITY
 from hq.platform.application.answer_fields import Pinned, SchemaVersion
-from hq.platform.application.capabilities import capability_registry
+from hq.platform.application.capabilities import command_spec
 from hq.platform.application.describe import Describe
 from hq.platform.application.finding_model import Finding
 from hq.platform.application.findings import (
@@ -174,7 +174,7 @@ class AgentFindings(TypedDict):
 
 def _command(label: str, capability: str, target: str, payload: dict[str, Any] | None = None) -> CapabilityCall:
     # A target where the capability takes one, or execute_capability refuses the call.
-    takes = bool(target) and bool(capability_registry()[capability].target_kind)
+    takes = bool(target) and bool(command_spec(capability).target_kind)
     arguments: CapabilityArguments = {"name": capability, "target": target if takes else None, "payload": payload or {}}
     return {"label": label, "tool": "execute_capability", "arguments": arguments}
 

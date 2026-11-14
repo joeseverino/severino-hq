@@ -286,10 +286,12 @@ SEVERINO_HQ_REVISION = "{{ exec(command='git rev-parse HEAD') }}"
 [task_templates."dev:scratch-env".env]
 _.file = "var/dev/scratch/secret.env"
 HQ_DEV_PROFILE = "scratch"
+# The throwaway account a new scratch database is seeded with.
+HQ_DEV_ACCOUNT = "operator"
 DJANGO_DEBUG = "1"
 UVICORN_HOST = "127.0.0.1"
 UVICORN_PORT = "0"
-DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost"
+DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,[::1]"
 SEVERINO_DATABASE_PATH = "{{ config_root }}/var/dev/scratch/db.sqlite3"
 SEVERINO_MEDIA_ROOT = "{{ config_root }}/var/dev/scratch/media"
 SEVERINO_EXPORTS_ROOT = "{{ config_root }}/var/dev/scratch/exports"
@@ -322,7 +324,7 @@ hide = true
 description = "To reach the scratch server from a script: a signed-in session cookie for it"
 # A program reads the cookie, so stdout is the command's own, unlabeled.
 raw = true
-run = "uv run python manage.py dev_session operator"
+run = 'uv run python manage.py dev_session "$HQ_DEV_ACCOUNT"'
 
 # `mise run manage --scratch`: the env is the scratch server's, which mise
 # fixes per task, so the scratch half is a step of its own.
@@ -351,9 +353,10 @@ usage = '''
 arg "[base]" env="CHECK_BASE" help="The ref to diff against; default the nearest commit whose tree passed, then the branch HEAD lands on"
 flag "--list" help="Print the selected test modules and run nothing"
 flag "--whole" help="Run the whole suite and every quick gate, whatever changed: a pass records the tree and the map of the tests that ran each file"
+flag "--fix" help="Judge the tree the quick gates' fixes leave: without it, a run whose fixes rewrote a file fails, naming each, so the tree a run passes is the tree it was given"
 flag "--parallel <workers>" env="CHECK_PARALLEL" default="auto" help="Test workers per suite; 1 rules out an order or isolation failure"
 '''
-run = "uv run python -m tools.gate.fast"
+run = ". ./tools/lib/remote.sh; uv run python -m tools.gate.fast"
 
 [tasks.lint]
 description = "After editing, or when fast is not enough: CI's lint job, every lint:* gate: lint, types, structure, dependencies, security, derived files"

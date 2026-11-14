@@ -32,9 +32,9 @@ from . import agent_access
 from .adoption import manages_through, observes_only
 from .conditions import stamped
 from .infrastructure import controller_contract, resolved_spec, serialize_resource
-from .inventory import strike_removed
+from .inventory import read_as, read_since, strike_removed
 from .plugin_admission import admitted_sources
-from .resource_operations import enqueue, serialize_operation
+from .resource_operations import REPLACES, enqueue, serialize_operation
 lazy from .automation_sources import propose
 lazy from .cadence import request_reading, swept
 lazy from .dependency_updates import plan as dependency_updates
@@ -482,6 +482,13 @@ def _next_resolvable(operations):
     """
 
     for operation in operations:
+        standing = over_live(operation)
+        if standing is UNREAD:
+            continue
+        if standing:
+            with own_operation(operation):
+                _end(operation, OperationRequest.State.FAILED, {"ok": False, "message": standing, "reason": "Drifted"})
+            continue
         try:
             return operation, controller_contract(operation.resource)
         except (KeyError, TypeError, ValueError) as exc:
@@ -492,6 +499,38 @@ def _next_resolvable(operations):
                     {"ok": False, "message": str(exc), "reason": "Unresolvable"},
                 )
     return None, {}
+
+
+# ``over_live``'s answer for a reconcile whose kind has not been read since it was queued.
+UNREAD = "unread"
+_ASK_AGAIN = f"{OperationRequest.Action.RECONCILE.label} to see and approve the whole difference."
+
+
+def over_live(operation: OperationRequest) -> str:
+    """Why a reconcile that carries the copy it replaces may not be applied,
+    ``UNREAD`` while no read since it was queued can say, or "" when it may.
+
+    The apply writes HQ's whole copy over the live record, so it is held to do
+    no more than the change that queued it: the copy is still the one that
+    change wrote, and a read made after the change was approved found the live
+    record as the copy it replaced. A live record changed in between would be
+    overwritten too, so the reconcile is refused and applying it is asked
+    again, where the whole difference is shown. The read is the sweep's, asked
+    for as the reconcile is queued, and the controller's pass reads before its
+    second round of claims.
+    """
+
+    replaced = (operation.input or {}).get(REPLACES)
+    if replaced is None:
+        return ""
+    resource = operation.resource
+    if operation.input.get("generation") != resource.generation:
+        return f"HQ's copy changed again before this ran. {_ASK_AGAIN}"
+    if not read_since(resource.kind, operation.created_at):
+        return UNREAD
+    if not read_as(resource.kind, replaced, resource.spec):
+        return f"The live record changed after this change was approved. {_ASK_AGAIN}"
+    return ""
 
 
 def _stop(reason: str, lease_expires_at=None) -> dict[str, Any]:

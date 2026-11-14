@@ -1,5 +1,6 @@
 """The catalog's parts: the page frame and every shared part no other family names."""
 
+import json
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
@@ -65,6 +66,25 @@ _RECORDS = {
     "example.first": {"example_effect": "read", "example_timeout_seconds": 60},
     "example.second": {"example_effect": "read", "example_timeout_seconds": 120, "example_retry": "safe"},
 }
+
+
+def _list_insert() -> tuple[dict[str, str], dict[str, str]]:
+    """A policy document before and after one grant is inserted among six and one test is widened."""
+
+    grants = [{"src": [f"group:example-{index}"], "dst": ["tag:example"], "ip": ["tcp:443"]} for index in range(6)]
+    tests = [{"src": f"user-{index}@example.com", "accept": ["tag:example:443"]} for index in range(2)]
+    inserted = {"src": ["group:example-admins"], "dst": ["tag:example"], "ip": ["*"]}
+    after = {
+        "grants": [*grants[:3], inserted, *grants[3:]],
+        "tests": [tests[0], {**tests[1], "accept": ["tag:example:443", "tag:example:22"]}],
+    }
+    return (
+        {"document": json.dumps({"grants": grants, "tests": tests})},
+        {"document": json.dumps(after)},
+    )
+
+
+_LIST_INSERT = _list_insert()
 
 
 class _Drawn:
@@ -1290,8 +1310,9 @@ ENTRIES = {
     # queue row draws a plan for each container behind: the hyphenated part is
     # a box of its own (`breakable`), set on the line of the words before it.
     "part/row-buttons": Entry(
-        '<div class="table-scroll"><table class="data-table"><tbody>{% for action in actions %}<tr><td>'
-        '{% include "partials/_action_links.html" with actions=action only %}</td></tr>{% endfor %}</tbody></table></div>',
+        '{% table_region "Example plans" %}<table class="data-table"><tbody>{% for action in actions %}<tr><td>'
+        '{% include "partials/_action_links.html" with actions=action only %}</td></tr>{% endfor %}</tbody></table>'
+        "{% endtable_region %}",
         {
             "actions": (
                 (PageAction("Upgrade plan for example", "/example/"),),
@@ -1651,6 +1672,13 @@ ENTRIES = {
             )
         },
     ),
+    # A document whose list gains one entry mid-way and has another edited:
+    # the new entry is one row, the edited one its field, and the entries
+    # after the insert stay unsaid.
+    "part/change-table-list": Entry(
+        "{% change_table preview %}",
+        {"preview": compare(*_LIST_INSERT, label="Would change", amends=True)},
+    ),
     # Agents' rules (core/_policy_table.html), each setting a toned select
     # (core/_policy_setting.html): every state a rule can be in, and a cell
     # past an agent's grant.
@@ -1750,7 +1778,7 @@ ENTRIES = {
     # In a row's cell, where its word alone stands and its sentence opens
     # under the row: one that failed with a long sentence.
     "part/ask-in-a-row": Entry(
-        '{% section "Example connections 2" %}{% table_region "Example connections 2" %}<table class="data-table">'
+        '{% section "Example connections 1" %}{% table_region "Example connections 1" %}<table class="data-table">'
         '<thead><tr>{% table_heading "Name" "identifier" %}{% table_heading "Read" "control" %}</tr></thead>'
         '<tbody><tr><td>example-main</td><td>{% include "partials/_ask.html" with ask=ask %}</td></tr>'
         "</tbody></table>{% endtable_region %}{% endsection %}",
@@ -1768,12 +1796,12 @@ ENTRIES = {
         },
     ),
     # Waiting its turn, given a sentence that only says its word again: the
-    # word alone, in the cell and in the head, and no line under the row.
+    # word alone in the cell, and no line under the row.
     "part/ask-waiting": Entry(
-        '{% section "Example connections 3" %}{% table_region "Example connections 3" %}<table class="data-table">'
+        '{% section "Example feeds 1" %}{% table_region "Example feeds 1" %}<table class="data-table">'
         '<thead><tr>{% table_heading "Name" "identifier" %}{% table_heading "Read" "control" %}</tr></thead>'
         '<tbody><tr><td>example-main</td><td>{% include "partials/_ask.html" with ask=ask %}</td></tr>'
-        '</tbody></table>{% endtable_region %}<p>{% include "partials/_ask.html" with ask=ask %}</p>{% endsection %}',
+        "</tbody></table>{% endtable_region %}{% endsection %}",
         {
             "ask": Ask(
                 "Read now",
@@ -1952,12 +1980,6 @@ ENTRIES = {
         '{% load static %}{% static "img/logo.png" as picture %}'
         '{% section "Example file" figure=True lede="example-receipt.png" %}'
         '{% include "partials/_document_picture.html" with src=picture alt="An example receipt" only %}'
-        "{% endsection %}",
-    ),
-    # A document of HQ's own framed in a page, an empty one standing in.
-    "part/framed-document": Entry(
-        '{% section "Example document" %}'
-        '{% include "partials/_framed_document.html" with src="about:blank" title="Example document" only %}'
         "{% endsection %}",
     ),
     # A command to paste somewhere else, short and long enough to wrap at its

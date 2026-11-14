@@ -317,6 +317,11 @@ RULES: tuple[FindingRule, ...] = (
         ),
         no_help_reason="HQ cannot sign a machine in to the tailnet.",
         card=TAILNET_CARD,
+        bars={
+            "serious": f"a machine's tailnet key runs out within {KEY_EXPIRY_SERIOUS_DAYS} days",
+            "attention": f"a machine's tailnet key runs out within {KEY_EXPIRY_ATTENTION_DAYS} days",
+        },
+        clears=f"the key runs more than {KEY_EXPIRY_ATTENTION_DAYS} days out, or key expiry is off",
     ),
     FindingRule(
         "tailnet-device-locked-out",
@@ -326,6 +331,7 @@ RULES: tuple[FindingRule, ...] = (
         operator_action="On a machine that can sign, run tailscale lock sign with the machine's key.",
         no_help_reason="Only a machine holding a tailnet lock key can sign.",
         card=TAILNET_CARD,
+        bars={"serious": "tailnet lock keeps a device off the tailnet"},
     ),
     FindingRule(
         "tailnet-device-unapproved",
@@ -335,6 +341,7 @@ RULES: tuple[FindingRule, ...] = (
         operator_action="Approve it in the Tailscale admin console, under Machines.",
         no_help_reason="HQ cannot approve a device on the tailnet.",
         card=TAILNET_CARD,
+        bars={"serious": "a device waits for approval to join the tailnet"},
     ),
     FindingRule(
         "tailnet-lock-unsigned",
@@ -344,6 +351,7 @@ RULES: tuple[FindingRule, ...] = (
         operator_action="On a machine that can sign, run tailscale lock sign with the machine's key.",
         no_help_reason="Only a machine holding a tailnet lock key can sign.",
         card=TAILNET_CARD,
+        bars={"serious": "a device has no tailnet lock signature"},
     ),
     FindingRule(
         "tailnet-client-update",
@@ -353,6 +361,7 @@ RULES: tuple[FindingRule, ...] = (
         operator_action="Run tailscale update on the machine, as an administrator.",
         no_help_reason="HQ cannot run commands on the machine.",
         card=TAILNET_CARD,
+        bars={"attention": "a newer Tailscale client is out for a device"},
     ),
     FindingRule(
         "tailnet-routes-unapproved",
@@ -362,5 +371,6 @@ RULES: tuple[FindingRule, ...] = (
         operator_action="Approve the routes you want on the machine's page, and stop offering the rest.",
         no_help_reason="HQ approves only the routes a machine already offers, and a person decides which.",
         card=TAILNET_CARD,
+        bars={"attention": "a machine offers routes nobody has approved"},
     ),
 )

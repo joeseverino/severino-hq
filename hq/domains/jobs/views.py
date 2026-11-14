@@ -13,7 +13,7 @@ from hq.platform.application.tables import Projected, TableColumn, TableFilter, 
 lazy from hq.platform.application import outbound_work, work_runs
 lazy from hq.platform.application.asks import FAILED, AskMixin, Standing, Took
 lazy from hq.platform.application.automation_runs import cancel_action, listed_with_actions, run_here_url
-lazy from hq.platform.application.capabilities import capability_registry
+lazy from hq.platform.application.capabilities import capability_spec
 lazy from hq.platform.application.labels import lower_first
 lazy from hq.platform.application.outbound_work import SUBJECT_FIELD
 lazy from hq.platform.application.run_pages import run_context
@@ -138,7 +138,7 @@ class RunView(PageMixin, TemplateView):
         ended = self.run.state not in {JobState.QUEUED, JobState.RUNNING}
         again = (
             (PageAction("Run again", run_here_url(playbook, self.run.evidence.hosts)),)
-            if ended and playbook and capability_registry().get(self.run.kind)
+            if ended and playbook and capability_spec(self.run.kind)
             else ()
         )
         return (*again, *((cancel,) if cancel is not None else ()))

@@ -61,6 +61,8 @@ class GateTestCase(SimpleTestCase):
         cls.enterClassContext(patch.dict(os.environ))
         os.environ[gate_verdict.VERDICTS_FOLDER] = kept
         os.environ.pop(gate_verdict.REPORTS, None)
+        # A gate a test runs is a run here, though the suite was sent from another machine.
+        os.environ.pop("HQ_GATE_SENT", None)
         # What a gate shows is the same on a terminal, in CI and in an agent's shell.
         os.environ[gate_verdict.OUTPUT] = "short"
 

@@ -142,29 +142,13 @@ class PageNavigation:
 # The plot rectangle every chart in HQ draws inside. Stated once so a line and
 # a bar chart placed one above the other share an axis position rather than
 # nearly sharing one.
-PLOT_LEFT, PLOT_TOP, PLOT_WIDTH, PLOT_HEIGHT = 48.0, 12.0, 606.0, 202.0
-# The strip after the plot, and the mirror of the gutter before it, so the
-# most recent period (the one being looked at) has room around it and the
-# chart does not lean left.
-# The same number as the left: the end labels are centered on their points, so
-# equal margins make the first and last label clear their edges by the same
-# amount.
-# Taken out of the plot rather than added to the box: the drawing stays 702
-# units wide, so every chart keeps its aspect ratio and a line chart sized by
-# `height: auto` does not change height on its own.
-PLOT_RIGHT = PLOT_LEFT
-# A chart in a card of its own, rather than one of a pair: the drawing fills a
-# full-width card instead of stopping at half-width. The height is unchanged:
-# this is the same chart given the room it is put in, not a bigger one.
-# Room to the right of the plot for the last category label, which is centered
-# on the last point and so hangs half its width past the axis. Sized for the
-# label at its largest: a phone scales the whole drawing down, so the type
-# has to be enlarged in these units to survive it, and the overhang is twice
-# what a desktop needs. Padding rather than a special case for the final
-# label: re-anchoring one label moves it off the point it belongs to.
-# The drawing is only the drawing. Labels are HTML positioned over it, so one
-# geometry serves a half-width card and a full-width one alike.
-STANDARD_SVG = round(PLOT_LEFT + PLOT_WIDTH + PLOT_RIGHT)
+# The plot runs to the drawing's right edge: what stands past it is the last
+# category label, which ends at its point (figures.css), so no strip is kept
+# for it. The gutter before it holds the value labels.
+PLOT_LEFT, PLOT_TOP, PLOT_WIDTH, PLOT_HEIGHT = 48.0, 12.0, 654.0, 202.0
+# The drawing is only the drawing. Labels are a layer over it placed by
+# percentage, so one geometry serves a half-width card and a full-width one.
+STANDARD_SVG = round(PLOT_LEFT + PLOT_WIDTH)
 STANDARD_HEIGHT = 260
 # What an axis label costs, in pixels, at the 11px it is rendered at: roughly
 # six per character, plus a gap before the next one. Decides whether a set of
@@ -176,7 +160,7 @@ LABEL_GAP_PX = 8.0
 # 320px column less the frame's sides, of which the plot is its share of the
 # drawing. Labels wanting more are `dense`, and the container query that acts
 # on it (figures.css) keeps only the end labels in any narrow card.
-NARROW_PLOT_PX = 284.0 * PLOT_WIDTH / (PLOT_LEFT + PLOT_WIDTH + PLOT_RIGHT)
+NARROW_PLOT_PX = 284.0 * PLOT_WIDTH / STANDARD_SVG
 
 
 @display
@@ -382,6 +366,16 @@ class LineChart(Chart):
     series: tuple[LineSeries, ...]
     marks: tuple[LineMark, ...]
 
+    @property
+    def axis_marks(self) -> tuple[PlacedLabel, ...]:
+        """Each mark's label over its rule, as a share of the drawing."""
+        return tuple(PlacedLabel(mark.x / self.width * 100, mark.label) for mark in self.marks)
+
+    @property
+    def mark_row(self) -> float:
+        """Where the mark labels stand: on the plot's top edge, which they clear upward (figures.css)."""
+        return self.plot_top / self.height * 100
+
 
 # How much room a date label needs beside its neighbor. "Aug 14" is about
 # forty pixels at the axis size, and two of them closer than this print over
@@ -495,8 +489,10 @@ class DatePlot:
         # The last day is always labeled (it is the one an eye goes to) but
         # stepping from the first rarely lands on it, so the step before it can
         # fall a couple of days short and the two labels print on top of each
-        # other. Whichever of the pair is not the last day gives way.
-        while len(stamps) > 1 and self.x(self.last_day) - self.x(stamps[-1]) < LABEL_GAP:
+        # other. Whichever of the pair is not the last day gives way. The last
+        # label ends at its point (figures.css), so the one before it needs
+        # half a label more.
+        while len(stamps) > 1 and self.x(self.last_day) - self.x(stamps[-1]) < LABEL_GAP * 1.5:
             stamps.pop()
         stamps.append(self.last_day)
         return stamps

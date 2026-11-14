@@ -490,6 +490,13 @@ def _offline(estate: Estate) -> tuple[Insight, ...]:
                     + (ended(f" It is the {what}") if what else "")
                     + (f" It serves {counted(len(machine.hostnames), 'name')}." if machine.hostnames else "")
                 ),
+                why=(
+                    f"Tailscale last saw it {ago(seen)}, and a machine that serves a name or a role is urgent "
+                    "while it is away."
+                    if serves
+                    else f"Tailscale last saw it {ago(seen)}, and a machine that serves no name or role needs "
+                    "attention while it is away."
+                ),
                 action="Open machine",
                 url=machine.url,
                 subject=subject_link("machine", machine.name),

@@ -179,6 +179,15 @@ def generation() -> str:
     return known.digest if known is not None else catch_up()
 
 
+def held() -> str:
+    """The digest of the catalog this process last read, "" before its first
+    read, asking the database nothing: for what is the same in every
+    generation (``integrations.held_graph``)."""
+
+    known = _THIS_PROCESS.known
+    return known.digest if known is not None else ""
+
+
 # Set by a request's door: whether this request has read the newest catalog yet.
 _UNCHECKED: ContextVar[list[bool] | None] = ContextVar("hq_adopted_catalog_checked", default=None)
 

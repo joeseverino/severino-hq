@@ -100,7 +100,13 @@ class Measurement:
 
         unmet = sorted(self.unmet, key=lambda result: not result.check.serious)
         return tuple(gap(result.check) for result in unmet) + tuple(
-            _row(f"{result.check.unmet} by design", result.reason, status="good", key=result.check.id)
+            _row(
+                f"{result.check.unmet} by design",
+                result.reason,
+                status="good",
+                key=result.check.id,
+                why="It fails this check on purpose, for the reason given, so nothing needs doing.",
+            )
             for result in self.intended
         )
 
@@ -139,6 +145,7 @@ def gap(check: Check, *, facts: tuple[tuple[str, str], ...] = (), links: tuple[A
         check.why,
         status="serious" if check.serious else "attention",
         key=check.id,
+        why=check.why,
         action=check.fix,
         facts=facts,
         links=links,

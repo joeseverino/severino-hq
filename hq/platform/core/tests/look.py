@@ -9,6 +9,7 @@ to use it is in docs/Development.md, under "Browser layout".
 import functools
 import importlib
 import inspect
+import io
 import json
 import os
 import re
@@ -19,7 +20,7 @@ import sys
 import tempfile
 import time
 from collections.abc import Callable
-from contextlib import ExitStack, suppress
+from contextlib import ExitStack, redirect_stdout, suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, NoReturn, override
@@ -38,7 +39,7 @@ from hq.platform.application import fragments
 from hq.platform.core import append_only, seeds
 from hq.platform.core.speculation import NOT_A_NAVIGATION
 from hq.platform.core.stalls import stall_watch
-from hq.platform.core.tests import task
+from hq.platform.core.tests import look_shares, task
 from hq.platform.core.tests.browser import probes
 from hq.platform.core.tests.browser.estate import ExampleEstateBrowserTests, estate_pages, navigation
 from hq.platform.core.tests.browser.gate import BrowserGate, add_css
@@ -91,6 +92,7 @@ lazy from hq.platform.core.example_estate.testing import as_production, sign_in
 # imported, so a base whose constructors this tree's catalog does not fit still
 # looks at every other page: it is read only for a name nothing else is.
 lazy from hq.platform.core.tests.browser import catalog
+lazy from tools.perf.report import tokens as perf_tokens  # noqa: TID251 - dev:look runs perf in its share, and perf declares what it draws
 
 # Each run's shots go to a folder of their own under here, named for when the
 # run began, so a later run never overwrites what an earlier one printed: the
@@ -141,6 +143,8 @@ SURVEY_INPUTS = (
 )
 # A rule's verdict when it judged no page at any width: none matched, or none drew.
 JUDGED_NOTHING = "{} judged no page: none matched, or none drew"
+# How many processes looked, each with a browser of its own (look_shares).
+LOOKED_IN = "Looked in {} {}"
 # The flags that change what a run draws or reads, named in what it says it judged.
 DRAWN_WITH = (
     "base",
@@ -773,9 +777,11 @@ def _marked_a_guess(request: Any) -> bool:
 
 @functools.cache
 def this_run() -> Path:
-    """The folder this run shoots into: the one its asker handed a look at a
-    base, or else a new one under ``OUT``."""
+    """The folder this run shoots into: the one the run that started it handed
+    a share or a look at a base, or else a new one under ``OUT``."""
 
+    if shared := look_shares.folder():
+        return shared
     if given := _asked().text(_SHOTS):
         folder = Path(given)
         folder.mkdir(parents=True, exist_ok=True)
@@ -1111,16 +1117,28 @@ def _not_the_hosts(asked: tuple[str, ...]) -> list[str]:
     ]
 
 
+def _shooting(rule: str) -> bool:
+    """Whether a run of ``rule`` takes its screenshots. A run that judges is
+    read by its findings, and a shot and its bands cost more than the rule
+    that reads the page, so it shoots only when asked or when what it was
+    asked reads the shots: a base's are kept beside this run's, and --eval and
+    --operation name the band that shows what they point at."""
+
+    asked = _asked()
+    return not rule or asked.switch("shots") or any(map(asked.text, ("base", "eval", "operation", _SHOTS)))
+
+
 def refuse_early() -> None:
     """Check what the task was asked before it waits for the heavy turn and
     draws the estate, exiting 64 with the refusal: every name but those only
     the estate drawn resolves, which the run checks (``_pages``). Not
     composed, a name only an extension's page can be is refused too, with
-    the flag that loads them."""
+    the flag that loads them. What it prints last is the share of the heavy
+    turn the look takes (``look_shares``)."""
 
-    said = []
+    said, pages = [], []
     try:
-        _checked(None)
+        pages = _checked(None).pages
         _css(_asked().text("css"))
         _script(_asked().text("eval"))
     except AssertionError as refused:
@@ -1132,6 +1150,26 @@ def refuse_early() -> None:
         )
     if said:
         refuse("\n".join(said))
+    # The share of the heavy turn the task takes, on the last line: the look's, or perf's when perf
+    # follows in the same share and draws more.
+    look = look_shares.tokens(_processes(len(pages), look_shares.capacity()))
+    print(max(look, _measured_after()), flush=True)
+
+
+def _measured_after() -> int:
+    """The tokens of the perf run that follows the look (dev:look's --perf, on by default with --base), or 0."""
+
+    asked = _asked()
+    if {"true": True, "false": False}.get(asked.text("perf"), bool(asked.text("base"))):
+        return perf_tokens(base=bool(asked.text("base")), image=False)
+    return 0
+
+
+def _processes(pages: int, tokens: int) -> int:
+    """How many processes look at ``pages`` pages in a share of ``tokens``:
+    one when following links, which finds its pages as it goes."""
+
+    return 1 if _asked().switch("deep") else look_shares.processes(pages, tokens)
 
 
 def refuse(said: str) -> NoReturn:
@@ -1180,6 +1218,15 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
     estate_client: Client | None
     # Each estate address answered, with its status and any speculation refusal.
     answered: dict[str, tuple[int, str]]
+    # Every page asked, this process's share of them as (i, n), and the
+    # processes of the other shares it started (look_shares).
+    dealt: list[str]
+    share_at: tuple[int, int] = (1, 1)
+    shares: list[look_shares.Started]
+    # Why a page went unlooked when split (a share that ended early, a page
+    # no share or two looked at), and the pages it names.
+    unlooked: tuple[str, ...] = ()
+    unlooked_pages: tuple[str, ...] = ()
 
     @classmethod
     @override
@@ -1204,6 +1251,10 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             asked.probe_source,
             asked.probe_arg,
         )
+        # Every page asked, and this process's share of them (look_shares).
+        cls.dealt = asked.pages
+        cls.share_at = look_shares.this_share() or (1, _processes(len(asked.pages), look_shares.granted()))
+        cls.asked = look_shares.mine(asked.pages, cls.share_at)
         # The base next, while nothing of this run's holds memory but Django.
         cls.base, cls.base_measured, cls.base_errors, cls.base_kept, cls.base_unfit = None, {}, {}, [], ""
         if ref := _asked().text("base"):
@@ -1216,7 +1267,27 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             except BaseUnfit as unfit:
                 cls.base_unfit = BASE_UNFIT.format(ref, unfit)
                 print(cls.base_unfit, flush=True)
+        # The other shares start on the database as it stands, before any
+        # estate is committed to it, and look while this one does.
+        cls.shares = []
+        if not look_shares.this_share() and (total := cls.share_at[1]) > 1:
+            cls.shares = cls.enterClassContext(
+                look_shares.started(total, this_run(), look_shares.command(sys.argv), cls.share_env(), sys.stdout)
+            )
         super().setUpClass()
+
+    @classmethod
+    def share_env(cls) -> dict[str, str]:
+        """The environment a share runs in: this run's, judged by the same rule
+        on the same clock and shooting as this run does, with no base, which
+        this run already looked at."""
+
+        env = {name: value for name, value in os.environ.items() if name != f"{PREFIX}base"}
+        return env | {
+            f"{PREFIX}rule": cls.rule_asked(),
+            PREFIX + _CLOCK: str(cls.clock_at),
+            f"{PREFIX}shots": "true" if _shooting(cls.rule_asked()) else "false",
+        }
 
     @classmethod
     def refuse(cls, said: str) -> NoReturn:
@@ -1372,7 +1443,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
 
     @override
     def left_out_on(self, path):
-        return catalog.left_out_on(path) if path in self.unscripted else ()
+        return catalog.left_out_on(path) if path in self.unscripted else super().left_out_on(path)
 
     def scripted_for(self, name) -> bool:
         """Whether ``name`` is drawn with script: a page is unless
@@ -1411,10 +1482,37 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             self.follow(widths[0])
         self.measured: Measured = {}
         found = self.look_at_every_page(widths, rule)
+        looked = look_shares.Looked(
+            found, self.measured, self.errors, list(self.judged_at), self.printed, self.unanswered_pages
+        )
+        if (at := look_shares.this_share()) and (shared := look_shares.folder()):
+            looked.write(look_shares.record(shared, at[0]))
+            return
+        found = self.merge(looked, widths)
         if into := _asked().text(_FINDINGS):
             _write_found(Path(into), drawn_at_base(found, self.unanswered_pages), self.measured, self.errors)
         if failed := self.close(rule, found):
             self.fail("\n".join(failed))
+
+    def merge(self, looked, widths) -> Found:
+        """What every share found, this one's included, as one look in the
+        order the pages were asked, each page's lines said in that order; each
+        share that ended without its findings, and each page no share or more
+        than one looked at, kept for the close to fail on."""
+
+        if not self.shares:
+            return looked.found
+        with stall_watch.paused():
+            theirs, failed = look_shares.collected(self.shares, this_run(), self.dealt, _why_it_ended)
+        whole, wrong = look_shares.merged(self.dealt, widths, [looked, *theirs])
+        self.unlooked = (*failed, *wrong)
+        self.unlooked_pages = tuple(
+            name for name in self.dealt if any((name, width) not in whole.found for width in widths)
+        )
+        self.measured, self.errors, self.unanswered_pages = whole.measured, whole.errors, whole.unanswered
+        self.judged_at = dict.fromkeys(whole.judged)
+        look_shares.say(whole.printed)
+        return whole.found
 
     def close(self, rule, found) -> list[str]:
         """What the run found and heard said, each new one against a base on
@@ -1455,14 +1553,16 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         if not self.shooting:
             shots = f"Findings in {_shown(this_run())}/, no screenshots: --shots takes them"
         unfit = [self.base_unfit] if self.base_unfit else []
+        total = self.share_at[1]
+        processes = LOOKED_IN.format(total, "process" if total == 1 else "processes")
         # Last, as it says which tree every line before it read.
         moved = changed_since(self.tree, Path(settings.BASE_DIR), self.tree_store)
         changed = [tree_changed(self.tree, moved)] if moved else []
-        print(*printed, *unanswered, *unfit, shots, *changed, sep="\n", flush=True)
+        print(*printed, *unanswered, *self.unlooked, *unfit, processes, shots, *changed, sep="\n", flush=True)
         if rule:
             again = [*failed_pages(found), *(name for (name, _), heard in self.errors.items() if heard)]
-            self.tell_the_gate(rule, said[-1], [*again, *self.unanswered_pages])
-        return failed + unanswered
+            self.tell_the_gate(rule, said[-1], [*again, *self.unanswered_pages, *self.unlooked_pages])
+        return [*failed, *unanswered, *self.unlooked]
 
     def tell_the_gate(self, rule, verdict, blamed):
         """What the rule judged, under its verdict, and the look that runs it
@@ -1504,23 +1604,44 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
     def look_at_every_page(self, widths, rule) -> Found:
         """Each page at each width, said as it starts, so a look that hangs
         names where, and once it has been looked at: its shots, its findings
-        (kept beside its screenshot) and every error and refusal it had."""
+        (kept beside its screenshot) and every error and refusal it had. Split
+        among processes, each says only where it is as it starts, after its
+        share, and keeps the rest in ``printed``, said page by page once every
+        share is done."""
 
         found: Found = {}
+        self.printed: dict[tuple[str, int], list[str]] = {}
+        index, total = self.share_at
+        # A share's own lines are said after its share by the run that started it.
+        progress = look_shares.said_by(index, total) if total > 1 and not look_shares.this_share() else ""
         for name in self.asked:
             for width in widths:
                 stall_watch.mark(f"dev:look {name} at {width}")
-                print(f"Looking at {name} at {width}", flush=True)
-                self.shots: list[tuple[str, str]] = []
-                said = found[name, width] = self.look(name, width, rule)
-                errors = self.errors[name, width] = self.refusals_so_far()
-                report = _shot(name, width).with_suffix(".txt")
-                if said:
-                    report.write_text("\n".join([f"{name} at {width}", *said]) + "\n", encoding="utf-8")
-                else:
-                    report.unlink(missing_ok=True)
-                print(*looked(self.shots, said, rule, _shown(report), errors), sep="\n", flush=True)
+                began = f"Looking at {name} at {width}"
+                if total == 1:
+                    print(began, flush=True)
+                    found[name, width], lines = self.look_once(name, width, rule)
+                    print(*lines, sep="\n", flush=True)
+                    continue
+                print(f"{progress}{name} at {width}", flush=True)
+                with redirect_stdout(heard := io.StringIO()):
+                    found[name, width], lines = self.look_once(name, width, rule)
+                self.printed[name, width] = [began, *heard.getvalue().splitlines(), *lines]
         return found
+
+    def look_once(self, name, width, rule) -> tuple[list[str], list[str]]:
+        """What ``rule`` found on ``name`` at ``width``, and the lines that say
+        how its look went."""
+
+        self.shots: list[tuple[str, str]] = []
+        said = self.look(name, width, rule)
+        errors = self.errors[name, width] = self.refusals_so_far()
+        report = _shot(name, width).with_suffix(".txt")
+        if said:
+            report.write_text("\n".join([f"{name} at {width}", *said]) + "\n", encoding="utf-8")
+        else:
+            report.unlink(missing_ok=True)
+        return said, looked(self.shots, said, rule, _shown(report), errors)
 
     def follow(self, width):
         """Every page the estate pages asked for link to, one per address."""
@@ -1547,13 +1668,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         rule = self.rule_asked()
         self.css = _css(_asked().text("css"))
         self.script = _script(_asked().text("eval"))
-        # A run that judges is read by its findings, and a shot and its bands
-        # cost more than the rule that reads the page, so it shoots only when
-        # asked or when what it was asked reads the shots: a base's are kept
-        # beside this run's, and --eval and --operation name the band that
-        # shows what they point at.
-        asked = _asked()
-        self.shooting = not rule or asked.switch("shots") or any(map(asked.text, ("base", "eval", "operation", _SHOTS)))
+        self.shooting = _shooting(rule)
         self.dialogs = _listed("dialog")
         unnamed = [dialog for dialog in self.dialogs if not re.fullmatch(r"[\w-]+", dialog)]
         self.assertFalse(unnamed, f"--dialog takes dialog ids (connection) or all, not {unnamed}")
@@ -1857,16 +1972,16 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
 
     def in_bands(self, shot, extent, shows) -> list[Band]:
         """The page shot whole at ``shot`` and, when it is taller than the
-        window, cut into window-sized bands beside it, so each can be read at
-        once, each to ``TALLEST`` at most (``shoot_page``), all from the one
-        ``extent``. A page that moved past that extent ends its bands where
+        window, cut into window-sized bands beside it to the page's end, so
+        each can be read at once, the whole shot to ``TALLEST`` at most
+        (``shoot_page``), all from the one ``extent``. A page that moved past that extent ends its bands where
         it went, and the shot says so. The part of the page each file holds."""
 
         wide, tall = extent
         cut = shoot_page(self.page, shot, extent=extent, animations="disabled")
         said = [shows, cut]
         files: list[Band] = []
-        for number, band in enumerate(_bands(min(tall, TALLEST), self.page.viewport_size["height"]), start=1):
+        for number, band in enumerate(_bands(tall, self.page.viewport_size["height"]), start=1):
             path = shot.with_name(f"{shot.stem}.band-{number:02}.png")
             try:
                 shoot_page(self.page, path, extent=(wide, tall), band=band, animations="disabled")

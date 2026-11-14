@@ -24,6 +24,8 @@ from .sweep import store
 REPOSITORIES = ("hq", "homelab", "photo-library", "media-server", "git-server", "backups", "dotfiles")
 # The repository HQ opens dependency updates for.
 UPDATED = "photo-library"
+# The repository whose default branch fails a check, so the queue holds GitHub's item.
+FAILING = "homelab"
 # The scheduled work HQ declares that runs on a clock, and how many runs to show.
 SCHEDULED = tuple((work.name, work.every) for work in scheduled_work.SCHEDULED if work.every is not None)
 RUNS = 3
@@ -117,6 +119,8 @@ def repositories():
             record["images"] = [{"name": "example/hq", "signed": [HQ_DIGEST.removeprefix("sha256:")]}]
         if name == UPDATED:
             record.update(_updates(name))
+        if name == FAILING:
+            record["checks"] = {"state": "failure", "total": 4, "failing": ["Scan"], "running": 0}
         return record
 
     store("github.repository", *(repository(name) for name in REPOSITORIES))

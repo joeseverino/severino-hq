@@ -29,12 +29,12 @@ lazy from hq.domains.jobs.runner import AUDIT_TYPE as JOB_AUDIT_TYPE
 from .asks import DONE, FAILED, QUEUED, RUNNING, Standing
 from .automation_runs import capability_name, resource_key, run_title
 from .doors import NOBODY, Attribution
-from .resource_operations import active_conditions, asked_by, problem_condition
+from .resource_operations import active_conditions, asked_by, asking, problem_condition
 from .routes import reverse
 lazy from .automation_adoption import playbook_titles
 lazy from .automation_sources import REFRESH, SOURCE_KEY, capability_specs
 lazy from .cadence import automation_standing
-lazy from .history import who_did
+lazy from .history import Acts, who_did_each
 lazy from .scheduled_work import job_names
 
 type Source = Literal["job", "run"]
@@ -509,13 +509,13 @@ def hydrated(rows: Iterable[Sequence[Any]]) -> list[WorkRun]:
         ids[source].append(pk)
     jobs = Job.objects.in_bulk(ids[JOB]) if ids[JOB] else {}
     runs = OperationRequest.objects.select_related("resource").in_bulk(ids[RUN]) if ids[RUN] else {}
-    # Who started each, from the audit row each wrote first.
-    who = {**who_did((JOB_AUDIT_TYPE,), ids[JOB]), **asked_by(runs.values())}
+    # Who started each, from the audit row each wrote first, both kinds in one read.
+    who = dict(zip((JOB, RUN), who_did_each(Acts((JOB_AUDIT_TYPE,), ids[JOB]), asking(runs.values())), strict=True))
     now = timezone.now()
     said = _untaken_of(JobState(seen) for source, _pk, seen, *_rest in page if source == RUN)
     built: list[WorkRun] = []
     for source, pk, seen, _created, title, _lead in page:
-        by = who.get(str(pk), NOBODY)
+        by = who[source].get(str(pk), NOBODY)
         if source == JOB:
             built.append(job_run(jobs[pk], title, by))
         else:

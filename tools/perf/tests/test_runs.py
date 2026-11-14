@@ -54,7 +54,7 @@ class FakeTarget:
         return 100 * 1024**2
 
     def queries(self, pages):
-        return dict.fromkeys(pages, 7)
+        return {page: {"queries": 7, "repeated_queries": 3} for page in pages}
 
     def cold_start(self):
         self.asked.append("cold start")
@@ -150,6 +150,7 @@ class FailureTests(Measured):
         self.assertIn("chromium", here["failures"][0]["error"])
         self.assertEqual(here["pages"][0]["server"]["p50_ms"], 4.0)
         self.assertEqual(here["pages"][0]["server"]["queries"], 7)
+        self.assertEqual(here["pages"][0]["server"]["repeated_queries"], 3)
         self.assertEqual(here["cold_start"]["median_ms"], 1500.0)
         self.assertTrue(here["finished_at"])
 
@@ -328,6 +329,7 @@ class BesideABaseTests(Measured):
         self.assertEqual(kept.doc["base_reused_from"], previous.name)
         self.assertNotIn("p50_ms", kept.doc["base"]["pages"][0]["server"])
         self.assertEqual(kept.doc["base"]["pages"][0]["server"]["queries"], 7)
+        self.assertEqual(kept.doc["base"]["pages"][0]["server"]["repeated_queries"], 3)
 
     def test_the_closing_line_names_both_loads_beside_the_run_a_base_is_kept_from(self):
         self.browsing()
@@ -535,6 +537,7 @@ class KeptTests(SimpleTestCase):
             ("an unfinished run", plan, {"finished": None}, commit, plan),
             ("fewer pages", plan | {"pages": ["/contacts/"]}, {}, commit, plan),
             ("memory measured otherwise", unmeasured, {}, commit, image.key()),
+            ("another machine", plan | {"machine": "elsewhere.example"}, {}, commit, plan),
             ("its browser waited otherwise", plan | {"browser_waits_for": "networkidle"}, {}, commit, plan),
         )
         for why, kept_plan, how, asked_commit, asked_plan in cases:

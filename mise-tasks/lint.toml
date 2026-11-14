@@ -285,7 +285,7 @@ flag "--pairs" help="First print every pair outside tests with the classificatio
 run = "uv run python -m tools.structural.bar"
 
 ["lint:css"]
-description = "Stylelint holds the stylesheets to their contract: color and sizes from tokens, every custom property defined"
+description = "Stylelint holds the stylesheets to their contract: color and sizes from tokens, every custom property defined, every feature at the browser floor or behind @supports"
 hide = true
 tags = ["fast"]
 sources = [

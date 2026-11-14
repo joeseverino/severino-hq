@@ -33,7 +33,8 @@ class ProblemRowTests(TestCase):
     def test_a_row_about_a_container_sits_in_the_machines_containers_card(self):
         page = all_elements(self.client.get(reverse("control_plane:machine", kwargs={"name": MACHINE})))
 
-        marks = [element for element in page if _ABOUT_A_CONTAINER in element.attrs.get("data-origin", "")]
+        # Each row's urgency panel names the rule that raised it.
+        marks = [element for element in page if element.tag == "dialog" and _ABOUT_A_CONTAINER in element.words]
         self.assertTrue(marks)
         for mark in marks:
             row = next(ancestor for ancestor in mark.ancestors if "data-attention-item" in ancestor.attrs)

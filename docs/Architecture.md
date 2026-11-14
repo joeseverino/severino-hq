@@ -164,6 +164,30 @@ source that builds an item without help, and
 `hq/platform/application/tests/test_item_help.py` reads the composed queue
 through the `item_help` gauge defined there.
 
+Every item also says why it is as urgent as it is, in one sentence on what HQ
+read and what makes that this urgent (`Insight.why`). The panel behind a card's
+urgency leads with it, then lists in view what raised it (the domain, a
+finding's rule, and the key), and closes on when its reading was taken and
+since when, in the modal's quiet foot line
+(`templates/partials/_urgency_pill.html`, from `decisions._origin`). A
+finding's is worded once, by `attention.finding_why`: its first readings, then
+the bar its rule declares for its severity (`FindingRule.bars`, worded from the
+detector's own constants and refused at import when the rule's own severity
+has none), as in "Free on /: 400 MB of 30 GB (1.3%); urgent once free space is
+under 512 MB and 3% of the disk." The ast-grep rule `attention-item-says-why`
+fails on an `Insight` built without one, and `attention-why-restates-rating`
+on a why that closes on its rating or names its rule, in host source and,
+through the plugin check, in an extension's. `test_item_help.py` holds every
+finding the example estate raises to a bar for its severity.
+
+An item a threshold raises also says what clears it (`Insight.clears`, a
+finding's from `FindingRule.clears`), worded from the same constant as its
+bar; `decisions._origin` adds it after the why, "Clears once free space is
+back above 2 GB or 10% of the disk." The ast-grep rule
+`threshold-says-what-clears-it` fails a why or a rule's bars that name a
+constant without one. The panel is drawn after the line its urgency sits in
+(`_urgency_pill.html#panel`), never inside that line's words.
+
 A rule is declared beside the detector that decides it: each module that raises
 findings (`perimeter_findings`, `controller_findings`, `docker_estate`,
 `dns_findings` and the rest) exports `RULES`, built from the vocabulary in

@@ -116,6 +116,10 @@ class QueueItem(TypedDict):
     subject: WrittenAction | None
     notice: bool
     family: str
+    # Why it is as urgent as its status says (``Insight.why``).
+    why: str
+    # What clears it, or "" (``Insight.clears``).
+    clears: str
     # ISO 8601, or "" when unknown.
     since: str
     observed_at: str
@@ -146,6 +150,8 @@ def queue_item(source_id: str, source: str, item: Insight) -> QueueItem:
         "subject": asdict(item.subject) if item.subject else None,
         "notice": item.notice,
         "family": item.family,
+        "why": item.why,
+        "clears": item.clears,
         "since": item.since.isoformat() if item.since else "",
         "observed_at": item.observed_at.isoformat() if item.observed_at else "",
         "reads": item.reads,

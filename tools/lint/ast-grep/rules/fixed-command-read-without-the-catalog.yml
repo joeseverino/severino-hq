@@ -1,0 +1,31 @@
+# Only an adopted procedure's command moves with an adoption; every other
+# command, and the graph's resources, connections and search, are the same at
+# every generation. Picked out of the whole registry or the graph at the
+# catalog adopted now, one of them costs every page that names it a read of
+# the catalog's digest; capability_spec and held_graph answer it from what the
+# process already holds, and read the catalog for a procedure alone.
+id: fixed-command-read-without-the-catalog
+language: python
+severity: error
+message: One command, or a part of the graph no adoption moves, is read at the catalog adopted now.
+note: >-
+  Read one command with capability_spec (None when unregistered) or
+  command_spec (registered), and resources, connections or search from
+  held_graph().
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+ignores:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/migrations/**"
+rule:
+  any:
+    - pattern: capability_registry()[$NAME]
+    - pattern: capability_registry().get($$$ARGS)
+    - pattern: $MODULE.capability_registry()[$NAME]
+    - pattern: $MODULE.capability_registry().get($$$ARGS)
+    - pattern: integration_graph().capabilities[$NAME]
+    - pattern: integration_graph().capabilities.get($$$ARGS)
+    - kind: attribute
+      regex: ^integration_graph\(\)\.(resources|connections|search|search_models)$

@@ -110,6 +110,27 @@ class OneListTests(WorkRunsTestCase):
         self.assertIn(RESTART, row.title)
         self.assertEqual((row.started, row.finished), (run.claimed_at, run.completed_at))
 
+    def test_who_started_each_job_and_asked_each_run_is_read_at_once(self):
+        from django.contrib.auth import get_user_model
+
+        from hq.domains.jobs.runner import AUDIT_TYPE, run as run_job
+        from hq.platform.core.models import AuditLog
+
+        from ..history import who_did
+        from ..resource_operations import asked_by
+
+        asked = self.run_of(APP)
+        person = get_user_model().objects.create_user("example-person", password="x" * 14)
+        job = run_job("example.work", "Example work", lambda progress: {}, requested_by=person)
+
+        with CaptureQueriesContext(connection) as sent:
+            rows = {row.source: row for row in self.listed()}
+
+        self.assertEqual(rows[JOB].by, who_did((AUDIT_TYPE,), [job.pk])[str(job.pk)])
+        self.assertEqual(rows[RUN].by, asked_by([asked])[str(asked.pk)])
+        self.assertNotEqual(rows[JOB].by, rows[RUN].by)
+        self.assertEqual(len([query for query in sent if AuditLog._meta.db_table in query["sql"]]), 1)
+
     def test_an_approved_run_names_who_approved_it(self):
         run = self.run_of(APP)
 

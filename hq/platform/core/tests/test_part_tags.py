@@ -124,6 +124,15 @@ class SectionTagTests(SimpleTestCase):
         self.assertEqual([h.words for h in elements(html, "h2")], ["Outer", "After"])
         self.assertEqual([h.words for h in elements(html, "h3")], ["Inner"])
 
+    def test_a_dialog_opened_inside_a_section_heads_its_sections_under_its_own_title(self):
+        html = _render(
+            '{% section "Outer" %}{% section "Inner" %}'
+            '{% headed top %}{% section "In the dialog" %}<p>A</p>{% endsection %}{% endheaded %}'
+            "{% endsection %}{% endsection %}"
+        )
+
+        self.assertEqual([h.words for h in elements(html, "h3")], ["Inner", "In the dialog"])
+
     def test_two_sections_of_one_heading_name_their_own(self):
         html = _render('{% section "Hosts" %}<p>A</p>{% endsection %}{% section "Hosts" %}<p>B</p>{% endsection %}')
 

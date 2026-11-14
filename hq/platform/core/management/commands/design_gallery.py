@@ -9,6 +9,9 @@ from hq.platform.core import design_gallery
 
 class Command(BaseCommand):
     help = "Write the Design page's gallery of every shared part to SEVERINO_DESIGN_GALLERY, as the image build does."
+    # The image build runs it as root before HQ's account owns anything, and
+    # the model checks open the database, which would ship root's in /data.
+    requires_system_checks = ()
 
     @override
     def add_arguments(self, parser):

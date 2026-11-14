@@ -622,7 +622,7 @@ class ActionItemTests(TestCase):
             f"{reverse('command', kwargs={'name': 'certificate.renew'})}?target=soon-cert",
             [action.url for step in found[0].workflow.steps for action in step.actions],
         )
-        # The card leads with the certificate's page, as it did before it was a finding.
+        # The card leads with the certificate's page.
         self.assertEqual(
             (found[0].action, found[0].url),
             ("Open certificate", reverse("control_plane:detail", args=["soon-cert"])),

@@ -348,6 +348,7 @@ RULES: tuple[FindingRule, ...] = (
         operator_action=("Adopt it if you started it. Otherwise remove it on its machine."),
         no_help_reason=("HQ cannot remove a container it did not start."),
         card=CONTAINERS_CARD,
+        bars={"serious": "a container runs that no compose project started"},
     ),
     FindingRule(
         "container-image-behind",
@@ -357,6 +358,7 @@ RULES: tuple[FindingRule, ...] = (
         operator_action=("Recreate the container from its compose project so it runs the image its tag names now."),
         no_help_reason=cannot_run_commands(),
         card=CONTAINERS_CARD,
+        bars={"attention": "a container runs an older image than its tag names now"},
     ),
     FindingRule(
         "container-image-untagged",
@@ -366,6 +368,7 @@ RULES: tuple[FindingRule, ...] = (
         operator_action=("Pin a tag for the image in the container's compose file and recreate it."),
         no_help_reason=CANNOT_EDIT_COMPOSE,
         card=CONTAINERS_CARD,
+        bars={"attention": "a container runs an image with no tag"},
     ),
     FindingRule(
         "container-image-unpinned",
@@ -375,5 +378,6 @@ RULES: tuple[FindingRule, ...] = (
         operator_action=("Pin the image by digest in the container's compose file and recreate it."),
         no_help_reason=CANNOT_EDIT_COMPOSE,
         card=CONTAINERS_CARD,
+        bars={"attention": "a container names its image by tag, with no digest"},
     ),
 )

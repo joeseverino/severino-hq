@@ -1,0 +1,34 @@
+# An item's why says what HQ read and what makes that this urgent. One that
+# closes on its rating ("which needs attention", "which is urgent") or names
+# the rule that raised it repeats what its badge already shows, so the panel
+# behind the badge answers nothing. The plugin check runs it over an
+# extension's src/ as well. A finding's why is worded once, from its evidence
+# and its rule's bars (attention.finding_why).
+id: attention-why-restates-rating
+language: python
+severity: error
+message: An item's why restates its rating instead of saying why.
+note: Say the plain reason it stands at this level, the consequence or the bar it crossed (card_items.Insight.why).
+files:
+  - "hq/**"
+  - "demo/**"
+  - "tools/**"
+  - "src/**"
+ignores:
+  - "**/tests/**"
+  - "**/test*.py"
+  - "**/migrations/**"
+rule:
+  kind: keyword_argument
+  all:
+    - has:
+        field: name
+        regex: ^why$
+    - has:
+        field: value
+        any:
+          - regex: (?i)which (needs|need) attention|which (is|are) (urgent|worth attention)|rates it|HQ's rule
+          - has:
+              stopBy: end
+              kind: string_content
+              regex: (?i)which (needs|need) attention|which (is|are) (urgent|worth attention)|rates it|HQ's rule

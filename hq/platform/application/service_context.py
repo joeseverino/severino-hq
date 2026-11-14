@@ -365,7 +365,7 @@ class SummaryItem:
     link: EntityLink | None = None
     detail: tuple[str, ...] = ()
     tone: str = ""
-    # What kind of fact it is, drawn as its tile: a name in partials/_icon.html.
+    # What kind of fact it is, drawn as its tile: a symbol of static/img/icons.svg.
     icon: str = ""
 
 

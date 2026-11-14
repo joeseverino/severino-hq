@@ -622,6 +622,7 @@ def source_attention(
                 title=f"{label} could not be read",
                 value="",
                 body="What it reports is missing from this queue until it reads again. The failure is logged.",
+                why="Asking this source for its items raised an error, so anything it would report is missing.",
                 key=f"unreadable:{source_id}",
                 workflow=instructions(
                     f"unreadable:{source_id}",

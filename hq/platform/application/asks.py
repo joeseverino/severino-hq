@@ -30,7 +30,7 @@ from .routes import reverse
 from .ui import ended
 lazy from . import cadence
 lazy from .cadence import every_sweep, read_request_lifetime
-lazy from .capabilities import capability_registry
+lazy from .capabilities import command_spec
 lazy from .refusal_status import refusal_of
 lazy from .security import safe_next
 lazy from .timestamps import moment
@@ -215,7 +215,7 @@ class AskMixin:
         return Took(
             read_standing(self.reads, at),
             read_status_url(self.reads, at),
-            capability_registry()[self.capability].requested(),
+            command_spec(self.capability).requested(),
         )
 
     def post(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:

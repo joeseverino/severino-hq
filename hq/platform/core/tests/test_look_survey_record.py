@@ -24,6 +24,8 @@ class _Surveyed:
 
     close = look.Look.close
     shooting = False
+    # One process, as a look of few pages is.
+    share_at, unlooked, unlooked_pages = look.Look.share_at, (), ()
 
     def __init__(self, judged, undrawn=()):
         self.undrawn = undrawn

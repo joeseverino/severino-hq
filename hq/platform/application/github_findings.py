@@ -94,5 +94,6 @@ RULES: tuple[FindingRule, ...] = (
         others_spent,
         operator_action=("Delete every App key on GitHub that is not HQ's, then rotate HQ's."),
         no_help_reason="HQ cannot see or delete the App's keys: GitHub lists them only on the App's settings page.",
+        bars={"attention": "something besides HQ spends the App's requests in an hour"},
     ),
 )

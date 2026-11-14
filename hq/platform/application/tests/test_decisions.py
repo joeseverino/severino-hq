@@ -1,10 +1,13 @@
 """One face for a queue card, without changing what its owner emitted."""
 
+import re
 from copy import deepcopy
 from dataclasses import asdict
+from datetime import timedelta
 
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase
+from django.utils import timezone
 
 from hq.platform.application.decisions import decision, urgency, workflow_parts
 from hq.platform.application.item_help import cannot_step, commands, do_step, run_step
@@ -20,7 +23,12 @@ def row_hrefs(html):
 
 
 def card(item) -> str:
-    return render_to_string("partials/_work_queue.html", {"items": [item]})
+    """A card's face: its markup less the urgency's panel, which opens apart
+    from it (``OriginTests`` reads that)."""
+
+    return re.sub(
+        r"<dialog\b.*?</dialog>", "", render_to_string("partials/_work_queue.html", {"items": [item]}), flags=re.DOTALL
+    )
 
 
 class DecisionTests(SimpleTestCase):
@@ -288,15 +296,77 @@ class OriginTests(SimpleTestCase):
                 self.assertTrue(path.startswith("hq/") and path.endswith(".py"), path)
                 self.assertTrue(line.isdigit())
 
-    def test_anything_else_says_where_it_came_from(self):
-        found = decision({"key": "example.domain:Renewals:Passport", "source": "Example", "status": "attention"})
+    def test_anything_else_says_why_and_where_it_came_from(self):
+        why = "The passport expires within 90 days, and a renewal takes weeks."
+        found = decision(
+            {"key": "example.domain:Renewals:Passport", "source": "Example", "status": "attention", "why": why}
+        )
 
-        self.assertEqual(found["origin"], {"source": "Example", "key": "example.domain:Renewals:Passport"})
+        self.assertEqual(found["origin"]["why"], why)
+        self.assertEqual(found["origin"]["source"], "Example")
+        self.assertEqual(found["origin"]["key"], "example.domain:Renewals:Passport")
+
+    def test_a_panel_is_named_apart_from_every_other_and_as_briefly_whatever_its_key(self):
+        keys = ("example.domain:a", "example.domain:b", "hq.example:finding:example-rule:" + "machine:example-" * 12)
+        panels = [decision({"key": key, "source": "Example", "status": "serious"})["origin"]["panel"] for key in keys]
+
+        self.assertEqual(len(set(panels)), len(keys))
+        self.assertEqual({len(panel) for panel in panels}, {len(panels[0])})
+
+    def test_what_clears_an_item_follows_its_why(self):
+        found = decision(
+            {
+                "key": "example.domain:space",
+                "source": "Example",
+                "status": "attention",
+                "why": "Free on /: 1 GB of 30 GB.",
+                "clears": "free space is back above 2 GB",
+            }
+        )
+
+        why = found["origin"]["why"]
+        self.assertTrue(why.startswith("Free on /: 1 GB of 30 GB."))
+        self.assertIn("free space is back above 2 GB", why)
+        self.assertTrue(why.endswith("."))
+
+    def test_the_panel_lists_why_then_what_raised_it_and_dates_it_in_its_foot(self):
+        why = "Example reads late, and a late reading is urgent."
+        key = "example.domain:late"
+        read = timezone.now() - timedelta(minutes=5)
+        item = decision({"key": key, "source": "Example", "status": "serious", "label": "Late", "why": why})
+        item["observed_at"] = read
+
+        html = render_to_string("partials/_urgency_pill.html", {"item": item})
+        html += render_to_string("partials/_urgency_pill.html#panel", {"item": item})
+
+        (pill,) = select(html, "data-origin")
+        self.assertTrue(pill.attrs["data-tip"].startswith(why))
+        (panel,) = select(html, "id", pill.attrs["data-origin"])
+        self.assertIn("popover", panel.attrs)
+        panel_html = html[html.index("<dialog") :]
+        # Nothing is folded away: every fact of what raised it is in view.
+        self.assertEqual(elements(panel_html, "details"), [])
+        labels = [found.words for found in with_class(panel_html, "fact-label")]
+        values = [found.words for found in with_class(panel_html, "fact-value")]
+        self.assertEqual(labels, ["Why", "Domain", "Key"])
+        self.assertEqual(values, [why, "Example", key])
+        # When it was read leaves the list for the panel's foot line.
+        (foot,) = with_class(panel_html, "modal-foot")
+        self.assertTrue(foot.words.startswith("Last read "))
+        self.assertNotIn("Last read", " ".join(labels))
+
+    def test_a_panel_with_nothing_to_date_draws_no_foot(self):
+        item = decision({"key": "example.domain:x", "source": "Example", "status": "attention", "label": "X"})
+
+        html = render_to_string("partials/_urgency_pill.html#panel", {"item": item})
+
+        self.assertEqual(with_class(html, "modal-foot"), [])
 
     def test_the_pill_opens_its_origin_and_nothing_else_does(self):
         item = decision({"key": "example.domain:x", "source": "Example", "status": "attention", "label": "X"})
 
         html = render_to_string("partials/_urgency_pill.html", {"item": item})
+        html += render_to_string("partials/_urgency_pill.html#panel", {"item": item})
 
         (pill,) = select(html, "data-origin")
         (panel,) = select(html, "id", pill.attrs["data-origin"])

@@ -143,8 +143,9 @@ class FastGatePassedBaseTests(GateTestCase):
 
 @tag("source")
 class FastGateFixTests(GateTestCase):
-    """Before the gates judge the tree, each selected quick gate with a fix mode runs it, so a run never fails
-    on what the tool rewrites itself, and the run judges the tree the fixes left."""
+    """Before the gates judge the tree, each selected quick gate with a fix mode runs it. A run whose fixes
+    rewrote a file fails on them unless asked to fix, so the tree a run passes is the tree it was given; asked,
+    it judges the tree the fixes left."""
 
     def setUp(self):
         self.root = Path(self.enterContext(tempfile.TemporaryDirectory()))
@@ -210,12 +211,14 @@ class FastGateFixTests(GateTestCase):
             everywhere("fix", return_value=[]) as fix,
             everywhere("changed_paths") as changed,
         ):
-            paths = fast_gate.fixed_first(SimpleNamespace(), ("lint:toml", "lint:record"), "base", (["changed.py"], []))
+            paths, unasked = fast_gate.fixed_first(
+                SimpleNamespace(), ("lint:toml", "lint:record"), "base", (["changed.py"], []), asked=True
+            )
         fix.assert_called_once_with(("lint:toml",))
-        self.assertEqual(paths, (["changed.py"], []))
+        self.assertEqual((paths, unasked), ((["changed.py"], []), []))
         changed.assert_not_called()
 
-    def after(self, first, fixed=("examples.json",)):
+    def after(self, first, fixed=("examples.json",), *, asked=True):
         """fixed_after on a first step, its fix rewriting ``fixed``: the steps, the fix's calls, the run again's."""
         gate = Mock()
         again = Step("again")
@@ -228,7 +231,7 @@ class FastGateFixTests(GateTestCase):
             everywhere("gates_and_tests", return_value=[again]) as rerun,
             patch("sys.stdout", io.StringIO()),
         ):
-            steps = fast_gate.fixed_after(gate, [first], [], "auto")
+            steps = fast_gate.fixed_after(gate, [first], [], "auto", asked=asked)
         return steps, fix, selected, rerun, gate
 
     def test_a_failed_recording_is_fixed_and_what_the_fix_rewrote_is_judged_again(self):
@@ -243,6 +246,14 @@ class FastGateFixTests(GateTestCase):
         # The first run failed on the recording alone, so the run again decides.
         self.assertTrue(steps[0].ok)
         self.assertEqual([step.label for step in steps], ["first", "again"])
+
+    def test_a_failed_recording_unasked_to_fix_stays_failed_and_writes_nothing(self):
+        first = Step("first", ok=False, code=1, tasks=["lint:record"])
+        steps, fix, _, rerun, gate = self.after(first, asked=False)
+        self.assertEqual(steps, [first])
+        fix.assert_not_called()
+        rerun.assert_not_called()
+        gate.restart.assert_not_called()
 
     def test_a_failure_beside_the_recordings_still_fails_the_run(self):
         first = Step("first", ok=False, code=1, tasks=["lint:record", "lint:check"])
@@ -259,18 +270,32 @@ class FastGateFixTests(GateTestCase):
                 gate.restart.assert_not_called()
                 self.assertEqual(fix.called, bool(first.tasks))
 
+    def test_a_run_sent_from_another_machine_fixes_nothing(self):
+        """Its fixes would stay on that machine while its verdict passed the tree they made, so it only checks."""
+
+        with (
+            everywhere("subprocess", SimpleNamespace(run=self.fail)),
+            patch.dict("os.environ", {"HQ_GATE_SENT": "1" * 40}),
+        ):
+            self.assertEqual(fast_gate.fix(("lint:toml", "lint:file")), [])
+
     def test_no_selected_fix_mode_runs_nothing(self):
         with everywhere("subprocess", SimpleNamespace(run=self.fail)):
             self.assertEqual(fast_gate.fix(("lint:check",)), [])
 
-    def test_a_run_that_fixed_says_so_and_judges_the_fixed_tree(self):
-        for fixed in ([], ["changed.py"]):
-            with self.subTest(fixed=fixed), patch.object(fast_gate.Gate, "restart") as restart:
-                _, printed = run_main(("changed.py",), fix=fixed, **QUIET)
+    def test_a_run_whose_fixes_rewrote_a_file_fails_naming_it_unless_asked_to_fix(self):
+        """A tree a run passed must be the tree it was given: a landing compares the verdict's tree with the
+        commit, and a run that rewrote its files and passed would hand it another. Asked (--fix), it says what
+        the fixes rewrote and judges the tree they left."""
+
+        for fixed, asked in (([], {}), (["changed.py"], {}), (["changed.py"], {"fix": "true"})):
+            with self.subTest(fixed=fixed, asked=asked), patch.object(fast_gate.Gate, "restart") as restart:
+                code, printed = run_main(("changed.py",), fix=fixed, asked=asked, **QUIET)
                 said = [line for line in printed if "fixes rewrote" in line]
                 self.assertEqual(bool(said), bool(fixed))
                 self.assertTrue(all("changed.py" in line for line in said))
-                self.assertEqual(restart.called, bool(fixed))
+                self.assertEqual(restart.called, bool(fixed and asked))
+                self.assertEqual(code, 1 if fixed and not asked else 0, printed)
 
 
 # A task named with the fix flag after it, as a run passes it.
@@ -314,7 +339,7 @@ class FastGateFixModeTests(GateTestCase):
 
 
 @tag("source", "tree")
-@reads(".github/**", "mise-tasks/**", "mise*.toml", "mise.lock")
+@reads(".github/**", "controller/go.mod", "mise-tasks/**", "mise*.toml", "mise.lock", "tools/pipeline/toolchain.env")
 class FixFlagPasserTests(GateTestCase):
     def test_only_fast_and_fix_pass_the_fix_flag(self):
         """A fix mode writes the tree, so a run that judges a tree it cannot change (CI's check, its lint job)

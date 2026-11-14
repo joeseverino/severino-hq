@@ -57,11 +57,26 @@ class MemoryTests(SimpleTestCase):
     def test_footprint_sums_each_process_once(self):
         """The summary line repeats the processes' sum; counting it too would double it."""
 
-        self.assertEqual(parse.footprint_bytes(FOOTPRINT_TWO), 1900952 + 1900000)
+        self.assertEqual(parse.memory_bytes(FOOTPRINT_TWO), 1900952 + 1900000)
 
     def test_footprint_that_found_no_process_is_refused(self):
         with self.assertRaises(ValueError):
-            parse.footprint_bytes("footprint: no process matching 123")
+            parse.memory_bytes("footprint: no process matching 123")
+
+    def test_a_linux_process_s_memory_is_its_proportional_set_and_swapped_share(self):
+        # /proc/<pid>/smaps_rollup as proc(5) prints it.
+        rollup = (
+            "00400000-ffffffffff601000 ---p 00000000 00:00 0                  [rollup]\n"
+            "Rss:                 884 kB\nPss:                 385 kB\nPss_Anon:            204 kB\n"
+            "Pss_File:            181 kB\nPss_Shmem:             0 kB\nShared_Clean:        696 kB\n"
+            "Private_Dirty:       128 kB\nAnonymous:           204 kB\nSwap:                 40 kB\n"
+            "SwapPss:              12 kB\nLocked:                0 kB\n"
+        )
+        self.assertEqual(parse.memory_bytes(rollup), (385 + 12) * 1024)
+
+    def test_a_rollup_naming_no_pss_is_refused(self):
+        with self.assertRaises(ValueError):
+            parse.memory_bytes("")
 
     def test_a_container_s_anonymous_memory_is_read_from_its_memory_stat(self):
         # The first lines of a cgroup v2 memory.stat, as a container's reads.
@@ -114,9 +129,26 @@ LIST_PAGE = """\
 """
 
 
+# The rows of LIST_PAGE a record draws: each record, the line it holds back, and the chart's value.
+RECORD_ROWS = (
+    '<tr><td>one<br><img src="/a.png"></td></tr>',
+    '<tr class="row-detail" hidden><td>held</td></tr>',
+    '<tr data-attention-item><td><input type="checkbox">two</td></tr>',
+    '<tr class="row-detail" hidden><td>held</td></tr>',
+    "<tr><th>Mon</th><td>3</td></tr>",
+)
+
+
 class DataRowTests(SimpleTestCase):
     def test_counts_the_records_in_main_s_data_tables(self):
-        self.assertEqual(parse.data_rows(LIST_PAGE), 3)
+        self.assertEqual(parse.data_rows(LIST_PAGE).count, 3)
+
+    def test_measures_the_html_of_the_rows_records_draw_and_no_other(self):
+        self.assertEqual(parse.data_rows(LIST_PAGE).html_bytes, sum(len(row.encode()) for row in RECORD_ROWS))
+
+    def test_a_row_s_bytes_are_its_encoded_text(self):
+        page = '<main><table class="data-table"><tbody>\n<tr><td>caf\u00e9</td></tr></tbody></table></main>'
+        self.assertEqual(parse.data_rows(page).html_bytes, len("<tr><td>caf\u00e9</td></tr>".encode()))
 
     def test_a_page_without_one_holds_none(self):
-        self.assertEqual(parse.data_rows("<main><p>Nothing here yet.</p></main>"), 0)
+        self.assertEqual(parse.data_rows("<main><p>Nothing here yet.</p></main>"), (0, 0))

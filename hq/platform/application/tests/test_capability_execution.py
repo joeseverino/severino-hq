@@ -16,6 +16,7 @@ from hq_sdk.capabilities import StrictCommand
 
 from ..capabilities import CapabilitySpec, describe_capabilities, execute_capability
 from ..documentation import sync_documentation
+from ..integration_testing import commands_registered
 from ..projects import ProjectCommand, save_project
 from ..security import AuthorizationError, Capability, Principal, agent_principal, cli_principal
 from .writers import keyed
@@ -36,10 +37,7 @@ class CapabilityTests(TestCase):
         )
         principal = Principal("test", "test", frozenset({"example.read"}))
 
-        with mock.patch(
-            "hq.platform.application.capabilities.capability_registry",
-            return_value={spec.name: spec},
-        ):
+        with commands_registered({spec.name: spec}):
             result = execute_capability(spec.name, {}, principal=principal)
 
         self.assertEqual(result, {"ok": True, "value": "works"})
@@ -224,10 +222,7 @@ class CapabilityTests(TestCase):
             lambda command, **kwargs: {"ok": True},
         )
         principal = Principal("test", "test", frozenset({"example.read"}))
-        with mock.patch(
-            "hq.platform.application.capabilities.capability_registry",
-            return_value={spec.name: spec},
-        ):
+        with commands_registered({spec.name: spec}):
             result = execute_capability(spec.name, payload, principal=principal)
         self.assertFalse(result["ok"], result)
         self.assertEqual(result["error"]["code"], "invalid_input")
@@ -462,7 +457,7 @@ class WriteActTests(TestCase):
         spec = CapabilitySpec(
             "example.write", "Write an example.", "remote_write", "example.write", ExampleWrite, handler
         )
-        with mock.patch("hq.platform.application.capabilities.capability_registry", return_value={spec.name: spec}):
+        with commands_registered({spec.name: spec}):
             return execute_capability(spec.name, payload, principal=self.principal)
 
     def written_since(self, before):

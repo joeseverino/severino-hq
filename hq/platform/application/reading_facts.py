@@ -221,6 +221,8 @@ class OnEachMachine[R: FactRow]:
                     evidence=tuple(item for row in picked for item in self.evidence(row)),
                     steps=tuple(step for row in picked for step in self.steps(node, row)),
                     no_help_reason=cannot_run_commands(node.label),
+                    observed_at=taken_at(node, self.row.KIND),
+                    reads=self.row.KIND,
                 )
             )
         return tuple(found)
