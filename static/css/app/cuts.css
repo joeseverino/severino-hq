@@ -89,8 +89,15 @@
 
 /* A long value in a table's cell (`cell-clamp`, table_cells) wraps and is
    held to its third line, with its mark; its cell's title and its row's open
-   line show it whole. */
-.cell-clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
+   line show it whole. Only words are held: each part of words in it
+   (`data-cell`) is clamped on its own, so a mark or a toggle beside them
+   stays whole, and a cell of no such part is clamped whole. WebKit lays a
+   value's boxes out past the clamp, so the box holds three lines too. */
+.cell-clamp:not(:has([data-cell])) { display: -webkit-box; }
+.cell-clamp [data-cell]:not([data-cell] *) { display: -webkit-inline-box; vertical-align: top; }
+.cell-clamp:not(:has([data-cell])), .cell-clamp [data-cell]:not([data-cell] *) {
+  -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; max-block-size: 3lh; overflow: hidden;
+}
 /* A part of a run (`line_list`) is whole on its line while the line holds it (the run wraps between its parts); one longer than the line takes the line and wraps at its words. */
 .data-table > tbody > tr > td .line-list > :not(.line-rest) { min-inline-size: 0; }
 .data-table > tbody > tr > td .line-list > :not(.line-rest) > .cell-part { white-space: normal; }

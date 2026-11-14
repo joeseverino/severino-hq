@@ -149,11 +149,12 @@ class _Row:
 
 @dataclass(slots=True)
 class LineEntry:
-    """A labeled block of a row's open line: its label, what it shows (an
-    element ``whole``, else a cell's content), and the marks that say when it
-    shows (``data-drop``, ``data-narrow``; none for at every width)."""
+    """A block of a row's open line: its label, what it shows (an element
+    ``whole``, else a cell's content), and the marks that say when it shows
+    (``data-drop``, ``data-narrow``; none for at every width). One with no
+    label is the row's controls, drawn as a line of their own."""
 
-    name: str
+    name: str | None
     span: Span
     whole: bool = True
     marks: str = ""
@@ -408,11 +409,14 @@ class Cells(HTMLParser):
             if place != named and (cell.fields or (cell.tops and all(cell.tops) and not cell.loose))
         }
         kept |= {at for at, cell in enumerate(heads[-1] if heads else []) if "data-stacks" in cell.attrs}
-        kept |= {place for row in records for place, _ in _row_controls(row, kinds, named)}
+        controls = {place for row in records for place, _ in _row_controls(row, kinds, named)}
+        kept |= controls
         ranked = {at: rank for at, rank in drops.items() if at not in kept | empty}
         # Each rank is a width of the region (tables.css), counted from the
-        # last to leave: a table's highest rank leaves at the narrowest.
-        order = sorted(set(ranked.values()), reverse=True)
+        # widest: a table's first rank leaves at the widest, and its others
+        # each at the next width down. Nothing is measured, so a column may
+        # leave a box that could still hold it.
+        order = sorted(set(ranked.values()))
         if len(order) > RANKS:
             raise ValueError(f"A table's columns leave in at most {RANKS} ranks.")
         levels = {at: order.index(rank) + 1 for at, rank in ranked.items()}
@@ -423,7 +427,7 @@ class Cells(HTMLParser):
             if row.group:
                 self._span(row, width)
                 continue
-            self._mark_cells(row, kinds, named, empty, levels)
+            self._mark_cells(row, kinds, named, empty, levels, controls)
             self._name(row, kinds, named)
             if gutter is not None and row.section != "thead":
                 self._gutter(row, gutter)
@@ -459,10 +463,13 @@ class Cells(HTMLParser):
             raise ValueError("A cell in the gutter closes with its own end tag, before which its toggle goes.")
         self.toggles.append((cell.closed, any(_finished(each, "editor") for each in row.cells)))
 
-    def _mark_cells(self, row: _Row, kinds: dict[int, str], named: int, empty: set[int], levels: dict[int, int]) -> None:
+    def _mark_cells(
+        self, row: _Row, kinds: dict[int, str], named: int, empty: set[int], levels: dict[int, int], controls: set[int]
+    ) -> None:
         """What each cell says of itself: blank, its whole column blank, the
-        width its column leaves at, and in the body its kind, a cut cell its
-        whole value, and a status said by one pill alone."""
+        width its column leaves at (a column of the rows' controls leaves in
+        a narrow box, `data-narrow`), and in the body its kind, a cut cell
+        its whole value, and a status said by one pill alone."""
 
         body = row.section == "tbody"
         for at, cell in _placed(row):
@@ -470,6 +477,7 @@ class Cells(HTMLParser):
             if "colspan" not in cell.attrs:
                 marks += [" data-blank-column"] if at in empty else []
                 marks += [f' data-drop="{levels[at]}"'] if at in levels else []
+                marks += [" data-narrow"] if at in controls else []
                 if row.section != "thead":
                     marks += self._body_marks(cell, _kind_at(at, kinds, named), body=body)
             self.marks.setdefault(cell.start, []).extend(marks)
@@ -513,9 +521,14 @@ class Cells(HTMLParser):
         blocks: list[Span] = []
         entries: list[LineEntry] = []
         always = False
+        controls = dict(_row_controls(row, kinds, named))
         for at, cell in _placed(row):
             if "colspan" in cell.attrs or not cell.closed:
                 continue
+            # The row's controls leave it in a narrow box, as a column does,
+            # for a copy on its open line.
+            if at in controls:
+                entries.insert(0, LineEntry(None, (cell.opened, cell.value_end), whole=False, marks=" data-narrow"))
             # The row's editor leads its line, moved there: its ids are its own.
             editors = [span for _, span in _finished(cell, "editor")]
             blocks[:0] = editors
@@ -562,8 +575,8 @@ def _classes(attrs: dict[str, str | None]) -> list[str]:
 def _row_controls(row: _Row, kinds: dict[int, str], named: int) -> list[tuple[int, _Cell]]:
     """Each cell of the row's controls, by its place: a row's actions or a
     cell of a column of controls, holding a control or the words that stand
-    where a row has none. Never the cell that names the row, nor a column of
-    tick-boxes."""
+    where a row has none. Never the cell that names the row, a column of
+    tick-boxes, nor a field a reader fills in, which is the row's value."""
 
     found = []
     for at, cell in _placed(row):
@@ -571,7 +584,7 @@ def _row_controls(row: _Row, kinds: dict[int, str], named: int) -> list[tuple[in
         if at == named or "colspan" in cell.attrs or "select-column" in classes or not cell.closed:
             continue
         controls = "control" in (kinds.get(at), cell.attrs.get("data-kind")) or "row-actions" in classes
-        if controls and (cell.controls or not cell.says_nothing):
+        if controls and not cell.fields and (cell.controls or not cell.says_nothing):
             found.append((at, cell))
     return found
 

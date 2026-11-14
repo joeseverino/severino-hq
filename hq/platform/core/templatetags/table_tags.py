@@ -104,11 +104,16 @@ def _detail_row(markup: _Markup, width: int, blocks: list[Span], entries: list[L
     entry under its label, each saying when it shows."""
 
     drawn = [markup.content(block, whole=True) for block in blocks]
+    controls = [
+        f'<div class="row-controls"{entry.marks}>{_entry(markup, entry)}</div>' for entry in entries if entry.name is None
+    ]
     listed = [
-        f"<div{entry.marks}><dt>{escape(entry.name)}</dt><dd>{_entry(markup, entry)}</dd></div>" for entry in entries
+        f"<div{entry.marks}><dt>{escape(entry.name)}</dt><dd>{_entry(markup, entry)}</dd></div>"
+        for entry in entries
+        if entry.name is not None
     ]
     columns = f'<dl class="row-columns">{"".join(listed)}</dl>' if listed else ""
-    return f'<tr class="row-detail" data-row-detail><td colspan="{width}">{"".join(drawn)}{columns}</td></tr>'
+    return f'<tr class="row-detail" data-row-detail><td colspan="{width}">{"".join(controls + drawn)}{columns}</td></tr>'
 
 
 def _entry(markup: _Markup, entry: LineEntry) -> str:

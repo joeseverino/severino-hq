@@ -52,6 +52,8 @@
 .table-sort-link { display: inline-flex; align-items: center; gap: var(--space-2); color: inherit; white-space: nowrap; }
 .table-sort-link:hover { color: var(--ink); text-decoration: none; }
 /* The page's own sort control is a button that reads exactly as a server sort link: the button primitive's styling is taken back off. */
+/* A heading's words wrap as a cell's do, so a column is never wider than its widest value for its name. */
+.data-table thead .table-sort-link { white-space: normal; }
 .data-table thead button.table-sort-link { min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; font: inherit; text-align: inherit; cursor: pointer; }
 /* The sort mark is a polygon cut from the heading's color, drawn with the box and in the server's HTML, so it is one shape in every face and nothing moves when a script sorts. */
 .sort-indicator {
@@ -91,6 +93,8 @@
 .data-table:not(:has(> thead)) th[scope=row] { inline-size: 1px; white-space: nowrap; }
 /* A value of several parts marks each one and wraps only between them: "1 week" broken from "Up" reads as another fact. */
 .data-table td .cell-part { white-space: nowrap; }
+/* A field in a cell fills its cell and gives way as its column does, so a table of fields fits as one of words. */
+.data-table > tbody > tr > td :is(select, textarea, input:not([type=checkbox], [type=radio], [type=hidden])) { box-sizing: border-box; inline-size: 100%; min-inline-size: 0; }
 .data-table input[type=checkbox] { inline-size: 16px; block-size: 16px; accent-color: var(--accent); }
 
 /* A filter is its button and the panel it opens in the top layer, placed against the button (its anchor, below): the scope keeps each panel to its own button. */
@@ -166,6 +170,9 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 .strut { display: none; }
 /* An identifier the row is read by, among many columns, wraps at its seams with a chip on each line. */
 .data-table td code.cell-whole { display: inline; white-space: normal; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.data-table td code.cell-whole :is(.token, .whole) { display: inline; }
+/* A hyphenated word in a name or a sentence (`|breakable`'s `.whole`) is a word: it never breaks at its hyphens, so its column is at least as wide as it. */
+.data-table > tbody > tr > :is([data-kind="name"], [data-kind="prose"]) .whole { white-space: nowrap; }
 /* A square for a glyph, and as wide as its word when it holds one. */
 .icon-link {
   display: inline-flex;
@@ -223,49 +230,52 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 
 /* ── How a table gives way ──────────────────────────────────────── */
 
-/* A ranked column (`data-drop`, table_cells: 1 for the last of a table's
-   columns to leave) leaves while its region is narrower than its rank's
+/* A ranked column (`data-drop`, table_cells: 1 for a table's first rank,
+   leaving at the widest) leaves while its region is narrower than its rank's
    width; its copy on each row's open line shows instead, and the row offers
    its toggle. A column with nothing in any row is not drawn
    (`data-blank-column`). */
 .data-table > * > tr > [data-blank-column] { display: none; }
 .row-columns > :is([data-drop], [data-narrow]) { display: none; }
 @container table-region (width < 24rem) {
-  .data-table > * > tr > [data-drop="1"] { display: none; }
-  :is(.row-columns > [data-drop="1"], .data-table > tbody > tr:has(+ .row-detail [data-drop="1"]) .row-expand) { display: grid; }
+  .data-table > * > tr > [data-drop="6"] { display: none; }
+  :is(.row-columns > [data-drop="6"], .data-table > tbody > tr:has(+ .row-detail [data-drop="6"]) .row-expand) { display: grid; }
 }
 @container table-region (width < 32rem) {
-  .data-table > * > tr > [data-drop="2"] { display: none; }
-  :is(.row-columns > [data-drop="2"], .data-table > tbody > tr:has(+ .row-detail [data-drop="2"]) .row-expand) { display: grid; }
-}
-@container table-region (width < 40rem) {
-  .data-table > * > tr > [data-drop="3"] { display: none; }
-  :is(.row-columns > [data-drop="3"], .data-table > tbody > tr:has(+ .row-detail [data-drop="3"]) .row-expand) { display: grid; }
-}
-@container table-region (width < 48rem) {
-  .data-table > * > tr > [data-drop="4"] { display: none; }
-  :is(.row-columns > [data-drop="4"], .data-table > tbody > tr:has(+ .row-detail [data-drop="4"]) .row-expand) { display: grid; }
-}
-@container table-region (width < 56rem) {
   .data-table > * > tr > [data-drop="5"] { display: none; }
   :is(.row-columns > [data-drop="5"], .data-table > tbody > tr:has(+ .row-detail [data-drop="5"]) .row-expand) { display: grid; }
 }
+@container table-region (width < 40rem) {
+  .data-table > * > tr > [data-drop="4"] { display: none; }
+  :is(.row-columns > [data-drop="4"], .data-table > tbody > tr:has(+ .row-detail [data-drop="4"]) .row-expand) { display: grid; }
+}
+@container table-region (width < 48rem) {
+  .data-table > * > tr > [data-drop="3"] { display: none; }
+  :is(.row-columns > [data-drop="3"], .data-table > tbody > tr:has(+ .row-detail [data-drop="3"]) .row-expand) { display: grid; }
+}
+@container table-region (width < 56rem) {
+  .data-table > * > tr > [data-drop="2"] { display: none; }
+  :is(.row-columns > [data-drop="2"], .data-table > tbody > tr:has(+ .row-detail [data-drop="2"]) .row-expand) { display: grid; }
+}
 @container table-region (width < 64rem) {
-  .data-table > * > tr > [data-drop="6"] { display: none; }
-  :is(.row-columns > [data-drop="6"], .data-table > tbody > tr:has(+ .row-detail [data-drop="6"]) .row-expand) { display: grid; }
+  .data-table > * > tr > [data-drop="1"] { display: none; }
+  :is(.row-columns > [data-drop="1"], .data-table > tbody > tr:has(+ .row-detail [data-drop="1"]) .row-expand) { display: grid; }
 }
 
 /* A narrow box: what a cell says only on a wide line (`narrow-more`) waits
    for its row's open line, what stands in for the columns that left
    (`narrow-only`, a few words in the naming cell) shows, what is on a page of
    its own (`wide-only`, a table of marks' older periods) leaves outright,
-   and rows get the room a control needs. */
-.data-table .narrow-only { display: none; }
+   and rows get the room a control needs. The rows' controls leave as a
+   column does (`data-narrow`, table_cells), for their copy on each row's open
+   line, where they stand at a target's size. */
+.data-table .narrow-only, .row-detail .row-controls { display: none; }
 @container table-region (width < 36rem) {
   .data-table > tbody { --row-pad: var(--space-6); }
-  .data-table [data-kind] .narrow-more, .data-table .wide-only { display: none; }
+  .data-table [data-kind] .narrow-more, .data-table .wide-only, .data-table > * > tr > [data-narrow] { display: none; }
   .data-table .narrow-only { display: inline; }
   :is(.row-columns > [data-narrow], .data-table > tbody > tr:has(+ .row-detail [data-narrow]) .row-expand) { display: grid; }
+  .row-detail .row-controls { display: flex; --control-compact: var(--target-min); }
   .data-table[data-marks] > * > tr > * { padding: var(--space-3) var(--space-1); }
 }
 
@@ -291,8 +301,9 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 .row-detail > td > * { contain: inline-size; margin-block: 0 var(--row-pad); }
 .row-detail .row-below + :is(.row-below, .row-columns) { margin-top: var(--space-5); }
 .data-table .row-detail:hover { background: none; }
-/* A row's buttons moved there stand side by side, wrapping as the line asks. */
-.row-detail .row-later { display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-4); }
+/* A row's buttons moved or copied there stand side by side, wrapping as the line asks. */
+.row-detail .row-later { display: flex; }
+.row-detail :is(.row-later, .row-controls) { flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-4); }
 /* An entry: its label in one column, what it shows beside it, on a panel. */
 .row-columns {
   display: grid; grid-template-columns: 7rem minmax(0, 1fr); align-items: baseline; gap: var(--space-5) var(--space-6); margin: 0;
