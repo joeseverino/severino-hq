@@ -69,6 +69,19 @@ class RunPageTests(TestCase):
                 for run in runs:
                     self.assertIn(run_page(run.id), hrefs)
 
+    def test_a_run_s_page_names_the_kinds_of_reading_its_playbook_stated(self):
+        run = OperationRequest.objects.filter(
+            action=OperationRequest.Action.RUN, state=OperationRequest.State.SUCCEEDED, input__correlation=CORRELATION
+        ).get()
+        machine = run.input["hosts"][0]
+        stated = {"readings": {machine: {"example.reading": [{"value": 1}], "example.other_reading": []}}}
+        OperationRequest.objects.filter(pk=run.pk).update(result={**run.result, "stated": stated})
+
+        said = facts(self.page(run_page(run.pk)))
+
+        self.assertIn("example.reading", said["Readings"][0])
+        self.assertIn("example.other_reading", said["Readings"][0])
+
     def test_a_finished_run_s_page_says_who_asked_how_it_ended_and_each_task(self):
         run = OperationRequest.objects.filter(
             action=OperationRequest.Action.RUN, state=OperationRequest.State.SUCCEEDED, input__correlation=CORRELATION

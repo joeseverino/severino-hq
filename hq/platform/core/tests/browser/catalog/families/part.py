@@ -646,6 +646,7 @@ _EXAMPLE_RUNS = (
         "Reported every example disk.",
         RunEvidence(
             hosts=("example-01",),
+            stated=("example.filesystem", "example.reading_with_a_longer_name"),
             events=tuple(
                 _event(f"Example task {number}", outcome, tone)
                 for number, (outcome, tone) in enumerate(
@@ -1500,7 +1501,7 @@ ENTRIES = {
     # A run's evidence ({% run_evidence %}) in its row's open line, as Jobs,
     # a machine's page and a procedure's page draw it: a run with every field,
     # one with none, one whose names and messages run long, and one with many
-    # tasks.
+    # tasks that stated readings.
     "part/run-evidence": Entry(
         '{% section "Example runs" %}{% table_region "Example runs" %}<table class="data-table"><thead><tr>'
         '{% table_heading "Procedure" gutter=True %}{% table_heading "State" "status" %}'

@@ -833,9 +833,18 @@ of that task replaces; a test that fails outside its subtests saves `page.png`
 there.
 
 Beside each screenshot is a Playwright trace of the same name (`.zip`): what
-the test did since its last failure, each step with the page as it stood.
+the failed subtest did, each step with the page as it stood.
 `uv run --group browser playwright show-trace <file>` opens it. CI uploads
 every such folder of a failed gate.
+
+A failed subtest says its findings whole, in JSON by check, and ends with the
+`dev:look` that finds them again on that page, run as printed: the engine,
+the width, script, the palette, what was opened and any sheet the test laid
+over it. A finding the test already reported is not reported again; the
+test's closing lines list every place it was found. After the slowest
+classes, the run prints two ledgers: each check's time in the page, and each
+rule's time per subtest, each row with where it was slowest. They fail
+nothing.
 
 A check is declared once, beside its probe: an entry of its probe module's
 `CHECKS` (`hq/platform/core/tests/browser/probes/__init__.py` says what an

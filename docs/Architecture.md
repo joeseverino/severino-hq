@@ -1521,7 +1521,21 @@ outside the project. A run that succeeded says what its playbook found or did: t
 set with `ansible.builtin.set_stats` (`per_host: false`), which ansible-runner
 hands over as the `artifact_data` of the `playbook_on_stats` event, each machine
 by name when it is keyed by machine. A playbook that sets none is said by
-its verification, which its checks have just held (`hq_runner/events.py`). A
+its verification, which its checks have just held (`hq_runner/events.py`).
+Beside `result`, the same event carries the playbook's `readings`
+(`{machine: {kind: [record]}}`) and `preview` (`{machine: [line]}`), which
+Ansible merges by machine and the report carries as `stated`; any other stat
+is dropped. Their bounds are the bridge contract's `RunStated`, `StatedText`
+and `StatedBytes`, and the worker keeps each part (one machine's records of
+one kind, one machine's preview) whole or leaves it out and says so in its
+message, never cut down into a wrong reading; HQ refuses a report past them
+whole. Its security property: a run
+states nothing about a machine it was not asked on. The worker drops what a
+playbook stated about any other machine, and HQ refuses a report that names
+one (`controller._hold_stated`), so a compromised worker can misstate only
+the machines of the runs it claims. Both doors strike secrets, the worker as
+it reports and HQ as it settles, and the run keeps what was stated in its
+result, whose kinds of reading the run's page and the `runs` read name. A
 journal names each claim before it is sent and records a run once it starts,
 so a claim retried after a crash is answered the same run, which is reported
 as unknown and never run again. `mise run smoke:runner` runs a real playbook

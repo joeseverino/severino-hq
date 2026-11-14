@@ -3,11 +3,12 @@
 import json
 import re
 from itertools import islice, takewhile
+from time import perf_counter
 from typing import override
 
 lazy from playwright.sync_api import TimeoutError as LoadTimeout
 
-from hq.platform.core.tests.browser.gate import BrowserGate, answered_as
+from hq.platform.core.tests.browser.gate import RULE_COSTS, BrowserGate, answered_as
 from hq.platform.core.tests.browser.probes.axe import contrast_read
 from hq.platform.core.tests.browser.probes.boxes import (
     ANY_SCROLLER,
@@ -122,24 +123,29 @@ class LayoutBrowserTests(BrowserGate):
         """Hold each rule on the page as it stands, one subtest each, in
         order. The probes of a run of rules that only read are read in one
         round trip before the first of them is judged; a probe that threw
-        fails its own rule only."""
+        fails its own rule only. Each subtest's time, its probes' time in the
+        page with it, goes to the run's ledger."""
 
         read: dict[int, list] = {}
         for at, rule in enumerate(rules):
             if hasattr(rule, "probes") and at not in read:
                 read |= self.read_ahead(rules, at)
-            with self.subTest(rule=rule.__name__, page=name, width=width, **where):
-                if at in read:
-                    rule(name, *map(taken, read[at]))
-                else:
-                    rule(name)
+            began = perf_counter() - sum(seconds for _returned, _value, seconds in read.get(at, []))
+            try:
+                with self.subTest(rule=rule.__name__, page=name, width=width, **where):
+                    if at in read:
+                        rule(name, *map(taken, read[at]))
+                    else:
+                        rule(name)
+            finally:
+                self.spent(RULE_COSTS, rule.__name__, perf_counter() - began, f"{name} at {width}px")
 
     def read_ahead(self, rules, at):
-        """The outcomes of each rule's probes, by its place in ``rules``, for
-        the run of reading rules that starts at ``at``."""
+        """The timed outcomes of each rule's probes, by its place in
+        ``rules``, for the run of reading rules that starts at ``at``."""
 
         run = list(takewhile(lambda rule: hasattr(rule, "probes"), rules[at:]))
-        outcomes = iter(self.outcomes([probe for rule in run for probe in rule.probes]))
+        outcomes = iter(self.timed_outcomes([probe for rule in run for probe in rule.probes]))
         return {at + offset: list(islice(outcomes, len(rule.probes))) for offset, rule in enumerate(run)}
 
     # Without script: the page as the server drew it. Layout must hold before

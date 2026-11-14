@@ -4,7 +4,8 @@ An agent or a client that asked for a run reads it here by the operation id
 its answer carried, or lists the runs of a playbook, a machine or its own
 correlation id. Each run says what Jobs shows of it to anyone who may read
 it, and nothing more: its machines, who asked and who agreed to it, the
-worker holding it, and each task's host, name, outcome and message.
+worker holding it, each task's host, name, outcome and message, and the
+kinds of reading its playbook stated.
 """
 
 import uuid
@@ -62,6 +63,9 @@ class RunRow(TypedDict):
     started_at: Annotated[str | None, Describe("When a worker took it up; null while it waits.")]
     finished_at: Annotated[str | None, Describe("When it ended; null while it waits or works.")]
     duration_seconds: Annotated[float | None, Describe("How long it worked for; null until it ends.")]
+    stated: Annotated[
+        list[str], Describe("The kinds of reading its playbook stated, each once; empty when it stated none.")
+    ]
 
 
 class RunRecord(RunRow):
@@ -131,6 +135,7 @@ def _row(run: WorkRun) -> dict[str, Any]:
         "finished_at": iso(run.finished),
         # Only an ended run's, so two reads of the same run answer alike.
         "duration_seconds": run.duration if run.finished else None,
+        "stated": list(run.evidence.stated),
     }
 
 

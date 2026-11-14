@@ -6,14 +6,17 @@ import mimetypes
 import os
 import pickle
 import re
+import shlex
 import tempfile
 from collections import deque
 from collections.abc import Mapping
+from contextlib import contextmanager
 from functools import cache, partial
 from hashlib import sha256
 from html import unescape
 from itertools import pairwise
 from pathlib import Path
+from time import perf_counter
 from typing import TYPE_CHECKING, Any, cast, override
 from unittest import TestResult, mock
 from urllib.parse import urlsplit
@@ -25,6 +28,7 @@ from django.utils.csp import CSP
 lazy from playwright.sync_api import Error as BrowserError
 
 from hq.platform.core.csp_views import _blocked, _csp_violations, _directive
+from hq.platform.core.run_report import Cost, tally
 from hq.platform.core.speculation import rules_document
 from hq.platform.core.stalls import stall_watch
 from hq.platform.core.stylesheets import stylesheet
@@ -52,7 +56,14 @@ from hq.platform.core.tests.browser.reading import _in_one_trip, taken
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import NONCE, ORIGIN, static_file
 from hq.platform.core.tests.browser.shots import shoot_page
-from hq.platform.core.tests.browser.survey import AS_FINDINGS, _as_is, geometry_probes, palette_probes, table_probes
+from hq.platform.core.tests.browser.survey import (
+    AS_FINDINGS,
+    CHECKS,
+    _as_is,
+    geometry_probes,
+    palette_probes,
+    table_probes,
+)
 from hq.platform.core.tests.browser.uncaught import Uncaught
 from hq.platform.core.tests.browser.widths import LARGEST, NARROWEST, query_edges, viewport, viewport_queries
 
@@ -149,7 +160,7 @@ class _Watched:
 
     def addSubTest(self, test, subtest, err):
         # Reported as the subtest ends, so the page is still the one it failed on.
-        if err is not None:
+        if err is not None and (err := self.test.as_reported(subtest.params, err)) is not None:
             self.test.subtest_failed(subtest.params)
         self.result.addSubTest(test, subtest, err)
 
@@ -380,6 +391,37 @@ def driver_log(path, stream):
     stream.writelines(tail)
 
 
+# The ledgers a browser test keeps for the run's report (`report_costs`): each
+# check's time in the page, a probe timed where it runs (`_in_one_trip`), and
+# each rule's subtest, its probes' time in the page included (`hold`).
+CHECK_COSTS = "Browser checks, time in the page"
+RULE_COSTS = "Browser rules, time per subtest"
+
+
+def findings_in(said, check):
+    """A failure's findings by check, when it says them as findings do (a
+    JSON list, or a JSON object of lists by check), or None. A list is
+    ``check``'s."""
+
+    try:
+        found = json.loads(said)
+    except ValueError:
+        return None
+    if isinstance(found, list):
+        return {check: found}
+    if isinstance(found, dict) and all(isinstance(lines, list) for lines in found.values()):
+        return found
+    return None
+
+
+def signature(check, finding):
+    """What a finding says, its measures aside: the same defect at another
+    width or on another load differs only in its numbers."""
+
+    said = finding if isinstance(finding, str) else json.dumps(finding, sort_keys=True)
+    return check, re.sub(r"\d+", "#", said)
+
+
 class BrowserGate(SimpleTestCase):
     """A browser over pages rendered once, every request answered locally.
 
@@ -393,8 +435,13 @@ class BrowserGate(SimpleTestCase):
 
     databases = {"default"}
     scripted = False
+    # A failure says its findings whole: a reader acts on all of them.
+    maxDiff = None
     # Whether a test keeps Playwright's trace of what it did (``start``).
     traced = True
+    # Whether `dev:look` draws the pages a subtest names by the name it gives
+    # them, so a failure can say the look that finds it again (``rerun``).
+    looked_at = True
     # Set once a class by setUpClass, and a test's context by start.
     policy: dict[str, str]
     pages: Mapping[Any, Any]
@@ -482,6 +529,9 @@ class BrowserGate(SimpleTestCase):
             self.context.add_init_script(DEAF_WHILE_PROBED)
         self.context.route("**/*", self.respond)
         self.page = self.context.new_page()
+        # The sheets a test laid over the page (``lay_css``), which a load drops.
+        self.laid: list[str] = []
+        self.page.on("load", lambda _page: self.laid.clear())
         self.page.on("console", self.heard)
         # A report is a ping the browser sends past the routes, so it is heard
         # as a request rather than answered.
@@ -560,15 +610,24 @@ class BrowserGate(SimpleTestCase):
         self.held.append(route)
         return True
 
-    def outcomes(self, probes):
-        """What each of ``probes`` returned or threw, in one round trip
-        the page's own scripts do not hear (``hushed``):
-        ``[(True, value) | (False, error), ...]``."""
+    def timed_outcomes(self, probes):
+        """What each of ``probes`` returned or threw, and the seconds it took
+        in the page, in one round trip the page's own scripts do not hear
+        (``hushed``): ``[(True, value, s) | (False, error, s), ...]``."""
 
         if not probes:
             return []
         sources, args = zip(*probes, strict=True)
-        return [tuple(outcome) for outcome in self.page.evaluate(hushed(_in_one_trip(sources)), list(args))]
+        return [
+            (returned, value, ms / 1000)
+            for returned, value, ms in self.page.evaluate(hushed(_in_one_trip(sources)), list(args))
+        ]
+
+    def outcomes(self, probes):
+        """What each of ``probes`` returned or threw, in one round trip:
+        ``[(True, value) | (False, error), ...]``."""
+
+        return [outcome[:2] for outcome in self.timed_outcomes(probes)]
 
     def read(self, probes):
         """What each of ``probes`` returned, in one round trip."""
@@ -618,8 +677,123 @@ class BrowserGate(SimpleTestCase):
     def run(self, result=None):
         self.failed = False
         self.failures = None
+        self.costs: dict[str, dict[str, Cost]] = {}
+        # Each finding a failed subtest reported, by its signature, with
+        # every place it was found.
+        self.places: dict[tuple[str, str], tuple[str, list[str]]] = {}
         # _Watched stands in for the result, passing on what it does not keep.
-        return super().run(result if result is None else cast(TestResult, _Watched(result, self)))
+        ran = super().run(result if result is None else cast(TestResult, _Watched(result, self)))
+        if result is not None and self.costs and (keep := getattr(result, "addCosts", None)):
+            keep(self, self.costs)
+        if again := [(said, places) for said, places in self.places.values() if len(places) > 1]:
+            print(f"{self.id()}: each finding reported once, at its first place, and found again:")
+            for said, places in again:
+                print(f"  {said}\n    at {', '.join(places)}")
+        return ran
+
+    @override
+    @contextmanager
+    def subTest(self, *args, **params):
+        """A subtest, with a trace of its own steps: a failure keeps what the
+        subtest did, never what the test did before it.
+
+        A trace chunk holds the steps since it started (Playwright's
+        ``tracing.start_chunk``); stopped with no path it is discarded
+        (``_tracing.py``, ``_do_stop_chunk``). The bodies the context fetched
+        (its stylesheets, its pages) stay in every chunk, so the snapshots of
+        a later one still draw."""
+
+        if self.traced and self.context is not None:
+            tracing = self.context.tracing
+            tracing.stop_chunk()
+            tracing.start_chunk()
+        with super().subTest(*args, **params):
+            yield
+
+    def spent(self, ledger, row, seconds, where=""):
+        """``seconds`` more for ``row`` of ``ledger``, which the run reports."""
+
+        tally(self.costs.setdefault(ledger, {}), row, Cost(1, seconds, seconds, where))
+
+    @override
+    def assertEqual(self, first, second, msg=None):
+        """As unittest's, but what was to be found empty and was not fails
+        as its findings, whole, in JSON: a rule's ``assertEqual(found, [])``
+        says every finding, never unittest's shortened repr, and the subtest
+        that fails reads them by check (``as_reported``)."""
+
+        if msg is None and second in ([], {}) and first != second and isinstance(first, list | dict):
+            self.fail(json.dumps(first, indent=1, default=str))
+        super().assertEqual(first, second, msg)
+
+    def lay_css(self, css):
+        """``css`` laid over the page as it stands (``add_css``), kept until
+        the next load so a failure's look lays it too (``rerun``)."""
+
+        add_css(self.page, css)
+        self.laid.append(css)
+
+    def where_found(self, params):
+        """Where a subtest ran, as its page and width and whatever else names it."""
+
+        width = params.get("width") or (self.page.viewport_size or {}).get("width")
+        place = " ".join(str(part) for part in (params.get("page"), f"at {width}px" if width else "") if part)
+        rest = ", ".join(f"{key}={value}" for key, value in params.items() if key not in ("page", "width", "rule"))
+        return ", ".join(part for part in (place, rest) if part) or self.id()
+
+    def as_reported(self, params, err):
+        """A failed subtest's error as it is reported: each finding the test
+        already reported dropped, the place it was found again kept for the
+        test's closing lines, and the look that finds the rest again added.
+        None when nothing is left to report."""
+
+        kind, value, trace = err
+        said = str(value)
+        rule = params.get("rule") or "findings"
+        place = self.where_found(params)
+        found = findings_in(said, rule)
+        new: dict[str, list] = {}
+        for check, lines in (found or {rule: [said]}).items():
+            for line in lines:
+                key = signature(check, line)
+                if key in self.places:
+                    self.places[key][1].append(place)
+                else:
+                    self.places[key] = (f"{check}: {line}", [place])
+                    new.setdefault(check, []).append(line)
+        if not new:
+            return None
+        if found is not None:
+            said = json.dumps(new.get(rule, []) if isinstance(json.loads(said), list) else new, indent=1)
+        if command := self.rerun(params):
+            said += f"\n\nFound again by: {command}"
+        if len(value.args) == 1 and str(value) == value.args[0]:
+            value.args = (said,)
+        else:
+            print(said)
+        return kind, value, trace
+
+    def rerun(self, params):
+        """The `dev:look` that draws a failed subtest's page as it was drawn
+        and judges it by the same rule, when the subtest names a page the look
+        draws: the engine, the width, script, the palette, what was opened and
+        what was laid over it. A subtest that names no rule is judged by every
+        check the gates hold (``survey``)."""
+
+        if not self.looked_at or "page" not in params or self.context is None:
+            return ""
+        width = params.get("width") or self.page.viewport_size["width"]
+        flags = [
+            f"--rule {params.get('rule') or 'survey'}",
+            f"--engine {self.browser.browser_type.name}",
+            *(["--no-script"] if not self.runs_script else []),
+            *(["--dark"] if params.get("scheme") == "dark" else []),
+            *(["--open"] if params.get("disclosures") == "open" else []),
+            *(["--expand"] if params.get("rows") == "open" else []),
+            *([f"--css {shlex.quote(' '.join(' '.join(self.laid).split()))}"] if self.laid else []),
+            f"--widths {width}",
+        ]
+        return " ".join(["mise run dev:look", *flags, shlex.quote(str(params["page"]))])
 
     @override
     def __getstate__(self):
@@ -757,7 +931,8 @@ class BrowserGate(SimpleTestCase):
                 )
                 for said_state, outcomes in states:
                     where = f"at {width}px" + (f", {said_state}" if said_state else "")
-                    for check, (returned, value) in zip(probes, outcomes, strict=False):
+                    for check, (returned, value, ms) in zip(probes, outcomes, strict=False):
+                        self.spent(CHECK_COSTS, check, ms / 1000, f"{self.where()} {where}")
                         said = AS_FINDINGS.get(check, _as_is)(value) if returned else [f"the probe threw: {value}"]
                         take(check, said, where)
                 take("opening rows moves", moved, f"at {width}px")
@@ -830,15 +1005,22 @@ class BrowserGate(SimpleTestCase):
                 "put back": (PUT_BACK, None),
             }
         )
+        began = perf_counter()
         found["fills"] = self.lost_fills()
+        # Its reads are several trips, each palette's, so it is timed here.
+        self.spent(CHECK_COSTS, "fills", perf_counter() - began, self.where_and_width())
         return {check: said for check, said in found.items() if said}
 
     def checked(self, probes):
-        """Each check's findings, read in one round trip; a probe that threw
-        is a finding of its own check, so it hides no other."""
+        """Each check's findings, read in one round trip, each check's time
+        in the page kept for the run's ledger; a probe that threw is a finding
+        of its own check, so it hides no other."""
 
-        outcomes = self.outcomes(list(probes.values()))
-        return {
-            check: AS_FINDINGS.get(check, _as_is)(value) if returned else [f"the probe threw: {value}"]
-            for check, (returned, value) in zip(probes, outcomes, strict=True)
-        }
+        outcomes = self.timed_outcomes(list(probes.values()))
+        where = self.where_and_width()
+        found = {}
+        for check, (returned, value, seconds) in zip(probes, outcomes, strict=True):
+            if check in CHECKS:
+                self.spent(CHECK_COSTS, check, seconds, where)
+            found[check] = AS_FINDINGS.get(check, _as_is)(value) if returned else [f"the probe threw: {value}"]
+        return found

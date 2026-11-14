@@ -5,18 +5,34 @@ its plant (test_browser_probes holds the two lists to each other). A plant
 that is a flex row sets its ``align-items``, so the row does not stretch its
 items to one height and hide the defect."""
 
+import io
 import json
+import os
+import re
+import shlex
+import subprocess
+import tempfile
+import unittest
+import zipfile
+from contextlib import redirect_stdout
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, override
+from unittest import mock
+
+from django.conf import settings
 
 from hq.platform.application.pages import Page, PageAction
+from hq.platform.core.tests.browser import gate
+from hq.platform.core.tests.browser.catalog import CATALOG
 from hq.platform.core.tests.browser.gate import add_css, with_script
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
 from hq.platform.core.tests.browser.probes.shifts import CLS_LIMIT, LAYOUT_SHIFTS
 from hq.platform.core.tests.browser.probes.tables import TABLES
 from hq.platform.core.tests.browser.reading import probe
 from hq.platform.core.tests.browser.selectors import SELECTORS
-from hq.platform.core.tests.browser.widths import WIDE
+from hq.platform.core.tests.browser.survey import CHECKS
+from hq.platform.core.tests.browser.widths import SPARSE_WIDTHS, WIDE
 
 
 @dataclass(frozen=True)
@@ -670,6 +686,23 @@ _FOLDED_TABLE = (
 )
 
 
+# A catalog entry `dev:look` draws by name, and a defect laid over it as CSS,
+# which the look lays as well (`--css`): what a failure's look is proven on.
+_LOOKED = "part/section-bare"
+_LOOKED_DEFECT = "main p { inline-size: 3ch; word-break: break-all }"
+_LOOKED_CHECK = "words broken in text"
+# What a failed subtest says: its findings, then the look that finds them again.
+_REPORTED = re.compile(r"AssertionError: (\{.*?\n\})\n\nFound again by: (.+)", re.DOTALL)
+# What the look prints of the report it keeps.
+_LOOK_REPORT = re.compile(r"Page by page: (\S+)")
+# How long the look may take: a fresh checkout migrates its database first.
+_LOOK_WITHIN = 900
+# What a test run sets that a look run inside it must not inherit: its task's
+# arguments, the gate's record of failed tests, the engine and database the
+# look sets for itself.
+_RUN_OWN = ("usage_", "HQ_", "SEVERINO_TEST_", "MISE_TASK_", "DJANGO_")
+
+
 def _said(finding):
     """A finding as a value a set holds: the audit's are dicts."""
 
@@ -684,6 +717,9 @@ class PlantedBrowserTests(LayoutBrowserTests):
     """Each check of the survey finds in its plant what it does not find on
     the bare probe page, so what it finds is the plant's."""
 
+    # A plant's page is the test's own, which `dev:look` cannot draw.
+    looked_at = False
+
     @classmethod
     @override
     def render(cls):
@@ -692,6 +728,7 @@ class PlantedBrowserTests(LayoutBrowserTests):
         return {
             **pages,
             **passes,
+            _LOOKED: CATALOG[_LOOKED].page(_LOOKED),
             _BARE: probe(""),
             _LIFTED: probe(_OUTRANKED),
             _LEFT: probe(_LEFT_BEHIND),
@@ -823,6 +860,80 @@ class PlantedBrowserTests(LayoutBrowserTests):
     @with_script
     def test_each_check_finds_its_plant_with_script_on(self):
         self.assert_each_found(scripted=True)
+
+    @with_script
+    def test_the_ledger_has_a_row_for_every_check(self):
+        """A survey's read times each check the survey holds, and nothing that
+        is no check (the stand-in put back around the reads)."""
+
+        from hq.platform.core.tests.browser.gate import CHECK_COSTS
+
+        self.open(_BARE, WIDE)
+        self.settle()
+        self.findings(_BARE, WIDE)
+        self.assertEqual(set(self.costs.get(CHECK_COSTS, {})), {*CHECKS, "fills"})
+
+    def a_defect_laid_over_a_page_at_two_widths(self):
+        """What the proof below runs as a test of its own: the entry as drawn,
+        which holds, then with the defect laid over it at two widths."""
+
+        self.looked_at = True
+        for width, defect in (
+            (SPARSE_WIDTHS[-1], ""),
+            (SPARSE_WIDTHS[1], _LOOKED_DEFECT),
+            (SPARSE_WIDTHS[2], _LOOKED_DEFECT),
+        ):
+            if not self.loaded(_LOOKED, width):
+                continue
+            if defect:
+                self.lay_css(defect)
+            self.hold(_LOOKED, width, [self.every_layout_check_holds])
+
+    def test_a_failure_says_once_the_look_that_finds_it_again_with_each_place_and_a_trace_of_its_own(self):
+        """A failed subtest says its findings whole and the `dev:look` that,
+        run as said, finds them again; a finding found again at another width
+        is said once, the place it was found again in the test's closing
+        lines; and its trace holds only its own steps. One engine proves it:
+        the command is built alike in each."""
+
+        if self.browser.browser_type.name != "webkit":
+            self.skipTest("proven in WebKit, the engine dev:look draws in by default")
+        result = unittest.TestResult()
+        said = io.StringIO()
+        with (
+            tempfile.TemporaryDirectory() as folder,
+            mock.patch.object(gate, "browser_failures", lambda: Path(folder)),
+            redirect_stdout(said),
+        ):
+            type(self)("a_defect_laid_over_a_page_at_two_widths").run(result)
+            traces = list(Path(folder).rglob("*.zip"))
+            steps = {
+                json.loads(line).get("method")
+                for trace in traces
+                for line in zipfile.ZipFile(trace).read("trace.trace").decode().splitlines()
+            }
+        self.assertEqual(result.errors, [])
+        [(_subtest, printed)] = result.failures
+        if (reported := _REPORTED.search(printed)) is None:
+            self.fail(printed)
+        findings, command = json.loads(reported[1])[_LOOKED_CHECK], reported[2]
+        self.assertIn(f"{_LOOKED} at {SPARSE_WIDTHS[2]}px", said.getvalue())
+        self.assertEqual(len(traces), 1, traces)
+        self.assertFalse(steps & {"goto", "setViewportSize"}, steps)
+
+        argv = shlex.split(command)
+        self.assertEqual(argv[:3], ["mise", "run", "dev:look"])
+        env = {name: value for name, value in os.environ.items() if not name.startswith(_RUN_OWN)}
+        ran = subprocess.run(
+            argv, cwd=settings.BASE_DIR, env=env, capture_output=True, text=True, timeout=_LOOK_WITHIN, check=False
+        )
+        out = ran.stdout + ran.stderr
+        if (kept := _LOOK_REPORT.search(out)) is None:
+            self.fail(out)
+        drawn = Path(settings.BASE_DIR, kept[1]).read_text(encoding="utf-8")
+        self.assertTrue(findings)
+        for finding in findings:
+            self.assertIn(json.dumps(finding), drawn)
 
     def test_a_style_a_test_writes_outranks_hq_s_rules_as_written_inline(self):
         """The gate serves a test's styles from a sheet, the only kind the

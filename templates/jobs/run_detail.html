@@ -3,7 +3,8 @@
 One run of a playbook, or one scan of its source (`run_pages.run_context`):
 what it ran and on which machines, who asked and who approved it (linking the
 approval it ran under), its lease
-while a runner holds it, how it ended, and each task's outcome, drawn as
+while a runner holds it, how it ended, the kinds of reading its playbook
+stated, and each task's outcome, drawn as
 every registry-driven table is. Its state is the badge beside its title.
 {% endcomment %}
 {% block page %}
@@ -24,6 +25,7 @@ every registry-driven table is. Its state is the badge beside its title.
     {% if run.evidence.worker %}{% fact "Lease" %}{{ run.evidence.worker|breakable }}{% detail %}<small>Until {{ run.evidence.lease_until|when:"exact" }}</small>{% endfact %}{% endif %}
     {% if operation.attempt_count > 1 %}{% fact "Attempts" value=operation.attempt_count %}{% endif %}
     {% if run.note %}{% fact "Result" value=run.note %}{% endif %}
+    {% if run.evidence.stated %}{% fact "Readings" %}{% for kind in run.evidence.stated %}<code>{{ kind|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endfact %}{% endif %}
   {% endfacts %}
 {% endsection %}
 {% include "partials/_page_sections.html" with spans_row=True %}

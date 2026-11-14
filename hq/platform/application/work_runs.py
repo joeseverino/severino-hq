@@ -90,17 +90,18 @@ _LISTED = (OperationRequest.Action.RUN, OperationRequest.Action.SCAN)
 class RunEvidence:
     """What a run of automation shows for itself (``partials/_run_evidence.html``):
     its machines, its asker's correlation id, the worker holding it and until
-    when while it is claimed, and its tasks' outcomes (each a ``RunEvent``
-    with its ``tone``)."""
+    when while it is claimed, its tasks' outcomes (each a ``RunEvent`` with
+    its ``tone``), and the kinds of reading its playbook stated."""
 
     hosts: tuple[str, ...] = ()
     correlation: str = ""
     worker: str = ""
     lease_until: datetime | None = None
     events: tuple[dict[str, Any], ...] = ()
+    stated: tuple[str, ...] = ()
 
     def __bool__(self) -> bool:
-        return bool(self.hosts or self.correlation or self.worker or self.events)
+        return bool(self.hosts or self.correlation or self.worker or self.events or self.stated)
 
 
 @dataclass(frozen=True, slots=True)
@@ -508,9 +509,17 @@ def _run_row(operation: OperationRequest, seen: JobState, title: str, now: datet
                 {**event, "tone": OUTCOME_TONES.get(event.get("outcome", ""), "")}
                 for event in (operation.result or {}).get("events") or ()
             ),
+            stated=stated_kinds(operation.result or {}),
         ),
         effect=str((operation.resource.spec or {}).get("effect", "")),
     )
+
+
+def stated_kinds(result: dict[str, Any]) -> tuple[str, ...]:
+    """The kinds of reading a run's playbook stated on any of its machines, each once."""
+
+    readings = (result.get("stated") or {}).get("readings") or {}
+    return tuple(sorted({kind for kinds in readings.values() for kind in kinds}))
 
 
 def _seconds(start: datetime | None, end: datetime | None) -> float | None:

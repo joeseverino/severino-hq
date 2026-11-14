@@ -15,6 +15,7 @@ from pathlib import Path
 
 from django.test import Client, SimpleTestCase
 
+from hq.platform.core import run_report
 from hq.platform.core.run_report import (
     REPORTS,
     ClassTimedSuite,
@@ -85,6 +86,77 @@ class ClassTimeTests(SimpleTestCase):
         said = stream.getvalue()
         self.assertIn("load average", said)
         self.assertLess(said.index("example.Slow"), said.index("example.Quick"))
+
+
+def _costly_class():
+    """Two tests that each report a cost to one row of a ledger, and one to a row of its own."""
+
+    class Costly(unittest.TestCase):
+        spends = {"test_quick": 0.25, "test_slow": 0.5}
+
+        def run(self, result=None):
+            ran = super().run(result)
+            seconds = self.spends[self._testMethodName]
+            rows = {"example check": run_report.Cost(1, seconds, seconds, f"example.invalid/{self._testMethodName}")}
+            if self._testMethodName == "test_quick":
+                rows["example rare check"] = run_report.Cost(1, 0.1, 0.1)
+            result.addCosts(self, {"Example ledger": rows})
+            return ran
+
+        def test_quick(self):
+            pass
+
+        def test_slow(self):
+            pass
+
+    return Costly
+
+
+class CostTests(SimpleTestCase):
+    """What each row of a test's ledger cost reaches the run's report summed
+    over its tests, whether they ran here or in a parallel worker."""
+
+    def run_costly(self, result):
+        tests = list(unittest.defaultTestLoader.loadTestsFromTestCase(_costly_class()))
+        unittest.TestSuite(tests).run(result)
+        return tests
+
+    def assert_summed(self, result):
+        rows = vars(result)["costs"]["Example ledger"]
+        self.assertEqual(rows["example check"], run_report.Cost(2, 0.75, 0.5, "example.invalid/test_slow"))
+        self.assertEqual(rows["example rare check"], run_report.Cost(1, 0.1, 0.1))
+
+    def test_a_serial_run_sums_each_row(self):
+        result = CompositionTextResult(io.StringIO(), descriptions=True, verbosity=0)
+        self.run_costly(result)
+
+        self.assert_summed(result)
+
+    def test_a_workers_costs_reach_the_parent(self):
+        worker = CompositionRemoteResult()
+        tests = self.run_costly(worker)
+
+        parent = CompositionTextResult(io.StringIO(), descriptions=True, verbosity=0)
+        for event in pickle.loads(pickle.dumps(worker.events)):
+            FileClonedParallelSuite.handle_event(None, parent, tests, event)
+        self.assert_summed(parent)
+
+    def test_the_report_lists_every_row_the_costliest_first_with_where_it_was_slowest(self):
+        result = CompositionTextResult(io.StringIO(), descriptions=True, verbosity=0)
+        self.run_costly(result)
+        stream = io.StringIO()
+        run_report.report_costs(result, stream)
+
+        said = stream.getvalue()
+        self.assertIn("Example ledger", said)
+        self.assertLess(said.index("example check"), said.index("example rare check"))
+        self.assertIn("example.invalid/test_slow", said)
+
+    def test_a_run_with_no_ledger_reports_none(self):
+        stream = io.StringIO()
+        run_report.report_costs(CompositionTextResult(io.StringIO(), descriptions=True, verbosity=0), stream)
+
+        self.assertEqual(stream.getvalue(), "")
 
 
 def _failing_class():

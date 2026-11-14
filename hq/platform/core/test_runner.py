@@ -38,6 +38,7 @@ from hq.platform.core.run_report import (
     CompositionRemoteRunner,
     CompositionTextResult,
     report_class_times,
+    report_costs,
     write_failures,
 )
 from hq.platform.core.stalls import stall_watch
@@ -402,6 +403,7 @@ class SeverinoTestRunner(DiscoverRunner):
             stopped.add_note("Or a worker exited on a test that did not stop when interrupted: see its stall report.")
             raise
         report_class_times(result, sys.stderr, began_load)
+        report_costs(result, sys.stderr)
         write_failures(result)
         return result
 

@@ -130,6 +130,8 @@ _REASONS = {
     "minimum": "is less than {expected}",
     "maximum": "is more than {expected}",
     "maxLength": "is longer than {expected}",
+    "maxItems": "has more than {expected} items",
+    "pattern": "is not spelled as the contract's pattern allows",
     "required": "lacks a required member",
     "additionalProperties": "has a member the contract does not declare",
 }

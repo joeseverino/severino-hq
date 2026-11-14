@@ -33,16 +33,20 @@ class ProbeThrew(Exception):
 @cache
 def _in_one_trip(sources):
     """One function that runs each probe in turn, each on its own, and says
-    what each returned or threw: ``[[true, value] | [false, error], ...]``.
-    A round trip to the page costs milliseconds, a probe often less."""
+    what each returned or threw and the milliseconds it took in the page:
+    ``[[true, value, ms] | [false, error, ms], ...]``. A round trip to the
+    page costs milliseconds, a probe often less, so a probe's cost is read
+    where it runs, for the run's ledger (``BrowserGate.spent``)."""
 
     probes = ",\n".join(f"({source})" for source in sources)
     return f"""async (args) => {{
   const probes = [{probes}];
   const out = [];
   for (let at = 0; at < probes.length; at += 1) {{
+    const began = performance.now();
     try {{ out.push([true, await probes[at](args[at])]); }}
     catch (error) {{ out.push([false, String(error)]); }}
+    out[at].push(performance.now() - began);
   }}
   return out;
 }}"""
@@ -53,9 +57,10 @@ def _probe(probe):
 
 
 def taken(outcome):
-    """A probe's value, or what it threw raised as ProbeThrew."""
+    """A probe's value, or what it threw raised as ProbeThrew; a timed
+    outcome's milliseconds are left out."""
 
-    returned, value = outcome
+    returned, value = outcome[:2]
     if not returned:
         raise ProbeThrew(value)
     return value

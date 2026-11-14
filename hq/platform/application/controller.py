@@ -1,6 +1,7 @@
 """Lease and report protocol for the privileged homelab controller."""
 
 import hashlib
+import json
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -24,7 +25,9 @@ from hq.domains.control_plane.providers import (
 from hq.platform.core.attribution import bound
 from hq.platform.core.audit import audit_events, audit_operation, audited_labels, record_event
 from hq.platform.core.models import AuditLog
+lazy from hq.domains.control_plane.bridge_contract import declared_names, departs, limit
 lazy from hq.domains.control_plane.provider_adapters.declarations import DELIVERY_TARGET_KIND
+lazy from hq.domains.control_plane.secret_shapes import struck
 
 from . import agent_access
 from .adoption import manages_through, observes_only
@@ -56,6 +59,9 @@ class ControllerReport:
     events: list[dict[str, Any]] = field(default_factory=list)
     # What a scan found (``SourceCatalog``); no other operation reports one.
     catalog: dict[str, Any] | None = None
+    # What a run's playbook stated beside its result (``RunStated``); no other
+    # operation reports any.
+    stated: dict[str, Any] | None = None
 
 
 def _confirm_delivery_targets(resource: ManagedResource, status: dict[str, Any]) -> None:
@@ -609,6 +615,10 @@ def report_operation(
         raise ValueError("A run reports what its tasks did as events, never a status for its record.")
     if report.events and not run:
         raise ValueError("Only a run reports events.")
+    if report.stated is not None:
+        if not run:
+            raise ValueError("Only a run reports what its playbook stated.")
+        _hold_stated(operation, report.stated)
     scan = operation.action == OperationRequest.Action.SCAN
     if report.catalog is not None and not scan:
         raise ValueError("Only a scan reports the playbooks it found.")
@@ -663,20 +673,51 @@ _AUDITED_OUTCOMES = {
 }
 
 
+def _hold_stated(operation: OperationRequest, stated: dict[str, Any]) -> None:
+    """Refuse what a run's playbook stated unless it keeps to ``RunStated``
+    and names only the run's own machines.
+
+    So a run states nothing about a machine it was not asked on: a worker,
+    even a compromised one, misstates only the machines of the runs it
+    claims. Held here as well as at the bridge's door, so a report built
+    outside a request keeps to the same bounds.
+    """
+
+    violation = departs("RunStated", stated)
+    if violation is not None:
+        raise ValueError(violation)
+    hosts = set((operation.input or {}).get("hosts") or ())
+    if any(set(stated.get(stat) or {}) - hosts for stat in ("readings", "preview")):
+        raise ValueError("A run states only what it found on the machines it was run on.")
+    if _stated_bytes(stated) > limit("StatedBytes", "maxLength"):
+        raise ValueError("What the run's playbook stated is larger than the bridge accepts.")
+
+
+def _stated_bytes(stated: dict[str, Any]) -> int:
+    """How many bytes ``stated`` is as ``StatedBytes`` measures it: compact JSON in UTF-8."""
+
+    return len(json.dumps(stated, separators=(",", ":"), ensure_ascii=False).encode())
+
+
 def _settle_run(operation: OperationRequest, report: ControllerReport) -> dict[str, Any]:
     """Record how a run ended, as evidence on the run alone.
 
     A procedure's record holds the manifest it is pinned to, never what a run
     found, so nothing here writes it. The events arrive bounded by the bridge
     contract (``RunEvent``) and struck of secrets at its door
-    (``secret_shapes``).
+    (``secret_shapes``); what its playbook stated (``RunStated``) is kept as
+    ``stated``, held to its bounds (``_hold_stated``) and struck again here,
+    so one built outside a request holds no secret either.
     """
 
     events = [dict(event) for event in report.events]
+    result: dict[str, Any] = {"message": report.message, "conditions": report.conditions, "events": events}
+    if report.stated:
+        result["stated"] = struck(report.stated, declared_names())[0]
     _finish(
         operation,
         report,
-        {"message": report.message, "conditions": report.conditions, "events": events},
+        result,
         unknown=any(condition.get("reason") == OUTCOME_UNKNOWN for condition in report.conditions),
     )
     for event in events:

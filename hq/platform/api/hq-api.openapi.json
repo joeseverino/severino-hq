@@ -1322,6 +1322,7 @@
             "started_at": null,
             "state": "queued",
             "state_label": "Waiting",
+            "stated": [],
             "worker": ""
           },
           "ok": true
@@ -2842,7 +2843,8 @@
                 "playbook": "example.package_upgrade",
                 "started_at": null,
                 "state": "queued",
-                "state_label": "Waiting"
+                "state_label": "Waiting",
+                "stated": []
               }
             ],
             "next": null,
@@ -16434,6 +16436,9 @@
           "state_label": {
             "$ref": "#/components/schemas/RunRow/properties/state_label"
           },
+          "stated": {
+            "$ref": "#/components/schemas/RunRow/properties/stated"
+          },
           "worker": {
             "description": "The worker running it now; empty unless one is.",
             "type": "string"
@@ -16542,6 +16547,13 @@
           "state_label": {
             "description": "That state in the words HQ's pages say it in.",
             "type": "string"
+          },
+          "stated": {
+            "description": "The kinds of reading its playbook stated, each once; empty when it stated none.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           }
         },
         "type": "object"

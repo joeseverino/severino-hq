@@ -346,6 +346,8 @@ class Ended:
     success: bool
     message: str
     events: tuple[tuple[str, str, str], ...] = ()
+    # The readings its playbook stated on its machine, by kind (``RunStated``).
+    readings: dict[str, list[dict[str, Any]]] | None = None
 
 
 def _events(host: str, events: tuple[tuple[str, str, str], ...]) -> list[dict[str, Any]]:
@@ -366,7 +368,14 @@ FAILED = Ended(
 )
 # How the read ended on the machine it last ran on: the result its playbook stated.
 REPORTED = Ended(
-    success=True, message="/: 120.5 GB of 460.4 GB used (27%)", events=(("Read the mount's use", "ok", ""),)
+    success=True,
+    message="/: 120.5 GB of 460.4 GB used (27%)",
+    events=(("Read the mount's use", "ok", ""),),
+    readings={
+        "host.filesystem": [
+            {"mount": "/", "free_bytes": 365226196992, "total_bytes": 494345830400, "read_at": "2026-11-13T12:00:00Z"}
+        ]
+    },
 )
 
 
@@ -512,6 +521,7 @@ def _reported(ended: Ended) -> Callable[[OperationRequest], None]:
             observed_generation=run.input["generation"],
             message=ended.message,
             events=_events(run.input["hosts"][0], ended.events),
+            stated={"readings": {run.input["hosts"][0]: ended.readings}} if ended.readings else None,
         )
         with doors.controller("report"):
             report_operation(str(run.pk), report, controller_id=WORKER)

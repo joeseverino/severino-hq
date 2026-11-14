@@ -1290,6 +1290,7 @@
           "started_at": null,
           "state": "queued",
           "state_label": "Waiting",
+          "stated": [],
           "worker": ""
         },
         "ok": true
@@ -2829,7 +2830,8 @@
               "playbook": "example.package_upgrade",
               "started_at": null,
               "state": "queued",
-              "state_label": "Waiting"
+              "state_label": "Waiting",
+              "stated": []
             }
           ],
           "next": null,

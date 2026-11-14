@@ -7,7 +7,7 @@ import pickle
 import traceback
 import unittest
 import unittest.util
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 # Bound here, so a test that patches time.monotonic moves its own clock and never a class's time.
@@ -89,7 +89,47 @@ class ClassTimes:
         vars(self).setdefault("class_times", {})[unittest.util.strclass(type(test))] = seconds
 
 
-class CompositionTextResult(FailureRecord, StallMarks, CompositionIsolation, ClassTimes, unittest.TextTestResult):
+@dataclass
+class Cost:
+    """What one row of a test's ledger spent: how many times it ran, its
+    seconds in all, and its slowest run with where that was."""
+
+    count: int
+    seconds: float
+    slowest: float
+    where: str = ""
+
+    def add(self, other: Cost) -> None:
+        self.count += other.count
+        self.seconds += other.seconds
+        if other.slowest > self.slowest:
+            self.slowest, self.where = other.slowest, other.where
+
+
+def tally(rows: dict[str, Cost], row: str, cost: Cost) -> None:
+    """``cost`` added to ``row`` of the ledger ``rows``."""
+
+    if (held := rows.get(row)) is None:
+        rows[row] = replace(cost)
+    else:
+        held.add(cost)
+
+
+class Costs:
+    """What each row of each ledger a test reports cost, summed over the
+    run's tests, by ledger: a cost below a class's, which ``ClassTimes``
+    cannot see (a browser check, a rule's subtest)."""
+
+    def addCosts(self, test, costs):
+        kept = vars(self).setdefault("costs", {})
+        for ledger, rows in costs.items():
+            for row, cost in rows.items():
+                tally(kept.setdefault(ledger, {}), row, cost)
+
+
+class CompositionTextResult(
+    FailureRecord, StallMarks, CompositionIsolation, ClassTimes, Costs, unittest.TextTestResult
+):
     def printErrors(self):
         block_on_output()
         super().printErrors()
@@ -173,6 +213,9 @@ class CompositionRemoteResult(StallMarks, CompositionIsolation, RemoteTestResult
         # against the subsuite's test at that index.
         self.events.append(("addClassTime", self.test_index, seconds))
 
+    def addCosts(self, _test, costs):
+        self.events.append(("addCosts", self.test_index, costs))
+
 
 class CompositionRemoteRunner(RemoteTestRunner):
     resultclass = CompositionRemoteResult
@@ -227,4 +270,22 @@ def report_class_times(result, stream, began_load: tuple[float, ...]) -> None:
     stream.write(f"\nSlowest test classes (load average at start / end: {load}):\n")
     for name, seconds in times[:SLOWEST_SHOWN]:
         stream.write(f"  {seconds:8.1f}s  {name}\n")
+    stream.flush()
+
+
+def report_costs(result, stream) -> None:
+    """Each ledger the run's tests kept, every row of it, the costliest first."""
+
+    ledgers = vars(result).get("costs", {})
+    if not ledgers:
+        return
+    block_on_output()
+    for ledger, rows in ledgers.items():
+        stream.write(f"\n{ledger}:\n  {'total':>9}  {'runs':>6}  {'mean':>9}  {'slowest':>9}  row (where slowest)\n")
+        for row, cost in sorted(rows.items(), key=lambda item: item[1].seconds, reverse=True):
+            where = f" ({cost.where})" if cost.where else ""
+            mean = cost.seconds / cost.count if cost.count else 0
+            stream.write(
+                f"  {cost.seconds:8.2f}s  {cost.count:6d}  {mean * 1000:7.1f}ms  {cost.slowest * 1000:7.1f}ms  {row}{where}\n"
+            )
     stream.flush()
