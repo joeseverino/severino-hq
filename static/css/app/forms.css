@@ -308,11 +308,6 @@ select.toned:not(.toned-neutral) { border-color: currentColor; }
   padding: var(--space-3) var(--space-4) var(--space-2);
   background: color-mix(in srgb, var(--ground) 94%, transparent);
   color: var(--muted);
-  font-size: var(--text-3xs);
-  font-weight: 700;
-  letter-spacing: .08em;
-  /* stylelint-disable-next-line property-disallowed-list -- a kicker: the heading over a group of Command Center's commands */
-  text-transform: uppercase;
 }
 .command-center-option {
   display: grid;

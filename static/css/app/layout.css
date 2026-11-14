@@ -340,8 +340,7 @@
   border-radius: 9px;
 }
 .week-plan-day.is-planned { background: var(--surface-2); border-color: var(--line-2); }
-/* stylelint-disable-next-line property-disallowed-list -- a kicker: the weekday over each day of a week plan */
-.week-plan-label { color: var(--muted-2); font-size: var(--text-3xs); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.week-plan-label { color: var(--muted-2); }
 .week-plan-day.is-planned .week-plan-label { color: var(--ink); }
 .week-plan-mark { display: flex; align-items: center; justify-content: center; gap: var(--space-1); min-height: 8px; }
 .week-plan-mark i { width: 8px; height: 8px; border-radius: 50%; display: block; }
@@ -402,11 +401,6 @@
 .calendar-weekday {
   padding: 0 0 var(--space-1);
   color: var(--muted-2);
-  font-size: var(--text-3xs);
-  font-weight: 700;
-  letter-spacing: .08em;
-  /* stylelint-disable-next-line property-disallowed-list -- a kicker: the weekday row over the activity calendar's days */
-  text-transform: uppercase;
   text-align: center;
 }
 .calendar-day {
@@ -578,7 +572,11 @@ td .facts-list { font-size: var(--text-xs); gap: var(--space-1) var(--space-6); 
 .address-list { display: grid; grid-template-columns: max-content minmax(0, max-content); gap: var(--space-1) var(--space-3); align-items: baseline; }
 .address-list li { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; }
 .address-list span { color: var(--muted); }
-/* stylelint-disable-next-line property-disallowed-list -- the kicker primitive, over a heading or a group of facts */
-.eyebrow { display: block; margin-bottom: var(--space-1); color: var(--muted-2); font-size: var(--text-3xs); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+/* The kicker: over a heading or a group of facts (`.eyebrow`), a timeline's
+   month, a week plan's and the activity calendar's weekdays, and Command
+   Center's group heads. */
+/* stylelint-disable-next-line property-disallowed-list -- the kicker primitive */
+.eyebrow, .timeline-month, .week-plan-label, .calendar-weekday, .command-center-group-label { font-size: var(--text-3xs); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.eyebrow { display: block; margin-bottom: var(--space-1); color: var(--muted-2); }
 
 }
