@@ -255,6 +255,9 @@ exec perl -e '
     while (reap() && (my $left = $grace - Time::HiRes::time) > 0) { Time::HiRes::sleep($left) }
     my ($user, $system, $cuser, $csystem) = times;
     my $cpu = $cuser + $csystem - $sampled;
+    # The two sums are floats, so a run that spent nothing beside its sampling
+    # can come out a hair below zero, which would print as -0.0s.
+    $cpu = 0 if $cpu < 0;
     my $wall = Time::HiRes::time - $began;
 
     sub span {
