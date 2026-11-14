@@ -558,7 +558,7 @@ BROKEN_TOKENS = (
   const range = document.createRange();
   for (const token of document.querySelectorAll(tokens)) {
     const table = token.closest('table');
-    const narrow = table && getComputedStyle(table).getPropertyValue('--whole').trim() === '0';
+    const narrow = narrowBox(table);
     if (narrow || token.closest(wraps) || token.closest('tr:has(> * > [aria-expanded="true"])')) continue;
     const lines = [];
     const walker = document.createTreeWalker(token, NodeFilter.SHOW_TEXT);

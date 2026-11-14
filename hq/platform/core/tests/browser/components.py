@@ -24,6 +24,7 @@ from hq.platform.core.test_runner import browser_engine
 from hq.platform.core.tests.browser.gate import add_css, served_sheet, tab_key, unfold, with_script
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
 from hq.platform.core.tests.browser.probes.boxes import MAP, SIDEWAYS, SMALL_TARGETS
+from hq.platform.core.tests.browser.probes.describe import DESCRIBE
 from hq.platform.core.tests.browser.probes.palette import BUTTON_EDGES
 from hq.platform.core.tests.browser.probes.parts import (
     DIALOGS_WITHOUT_OPENERS,
@@ -176,14 +177,18 @@ _MEASURE_A_COPY = """() => {
 
 # How the queue's table stands: whether it is in its narrow box, and the
 # width of every action cell shown.
-_QUEUE_COLUMNS = """([queue, act]) => {
+_QUEUE_COLUMNS = (
+    "([queue, act]) => {"
+    + DESCRIBE
+    + """
   const table = document.querySelector(queue);
   return {
-    narrow: getComputedStyle(table).getPropertyValue('--whole').trim() === '0',
+    narrow: narrowBox(table),
     acts: [...table.querySelectorAll(act)].filter((cell) => cell.checkVisibility())
       .map((cell) => Math.round(cell.getBoundingClientRect().width)),
   };
 }"""
+)
 
 # A change of content inside the queue's region, as a fragment or a probe
 # makes: a part put in a row's cell and taken away.
@@ -1511,7 +1516,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
         """A table of four columns or more keeps the column that names each row
         and the ones marked key, and fits the screen; it does not stack into
         cards and is not swiped through. What left shows when a row is
-        opened, beneath that row's first line, each under its column's name.
+        opened, on its open line, each under its column's name.
         """
 
         for name in ("connections", "services", "containers", "projects"):
@@ -1531,9 +1536,8 @@ class ComponentLayoutTests(LayoutBrowserTests):
 
     @with_script
     def test_opening_a_row_moves_no_column_and_no_other_row(self):
-        """A row's cells stand in its table's tracks, so what an open row
-        shows whole (a column that left, a cut value, a block it keeps beneath
-        itself) stands on lines of its own beneath its first and asks no
+        """What an open row shows whole (a column that left, a cut value, a
+        block it keeps beneath itself) stands on its open line and asks no
         column for width: every column keeps its edges and every other row
         its height, at every width, on each of the table's catalog entries and
         the wide tables of the estate, and a part shown whole keeps its box;
@@ -1570,11 +1574,10 @@ class ComponentLayoutTests(LayoutBrowserTests):
     @with_script
     def test_a_table_keeps_its_promises_on_every_catalog_entry(self):
         """The table primitive, on each of its catalog entries at every width:
-        a grid that names its role and each cell's; its first lines under their headings, a group's heading across
+        laid out as a table with its headings drawn, a group's heading across
         its table and the heading row stuck; nothing past its region, and a
-        value it cuts whole in its cell's title; in a narrow box the row's
-        controls beneath its first line, in the row's order. Laid out by the
-        stylesheet alone, it draws every column where it does with no script."""
+        value it cuts whole in its cell's title. Laid out by the stylesheet
+        alone, it draws every column where it does with no script."""
 
         from hq.platform.core.tests.browser.catalog import CATALOG
 

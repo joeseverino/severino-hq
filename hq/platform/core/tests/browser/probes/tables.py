@@ -76,12 +76,9 @@ TABLES = (
 )
 
 
-# What a grid table promises past what `TABLES` reads: a group's heading
-# spans its table, the heading
-# row sticks, a value its cell cuts on a closed row carries its whole text as
-# its cell's title, and the row's controls drawn beneath its words (a narrow
-# box) stand below every cell of its first line, in the order the row holds
-# them. What breaks one, each named once.
+# What a table promises past what `TABLES` reads: a group's heading spans its
+# table, the heading row sticks, and a value its cell cuts on a closed row
+# carries its whole text as its cell's title. What breaks one, each named once.
 TABLE_PROMISES = """(scroll) => {
   const found = new Set();
   const text = (el) => el.textContent.replace(/\\s+/g, ' ').trim();
@@ -97,24 +94,13 @@ TABLE_PROMISES = """(scroll) => {
     if (head && getComputedStyle(head).position !== 'sticky') found.add(`${name}: its heading row does not stick`);
     for (const row of table.querySelectorAll(':scope > tbody > tr:not(.is-expanded):not([data-row-detail])')) {
       for (const cell of row.querySelectorAll(':scope > [data-kind]')) {
-        if (!cell.checkVisibility() || getComputedStyle(cell).gridRowStart !== '1') continue;
+        if (!cell.checkVisibility()) continue;
         const parts = [cell, ...cell.querySelectorAll('*')].filter((el) => el.checkVisibility());
         const cut = parts.some((el) => el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1);
         const said = text(cell);
         if (cut && said && !(cell.title || '').replace(/\\s+/g, ' ').includes(said.slice(0, 24))) {
           found.add(`${name}: ${said.slice(0, 24)} is cut with no title holding it whole`);
         }
-      }
-      const cells = [...row.children].filter((cell) => cell.checkVisibility());
-      const line = cells.filter((cell) => getComputedStyle(cell).gridRowStart === '1');
-      const beneath = cells.filter((cell) => cell.hasAttribute('data-beneath') && !line.includes(cell));
-      const floor = Math.max(...line.map((cell) => cell.getBoundingClientRect().bottom));
-      let last = -Infinity;
-      for (const cell of beneath) {
-        const top = cell.getBoundingClientRect().top;
-        if (top < floor - 1) found.add(`${name}: its controls stand beside the row's first line`);
-        if (top < last - 1) found.add(`${name}: its controls stand out of the row's order`);
-        last = top;
       }
     }
   }
@@ -123,8 +109,8 @@ TABLE_PROMISES = """(scroll) => {
 
 # The first table on a page as a phone lays it out: whether it runs past its
 # box, where each showing column starts and how wide it is, how tall each record's row is, how
-# many rows show their toggle, and the columns whose cells the open rows
-# draw beneath them, each under its column's name (`data-label`).
+# many rows show their toggle, and the labels of the entries the open rows
+# show on their open lines.
 PHONE_TABLE = """(scroll) => {
   const box = document.querySelector('main ' + scroll);
   const table = box && box.querySelector('table');
@@ -138,7 +124,7 @@ PHONE_TABLE = """(scroll) => {
     rows: [...table.querySelectorAll('tbody > tr:not([data-row-detail]):not(:has(> th[scope="rowgroup"]))')]
       .map((row) => Math.round(row.getBoundingClientRect().height)),
     toggles: [...table.querySelectorAll('tbody button[aria-expanded]:not([data-fold-toggle])')].filter((el) => el.checkVisibility()).length,
-    details: [...table.querySelectorAll('tbody > tr > [data-drop][data-label]')].filter((cell) => cell.checkVisibility() && getComputedStyle(cell).gridRowStart !== '1').map((cell) => cell.dataset.label),
+    details: [...table.querySelectorAll('tbody > tr.row-detail .row-columns > * > dt')].filter((label) => label.checkVisibility()).map((label) => label.textContent.trim()),
   };
 }"""
 
@@ -157,8 +143,8 @@ TABLES_THAT_DO_NOT_FIT = """(scroll) => [...document.querySelectorAll('main ' + 
 # layout around it changes shape as the window grows: which viewport queries
 # hold, whether the page scrolls, around each region how many tracks each grid
 # has and how many lines each wrapping flex box makes, and how far each
-# region's table has given way (tables.css: which ranks it keeps, and whether
-# its controls stand beneath its words). Each of those moves one way as the
+# region's table has given way (tables.css: which of its columns show, and
+# whether it stands in its narrow box). Each of those moves one way as the
 # window grows, so a sweep that finds it changed between two widths knows a
 # change of shape lies between them. It is read, with each region's width, a
 # frame after the resize (two, so WebKit has laid the page out again). Opening
@@ -175,11 +161,12 @@ TABLE_LAYOUT = """async ([scroll, queries]) => {
     if (style.display.endsWith('flex') && style.flexWrap !== 'nowrap') return `f${lines(el)}`;
     return '';
   };
+  // Which of its headings show, and whether its narrow-box marks have left.
   const gave = (table) => {
     if (!table) return '';
-    const style = getComputedStyle(table);
-    return ['--whole', '--keep-1', '--keep-2', '--keep-3', '--keep-4', '--keep-5', '--keep-6']
-      .map((name) => style.getPropertyValue(name).trim()).join('');
+    const showing = [...table.querySelectorAll(':scope > thead > tr:last-child > th')]
+      .map((heading) => getComputedStyle(heading).display === 'none' ? 0 : 1).join('');
+    return showing + (table.querySelector('[data-narrow]:not(.row-detail *)')?.checkVisibility() === false ? 'n' : '');
   };
   const regions = [...document.querySelectorAll('main ' + scroll)];
   const around = regions.map((region) => {
@@ -475,7 +462,7 @@ CUT_AND_CLOSED = (
   for (const row of document.querySelectorAll(rows)) {
     if (!row.checkVisibility() || row.closest('details:not([open])')) continue;
     if ([...row.querySelectorAll('[aria-expanded]')].some((toggle) => toggle.checkVisibility())) continue;
-    const narrow = getComputedStyle(row.closest('table')).getPropertyValue('--whole').trim() === '0';
+    const narrow = narrowBox(row.closest('table'));
     for (const cell of row.querySelectorAll(':scope > :is(td, th)')) {
       for (const {node, boxes, marked} of cutsIn(cell, unseen)) {
         const by = boxes.at(-1);
