@@ -723,10 +723,6 @@ so no page draws headings over nothing. Its `empty=` says what is missing in
 the page's words, with `remedy=` (or `action_url=` and `action_label=`).
 `filtered=` with `clear=` says its filter emptied it, with the way back.
 
-**A document whose markup must stay apart from the page is framed.**
-`partials/_framed_document.html` (`src`, `title`) draws one of HQ's own
-documents, the Design page's gallery, in a frame as wide as the column and as
-tall as the view, so its ids, headings and links never become the page's.
 The message is the fact alone, one sentence ("No playbooks adopted yet."), with
 no how-to after it: the action and the page's controls say what to do.
 
@@ -780,9 +776,16 @@ one.
 **The content column is drawn by `{% page_main %}`.** base.html draws every
 page's content in it (`partials/_page_main.html`), and the component catalog
 draws each of its entries in the same part, so an entry stands where a page's
-content does. A page's own sheet that lays the column out for one page (the
-API reference's) reaches it as `.content`, the class the part writes. It is the
-host's frame; an extension's page is drawn in it and never writes it.
+content does. It is the host's frame; an extension's page is drawn in it and
+never writes it.
+
+**A page that is one document extends `document_page.html`.** The API
+reference and the Design page's gallery are each one document under the site
+header: no page head and no footer, the title spoken alone, the document
+filling the view edge to edge and scrolled as the page scrolls
+(`[data-document-page]`, page.css), bringing its own gutters. The page fills
+`{% block document %}`; `test_document_page.py` fails any other template that
+empties the footer and any other rule that fills the view from the column.
 
 **A card is drawn by `{% card %}`.** `{% card css="example"
 heading="example-heading" %}...{% endcard %}` frames what it encloses

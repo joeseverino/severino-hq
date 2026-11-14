@@ -1158,10 +1158,10 @@ A component catalog entry (`part/notice-error`, `table/figures`, every key of
 families' modules) is drawn by the
 catalog gate's own `catalog.page`, so a look and that gate never
 draw an entry apart. `gallery` is every entry on one page, each in a region
-named for it, after a map of its families: the gate holds it to the survey
-each entry alone is held to, so a finding there that no entry has alone is
-one entry disturbing another. HQ's System > Design page frames the same
-gallery as a document of its own, drawn by a checkout's server from the catalog it runs on each request, and
+named for it under its name, after a map of its families, each part in a
+shadow root of its own, so no entry reaches another: the gate holds the
+page around them to the survey. HQ's System > Design page draws the same
+gallery as its content, drawn by a checkout's server from the catalog it runs on each request, and
 read from the image build's copy in the image. An entry is answered from memory as a gate page is, with no
 server or estate behind it, so a look at one entry is the quick way to see a
 change to a shared part, ahead of the catalog's whole browser class. A name that begins entries

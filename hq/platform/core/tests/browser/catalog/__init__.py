@@ -7,11 +7,11 @@ import below."""
 
 from typing import override
 
-from django.template.context import RenderContext
 from django.template.loader import render_to_string
 from django.utils.html import escape
 
 from hq.platform.application.ui import PageNavigation, PageSection
+from hq.platform.core.templatetags.stylesheet_tags import stylesheets
 from hq.platform.core.tests.browser.catalog.common import Entry, head_of, part_page
 from hq.platform.core.tests.browser.catalog.families import chart, form, graph, part, status, table
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
@@ -47,17 +47,27 @@ GALLERY_LEAVES_OUT = {
 GALLERY_TITLE = "Shared parts"
 # The map of the gallery's families, as a page draws its own.
 NAVIGATION = "partials/_page_navigation.html"
+# An entry's name over it, as a section heads itself.
+NAME = "partials/_section_head.html"
+# The column an entry is drawn in on a page of its own.
+COLUMN = '<div class="content">{}</div>'
 
 
 def gallery_body() -> str:
     """Every entry but the frame's own, in the catalog's order, each in a
     region named for it under its name, after a map that opens each family at
-    its first entry: the gallery's content column."""
+    its first entry: the Design page's content.
+
+    Each part is drawn in a shadow root of its own, written in the markup
+    (`<template shadowrootmode>`), with HQ's sheets and the column it stands in
+    on its own page. Its ids, and what points at them (a label, a popover, a
+    dialog, a button's form), are the part's alone there, so no example meets
+    another or the page around it, and the page's scripts, which read the
+    document, never act on one."""
 
     drawn: list[str] = []
     families: list[str] = []
-    # One page, so each section's id is numbered past the others' as on any page.
-    page = RenderContext()
+    sheets = stylesheets()
     for name, entry in CATALOG.items():
         if entry.frame:
             continue
@@ -65,16 +75,21 @@ def gallery_body() -> str:
         if (family := name.partition("/")[0]) not in families:
             families.append(family)
             anchor = f' id="design-{family}"'
-        # A part that is a page's head is its own heading, so its name goes above it.
-        named = head_of(name) if entry.heads_the_page else ""
-        drawn.append(f'<div{anchor} role="region" aria-label="{escape(name)}">{named}{entry.drawn(name, page)}</div>')
+        heading = render_to_string(NAME, {"heading": escape(name)})
+        part = COLUMN.format(entry.part(name))
+        drawn.append(
+            f'<div{anchor} role="region" aria-label="{escape(name)}"><div class="specimen-name">{heading}</div>'
+            f'<div class="specimen"><template shadowrootmode="open">{sheets}{part}</template></div></div>'
+        )
     navigation = PageNavigation(tuple(PageSection(f"design-{family}", family) for family in families), label="Families")
-    return render_to_string(NAVIGATION, {"navigation": navigation}) + "".join(drawn)
+    return (
+        f'<div class="design-gallery">{render_to_string(NAVIGATION, {"navigation": navigation})}{"".join(drawn)}</div>'
+    )
 
 
 def _gallery_page() -> str:
-    """The gallery on a page of its own: the document the survey judges and
-    the Design page frames. The frame's parts (the site header, the demo's
+    """The gallery on a page of its own: the document the survey judges, as
+    the Design page draws it. The frame's parts (the site header, the demo's
     foot) hold to a page's edge, so each is judged on its page alone and the
     gallery draws none of them."""
 
@@ -109,10 +124,9 @@ class CatalogLayoutTests(LayoutBrowserTests):
     sparse widths, which cross the stylesheet's media queries: closed, in both
     palettes, and with every disclosure open.
 
-    The gallery is held to the same, so what an entry shows among the others
-    is what it shows alone: each entry alone finds nothing, so a finding on the
-    gallery is one a neighbor caused (a shared id, a rule scoped to a lone
-    entry), and one a neighbor hid still fails the entry's own page."""
+    The gallery is held to the same: each part there is in a shadow root of
+    its own, which no neighbor reaches, so the survey judges the page around
+    them, its map and each entry's name."""
 
     @classmethod
     @override

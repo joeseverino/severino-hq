@@ -47,7 +47,6 @@ from hq.platform.core.views import (
     SearchView,
     ThemeView,
     ThrottledLoginView,
-    design_gallery_document,
 )
 from hq.platform.core.write_bounds import NOTHING, Bound, writes
 
@@ -121,7 +120,6 @@ urlpatterns = [
     path("connection/", ConnectionPageView.as_view(), name="connection"),
     path("hq/", HQView.as_view(), name="hq_self"),
     path("design/", DesignView.as_view(), name="design"),
-    path("design/gallery/<str:digest>/", design_gallery_document, name="design_gallery"),
     path(
         "connection/address/",
         PublicAddressView.as_view(),

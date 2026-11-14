@@ -45,9 +45,6 @@ non_dev_dependency_groups = ["runner"]
 [tool.deptry.per_rule_ignores]
 # Runtime dependencies no host code imports, and why each is installed anyway.
 DEP002 = [
-    # WhiteNoise's compressor imports it when collectstatic runs, in the image
-    # build as well, and writes each asset's .br copy with it.
-    "brotli",
     # Django's parallel test runner pickles a failure's traceback with it, in
     # the image as well.
     "tblib",

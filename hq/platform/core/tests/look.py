@@ -1431,7 +1431,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
 
     @override
     def left_out_on(self, path):
-        return catalog.left_out_on(path) if path in self.unscripted else ()
+        return catalog.left_out_on(path) if path in self.unscripted else super().left_out_on(path)
 
     def scripted_for(self, name) -> bool:
         """Whether ``name`` is drawn with script: a page is unless

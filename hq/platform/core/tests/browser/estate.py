@@ -68,14 +68,13 @@ _REDIRECTS = frozenset({301, 302, 303, 307, 308})
 _IN_A_POPOVER = ("overlaps", "overlapping text", "touching text")
 
 
-_EMBEDDED = re.compile(r'<(?:img|iframe)\b[^>]*\ssrc="(/[^"/][^"]*)"')
+_EMBEDDED = re.compile(r'<img\b[^>]*\ssrc="(/[^"/][^"]*)"')
 
 
 def embedded_of(pages, ask):
-    """Each picture ``pages`` draw from HQ's own records (a receipt's file)
-    and each document of HQ's own they frame (the Design page's gallery), by
-    its address, as the server answers it: a browser asks for it as the page
-    loads."""
+    """Each picture ``pages`` draw from HQ's own records (a receipt's file),
+    by its address, as the server answers it: a browser asks for it as the
+    page loads."""
 
     addresses = {
         unescape(url) for page in pages for url in _EMBEDDED.findall(page) if not url.startswith(settings.STATIC_URL)

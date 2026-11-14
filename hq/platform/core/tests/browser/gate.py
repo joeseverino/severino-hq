@@ -68,6 +68,7 @@ from hq.platform.core.tests.browser.survey import (
 )
 from hq.platform.core.tests.browser.uncaught import Uncaught
 from hq.platform.core.tests.browser.widths import LARGEST, NARROWEST, query_edges, viewport, viewport_queries
+lazy from hq.platform.core.tests.browser import catalog
 
 # Named for annotations alone: a class's annotations can be read as it is made
 # (a dataclass's are), which would load a lazy import at once.
@@ -1112,12 +1113,13 @@ class BrowserGate(SimpleTestCase):
         self.spent(CHECK_COSTS, "fills", perf_counter() - began, self.where_and_width())
         return {check: said for check, said in found.items() if said}
 
-    def left_out_on(self, _path) -> tuple[str, ...]:
-        """The axe rules the page at ``_path`` declares it leaves out, beside
-        those every page does (probes/axe.py's LEFT_OUT): none but where a
-        page's class says."""
+    def left_out_on(self, path) -> tuple[str, ...]:
+        """The axe rules the page at ``path`` declares it leaves out, beside
+        those every page does (probes/axe.py's LEFT_OUT): the gallery's on the
+        Design page, which draws it, and else none but where a page's class
+        says."""
 
-        return ()
+        return catalog.left_out_on(catalog.GALLERY) if path == reverse("design") else ()
 
     def checked(self, probes):
         """Each check's findings, read in one round trip, each check's time

@@ -1981,12 +1981,6 @@ ENTRIES = {
         '{% include "partials/_document_picture.html" with src=picture alt="An example receipt" only %}'
         "{% endsection %}",
     ),
-    # A document of HQ's own framed in a page, an empty one standing in.
-    "part/framed-document": Entry(
-        '{% section "Example document" %}'
-        '{% include "partials/_framed_document.html" with src="about:blank" title="Example document" only %}'
-        "{% endsection %}",
-    ),
     # A command to paste somewhere else, short and long enough to wrap at its
     # slashes and spaces.
     "part/command": Entry(

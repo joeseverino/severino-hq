@@ -7,7 +7,6 @@ from unittest import mock
 
 from django.forms import BaseForm
 from django.template import Context, Template
-from django.template.context import RenderContext
 from django.template.defaulttags import CsrfTokenNode
 from django.template.loader import render_to_string
 from django.test import RequestFactory, override_settings
@@ -54,9 +53,14 @@ class Entry:
     # The settings the part is drawn under, for a part only some deployments draw.
     settings: dict[str, Any] = field(default_factory=dict)
 
-    def drawn(self, name, page: RenderContext | None = None):
-        """The entry under its name, drawn as a part of ``page``, the state one
-        render of a page keeps (the section ids it drew), where it shares one."""
+    def drawn(self, name):
+        """The entry under its name, as a page draws it under its head."""
+
+        head = "" if self.heads_the_page or self.frame else head_of(name)
+        return head + self.part(name)
+
+    def part(self, name):
+        """The part alone, as its template draws it."""
 
         with (
             override_settings(**self.settings),
@@ -64,15 +68,12 @@ class Entry:
             mock.patch.object(write_tags, "CsrfTokenNode", _NoToken),
             mock.patch.object(timezone, "now", return_value=DRAWN_AT),
         ):
-            head = "" if self.heads_the_page or self.frame else head_of(name)
             # A form names its fields' ids after the entry, as a page drawing
             # two forms gives each its own.
             for form in (value for value in self.context.values() if isinstance(value, BaseForm)):
                 form.auto_id = f"{slugify(name)}-%s"
             context = _Asked(self.context, self.address) if self.address else Context(self.context)
-            if page is not None:
-                context.render_context = page
-            return head + Template(self.template).render(context)
+            return Template(self.template).render(context)
 
     def page(self, name):
         """The entry on a page of its own: in its main, or beside it for a part of the frame."""
