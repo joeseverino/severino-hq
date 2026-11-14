@@ -3,6 +3,9 @@ the catalog draws it on a server that names no file, in a document of its own
 the page frames."""
 
 import io
+import os
+import subprocess
+import sys
 import tempfile
 import warnings
 from pathlib import Path
@@ -127,6 +130,18 @@ class DesignPageTests(TestCase):
     def test_writing_it_needs_somewhere_to_write(self):
         with override_settings(SEVERINO_DESIGN_GALLERY=None), self.assertRaises(CommandError):
             call_command("design_gallery", stdout=io.StringIO())
+
+    def test_the_build_s_command_line_opens_no_database(self):
+        # The image build runs it as root, so a database it opened would ship
+        # root's in the volume HQ's account migrates.
+        database = self.built.with_name("never.sqlite3")
+        environment = {**os.environ, "SEVERINO_DATABASE_PATH": str(database)}
+        command = [sys.executable, "manage.py", "design_gallery", "--output", str(self.built.with_name("cli.html"))]
+
+        subprocess.run(command, cwd=settings.BASE_DIR, env=environment, check=True, capture_output=True, timeout=300)
+
+        self.assertTrue(self.built.with_name("cli.html").exists())
+        self.assertFalse(database.exists())
 
     def test_its_example_forms_draw_without_a_missing_token_warning(self):
         # DEBUG is when Django warns of a form drawn with no token.

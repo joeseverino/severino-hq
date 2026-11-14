@@ -12,13 +12,12 @@ import re
 import shlex
 import subprocess
 import tempfile
-import unittest
 import zipfile
 from contextlib import redirect_stdout
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, override
-from unittest import mock
+from unittest import TestResult, mock
 
 from django.conf import settings
 
@@ -702,7 +701,7 @@ class PlantedBrowserTests(LayoutBrowserTests):
 
         if self.browser.browser_type.name != "webkit":
             self.skipTest("proven in WebKit, the engine dev:look draws in by default")
-        result = unittest.TestResult()
+        result = TestResult()
         said = io.StringIO()
         with (
             tempfile.TemporaryDirectory() as folder,

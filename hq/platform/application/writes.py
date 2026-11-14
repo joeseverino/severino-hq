@@ -150,12 +150,14 @@ class _RecordWrite(PostedOnce, WriteMessages):
 
     ``result_key`` is where the answer nests the record, ``identity_attr`` the
     model field its capabilities target it by, and ``identity_result_key``
-    that identity in the answer where it is named otherwise.
+    that identity in the answer where it is named otherwise. Each write
+    declares the first three, as a value or a property, so no base holds a
+    value of them another base contradicts.
     """
 
-    noun = ""
-    result_key = ""
-    identity_attr = ""
+    noun: str
+    result_key: str
+    identity_attr: str
     identity_result_key = ""
 
     @property

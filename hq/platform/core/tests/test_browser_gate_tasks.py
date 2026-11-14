@@ -5,11 +5,10 @@ still finds the face it withholds."""
 import os
 import shlex
 import tomllib
-import unittest
 from collections import Counter
 from pathlib import Path
 from typing import Any
-from unittest import mock
+from unittest import TestCase, mock
 
 from django.test import SimpleTestCase, tag
 from django.test.runner import DiscoverRunner
@@ -87,7 +86,7 @@ def engine(task: dict) -> str:
     return dict(entry.split("=", 1) for entry in task["env"] if "=" in entry).get("HQ_BROWSER_ENGINE", "webkit")
 
 
-def gate_tests(task: dict) -> list[unittest.TestCase]:
+def gate_tests(task: dict) -> list[TestCase]:
     """The tests a Django browser task runs, loaded as its ``manage.py test`` loads them."""
 
     words = shlex.split(body(task))

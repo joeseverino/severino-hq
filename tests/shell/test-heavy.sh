@@ -32,9 +32,14 @@ trap cleanup EXIT
 # mise it starts would inherit and so never wait, and inside its measured run,
 # which every run would take as its own.
 unset MISE_TASK_LOCKS MISE_TASK_LOCK_TIMEOUT HQ_MEASURED HQ_TURN_SHARE
-# The uv this checkout pins, for the test runs made from a directory whose
-# config names none, where a shim finds no version.
-uv="$(mise -C "${repo}" which uv)"
+# The uv this checkout pins, first on PATH from a directory of the suite's
+# own: the fixture's config names none, so a shim there finds no version, a
+# machine may have no uv of its own, and mise drops its own install
+# directories from the PATH a task inherits.
+mkdir "${work}/bin"
+ln -s "$(mise -C "${repo}" which uv)" "${work}/bin/uv"
+PATH="${work}/bin:${PATH}"
+export PATH
 
 fail() {
     echo "test-heavy: $*" >&2
@@ -87,7 +92,7 @@ run = "mise run quick"
 [tasks.spend]
 extends = "heavy"
 timeout = "2m"
-run = '"$UV" run --project "$REPO" --locked python manage.py test'
+run = 'uv run --project "$REPO" --locked python manage.py test'
 TOML
 # A test run as Django's parallel runner makes one: two workers, each holding
 # 32 MB and running a child, as a walk runs apart, that holds 32 MB and spends
@@ -256,7 +261,7 @@ one_line "${work}/out" "a heavy task that ran another"
 # A run of tests in the turn: its CPU holds the half second each child spent,
 # and its peak names the test run, two workers of 32 MB or more each and two
 # children apart from them.
-REPO="${repo}" UV="${uv}" mise -C "${main}" run spend >"${work}/out" 2>&1 || { cat "${work}/out" >&2; fail "a measured run of tests failed"; }
+REPO="${repo}" mise -C "${main}" run spend >"${work}/out" 2>&1 || { cat "${work}/out" >&2; fail "a measured run of tests failed"; }
 one_line "${work}/out" "a run of tests"
 line="$(measured "${work}/out")"
 cpu="$(printf '%s\n' "${line}" | sed -nE 's/.* wall, ([0-9.]+)s CPU,.*/\1/p')"
@@ -277,7 +282,7 @@ import sys
 
 sys.exit(subprocess.run(sys.argv[1:], check=False).returncode)
 PY
-(cd "${main}" && ./tools/lib/measured python3 -m wrapper "${uv}" run --project "${repo}" --locked python manage.py test) \
+(cd "${main}" && ./tools/lib/measured python3 -m wrapper uv run --project "${repo}" --locked python manage.py test) \
     >"${work}/out" 2>&1 || { cat "${work}/out" >&2; fail "a measured run of tests under a wrapper failed"; }
 one_line "${work}/out" "a run of tests under a wrapper"
 line="$(measured "${work}/out")"
