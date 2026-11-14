@@ -64,11 +64,14 @@ def palette_probes():
     return Probes({name: _read(check) for name, check in CHECKS.items() if check.palette})
 
 
-def geometry_probes():
+def geometry_probes(scripted=True):
     """The geometry's probes, as ``(source, arg)`` by check: every check whose
-    verdict does not depend on the palette."""
+    verdict does not depend on the palette, on a page whose script has run
+    when ``scripted``, else every one that holds without it."""
 
-    return Probes({name: _read(check) for name, check in CHECKS.items() if not check.palette})
+    return Probes(
+        {name: _read(check) for name, check in CHECKS.items() if not check.palette and (scripted or not check.scripted)}
+    )
 
 
 def table_probes():
@@ -78,11 +81,12 @@ def table_probes():
     return {name: _read(check)() for name, check in CHECKS.items() if check.table}
 
 
-def survey_checks(path, width):
-    """The checks the survey runs on ``path`` at ``width``, by name: the
-    probes' and the fills, which the gate reads in both palettes at once."""
+def survey_checks(path, width, scripted=True):
+    """The checks the survey runs on ``path`` at ``width``, with script or
+    without, by name: the probes' and the fills, which the gate reads in both
+    palettes at once."""
 
-    return [*geometry_probes(), *palette_probes(), "fills"]
+    return [*geometry_probes(scripted), *palette_probes(), "fills"]
 
 
 def _as_is(value):

@@ -25,8 +25,9 @@ lazy from playwright.sync_api import Error as BrowserError
 
 from hq.platform.core.csp_views import _blocked, _csp_violations, _directive
 from hq.platform.core.speculation import rules_document
+from hq.platform.core.stalls import stall_watch
 from hq.platform.core.stylesheets import stylesheet
-from hq.platform.core.test_runner import browser_failures, stall_watch
+from hq.platform.core.test_runner import browser_failures
 from hq.platform.core.tests.browser.probes.palette import (
     FILL_PAINTERS,
     FILL_STEPS,
@@ -800,14 +801,14 @@ class BrowserGate(SimpleTestCase):
     def findings(self, path, width):
         """What the layout rules find in HQ's own markup, checks that found
         nothing left out: the geometry and the palette checks in the palette
-        loaded, and the fills in both.
-        The vendored markup is stood in for while they read, and put back
-        however they end: each probe runs on its own."""
+        loaded, and the fills in both; on a page with no script, only those
+        that hold without it. The vendored markup is stood in for while they
+        read, and put back however they end: each probe runs on its own."""
 
         found = self.checked(
             {
                 "stand in": (STAND_IN, SELECTORS["vendored"]),
-                **geometry_probes(),
+                **geometry_probes(self.runs_script),
                 **palette_probes(),
                 "put back": (PUT_BACK, None),
             }

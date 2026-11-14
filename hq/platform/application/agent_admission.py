@@ -79,18 +79,30 @@ def admit(bearer: str, *, interface: str, source: str) -> Principal | Stopped | 
             # RFC 6750's word for a good token that grants too little, on both doors.
             unadmitted = Unadmitted("insufficient_scope", exc.reason, verified=True)
         else:
-            limited = agent_limits.LIMITS.take(agent_subject(principal))
-            if limited is not None:
-                return Stopped(principal, limited)
-            settle(principal.actor)
-            placed = agent_devices.place(source)
-            principal = replace(principal, device=placed.node_id)
-            observe(principal, placed.device)
-            if placed.refused is not None:
-                return Stopped(principal, agent_access.unplaced(placed.refused, placed.detail))
-            return principal
+            return admitted(principal, source=source)
     record_denial(interface=interface, reason=unadmitted.code, source=source, authenticated=False)
     return unadmitted
+
+
+def admitted(principal: Principal, *, source: str) -> Principal | Stopped:
+    """``principal``, whose token verified, let through from ``source`` as
+    ``admit`` lets one through: within its rate, placed and observed.
+
+    Apart from ``admit`` for a development server's agent door (``hq_call
+    --agent``), whose principal comes from its command line in place of a
+    token, so every step after the token is the one production takes.
+    """
+
+    limited = agent_limits.LIMITS.take(agent_subject(principal))
+    if limited is not None:
+        return Stopped(principal, limited)
+    settle(principal.actor)
+    placed = agent_devices.place(source)
+    principal = replace(principal, device=placed.node_id)
+    observe(principal, placed.device)
+    if placed.refused is not None:
+        return Stopped(principal, agent_access.unplaced(placed.refused, placed.detail))
+    return principal
 
 
 @contextlib.contextmanager

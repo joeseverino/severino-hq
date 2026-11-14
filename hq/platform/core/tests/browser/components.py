@@ -1858,6 +1858,12 @@ class ComponentLayoutTests(LayoutBrowserTests):
         region = "(probe) => getComputedStyle(document.querySelector(`[data-probe=${probe}]`).parentElement).overflowX"
         self.assertEqual(self.page.evaluate(region, "unfittable"), "auto")
         self.assertEqual(self.page.evaluate(region, "actions"), "visible")
+        # The server draws each region as a stop for the keyboard; the one
+        # that scrolls stays one, by its name, and the one that fits is none.
+        stop = """(probe) => ['role', 'aria-label', 'tabindex'].map((attribute) =>
+          document.querySelector(`[data-probe=${probe}]`).parentElement.getAttribute(attribute))"""
+        self.assertEqual(self.page.evaluate(stop, "unfittable"), ["group", "Unfittable", "0"])
+        self.assertEqual(self.page.evaluate(stop, "actions"), [None, None, None])
         self.assertEqual(self.page.evaluate(SIDEWAYS, SELECTORS["sideways"]), [])
         self.assertEqual(self.page.evaluate(HEADING_DROP, "unfittable"), 0)
 

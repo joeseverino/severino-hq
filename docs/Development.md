@@ -164,9 +164,15 @@ What it holds to:
 - Its one login is to the machine HQ's inventory says the server runs on
   (the machine page's "runs HQ", matched by this host's addresses), so
   Playbooks offers that machine alone and a run's page names where it ran.
-  With no such machine it has no login, and a run can't be asked. The login
-  reaches 127.0.0.1 and every play there sets its connection to local, so a
-  run acts on this Mac alone.
+  A scratch server with no such machine declares `scratch-host` at this
+  host's addresses in its own database, through the operator's create
+  command, when the worker first starts; `dev` declares nothing in its real
+  data, and with no such machine its worker has no login. The login reaches
+  127.0.0.1 and every play there sets its connection to local, so a run acts
+  on this Mac alone.
+- Its one change, `example.note_write`, writes one file in the run's own
+  temporary directory, which the worker removes as the run ends; where it
+  writes is no input's to say.
 
 What it cannot show: GitHub's word on a commit's signature, so the worker
 reports each commit it scans as verified; the renderer's real runner
@@ -174,8 +180,24 @@ connections and identities; and the egress table and container confinement the
 host gives the worker. A run that names a commit the local repository does not
 hold, as the showcase's do, is ended as failed to fetch by the first pass that
 finds it waiting, and a database that adopted another commit shows the local
-one as pending. Adopting the local commit makes `example.disk_report` its one
-playbook.
+one as pending. Adopting the local commit makes `example.disk_report` and
+`example.note_write` its playbooks.
+
+An agent's path is walked on the same server with `hq_call --agent <client>
+--grant <permissions>`, one MCP tool call made as that agent, the request on
+stdin as `hq_call` takes it:
+
+```sh
+echo '{"tool": "execute_capability", "arguments": {"name": "automation.example.note_write.run", "payload": {"hosts": ["scratch-host"], "parameters": {"text": "hello"}, "idempotency_key": "walk-1"}}}' \
+  | mise run manage --scratch -- hq_call --agent example-claude --grant read,manage_infrastructure
+```
+
+It answers only with DEBUG on and every host the server serves a loopback one,
+as a scratch server's are. The agent holds the permissions named and no more,
+and a name no agent's token can carry is refused. The call is admitted and
+served as an agent's over /mcp/ (its rate, the Agents page's brakes, its
+authorization and approval), so the change above answers `awaiting_approval`
+until a person approves it.
 
 Python dependencies come from `uv.lock`. `mise.toml` sets `UV_LOCKED`, so
 every task's `uv run` refuses a lock that `pyproject.toml` has moved past, and
@@ -903,7 +925,10 @@ Inter's widths fails.
 
 A test that stalls fails and says where. Each test process (every parallel
 worker) watches for progress: a test, a class fixture or a subtest starting, a
-subtest ending, a page in `dev:look`.
+subtest ending, a page in `dev:look`, or CPU spent by the process and every
+process under it, a browser included. A tree under 1% of a core is idle; one
+at work spends more however loaded the machine is, so load never stalls a
+test.
 
 Once none has come for `HQ_TEST_STALL_SECONDS` (300 unless the environment
 says otherwise; `0` turns it off, for a debugger), it prints a stall report.
@@ -914,7 +939,9 @@ run goes on.
 
 One that does not stop within 30 seconds of that ends its process, and a
 parallel worker that ends stops the whole run. So a hang never holds the heavy
-turn or a CI job until its bound.
+turn or a CI job until its bound. A loop that spins (a renderer inside
+`page.evaluate`) spends CPU, so the watch keeps it; its job's
+`timeout-minutes` bounds it on CI.
 
 #### Looking at a page
 

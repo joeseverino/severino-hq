@@ -25,7 +25,7 @@ from tools.gate import verdict as gate_verdict
 # failed tests of a real loader and runner as it reads the suite's.
 UNITTEST = """
 import sys, unittest
-from hq.platform.core.test_runner import FailureRecord, write_failures
+from hq.platform.core.run_report import FailureRecord, write_failures
 
 class Result(FailureRecord, unittest.TextTestResult):
     pass

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from django.test import SimpleTestCase
 
-from hq.platform.core.test_runner import StallWatch
+from hq.platform.core.stalls import StallWatch
 from hq.platform.core.tests.browser import gate
 
 

@@ -159,11 +159,26 @@ class LayoutBrowserTests(BrowserGate):
                 self.layout_audit_structural_rules,
             ]
         if width in WIDTHS:
-            rules += [*self.overflow_reads(name), self.a_heads_note_costs_its_head_no_room]
+            reads = [*self.overflow_reads(name), self.a_heads_note_costs_its_head_no_room]
+            rules += [rule for rule in reads if rule not in rules]
         return rules
+
+    @classmethod
+    def unscripted_rules(cls):
+        """Each rule the sweep without script holds, by name, with the widths
+        it holds it at on some page, read off the lists the sweep runs."""
+
+        lists = cls.__new__(cls)
+        held: dict[str, set[int]] = {}
+        for name in (*PAGES, *DENSE_PAGES):
+            for width in {*WIDTHS, *SPARSE_WIDTHS}:
+                for rule in (*lists.unscripted_reads(name, width), *lists.unscripted_openings(name, width)):
+                    held.setdefault(rule.__name__, set()).add(width)
+        return {rule: sorted(widths) for rule, widths in held.items()}
 
     def overflow_reads(self, name):
         rules = [
+            self.tables_scroll_inside_their_own_container,
             self.no_block_breaks_a_paragraph,
             self.words_stay_inside_the_box_that_holds_them,
             self.only_a_table_scrolls_sideways,
@@ -304,10 +319,11 @@ class LayoutBrowserTests(BrowserGate):
 
     @reads(TABLES)
     def tables_scroll_inside_their_own_container(self, name, tables):
-        """On a phone a wide table scrolls sideways; it never stacks into cards."""
+        """A table wider than its card scrolls sideways in its own region; it
+        never runs past the card or stacks into cards."""
 
         self.assertEqual(tables["found"], [])
-        if "<table" in self.pages[name]:
+        if "<table" in (self.pages.get(name) or self.page.content()):
             self.assertGreater(tables["seen"], 0, "the probe measured nothing")
 
     @reads(OVERLAPS)

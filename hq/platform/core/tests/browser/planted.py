@@ -116,9 +116,11 @@ PLANTS = {
         '<p><code style="display: inline-block; inline-size: 4ch; block-size: 1lh; background: #eee">Example overrun</code></p>'
     ),
     "tables": Plant(_TABLE.format("Example").replace('style="', 'style="display: block; ', 1)),
+    # Held only once script has run, which alone fits a table to its box.
     "tables fit": Plant(
         '<div class="table-scroll" style="inline-size: 10rem"><table class="data-table" style="min-inline-size: 20rem">'
-        "<tbody><tr><td>Example</td></tr></tbody></table></div>"
+        "<tbody><tr><td>Example</td></tr></tbody></table></div>",
+        scripted=True,
     ),
     # A column hidden while a cell still spans it, so the table keeps its width.
     "unseen columns": Plant(
@@ -174,12 +176,14 @@ PLANTS = {
         '<span style="display: block; max-inline-size: 6ch; overflow: hidden; text-overflow: ellipsis; '
         'white-space: nowrap">Example value cut short</span></td><td>Example</td></tr></tbody></table></div>'
     ),
-    # A value cut with an ellipsis in a row with no toggle to open it.
+    # A value cut with an ellipsis in a row with no toggle to open it, and no
+    # title, which only script gives a cut.
     "cut and closed": Plant(
         _TABLE.format(
             '<span style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">'
             "an-example-value-far-too-long-for-its-cell</span>"
-        )
+        ),
+        scripted=True,
     ),
     # The same in a row drawn open, held past the stylesheet's lifting of an
     # open row's cuts.

@@ -145,7 +145,7 @@ class FastGateMapRecordTests(GateTestCase):
 
 class FastGateMapContextTests(GateTestCase):
     def test_a_test_modules_class_fixtures_and_tests_run_in_its_context(self):
-        from hq.platform.core.test_runner import ClassTimedSuite
+        from hq.platform.core.run_report import ClassTimedSuite
 
         measuring = SimpleNamespace(context=None, get_option={"run:core": "ctrace"}.get)
         measuring.switch_context = lambda name: setattr(measuring, "context", name)

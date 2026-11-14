@@ -411,6 +411,7 @@ CUT_AND_CLOSED = (
     return false;
   };
   const rows = 'main table > tbody > tr:not([data-row-detail], .row-detail, .is-expanded)';
+  const scripted = matchMedia('(scripting: enabled)').matches;
   for (const row of document.querySelectorAll(rows)) {
     if (!row.checkVisibility() || row.closest('details:not([open])')) continue;
     if ([...row.querySelectorAll('[aria-expanded]')].some((toggle) => toggle.checkVisibility())) continue;
@@ -418,7 +419,8 @@ CUT_AND_CLOSED = (
     for (const cell of row.querySelectorAll(':scope > :is(td, th)')) {
       for (const {node, boxes, marked} of cutsIn(cell, unseen)) {
         const by = boxes.at(-1);
-        const why = !marked ? 'with no ellipsis' : narrow ? 'in a narrow box' : titled(node, boxes[0], cell) ? '' : 'with no title';
+        // Without script no row opens and nothing gives a cut its title, so a cut shown by its ellipsis is all a page can say.
+        const why = !marked ? 'with no ellipsis' : !scripted ? '' : narrow ? 'in a narrow box' : titled(node, boxes[0], cell) ? '' : 'with no title';
         if (why) found.push(`${describe(by)} "${by.textContent.trim().slice(0, 40)}" is cut ${why}, in a row that does not open`);
       }
     }
@@ -769,7 +771,8 @@ IDENTIFIER_VALUES = {
 CHECKS = {
     "cells": Check(CELLS, table=True),
     "tables": Check(TABLES, table=True, findings=lambda report: report["found"]),
-    "tables fit": Check((TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), table=True),
+    # Only script fits a table to its box (tables.js); without it a table scrolls in its region.
+    "tables fit": Check((TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), table=True, scripted=True),
     "unseen columns": Check((UNSEEN_COLUMNS, SELECTORS["table_scroll"]), table=True),
     "cut with room": Check(
         (CUT_WITH_ROOM, [SELECTORS["cut_box"], SELECTORS["name_box"], SELECTORS["unseen"]]), table=True
