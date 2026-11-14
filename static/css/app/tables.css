@@ -70,8 +70,8 @@
 /* Each cell keeps its column's place on its row's first line whatever leaves beside it; a cell across the row (a group's heading, an empty row) spans every column. */
 /* Its column is its place among its row's cells: a column that leaves keeps its cells in the row, undrawn. */
 .data-table > * > tr > * { grid-row: 1; grid-column: sibling-index(); min-inline-size: 0; }
-/* A cell across the row (a group's heading, the line beneath a row) asks its columns for no width, so it never widens one a region let go. */
-.data-table > * > tr > [colspan] { grid-column: 1 / -1; contain: inline-size; }
+/* A cell across the row (a group's heading, the line beneath a row) runs from where it stands to the row's end, beside a cell before it, and asks its columns for no width, so it never widens one a region let go. */
+.data-table > * > tr > [colspan] { grid-column: sibling-index() / -1; contain: inline-size; }
 .data-table th, .data-table td { padding: var(--row-pad) var(--space-6); text-align: left; font-size: var(--text-sm); overflow-wrap: break-word; }
 .data-table thead th { background: var(--surface-2); font-size: var(--text-xs); line-height: var(--heading-line); color: var(--muted); font-weight: 600; }
 /* The heading sticks under the page's chrome while its rows scroll by; a pane's sticks to the pane's own top. Its fill is opaque, so the rows pass under it. */
