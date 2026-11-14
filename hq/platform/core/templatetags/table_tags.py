@@ -319,6 +319,7 @@ def table_heading(
     *,
     css: str = "",
     drop: int = 0,
+    beneath: bool = False,  # in a narrow box its cells stand beneath the row's words, under its name
     sort: str = "",
     descending: str = "",
     local_sort: bool | None = None,  # left out, it follows from what the column holds
@@ -330,7 +331,10 @@ def table_heading(
     """One column heading.
 
     ``drop`` is the order a table too wide for its region lets the column go
-    in, 1 first, the rightmost of a rank first. ``sort`` names the field a
+    in, 1 first, the rightmost of a rank first. ``beneath`` keeps a column of
+    words every row must show (a change's two sides): in a narrow box each of
+    its cells stands on a line beneath the row's words, under the column's
+    name, as a row's controls do. ``sort`` names the field a
     server-sorted list orders this column by (``descending`` when its reverse is
     not ``-field``). Any other column that says something sorts the rows
     already on the page, whose region keeps the control only where it holds
@@ -345,6 +349,8 @@ def table_heading(
     if local_sort is None:
         local_sort = not sort and kind != "control" and not hidden and bool(label)
     check_drop(drop, css, label)
+    if beneath and drop:
+        raise ValueError(f"Column {label!r} stands beneath its row or leaves by its rank, not both.")
     classes = [css] if css else []
     classes += ["select-column"] if select_all else []
     classes += ["row-gutter"] if gutter else []
@@ -353,6 +359,7 @@ def table_heading(
         "kind": kind,
         "css": " ".join(classes),
         "drop": drop,
+        "beneath": beneath,
         "server_sort": _server_sort(context, sort, descending) if sort else None,
         "local_sort": local_sort,
         "hidden": hidden,

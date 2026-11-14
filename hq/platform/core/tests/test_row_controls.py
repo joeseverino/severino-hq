@@ -100,6 +100,23 @@ class RowControlsTests(SimpleTestCase):
         cells = [each for each in _marked(html) if each.tag == "td"]
         self.assertEqual([each.attrs.get("data-label") for each in cells], ["Rule", "Rule"])
 
+    def test_a_column_its_heading_sets_beneath_stands_under_its_name(self):
+        """Words every row must show (a change's two sides) take no rank: in a
+        narrow box each stands beneath the row's words under its column's
+        name, and a cell that says nothing is marked so it takes no line."""
+
+        rows = "<tr><td>Example</td><td>one</td><td></td></tr>"
+        head = '{% table_heading "Name" gutter=True %}{% table_heading "Before" beneath=True %}'
+        html = _table(rows, head=head + '{% table_heading "After" beneath=True %}')
+        cells = [each for each in _marked(html) if each.tag == "td"]
+        self.assertEqual([each.attrs.get("data-label") for each in cells], ["Before", "After"])
+        self.assertEqual(["data-blank" in each.attrs for each in cells], [False, True])
+        self.assertEqual([each.attrs.get("data-drop") for each in cells], [None, None])
+
+    def test_a_column_set_beneath_takes_no_rank(self):
+        with self.assertRaisesMessage(ValueError, "stands beneath its row or leaves by its rank"):
+            _table("<tr><td>Example</td><td>one</td></tr>", head='{% table_heading "Before" beneath=True drop=1 %}')
+
     def test_a_column_of_choices_never_leaves_with_its_rank(self):
         """A choice a reader makes is what the row is for, so the narrow box
         keeps its column whatever rank its heading gives it."""

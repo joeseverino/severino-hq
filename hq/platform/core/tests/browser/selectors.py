@@ -50,7 +50,8 @@ SELECTORS = {
     "row_opener": "main [data-row-toggle]:not([data-fold-toggle])",
     # A table's own rows of records, the lines beneath them left out.
     "own_records": ":scope > tbody > tr:not(.row-detail)",
-    "decision_dismiss": '[data-attention-item] .row-actions > button[name="key"]',
+    # Read inside one row of the queue, so it names nothing above the row's own cell.
+    "decision_dismiss": 'td.row-actions > button[name="key"]',
     "decision_title": "[data-attention-title]",
     "decision_steps": ".resolution-workflow",
     # What an item means: never cut.

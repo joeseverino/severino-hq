@@ -131,6 +131,7 @@ def _plain_selector(selector: str) -> str:
 
 # Whether what `selector` names in the line beneath a row is shown.
 _SHOWN_BENEATH = "(row, selector) => row.nextElementSibling?.querySelector(selector)?.checkVisibility() ?? false"
+_HELD_BENEATH = "(row, selector) => Boolean(row.nextElementSibling?.querySelector(selector))"
 
 
 # A table whose one cell holds a phrase, which a probe measures beside a
@@ -347,7 +348,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
                     # One Dismiss is shown: at the row's end, or beneath its words in a narrow box.
                     self.assertEqual(row.locator(f"{SELECTORS['decision_dismiss']} >> visible=true").count(), 1)
                     # The row's steps are in its line beneath, drawn by the server.
-                    if not row.locator(SELECTORS["decision_steps"]).count():
+                    if not row.evaluate(_HELD_BENEATH, SELECTORS["decision_steps"]):
                         continue
 
                     def steps_shown(row=row):
@@ -1930,7 +1931,12 @@ class ComponentLayoutTests(LayoutBrowserTests):
             range.selectNodeContents(box);
             const inside = box.getBoundingClientRect().width - parseFloat(pad.paddingLeft) - parseFloat(pad.paddingRight);
             const spare = inside - range.getBoundingClientRect().width;
-            const off = parts.filter((part) => part.getBoundingClientRect().top > top + 1 || part.scrollWidth > part.clientWidth);
+            // A part is text of its box, set within the box's line: on the
+            // next line it stands a line lower, never a fraction of one.
+            const off = parts.filter((part) => {
+              const drawn = part.getBoundingClientRect();
+              return drawn.top > top + drawn.height / 2 || part.scrollWidth > part.clientWidth;
+            });
             if (off.length || spare < 0)
               found.push(`${box.textContent} spares ${spare.toFixed(2)}px, ${off.length} of its parts off its line or cut`);
           }

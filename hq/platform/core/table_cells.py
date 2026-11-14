@@ -177,6 +177,8 @@ class Cells(HTMLParser):
         super().__init__(convert_charrefs=True)
         # Whether its tables' rows may sort on the page at all.
         self.sorts = sorts
+        # The columns of the table being marked whose headings set them beneath.
+        self.stacked: set[int] = set()
         self.tables = 0
         # How many rows each of the region's own tables holds outside its head.
         self.bodies: list[int] = []
@@ -427,7 +429,12 @@ class Cells(HTMLParser):
             for place, cell in _placed(row)
             if cell.tops and all(cell.tops) and not cell.loose and place != named
         }
-        beneath = states | {place for row in records for place, _ in _row_controls(row, kinds, named)}
+        # A column its heading sets beneath (`{% table_heading beneath=True %}`):
+        # words every row must show, such as a change's two sides.
+        self.stacked = {
+            at for at, cell in enumerate(heads[-1] if heads else []) if "data-stacks" in cell.attrs and at != named
+        }
+        beneath = states | self.stacked | {place for row in records for place, _ in _row_controls(row, kinds, named)}
         # A field a reader fills in is what the row is for too, kept in its column.
         fields = {place for row in records for place, cell in _placed(row) if cell.fields}
         ranked = {at: rank for at, rank in drops.items() if at not in beneath | fields | empty}
@@ -441,7 +448,7 @@ class Cells(HTMLParser):
         ]
         if not (self.sorts and _sorts(records)):
             self.cuts += _sort_controls(heads)
-        self.marks.setdefault(self.table_at, []).append(_layout(kinds, named, empty, ranked, beneath, width))
+        self.marks.setdefault(self.table_at, []).append(_layout(kinds, named, empty, ranked, beneath, width, frozenset(self.stacked)))
         # A row group drawn as `display: contents` loses the role its tag
         # gives it; a table, row or cell on a grid keeps its own.
         for start in self.sections:
@@ -463,6 +470,11 @@ class Cells(HTMLParser):
                     (at, cell)
                     for at, cell in _placed(row)
                     if at in states and cell.closed and "colspan" not in cell.attrs
+                ]
+                stated += [
+                    (at, cell)
+                    for at, cell in _placed(row)
+                    if at in self.stacked and "colspan" not in cell.attrs
                 ]
                 for cell in dict(stated + _row_controls(row, kinds, named)).values():
                     self.marks.setdefault(cell.start, []).append(" data-beneath")
@@ -540,9 +552,9 @@ class Cells(HTMLParser):
         # Its column's name, for where it stands away from its heading: a
         # column let go shows in its open row, a field beneath the row's
         # words, as do the words a column of controls holds where a row has
-        # no control.
+        # no control and the words of a column its heading sets beneath.
         worded = body and kind == "control" and not cell.controls and not cell.says_nothing
-        named_away = at in drops or cell.fields or worded
+        named_away = at in drops or cell.fields or worded or (body and at in self.stacked)
         if named_away and at < len(names) and names[at] and "data-label" not in cell.attrs:
             marks.append(f' data-label="{html.escape(names[at])}"')
         if body and kind in _CUT_KINDS and not cell.says_nothing:
@@ -725,7 +737,13 @@ RANKS = 6
 
 
 def _layout(
-    kinds: dict[int, str], named: int, empty: set[int], ranked: dict[int, int], beneath: set[int], width: int
+    kinds: dict[int, str],
+    named: int,
+    empty: set[int],
+    ranked: dict[int, int],
+    beneath: set[int],
+    width: int,
+    stacked: frozenset[int] = frozenset(),
 ) -> str:
     """The table's grid, written on it as custom properties alone: each
     column's track from its kind (``TRACKS``), and each width the region
@@ -754,7 +772,7 @@ def _layout(
         # A column that stands beneath the row's words in a narrow box is as
         # wide as its cells beside them, so once they leave it it is as wide
         # as its clipped heading: nothing.
-        if at in beneath:
+        if at in beneath and at not in stacked:
             grows = "hold"
         if kind == "name" and beneath:
             floor = f"max({floor}, {_BESIDE_CONTROLS})"
@@ -788,7 +806,9 @@ def _layout(
         if grows == "share":
             kept = f"var(--keep-{ranked[at]})" if at in ranked else "var(--whole)"
             least = f"max({least}, {floor} * {kept})"
-        most = "max-content" if grows == "hold" or at in ranked else "auto"
+        # A column of words set beneath grows no further than its asks either:
+        # its cells leave it in a narrow box.
+        most = "max-content" if grows == "hold" or at in ranked or at in stacked else "auto"
         tracks.append(f"minmax({least}, {most})")
     needs = {0: [floor for at, floor in floors.items() if at not in ranked]}
     for rank in sorted(set(ranked.values())):

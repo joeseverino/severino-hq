@@ -280,7 +280,8 @@ _NARROW = (
 # A wide one: a table of four columns, which takes the whole row.
 _WIDE = (
     '{% table_region "Example hosts" %}<table class="data-table"><thead><tr>'
-    '<th scope="col">Name</th><th scope="col">State</th><th scope="col">Address</th><th scope="col">Seen</th>'
+    '{% table_heading "Name" %}{% table_heading "State" drop=3 %}{% table_heading "Address" drop=1 %}'
+    '{% table_heading "Seen" drop=2 %}'
     "</tr></thead><tbody><tr><td>example-01</td><td>Online</td><td>192.0.2.10</td><td>Today</td></tr></tbody>"
     "</table>{% endtable_region %}"
 )

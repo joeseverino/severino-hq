@@ -28,6 +28,20 @@ SIDEWAYS = (
     }
     return false;
   };
+  // The part of a box in sight: what a box that clips its content shows of
+  // it. What such a box cuts is held on its own (the cut checks), and what
+  // it clips away entirely (a heading drawn as nothing) is drawn nowhere.
+  const seen = (el, r) => {
+    let left = r.left;
+    let right = r.right;
+    for (let up = el.parentElement; up && up !== document.body; up = up.parentElement) {
+      if (!['hidden', 'clip'].includes(getComputedStyle(up).overflowX)) continue;
+      const by = up.getBoundingClientRect();
+      left = Math.max(left, by.left);
+      right = Math.min(right, by.right);
+    }
+    return right > left ? {left, right} : {left: 0, right: 0};
+  };
   for (const el of document.querySelectorAll('body *')) {
     const r = box(el);
     if (r.width < 2 || r.height < 2 || !el.checkVisibility({ visibilityProperty: true }) || held(el)) continue;
@@ -35,7 +49,7 @@ SIDEWAYS = (
     const boxed = ['auto', 'scroll', 'hidden', 'clip'].includes(style.overflowX);
     if (boxed && !allows(el) && el.scrollWidth > el.clientWidth + 1 && style.textOverflow !== 'ellipsis') {
       found.push(`${describe(el)} holds ${el.scrollWidth}px in ${el.clientWidth}px (overflow-x: ${style.overflowX})`);
-    } else if (r.right > width + 1 || r.left < -1) {
+    } else if (seen(el, r).right > width + 1 || seen(el, r).left < -1) {
       found.push(`${describe(el)} spans ${Math.round(r.left)}..${Math.round(r.right)}px`);
     }
   }

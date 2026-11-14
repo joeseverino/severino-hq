@@ -219,7 +219,10 @@ the section or card around a table is one already, often by the same name.
 as tall as its rows up to a fixed reading height, as the topology ledger is,
 and scrolls past it. A table never stacks into cards and is not swiped through:
 a row that offers controls sets them on a line beneath its words in a narrow
-box, each cell still a cell of its row (below).
+box, each cell still a cell of its row (below). A column of words every row
+must show, such as a change's two sides, stands beneath the same way under its
+column's name (`{% table_heading ... beneath=True %}`), since a rank would
+hide it behind the row's toggle.
 
 A key/value table (row headers, no `thead`) sizes its label column to its
 longest label.

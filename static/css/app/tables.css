@@ -327,10 +327,12 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
   .data-table > tbody { --row-pad: var(--space-6); }
   .data-table > tbody > tr > [data-beneath] { grid-row: auto; grid-column: 1 / -1; contain: inline-size; justify-content: flex-start; padding-block-start: 0; }
   .data-table > tbody > tr > [data-beneath] > :is(.muted, p) { text-align: start; }
+  /* A cell that says nothing has no line beneath to take. */
+  .data-table > tbody > tr > [data-beneath][data-blank] { display: none; }
   /* A status there has no column to fill, so its pill is as wide as it says. */
   .data-table > tbody > tr > td[data-pill-only][data-beneath] .pill { display: inline-flex; }
-  /* A field there is told by its column's name, which no heading shows above it now, and so are the words a column of controls holds where a row has no control. */
-  .data-table > tbody > tr > [data-beneath][data-label]:is(:has(select, textarea, input:not([type="hidden"])), [data-kind="control"]:not(:has(button, a[href])))::before {
+  /* A field there is told by its column's name, which no heading shows above it now, and so are the words a column of controls holds where a row has no control and the words of a column set beneath (`beneath=True`). */
+  .data-table > tbody > tr > [data-beneath][data-label]:is(:has(select, textarea, input:not([type="hidden"])), [data-kind="control"]:not(:has(button, a[href])), [data-kind="prose"], [data-kind="identifier"])::before {
     content: attr(data-label); align-self: center; margin-inline-end: var(--space-3); color: var(--muted); font-size: var(--text-xs);
   }
   .data-table:has(> tbody > tr > * > [data-row-toggle]) > tbody > tr:has(> .row-gutter) > [data-beneath] { padding-inline-start: var(--row-gutter); }

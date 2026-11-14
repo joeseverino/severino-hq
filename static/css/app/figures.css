@@ -200,7 +200,9 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .relation-verb { grid-area: 1 / 2 / 2 / 4; font-size: var(--text-3xs); color: var(--muted); }
 .relation-link > .pill { grid-area: 1 / 4 / 3 / 5; }
 /* Policy names and ports, wrapping between them: in a table a chip is held whole, elsewhere a chip wider than its line breaks at its seams. */
-.code-list { display: inline-flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); }
+/* A run of chips is no wider than what holds it, and a chip longer than the run gives way inside it, where it is cut or broken as its own rules say. */
+.code-list { display: inline-flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); max-inline-size: 100%; }
+.code-list > * { min-inline-size: 0; }
 /* The title says where the link goes, so the arrow is for the eye alone. */
 .external-link::after { content: "\00a0\2197" / ""; font-size: .85em; }
 /* A row of links, each a chip (partials/_link_chips.html): a place to go, so
