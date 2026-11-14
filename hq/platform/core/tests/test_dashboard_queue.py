@@ -13,6 +13,7 @@ from hq.platform.application.dashboard import work_queue
 from hq.platform.application.derivation_testing import uncached
 from hq.platform.application.plugins import gather_attention
 from hq.platform.application.tests.markup import hrefs, select, with_class, within
+from hq.platform.application.tests.test_decisions import row_hrefs
 from hq.platform.application.ui import DomainOverview
 from hq.platform.application.workflow_contracts import ActionLink
 from hq.platform.application.workflows import claim_resolution_plan
@@ -81,7 +82,7 @@ class DashboardQueueTests(TestCase):
                 response = self.client.get(path)
                 if path == "/action-items/":
                     self.assertContains(response, "Reconcile the bill")
-                    self.assertEqual(hrefs(response).count("/example/evidence/"), 1)
+                    self.assertEqual(row_hrefs(response).count("/example/evidence/"), 1)
                     # The verification is a write: posted with the token, never a link.
                     self.assertTrue(select(response, "formaction", "/dashboard/glance/"))
                     self.assertNotIn("/dashboard/glance/", hrefs(response))

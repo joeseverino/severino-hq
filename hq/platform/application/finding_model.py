@@ -9,7 +9,7 @@ import shlex
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Annotated, Any, NotRequired, TypedDict
+from typing import TYPE_CHECKING, Annotated, NotRequired, TypedDict
 
 from pydantic import ConfigDict, with_config
 
@@ -247,10 +247,6 @@ def per_connection(
         for node, values in connections_carrying(estate, key)
     )
     return tuple(sorted(found, key=lambda finding: finding.title))
-
-
-def built_findings(fields: tuple[dict[str, Any], ...]) -> tuple[Finding, ...]:
-    return tuple(Finding(**item) for item in fields)
 
 
 # Its own config, so it is written one way under every answer that holds it.

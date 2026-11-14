@@ -334,7 +334,8 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 opened = 0
                 for row in rows.all():
                     self.assertTrue(row.locator(SELECTORS["decision_title"]).is_visible())
-                    self.assertTrue(row.locator(SELECTORS["decision_dismiss"]).is_visible())
+                    # One Dismiss is shown: at the row's end, or beneath its words in a narrow box.
+                    self.assertEqual(row.locator(f"{SELECTORS['decision_dismiss']} >> visible=true").count(), 1)
                     # The row's steps are in its line beneath, drawn by the server.
                     if not row.locator(SELECTORS["decision_steps"]).count():
                         continue
@@ -1698,7 +1699,8 @@ class ComponentLayoutTests(LayoutBrowserTests):
                     self.page.evaluate(SETTLE)
                     columns = [SELECTORS["queue_table"], SELECTORS["queue_act"]]
                     closed = self.page.evaluate(_QUEUE_COLUMNS, columns)
-                    self.assertTrue(closed["acts"])
+                    # In a narrow box the buttons stand beneath the words and their column leaves.
+                    self.assertTrue(closed["acts"] or closed["narrow"])
                     if how == "toggle":
                         self.page.locator(toggles).evaluate_all(PRESS_EVERY_SHOWN)
                         self.assertTrue(self.page.locator(toggles + '[aria-expanded="true"]').count())

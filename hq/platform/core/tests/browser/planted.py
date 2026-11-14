@@ -372,6 +372,19 @@ PLANTS = {
         * 2
         + "</div>"
     ),
+    # A queue row in a narrow box whose button shows only in a whole box, so
+    # in the narrow one it waits behind the row's toggle.
+    "queue actions behind the toggle": Plant(
+        '<table class="data-table queue-table" style="--box: narrow"><tbody><tr class="queue-row">'
+        '<td class="queue-what">Example</td><td class="queue-act">'
+        '<button type="button" class="btn compact example-held">Example</button></td></tr></tbody></table>',
+        css="@container style(--box: narrow) { .example-held { display: none; } }",
+    ),
+    # A button's word drawn at no size, a glyph standing in its place.
+    "words swapped for a glyph": Plant(
+        '<button type="button" class="btn compact example-glyph" style="font-size: 0">Example</button>',
+        css='.example-glyph::before { content: "\\00d7" / ""; font-size: 1rem; }',
+    ),
     "contrast": Plant('<p style="color: #c8c8c8; background: #fff">Example words too faint to read</p>'),
     "fields": Plant(
         '<input type="text" aria-label="Example" style="border: 1px solid #fafafa; background: transparent">'
@@ -397,6 +410,25 @@ _FLOWS = (
 # differs from, so a check that finds everything is caught as surely as one
 # that finds nothing.
 PASSES = {
+    # A queue row in a narrow box whose button leaves its cell and shows in
+    # the words' cell instead, as the queue row draws it beneath its words.
+    "queue actions behind the toggle": Plant(
+        '<table class="data-table queue-table" style="--box: narrow"><tbody><tr class="queue-row">'
+        '<td class="queue-what">Example<div class="example-beneath">'
+        '<button type="button" class="btn compact">Example</button></div></td><td class="queue-act">'
+        '<button type="button" class="btn compact example-held">Example</button></td></tr></tbody></table>',
+        css=(
+            "@container style(--box: narrow) { .example-held { display: none; } }"
+            " @container style(--box: whole) { .example-beneath { display: none; } }"
+        ),
+    ),
+    # A link's word drawn at no size with no glyph in its place (a calendar's
+    # sliver), and a glyph button named by no word of its own.
+    "words swapped for a glyph": Plant(
+        '<a class="btn compact" href="#example" style="font-size: 0">Example</a>'
+        '<button type="button" class="btn compact example-glyph" aria-label="Example"></button>',
+        css='.example-glyph::before { content: "\\00d7" / ""; font-size: 1rem; }',
+    ),
     # Three readings one to a line, an odd count going from one row to one a
     # line; and a row's two buttons beside words given their whole line.
     "readings one to a line with room": Plant(

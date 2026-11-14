@@ -13,6 +13,17 @@ from hq.platform.application.workflow_contracts import ActionLink, WorkflowOutco
 from .markup import elements, hrefs, select, text, texts, with_class, within
 
 
+def row_hrefs(html):
+    """Every link's target, leaving out the copy of a queue row's buttons a
+    narrow box draws beneath its words (`queue-beneath`) in place of their cell."""
+
+    return [
+        link.attrs["href"]
+        for link in elements(html, "a")
+        if "href" in link.attrs and not any("queue-beneath" in above.classes for above in link.ancestors)
+    ]
+
+
 def card(item) -> str:
     return render_to_string("partials/_work_queue.html", {"items": [item]})
 
@@ -54,7 +65,7 @@ class DecisionTests(SimpleTestCase):
         self.assertEqual(shown["actions"], [asdict(action)])
         self.assertEqual([step["phase"] for step in shown["workflow"]["steps"]], ["verify"])
         html = card(item)
-        self.assertEqual(hrefs(html).count("/example/review/"), 1)
+        self.assertEqual(row_hrefs(html).count("/example/review/"), 1)
         (recheck,) = select(html, "formaction", "/example/check/")
         self.assertEqual(recheck.attrs["form"], "hq-post")
         self.assertEqual(elements(html, "form"), [])
@@ -145,9 +156,10 @@ class DecisionTests(SimpleTestCase):
             id(next(ancestor for ancestor in reversed(link.ancestors) if ancestor.tag == "td"))
             for link in elements(html, "a")
             if link.attrs.get("href", "").startswith("/example/")
+            and not any("queue-beneath" in above.classes for above in link.ancestors)
         }
         self.assertEqual(len(cells), 1)
-        self.assertEqual(sorted(hrefs(html)), [f"/example/{n}/" for n in range(3)])
+        self.assertEqual(sorted(row_hrefs(html)), [f"/example/{n}/" for n in range(3)])
 
     def test_the_title_goes_to_the_thing_and_the_named_next_step_is_a_link(self):
         subject = asdict(ActionLink("subject", "example-host", "read", "/machines/example-host/"))
@@ -222,13 +234,15 @@ class OriginTests(SimpleTestCase):
     def test_a_finding_says_its_rule_and_the_line_it_is_declared_at(self):
         from hq.platform.application.findings import RULES
 
-        rule = RULES[0]
-        found = decision({"key": f"hq.example:finding:{rule.name}:node:1", "source": "Example", "status": "serious"})
+        for rule in RULES:
+            with self.subTest(rule=rule.name):
+                key = f"hq.example:finding:{rule.name}:node:1"
+                found = decision({"key": key, "source": "Example", "status": "serious"})
 
-        self.assertEqual((found["origin"]["rule"], found["origin"]["title"]), (rule.name, rule.title))
-        path, _, line = found["origin"]["where"].rpartition(":")
-        self.assertTrue(path.startswith("hq/") and path.endswith(".py"), path)
-        self.assertTrue(line.isdigit())
+                self.assertEqual((found["origin"]["rule"], found["origin"]["title"]), (rule.name, rule.title))
+                path, _, line = found["origin"]["where"].rpartition(":")
+                self.assertTrue(path.startswith("hq/") and path.endswith(".py"), path)
+                self.assertTrue(line.isdigit())
 
     def test_anything_else_says_where_it_came_from(self):
         found = decision({"key": "example.domain:Renewals:Passport", "source": "Example", "status": "attention"})

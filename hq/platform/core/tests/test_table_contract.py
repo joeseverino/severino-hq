@@ -438,6 +438,23 @@ class TableTagTests(SimpleTestCase):
         marked = [each.attrs.get("data-col") for each in elements(_render(source), "td") if "data-long" in each.attrs]
         self.assertEqual(marked, ["status", "long"])
 
+    def test_the_words_beside_a_rows_controls_keep_their_line(self):
+        long = "A sentence long enough to wrap beside a row's buttons"
+        source = (
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
+            '{% table_heading "State" "status" %}{% table_heading "Note" %}<th></th></tr></thead><tbody>'
+            f'<tr><td data-col="short">a</td><td>Up</td><td data-col="long">{long}</td>'
+            '<td class="row-actions"><button>Read</button></td></tr>'
+            f'<tr><td>b</td><td>Up</td><td>{long}</td><td class="select-column"><input type="checkbox"></td></tr>'
+            "</tbody></table>{% endtable_region %}"
+        )
+        marked = {
+            each.attrs.get("data-col"): each.attrs["data-words"]
+            for each in elements(_render(source), "td")
+            if "data-words" in each.attrs
+        }
+        self.assertEqual(marked, {"short": "line", "long": "floor"})
+
     def test_a_status_too_long_to_keep_wraps(self):
         long = "Ask me first for container stack and tailnet policy changes"
         source = (

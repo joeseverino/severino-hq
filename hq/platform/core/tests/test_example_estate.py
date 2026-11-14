@@ -418,12 +418,13 @@ class WalkedStatesTests(TestCase):
         self.assertEqual(sorted({name for name in ids if ids.count(name) > 1}), [])
         for fold in select(page, "data-fold-toggle"):
             self.assertTrue(fold.attrs.get("aria-label"), fold)
-        # The name is judged by the certificate that serves it, the newer one.
+        # The name is judged by the certificate that serves it, the newer one,
+        # and raised once: by the finding, which names it among what it serves.
         (item,) = [
             item
             for group in page.context["action_groups"]
             for item in group["items"]
-            if item["source_id"] == "hq.estate" and held_twice in item["label"]
+            if held_twice in " ".join((item["label"], *(value for _label, value in item["facts"])))
         ]
         self.assertIn("expires in 5 days", item["label"])
         with projection_scope():

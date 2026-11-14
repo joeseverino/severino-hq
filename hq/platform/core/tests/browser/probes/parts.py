@@ -98,6 +98,37 @@ READINGS_ONE_TO_A_LINE_WITH_ROOM = (
 )
 
 
+# A closed row of the queue in a narrow box shows every control it shows in a
+# whole box: what waits on a person stands in the row (beneath its words, on
+# a phone), never only behind the row's toggle. The row's own table is drawn
+# in a whole box for a moment to read what it offers there.
+QUEUE_ACTIONS_BEHIND_THE_TOGGLE = (
+    "([rows, pressed]) => {"
+    + DESCRIBE
+    + """
+  const found = [];
+  const said = (el) => el.textContent.trim().replace(/\\s+/g, ' ');
+  const offered = (row) => new Set([...row.querySelectorAll(pressed)]
+    .filter((el) => el.checkVisibility() && !el.matches('[data-row-toggle], [data-fold-toggle]') && said(el))
+    .map(said));
+  for (const row of document.querySelectorAll(rows)) {
+    if (!row.checkVisibility() || row.matches('.is-expanded')) continue;
+    const table = row.closest('table');
+    if (getComputedStyle(table).getPropertyValue('--box').trim() !== 'narrow') continue;
+    const narrow = offered(row);
+    const before = [table.style.getPropertyValue('--box'), table.style.getPropertyPriority('--box')];
+    table.style.setProperty('--box', 'whole', 'important');
+    const whole = offered(row);
+    table.style.setProperty('--box', ...before);
+    if (!before[0]) table.style.removeProperty('--box');
+    const held = [...whole].filter((label) => !narrow.has(label));
+    if (held.length) found.push(`${describe(row)} shows "${held.join(' / ')}" only once opened in its narrow box`);
+  }
+  return found;
+}"""
+)
+
+
 def reading_problems(readings):
     """What a reader loses of the readings: a line drawn under its mark, or
     cut short."""
@@ -439,4 +470,8 @@ CHECKS = {
     "bare folds": (BARE_FOLDS, [SELECTORS["section_fold"], SELECTORS["drawn_when_opened"]]),
     "readings": Check((_READINGS_OF, SELECTORS["readings"]), findings=reading_problems),
     "readings one to a line with room": (READINGS_ONE_TO_A_LINE_WITH_ROOM, SELECTORS["readings"]),
+    "queue actions behind the toggle": (
+        QUEUE_ACTIONS_BEHIND_THE_TOGGLE,
+        [f"main {SELECTORS['queue_table']} > tbody > tr:is(.queue-row, .queue-family)", SELECTORS["pressed"]],
+    ),
 }

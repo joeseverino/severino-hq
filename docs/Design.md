@@ -1221,9 +1221,13 @@ with no script every row shows all of it. The line beneath holds, in order:
 - the reason it cannot be done from here, as a sentence and never as a step;
 - the pages that help look into it (`Insight(links=...)`), the topology's as
   icons with HQ's tooltip;
-- the buttons past the first two, in one place under the rest. On a phone
-  every button waits there, each the line's width, while Dismiss stays in the
-  row as a mark.
+- the buttons past the first two, in one place under the rest.
+
+In a narrow box (a phone, or a narrow card on a wide screen) the row's
+buttons stand beneath its words, closed or open, sharing the line's width,
+and Dismiss or Restore ends that line in its word. A reader never opens a row
+to find what it offers. The survey holds both: "queue actions behind the
+toggle" and "words swapped for a glyph".
 
 The word is `partials/_urgency_pill.html`. A Cmd- or Ctrl-click on it opens
 what raised it, read from the code rather than written down. That is the finding rule,

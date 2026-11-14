@@ -142,6 +142,11 @@
 @container style(--box: narrow) {
   .data-table > tbody td[data-long]::before { inline-size: min(16ch, var(--hold)); }
 }
+/* A row's words beside its controls (`data-words`, table_cells.ROW_WORDS) keep a line of `--row-words`: words that fit one stay on it and longer ones hold out for it, so a table with no room for both gives way (tables.js), or scrolls with no script, rather than read a few words a line beside a column of buttons. A narrow box has no column left to give, so there the floor would only push the table past its region. */
+@container not style(--box: narrow) {
+  .data-table > tbody > tr > :is(td, th)[data-words="line"] { white-space: nowrap; }
+  .data-table > tbody > tr > :is(td, th)[data-words="floor"]::before { content: ""; display: block; inline-size: var(--row-words); }
+}
 /* Outside a narrow box the columns showing have the room they ask (tables.js), so such a line keeps it. */
 @container style(--box: whole) {
   /* The region wraps what such a cell says in one `.kept-line`, as wide as its line up to the share and the icon it opens with (`--hang`, figures.css); an identifier in it breaks past the share, a pill or a time never wraps. */
@@ -548,7 +553,7 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 :where(.data-table[data-line="flat"]) .row-columns > dd > .narrow-more { display: contents; }
 @container style(--box: narrow) {
   :where(.data-table[data-line="flat"]) .row-columns > dd { display: grid; grid-template-columns: minmax(0, 1fr); }
-  .data-table[data-line="flat"] .row-columns > dd .btn { justify-content: center; white-space: normal; text-align: center; }
+  .data-table[data-line="flat"] .row-columns > dd .btn { white-space: normal; text-align: center; }
 }
 .data-table .row-detail:hover { background: none; }
 

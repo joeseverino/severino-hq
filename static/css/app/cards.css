@@ -174,10 +174,12 @@ a.kpi, a.kpi:hover { text-decoration: none; color: inherit; }
 .queue-table.is-dense .attention-title { font-size: var(--text-sm); font-weight: 500; }
 /* The words keep a line of `--row-words` beside the buttons; a table that has
    not that room is wider than its region, so it takes its narrow box, where
-   the buttons wait in the line beneath and the words keep the row. */
-.queue-table .queue-what { min-width: var(--row-words); }
+   the buttons stand beneath the words and the words keep the row. The line
+   is the words' own, inside the cell's padding (a cell's min-width counts
+   it), so it is held by the words' first box. */
+.queue-table .queue-what > .attention-head { min-width: var(--row-words); }
 @container style(--box: narrow) {
-  .queue-table .queue-what { min-width: 10rem; }
+  .queue-table .queue-what > .attention-head { min-width: 10rem; }
 }
 .queue-table .queue-act { width: 1%; text-align: right; white-space: nowrap; padding-block-start: calc(var(--row-pad) - var(--space-1)); padding-inline-end: var(--space-4); }
 /* What a row offers, then the reader's own dismiss, side by side on one line whatever the cell's white-space says, so the column asks for that line and the other columns give way; the dismiss is one word and never gives way. */
@@ -185,17 +187,25 @@ a.kpi, a.kpi:hover { text-decoration: none; color: inherit; }
 .queue-table .queue-buttons > [data-triage] { flex: none; }
 .queue-table .queue-buttons > * { display: flex; flex-wrap: nowrap; align-items: flex-start; gap: var(--space-3); margin: 0; }
 .queue-table .queue-act form { margin: 0; }
-/* A row with nothing to press, or whose buttons wait in the line beneath in a
-   narrow table, gives the title the room its padding would keep. */
+/* A row with nothing to press gives the title the room its padding would keep. */
 .queue-table .queue-act:not(:has(> *)) { padding: 0; }
-@media (scripting: enabled) {
-  @container style(--box: narrow) {
-    .queue-table .queue-act:not(:has(> :not(.narrow-more, .queue-buttons), .queue-buttons > :not(.narrow-more))) { padding: 0; }
-    /* On a phone the title has the row: Dismiss is a mark at its end, still
-       named by its word. */
-    .queue-table :is(.queue-row:not([data-dismissed]), .queue-family) .queue-dismiss { width: 2rem; max-width: none; padding: 0; justify-content: center; font-size: 0; }
-    .queue-table :is(.queue-row:not([data-dismissed]), .queue-family) .queue-dismiss::before { content: "\00d7" / ""; font-size: var(--text-lg); line-height: 1; }
-  }
+/* In a narrow box the title has the row and what it offers stands beneath its
+   words (`queue-beneath`, the `narrow-only` copy in the words' cell): the
+   owner's buttons share the line's width, Dismiss or Restore ends it in its
+   word (on a line of its own where the buttons would have under 24ch beside
+   it), and the cell the buttons stood in empties to no width. It stays a
+   cell, so a row opened, whose columns tables.js holds as it measured them,
+   keeps two. The buttons stand one to a line, in a track that asks the line
+   for no width (`minmax(0, 1fr)`), as the opened line's do (tables.css), so a
+   long label never widens the table. */
+@container style(--box: narrow) {
+  .queue-table .queue-act { width: 0; padding: 0; }
+  .queue-table .queue-act > * { display: none; }
+  .queue-table .queue-beneath { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-3); margin-top: var(--space-4); }
+  .queue-beneath > * { margin: 0; }
+  .queue-beneath > .attention-actions { flex: 1 1 0; min-width: min(100%, 24ch); display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
+  .queue-beneath > [data-triage] { flex: none; }
+  .queue-beneath > :last-child:not(.attention-actions) { margin-inline-start: auto; }
 }
 /* The opened line (table_tags._detail_row) is flat (`data-line`, tables.css): what the row holds back, then one place for every button the row holds. */
 .queue-more > :first-child { margin-top: 0; }
@@ -207,7 +217,7 @@ a.kpi, a.kpi:hover { text-decoration: none; color: inherit; }
 .queue-table .count { margin-inline-start: var(--space-1); color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* A row dismissed in place: its title, quiet, and the way back. */
 .queue-row[data-dismissed] :is(.attention-detail, .queue-more, .queue-what > [data-row-toggle]),
-.queue-row[data-dismissed] .queue-buttons > :not([data-triage]),
+.queue-row[data-dismissed] :is(.queue-buttons, .queue-beneath) > :not([data-triage]),
 .queue-row[data-dismissed] :is(.attention-meta, .pill.is-mark) { display: none; }
 .queue-row[data-dismissed] .attention-title { color: var(--muted); font-weight: 400; }
 .queue-row[data-dismissed] .attention-title::before { content: "Dismissed: " / "Dismissed: "; }

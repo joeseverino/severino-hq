@@ -364,6 +364,30 @@ ACTIONS_BESIDE_SQUEEZED_WORDS = (
 )
 
 
+# A control of words shows them: one whose words are drawn at no size while a
+# glyph its stylesheet writes stands in their place (a lone "x" for Dismiss)
+# leaves a reader to guess what it does.
+WORDS_SWAPPED_FOR_A_GLYPH = (
+    "(selector) => {"
+    + DESCRIBE
+    + """
+  const found = [];
+  const drawn = (el, pseudo) => !['none', 'normal'].includes(getComputedStyle(el, pseudo).content);
+  for (const el of document.querySelectorAll(selector)) {
+    if (!el.checkVisibility() || !/\\p{L}/u.test(el.textContent)) continue;
+    if (!drawn(el, '::before') && !drawn(el, '::after')) continue;
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    let shown = false;
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (/\\p{L}/u.test(node.textContent) && parseFloat(getComputedStyle(node.parentElement).fontSize) > 0) shown = true;
+    }
+    if (!shown) found.push(`${describe(el)} draws "${el.textContent.trim().slice(0, 24)}" at no size behind a glyph`);
+  }
+  return found;
+}"""
+)
+
+
 # A filter bar's choice (a select, a filter's menu, the sort) is as wide as
 # its options, never stretched over the bar: one drawn wider than it lays out
 # at its own width, the bar's room being its search's. One a bar too narrow
@@ -399,6 +423,7 @@ CHECKS = {
         ACTIONS_BESIDE_SQUEEZED_WORDS,
         [f"{SELECTORS['row_actions_cell']}, {SELECTORS['queue_actions_cell']}", ROW_WORDS],
     ),
+    "words swapped for a glyph": (WORDS_SWAPPED_FOR_A_GLYPH, SELECTORS["pressed"]),
     "control words on one line": (
         WRAPPED_CONTROLS,
         [SELECTORS["pressed"], SELECTORS["choice"], SELECTORS["unseen"], SELECTORS["vendored"]],

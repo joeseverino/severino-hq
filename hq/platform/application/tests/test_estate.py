@@ -379,7 +379,7 @@ class EdgeCertificateExpiryTests(TestCase):
         self.assertNotIn("status", figure)
         self.assertEqual(self.items(), [])
 
-    def test_an_edge_certificate_inside_the_window_says_renewal_failed(self):
+    def test_an_edge_certificate_inside_the_window_is_the_next_expiry_and_the_finding_s_to_raise(self):
         self.edge(10)
 
         figure = self.figure()
@@ -387,10 +387,7 @@ class EdgeCertificateExpiryTests(TestCase):
         self.assertIn("example.com", figure["detail"])
         self.assertEqual(figure["status"], "attention")
         self.assertEqual(figure["url"], reverse("zones:detail", args=["example.com"]))
-        (item,) = self.items()
-        self.assertEqual(item.status, "attention")
-        self.assertIn("example.com", item.title)
-        self.assertEqual(item.subject.url, reverse("zones:detail", args=["example.com"]))
+        self.assertEqual(self.items(), [])
 
 
 def in_days(days):
@@ -460,14 +457,10 @@ class CertificateListTests(TestCase):
 
         with projection_scope():
             found = estate_reading().certificates
-            items = [item for item in estate_attention() if item.eyebrow == "Certificates"]
 
         self.assertEqual(
             sorted((item.subject, item.days) for item in found), [("example.com", 5), ("www.example.com", -1)]
         )
-        self.assertEqual(len({item.key for item in items}), len(items))
-        (held_twice,) = [item for item in items if item.title.startswith("example.com ")]
-        self.assertEqual(held_twice.value, "5")
 
 
 class StaleGlanceTests(TestCase):

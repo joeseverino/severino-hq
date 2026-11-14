@@ -61,9 +61,8 @@ class EveryRuleSaysHowTests(TestCase):
 
         for rule in RULES:
             with self.subTest(rule=rule.name):
-                self.assertEqual(
+                self.assertTrue(
                     _detects_findings(rule.detect),
-                    rule.name not in _BUILT_FROM_FIELDS,
                     f"{rule.name}'s detect is a function annotated (estate: FindingEstate) -> tuple[Finding, ...]",
                 )
 
@@ -75,11 +74,6 @@ class EveryRuleSaysHowTests(TestCase):
 
         self.assertIn("Device approval", steps_text(finding))
         self.assertEqual(finding["remedies"], [])
-
-
-# certificate_expiry still words a certificate's expiry as a dict of a
-# Finding's fields; held here so the set empties once it builds Findings.
-_BUILT_FROM_FIELDS = {"certificate-expiring"}
 
 
 def _detects_findings(detect) -> bool:

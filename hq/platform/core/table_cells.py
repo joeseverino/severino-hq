@@ -25,6 +25,10 @@ _CELL_KINDS = frozenset({"numeric", "control"})
 # The characters a line of prose or a status keeps whole; one longer wraps,
 # and its cell holds out for a floor (`data-long`, tables.css).
 LONG = 48
+# The characters of a line that fits `--row-words` (tokens.css), the line a
+# row's words keep beside its controls: one no longer stays whole there, and
+# a longer one holds out for that line (`data-words`, tables.css).
+ROW_WORDS = 30
 
 # The tags that end a line of a cell.
 _LINE_ENDS = frozenset({"br", "div", "p", "li", "dt", "dd"})
@@ -431,6 +435,28 @@ class Cells(HTMLParser):
                 )
             if marks:
                 self.marks[cell.start] = marks
+        if body:
+            self._mark_words(row, kinds)
+
+    def _mark_words(self, row: _Row, kinds: dict[int, str]) -> None:
+        """Mark the words a row stands beside its controls, which keep a line
+        of their own there rather than wrap a few to a line beside buttons. A
+        column of tick-boxes is no control a row offers."""
+
+        place, controls, words = 0, False, []
+        for cell in row.cells:
+            kind = kinds.get(place)
+            place += int(cell.attrs.get("colspan") or 1)
+            classes = _classes(cell.attrs)
+            if "colspan" in cell.attrs or "select-column" in classes:
+                continue
+            if "control" in (kind, cell.attrs.get("data-kind")) or "row-actions" in classes:
+                controls = True
+            elif kind not in _KEPT_KINDS and not cell.says_nothing:
+                words.append(cell)
+        for cell in words if controls else ():
+            mark = ' data-words="line"' if cell.longest <= ROW_WORDS else ' data-words="floor"'
+            self.marks.setdefault(cell.start, []).append(mark)
 
     def _column_marks(self, cell: _Cell, kind: str | None, *, body: bool, blank: bool, named: bool) -> list[str]:
         """What a cell that stands in one column says of itself there, and the
