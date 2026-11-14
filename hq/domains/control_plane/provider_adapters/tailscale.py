@@ -4,6 +4,7 @@ import json
 from collections.abc import Mapping
 from typing import Any
 
+from django.utils.text import capfirst
 from pydantic import Field
 
 from hq.platform.application.ui import ended
@@ -206,6 +207,90 @@ def _policy_readout(
     )
 
 
+def _policy(spec: Mapping[str, Any]) -> dict[str, Any] | None:
+    """A declaration's policy document, parsed; None where it is not JSON (a
+    document with comments), which the change's own line diff then shows."""
+
+    text = str(spec.get("document") or "")
+    try:
+        parsed = json.loads(text) if text.strip() else {}
+    except ValueError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _names(value: Any) -> list[str]:
+    return [str(item) for item in value] if isinstance(value, list) else []
+
+
+def _access(policy: Mapping[str, Any]) -> list[tuple[str, str, str]]:
+    """Each (source, destination, port) the policy admits, as its grants and
+    its older ``acls`` write them, in the document's order."""
+
+    found: list[tuple[str, str, str]] = []
+    for grant in policy.get("grants") or ():
+        if isinstance(grant, Mapping):
+            found += [
+                (src, dst, port)
+                for src in _names(grant.get("src"))
+                for dst in _names(grant.get("dst"))
+                for port in _names(grant.get("ip"))
+            ]
+    for acl in policy.get("acls") or ():
+        if isinstance(acl, Mapping) and acl.get("action", "accept") == "accept":
+            for src in _names(acl.get("src") or acl.get("users")):
+                for target in _names(acl.get("dst") or acl.get("ports")):
+                    dst, _, port = target.rpartition(":")
+                    found.append((src, dst or target, port if dst else "*"))
+    return found
+
+
+def _deny_tests(policy: Mapping[str, Any]) -> list[tuple[str, str, str]]:
+    """Each (source, protocol, destination) a test of the policy says is denied."""
+
+    return [
+        (str(test.get("src", "")), str(test.get("proto") or ""), dst)
+        for test in policy.get("tests") or ()
+        if isinstance(test, Mapping)
+        for dst in _names(test.get("deny"))
+    ]
+
+
+def _policy_change_words(before: Mapping[str, Any], after: Mapping[str, Any]) -> str:
+    """What a policy change opens and which deny tests it drops ("Opens
+    dell:22 to mac; drops the test that mac is denied dell:22"), or "" when
+    it does neither."""
+
+    was, now = _policy(before), _policy(after)
+    if was is None or now is None:
+        return ""
+    clauses: list[str] = []
+    held = set(_access(was))
+    opened: dict[str, dict[str, list[str]]] = {}
+    for src, dst, port in _access(now):
+        ports = opened.setdefault(src, {}).setdefault(dst, [])
+        if (src, dst, port) not in held and port not in ports:
+            ports.append(port)
+    # Sources opened the same places are said together.
+    by_reach: dict[str, list[str]] = {}
+    for src, places in opened.items():
+        reach = ", ".join(f"{dst}:{', '.join(ports)}" for dst, ports in places.items() if ports)
+        if reach:
+            by_reach.setdefault(reach, []).append(src)
+    clauses += [f"opens {reach} to {', '.join(sources)}" for reach, sources in by_reach.items()]
+    kept = set(_deny_tests(now))
+    dropped: dict[tuple[str, str], list[str]] = {}
+    for src, proto, dst in _deny_tests(was):
+        if (src, proto, dst) not in kept and dst not in dropped.get((src, proto), []):
+            dropped.setdefault((src, proto), []).append(dst)
+    clauses += [
+        f"drops the test that {src} is denied {', '.join(dsts)}{f' over {proto}' if proto else ''}"
+        for (src, proto), dsts in dropped.items()
+    ]
+    said = "; ".join(clauses)
+    return capfirst(said)
+
+
 POLICY = ProviderSpec(
     TAILNET_POLICY_KIND,
     "The tailnet's access policy. HQ runs the policy's tests before applying a change.",
@@ -239,8 +324,11 @@ POLICY = ProviderSpec(
     # The most valuable single control in the estate: it decides who can
     # reach what, everywhere, and a mistake in it is not confined to one
     # service. A credential that can change this can open the network, so
-    # changing it asks a person first.
+    # changing it asks a person first. That person is the check on what a
+    # change opens, so the change is headed by what it opens and which deny
+    # tests it drops.
     requires_approval=True,
+    change_words=_policy_change_words,
     change_effects=(
         (
             "document",

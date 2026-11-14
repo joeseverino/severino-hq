@@ -229,7 +229,7 @@ def preview(held: ApprovalRequest) -> ChangePreview:
     declared = dict(held.baseline.get("spec") or {})
     requested = held.payload.get("spec")
     if isinstance(requested, dict):
-        return compare(declared, requested, label="Would change", amends=True)
+        return compare(declared, requested, label=_headed(held, declared, requested, "Would change"), amends=True)
     if held.capability.endswith(".remove"):
         return compare(declared, {}, label="Would be removed")
     if held.capability in _lifecycle_capabilities():
@@ -238,8 +238,17 @@ def preview(held: ApprovalRequest) -> ChangePreview:
         return ChangePreview(label="", rows=(), lines=())
     live = held.baseline.get("observed")
     if isinstance(live, Mapping) and live:
-        return compare(dict(live), declared, label="Live record changes")
+        return compare(dict(live), declared, label=_headed(held, live, declared, "Live record changes"))
     return compare({}, declared, label="Would be applied")
+
+
+def _headed(held: ApprovalRequest, before: Mapping[str, Any], after: Mapping[str, Any], label: str) -> str:
+    """What heads a change to a declaration: its kind's words for what it does
+    (``ProviderSpec.change_words``), else ``label``."""
+
+    provider = PROVIDERS.get(held.resource_kind)
+    said = provider.change_words(before, after) if provider is not None and provider.change_words else ""
+    return said or label
 
 
 def _lifecycle_capabilities() -> frozenset[str]:

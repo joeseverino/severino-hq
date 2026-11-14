@@ -12,6 +12,7 @@ Each step runs the way a verified token's call does in production, so the
 Agents page and the approvals queue read what HQ itself records.
 """
 
+import json
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import timedelta
@@ -57,6 +58,7 @@ from hq.platform.core.models import AgentDevice, AgentIdentity, LinkedAccount, O
 from . import doors
 from .infra import CERTIFICATE
 from .names import LAPTOP_NAME, MACHINE, PHONE_NAME, TAILNET, now, tailnet_v4
+from .network import POLICY
 
 AGENT = "example-agent"
 # What its token carries: reading HQ, mirroring the documentation index, and
@@ -131,6 +133,34 @@ def seen(owner=None):
     # Its last call, a few minutes ago, from the server.
     AgentIdentity.objects.filter(client_id=AGENT).update(last_seen=now() - timedelta(minutes=4))
     AgentDevice.objects.filter(identity__client_id=AGENT).update(last_seen=now() - timedelta(minutes=4))
+
+
+# The tailnet policy as HQ keeps it in the seed that holds a change to it.
+POLICY_KEY = "tailnet-policy"
+
+
+def asks_to_open_the_policy():
+    """The tailnet policy kept in HQ, its test that the server's SSH port is
+    shut beside the owner's, and the agent asking to open that port to the
+    admins and drop the test: held for the owner, as every change to the
+    policy is."""
+
+    kept = {**POLICY, "tests": [{**POLICY["tests"][0], "deny": ["tag:server:22"]}]}
+    ManagedResource.objects.create(key=POLICY_KEY, kind="tailscale.policy", spec={"document": json.dumps(kept)})
+    opened = {
+        **POLICY,
+        "grants": [*POLICY["grants"], {"src": ["group:admins"], "dst": ["tag:server"], "ip": ["22"]}],
+    }
+    agent = _from(token_principal(CLAIMS, API_INTERFACE), MACHINE)
+    with doors.called("infrastructure.resource.update"):
+        update = run_capability(
+            "infrastructure.resource.update",
+            {"key": POLICY_KEY, "kind": "tailscale.policy", "spec": {"document": json.dumps(opened)}},
+            principal=agent,
+            target=POLICY_KEY,
+            idempotency_key="example-policy-update",
+        ).answer
+    _expect(update, is_held(update), "held for the operator")
 
 
 def lately(owner=None):

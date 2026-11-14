@@ -361,6 +361,11 @@ class ProviderSpec:
     # declaration it would write: a sentence per thing in it that reaches
     # further than the kind's name suggests. Shown on the approval card.
     review_warnings: Callable[[dict[str, Any]], tuple[str, ...]] | None = None
+    # What a change from one declaration of this kind to another does, in the
+    # words a person reads first (what it opens, a check it drops), or "" when
+    # nothing needs saying ahead of the field-by-field change. It heads that
+    # change wherever a held request is shown.
+    change_words: Callable[[Mapping[str, Any], Mapping[str, Any]], str] | None = None
     # Fields that are optional to the model but unanswerable-by-default when
     # the record does not exist yet. An NPM proxy keeps whatever certificate it
     # already has when this is blank, which is a sensible default for an edit
