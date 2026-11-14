@@ -111,6 +111,10 @@ class Insight:
     # (the run, the day, the figures), and a counter that moves on its own
     # (days since) belongs in ``value``.
     notice: bool = False
+    # A request a person decides, by its Approve or Reject: it ends only when
+    # decided, so a reader can never set it aside, and a mark from before
+    # does not hide it.
+    held: bool = False
     # What kind of matter this is, as its owner would head a list of them:
     # "Image advisories", "Tailscale updates". Several open items of one family
     # from one source are folded under that heading in the queue, so a dozen of

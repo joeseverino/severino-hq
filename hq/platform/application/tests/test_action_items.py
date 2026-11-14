@@ -152,6 +152,18 @@ class AsideStateTests(TestCase):
 
         self.assertEqual(list(ActionItemRead.objects.values_list("key", flat=True)), [OTHER["key"]])
 
+    def test_a_held_request_is_never_set_aside_and_anything_else_is(self):
+        held = {**OTHER, "held": True}
+
+        set_aside(self.user, [ITEM["key"], held["key"]], aside=True, current=[ITEM, held])
+
+        # Decided by its Approve or Reject, it waits until then: a mark,
+        # however it was made, does not hide it.
+        self.assertEqual(
+            [item["key"] for item in with_aside_state([ITEM, held], self.user) if not item["aside"]], [held["key"]]
+        )
+        self.assertEqual(waiting_count([ITEM, held], self.user), 1)
+
     def test_bringing_back_undoes_setting_aside(self):
         set_aside(self.user, [ITEM["key"]], aside=True, current=[ITEM])
         set_aside(self.user, [ITEM["key"]], aside=False, current=[ITEM])
@@ -230,6 +242,17 @@ class PageTests(TestCase):
 
         self.client.post(reverse("action_items_bring_back"), form_keyed({"key": row_value(ITEM)}))
         self.assertEqual(waiting_count([ITEM, OTHER], self.user), 2)
+
+    def test_a_held_requests_row_offers_no_dismiss_and_any_other_row_does(self):
+        held = {**OTHER, "held": True}
+        with mock.patch("hq.platform.core.action_item_views.work_queue", return_value=[ITEM, held]):
+            page = self.client.get(reverse("action_items"))
+
+        dismissed = [
+            button.attrs.get("value") for button in select(page, "formaction", reverse("action_items_set_aside"))
+        ]
+        self.assertIn(row_value(ITEM), dismissed)
+        self.assertNotIn(row_value(held), dismissed)
 
     def test_one_row_is_dismissed_without_composing_the_queue(self):
         with mock.patch("hq.platform.core.action_item_views.work_queue", side_effect=AssertionError("composed")):

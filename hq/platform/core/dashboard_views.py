@@ -14,7 +14,6 @@ from django.views.generic import TemplateView, View
 from hq.domains.contacts import inbox
 from hq.platform.application import action_items as queue_state, fragments, getting_started
 from hq.platform.application.asks import AskMixin, Took
-from hq.platform.application.attention import APPROVAL_KEY
 from hq.platform.application.cadence import controller_standing
 from hq.platform.application.calendar import calendar_month, month_of
 from hq.platform.application.calendar_entries import calendar_choices
@@ -149,7 +148,7 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
         # Everything else is the count above it and in the header.
         held, serious = [], []
         for item in doing:
-            if item["key"].partition(":")[2].startswith(APPROVAL_KEY):
+            if item.get("held"):
                 held.append(item)
             elif item["status"] == "serious":
                 serious.append(item)

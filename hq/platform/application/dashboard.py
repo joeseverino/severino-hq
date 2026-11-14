@@ -115,6 +115,8 @@ class QueueItem(TypedDict):
     actions: list[WrittenAction]
     subject: WrittenAction | None
     notice: bool
+    # A request a person decides, never set aside (``Insight.held``).
+    held: bool
     family: str
     # Why it is as urgent as its status says (``Insight.why``).
     why: str
@@ -149,6 +151,7 @@ def queue_item(source_id: str, source: str, item: Insight) -> QueueItem:
         "actions": [asdict(action) for action in item.actions],
         "subject": asdict(item.subject) if item.subject else None,
         "notice": item.notice,
+        "held": item.held,
         "family": item.family,
         "why": item.why,
         "clears": item.clears,

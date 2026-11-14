@@ -39,10 +39,11 @@ def row_value(item):
 def triage(item=None, *, sorts=True, family="", url=""):
     """``{% triage item sorts=triage as away %}``: the reader's own way to sort
     a queue row, Dismiss, or Restore once it is dismissed, posting the row's
-    key; none where the queue is not the reader's to sort (``sorts``). With
+    key; none where the queue is not the reader's to sort (``sorts``) or the
+    row is not (``action_items.sortable``). With
     ``family`` and the part's dismiss ``url``, Dismiss of a whole family."""
 
-    if not sorts:
+    if not sorts or (item is not None and not action_items.sortable(item)):
         return None
     if family:
         return PageAction("Dismiss", f"{url}&family={family}", method="post")

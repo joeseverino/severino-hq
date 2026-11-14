@@ -1389,7 +1389,9 @@ looking at it. What a reader can do with one they are not acting on is dismiss
 it. It leaves their queue and their counts, stays reachable in a fold below,
 and comes back on its own when it gets worse or grows. The header and the
 dashboard count what waits; a dashboard with only dismissed items says so and
-links to them, and never claims all is clear.
+links to them, and never claims all is clear. A held request
+(`Insight(held=True)`) is decided by its Approve or Reject, never dismissed:
+its row has no Dismiss and no mark hides it (`action_items.sortable`).
 
 **A family folds.** An owner names what kind of matter an item is
 (`Insight(family="Image advisories")`), in the words it would head a list

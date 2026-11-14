@@ -78,13 +78,20 @@ def item_revision(item: Any) -> str:
     return hashlib.sha256(json.dumps(seen).encode()).hexdigest()[:16]
 
 
+def sortable(item: dict[str, Any]) -> bool:
+    """Whether a reader may set ``item`` aside: a held request is decided,
+    never set aside, so it waits until decided and no mark hides it."""
+
+    return not item.get("held")
+
+
 def with_aside_state(items: list[dict[str, Any]], user) -> list[dict[str, Any]]:
     """The items, each with whether ``user`` set this revision of it aside. One query."""
 
     aside = dict(
         ActionItemRead.objects.filter(user=user, key__in=[item["key"] for item in items]).values_list("key", "revision")
     )
-    return [{**item, "aside": aside.get(item["key"]) == item["revision"]} for item in items]
+    return [{**item, "aside": sortable(item) and aside.get(item["key"]) == item["revision"]} for item in items]
 
 
 def waiting_count(items: list[dict[str, Any]], user) -> int:

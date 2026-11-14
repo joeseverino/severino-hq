@@ -399,10 +399,6 @@ def approval_queue() -> str:
     return f"{reverse('core:audit_list')}?awaiting=1"
 
 
-# The start of a held request's key in the queue, after its source's id.
-APPROVAL_KEY = "approval:"
-
-
 def waiting_for_approval() -> tuple[Insight, ...]:
     """One item per change an agent asked for. Nothing is written until a person decides."""
 
@@ -414,13 +410,14 @@ def waiting_for_approval() -> tuple[Insight, ...]:
             Insight(
                 status="attention",
                 eyebrow="Approval",
-                key=f"{APPROVAL_KEY}{held.id}",
+                key=f"approval:{held.id}",
                 title=str(sentence),
                 value="1",
                 body="" if sentence.whole else _asked_change(shown),
                 why="An agent asked for this change, and HQ writes nothing until a person approves or rejects it.",
                 url=_approval_entry(held),
                 since=held.created_at,
+                held=True,
                 actions=tuple(
                     ActionLink(
                         name=f"approval.{decision}",
