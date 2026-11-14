@@ -12,6 +12,7 @@ from hq.platform.application.ui import ended
 
 from ..connection_shapes import OAUTH_CLIENT
 from ..consoles import tailscale_machine
+from ..observations import tailscale as readings
 from ..observations.contract import ReadingPart
 from ..permissions import Tailscale
 from ..provider_spec import (
@@ -356,6 +357,7 @@ SHARED = (
 
 # Declarations only: the controller half is still the core's.
 DEFINITIONS = (DEVICE, POLICY)
+OBSERVATIONS = readings.OBSERVATIONS
 
 # The connection this provider's credential arrives through, beside its kinds:
 # admitting the module admits both.

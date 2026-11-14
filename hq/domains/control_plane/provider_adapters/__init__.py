@@ -1,10 +1,12 @@
-"""The provider modules HQ admits, and every declaration they emit.
+"""The modules HQ admits, and every declaration and reading they emit.
 
 Admission is this closed tuple, owned by HQ, and its order is the registries'
 order: a module outside it contributes nothing. What each module declares, and
 what admitting one takes, is docs/Architecture.md#providers.
 """
 
+from ..observations import host, hq, public_registry
+from ..observations.contract import registry
 from ..provider_spec import ConnectionKind
 from . import (
     adguard,
@@ -19,9 +21,29 @@ from . import (
     tls,
 )
 
-ADMITTED = (tls, npm, github, portainer, tailscale, declarations, caddy, adguard, cloudflare, automation)
+# A provider is its adapter, which brings its readings module's OBSERVATIONS
+# with it. A source HQ reads with no connection a person makes (the
+# controller's own machine, HQ's own requests, the keyless public registries)
+# has no adapter, so its readings module is admitted alone.
+ADMITTED = (
+    tls,
+    npm,
+    github,
+    portainer,
+    tailscale,
+    declarations,
+    caddy,
+    adguard,
+    cloudflare,
+    automation,
+    host,
+    hq,
+    public_registry,
+)
 
-DECLARATIONS = tuple(definition for module in ADMITTED for definition in module.DEFINITIONS)
+DECLARATIONS = tuple(definition for module in ADMITTED for definition in getattr(module, "DEFINITIONS", ()))
+
+OBSERVATIONS = registry(tuple(spec for module in ADMITTED for spec in getattr(module, "OBSERVATIONS", ())))
 
 
 def admitted_connections(modules) -> dict[str, ConnectionKind]:
@@ -57,6 +79,7 @@ __all__ = [
     "ADMITTED",
     "CONNECTIONS",
     "DECLARATIONS",
+    "OBSERVATIONS",
     "admitted_connections",
     "undeclared_connections",
 ]

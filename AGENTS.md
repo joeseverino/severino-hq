@@ -105,8 +105,8 @@ until a genuine shared contract appears.
 
 A provider is named once, in `ADMITTED`
 (`hq/domains/control_plane/provider_adapters/__init__.py`). Everything else
-derives from its adapter's `DEFINITIONS` and `CONNECTIONS` and its readings
-module, and `test_admission.py` there holds that to be enough. Its Go half in
+derives from its adapter's `DEFINITIONS`, `CONNECTIONS` and `OBSERVATIONS`
+(its readings module's), and `test_admission.py` there holds that to be enough. Its Go half in
 `controller/providers/` is handed its connection as a typed value
 (`r.Supplied.For`), never a setting by name
 ([Providers](docs/Architecture.md#providers)).

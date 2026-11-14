@@ -18,7 +18,7 @@ from hq.platform.application.ui import ended
 
 from . import provider_spec
 from .connection_shapes import SHAPES
-from .observations import _SPEC_MODULES, OBSERVATIONS
+from .observations import OBSERVATIONS
 from .provider_adapters import ADMITTED, CONNECTIONS
 from .provider_adapters.contracts import FAILURES, REFUSALS
 from .provider_spec import ConnectionShape, SharedValue
@@ -226,7 +226,7 @@ def _records() -> Iterable[dict[str, dict[str, Any]]]:
 
 def _declared() -> Iterable[dict[str, dict[str, Any]]]:
     yield _enumerations()
-    for module in (provider_spec, *ADMITTED, *_SPEC_MODULES):
+    for module in (provider_spec, *ADMITTED):
         for value in getattr(module, "SHARED", ()):
             yield _shared(value)
     yield from _records()

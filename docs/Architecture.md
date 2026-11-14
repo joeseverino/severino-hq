@@ -875,8 +875,12 @@ A kind naming a connection provider no admitted module declares fails at
 import.
 
 A provider's readings are a module in
-`hq/domains/control_plane/observations/`, registered by discovery in name
-order ([Derived Facts](Derived-Facts.md#readings)). The edges its declarations
+`hq/domains/control_plane/observations/`, which its adapter brings as
+`OBSERVATIONS`; a source HQ reads with no connection a person makes (the
+controller's own machine, HQ's own requests, the keyless public registries) has
+no adapter, so its readings module is admitted alone. Only an admitted module's
+readings are registered, in admission order
+([Derived Facts](Derived-Facts.md#readings)). The edges its declarations
 produce are in [Derived Facts](Derived-Facts.md#topology).
 
 Adding a provider is writing its modules and adding one name to `ADMITTED`.

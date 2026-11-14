@@ -1237,46 +1237,65 @@
         "dataValue": {
           "data": {
             "error": "",
-            "facet": "",
+            "facet": "certificate",
             "items": [
               {
-                "addresses": [
-                  "100.101.102.104"
+                "connection_ref": "npm",
+                "domains": [
+                  "*.example.com"
                 ],
-                "connection_ref": "adguard",
-                "filtering_enabled": true,
-                "ids": [
-                  "100.101.102.104"
-                ],
-                "name": "macbook-pro-16",
-                "source": "persistent",
-                "use_global_settings": true
+                "expires_on": "2026-02-08T09:30:00+00:00",
+                "id": 1,
+                "name": "wildcard-example-com",
+                "provider": "other",
+                "serves": [
+                  "hq.example.com",
+                  "photos.example.com",
+                  "streaming.example.com",
+                  "git.example.com",
+                  "home-automation-dashboard.example.com"
+                ]
               },
               {
-                "addresses": [
-                  "100.101.102.105"
+                "connection_ref": "npm",
+                "domains": [
+                  "media.example.com"
                 ],
-                "connection_ref": "adguard",
-                "filtering_enabled": true,
-                "ids": [
-                  "100.101.102.105"
+                "expires_on": "2026-01-03T09:30:00+00:00",
+                "id": 2,
+                "name": "media.example.com",
+                "provider": "letsencrypt",
+                "serves": []
+              },
+              {
+                "connection_ref": "npm",
+                "domains": [
+                  "media.example.com"
                 ],
-                "name": "iphone-16-pro",
-                "source": "persistent",
-                "use_global_settings": true
+                "expires_on": "2026-01-03T09:30:00+00:00",
+                "id": 3,
+                "name": "media.example.com",
+                "provider": "other",
+                "serves": []
               }
             ],
-            "kind": "adguard.client",
-            "label": "DNS client",
+            "kind": "npm.certificate",
+            "label": "NPM certificate",
             "observed_at": "2026-01-15T09:30:00+00:00",
-            "provider": "adguard",
-            "provider_label": "AdGuard Home",
+            "provider": "npm",
+            "provider_label": "Nginx Proxy Manager",
             "read_by": "controller",
-            "records": 2,
+            "records": 3,
             "refusal": "",
-            "relation": "Name in AdGuard",
+            "relation": "Served with certificate",
             "remedy": "",
-            "requires": [],
+            "requires": [
+              "Certificates: View Only",
+              "Proxy Hosts: View Only",
+              "Redirection Hosts: View Only",
+              "404 Hosts: View Only (API: dead_hosts)",
+              "Streams: View Only"
+            ],
             "state": "readable"
           },
           "ok": true

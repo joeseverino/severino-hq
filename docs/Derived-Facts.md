@@ -20,8 +20,9 @@ says when HQ may act on what it read.
 
 ## Readings
 
-A reading is registered once, in its provider's module under
-`hq/domains/control_plane/observations/`:
+A reading is declared once, in its source's module under
+`hq/domains/control_plane/observations/`, and registered through
+`provider_adapters.ADMITTED`, which admits that module:
 
 ```python
 class PagesProjectRecord(ObservationRecord):

@@ -10,6 +10,7 @@ from hq.platform.core.network import split_host_port
 from ..certificate_authorities import npm_issuer
 from ..connection_shapes import LOGIN
 from ..names import normalized_hostname
+from ..observations import npm as readings
 from ..provider_spec import ConnectionKind, ProviderModel, ProviderSpec, applies
 from .contracts import IngressPolicy, ServedCertificate
 
@@ -218,6 +219,7 @@ DEFINITION = ProviderSpec(
     ),
 )
 DEFINITIONS = (DEFINITION,)
+OBSERVATIONS = readings.OBSERVATIONS
 
 # The connection this provider's credential arrives through, beside its kinds:
 # admitting the module admits both.
