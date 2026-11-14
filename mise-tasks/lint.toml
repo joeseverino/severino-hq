@@ -6,8 +6,8 @@
 # fast. Its sources are the files it reads, then the dependencies, tool pins
 # and task definitions every gate reads; `!` takes out a path its tool never
 # reads, as the tool's own config says. outputs = [] keeps mise from skipping
-# it as up to date. tools/tests/test_drift_sources.py holds a drift gate's
-# sources to every file of the checkout its run opens.
+# it as up to date. A drift gate's sources are the files its output is
+# derived from, not every file its run happens to open.
 
 ["lint:ruff"]
 description = "Ruff lints the Python and holds it to its format"
@@ -409,15 +409,13 @@ run = 'if [ "${usage_fix:-}" = true ]; then uv run python manage.py api_openapi;
 ["lint:drift-api-examples"]
 description = "The machine API's recorded examples are what its tests receive"
 hide = true
+# The examples are JSON answers: a template or stylesheet the recorded tests
+# happen to render changes none of them.
 sources = [
   "**/*.py",
   "hq/platform/api/openapi-examples.json",
   "hq/domains/control_plane/bridge_base.json",
   "deploy/systemd/severino-hq-secrets.timer",
-  "templates/**",
-  "static/css/**",
-  "static/js/**",
-  "static/vendor/scalar/**",
   "pyproject.toml",
   "uv.lock",
   "mise.toml",
