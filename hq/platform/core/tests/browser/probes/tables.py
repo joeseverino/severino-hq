@@ -39,12 +39,8 @@ TABLES = (
     "() => {"
     + DESCRIBE
     + """
-  // A table is laid out on its own grid (tables.css): a row group drawn with
-  // no box of its own names the role its tag no longer gives it,
-  // its heading row is drawn, every row is a subgrid of its columns, and each
-  // cell on a row's first line stands under the heading of its column. A
-  // cell its row draws on a line of its own (a column the region let go, a
-  // row's controls beneath its words) spans the row, under no heading.
+  // A table is laid out by the browser's table layout (tables.css), which
+  // keeps every cell under its column's heading, and its headings are drawn.
   const width = document.documentElement.clientWidth;
   const found = [];
   let seen = 0;
@@ -59,35 +55,11 @@ TABLES = (
     }
     seen += 1;
     const name = describe(table);
-    if (getComputedStyle(table).display !== 'grid') found.push(`${name} is not laid out on its grid`);
-    const groups = [...table.querySelectorAll(':scope > :is(thead, tbody, tfoot)')];
-    if (groups.some((group) => getComputedStyle(group).display === 'contents' && group.getAttribute('role') !== 'rowgroup')) {
-      found.push(`${name} draws a row group with no box and no role`);
-    }
+    if (getComputedStyle(table).display !== 'table') found.push(`${name} is not laid out as a table`);
     const head = table.querySelector('thead');
     const headings = head ? [...head.querySelectorAll(':scope > tr:last-child > th')] : [];
-    if (head && (getComputedStyle(head).display !== 'contents'
-                 || headings.length && !headings.some((heading) => heading.checkVisibility()))) {
+    if (headings.length && !headings.some((heading) => heading.checkVisibility())) {
       found.push(`${name} hides its column headings`);
-    }
-    // A row folded away is not drawn at all.
-    for (const row of table.querySelectorAll(':scope > * > tr')) {
-      const style = getComputedStyle(row);
-      if (style.display !== 'none' && !style.gridTemplateColumns.startsWith('subgrid')) {
-        found.push(`${name} draws a row off its columns`); break;
-      }
-    }
-    // A row's cells and its heading row's stand in the same order, every column present in each.
-    const edges = new Map(headings.map((heading, place) => [place, heading.checkVisibility() && box(heading)]));
-    for (const cell of table.querySelectorAll(':scope > tbody > tr > :is(td, th):not([colspan])')) {
-      const at = edges.get(cell.cellIndex);
-      const style = getComputedStyle(cell);
-      if (!at || !cell.checkVisibility() || style.gridRowStart !== '1') continue;
-      const c = box(cell);
-      if (Math.abs(c.left - at.left) > 1 || Math.abs(c.right - at.right) > 1) {
-        found.push(`${name} draws column ${cell.cellIndex + 1} off its heading by ${Math.round(c.left - at.left)}px`);
-        break;
-      }
     }
     let scroller = table.parentElement;
     while (scroller && scroller !== document.body && !scrolls(scroller)) scroller = scroller.parentElement;
@@ -525,7 +497,9 @@ CUT_WHEN_OPEN = (
     + CUTS
     + """
   const found = [];
-  const rows = 'main table > tbody > tr.is-expanded:not(.row-detail), main table > tbody > tr.is-expanded + tr.row-detail';
+  // An open row keeps its cells as they were, a clamp included; the line
+  // beneath it is where its values stand whole.
+  const rows = 'main table > tbody > tr.is-expanded + tr.row-detail';
   for (const row of document.querySelectorAll(rows)) {
     if (!row.checkVisibility() || row.closest('details:not([open])')) continue;
     for (const cell of row.querySelectorAll(':scope > :is(td, th)')) {
