@@ -167,8 +167,8 @@ class ProviderModel(BaseModel):
 
 
 class ControllerVerification(ProviderModel):
-    timeout_seconds: int = Field(ge=1, le=3600)
-    interval_seconds: int = Field(ge=1, le=300)
+    timeout_seconds: int = Field(ge=30, le=600)
+    interval_seconds: int = Field(ge=1, le=30)
 
     @model_validator(mode="after")
     def interval_fits_timeout(self) -> ControllerVerification:
@@ -204,6 +204,16 @@ class ControllerProviderCapability(ProviderModel):
 class ControllerCapabilityRegistry(ProviderModel):
     schema_version: Literal[1]
     capabilities: dict[str, ControllerProviderCapability]
+
+
+SHARED = (
+    SharedValue(
+        "Verification",
+        ControllerVerification,
+        "How long the controller keeps checking that an applied change is actually served, "
+        "declared by the action it belongs to.",
+    ),
+)
 
 
 def applies(*, automatic: bool = False, verification: ControllerVerification | None = None) -> ControllerActionPolicy:

@@ -2110,23 +2110,6 @@
           "cls_poor"
         ]
       },
-      "Verification": {
-        "type": "object",
-        "description": "How long the controller keeps checking that an applied change is actually served, declared by the action it belongs to.",
-        "properties": {
-          "timeout_seconds": {
-            "type": "integer"
-          },
-          "interval_seconds": {
-            "type": "integer"
-          }
-        },
-        "required": [
-          "timeout_seconds",
-          "interval_seconds"
-        ],
-        "additionalProperties": false
-      },
       "PassMode": {
         "type": "string",
         "enum": [
@@ -6094,6 +6077,27 @@
         ],
         "type": "object",
         "description": "One tailscale.user record: Tailnet user."
+      },
+      "Verification": {
+        "additionalProperties": false,
+        "properties": {
+          "timeout_seconds": {
+            "maximum": 600,
+            "minimum": 30,
+            "type": "integer"
+          },
+          "interval_seconds": {
+            "maximum": 30,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "timeout_seconds",
+          "interval_seconds"
+        ],
+        "type": "object",
+        "description": "How long the controller keeps checking that an applied change is actually served, declared by the action it belongs to."
       }
     }
   }

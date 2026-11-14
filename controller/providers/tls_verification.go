@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/joeseverino/severino-hq/controller/api"
 	"github.com/joeseverino/severino-hq/controller/internal/clock"
 	"github.com/joeseverino/severino-hq/controller/providers/npmapi"
 	"github.com/joeseverino/severino-hq/controller/runtime"
@@ -312,6 +313,14 @@ func (r *Registry) reconcileTLS(ctx context.Context, spec TLSCertificateSpec) (R
 		Message:    "Checked what each site serves.",
 	}, status, nil
 }
+
+// A renewal's verification policy must fall inside the contract's bounds, in seconds.
+var (
+	verificationTimeoutMin  = api.MustLimit("Verification", "properties", "timeout_seconds", "minimum")
+	verificationTimeoutMax  = api.MustLimit("Verification", "properties", "timeout_seconds", "maximum")
+	verificationIntervalMin = api.MustLimit("Verification", "properties", "interval_seconds", "minimum")
+	verificationIntervalMax = api.MustLimit("Verification", "properties", "interval_seconds", "maximum")
+)
 
 // tlsVerificationPolicy is how long to keep checking that a renewed certificate is served.
 func tlsVerificationPolicy(ctx context.Context) (time.Duration, time.Duration, error) {
