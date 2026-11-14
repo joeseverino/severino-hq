@@ -753,10 +753,12 @@ shares through `python -m tools.gate.turn --share` (`tools/lib/heavy-turn.sh`
 for a file task), each under the gate's own bound: `mise run --timeout` would
 count the wait too.
 
-A share counts in tokens out of the machine's four (`CAPACITY`), each about
+A share counts in tokens out of the machine's budget (`CAPACITY`), each about
 a core and 600 MB: a process that runs tests takes one, one beside which a
-browser draws (a look, a survey) two, so two surveys or four test runs fit together beside
-the dev server and a browser on an 8 GB Mac. mise's task lock is one
+browser draws (a look, a survey) two. The budget is derived from the machine,
+a token for each core and no more than one for each 2 GB, so two surveys or
+four test runs fit together beside the dev server and a browser on an 8 GB
+Mac, and a 12-core, 32 GB machine holds twelve. mise's task lock is one
 exclusive flock with no shared or counted mode
 ([task_lock.rs](https://github.com/jdx/mise/blob/v2026.11.8/src/task/task_lock.rs)),
 so a share is the counting semaphore the kernel's flock(2) makes, as
@@ -815,6 +817,61 @@ The line is a report, never a check: load and the mix of tests move both
 memory and time, so nothing fails on them, and the command's exit status is
 the run's whatever the measuring did. A measurement it cannot take (no
 `footprint`, a sample that failed) is named in the line in its place.
+
+### Gates on a second machine
+
+A second machine you reach over SSH can take the gates a person types:
+`fast`, `test` (the composed suite and `--at` included), `dev:look` and
+`browser`. One line in the gitignored `mise.local.toml`, which
+`.worktreeinclude` copies into every worktree, turns it on:
+
+```toml
+HQ_GATE_REMOTE = "gates:hq"
+```
+
+It names the machine as git names a repository over SSH, the host then
+HQ's checkout there. Each of those tasks then runs there under that
+machine's own heavy turn, never taking this one's, with nothing new to type.
+Its output reads as a run here, paths named in this checkout, after one line
+naming where it runs:
+
+```text
+[fast] runs on gates, tree 928ba11e2
+```
+
+A machine that does not answer within five seconds leaves the run here, after
+one line saying so; so does a run inside a turn here, and one whose flag acts
+on this machine (`--open`, `--docs`, `browser --linux`). A task the release
+check runs that reads a secret or the deploy host (`failure-logs`, `mint`,
+the host check) never asks.
+
+How a run goes (`tools/gate/remote.py`, and `tools/gate/remote-host.sh` there):
+
+1. The tree to judge, committed or not, is the one `var/gate/` names
+   (`tools/gate/tree.py`). It is pushed with git over SSH as a commit on
+   HEAD, or HEAD itself when it holds the tree, with each commit an argument
+   names (fast's base, `--at`), which are resolved here: a branch there is
+   not this one. fast's default base is resolved here too, from this
+   checkout's chain of passed trees, which is also synced there with its maps,
+   so it selects what it would select here. A composed run sends the
+   extension checkout `HQ_LOCAL_PYTHONPATH` names the same way, to the clone
+   of the same name beside HQ's there.
+2. There, the tree gets a detached worktree of its own under
+   `~/.cache/hq-gates`, holding the files `.worktreeinclude` names as that
+   checkout has them, and the pushed refs are removed. A file under `var/`
+   that an argument names (a `--eval` probe) goes with it. A worktree
+   untouched for a day is removed as the next one is made.
+3. The same `mise run <task> <arguments>` runs in it, the arguments as mise
+   parsed them here. Closing the connection stops it.
+4. What it wrote comes back: each `var/gate/` verdict that names the tree
+   sent (any other is left there, and said so), the logs and `var/look/`.
+   A pass fast recorded there is recorded here only then, its file naming the
+   machine it ran on.
+
+One SSH connection carries every step (`ControlMaster`), with no agent or
+display forwarded. The machine needs mise, the checkouts (the extension
+clone only for a composed run) and the browsers the browser gates draw in,
+and nothing that writes to GitHub or reaches production.
 
 ### What the gates need
 

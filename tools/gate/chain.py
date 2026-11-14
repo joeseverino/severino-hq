@@ -11,6 +11,7 @@ from pathlib import Path
 
 from hq.platform.core.tests.task import RefError, git
 from tools.gate import testmap
+from tools.gate.verdict import TREE_LINE
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -105,8 +106,8 @@ def answered(*args: str, root: Path = ROOT) -> list[str]:
 
 
 # Where a passed tree is recorded, under the repository's common git directory
-# so every worktree shares it: an empty file named by the tree's hash, which a
-# commit keeps when it is re-signed. The agent hooks read it to hold a brief's
+# so every worktree shares it: a file named by the tree's hash, which a commit
+# keeps when it is re-signed, empty or naming the machine the run was on. The agent hooks read it to hold a brief's
 # base to a pass.
 PASSES = ("severino", "fast-passes")
 
@@ -150,6 +151,20 @@ def record_pass(tree: str | None, base: str, *, whole: bool) -> None:
         (folder / tree).touch()
         said = "recorded as passed"
     print(f"[fast] tree {tree[:9]} {said}", flush=True)
+
+
+def record_elsewhere(tree: str, verdict: str, where: str) -> bool:
+    """Record ``tree`` as passed by a fast run on the machine ``where``, whose
+    record of it there is ``verdict`` (its var/gate/fast.txt), when that names
+    ``tree``: a verdict on any other tree records nothing. The file holds where
+    the run was, beside the empty file a run here leaves."""
+
+    if verdict.splitlines()[:1] != [TREE_LINE.format(tree)]:
+        return False
+    folder = passes()
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / tree).write_text(f"{where}\n")
+    return True
 
 
 # The workflow whose run on a pushed commit is every gate CI holds it to: on a

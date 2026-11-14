@@ -35,6 +35,8 @@
 # it, in the same heavy turn. The docs' pictures are demo/screenshot.py's, a
 # step of its own (dev:look:docs) with the demo it draws from.
 set -eu
+# shellcheck source=tools/lib/remote.sh
+. ./tools/lib/remote.sh
 
 if [ "${usage_docs:-}" = true ]; then
     exec mise run dev:look:docs

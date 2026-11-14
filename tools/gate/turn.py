@@ -22,7 +22,7 @@ import subprocess
 import sys
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 lazy import django
@@ -47,12 +47,20 @@ IN_TURN = ["mise", "run", "turn", "--"]
 GATE = "gate"
 # How mise says which locks a task holds; a task that inherits one takes it as held.
 HELD = "MISE_TASK_LOCKS"
-# The machine's budget for shares, in tokens of about a core and 600 MB each:
-# four hold two surveys or four one-process test runs, about 2.4 GB and five
-# cores, beside the dev server, a browser and the agents on an 8 GB, 8-core
-# Mac. One share takes its tokens at a time, behind a door, so a share of
-# several is never starved by shares of one.
-CAPACITY = 4
+
+
+def capacity(cores: int, memory: int) -> int:
+    """The machine's budget for shares, in tokens of about a core and 600 MB each:
+    one for each core, and no more than one for each 2 GB it holds, which leaves
+    room for the dev server, a browser and the agents. An 8 GB Mac holds four,
+    two surveys or four one-process test runs."""
+
+    return max(1, min(cores, memory // 2**31))
+
+
+# One share takes its tokens at a time, behind a door, so a share of several
+# is never starved by shares of one.
+CAPACITY = capacity(os.cpu_count() or 1, os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE"))
 DOOR = f"{LOCK}.door"
 # A process that runs tests, and one beside which a browser draws (a survey
 # holds about 1.2 GB and a core and a half).
@@ -94,11 +102,18 @@ def lock_file(name: str) -> Path:
     return Path(state, "task-locks", hashlib.sha256(name.encode()).hexdigest()[:16] + ".lock")
 
 
-def opened(name: str) -> int:
+@contextlib.contextmanager
+def opened(name: str) -> Iterator[int]:
+    """The lock file of ``name``, open for the block: closing it lets go of any lock taken on it."""
+
     path = lock_file(name)
     path.parent.mkdir(parents=True, exist_ok=True)
     # Only its owner opens it: mise, run as the same user, opens it read-write to take it too.
-    return os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+    descriptor = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        yield descriptor
+    finally:
+        os.close(descriptor)
 
 
 def held_locks() -> set[str]:
@@ -114,18 +129,17 @@ def land(command: list[str]) -> int:
     landing waits behind only the heavy run already in the turn. Its own heavy
     tasks still take turns among themselves on LOCK."""
 
-    gate = opened(GATE)
     record = lock_file(GATE).with_suffix(".json")
-    threading.Thread(target=hold, args=(gate, record), daemon=True).start()
     held = held_locks() | {GATE}
-    try:
-        return subprocess.run(command, env=os.environ | {HELD: ",".join(sorted(held))}, check=False).returncode
-    except KeyboardInterrupt:
-        return 130
-    finally:
-        # The record goes first, while the lock still keeps the next holder from writing its own.
-        record.unlink(missing_ok=True)
-        os.close(gate)
+    with opened(GATE) as gate:
+        threading.Thread(target=hold, args=(gate, record), daemon=True).start()
+        try:
+            return subprocess.run(command, env=os.environ | {HELD: ",".join(sorted(held))}, check=False).returncode
+        except KeyboardInterrupt:
+            return 130
+        finally:
+            # The record goes first, while the lock still keeps the next holder from writing its own.
+            record.unlink(missing_ok=True)
 
 
 def hold(gate: int, record: Path) -> None:
@@ -241,56 +255,48 @@ def flocked(fd: int, mode: int) -> bool:
     return True
 
 
-def take_share(tokens: int, waiting: Waiting) -> list[int]:
-    """Take a share of ``tokens``: past the gate, ``tokens`` slots behind the door, then LOCK shared.
-    Returns the descriptors that hold it; closing them gives it back."""
+@contextlib.contextmanager
+def share_held(tokens: int, waiting: Waiting) -> Iterator[None]:
+    """Hold a share of ``tokens`` for the block: past the gate, ``tokens`` slots behind the door, then LOCK
+    shared. Each lock file is open in a block of its own, and the share's until it ends; a slot it opened and
+    did not take holds no lock."""
 
-    held: list[int] = []
-    try:
-        if GATE not in held_locks():
-            gate = opened(GATE)
-            held.append(gate)
+    if GATE not in held_locks():
+        # A turnstile: passed, it is let go at once, so only a run that holds it stops the shares behind it.
+        with opened(GATE) as gate:
             waiting.until(lambda: flocked(gate, fcntl.LOCK_SH), lambda: on(GATE))
-            # A turnstile: passed, it is let go at once, so only a run that holds it stops the shares behind it.
-            held.remove(gate)
-            os.close(gate)
-        door = opened(DOOR)
-        held.append(door)
-        slots = [opened(f"{LOCK}.share.{n}") for n in range(CAPACITY)]
-        held += slots
+    with contextlib.ExitStack() as share:
         mine: list[int] = []
+        with opened(DOOR) as door:
+            slots = [share.enter_context(opened(f"{LOCK}.share.{n}")) for n in range(CAPACITY)]
 
-        def enough() -> bool:
-            for n, slot in enumerate(slots):
-                if len(mine) < tokens and slot not in mine and flocked(slot, fcntl.LOCK_EX):
-                    mine.append(slot)
-                    record(f"{LOCK}.share.{n}")
-            return len(mine) == tokens
+            def enough() -> bool:
+                for n, slot in enumerate(slots):
+                    if len(mine) < tokens and slot not in mine and flocked(slot, fcntl.LOCK_EX):
+                        mine.append(slot)
+                        record(f"{LOCK}.share.{n}")
+                return len(mine) == tokens
 
-        def holders() -> str:
-            others = [holder(f"{LOCK}.share.{n}") for n, slot in enumerate(slots) if slot not in mine]
-            return f"a share of {tokens} of lock {LOCK}'s {CAPACITY}, " + "; ".join(sorted({o for o in others if o}))
+            def holders() -> str:
+                others = [holder(f"{LOCK}.share.{n}") for n, slot in enumerate(slots) if slot not in mine]
+                return f"a share of {tokens} of lock {LOCK}'s {CAPACITY}, " + "; ".join(
+                    sorted({o for o in others if o})
+                )
 
-        waiting.until(lambda: flocked(door, fcntl.LOCK_EX), lambda: on(DOOR))
-        record(DOOR)
-        waiting.until(enough, holders)
-        for slot in slots:
-            if slot not in mine:
-                held.remove(slot)
-                os.close(slot)
-        lock_file(DOOR).with_suffix(".json").unlink(missing_ok=True)
-        held.remove(door)
-        os.close(door)
-        heavy = opened(LOCK)
-        held.append(heavy)
-        waiting.until(lambda: flocked(heavy, fcntl.LOCK_SH), lambda: on(LOCK))
-        record(LOCK)
-        waiting.done(tokens)
-        return held
-    except BaseException:
-        for fd in held:
-            os.close(fd)
-        raise
+            try:
+                waiting.until(lambda: flocked(door, fcntl.LOCK_EX), lambda: on(DOOR))
+                record(DOOR)
+                waiting.until(enough, holders)
+            finally:
+                lock_file(DOOR).with_suffix(".json").unlink(missing_ok=True)
+        heavy = share.enter_context(opened(LOCK))
+        try:
+            waiting.until(lambda: flocked(heavy, fcntl.LOCK_SH), lambda: on(LOCK))
+            record(LOCK)
+            waiting.done(tokens)
+            yield
+        finally:
+            give_back()
 
 
 def recorded(name: str) -> str:
@@ -312,8 +318,8 @@ def ours(text: str) -> bool:
     return isinstance(found, dict) and found.get("pid") == os.getpid()
 
 
-def give_back(held: list[int]) -> None:
-    """Close what holds a share, its records first, while the locks still keep the next holder from writing."""
+def give_back() -> None:
+    """Take this share's records back, while its locks still keep the next holder from writing its own."""
 
     others = []
     for n in range(CAPACITY):
@@ -329,8 +335,6 @@ def give_back(held: list[int]) -> None:
             heavy.write_text(others[0])
         else:
             heavy.unlink(missing_ok=True)
-    for fd in held:
-        os.close(fd)
 
 
 def share(tokens: int, bound: str, command: list[str]) -> int:
@@ -343,16 +347,13 @@ def share(tokens: int, bound: str, command: list[str]) -> int:
     if inside():
         return subprocess.run(command, check=False).returncode
     try:
-        held = take_share(min(tokens, CAPACITY), Waiting())
+        with share_held(min(tokens, CAPACITY), Waiting()):
+            return run_bounded(command, seconds(bound), bound, os.environ | {SHARE: str(tokens)})
     except TimeoutError as error:
         print(f"[{task_name()}] ERROR {error}", file=sys.stderr, flush=True)
         return 1
     except KeyboardInterrupt:
         return 130
-    try:
-        return run_bounded(command, seconds(bound), bound, os.environ | {SHARE: str(tokens)})
-    finally:
-        give_back(held)
 
 
 def run_bounded(command: list[str], limit: float, bound: str, env: dict[str, str]) -> int:

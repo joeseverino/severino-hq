@@ -24,6 +24,8 @@
 # One gate at a time, each in a heavy turn of its own: each starts a browser
 # per core. The Chromium leg is CI's alone, since HQ is read in Safari.
 set -eu
+# shellcheck source=tools/lib/remote.sh
+. ./tools/lib/remote.sh
 
 # mise hands the targets over shell-quoted, one word each. A leg is a word
 # with no dot; a test label has one.

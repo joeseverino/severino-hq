@@ -149,6 +149,9 @@ SCANS = {
                 "Dockerfile",
                 "composition/Dockerfile",
                 "tools/dev/browser-linux.sh",
+                # Runs on the second machine, whose own state holds the heavy
+                # turn every gate run there shares.
+                "tools/gate/remote-host.sh",
             }
         ),
         "these trust a mise config and leave its records in the Mac's mise state: use "

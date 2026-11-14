@@ -353,7 +353,7 @@ flag "--list" help="Print the selected test modules and run nothing"
 flag "--whole" help="Run the whole suite and every quick gate, whatever changed: a pass records the tree and the map of the tests that ran each file"
 flag "--parallel <workers>" env="CHECK_PARALLEL" default="auto" help="Test workers per suite; 1 rules out an order or isolation failure"
 '''
-run = "uv run python -m tools.gate.fast"
+run = ". ./tools/lib/remote.sh; uv run python -m tools.gate.fast"
 
 [tasks.lint]
 description = "After editing, or when fast is not enough: CI's lint job, every lint:* gate: lint, types, structure, dependencies, security, derived files"

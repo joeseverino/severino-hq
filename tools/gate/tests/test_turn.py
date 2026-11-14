@@ -14,12 +14,25 @@ from django.test import tag
 
 from hq.platform.core.test_runner import BROWSER_TESTS
 from tests.mise_tasks import HEAVY_LOCK, ROOT, SOURCES_THE_TURN, body, locks, mise_tasks, runs, takes_the_turn
+from tools.gate import turn
 from tools.gate.tests.base import GateTestCase
 from tools.gate.turn import BROWSER, CAPACITY, IN_TURN, LOCK, ONE, in_turn, weigh
 
 MODULE = "hq.platform.application.tests.test_pipeline"
 # One test class of it, which a parallel run starts one worker for.
 CLASS = "ActionPinTests"
+
+
+class CapacityTests(GateTestCase):
+    def test_the_budget_is_a_token_a_core_within_one_for_each_2_gb(self):
+        """A share's token is about a core and 600 MB, so a larger machine runs more shares at once."""
+        from tools.gate.turn import capacity
+
+        gb = 2**30
+        self.assertEqual(capacity(8, 8 * gb), 4)
+        self.assertEqual(capacity(12, 30 * gb), 12)
+        self.assertEqual(capacity(4, 16 * gb), 4)
+        self.assertEqual(capacity(2, gb), 1)
 
 
 class InTurnTests(GateTestCase):
@@ -111,7 +124,10 @@ class HeavyTaskTests(GateTestCase):
     def test_a_task_takes_the_heavy_turn_when_its_run_is_heavy(self):
         """Two suites at once exhaust a small machine's memory; mise's task lock makes them take turns.
         tools/gate/turn.py says which runs of tests are heavy: a task whose tests are fixed takes the turn
-        exactly when they are, and one that runs the tests it is given hands them to that decision."""
+        exactly when they are, and one that runs the tests it is given hands them to that decision. A fixed run is
+        weighed against the smallest budget it is declared for, an 8 GB Mac's four: a larger machine still gives it the
+        whole turn."""
+        self.enterContext(mock.patch.object(turn, "CAPACITY", 4))
         runs = {name: task for name, task in mise_tasks().items() if "manage.py test" in body(task)}
         self.assertGreater(len(runs), 3)
         for name, task in runs.items():
