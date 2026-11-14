@@ -1028,7 +1028,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
           const button = document.createElement('button');
           button.className = 'example-edged';
           button.textContent = 'Example';
-          button.style.setProperty('border-color', 'var(--field-line)');
+          button.style.setProperty('border', '1px solid var(--field-line)');
           document.querySelector('main').append(button);
         }""")
         self.assertEqual(
