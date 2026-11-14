@@ -116,7 +116,6 @@ select.toned:not(.toned-neutral) { border-color: currentColor; }
 .choice-card:has(input:checked) { border-color: var(--accent); background: var(--bg-tint); }
 .choice-card > input { grid-row: 1 / span 2; margin: var(--space-1) 0 0; }
 .field .choice-card > label { margin: 0; font-size: var(--text-md); cursor: pointer; }
-.choice-card > label::after { content: ""; position: absolute; inset: 0; }
 .choice-card-what { grid-column: 2; margin: 0; color: var(--muted); font-size: var(--text-sm); line-height: 1.45; }
 /* A unit after its box (`SuffixedInput`), so a percentage never reads as a
    count. */

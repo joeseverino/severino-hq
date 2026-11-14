@@ -457,7 +457,9 @@
 /* A list of places to go: the whole row is its title's link, stretched over
    it, so the row is one target and its markup stays a link around a name. */
 .whole-rows li { position: relative; }
-.whole-rows .row-main > a::after { content: ""; position: absolute; inset: 0; }
+/* A link or a label stretched over the whole of its row, fact or card, so
+   the box is the target. */
+.whole-rows .row-main > a::after, .facts-inline .fact-value a::after, .choice-card > label::after { content: ""; position: absolute; inset: 0; }
 /* A title is ink however it links: its own address, or a thing it names. */
 .list-rows :is(a strong, strong > a) { color: var(--ink); font-weight: 600; }
 .list-rows :is(a:hover strong, strong > a:hover) { color: var(--accent); }
