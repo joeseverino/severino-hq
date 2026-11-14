@@ -62,6 +62,7 @@ PARTIALS: dict[str, str] = {
     "partials/_attention_list.html": "Decisions waiting on the operator, from `hq_sdk.ui.Insight` entries.",
     "partials/_cadence.html": "Whether a thing happened, period by period, from `hq_sdk.ui.Cadence`.",
     "partials/_cadence_matrix.html": "Several cadences over the same periods, from `hq_sdk.ui.CadenceMatrix`.",
+    "partials/_chart.html": "A measure over time from `hq_sdk.ui.line_chart`, or quantities that add up from `hq_sdk.ui.stacked_bar_chart`.",
     "partials/_chart_tabs.html": "Up to four charts of one thing in the space of one.",
     "partials/_dropzone.html": "A file field that also accepts a drop.",
     "partials/_empty_state.html": "The one empty state: what is missing, then what would fill it.",
@@ -72,10 +73,8 @@ PARTIALS: dict[str, str] = {
     "partials/_insight_grid.html": "Readings that need interpreting, each with its next step.",
     "partials/_job_progress.html": "A running job and what it is doing.",
     "partials/_kpi_grid.html": "Responsive linked or static figures.",
-    "partials/_line_chart.html": "A measure over time on an axis fitted to it.",
     "partials/_record_list.html": "A compact list of records, from `hq_sdk.ui.ListRow`.",
     "partials/_row_field.html": "One field of a form whose fields stand one to a row of a table, in its row.",
-    "partials/_stacked_bar_chart.html": "Quantities that add up, from `hq_sdk.ui.StackedBarChart`.",
     "partials/_timeline.html": "Chronological linked events, from `hq_sdk.ui.Timeline`.",
     "partials/_week_plan.html": "Which days of the week a thing is scheduled for, from `hq_sdk.ui.WeekPlan`.",
 }

@@ -94,18 +94,18 @@ ENTRIES = {
     # it, and its legend or a month's controls beside them; its data a folded
     # section in its frame.
     "chart/line": Entry(
-        '{% include "partials/_line_chart.html" %}',
+        '{% include "partials/_chart.html" %}',
         {"chart": _readings("Example pace", "Example readings over a week, two of them.", "Easy", "Hard")},
     ),
     # A rule at a day something began, its label over the rule.
     "chart/line-marked": Entry(
-        '{% include "partials/_line_chart.html" %}',
+        '{% include "partials/_chart.html" %}',
         {"chart": _readings("Example pace", "", "Easy", marks=((_WEEK + timedelta(days=3), "Example start"),))},
     ),
     # Two years of readings, so each label carries its year and the last one,
     # the longest an axis draws, ends at the plot's right edge.
     "chart/line-years": Entry(
-        '{% include "partials/_line_chart.html" %}',
+        '{% include "partials/_chart.html" %}',
         {
             "chart": line_chart(
                 "Example weight",
@@ -122,11 +122,11 @@ ENTRIES = {
         },
     ),
     "chart/line-empty": Entry(
-        '{% include "partials/_line_chart.html" %}',
+        '{% include "partials/_chart.html" %}',
         {"chart": line_chart("Example pace", "Too few readings to draw.", (), unit="example")},
     ),
     "chart/stacked-bar": Entry(
-        '{% include "partials/_stacked_bar_chart.html" %}',
+        '{% include "partials/_chart.html" %}',
         {"chart": _weeks("Example sessions", "Each week's sessions by kind.")},
     ),
     "chart/activity-calendar": Entry('{% include "partials/_activity_calendar.html" %}', {"calendar": _month()}),
@@ -137,8 +137,8 @@ ENTRIES = {
     # Two charts in a pair, one line under each heading longer than the other's,
     # and a chart beside a section of prose: each pair's frames start together.
     "chart/pair": Entry(
-        '<div class="two-col">{% include "partials/_line_chart.html" with chart=first %}'
-        '{% include "partials/_stacked_bar_chart.html" with chart=second %}</div>',
+        '<div class="two-col">{% include "partials/_chart.html" with chart=first %}'
+        '{% include "partials/_chart.html" with chart=second %}</div>',
         {
             "first": _readings(
                 "Example pace",
@@ -149,7 +149,7 @@ ENTRIES = {
         },
     ),
     "chart/beside-section": Entry(
-        '<div class="two-col">{% include "partials/_line_chart.html" %}'
+        '<div class="two-col">{% include "partials/_chart.html" %}'
         '{% section "Example notes" %}<p>An example line of prose in the frame.</p>{% endsection %}</div>',
         {"chart": _readings("Example pace", "Example readings over a week.", "Pace")},
     ),
@@ -181,7 +181,7 @@ ENTRIES = {
     "chart/cadence-matrix-compact": Entry(
         '<div class="two-col">{% section "Example habits 3" %}'
         '{% include "partials/_cadence_matrix.html" with compact=True label="Example habit" %}{% endsection %}'
-        '{% include "partials/_line_chart.html" %}</div>',
+        '{% include "partials/_chart.html" %}</div>',
         {"matrix": _matrix(), "chart": _readings("Example minutes", "Minutes each day.", "Example run")},
     ),
     # The days of a week a thing is planned for: two on one day, a day with

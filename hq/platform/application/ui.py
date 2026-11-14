@@ -4,6 +4,7 @@ import math
 import re
 from dataclasses import dataclass
 from datetime import date, timedelta
+from typing import ClassVar
 
 from .card_items import Kpi, TimelineItem
 from .chart_numbers import (
@@ -253,6 +254,8 @@ class Chart:
     plot_right: float = PLOT_LEFT + PLOT_WIDTH
     plot_top: float = PLOT_TOP
     plot_bottom: float = PLOT_TOP + PLOT_HEIGHT
+    # Which marks partials/_chart.html draws: bars stacked from zero, or lines.
+    stacked: ClassVar[bool] = False
 
     @property
     def dense(self) -> bool:
@@ -310,6 +313,7 @@ class StackedBarChart(Chart):
 
     series: tuple[ChartSeries, ...]
     bars: tuple[ChartBar, ...]
+    stacked: ClassVar[bool] = True
 
 
 @display

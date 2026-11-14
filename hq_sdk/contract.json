@@ -2386,7 +2386,12 @@
         ],
         "fields": [],
         "kind": "dataclass",
-        "members": {}
+        "members": {
+          "stacked": {
+            "kind": "attribute",
+            "type": "bool"
+          }
+        }
       },
       "Timeline": {
         "bases": [],
@@ -3171,6 +3176,13 @@
           "matrix"
         ]
       },
+      "partials/_chart.html": {
+        "about": "A measure over time from `hq_sdk.ui.line_chart`, or quantities that add up from `hq_sdk.ui.stacked_bar_chart`.",
+        "optional": [],
+        "required": [
+          "chart"
+        ]
+      },
       "partials/_chart_tabs.html": {
         "about": "Up to four charts of one thing in the space of one.",
         "optional": [],
@@ -3281,13 +3293,6 @@
           "items"
         ]
       },
-      "partials/_line_chart.html": {
-        "about": "A measure over time on an axis fitted to it.",
-        "optional": [],
-        "required": [
-          "chart"
-        ]
-      },
       "partials/_record_list.html": {
         "about": "A compact list of records, from `hq_sdk.ui.ListRow`.",
         "optional": [
@@ -3304,13 +3309,6 @@
         "optional": [],
         "required": [
           "field"
-        ]
-      },
-      "partials/_stacked_bar_chart.html": {
-        "about": "Quantities that add up, from `hq_sdk.ui.StackedBarChart`.",
-        "optional": [],
-        "required": [
-          "chart"
         ]
       },
       "partials/_timeline.html": {
