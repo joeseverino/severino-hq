@@ -371,11 +371,12 @@ class WalkedStatesTests(TestCase):
         # The queue's row shows its first two buttons; the rest wait in its
         # opened line, a part the survey reaches only through a row with more.
         page = self.walked(reverse("action_items"))
-
         waiting = [
             control
-            for control in within(page, "class", "row-later")
-            if control.tag in {"a", "button"} and any("data-attention-item" in row.attrs for row in control.ancestors)
+            for control in all_elements(page)
+            if control.beneath
+            and control.tag in {"a", "button"}
+            and any("row-later" in part.classes for part in control.ancestors)
         ]
         self.assertTrue(waiting)
 

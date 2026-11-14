@@ -208,7 +208,7 @@ SELECTORS = {
     "identifier": ".token",
     "wraps_in_a_cell": (
         "tr.row-detail, .row-gutter, [data-cell], .table-clamp, code.cell-whole, .btn,"
-        " .token:not([data-sole]), .token[data-in-line], [popover]"
+        " .token:not([data-sole]), [popover]"
     ),
     # Words said to a reader and never drawn.
     "unseen": ".visually-hidden",
