@@ -117,8 +117,8 @@
 }
 /* A box a reader presses or tabs to is a target tall, as a link on a line of its own is (figures.css). */
 .data-table > tbody > tr > [data-kind="identifier"] > :is(a[href], [tabindex]) { line-height: var(--target-min); }
-/* Words that open a tip are a box of their own a target tall, no wider than the cell. */
-.data-table > tbody > tr > td > :is(span, code)[data-tip][tabindex]:not(.pill) { display: inline-block; max-inline-size: 100%; line-height: var(--target-min); vertical-align: top; }
+/* Words that open a tip are a box of their own a target tall, no wider than the cell, alone in it or on one of its lines; a chip or a pill keeps its one size. */
+.data-table > tbody > tr > td span[data-tip][tabindex]:not(.pill, .tag) { display: inline-block; max-inline-size: 100%; line-height: var(--target-min); vertical-align: top; }
 /* An identifier's link stays text of its line, a target tall by its padding as a name's is. */
 .data-table > tbody > tr > [data-kind="identifier"] > a[href] { padding-block: calc((var(--target-min) - 1.25em) / 2); }
 /* A fact on one line of its own (`{% cell_line lines=1 %}`). */

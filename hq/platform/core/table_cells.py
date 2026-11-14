@@ -110,8 +110,7 @@ class _Cell:
     # start, or None when it has none.
     class_at: int | None = None
     # Whether each element at its top is a pill, and whether text stands
-    # there beside them: a status said by one pill alone is as wide as its
-    # column (`data-pill-only`), so the pills down a column line up.
+    # there beside them: a cell said by its pills alone is what a row is.
     tops: list[bool] = field(default_factory=list)
     loose: bool = False
     # Whether it holds a row's toggle, and one that opens a folded group,
@@ -473,8 +472,8 @@ class Cells(HTMLParser):
     ) -> None:
         """What each cell says of itself: blank, its whole column blank, the
         width its column leaves at (a column of the rows' controls leaves in
-        a narrow box, `data-narrow`), and in the body its kind, a cut cell
-        its whole value, and a status said by one pill alone."""
+        a narrow box, `data-narrow`), and in the body its kind and a cut
+        cell's whole value."""
 
         body = row.section == "tbody"
         for at, cell in _placed(row):
@@ -498,8 +497,6 @@ class Cells(HTMLParser):
             if cell.longest > LONG and cell.closed:
                 cell.clamped = True
                 self.clamps.append((cell.opened, cell.value_end))
-        if body and kind == "status" and cell.tops == [True] and not cell.loose:
-            marks.append(" data-pill-only")
         return marks
 
     def _name(self, row: _Row, kinds: dict[int, str], named: int) -> None:

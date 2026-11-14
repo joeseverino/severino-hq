@@ -242,9 +242,8 @@ its cell and gives way with its column. The reader's way to set a row aside
 drawn quiet. *Gates:* the survey's `row actions beside squeezed words` and
 `row actions behind the toggle`, and `test_row_controls.py`.
 
-A status said by one pill alone fills its
-column, as wide as its widest pill, so the pills down a column share both
-edges (`data-pill-only`, marked by the region). *Gates:*
+A pill is as wide as its words wherever it stands, in a cell alone or beside
+words. *Gates:*
 `a_table_fits_its_box_at_every_width`,
 `test_a_blank_column_is_not_drawn_and_a_short_word_is_not_split`,
 `only_a_table_scrolls_sideways`, and the page crawl, which fails any

@@ -162,8 +162,6 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 .data-table td .pill { vertical-align: top; line-height: 1.4; }
 /* A state told by an icon and a value holds both on one line, so its column is as wide as the two and the icon never stands alone above what it marks. */
 .data-table > tbody > tr > [data-kind="status"] .toned:has(> .icon) { white-space: nowrap; }
-/* A status said by one pill alone (`data-pill-only`, table_cells) fills its column, which is as wide as its widest pill, so the pills down a column share both edges. */
-.data-table > tbody > tr > td[data-pill-only] .pill { display: flex; justify-content: center; text-align: center; }
 /* A time is one phrase; broken over two lines it doubles its row. */
 .data-table td time { white-space: nowrap; }
 /* A name's unseen copy (value_tags) holds nothing open in a table. */
