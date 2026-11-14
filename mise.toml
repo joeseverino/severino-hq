@@ -341,8 +341,8 @@ run = "uv run python manage.py"
 
 [tasks.fast]
 description = "While editing: the tests the change reaches, and the quick gates that read the paths it touched"
-# Its test run alone takes the heavy turn (tools/gate/fast.py), so the quick
-# gates of one worktree never wait on another's suite.
+# Its tests and heavy gates share one heavy turn (tools/gate/fast.py), so the
+# quick gates of one worktree never wait on another's suite.
 extends = "django"
 env = { SEVERINO_WAITS_FOR_HEAVY_TURN = "1" }
 # The lint tools the quick gates and the stylesheet tests run.

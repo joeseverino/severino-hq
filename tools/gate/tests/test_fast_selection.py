@@ -13,8 +13,9 @@ from django.test import tag
 from hq.platform.application.tests.reads import reads
 from hq.platform.core.tests.task import names, trusted_mise
 from tests.mise_tasks import mise_tasks
-from tools.gate import fast as fast_gate
+from tools.gate import chain as fast_chain, fast as fast_gate
 from tools.gate.tests.base import GateTestCase, fixture_git
+from tools.gate.tests.fast_runs import everywhere
 from tools.structural.classify import TEST
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -97,7 +98,7 @@ class FastGateFixtureSelectionTests(GateTestCase):
     def setUp(self):
         self.folder = Path(self.enterContext(tempfile.TemporaryDirectory()))
         self.root = self.folder / "tree"
-        self.enterContext(patch.object(fast_gate, "ROOT", self.root))
+        self.enterContext(patch.object(fast_chain, "ROOT", self.root))
 
     def selected(self, *changed: str, deleted: tuple[str, ...] = ()) -> set[str]:
         """The quick gates fast selects for a change to ``changed`` that removes ``deleted``, the fixture
@@ -289,8 +290,8 @@ class ShellSourcesTests(GateTestCase):
     def test_fast_reads_a_present_path_here_and_a_deleted_one_as_the_base_had_it(self):
         # mise's own selection is none, so the shell gate is fast's from the lister alone.
         with (
-            patch.object(fast_gate, "ROOT", self.root),
-            patch.object(fast_gate, "mise_json", return_value={"tasks": []}),
+            patch.object(fast_chain, "ROOT", self.root),
+            everywhere("mise_json", return_value={"tasks": []}),
         ):
             listed = fast_gate.shell_files(["tool.py", "script", "gone.sh", "gone.txt"], self.base)
             self.assertEqual(sorted(listed), ["gone.sh", "script"])

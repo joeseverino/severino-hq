@@ -20,10 +20,10 @@ from hq.config.sandbox import RUN
 from hq.platform.application.tests.tree import SUITE
 from hq.platform.core.test_runner import excluded_tags
 from hq.platform.core.tests.task import Usage, names, trusted_mise
-from tests.mise_tasks import HEAVY_LOCK, locks, mise_tasks, takes_the_turn
-from tools.gate import fast as fast_gate, verdict as gate_verdict
+from tests.mise_tasks import mise_tasks
+from tools.gate import chain as fast_chain, fast as fast_gate, selection as fast_select, verdict as gate_verdict
 from tools.gate.tests.base import UNITTEST, GateTestCase, fixture_git
-from tools.gate.tests.fast_runs import Recorder, run_main
+from tools.gate.tests.fast_runs import Recorder, everywhere, run_main
 from tools.gate.verdict import FailedTest
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -32,22 +32,22 @@ ROOT = Path(__file__).resolve().parents[3]
 @tag("source", "tree")
 class FastGateMappingTests(GateTestCase):
     def setUp(self):
-        self.files = fast_gate.python_files()
+        self.files = fast_select.python_files()
 
     def labels(self, *changed: str) -> list[str]:
-        reached, touched = fast_gate.affected(list(changed), [], self.files)
-        return fast_gate.test_labels(self.files, reached, touched)[0]
+        reached, touched = fast_select.affected(list(changed), [], self.files)
+        return fast_select.test_labels(self.files, reached, touched)[0]
 
     def test_a_package_init_is_the_package(self):
-        self.assertEqual(fast_gate.module_name(Path("a/b/__init__.py")), "a.b")
-        self.assertEqual(fast_gate.module_name(Path("a/b/c.py")), "a.b.c")
+        self.assertEqual(fast_select.module_name(Path("a/b/__init__.py")), "a.b")
+        self.assertEqual(fast_select.module_name(Path("a/b/c.py")), "a.b.c")
 
     def test_a_relative_import_reaches_its_sibling(self):
-        importers = fast_gate.importers(self.files)
+        importers = fast_select.importers(self.files)
         self.assertIn("hq.platform.application.tests.test_domains", importers["hq.platform.application.domains"])
 
     def test_a_declarations_string_reference_is_not_an_import(self):
-        importers = fast_gate.importers(self.files)
+        importers = fast_select.importers(self.files)
         self.assertNotIn("hq.platform.application.domains", importers["hq.domains.expenses.urls"])
 
     def test_a_lazy_import_and_a_tests_mock_target_are_imports_and_reach_the_package(self):
@@ -65,8 +65,8 @@ class FastGateMappingTests(GateTestCase):
             for path, text in modules.items():
                 (root / path).parent.mkdir(parents=True, exist_ok=True)
                 (root / path).write_text(text)
-            with patch.object(fast_gate, "ROOT", root):
-                importers = fast_gate.importers([Path(path) for path in modules])
+            with patch.object(fast_chain, "ROOT", root):
+                importers = fast_select.importers([Path(path) for path in modules])
         self.assertEqual(importers["example.models"], {"example.lazy"})
         self.assertEqual(importers["example.urls"], {"example.tests.test_mock"})
         self.assertLessEqual({"example.lazy", "example.tests.test_mock"}, importers["example"])
@@ -79,9 +79,9 @@ class FastGateMappingTests(GateTestCase):
     def test_a_model_change_selects_its_app_and_not_an_unrelated_domain(self):
         labels = self.labels("hq/domains/projects/models.py")
         own = [
-            fast_gate.module_name(p)
+            fast_select.module_name(p)
             for p in self.files
-            if fast_gate.is_test(p) and p.parts[:3] == ("hq", "domains", "projects")
+            if fast_select.is_test(p) and p.parts[:3] == ("hq", "domains", "projects")
         ]
         self.assertTrue(own)
         self.assertLessEqual(set(own), set(labels))
@@ -97,8 +97,8 @@ class FastGateMappingTests(GateTestCase):
             }.items():
                 (root / f"test_{name}.py").write_text(text)
             files = sorted(Path(p.name) for p in root.iterdir())
-            with patch.object(fast_gate, "ROOT", root):
-                chosen, _ = fast_gate.test_labels(files, set(), {"projects"})
+            with patch.object(fast_chain, "ROOT", root):
+                chosen, _ = fast_select.test_labels(files, set(), {"projects"})
             self.assertEqual(chosen, ["test_model", "test_namespace"])
 
     def reading(self, modules: dict[str, str], *changed: str) -> set[str]:
@@ -109,8 +109,8 @@ class FastGateMappingTests(GateTestCase):
             for path, text in {"example/__init__.py": "", "example/tests/__init__.py": "", **modules}.items():
                 (root / path).parent.mkdir(parents=True, exist_ok=True)
                 (root / path).write_text(text)
-            with patch.object(fast_gate, "ROOT", root):
-                return fast_gate.reading(list(changed), sorted(p.relative_to(root) for p in root.rglob("*.py")))
+            with patch.object(fast_chain, "ROOT", root):
+                return fast_select.reading(list(changed), sorted(p.relative_to(root) for p in root.rglob("*.py")))
 
     def test_a_changed_file_selects_the_tests_that_name_its_path_or_directory(self):
         tests = "example/tests/test_{}.py"
@@ -257,7 +257,7 @@ class FastGateMappingTests(GateTestCase):
                 under = (f for f in tracked if f.startswith(f"{path}/") and not f.endswith(".py"))
                 sample = path if (ROOT / path).is_file() else next(under, None)
                 if sample and sample not in selected:
-                    selected[sample] = fast_gate.affected([sample], [], self.files)
+                    selected[sample] = fast_select.affected([sample], [], self.files)
                 # A test the change reaches is selected; one that is not may yet be, by an app it names.
                 if sample and module not in selected[sample][0] and module not in self.labels(sample):
                     missed.append(f"{module} builds {path}")
@@ -284,16 +284,16 @@ class FastGateMappingTests(GateTestCase):
         self.assertIn("hq.platform.application.tests.test_architecture", labels)
 
     def test_a_template_belongs_to_its_app(self):
-        _, touched = fast_gate.affected(["templates/expenses/list.html"], [], self.files)
+        _, touched = fast_select.affected(["templates/expenses/list.html"], [], self.files)
         self.assertEqual(touched, {"expenses"})
 
     def test_a_deleted_module_selects_what_imported_it(self):
-        reached, touched = fast_gate.affected([], ["hq/domains/projects/models.py"], self.files)
+        reached, touched = fast_select.affected([], ["hq/domains/projects/models.py"], self.files)
         self.assertEqual(touched, {"projects"})
         self.assertIn("hq.domains.reports.exports", reached)
 
     def test_apps_are_derived_from_the_tree(self):
-        self.assertLessEqual({"expenses", "core", "projects"}, set(fast_gate.django_apps().values()))
+        self.assertLessEqual({"expenses", "core", "projects"}, set(fast_select.django_apps().values()))
 
 
 @tag("source")
@@ -303,31 +303,31 @@ class FastGateTreeTests(GateTestCase):
         """A walk reads a new test module, a template and a doc alike, by no import and no name."""
         modules = [f"{package}/example/tests/test_example.py" for package in SUITE]
         others = ["static/css/app.css", "templates/base.html", "docs/Example.md", ".github/workflows/ci.yml"]
-        with patch.object(fast_gate, "tree_tests", return_value=[("hq.a.tests.test_tree.Walks", None)]):
+        with everywhere("tree_tests", return_value=[("hq.a.tests.test_tree.Walks", None)]):
             for path in [*modules, *others]:
                 with self.subTest(path=path):
-                    self.assertIn("hq.a.tests.test_tree.Walks", fast_gate.with_tree([], [path]))
-            self.assertEqual(fast_gate.with_tree([], []), [])
+                    self.assertIn("hq.a.tests.test_tree.Walks", fast_select.with_tree([], [path]))
+            self.assertEqual(fast_select.with_tree([], []), [])
 
     @tag("tree")
     def test_a_tree_test_that_declares_what_it_reads_runs_on_a_change_to_those_files_alone(self):
         """An edit reaches a file it opens; only an added or deleted file reaches one it lists."""
         walks = "hq.a.tests.test_tree.Walks"
         declared = [(walks, (("templates/**/*.html",), ("hq/**/*.py",)))]
-        with patch.object(fast_gate, "tree_tests", return_value=declared):
+        with everywhere("tree_tests", return_value=declared):
             for paths, listed in (
                 (["templates/partials/table.html"], []),
                 (["templates/new.html"], ["templates/new.html"]),
                 (["hq/domains/example/views.py"], ["hq/domains/example/views.py"]),
             ):
                 with self.subTest(paths=paths, listed=listed):
-                    self.assertEqual(fast_gate.with_tree([], paths, listed), [walks])
+                    self.assertEqual(fast_select.with_tree([], paths, listed), [walks])
             for paths, listed in (
                 (["hq/domains/example/views.py"], []),
                 (["static/css/app.css", "docs/Example.md"], ["docs/Example.md"]),
             ):
                 with self.subTest(paths=paths, listed=listed):
-                    self.assertEqual(fast_gate.with_tree([], paths, listed), [])
+                    self.assertEqual(fast_select.with_tree([], paths, listed), [])
 
     @tag("tree")
     def test_a_change_adds_each_tree_test_it_reaches_to_the_one_run(self):
@@ -337,9 +337,9 @@ class FastGateTreeTests(GateTestCase):
         undeclared = {label for label, held in tree if held is None}
         self.assertIn("hq.platform.application.tests.test_tree_tag.TreeTagTests", undeclared)
         # The walk above is this checkout's; with_tree asks for it once and adds what it answers.
-        with patch.object(fast_gate, "tree_tests", return_value=tree) as walked:
-            labels = fast_gate.with_tree(["hq.a.tests.test_b"], ["hq/domains/example/models.py"], [])
-        walked.assert_called_once_with(fast_gate.ROOT)
+        with everywhere("tree_tests", return_value=tree) as walked:
+            labels = fast_select.with_tree(["hq.a.tests.test_b"], ["hq/domains/example/models.py"], [])
+        walked.assert_called_once_with(fast_chain.ROOT)
         self.assertLessEqual({"hq.a.tests.test_b", *undeclared}, set(labels))
         command = fast_gate.run_command((), [], labels, "2")
         self.assertLessEqual(set(labels), set(command))
@@ -351,10 +351,10 @@ class FastGateTreeTests(GateTestCase):
     @tag("tree")
     def test_the_walk_started_beside_the_selection_is_the_one_read(self):
         walks = [("hq.a.tests.test_tree.Walks", None)]
-        with patch.object(fast_gate, "tree_tests", return_value=walks) as walked:
-            walking = fast_gate.walk_for_tree()
-            labels = fast_gate.with_tree(["hq.a.tests.test_b"], ["docs/Example.md"], None, walking)
-        walked.assert_called_once_with(fast_gate.ROOT)
+        with everywhere("tree_tests", return_value=walks) as walked:
+            walking = fast_select.walk_for_tree()
+            labels = fast_select.with_tree(["hq.a.tests.test_b"], ["docs/Example.md"], None, walking)
+        walked.assert_called_once_with(fast_chain.ROOT)
         self.assertEqual(labels, ["hq.a.tests.test_b", "hq.a.tests.test_tree.Walks"])
 
     def test_the_paths_a_listing_can_tell_are_those_added_or_deleted(self):
@@ -372,8 +372,8 @@ class FastGateTreeTests(GateTestCase):
             (root / "staged.txt").write_text("new\n")
             git("add", "staged.txt")
             (root / "untracked.txt").write_text("new\n")
-            with patch.object(fast_gate, "ROOT", root):
-                listed = fast_gate.listed_change(base, ["deleted.txt"])
+            with patch.object(fast_chain, "ROOT", root):
+                listed = fast_select.listed_change(base, ["deleted.txt"])
         self.assertEqual(listed, ["deleted.txt", "staged.txt", "untracked.txt"])
 
     def test_a_test_both_selected_and_tagged_tree_runs_once(self):
@@ -397,12 +397,12 @@ class FastGateNestedLayoutTests(GateTestCase):
             (root / path).write_text(
                 'class ExampleConfig:\n    name = "hq.domains.example"\n    label = "stable_label"\n'
             )
-            with patch.object(fast_gate, "ROOT", root), patch.object(fast_gate, "python_files", return_value=[path]):
-                apps = fast_gate.django_apps()
+            with patch.object(fast_chain, "ROOT", root), everywhere("python_files", return_value=[path]):
+                apps = fast_select.django_apps()
             self.assertEqual(apps, {"hq/domains/example": "stable_label"})
-            self.assertEqual(fast_gate.owner("hq/domains/example/views.py", apps), "stable_label")
-            self.assertEqual(fast_gate.owner("templates/stable_label/list.html", apps), "stable_label")
-            self.assertEqual(fast_gate.owner("static/stable_label/site.css", apps), "stable_label")
+            self.assertEqual(fast_select.owner("hq/domains/example/views.py", apps), "stable_label")
+            self.assertEqual(fast_select.owner("templates/stable_label/list.html", apps), "stable_label")
+            self.assertEqual(fast_select.owner("static/stable_label/site.css", apps), "stable_label")
 
     def test_an_app_is_each_class_naming_one_in_an_apps_module_under_hq(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -420,10 +420,10 @@ class FastGateNestedLayoutTests(GateTestCase):
                 (root / path).parent.mkdir(parents=True)
                 (root / path).write_text(text)
             with (
-                patch.object(fast_gate, "ROOT", root),
-                patch.object(fast_gate, "python_files", return_value=[Path(path) for path in modules]),
+                patch.object(fast_chain, "ROOT", root),
+                everywhere("python_files", return_value=[Path(path) for path in modules]),
             ):
-                apps = fast_gate.django_apps()
+                apps = fast_select.django_apps()
             # Without a label of its own, an app is labeled by its name's last part.
             self.assertEqual(apps, {"hq/domains/example": "example"})
 
@@ -434,10 +434,10 @@ class FastGateNestedLayoutTests(GateTestCase):
             (root / path).parent.mkdir(parents=True)
             (root / path).write_text("")
             with (
-                patch.object(fast_gate, "ROOT", root),
-                patch.object(fast_gate, "names", return_value=[str(path), "example/views.py"]),
+                patch.object(fast_chain, "ROOT", root),
+                everywhere("names", return_value=[str(path), "example/views.py"]),
             ):
-                self.assertEqual(fast_gate.python_files(), [path])
+                self.assertEqual(fast_select.python_files(), [path])
 
     def test_a_name_git_quotes_in_a_list_of_lines_reaches_the_selection_as_it_is(self):
         """systemd's escaping writes a backslash into a unit's name, which git quotes unless asked for -z."""
@@ -458,9 +458,9 @@ class FastGateNestedLayoutTests(GateTestCase):
             git("commit", "--quiet", "--no-verify", "-m", "change")
             (root / new).write_text("new\n")
             (root / module).write_text("")
-            with patch.object(fast_gate, "ROOT", root):
+            with patch.object(fast_chain, "ROOT", root):
                 self.assertEqual(fast_gate.changed_paths(base, root), (sorted([added, new, module]), [gone]))
-                self.assertEqual(fast_gate.python_files(), [Path(module)])
+                self.assertEqual(fast_select.python_files(), [Path(module)])
 
     def test_a_renamed_files_old_path_selects_what_reached_it(self):
         """git sees an unchanged file moved as a rename, which names only its new path unless asked not to."""
@@ -494,8 +494,8 @@ class FastGateNestedLayoutTests(GateTestCase):
             git("mv", "deploy/old.yml", "deploy/new.yml")
             git("commit", "--quiet", "--no-verify", "-m", "rename")
             with (
-                patch.object(fast_gate, "ROOT", root),
-                patch.object(fast_gate, "merge_base", return_value=base),
+                patch.object(fast_chain, "ROOT", root),
+                everywhere("merge_base", return_value=base),
                 patch("sys.stdout", new_callable=io.StringIO) as out,
             ):
                 self.assertEqual(fast_gate.main(Usage({"list": "true"})), 0)
@@ -506,7 +506,7 @@ class FastGateNestedLayoutTests(GateTestCase):
 
     def test_only_a_test_named_module_of_a_package_is_a_label(self):
         """A module run in a dependency group's environment, or run as a harness, is no label of the default run."""
-        self.assertTrue(fast_gate.is_test(Path("tools/gate/tests/test_fast.py")))
+        self.assertTrue(fast_select.is_test(Path("tools/gate/tests/test_fast.py")))
         for path in (
             "tests/fuzz/api_properties.py",
             "tests/fuzz/parsers.py",
@@ -514,7 +514,7 @@ class FastGateNestedLayoutTests(GateTestCase):
             "tests/fixtures/example_hq_plugin/views.py",
         ):
             with self.subTest(path=path):
-                self.assertFalse(fast_gate.is_test(Path(path)))
+                self.assertFalse(fast_select.is_test(Path(path)))
 
 
 # A test module only a test task's dependency group can import, and that task.
@@ -537,12 +537,12 @@ class FastGateGroupTaskTests(GateTestCase):
 
     def test_a_change_that_reaches_the_module_runs_its_task_and_no_label_for_it(self):
         labels, gates = self.run_on(GROUP_MODULE)
-        self.assertNotIn(fast_gate.module_name(Path(GROUP_MODULE)), labels)
+        self.assertNotIn(fast_select.module_name(Path(GROUP_MODULE)), labels)
         self.assertIn(GROUP_TASK, gates)
 
     def test_a_change_that_does_not_reach_the_module_runs_neither(self):
         labels, gates = self.run_on("hq/domains/projects/models.py")
-        self.assertNotIn(fast_gate.module_name(Path(GROUP_MODULE)), labels)
+        self.assertNotIn(fast_select.module_name(Path(GROUP_MODULE)), labels)
         self.assertNotIn(GROUP_TASK, gates)
 
 
@@ -557,8 +557,8 @@ class FastGateRecordingSelectionTests(GateTestCase):
             "lint:ruff": {"name": "lint:ruff", "tags": ["fast"]},
         }
         held = {"lint:record": ["example.api", "example.contacts.tests"], "lint:unnamed": []}
-        self.enterContext(patch.object(fast_gate, "quick_tasks", return_value=tasks))
-        self.enterContext(patch.object(fast_gate, "recorded_labels", side_effect=held.__getitem__))
+        self.enterContext(everywhere("quick_tasks", return_value=tasks))
+        self.enterContext(everywhere("recorded_labels", side_effect=held.__getitem__))
 
     def unreached(self, paths: list[str], labels: list[str]) -> list[str]:
         return fast_gate.unreached_recordings(("lint:record", "lint:unnamed", "lint:ruff"), paths, labels)
@@ -777,119 +777,6 @@ class GateVerdictTests(GateTestCase):
                 code, printed = run_main(selected=("lint:ruff",), step=[*steps, *[gate_verdict.Step("more")] * 3])
                 self.assertEqual(code, 0 if expected == "passed in" else 1)
                 self.assertIn(expected, printed[-1])
-
-
-@tag("source", "tree")
-class FastGateTurnTests(GateTestCase):
-    """fast holds the machine's heavy turn for its test run alone, which runs in one run of mise with every quick
-    gate it selected, those that take the heavy lock themselves among them: the run goes on past a failure, so
-    one waiting for its turn is waited for rather than left behind."""
-
-    def test_every_gate_runs_beside_the_tests_those_that_take_the_lock_included(self):
-        quick = fast_gate.quick_gates()
-        self.assertTrue({task for task in quick if HEAVY_LOCK in locks(task)})
-        calls: list[tuple[str, list[str]]] = []
-
-        def step(label: str, cmd: list[str]) -> gate_verdict.Step:
-            calls.append((label, cmd))
-            return gate_verdict.Step(label)
-
-        run_main(("hq/example.py",), quick, step, affected=(set(), set()), test_labels=([], 0), unreached_recordings=[])
-        (run,) = [cmd for _, cmd in calls if set(quick) & set(cmd)]
-        self.assertIn(fast_gate.TESTS, run)
-        self.assertLessEqual(set(quick), set(run))
-        self.assertTrue(takes_the_turn(mise_tasks()[fast_gate.TESTS]))
-        self.assertFalse(takes_the_turn(mise_tasks()["fast"]))
-
-
-TREE = "1" * 40
-BASE_TREE = "2" * 40
-
-
-@tag("source", "tree")
-class FastGatePassRecordTests(GateTestCase):
-    """A passing run on a tree that held still records the tree when the run proves it: the whole suite ran, or the
-    base's tree passed and the run selected what changed from it."""
-
-    def setUp(self):
-        self.folder = Path(self.enterContext(tempfile.TemporaryDirectory())) / "severino" / "fast-passes"
-
-    def run_fast(self, *, still=True, ok=True, whole=False, labels=("hq.example.tests.test_x",)) -> list[str]:
-        total = len(labels) if whole else len(labels) + 5
-        selected = fast_gate.quick_gates() if whole else ()
-        groups = tuple(fast_gate.group_tests().values()) if whole else ()
-        result = gate_verdict.Step("tests", ok=ok)
-        with patch.object(fast_gate, "passes", return_value=self.folder):
-            run_main(
-                selected=selected,
-                group_tasks=groups,
-                step=lambda label, cmd, *_: result if fast_gate.TESTS in cmd else gate_verdict.Step(label),
-                affected=(set(), set()),
-                test_labels=(list(labels), total),
-                judged=TREE if still else None,
-                tree_of=BASE_TREE,
-                touches_shared_ui=False,
-            )
-        return sorted(path.name for path in self.folder.iterdir()) if self.folder.is_dir() else []
-
-    def test_a_passing_run_of_the_whole_suite_on_a_tree_that_held_still_records_it(self):
-        self.assertEqual(self.run_fast(whole=True), [TREE])
-
-    def test_a_wide_selection_runs_the_whole_suite_and_every_quick_gate_and_records_it(self):
-        """Past WIDE of the suite the rest runs too, so the pass starts the chain of recorded trees; short of it,
-        the selection runs alone."""
-        suite = [f"hq.example.tests.test_{n}" for n in range(10)]
-        for share, whole in ((7, True), (2, False)):
-            with self.subTest(share=share):
-                shutil.rmtree(self.folder, ignore_errors=True)
-                recorder = Recorder()
-                with patch.object(fast_gate, "passes", return_value=self.folder):
-                    run_main(
-                        ("hq/example.py",),
-                        selected=(),
-                        step=recorder,
-                        affected=(set(), set()),
-                        test_labels=(suite[:share], len(suite)),
-                        whole_suite=suite,
-                        judged=TREE,
-                        tree_of=BASE_TREE,
-                        touches_shared_ui=False,
-                    )
-                (run,) = [cmd for _, cmd in recorder.calls if fast_gate.TESTS in cmd]
-                every_gate = {*fast_gate.quick_gates(), *fast_gate.group_tests().values()}
-                self.assertEqual(every_gate <= set(run), whole)
-                self.assertEqual(set(suite) <= set(run), whole)
-                recorded = sorted(path.name for path in self.folder.iterdir()) if self.folder.is_dir() else []
-                self.assertEqual(recorded, [TREE] if whole else [])
-
-    def test_a_passing_run_over_a_passed_base_records_the_tree(self):
-        self.folder.mkdir(parents=True)
-        (self.folder / BASE_TREE).touch()
-        self.assertEqual(self.run_fast(), sorted([BASE_TREE, TREE]))
-
-    def test_a_tree_changed_in_the_run_or_a_failed_run_records_nothing(self):
-        for case in ({"still": False}, {"ok": False}):
-            with self.subTest(**case):
-                self.assertEqual(self.run_fast(whole=True, **case), [])
-
-    def test_a_selection_from_an_unpassed_base_records_nothing(self):
-        """A clean branch equal to its base selects nothing it changed, so its pass says nothing about the tree."""
-        for labels in ((), ("hq.example.tests.test_x",)):
-            with self.subTest(labels=labels):
-                self.assertEqual(self.run_fast(labels=labels), [])
-
-    def test_the_record_is_shared_by_every_worktree(self):
-        with tempfile.TemporaryDirectory() as directory:
-            repo, other = Path(directory) / "repo", Path(directory) / "other"
-            repo.mkdir()
-            git = fixture_git(repo)
-            git("init", "-q")
-            (repo / "a.txt").write_text("a\n")
-            git("add", "a.txt")
-            git("commit", "--quiet", "--no-verify", "-m", "a")
-            git("worktree", "add", "-q", str(other))
-            self.assertEqual(fast_gate.passes(other), fast_gate.passes(repo))
-            self.assertEqual(fast_gate.passes(repo), (repo / ".git").resolve().joinpath("severino", "fast-passes"))
 
 
 @tag("source", "tree")

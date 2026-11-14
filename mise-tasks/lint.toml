@@ -30,7 +30,7 @@ run = 'if [ "${usage_fix:-}" = true ]; then uv run ruff check --fix-only --quiet
 ["lint:mypy"]
 description = "mypy type-checks the seams pyproject.toml names and the browser test package's calls, then every source module for code its types rule out"
 hide = true
-tags = ["fast"]
+tags = ["fast", "heavy"]
 sources = [
   "**/*.py",
   "pyproject.toml",
@@ -256,7 +256,7 @@ run = "uv run python manage.py check --deploy --fail-level WARNING"
 ["lint:structural"]
 description = "No new near-duplicate pair outside tests"
 hide = true
-tags = ["fast"]
+tags = ["fast", "heavy"]
 sources = [
   "**/*.py",
   "**/*.go",
@@ -432,7 +432,7 @@ extends = "django"
 # selects it on a change to Python alone only where it selects one of those
 # tests, and runs its fix only once its check has failed, then checks again
 # (tools/gate/fast.py, RECORDING).
-tags = ["fast", "recording"]
+tags = ["fast", "recording", "heavy"]
 usage = 'flag "--fix" help="Record the examples into the file and rewrite the document instead of checking: fast runs it once the check fails"'
 run = 'if [ "${usage_fix:-}" = true ]; then mise run fix:api-examples; exit; fi; recorded="$(mktemp)"; trap "rm -f \"$recorded\"" EXIT; HQ_API_RECORD_EXAMPLES_TO="$recorded" mise run fix:api-examples && diff -u hq/platform/api/openapi-examples.json "$recorded" || { echo "lint:drift-api-examples: the recording differs from hq/platform/api/openapi-examples.json, or did not finish; mise run fix:api-examples records it again" >&2; exit 1; }'
 

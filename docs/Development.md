@@ -327,7 +327,7 @@ On an 8 GB Apple silicon machine:
 `mise run fast [BASE]` maps the changed files against a base. One asked for
 (`BASE`, `$CHECK_BASE`) is read as its merge base with HEAD. With none, the
 base is the nearest commit on HEAD's first-parent history (as far back as
-`PASSED_REACH` in `tools/gate/fast.py`) whose tree passed fast (the record
+`PASSED_REACH` in `tools/gate/chain.py`) whose tree passed fast (the record
 below), so the change is only what came after a proven tree. Without one,
 it is the merge base with the branch HEAD lands on, then `origin/main`,
 `main`. The branch HEAD lands on is its own branch's
@@ -391,10 +391,9 @@ The tests it selects are:
   change reaches what extensions render through (`templates/`, `static/`,
   `hq_sdk/`, the shared table, page, UI and moment modules, template tags).
 
-A selection past `WIDE` of the test modules (`tools/gate/fast.py`) is a
-wide change, and the whole suite runs with every quick gate instead: the
-rest costs little beside it, and only a whole run's pass records a tree that
-has no passed base. `--whole` runs it whatever changed.
+A run runs its selection however wide it is. `--whole` runs the whole suite
+with every quick gate instead, whatever changed: the landing asks for it, and
+its pass records the tree and its map.
 
 A whole run also measures which test modules ran each Python file, as
 pytest-testmon does: coverage runs with its C tracer and a context per test
@@ -420,16 +419,16 @@ The import, task and naming rules apply to every changed file either way,
 which keeps the tests that run a file in a subprocess, which coverage does
 not attribute.
 
-Beside the tests it runs each quick gate the change affects, as mise's
+Before the tests it runs each quick gate the change affects, as mise's
 `--affected` reads it from the base: a quick gate is a task tagged
 `fast`, and it is affected when a changed or deleted file matches its
 `sources` (`!` patterns take paths out) or its own definition changed. Every
 quick gate's sources also name the tool pins and task definitions, and each
 one that runs Python its dependencies (`pyproject.toml`, `uv.lock`), so a
 change to one runs every gate that reads it. The controller's Go tests
-(`test:controller`) are a quick gate too: they take the heavy lock
-themselves, so they run once the rest has passed, and Go's own test cache
-reruns only the packages a change reached. Each quick gate declares
+(`test:controller`) are a quick gate too, which runs beside the tests in
+the heavy turn, as it takes the lock itself, and Go's own test cache reruns
+only the packages a change reached. Each quick gate declares
 `outputs = []`, so a direct `mise run` of it never skips as up to date. The
 shell gate also runs when a path the change touched is one
 `tools/gate/shell-sources.sh` names (a deleted one as the base had it), which
@@ -443,10 +442,19 @@ exclusions its tool declares.
 A test module that a `test:*` task runs by its label in a dependency group's
 environment (`uv run --group fuzz`), which the tests' environment lacks, is
 never a label. When the selection above would reach it, its task runs as a
-quick gate instead, read from the task's own `run`.
+gate beside the tests instead, read from the task's own `run`.
 
-The quick gates and the tests run in one `mise run`, whose output
-`var/gate/fast.log` keeps ([The gates](#the-gates)), in the config
+fast runs in two stages, each one `mise run`. The quick gates run first, side
+by side, before the tests are selected, and the tests start only once every
+one has passed, so a lint or drift finding fails the run in the seconds they
+take. A recording waits for the selection, which says whether it runs. The tests then run
+beside each selected gate that runs in the heavy turn ([Heavy gates take
+turns](#heavy-gates-take-turns)): with one, fast takes the turn once, through
+the hidden task `turn`, for the tests and those gates together, and mise hands
+its lock down to every task under it, so a gate that takes the lock itself
+goes ahead at once, beside the rest. With none, the tests take the turn
+themselves when their run is heavy. Both runs' output is kept in
+`var/gate/fast.log` ([The gates](#the-gates)), and both run in the config
 environment `mise.fast.toml` sets: mise's summary output, where a gate that
 passed prints its `passed in` line as it ends and one that failed prints
 whole as it ends. The tests run as `fast:tests` (`mise-tasks/fast/`), whose
@@ -454,11 +462,9 @@ own output setting outranks the environment's, so they print as they run,
 their wait for the heavy turn included; `--output` or `MISE_TASK_OUTPUT`
 would outrank both.
 
-The run goes on past a failure (`--continue-on-error`) until every task it
-holds has ended, so one run names every gate and test that failed, and the
-verdict's last line names the rerun of each. A quick gate that takes the
-heavy lock itself (the shell gate, for its suites) runs in it too, once it
-has the turn. The selected tests that read every browser gate module (each
+Each run goes on past a failure (`--continue-on-error`) until every task it
+holds has ended, so it names every gate and test that failed, and the
+verdict's last line names the rerun of each. The selected tests that read every browser gate module (each
 imports `browser_modules`: the probe check among them) start no browser,
 and run first as `fast:source`, ahead of the tests, which run after them
 whether or not they passed.
@@ -479,9 +485,14 @@ verdict file opens on, as an empty file named by that hash under
 `$(git rev-parse --git-common-dir)/severino/fast-passes/`, which every
 worktree shares and which a re-signed commit keeps. It records one only when
 the run proves the tree: its base's tree has a record, so what the change left
-unselected had passed, or the run selected every test and quick gate. A wide
-change runs them all, so a branch whose history has no recorded tree records
-one on its first wide run, and each run after reads from it.
+unselected had passed, or the run selected every test and quick gate. A base
+with no record here is asked of GitHub once, through `gh`: when CI's last
+completed run on that commit (`ci.yml`, a run of this repository's own
+commit, never a fork's) passed, its tree is recorded first, so a run from
+`origin/main` or any pushed commit starts the chain, and each run after reads
+from it. With no network, no `gh` or no passed run, the run says so in its one
+line on the record and goes on unrecorded (`passed_in_ci` in
+`tools/gate/chain.py`).
 
 ### What `check` runs
 
@@ -668,7 +679,13 @@ the machine (a suite, a browser, an image build, CodeQL) waits for one turn
 shared by every checkout and worktree, and a waiting task names the holder.
 
 A step of one process (a Django command, a linter, a serial test run) runs
-beside the holder. An aggregate (`check`, `lint`, `test`, `browser`) holds no
+beside the holder. A gate whose one process still loads the machine
+through most of a fast run (`lint:mypy` is one) carries the tag `heavy`, which only fast reads: fast
+runs it beside its tests in the turn it takes for them, never among its
+quick gates, while a direct `mise run` of it, `lint` and CI run it as a step
+of one process. `FastGateStageTests` (`tools/gate/tests/test_fast_stages.py`)
+holds every gate fast runs to one side: tagged `fast` as a quick gate, or
+tagged `heavy` or taking the lock. An aggregate (`check`, `lint`, `test`, `browser`) holds no
 turn of its own, so its light gates never wait; `build` holds one across its
 steps, which share the VM it boots. A one-off command in the built image
 (`mise run image:run -- python -V`) holds the turn and the VM while it runs,
