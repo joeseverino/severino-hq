@@ -163,6 +163,19 @@ class FilterBarFoldTests(SimpleTestCase):
             "the panel keeps its id across a choice, so the answer raises it again",
         )
 
+    def test_two_bars_sending_the_same_choices_each_fold_into_their_own_panel_once_named(self):
+        source = (
+            '{% filter_bar id=named %}<input type="search" name="q">{% choices %}'
+            '<select name="kind"><option>a</option></select>{% endfilter_bar %}'
+        )
+        html = _render(source) + _render(source, named="example-other")
+
+        folds = [fold.attrs["popovertarget"] for fold in with_class(html, "filter-bar-fold")]
+        self.assertEqual(len(set(folds)), 2)
+        for target in folds:
+            (panel,) = select(html, "id", target)
+            self.assertIn("popover", panel.attrs)
+
     def test_choices_counted_are_those_that_narrow(self):
         from hq.platform.core.templatetags.filter_tags import folded
 

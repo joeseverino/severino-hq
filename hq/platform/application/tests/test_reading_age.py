@@ -222,7 +222,7 @@ class ReadingItemsCarryTheirAgeTests(SimpleTestCase):
         missing = sorted(f"{module}:{line}" for (module, line), aged in held.items() if not aged)
 
         self.assertTrue(held, "no item is built from a stored reading: the rule checks nothing")
-        self.assertIn(("container_attention", "attention"), readers, "the walk no longer follows an indirect reader")
+        self.assertIn(("container_findings", "add"), readers, "the walk no longer follows an indirect reader")
         self.assertEqual(missing, [])
 
 

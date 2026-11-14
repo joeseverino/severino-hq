@@ -96,6 +96,7 @@ NOT_A_FINDING = {
     "hq/platform/application/attention.py:finding_insight": "the rule runner's card",
     "hq/platform/application/attention.py:_backlog": "a record domain's backlog",
     "hq/platform/application/attention.py:waiting_for_approval": "a held request a person decides",
+    "hq/platform/application/attention.py:_deploying": "a deploy on its way to production, no fault",
     "hq/platform/application/plugins.py:source_attention": "a source HQ could not read",
     "hq/platform/application/references.py:_dangling_item": "a record linking to nothing",
     "hq/platform/application/request_path.py:finding_rows": "one request, judged as it is served",
@@ -105,13 +106,6 @@ NOT_A_FINDING = {
 # ``FindingRule`` leaves this list; nothing joins it.
 BUILT_BY_HAND = frozenset(
     {
-        "hq/platform/application/attention.py:_deploying",
-        "hq/platform/application/attention.py:_unsettled",
-        "hq/platform/application/attention.py:services",
-        "hq/platform/application/container_attention.py:_advisory",
-        "hq/platform/application/container_attention.py:_reach_attention",
-        "hq/platform/application/container_attention.py:attention",
-        "hq/platform/application/estate.py:_expiring",
         "hq/platform/application/estate.py:_offline",
         "hq/platform/application/github_estate.py:_alerts",
         "hq/platform/application/github_estate.py:_failing",

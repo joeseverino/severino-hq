@@ -113,14 +113,14 @@ class EveryCallerTests(TestCase):
 
         self.assertSays(read)
 
-    def test_an_estate_certificate_item(self):
-        from ..estate import Expiry, _expiring
+    def test_a_certificate_renewal_finding(self):
+        from ..certificate_expiry import RENEWAL, renewal_due
 
         def read(when):
-            (item,) = _expiring(
-                SimpleNamespace(certificates=(Expiry("example.com", "Certificate", when, resource_key="example-cert"),))
+            (finding,) = renewal_due(
+                estate(node(**{RENEWAL: f"example.com|{when.isoformat()}|30|/certificates/example/"}))
             )
-            return item.title
+            return finding.title
 
         self.assertSays(read)
 

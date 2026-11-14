@@ -712,6 +712,11 @@ where a value would stand (a fact, a cell, a row) is the same part with
 so no page draws headings over nothing. Its `empty=` says what is missing in
 the page's words, with `remedy=` (or `action_url=` and `action_label=`).
 `filtered=` with `clear=` says its filter emptied it, with the way back.
+
+**A document whose markup must stay apart from the page is framed.**
+`partials/_framed_document.html` (`src`, `title`) draws one of HQ's own
+documents, the Design page's gallery, in a frame as wide as the column and as
+tall as the view, so its ids, headings and links never become the page's.
 The message is the fact alone, one sentence ("No playbooks adopted yet."), with
 no how-to after it: the action and the page's controls say what to do.
 
@@ -979,7 +984,9 @@ otherwise fold behind one Filters control, a popover panel under the bar that
 sends without a script. That button reads Apply unless the bar names its own
 verb, so Filter never stands beside Filters. The control counts the choices that narrow (a select off its "Any", a
 table's filter with a box ticked, a set of toggles with one off, a ticked
-toggle), so a folded bar never hides that its list is narrowed. The fold is
+toggle), so a folded bar never hides that its list is narrowed. The panel's
+id is drawn from the names its choices send, and from the bar's `id=` where a
+page draws two bars sending the same names, as a page of maps does. The fold is
 the layout's own measure, never a width written for one page: the bar's sizer,
 an inert copy of the row unfolded, takes the room the row needs, and the
 choices fold exactly when what is left is none, which is where the row would

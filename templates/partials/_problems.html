@@ -10,7 +10,7 @@ from, and its title is not a link back to the page it is on.
 
 Each is the queue's own row (`_work_queue.html`), a family folded under its
 name; an urgent one is in a box above the page. The page's other problems
-share a card under that box, in the row's dense form; a page made of parts
+share an "Open problems" section under that box, in the row's dense form; a page made of parts
 draws a part's problems in that part's card, as `rest`:
 
     {% include "partials/_problems.html#rest" with rest=part_problems %}
@@ -28,6 +28,6 @@ Nothing is drawn when nothing is open.
 {% endcard %}
 {% endif %}
 {% if rest %}
-{% card label=rest|length|counted:"open problem,open problems" %}{% partial rest %}{% endcard %}
+{% section "Open problems" id="problems" count=rest|length %}{% partial rest %}{% endsection %}
 {% endif %}
 {% endwith %}

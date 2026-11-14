@@ -39,6 +39,13 @@ class ExpiringTests(SimpleTestCase):
         self.assertEqual(finding.severity, "attention")
         self.assertIn("certificate error", finding.explanation)
 
+    def test_an_expired_certificate_folds_under_a_family_named_for_it_too(self):
+        from hq.platform.application.findings import rule_for
+
+        (expired,) = expiring(holding(certificate("example.com", -3)))
+
+        self.assertIn("past expiry", rule_for(expired.rule).title)
+
     def test_findings_come_in_title_order_and_other_facts_are_passed_over(self):
         found = expiring(
             holding(

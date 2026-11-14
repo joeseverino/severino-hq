@@ -37,6 +37,8 @@ from .topology_model import (
 )
 lazy from . import (
     certificate_expiry,
+    container_findings,
+    contradiction_findings,
     docker_estate,
     filesystem_findings,
     reading_facts,
@@ -228,6 +230,7 @@ def _services(nodes, edges, estate: _Estate, zones: tuple[str, ...]) -> None:
             detail=service.faults[0] if service.faults else "",
             url=service.url,
             kind_key="service",
+            facts=tuple((contradiction_findings.SERVICE_FAULT, fault) for fault in service.faults),
             actions=_open(service.url),
         )
         estate.subjects[node_id] = Subject.of(
@@ -498,10 +501,12 @@ def _reader_index(nodes) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
 
 def _derived_from_readings(nodes, resources, estate: _Estate) -> None:
     """What provider-specific joins add: container edges, and image, render
-    status, unit, filesystem, restart, tailnet device, refused report and certificate facts."""
+    status, unit, filesystem, restart, tailnet device, refused report, certificate and renewal facts,
+    and the findings about each container."""
 
     if estate.machine_ids:
         docker_estate.add(nodes, estate.machine)
+        container_findings.add(nodes, estate.machine)
     render_status_findings.add(nodes, estate.machine)
     unit_findings.add(nodes, estate.machine)
     filesystem_findings.add(nodes, estate.machine)
@@ -509,6 +514,7 @@ def _derived_from_readings(nodes, resources, estate: _Estate) -> None:
     tailnet_device_findings.add(nodes, estate.machine)
     reading_facts.add_refusals(nodes, estate.machine)
     reference_findings.add(nodes, resources)
+    certificate_expiry.add_renewals(nodes)
     by_ref, by_provider = _reader_index(nodes)
     certificate_expiry.add(
         nodes,

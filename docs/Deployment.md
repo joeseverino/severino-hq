@@ -529,6 +529,7 @@ that variable names. `test_settings_env.py` holds this table to the code.
 | `SEVERINO_MEDIA_ROOT` | platform | where uploads are kept |
 | `SEVERINO_EXPORTS_ROOT` | platform | where exports are written |
 | `DJANGO_STATIC_ROOT` | platform | the collected static tree, built into the image |
+| `SEVERINO_DESIGN_GALLERY` | platform | the Design page's gallery, written once by the image build; absent, the page says so |
 | `SEVERINO_HQ_SOURCE` | platform | the repository this build came from |
 | `SEVERINO_HQ_REVISION` | platform | the commit this build is |
 | `SEVERINO_HQ_PLUGINS` | platform | the installed extensions' manifests, as `package.module:PluginManifest` entries |

@@ -1,0 +1,21 @@
+from pathlib import Path
+from typing import override
+
+from django.conf import settings
+from django.core.management.base import BaseCommand
+
+from hq.platform.core import design_gallery
+
+
+class Command(BaseCommand):
+    help = "Write the Design page's gallery of every shared part to SEVERINO_DESIGN_GALLERY, as the image build does."
+
+    @override
+    def add_arguments(self, parser):
+        parser.add_argument("--output", type=Path, help="Where to write it instead of SEVERINO_DESIGN_GALLERY.")
+
+    @override
+    def handle(self, *args, **options):
+        path = options["output"] or Path(settings.SEVERINO_DESIGN_GALLERY)
+        size = design_gallery.write(path)
+        self.stdout.write(f"{path}: {size} bytes")

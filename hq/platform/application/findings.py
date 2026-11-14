@@ -30,6 +30,7 @@ from . import (
     automation_findings,
     certificate_expiry,
     connection_findings,
+    container_findings,
     contradiction_findings,
     controller_findings,
     credential_findings,
@@ -176,6 +177,7 @@ def _estate(topology: Topology) -> FindingEstate:
 # This is the closed set, in the order pages list the rules.
 RULE_MODULES = (
     docker_estate,
+    container_findings,
     perimeter_findings,
     connection_findings,
     credential_findings,
@@ -339,7 +341,7 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
             )
         )
     resolved_remedies = tuple(kept)
-    offers = tuple(
+    offers = finding.offers + tuple(
         action for action in (subject.actions if subject else ()) if action.effect == "read" and action.method == "GET"
     )
     investigations = topology_investigation_links(subject.id) if subject else ()
@@ -366,24 +368,17 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
         remedies=remedy_actions,
         verification=verification,
     )
-    return Finding(
-        rule=finding.rule,
-        subject=finding.subject,
-        title=finding.title,
-        severity=finding.severity,
-        explanation=finding.explanation,
-        evidence=finding.evidence,
+    # Every field the detector set carries through; only what derivation adds changes.
+    return replace(
+        finding,
         remedies=resolved_remedies,
         offers=offers,
         investigations=investigations,
-        scope=finding.scope,
-        affected_scopes=finding.affected_scopes,
         workflow=workflow,
         steps=finding_steps(finding),
         no_help_reason=_no_help_reason(finding),
         subject_link=ActionLink("subject", subject.label, "read", subject.url) if subject and subject.url else None,
         read_capabilities=_held_to(finding, subject, principal),
-        part=finding.part,
         read_now=read_now,
     )
 

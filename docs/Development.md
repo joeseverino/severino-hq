@@ -1016,8 +1016,13 @@ filtered list) is a name like any other.
 A component catalog entry (`part/notice-error`, `table/figures`, every key of
 `CATALOG`, which `hq/platform/core/tests/browser/catalog/` gathers from its
 families' modules) is drawn by the
-catalog gate's own `CatalogLayoutTests.render`, so a look and that gate never
-draw an entry apart. It is answered from memory as a gate page is, with no
+catalog gate's own `catalog.page`, so a look and that gate never
+draw an entry apart. `gallery` is every entry on one page, each in a region
+named for it, after a map of its families: the gate holds it to the survey
+each entry alone is held to, so a finding there that no entry has alone is
+one entry disturbing another. HQ's System > Design page frames the same
+gallery as a document of its own, drawn live on a dev server and from the
+image build's copy elsewhere. An entry is answered from memory as a gate page is, with no
 server or estate behind it, so a look at one entry is the quick way to see a
 change to a shared part, ahead of the catalog's whole browser class. A name that begins entries
 (`part/notice`, `table`) is each of them, in the catalog's order. The gate

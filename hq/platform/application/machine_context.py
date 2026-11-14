@@ -24,9 +24,10 @@ from .projection import projection_scope
 from .security import Principal
 from .service_context import Cell, ServiceSection, recent_changes, recent_work
 from .ui import MISSING
-lazy from . import connections, docker_estate, services
+lazy from . import connections, services
 lazy from .cadence import connection_providers
-lazy from .findings import rule_of
+lazy from .finding_model import CONTAINERS_CARD, TAILNET_CARD
+lazy from .findings import rule_for, rule_of
 lazy from .hq_self import hq_service
 lazy from .locate import host_of
 lazy from .machines import Machine
@@ -103,7 +104,7 @@ def _identity(machine) -> ServiceSection | None:
 _SUPPLIED_BY = {"runtime": "Container", "dns": "DNS record", "proxy": "Proxy", "certificate": "Certificate"}
 
 
-def _names(machine) -> ServiceSection | None:
+def _names(machine, *, principal: Principal) -> ServiceSection | None:
     """Every name this machine answers on, and what supplies each one.
 
     The band the machine page exists for: what runs, resolves, fronts and
@@ -130,8 +131,14 @@ def _names(machine) -> ServiceSection | None:
         claim = next(iter(facet.claims), None) if facet and facet.present else None
         if claim is None:
             return Cell(MISSING, muted=True)
-        # The row is already the name, so the cell says where it leads.
-        return Cell.of(claim.within_service)
+        # The row is already the name, so the cell says where it leads, and,
+        # while what it leads to has an open problem, the worst of them in its
+        # tone, as the queue words it less the name the cell already shows.
+        link = claim.within_service
+        worst = next(iter(problems_about(link.url, principal)), None)
+        if worst is None:
+            return Cell.of(link)
+        return Cell(worst["label"].removeprefix(link.label).strip(), link.url, tone=worst["status"], link=link)
 
     def traffic(hostname: str) -> Cell:
         reading = measured.get(normalized_hostname(hostname))
@@ -256,20 +263,17 @@ def machine_links(machine: Machine, relationships) -> dict[str, object]:
 
 
 def problems_by_part(machine: Machine, principal: Principal) -> dict[str, tuple[dict, ...]]:
-    """The machine's open problems ``principal`` may read, by where its page draws them: a line about
-    a container under Containers, any other line under Tailnet, and an urgent
-    one, or one whose part the page does not draw, above the page (``page``)."""
+    """The machine's open problems ``principal`` may read, by where its page
+    draws them: under the card its rule declares (``FindingRule.card``) when
+    the page draws that card, and an urgent one, or any other, above the page
+    with the machine's own state (``page``)."""
 
-    containers = {rule.name for rule in docker_estate.RULES}
-    found: dict[str, list[dict]] = {"page": [], "containers": [], "tailnet": []}
+    drawn = {CONTAINERS_CARD: bool(machine.containers), TAILNET_CARD: machine.presence is not None}
+    found: dict[str, list[dict]] = {"page": [], CONTAINERS_CARD: [], TAILNET_CARD: []}
     for item in problems_about(machine.url, principal):
-        part = "page"
-        if item.get("status") != "serious":
-            if machine.containers and rule_of(item["key"]) in containers:
-                part = "containers"
-            elif machine.presence is not None:
-                part = "tailnet"
-        found[part].append(item)
+        rule = rule_for(rule_of(item["key"]))
+        card = rule.card if rule is not None and item.get("status") != "serious" else ""
+        found[card if drawn.get(card) else "page"].append(item)
     return {part: tuple(items) for part, items in found.items()}
 
 
@@ -349,4 +353,4 @@ SECTIONS: tuple[Callable[..., ServiceSection | None], ...] = (
     _activity,
 )
 # The sections whose rows depend on who reads them, each handed the reader.
-_READ_BY = frozenset({_runs, _activity})
+_READ_BY = frozenset({_names, _runs, _activity})

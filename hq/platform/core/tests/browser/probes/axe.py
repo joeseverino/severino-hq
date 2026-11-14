@@ -123,11 +123,12 @@ def contrast_read():
     return (axe_probe(), [SELECTORS["contrast_scope"], CONTRAST, [], SELECTORS["vendored"]])
 
 
-def rules_read():
-    """Every rule of TAGS but those LEFT_OUT, over the whole page, as a probe
-    and its argument."""
+def rules_read(left_out=()):
+    """Every rule of TAGS but those LEFT_OUT and ``left_out``, the rules a
+    page declares it leaves out (``BrowserGate.left_out_on``), over the whole
+    page, as a probe and its argument."""
 
-    return (axe_probe(), [None, TAGS, list(LEFT_OUT), SELECTORS["vendored"]])
+    return (axe_probe(), [None, TAGS, [*LEFT_OUT, *left_out], SELECTORS["vendored"]])
 
 
 # The survey checks these probes answer (`probes/__init__.py`), each read only

@@ -3,8 +3,8 @@ The queue's rows, one per item, in the queue's table (`_work_queue.html`,
 `_queue_groups.html`): a table row as any other, the words in the cell that
 names it and what can be pressed in its row's actions. Its face is
 `application.decisions`. The first line is the title and, only when urgent,
-the word after it; then its one line of meaning, then since when and how old
-its reading is, quiet, under it. What it offers is `{% row_actions %}`: the
+the word after it; then its one line of meaning, then since when and, once out of
+date, how old its reading is, quiet, under it. What it offers is `{% row_actions %}`: the
 first two buttons, the rest waiting in the opened line, and where the reader
 sorts their own queue (`triage`), Dismiss or Restore as the last of them. Everything taller (the meaning in full, facts, advice, the steps and
 their commands, the reason it cannot be done from here, the pages that help)
@@ -25,11 +25,11 @@ whole.
     <div class="row-line">{% if glance %}<a class="cell-prose" href="{{ item.page }}" data-attention-title>{{ item.label|breakable }}</a>{% elif item.href and not here %}<a class="cell-prose" href="{{ item.href }}" data-attention-title>{{ item.label|breakable }}</a>{% else %}<span class="cell-prose" data-attention-title>{{ item.label|breakable }}</span>{% endif %}{% if not item.aside %} {% include "partials/_urgency_pill.html" with item=item mark=True quiet=glance only %}{% endif %}</div>
     {% if not item.aside %}
       {% if item.detail and not dense %}<p class="muted cell-prose" data-attention-detail>{{ item.detail|breakable }}</p>{% endif %}
-      {% if item.since or item.observed_at or not grouped %}
+      {% if item.since or item.late or not grouped %}
       <ul class="dot-list muted">
         {% if not grouped %}<li>{{ item.source|breakable }}</li>{% endif %}
         {% if item.since %}<li>Since {{ item.since|when:"day" }}</li>{% endif %}
-        {% if item.observed_at %}<li>{% include "partials/_reading_age.html" with at=item.observed_at only %}</li>{% endif %}
+        {% if item.late %}<li>{% include "partials/_reading_age.html" with reading=item.late.reading only %}</li><li>{{ item.late.every|breakable }}</li>{% endif %}
       </ul>
       {% endif %}
       {% if glance %}{% elif item.facts or item.advice or item.steps or item.reason or item.links or item.detail and dense %}

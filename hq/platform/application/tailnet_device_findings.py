@@ -18,7 +18,7 @@ from typing import Any
 from hq.domains.control_plane.consoles import tailscale_machine
 
 from .expiry import days_until
-from .finding_model import Finding, FindingEstate, FindingRemedy, FindingRule, OperatorStep, fact_values
+from .finding_model import TAILNET_CARD, Finding, FindingEstate, FindingRemedy, FindingRule, OperatorStep, fact_values
 from .images import compare, version
 from .moments import when_day
 from .reading_facts import onto_machine
@@ -316,6 +316,7 @@ RULES: tuple[FindingRule, ...] = (
             "Sign in to Tailscale again on the machine, or turn off key expiry for it in the Tailscale admin console."
         ),
         no_help_reason="HQ cannot sign a machine in to the tailnet.",
+        card=TAILNET_CARD,
     ),
     FindingRule(
         "tailnet-device-locked-out",
@@ -324,6 +325,7 @@ RULES: tuple[FindingRule, ...] = (
         _locked_out,
         operator_action="On a machine that can sign, run tailscale lock sign with the machine's key.",
         no_help_reason="Only a machine holding a tailnet lock key can sign.",
+        card=TAILNET_CARD,
     ),
     FindingRule(
         "tailnet-device-unapproved",
@@ -332,6 +334,7 @@ RULES: tuple[FindingRule, ...] = (
         _unauthorized,
         operator_action="Approve it in the Tailscale admin console, under Machines.",
         no_help_reason="HQ cannot approve a device on the tailnet.",
+        card=TAILNET_CARD,
     ),
     FindingRule(
         "tailnet-lock-unsigned",
@@ -340,6 +343,7 @@ RULES: tuple[FindingRule, ...] = (
         _lock_unsigned,
         operator_action="On a machine that can sign, run tailscale lock sign with the machine's key.",
         no_help_reason="Only a machine holding a tailnet lock key can sign.",
+        card=TAILNET_CARD,
     ),
     FindingRule(
         "tailnet-client-update",
@@ -348,6 +352,7 @@ RULES: tuple[FindingRule, ...] = (
         _client_update,
         operator_action="Run tailscale update on the machine, as an administrator.",
         no_help_reason="HQ cannot run commands on the machine.",
+        card=TAILNET_CARD,
     ),
     FindingRule(
         "tailnet-routes-unapproved",
@@ -356,5 +361,6 @@ RULES: tuple[FindingRule, ...] = (
         _routes_unapproved,
         operator_action="Approve the routes you want on the machine's page, and stop offering the rest.",
         no_help_reason="HQ approves only the routes a machine already offers, and a person decides which.",
+        card=TAILNET_CARD,
     ),
 )

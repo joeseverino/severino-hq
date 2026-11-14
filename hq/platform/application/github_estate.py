@@ -497,6 +497,7 @@ def _failing(repo: Repository) -> list[tuple[Insight, str]]:
         url=one.url if one else f"{repo.url}/commit/{repo.head.get('sha', '')}",
         workflow=_failing_help(repo, runs),
         observed_at=repo.observed_at,
+        reads=REPOSITORY_KIND,
         links=() if one else runs,
     )
     return [(item, f"{repo.short} was failing on {repo.default_branch}")]
@@ -522,6 +523,7 @@ def _unverified(repo: Repository) -> list[tuple[Insight, str]]:
             "and the fix in the repository, which HQ never writes to.",
         ),
         observed_at=repo.observed_at,
+        reads=REPOSITORY_KIND,
     )
     return [(item, f"{repo.short}'s last deploy had not passed its own verification")]
 
@@ -552,6 +554,7 @@ def _alerts(repo: Repository) -> list[tuple[Insight, str]]:
             "An alert closes when the code is upgraded. HQ never writes to the repository.",
         ),
         observed_at=repo.observed_at,
+        reads=REPOSITORY_KIND,
     )
     return [(item, f"{counted(repo.serious_alerts, f'{one} was', f'{many} were')} open in {repo.short}")]
 
@@ -594,6 +597,7 @@ def _lapsing(repo: Repository) -> list[tuple[Insight, str]]:
                     "cannot name the run to repeat.",
                 ),
                 observed_at=repo.observed_at,
+                reads=REPOSITORY_KIND,
             ),
             f"{repo.short}'s admission was due to lapse in {artifact['days']} days",
         )
@@ -640,6 +644,7 @@ def _waiting(repo: Repository) -> list[tuple[Insight, str]]:
                 "Only a required reviewer can approve a deployment, and HQ reads GitHub with read-only tokens.",
             ),
             observed_at=repo.observed_at,
+            reads=REPOSITORY_KIND,
         )
         items.append((item, f"{name} was waiting for your approval to deploy to {where}"))
     return items

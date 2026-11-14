@@ -915,7 +915,7 @@ def catalog_pages(asked) -> dict[str, str]:
     entries = {name for name in asked if not is_estate(name) and name not in known}
     if not entries:
         return {}
-    return {name: page for name, page in catalog.CatalogLayoutTests.render().items() if name in entries}
+    return {name: catalog.page(name) for name in catalog.PAGES if name in entries}
 
 
 # A template no page or entry draws, with why: once one is drawn, the test
@@ -952,7 +952,7 @@ def _pages(asked: tuple[str, ...], records: task.Records | None) -> list[str]:
             with suppress(task.PageRefused):
                 found = task.pages(asked, estate_pages(), [*named, *posts], records)
         if found is None:
-            named += catalog.CATALOG
+            named += catalog.PAGES
             found = task.pages(_families(asked), estate_pages(), [*named, *posts], records)
     except task.PageRefused as refused:
         raise AssertionError(f"{refused}\n{_rerun(refused.instead)}") from None
@@ -1369,6 +1369,10 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         if self.css:
             add_css(self.page, self.css)
             self.settle()
+
+    @override
+    def left_out_on(self, path):
+        return catalog.left_out_on(path) if path in self.unscripted else ()
 
     def scripted_for(self, name) -> bool:
         """Whether ``name`` is drawn with script: a page is unless

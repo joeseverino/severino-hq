@@ -402,6 +402,36 @@ class BrowserFailureShotTests(SimpleTestCase):
             self.assertEqual(sorted(p.name for p in shots.iterdir()), ["browser-other"])
 
 
+class CatalogIsolationTests(SimpleTestCase):
+    """A class sets up on no adopted catalog, whatever a test before it adopted."""
+
+    def test_a_catalog_one_test_adopted_is_gone_when_the_next_class_sets_up(self):
+        from hq.platform.application import automation_adoption
+
+        seen = []
+
+        class Adopting(unittest.TestCase):
+            def test_it(self):
+                automation_adoption._THIS_PROCESS.known = automation_adoption._Known("example-left", (), ())
+
+        class SettingUp(unittest.TestCase):
+            @classmethod
+            def setUpClass(cls):
+                seen.append(automation_adoption.generation())
+
+            def test_it(self):
+                pass
+
+        result = CompositionTextResult(io.StringIO(), descriptions=True, verbosity=0)
+        loader = unittest.TestLoader()
+        unittest.TestSuite([loader.loadTestsFromTestCase(Adopting), loader.loadTestsFromTestCase(SettingUp)]).run(
+            result
+        )
+
+        self.assertTrue(result.wasSuccessful(), result.failures + result.errors)
+        self.assertEqual(seen, [""])
+
+
 @override_settings(SEVERINO_AGENT_CALLS_PER_MINUTE=1, SEVERINO_AGENT_CALLS_AT_ONCE_OVERALL=1)
 class AgentLimitsIsolationTests(SimpleTestCase):
     """A test reads the agent limits as if no test ran before it in the process."""

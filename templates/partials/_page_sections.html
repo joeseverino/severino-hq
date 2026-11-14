@@ -10,7 +10,8 @@
   templates drift the moment one gains a column, and the difference shows up as
   one page quietly missing what the other shows.
 
-  A cell with a tone is a state, drawn as its status. What a row shows
+  A cell with a tone is a state, drawn as its status, after the entity it
+  is the state of when it names one. What a row shows
   beneath itself (`below`, a run's evidence) is in its open line, drawn by
   {% run_evidence %}, and what may be done to it (`actions`) ends it, drawn by
   {% row_actions %}. A section whose rows
@@ -41,7 +42,9 @@ separate "Show all" under the heading reads as a control belonging to nothing.
           <tr>
             {% for cell in record %}
               <td>
-                {% if cell.tone %}
+                {% if cell.tone and cell.link %}
+                  {% entity cell.link %} {% status cell.text tone=cell.tone %}
+                {% elif cell.tone %}
                   {% status cell.text tone=cell.tone href=cell.url %}
                 {% elif cell.link %}
                   {% entity cell.link %}

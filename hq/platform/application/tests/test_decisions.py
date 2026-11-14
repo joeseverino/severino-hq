@@ -98,6 +98,56 @@ class DecisionTests(SimpleTestCase):
 
         self.assertEqual(shown["actions"], [asdict(own), asdict(check)])
 
+    def test_the_fix_and_the_named_page_stand_on_the_row_before_a_check(self):
+        fix = ActionLink("remedy", "Renew certificate", "remote_write", "/commands/renew/", recommended=True)
+        check = ActionLink("verify", "Check again", "read", "/example/check/")
+        shown = decision(
+            self.item(
+                url="/certificates/example/",
+                action="Open certificate",
+                steps=(
+                    WorkflowStep("act", "Renew", "", "recommended", (fix,)),
+                    WorkflowStep("verify", "Check again", "", "available", (check,)),
+                ),
+            )
+        )
+
+        self.assertEqual(
+            [action["label"] for action in shown["actions"]], ["Renew certificate", "Open certificate", "Check again"]
+        )
+
+    def test_a_row_says_how_old_its_reading_is_only_once_it_is_out_of_date(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from hq.platform.application.freshness import cadence
+
+        kind = "github.repository"
+        late = timezone.now() - cadence(kind).stale_after - timedelta(minutes=5)
+        for at, shown in ((timezone.now(), False), (late, True)):
+            with self.subTest(shown=shown):
+                html = card(self.item(key="example:read", reads=kind, observed_at=at.isoformat()))
+
+                self.assertEqual(bool(select(html, "data-reading-age")), shown)
+                self.assertEqual("Read every" in text(html), shown)
+        unknown = card(self.item(key="example:read", observed_at=late.isoformat()))
+        self.assertFalse(select(unknown, "data-reading-age"))
+
+    def test_the_named_page_leads_when_nothing_else_is_recommended(self):
+        check = ActionLink("verify", "Check again", "read", "/example/check/")
+        shown = decision(
+            self.item(
+                url="/example/plan/",
+                action="Upgrade plan for example",
+                steps=(WorkflowStep("verify", "Check again", "", "available", (check,)),),
+            )
+        )
+
+        self.assertEqual(
+            [action["label"] for action in shown["actions"] if action["recommended"]], ["Upgrade plan for example"]
+        )
+
     def test_a_reason_is_a_sentence_and_never_a_numbered_step(self):
         item = self.item(steps=(cannot_step("Only the registrar can renew it."),))
         shown = decision(item)

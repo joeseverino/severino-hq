@@ -83,6 +83,13 @@ class CatalogNamesTests(SimpleTestCase):
         gate = CatalogLayoutTests.render()
         self.assertEqual(look.catalog_pages(names), {name: gate[name] for name in names})
 
+    def test_the_gallery_is_drawn_as_the_catalog_gate_draws_it(self):
+        from hq.platform.core.tests.browser import catalog
+
+        self.assertEqual(_named("gallery"), ["gallery"])
+        self.assertEqual(look.catalog_pages(["gallery"]), {"gallery": catalog.page("gallery")})
+        self.assertEqual(look.catalog_pages(["gallery", "part/notice-error"]).keys(), {"gallery", "part/notice-error"})
+
     def test_a_name_that_begins_entries_is_every_one_of_them(self):
         from hq.platform.core.tests.browser.catalog import CATALOG
 
@@ -111,11 +118,11 @@ class CatalogNamesTests(SimpleTestCase):
     def test_no_other_page_takes_an_entry_s_name(self):
         # The catalog is read only for a name no other page is, so a page by that name would shadow the entry.
         from hq.platform.core.tests import task
-        from hq.platform.core.tests.browser.catalog import CATALOG
+        from hq.platform.core.tests.browser.catalog import CATALOG, PAGES
         from hq.platform.core.tests.look_posts import post_names
 
         named = [*look._named(), *post_names()]
-        for name in {*CATALOG, *(name.split("/")[0] for name in CATALOG)}:
+        for name in {*PAGES, *(name.split("/")[0] for name in CATALOG)}:
             with self.subTest(name=name), self.assertRaises(task.PageRefused):
                 task.pages([name], [], named)
 

@@ -134,6 +134,8 @@ class DashboardQueueTests(TestCase):
         self.assertIn("/action-items/", hrefs(response))
 
     def test_a_card_on_the_dashboard_opens_its_whole_card_and_shows_how_old_it_is(self):
+        from datetime import timedelta
+
         from django.utils import timezone
 
         from hq.platform.application.item_help import commands
@@ -146,7 +148,8 @@ class DashboardQueueTests(TestCase):
             "Two checks fail.",
             key="example-failing",
             workflow=commands("example-failing", (("See the failing runs", "example-tool runs --failing"),)),
-            observed_at=timezone.now(),
+            observed_at=timezone.now() - timedelta(days=30),
+            reads="github.repository",
         )
         entries = gather_attention((("example.utility", "Example", lambda: (urgent,), ()),))
         with patch("hq.platform.application.dashboard.domain_attention_items", return_value=entries):
@@ -155,6 +158,7 @@ class DashboardQueueTests(TestCase):
             whole = self.client.get(page)
 
         self.assertContains(dashboard, "data-reading-age")
+        self.assertContains(dashboard, "Read every")
         self.assertNotContains(dashboard, "runs --failing")
         path, _, anchor = page.partition("#")
         self.assertEqual(path, "/action-items/")

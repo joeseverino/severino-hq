@@ -368,7 +368,7 @@ class EdgeCertificateExpiryTests(TestCase):
 
     def items(self):
         with projection_scope():
-            return [item for item in estate_attention() if item.eyebrow == "Certificates"]
+            return [item for item in infrastructure() if "certificate-expiring:resource:" in item.key]
 
     def test_an_edge_certificate_outside_the_window_is_not_the_next_expiry(self):
         self.edge(40)
@@ -612,12 +612,21 @@ class ActionItemTests(TestCase):
             )
 
         with projection_scope():
-            found = [item for item in estate_attention() if item.eyebrow == "Certificates"]
+            found = [item for item in infrastructure() if "certificate-expiring:resource:" in item.key]
 
         self.assertEqual(len(found), 1)
         self.assertEqual(found[0].status, "serious")
         self.assertIn("soon-cert expires in", found[0].title)
         self.assertEqual(found[0].subject.url, reverse("control_plane:detail", args=["soon-cert"]))
+        self.assertIn(
+            f"{reverse('command', kwargs={'name': 'certificate.renew'})}?target=soon-cert",
+            [action.url for step in found[0].workflow.steps for action in step.actions],
+        )
+        # The card leads with the certificate's page, as it did before it was a finding.
+        self.assertEqual(
+            (found[0].action, found[0].url),
+            ("Open certificate", reverse("control_plane:detail", args=["soon-cert"])),
+        )
 
     def test_the_action_items_page_links_each_subject(self):
         user = get_user_model().objects.create_superuser("operator", password="x" * 20)

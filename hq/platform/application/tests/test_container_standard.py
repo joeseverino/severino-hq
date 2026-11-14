@@ -254,8 +254,9 @@ class ResourceTests(TestCase):
 
 
 class AttentionTests(TestCase):
-    def test_reach_over_a_machine_is_one_queued_item_per_check_and_hardening_is_not_queued(self):
-        from ..containers import attention
+    def test_reach_over_a_machine_is_one_finding_per_container_and_hardening_is_not_one(self):
+        from ..findings import estate_findings
+        from ..security import cli_principal
 
         estate()
         inventory(
@@ -266,11 +267,11 @@ class AttentionTests(TestCase):
             ],
         )
 
-        keys = {item.key: item for item in attention()}
+        found = estate_findings(principal=cli_principal(), rule="container-hardening")
 
-        self.assertIn("container-posture:not-privileged", keys)
-        self.assertEqual(keys["container-posture:not-privileged"].magnitude, 2)
-        self.assertNotIn("container-posture:not-root", keys)
+        self.assertEqual(sorted(finding.part for finding in found), ["kuma", "web"])
+        self.assertTrue(all("runs privileged" in finding.title for finding in found))
+        self.assertFalse(any("root" in finding.title for finding in found))
 
 
 class HealthCheckedTests(TestCase):

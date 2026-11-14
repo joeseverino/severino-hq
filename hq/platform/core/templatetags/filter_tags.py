@@ -49,6 +49,7 @@ def filter_bar_frame(name: str, given: dict) -> dict:
         "total": f"{total:,}" if counted else "",
         "held": held,
         "more": given.get("more") if held else "",
+        "named": given.get("id") or "",
         "data": html_attributes(
             {option.replace("_", "-"): value for option, value in given.items() if option.startswith("data_")}
         ),
@@ -59,7 +60,7 @@ slotted(
     "filter_bar",
     FILTER_BAR_PARTIAL,
     ("content", "choices", "summary"),
-    frozenset(("filtered", "clear", "verb", "action", "css", "shown", "total", "held", "more")),
+    frozenset(("filtered", "clear", "verb", "action", "css", "shown", "total", "held", "more", "id")),
     shape=filter_bar_frame,
     library=register,
 )
@@ -138,9 +139,10 @@ class _SetChoices(HTMLParser):
 
 
 @register.filter
-def folded(choices: str) -> Fold:
+def folded(choices: str, named: str = "") -> Fold:
     """The fold of a bar's ``{% choices %}``: its panel's id, drawn from the
-    names they send, so the panel a reader opened is the same one in the
+    bar's ``id=`` where a page draws two bars sending the same names, else from
+    the names they send, so the panel a reader opened is the same one in the
     answer to a choice (fragment.js raises it again by its id), and how many
     of them are set."""
 
@@ -148,7 +150,7 @@ def folded(choices: str) -> Fold:
     counted.feed(str(choices))
     counted.close()
     digest = hashlib.blake2b(" ".join(dict.fromkeys(counted.names)).encode(), digest_size=4).hexdigest()
-    return Fold(f"filter-bar-choices-{digest}", counted.set)
+    return Fold(f"filter-bar-choices-{named or digest}", counted.set)
 
 
 # What makes a control one of the page's: what a form sends it as, what a

@@ -17,14 +17,19 @@ from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.providers import PROVIDERS
 lazy from hq.domains.control_plane.provider_spec import expiry_phrase
 
+from .action_links import command_url
 from .expiry import days_until
 from .facts import Joined, inventory_records
-from .finding_model import THEN_CHECK_AGAIN, Finding, FindingEstate, FindingRule
+from .finding_model import THEN_CHECK_AGAIN, Finding, FindingEstate, FindingRemedy, FindingRule, fact_values, opens
 from .labels import lower_first
 from .moments import expiry_words
 from .timestamps import moment
+from .ui import ended
+lazy from .estate import managed_certificates
 
 CERTIFICATE_EXPIRES = "certificate-expires"
+# A certificate HQ renews, on its declaration: its name, expiry, renewal window and page.
+RENEWAL = "certificate-renewal"
 # A provider that renews on its own does so with thirty days left; a
 # certificate still inside three weeks of expiry missed that renewal.
 WARN_DAYS = 21
@@ -138,7 +143,8 @@ def serving[T](found: Iterable[tuple[Hashable, datetime, T]]) -> list[T]:
 
 def expiring(estate: FindingEstate) -> tuple[Finding, ...]:
     """A certificate a connection serves its names with, or one that serves
-    none, inside three weeks of expiry or past it."""
+    none, inside three weeks of expiry or past it, then each HQ renews inside
+    its renewal window."""
 
     held = serving(
         (_served_as(node, value), when, (node, value, days_until(when, estate.now)))
@@ -155,7 +161,7 @@ def expiring(estate: FindingEstate) -> tuple[Finding, ...]:
         found += [
             _finding(node, value, days, apart=said(node, value) if said else ("", "")) for node, value, days in group
         ]
-    return tuple(sorted(found, key=lambda item: item.title))
+    return tuple(sorted(found, key=lambda item: item.title)) + renewal_due(estate)
 
 
 def _expiries(node) -> Iterator[tuple[str, datetime]]:
@@ -253,14 +259,59 @@ _SERVING_EXPLANATION = (
 _UNUSED_EXPLANATION = "It serves no name, so nothing breaks when it expires. Delete it where it is held."
 
 
-# The rules this module raises, beside the detectors that decide them.
+def add_renewals(nodes) -> None:
+    """Each certificate HQ renews, as a fact on its declaration's node."""
+
+    for expiry in managed_certificates():
+        node = nodes.get(f"resource:{expiry.resource_key}")
+        if node is not None:
+            said = (expiry.subject, expiry.expires.isoformat(), str(expiry.renewal_window_days), expiry.url)
+            fact = (RENEWAL, "|".join(said))
+            nodes[node.id] = replace(node, facts=(*node.facts, fact))
+
+
+def renewal_due(estate: FindingEstate) -> tuple[Finding, ...]:
+    """A certificate HQ renews, inside its renewal window: the renewal has not run."""
+
+    found = []
+    for node in estate.nodes():
+        for value in fact_values(node, RENEWAL):
+            name, stamp, window, url = value.rsplit("|", 3)
+            if (when := moment(stamp)) is None or (days := days_until(when, estate.now)) > int(window):
+                continue
+            found.append(
+                Finding(
+                    rule="certificate-expiring",
+                    subject=node.id,
+                    severity="serious" if days <= SERIOUS_DAYS else "attention",
+                    title=f"{name} {expiry_words(days)}",
+                    explanation=f"Expires {ended(expiry_phrase(stamp))} Renewal has not run; renew it.",
+                    primary=opens("Open certificate", url),
+                    remedies=(
+                        FindingRemedy(
+                            capability="certificate.renew",
+                            target=node.label,
+                            url=command_url("certificate.renew", node.label),
+                        ),
+                    ),
+                )
+            )
+    return tuple(found)
+
+
+# The rule this module raises: one family, whether HQ renews the certificate or
+# where it is held does.
 RULES: tuple[FindingRule, ...] = (
     FindingRule(
         "certificate-expiring",
-        "Certificate expiring",
+        # Its family holds certificates still to expire and those already past.
+        "Certificate near or past expiry",
         "attention",
         expiring,
-        operator_action=(f"Renew the certificate where it is held, or fix its automatic renewal. {THEN_CHECK_AGAIN}"),
-        no_help_reason=("HQ cannot renew this certificate."),
+        operator_action=(
+            "Renew the certificate from its page in HQ, or where it is held, or fix its automatic renewal. "
+            f"{THEN_CHECK_AGAIN}"
+        ),
+        no_help_reason="HQ cannot renew this certificate.",
     ),
 )

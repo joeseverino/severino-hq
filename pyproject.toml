@@ -143,6 +143,18 @@ ignore_imports = [
 ]
 
 [[tool.importlinter.contracts]]
+name = "HQ reaches the component catalog only through the Design page's gallery, which the image build writes once"
+type = "forbidden"
+# Each package that holds no test of its own, and each module of the one that
+# does: a forbidden module inside a source is skipped (see above).
+source_modules = ["hq.config", "hq.domains", "hq.platform.*", "hq.platform.core.*", "hq_sdk"]
+forbidden_modules = ["hq.platform.core.tests.browser.catalog"]
+ignore_imports = [
+  "hq.**.tests.** -> hq.**",
+  "hq.platform.core.design_gallery -> hq.platform.core.tests.browser.catalog",
+]
+
+[[tool.importlinter.contracts]]
 name = "The UI primitives never reach the workflow engine"
 type = "forbidden"
 source_modules = ["hq.platform.application.ui"]

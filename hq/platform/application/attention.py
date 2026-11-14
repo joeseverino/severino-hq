@@ -18,36 +18,25 @@ from hq.domains.content.models import ContentItem
 from hq.domains.expenses.models import Expense
 from hq.domains.receipts.models import Receipt
 from hq.platform.application.routes import reverse
-lazy from hq.domains.control_plane.providers import PROVIDERS
 
 from . import sections
 from .card_items import Insight
-from .conditions import held_since
 from .delivery_progress import STALLED_AFTER, WAITING, delivery_progress
-from .entity_links import EntityLink, entity_link, kind_label
+from .entity_links import EntityLink, entity_link
 from .estate import subject_link
 from .findings import estate_findings, finding_key, rule_for
 from .first_seen import dated
 from .infrastructure import enabled_resources, resource_health
-from .item_help import finding_plan, instructions, remedy_link
+from .item_help import finding_plan
 from .labels import lower_first
-from .moments import ago
 from .projection import read_once
 from .references import dangling
 from .security import cli_principal, internal_principal
-from .services import service_catalog
 from .ui import counted, ended
 from .workflow_contracts import ActionLink
 lazy from .approval_review import asked, preview
 lazy from .approvals import pending, reads_every_hold
 
-# Reconciliation states that mean the declared world and the real one disagree.
-# "degraded" is a failure; the others are a resource HQ cannot currently vouch
-# for, which is its own kind of thing to look at.
-# A resource HQ has already asked the controller about is not something to ask
-# an operator about. Pending clears itself on the next pass; degraded and
-# unknown do not.
-UNSETTLED_RESOURCE_STATES = frozenset({"degraded", "unknown"})
 # How many of a backlog's things a card says by name before it counts the rest.
 MOST_NAMED = 3
 CONTACTS_STATE_KEY = "attention.contacts-state"
@@ -247,22 +236,21 @@ _FINDING_STATUS = {"serious": "serious", "attention": "attention", "neutral": "n
 
 @dated
 def infrastructure() -> tuple[Insight, ...]:
-    """What infrastructure needs looking at: unsettled state, and deadlines.
-
-    One entry per finding, and one per resource whose reconciled state is not
-    settled that no finding already speaks for, so each links to its own page:
-    "three resources need attention" is not actionable without knowing which.
-    """
+    """What infrastructure needs looking at: one entry per finding HQ can speak
+    for now, each read, acted on and resolved on its own, and one per deploy on
+    its way to production, which is no finding (``delivery_progress``)."""
 
     resources = enabled_resources()
     health_by_key = {resource.key: resource_health(resource) for resource in resources}
-    findings = _findings_to_raise(resources, health_by_key)
-    # One item per finding, so each can be read, acted on and resolved on its
-    # own. Folding them is the page's job; each says which family it is of.
     findings_url = reverse("control_plane:findings")
-    items = [finding_insight(finding, findings_url) for finding in findings]
-    items.extend(_resource_insights(resources, health_by_key, findings))
-    return tuple(items)
+    return (
+        *(finding_insight(finding, findings_url) for finding in _findings_to_raise(resources, health_by_key)),
+        *(
+            _deploying(resource, health)
+            for resource in resources
+            if (health := health_by_key[resource.key])["state"] == "deploying"
+        ),
+    )
 
 
 def _findings_to_raise(resources, health_by_key: dict[str, dict[str, str]]) -> tuple[Any, ...]:
@@ -293,29 +281,6 @@ def _subject_confirmed(finding: Any, actionable_keys: set[str], actionable_kinds
     return bool(finding.subject) or not finding.scope or finding.scope in actionable_kinds
 
 
-def _resource_insights(
-    resources, health_by_key: dict[str, dict[str, str]], findings: tuple[Any, ...]
-) -> Iterable[Insight]:
-    """A card for each resource being deployed, and for each unsettled one no
-    finding already speaks for, by its key or its kind."""
-
-    covered_resources = {
-        finding.subject.removeprefix("resource:") for finding in findings if finding.subject.startswith("resource:")
-    }
-    covered_kinds = {finding.scope for finding in findings if finding.scope}
-    for resource in resources:
-        health = health_by_key[resource.key]
-        if health["state"] == "deploying":
-            # Told whatever else is open about it: no finding says this.
-            yield _deploying(resource, health)
-        elif (
-            resource.key not in covered_resources
-            and resource.kind not in covered_kinds
-            and health["state"] in UNSETTLED_RESOURCE_STATES
-        ):
-            yield _unsettled(resource, health)
-
-
 def finding_insight(finding: Any, findings_url: str) -> Insight:
     """A finding as the queue's card carries it, wherever it is drawn: what
     was read that shows it, its plan, and the pages that help look into it."""
@@ -329,9 +294,12 @@ def finding_insight(finding: Any, findings_url: str) -> Insight:
         title=finding.title,
         value="",
         body=finding.explanation,
-        url=f"{findings_url}?rule={finding.rule}",
+        action=finding.primary.label if finding.primary else "",
+        url=finding.primary.url if finding.primary else f"{findings_url}?rule={finding.rule}",
         subject=finding.subject_link,
         since=finding.since,
+        observed_at=finding.observed_at,
+        reads=finding.reads,
         workflow=finding_plan(finding, finding_key(finding)),
         facts=finding.evidence,
         links=_dedupe_links((*finding.investigations, *finding.offers)),
@@ -347,32 +315,6 @@ def _dedupe_links(links: Iterable[Any]) -> tuple[Any, ...]:
     for link in links:
         seen.setdefault(link.label, link)
     return tuple(seen.values())
-
-
-def _unsettled(resource, health: dict[str, str]) -> Insight:
-    """A record that reports a problem, or that could not be checked, and that
-    no finding already speaks for."""
-
-    named = f"{kind_label(resource.kind)} {resource.key}"
-    failed = health["state"] == "degraded"
-    if failed:
-        body = ended(health["message"]) or "It gave no reason."
-    elif resource.last_observed_at:
-        body = f"It was last read {ago(resource.last_observed_at)}."
-    else:
-        body = "It has never been read."
-    return Insight(
-        status="serious" if failed else "attention",
-        eyebrow="Infrastructure",
-        key=f"resource:{resource.key}",
-        title=f"{named} has a problem" if failed else f"{named} could not be checked",
-        value="1",
-        body=body,
-        url=entity_link("resource", resource.key).url,
-        subject=subject_link("resource", resource.key),
-        since=held_since(resource.conditions, "Degraded") if failed else None,
-        **_apply_help(resource),
-    )
 
 
 def _deploying(resource, health: dict[str, str]) -> Insight:
@@ -408,24 +350,6 @@ def _deploying(resource, health: dict[str, str]) -> Insight:
         subject=subject_link("resource", resource.key),
         notice=True,
     )
-
-
-def _apply_help(resource) -> dict:
-    """Apply HQ's config again, where its type allows; otherwise say where to change it."""
-
-    provider = PROVIDERS.get(resource.kind)
-    policy = provider.actions.get("reconcile") if provider else None
-    link = None
-    if policy is None or policy.mode != "locked":
-        link = remedy_link("infrastructure.resource.reconcile", resource.key)
-    if link is not None:
-        return {"actions": (link,)}
-    return {
-        "workflow": instructions(
-            f"resource:{resource.key}",
-            "HQ does not change this type. Change it at its source.",
-        )
-    }
 
 
 def _approval_entry(held) -> str:
@@ -518,40 +442,4 @@ def _asked_change(shown) -> str:
         f"{shown.label}: {', '.join(moves)}"
         + (f", and {counted(more, 'more field', 'more fields')}" if more > 0 else "")
         + "."
-    )
-
-
-def _fault_title(hostname: str, faults: tuple[str, ...]) -> str:
-    """What is wrong with ``hostname``, by its first fault's first sentence; the body says all of each."""
-
-    first = faults[0].split(". ", 1)[0].rstrip(".")
-    more = len(faults) - 1
-    return f"{hostname}: {first}" + (f", and {counted(more, 'more problem', 'more problems')}" if more else "")
-
-
-@dated
-def services() -> tuple[Insight, ...]:
-    """One entry per hostname whose wiring is incomplete: what no single resource
-    can see, such as a name answered with no certificate covering it, an
-    ingress pointing at a host HQ does not know, or two declarations of one
-    kind contradicting each other. Whether a resource reconciled is
-    ``infrastructure``'s, so one problem is never queued twice.
-    """
-
-    return tuple(
-        Insight(
-            status="attention",
-            eyebrow="Services",
-            key=f"service:{service.hostname}",
-            title=_fault_title(service.hostname, service.faults),
-            value=str(len(service.faults)),
-            body=" ".join(service.faults),
-            action="Open service",
-            url=service.url,
-            subject=subject_link("service", service.hostname),
-            # Wiring is declarations and readings together; no one reading dates it.
-            observed_at=None,
-        )
-        for service in service_catalog()
-        if service.faults
     )

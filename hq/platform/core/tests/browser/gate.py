@@ -33,6 +33,7 @@ from hq.platform.core.speculation import rules_document
 from hq.platform.core.stalls import stall_watch
 from hq.platform.core.stylesheets import stylesheet
 from hq.platform.core.test_runner import browser_failures
+from hq.platform.core.tests.browser.probes.axe import rules_read
 from hq.platform.core.tests.browser.probes.palette import (
     FILL_PAINTERS,
     FILL_STEPS,
@@ -1029,10 +1030,13 @@ class BrowserGate(SimpleTestCase):
         that hold without it. The vendored markup is stood in for while they
         read, and put back however they end: each probe runs on its own."""
 
+        geometry = dict(geometry_probes(self.runs_script))
+        if "axe" in geometry and (left_out := self.left_out_on(path)):
+            geometry["axe"] = rules_read(left_out)
         found = self.checked(
             {
                 "stand in": (STAND_IN, SELECTORS["vendored"]),
-                **geometry_probes(self.runs_script),
+                **geometry,
                 **palette_probes(),
                 "put back": (PUT_BACK, None),
             }
@@ -1042,6 +1046,13 @@ class BrowserGate(SimpleTestCase):
         # Its reads are several trips, each palette's, so it is timed here.
         self.spent(CHECK_COSTS, "fills", perf_counter() - began, self.where_and_width())
         return {check: said for check, said in found.items() if said}
+
+    def left_out_on(self, _path) -> tuple[str, ...]:
+        """The axe rules the page at ``_path`` declares it leaves out, beside
+        those every page does (probes/axe.py's LEFT_OUT): none but where a
+        page's class says."""
+
+        return ()
 
     def checked(self, probes):
         """Each check's findings, read in one round trip, each check's time
