@@ -551,6 +551,7 @@ def attention() -> tuple[Insight, ...]:
                 # A setting to change in each repository that misses it.
                 magnitude=len(missing),
                 body=f"{ended(', '.join(missing))} {check.fix}",
+                why=check.why,
                 action="Open repo checks",
                 url=reverse("posture"),
                 workflow=help_for(check, unmet),

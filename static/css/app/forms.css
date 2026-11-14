@@ -212,6 +212,7 @@ select.toned:not(.toned-neutral) { border-color: currentColor; }
 }
 .modal-close:hover { color: var(--ink); background: var(--bg-tint); border-color: transparent; }
 .modal-lede { margin: 0 0 var(--space-7); font-size: var(--text-sm); color: var(--muted); line-height: 1.5; }
+.modal-foot { margin-top: var(--space-7); text-align: end; font-size: var(--text-xs); color: var(--muted); }
 .modal .form { background: none; border: 0; padding: 0; box-shadow: none; }
 
 /* `size="wide"`: a page in a dialog, wide enough for two panels side by side.

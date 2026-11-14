@@ -716,6 +716,28 @@ class ExampleEstateControlTests(BrowserGate):
                     self.assertEqual(names, sorted(names, key=str.lower, reverse=direction == "descending"))
                 self.assertTrue(self.page.evaluate("() => window.kept === true"), "a sort loaded another page")
 
+    def test_every_queue_row_opens_what_raised_it_on_a_modifier_press_a_person_can_reach(self):
+        """A row that keeps its urgency for a screen reader still opens its
+        panel: a Cmd- or Ctrl-press on its row lands on the row's own cell, the
+        one place a person can press, and opens that row's panel, not its fold."""
+
+        for width in PRESSED_AT:
+            with self.subTest(width=width):
+                self.visit(reverse("action_items"), width)
+                rows = self.page.locator(f"{SELECTORS['decisions']}:has([data-origin])")
+                self.assertGreater(rows.count(), 0)
+                for place in range(rows.count()):
+                    row = rows.nth(place)
+                    if not row.is_visible():
+                        continue
+                    gutter = row.locator(".row-gutter")
+                    box = gutter.bounding_box()
+                    # The cell's own far corner, clear of its title link.
+                    gutter.click(modifiers=["ControlOrMeta"], position={"x": box["width"] - 4, "y": box["height"] - 4})
+                    panel = row.locator(".origin-panel")
+                    self.assertTrue(panel.evaluate("(panel) => panel.matches(':popover-open')"), place)
+                    panel.evaluate("(panel) => panel.hidePopover()")
+
     def test_the_queue_keeps_only_the_urgency_it_is_asked_for(self):
         for width in PRESSED_AT:
             with self.subTest(width=width):

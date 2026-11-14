@@ -1,0 +1,12 @@
+id: attention-why-restates-rating
+valid:
+  - 'Insight(title="Example", why="HQ read it late, so its figures are a day old.")'
+  - 'Insight(title="Example", why=f"GitHub reports it failing, and a failing default branch is urgent.")'
+  - 'Insight(title="Example", why=reason)'
+  - 'Insight(title="Example", why=(f"The newest balance is {age} old, and balances " f"older than {limit} need attention."))'
+  - 'Insight(title="Example", body="This needs attention.", why="Its key ran out.")'
+invalid:
+  - 'Insight(title="Example", why="HQ holds a draft, which needs attention.")'
+  - 'Insight(title="Example", why=("The bank refuses HQ, " "which is urgent."))'
+  - '_backlog(model, why="A review is overdue, which needs attention.")'
+  - 'Insight(title="Example", why=f"HQ''s rule {title} found this")'

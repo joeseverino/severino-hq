@@ -332,6 +332,11 @@ RULES: tuple[FindingRule, ...] = (
         operator_action="Move the container to a release that fixes it, once one does.",
         no_help_reason=BY_HAND,
         card=CONTAINERS_CARD,
+        bars={
+            "serious": "a container anyone may reach has a serious advisory a release fixes",
+            "attention": "a container has an advisory, or only a login or the tailnet stands in front of it",
+            "neutral": "nothing routes to the container",
+        },
     ),
     FindingRule(
         UPDATE,
@@ -341,6 +346,10 @@ RULES: tuple[FindingRule, ...] = (
         operator_action="Move the container to the newer release.",
         no_help_reason=BY_HAND,
         card=CONTAINERS_CARD,
+        bars={
+            "attention": "a newer release of a container's image is out",
+            "neutral": "nothing routes to the container",
+        },
     ),
     FindingRule(
         HARDENING,
@@ -350,5 +359,10 @@ RULES: tuple[FindingRule, ...] = (
         operator_action="Make the compose change on the container's page.",
         no_help_reason=CANNOT_EDIT_COMPOSE,
         card=CONTAINERS_CARD,
+        bars={
+            "serious": "a container anyone may reach fails a serious hardening check",
+            "attention": "a container behind a login or on the tailnet fails a serious hardening check",
+            "neutral": "nothing routes to the container",
+        },
     ),
 )

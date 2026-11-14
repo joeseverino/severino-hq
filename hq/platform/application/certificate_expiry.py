@@ -313,5 +313,10 @@ RULES: tuple[FindingRule, ...] = (
             f"{THEN_CHECK_AGAIN}"
         ),
         no_help_reason="HQ cannot renew this certificate.",
+        bars={
+            "serious": f"a certificate in use expires within {SERIOUS_DAYS} days",
+            "attention": f"a certificate expires within {WARN_DAYS} days",
+        },
+        clears=f"the certificate runs more than {WARN_DAYS} days out",
     ),
 )

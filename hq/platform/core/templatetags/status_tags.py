@@ -26,7 +26,7 @@ from hq.platform.application.labels import sentence
 from hq.platform.application.page_parts import html_attributes
 from hq.platform.core.templatetags.value_tags import breakable
 lazy from hq.platform.application.infrastructure import RESOURCE_TONES
-lazy from hq.platform.application.ui import STATUS_VALUES, severity_tone as _severity_tone
+lazy from hq.platform.application.ui import STATUS_VALUES, ended, severity_tone as _severity_tone
 
 register = template.Library()
 
@@ -180,16 +180,10 @@ def urgency_tone(item):
 @register.filter
 def origin_tip(item, mark=""):
     """What a queue item's urgency says on hover: how urgent on a row's mark
-    (``item|origin_tip:"mark"``), then what raised it."""
+    (``item|origin_tip:"mark"``), then why, as its panel leads with it."""
 
-    origin = _field(item, "origin") or {}
-    rule, where = _field(origin, "rule"), _field(origin, "where")
-    if rule:
-        at = f", defined at {where.removeprefix('hq/platform/application/')}" if where else ""
-        source = f"Rule {rule}{at}"
-    else:
-        source = f"From {_field(origin, 'source')}"
-    return f"{f'{_field(item, "urgency")}. ' if mark else ''}{source}. ⌘-click for more."
+    why = ended(_field(_field(item, "origin") or {}, "why"))
+    return f"{f'{_field(item, "urgency")}. ' if mark else ''}{why} ⌘-click for more."
 
 
 @register.filter

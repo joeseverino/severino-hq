@@ -548,6 +548,8 @@ is wrong and holds what fixes it"):
 | `Insight.action` with `Insight.url` | the page the work is done on (a short label; a sentence is shown as a sentence) |
 | `Insight.workflow` | commands and their check |
 | `Insight.since` | the moment it began, when that is known |
+| `Insight.why` | why it is as urgent as its status says: what was read and what makes that this urgent, in one sentence. Required of every item the queue may show, never a restatement of its rating; the plugin check's `attention-item-says-why` fails an `Insight` built without it, and `attention-why-restates-rating` one that closes on "which needs attention" or "which is urgent" |
+| `Insight.clears` | what clears an item a threshold raises, worded from that same threshold as a clause after "Clears once" ("a balance newer than 3 days arrives"); the panel says it after the why. The plugin check's `threshold-says-what-clears-it` fails a why that names a constant without it |
 
 **Capabilities.** HQ validates every `CapabilitySpec` before describing or
 invoking the registry: name, effect, required permissions, target kind and

@@ -380,6 +380,8 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
         subject_link=ActionLink("subject", subject.label, "read", subject.url) if subject and subject.url else None,
         read_capabilities=_held_to(finding, subject, principal),
         read_now=read_now,
+        # Where no one reading dates it, its subject's last read does.
+        observed_at=finding.observed_at or (parse_stamp(subject.observed_at) if subject else None),
     )
 
 

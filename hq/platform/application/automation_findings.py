@@ -98,5 +98,9 @@ RULES: tuple[FindingRule, ...] = (
             f"On HQ's machine, add an automation entry to {HOST_CONFIGURATION}, then run {HQ_HOST} automation as root."
         ),
         no_help_reason="HQ cannot change its machine's configuration or start its worker.",
+        bars={
+            "serious": "the playbook worker has stopped reporting, so refresh and playbook runs are refused",
+            "attention": "the playbook worker is not set up, so refresh and playbook runs are refused",
+        },
     ),
 )

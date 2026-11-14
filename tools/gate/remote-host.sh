@@ -18,6 +18,9 @@ gates="${XDG_CACHE_HOME:-$HOME/.cache}/hq-gates"
 # machine's own state, which holds the heavy turn every run here shares.
 MISE_TRUSTED_CONFIG_PATHS=$gates
 export MISE_TRUSTED_CONFIG_PATHS
+# Files are made as the image's build, CI's runner and the Mac make them; an
+# Ubuntu login's 002 would leave every written file group-writable.
+umask 022
 
 # A detached worktree of <commit> at <worktree>, holding the gitignored files
 # .worktreeinclude names as the checkout has them, as Claude Code makes one.

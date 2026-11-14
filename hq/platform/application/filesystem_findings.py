@@ -139,5 +139,10 @@ RULES: tuple[FindingRule, ...] = (
         _nearly_full,
         operator_action="On the machine, free space on the mount, then check again.",
         no_help_reason=cannot_run_commands(),
+        bars={
+            "serious": f"free space is under {human_bytes(SERIOUS_FREE)} and {SERIOUS_SHARE:.0%} of the disk",
+            "attention": f"free space is under {human_bytes(ATTENTION_FREE)} and {ATTENTION_SHARE:.0%} of the disk",
+        },
+        clears=f"free space is back above {human_bytes(ATTENTION_FREE)} or {ATTENTION_SHARE:.0%} of the disk",
     ),
 )

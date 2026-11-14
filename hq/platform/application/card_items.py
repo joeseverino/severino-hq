@@ -136,6 +136,17 @@ class Insight:
     # The capabilities a reader must hold to be shown it, for an item drawn
     # from what only they may read. Empty, every reader of the queue sees it.
     read_capabilities: tuple[str, ...] = ()
+    # Why it is as urgent as its status says, in one sentence a stranger
+    # understands: what HQ read and what makes that this urgent ("GitHub
+    # reports a failed check on main's newest commit, and a failing default
+    # branch is urgent"). The panel behind a queue card's urgency leads with
+    # it, so every item the queue shows says one; a finding's comes from its
+    # rule.
+    why: str = ""
+    # What clears it, for an item a threshold raises, worded from that same
+    # threshold as a clause after "Clears once" ("free space is back above
+    # 2 GB or 10% of the disk"). The panel says it after the why.
+    clears: str = ""
 
     def __post_init__(self) -> None:
         _one_of("Insight status", self.status, STATUS_VALUES)

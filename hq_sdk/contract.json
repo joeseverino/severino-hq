@@ -2182,7 +2182,9 @@
           "reads=",
           "facts=",
           "links=",
-          "read_capabilities="
+          "read_capabilities=",
+          "why=",
+          "clears="
         ],
         "fields": [],
         "kind": "dataclass",

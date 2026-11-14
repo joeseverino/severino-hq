@@ -531,7 +531,8 @@
   };
   document.addEventListener("click", (event) => {
     const head = event.target.closest("tr[data-folds]");
-    if (!head || event.defaultPrevented) return;
+    // A Cmd- or Ctrl-click asks for what raised the row (app.js), never its fold.
+    if (!head || event.defaultPrevented || event.metaKey || event.ctrlKey) return;
     const toggle = event.target.closest("[data-fold-toggle]");
     if (!toggle && event.target.closest("a, button, input, select, label, [data-origin]")) return;
     setFold(head, head.querySelector("[data-fold-toggle]")?.getAttribute("aria-expanded") !== "true");

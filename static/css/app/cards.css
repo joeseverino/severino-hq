@@ -153,6 +153,9 @@ a.kpi, a.kpi:hover { text-decoration: none; color: inherit; }
 /* What raised an item, opened from its urgency: a small modal over the page,
    titled with the item it explains. */
 .modifier-held [data-origin] { cursor: pointer; text-decoration: underline; text-underline-offset: 2px; outline: 1px solid var(--tone-line, var(--line)); outline-offset: 1px; }
+/* A queue row whose urgency is said only to a screen reader opens it from the
+   rest of its row (app.js). */
+.modifier-held [data-attention-item]:has([data-origin].visually-hidden) > .row-gutter { cursor: pointer; }
 /* Hide the tooltip while the origin panel is open: it would cover the panel. */
 :root:has(.origin-panel:popover-open) .chart-tip { display: none; }
 /* One of HQ's modals; what it lists sits flat inside it. */

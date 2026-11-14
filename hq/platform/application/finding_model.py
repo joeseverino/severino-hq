@@ -8,7 +8,7 @@ import json
 import re
 import shlex
 from collections.abc import Callable, Iterable, Iterator
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import TYPE_CHECKING, Annotated, NotRequired, TypedDict
 
@@ -140,12 +140,24 @@ class FindingRule:
     # the parts it is about ("containers" on a machine's page); empty, the
     # page's own place for problems.
     card: str = ""
+    # The bar a finding crosses to stand at each severity the rule raises, a
+    # clause after "urgent once": "free space is under 512 MB and 3% of the
+    # disk". Worded from the detector's own constants, so a card's why says
+    # what was read and the bar it crossed (``attention.finding_why``).
+    bars: dict[str, str] = field(default_factory=dict, hash=False, compare=False)
+    # What clears its findings, where a threshold raises them, worded from the
+    # same constants as its lowest bar (``card_items.Insight.clears``). The
+    # ast-grep rule threshold-says-what-clears-it asks it of every rule whose
+    # bars name a constant.
+    clears: str = ""
 
     def __post_init__(self) -> None:
         if not self.operator_action.strip():
             raise ValueError(f"Finding rule {self.name!r} must say how it is resolved.")
         if not self.no_help_reason.strip():
             raise ValueError(f"Finding rule {self.name!r} must say why HQ cannot resolve it itself.")
+        if not self.bars.get(self.severity, "").strip():
+            raise ValueError(f"Finding rule {self.name!r} must say the bar its {self.severity} findings cross (bars).")
 
 
 @dataclass(frozen=True, slots=True)

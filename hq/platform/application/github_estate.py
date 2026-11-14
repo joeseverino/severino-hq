@@ -29,7 +29,7 @@ from .entity_links import web_url
 from .expiry import days_until
 from .freshness import Freshness, freshness
 from .item_help import cannot_help, commands
-from .moments import ago
+from .moments import ago, duration
 from .projection import read_once
 from .timestamps import moment
 from .ui import counted, severity_tone
@@ -479,6 +479,14 @@ def _as_read(repo: Repository, item: Insight, was: str) -> Insight:
     return replace(item, title=was, status="attention", notice=True)
 
 
+def _named(one: str, many: str, names: list[str]) -> str:
+    """Names under what they are ("Failing job: Scan"), so a line of bare
+    names never leaves a reader guessing; the first four, then a count."""
+
+    shown = ", ".join(names[:4]) + (f" and {len(names) - 4} more" if len(names) > 4 else "")
+    return f"{one if len(names) == 1 else many}: {shown}" if names else ""
+
+
 def _failing(repo: Repository) -> list[tuple[Insight, str]]:
     if not repo.failing:
         return []
@@ -492,7 +500,11 @@ def _failing(repo: Repository) -> list[tuple[Insight, str]]:
         key=f"github-failing:{repo.name}",
         title=f"{repo.short} is failing on {repo.default_branch}",
         value=str(len(failing) or 1),
-        body=", ".join(failing[:4]) + (f" and {len(failing) - 4} more" if len(failing) > 4 else ""),
+        body=_named("Failing job", "Failing jobs", failing),
+        why=(
+            f"GitHub reports a failed check on the newest commit to {repo.default_branch}, "
+            "and a failing default branch is urgent."
+        ),
         action="Open run" if one else "Open checks",
         url=one.url if one else f"{repo.url}/commit/{repo.head.get('sha', '')}",
         workflow=_failing_help(repo, runs),
@@ -514,7 +526,8 @@ def _unverified(repo: Repository) -> list[tuple[Insight, str]]:
         key=f"github-unverified:{repo.name}",
         title=f"{repo.short}'s last deploy did not pass its own verification",
         value=str(len(failed)),
-        body=", ".join(failed),
+        body=_named("Failed step", "Failed steps", failed),
+        why="GitHub reports a step of the last deploy's own verification failed, so production may not be what was meant.",
         action="Open deploy",
         url=web_url(repo.production.get("url")) or repo.url,
         workflow=cannot_help(
@@ -546,6 +559,11 @@ def _alerts(repo: Repository) -> list[tuple[Insight, str]]:
         title=f"{alerts} in {repo.short}",
         value=str(repo.serious_alerts),
         body=body,
+        why=(
+            "GitHub reports an open leaked credential or critical alert, which anyone who finds it can use."
+            if repo.leaked_credentials or repo.alerts_at("critical")
+            else "GitHub reports open high severity alerts, which stay open to attack until the code is upgraded."
+        ),
         action="Open updates" if updates else "Open alerts",
         url=updates or kinds[0].url,
         links=kinds if updates or len(kinds) > 1 else (),
@@ -589,6 +607,14 @@ def _lapsing(repo: Repository) -> list[tuple[Insight, str]]:
                 title=f"{repo.short}'s admission lapses in {artifact['days']} days",
                 value=str(artifact["days"]),
                 body="Once it lapses, HQ's next build leaves it out. Run its admission again to renew it.",
+                why=(
+                    f"GitHub says this artifact expires in {artifact['days']} days, and one within "
+                    f"{ARTIFACT_SERIOUS_DAYS} days of lapsing is urgent."
+                    if artifact["days"] <= ARTIFACT_SERIOUS_DAYS
+                    else f"GitHub says this artifact expires in {artifact['days']} days, and it becomes urgent "
+                    f"{ARTIFACT_SERIOUS_DAYS} days out."
+                ),
+                clears="its admission runs again, which renews the artifact",
                 action="Open actions",
                 url=f"{repo.url}/actions",
                 workflow=cannot_help(
@@ -636,7 +662,15 @@ def _waiting(repo: Repository) -> list[tuple[Insight, str]]:
             key=f"github-waiting:{repo.name}:{run.get('id')}",
             value=f"{hours}h",
             title=f"{name} waits for your approval to deploy to {where}",
-            body=dotted(repo.short, run.get("sha", "")[:7]),
+            body=f"Commit {run.get('sha', '')[:7]} of {repo.short}",
+            why=(
+                f"GitHub reports this run waiting on a reviewer, and one waiting past "
+                f"{duration(WAITING_SERIOUS_AFTER)} is urgent."
+                if serious
+                else f"GitHub reports this run waiting on a reviewer, and it becomes urgent after "
+                f"{duration(WAITING_SERIOUS_AFTER)}."
+            ),
+            clears="a reviewer approves or rejects the run",
             action="Review deployment",
             url=web_url(run.get("url")) or repo.url,
             workflow=cannot_help(

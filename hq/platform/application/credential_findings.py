@@ -229,6 +229,7 @@ RULES: tuple[FindingRule, ...] = (
         missing_permissions,
         operator_action=(f"Make a new token with the command on the connection's page. {THEN_REFRESH}"),
         no_help_reason=_CANNOT_ISSUE,
+        bars={"attention": "a token lacks a permission HQ uses"},
     ),
     FindingRule(
         "credential-expiring",
@@ -237,5 +238,9 @@ RULES: tuple[FindingRule, ...] = (
         expiring,
         operator_action=(f"Make a new token with the command on the connection's page. {THEN_REFRESH}"),
         no_help_reason=_CANNOT_ISSUE,
+        bars={
+            "serious": "a token has expired",
+            "attention": "a token is inside its renewal window",
+        },
     ),
 )

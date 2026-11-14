@@ -365,8 +365,8 @@ release
 
 # Shares run side by side up to the budget, each once, in its share: one of
 # two holds its share in the main worktree while one of two in the other runs
-# beside it. One of four waits and names the share it waits for, and so does
-# a whole run.
+# beside it. One of the whole budget waits and names the share it waits for,
+# and so does a whole run.
 fifo linger
 rm -f "${RAN}" "${STARTS}"
 turn_share=2 LINGER="${work}/linger" mise -C "${main}" run weighed >"${work}/share" 2>&1 &
@@ -386,7 +386,9 @@ names_share() {
     esac
 }
 status=0
-said="$(turn_share=4 STARTS="${work}/starts-past" MISE_TASK_LOCK_TIMEOUT=1s mise -C "${second}" run weighed 2>&1)" ||
+# The machine's whole budget, beside the share still held, is past it here.
+capacity="$(cd "${repo}" && uv run --locked python -c 'from tools.gate.turn import CAPACITY; print(CAPACITY)')"
+said="$(turn_share="${capacity}" STARTS="${work}/starts-past" MISE_TASK_LOCK_TIMEOUT=1s mise -C "${second}" run weighed 2>&1)" ||
     status=$?
 [ "${status}" -ne 0 ] || fail "a share past the budget ran"
 names_share "${said}" "a share past the budget"

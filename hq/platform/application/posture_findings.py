@@ -49,5 +49,6 @@ RULES: tuple[FindingRule, ...] = (
         _unmet,
         operator_action="Meet the check, or turn Advanced HQ Posture off.",
         no_help_reason="HQ does not change these settings.",
+        bars={"attention": "a check of the standard HQ holds itself to is not met"},
     ),
 )
