@@ -162,11 +162,11 @@
 /* A fact on one line (`{% cell_line lines=1 %}`). */
 .data-table > tbody > tr > td .cell-line[data-lines="1"] { display: block; }
 .data-table > tbody > tr > td .cell-line[data-lines="1"] :is(.token, .whole, .part) { display: inline; max-inline-size: none; }
-/* Closed, each is cut at its end. */
+/* Closed, each is cut at its end. Only a column that shares its room cuts: one that holds its content (a state, a figure) takes its track from that content, so its lines wrap the same in a closed row and an open one. */
 @container style(--opens: 1) {
 .data-table > tbody > tr:not(.is-expanded) > :is([data-kind="name"], [data-kind="prose"]) :is(.tag, .pill, code:not(.cell-whole), .token[data-sole]:not(code *)),
 .data-table > tbody > tr:not(.is-expanded) > [data-kind="identifier"],
-.data-table > tbody > tr:not(.is-expanded) > td .cell-line[data-lines="1"] { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.data-table > tbody > tr:not(.is-expanded) > :is([data-kind="name"], [data-kind="prose"], [data-kind="identifier"]) .cell-line[data-lines="1"] { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 }
 /* A control's label is the control's to cut, as one line at its end: its words (`button_words`, one box) are cut where the control ends, a part among them text of that line so the cut lands inside it; a part alone, longer than the control, is held to it and cut there, set on the line by its top since a box that clips takes its bottom edge as its baseline. */
 .data-table td .btn > .button-words { min-width: 0; overflow: hidden; text-overflow: ellipsis; & .whole { display: contents; } }

@@ -250,9 +250,9 @@
   @media (prefers-reduced-motion: reduce) { :is(.row-expand, .row-fold)::before { transition: none; } }
   /* With no script a fold cannot open or close, and every row it would fold shows (tables.css), so it is not drawn. */
   @media (scripting: none) { .row-fold { display: none; } }
-  /* An open row shows each value whole, wrapping inside its column wherever it must, so nothing in it runs past its cell; a panel a cell shows is no part of the column. */
-  .data-table > tbody > tr.is-expanded > :is(td, th),
-  .data-table > tbody > tr.is-expanded > :is(td, th) *:not(.visually-hidden, .visually-hidden *, [popover], [popover] *) { white-space: normal; overflow-wrap: anywhere; }
+  /* An open row shows each value it cut whole, wrapping inside its column wherever it must, so nothing in it runs past its cell; a panel a cell shows is no part of the column. A column that holds its content (a state, a figure, controls) cuts nothing and takes its track from that content, so it wraps the same open and closed and opening moves no column. */
+  .data-table > tbody > tr.is-expanded > :is([data-kind="name"], [data-kind="prose"], [data-kind="identifier"]),
+  .data-table > tbody > tr.is-expanded > :is([data-kind="name"], [data-kind="prose"], [data-kind="identifier"]) *:not(.visually-hidden, .visually-hidden *, [popover], [popover] *) { white-space: normal; overflow-wrap: anywhere; }
 
   /* A band too narrow for two cells is a list, like every other summary:
      each fact one row, its label and its value at the right edge, the detail
