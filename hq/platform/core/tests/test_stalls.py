@@ -1,10 +1,13 @@
 """A test process that stops making progress says what it was running and where every thread is."""
 
 import contextlib
+import faulthandler
 import io
 import itertools
 import multiprocessing
 import os
+import re
+import signal
 import subprocess
 import sys
 import tempfile
@@ -12,9 +15,11 @@ import threading
 import time
 import unittest
 import unittest.mock
+from pathlib import Path
 from typing import override
 
-from django.test import SimpleTestCase
+from django.conf import settings
+from django.test import SimpleTestCase, tag
 
 from hq.platform.core.run_report import ClassTimedSuite, CompositionRemoteResult
 from hq.platform.core.stalls import DEFAULT_STALL_SECONDS, STALL_SECONDS, Stalled, StallWatch, tree_cpu
@@ -277,3 +282,31 @@ class StallWatchTests(SimpleTestCase):
             ClassTimedSuite(unittest.defaultTestLoader.loadTestsFromTestCase(Pages)).run(CompositionRemoteResult())
 
         self.assertTrue(any("second" in mark for mark in watch.marks), watch.marks)
+
+    def test_each_mark_is_left_for_the_measurer_as_the_last_one_of_its_process(self):
+        folder = self.enterContext(tempfile.TemporaryDirectory())
+        watch = self.watch(600)
+        watch.marks_folder = folder
+        self.addCleanup(faulthandler.unregister, signal.SIGUSR1)
+        with watch.watching():
+            watch.mark("example.Tests.test_first")
+            watch.mark("example.Tests.test_second")
+
+        self.assertEqual(Path(folder, str(os.getpid())).read_text(), "example.Tests.test_second")
+
+    def test_a_measurer_named_in_the_environment_is_where_the_marks_go(self):
+        from hq.platform.core.stalls import MARKS
+
+        with unittest.mock.patch.dict(os.environ, {MARKS: "/example/marks"}):
+            self.assertEqual(StallWatch.from_environment().marks_folder, "/example/marks")
+
+
+@tag("source")
+class MeasuredRunStallTests(SimpleTestCase):
+    """The measurer gives a run of tests twice the bound each test process's watch has."""
+
+    def test_the_measurers_default_test_bound_is_the_watchs(self):
+        measured = (Path(settings.BASE_DIR) / "tools/lib/measured").read_text(encoding="utf-8")
+        default = re.search(r"\$test_bound = (\d+) unless", measured)
+        self.assertIsNotNone(default, "tools/lib/measured no longer reads the test stall bound's default")
+        self.assertEqual(float(default[1]), DEFAULT_STALL_SECONDS)

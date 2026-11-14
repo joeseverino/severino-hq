@@ -55,17 +55,18 @@ if [ "${usage_composed:-}" = true ]; then
     kept_set=/composed
 fi
 
-# A look is one process however many pages it draws, a browser beside it,
-# so it takes a share of the heavy turn (tools/gate/turn.py, BROWSER); a base
-# or a measure runs perf, which takes the whole turn.
-turn_share=2
-[ -z "${usage_base:-}" ] && [ "${usage_perf:-}" != true ] || turn_share=""
 # mise hands the pages over shell-quoted, one word each.
 eval "set -- ${usage_pages:?}"
 # What was asked is checked before the turn, which may wait behind
 # other runs: all but a record's page, found only in the estate the run draws.
-uv run --group browser python manage.py shell --no-imports -v 0 \
-    -c 'from hq.platform.core.tests.look import refuse_early; refuse_early()'
+# Its last line is the share of the heavy turn the look takes: a browser's
+# tokens (tools/gate/turn.py, BROWSER) for each process its pages are split
+# among (hq/platform/core/tests/look_shares.py). A base or a measure runs
+# perf, which takes the whole turn.
+weight="$(uv run --group browser python manage.py shell --no-imports -v 0 \
+    -c 'from hq.platform.core.tests.look import refuse_early; refuse_early()')"
+turn_share="$(printf '%s\n' "${weight}" | tail -n 1)"
+[ -z "${usage_base:-}" ] && [ "${usage_perf:-}" != true ] || turn_share=""
 turn_bound=30m
 # shellcheck source=tools/lib/heavy-turn.sh
 . ./tools/lib/heavy-turn.sh

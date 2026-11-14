@@ -501,7 +501,8 @@ class DecisionTests(TestCase):
 
         held.refresh_from_db()
         self.assertEqual(held.state, ApprovalRequest.State.STALE)
-        self.assertFalse(OperationRequest.objects.exists())
+        # The editor's own save applies its change; the stale approval applies nothing.
+        self.assertFalse(OperationRequest.objects.filter(requested_interface="mcp").exists())
 
     def test_a_request_nobody_answers_lapses(self):
         held = self.held()

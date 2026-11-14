@@ -64,6 +64,13 @@ _FALLBACK_GRACE = 30.0
 # returns with EINTR and the handler runs there.
 _INTERRUPT = signal.SIGALRM
 
+# The folder where the measurer running the gate (tools/lib/measured) reads
+# each test process's last mark, a file named for its pid, and the signal on
+# which a process that wrote one dumps every stack, so a run that stops
+# outside any watch is ended naming the test it hung in.
+MARKS = "HQ_TEST_MARKS"
+_DUMP = signal.SIGUSR1
+
 
 class Stalled(Exception):
     """Raised in a test that made no progress for the stall bound.
@@ -200,10 +207,14 @@ class StallWatch:
     (docs/Development.md).
     """
 
-    def __init__(self, seconds: float | None, stream=None, grace: float = _FALLBACK_GRACE):
+    def __init__(
+        self, seconds: float | None, stream=None, grace: float = _FALLBACK_GRACE, marks_folder: str | None = None
+    ):
         self.seconds = seconds
         self.stream = stream
         self.grace = grace
+        self.marks_folder = marks_folder
+        self._dumps = False
         self.evidence: list = []
         # A parallel worker's share of the run's worker counter: negative, it
         # stops Django's parent (ParallelTestSuite.run).
@@ -221,7 +232,7 @@ class StallWatch:
     @classmethod
     def from_environment(cls) -> StallWatch:
         value = os.environ.get(STALL_SECONDS, "").strip()
-        return cls(float(value) if value else DEFAULT_STALL_SECONDS)
+        return cls(float(value) if value else DEFAULT_STALL_SECONDS, marks_folder=os.environ.get(MARKS) or None)
 
     @property
     def enabled(self) -> bool:
@@ -240,6 +251,10 @@ class StallWatch:
             self._watching += 1
             if self._watching == 1:
                 self._take_interrupt()
+            if self.marks_folder and not self._dumps:
+                # Kept for the life of the process: a hang on its way out comes after the watch.
+                faulthandler.register(_DUMP, file=sys.__stderr__, all_threads=True)
+                self._dumps = True
             if self._thread is None:
                 self._thread = threading.Thread(target=self._wait, name="stall-watch", daemon=True)
                 self._thread.start()
@@ -286,6 +301,19 @@ class StallWatch:
             self._marks += 1
             self._ready.notify()
         self._backstop(self.seconds + self.grace)
+        if self.marks_folder:
+            self._write_mark(label)
+
+    def _write_mark(self, label: str) -> None:
+        """Leave ``label`` as this process's last mark for the measurer. By ``os`` calls alone, as a test
+        may have patched ``open``; a folder gone with its measurer leaves the test to run on."""
+
+        with contextlib.suppress(OSError):
+            mark = os.open(f"{self.marks_folder}/{os.getpid()}", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            try:
+                os.write(mark, label.encode(errors="replace"))
+            finally:
+                os.close(mark)
 
     @staticmethod
     def _backstop(seconds: float) -> None:

@@ -298,6 +298,11 @@ def _resource_for_operation(key: str) -> ManagedResource:
         raise RecordNotFound("That record was not found.") from exc
 
 
+# The key of a reconcile's input holding the copy of a declaration an apply by
+# hand may only replace.
+REPLACES = "replaces"
+
+
 def enqueue(
     resource: ManagedResource, action: str, *, idempotency_key: str, **fields: Any
 ) -> tuple[OperationRequest, bool]:
@@ -327,6 +332,7 @@ def _queue_operation(
     principal: Principal,
     action: str,
     require_enabled: bool = True,
+    replaces: dict[str, Any] | None = None,
 ) -> OperationQueued:
     if require_enabled and not resource.enabled:
         raise PolicyError("This record is switched off in HQ.")
@@ -355,11 +361,12 @@ def _queue_operation(
         # could be queued, that is recorded beside the request rather than in
         # place of it: an operation applied on somebody's say-so and one a
         # credential queued alone must not read the same afterwards.
-        input=(
-            {"generation": resource.generation, "approved_by": principal.approved_by}
-            if principal.approved_by
-            else {"generation": resource.generation}
-        ),
+        input={
+            "generation": resource.generation,
+            **({"approved_by": principal.approved_by} if principal.approved_by else {}),
+            # The copy an apply by hand may only replace (``controller.over_live``).
+            **({REPLACES: replaces} if replaces is not None else {}),
+        },
     )
     if operation.resource_id != resource.id or operation.action != action:
         raise PolicyError("Idempotency key is already used by another operation.")
@@ -373,17 +380,22 @@ def _queue_operation(
     return {"ok": True, "queued": True, "operation": serialize_operation(operation)}
 
 
-def queue_reconcile(resource: ManagedResource, *, principal: Principal, reason: str) -> OperationQueued:
-    """Queue a reconcile of a declaration a domain service has just written.
+def queue_reconcile(
+    resource: ManagedResource, *, principal: Principal, reason: str, replaces: dict[str, Any] | None = None
+) -> OperationQueued:
+    """Queue a reconcile of a declaration just written, as the write's own act.
 
     For a service that writes a declaration under its own capability (the
     contact inbox under contacts), so it is checked against the same policy
     as any other reconcile. Keyed on the generation: asking twice for one
-    generation queues it once.
+    generation queues it once. ``replaces`` is the copy the write replaced,
+    which the claim holds the live record to.
     """
 
     command = OperationCommand(idempotency_key=f"reconcile:{resource.pk}:g{resource.generation}", reason=reason)
-    return _queue_operation(resource, command, principal=principal, action=OperationRequest.Action.RECONCILE)
+    return _queue_operation(
+        resource, command, principal=principal, action=OperationRequest.Action.RECONCILE, replaces=replaces
+    )
 
 
 @transaction.atomic

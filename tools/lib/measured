@@ -44,6 +44,18 @@
 # The line is a report: it has no limit, and the command's exit status is
 # this one's whatever the measuring did. A measurement it cannot take is
 # named in the line in its place.
+#
+# The one thing it ends is a run of tests that stopped making progress where
+# each test process's own stall watch (hq/platform/core/stalls.py) cannot see:
+# a worker that never starts, a parent waiting on a pipe, a process that hangs
+# on its way out. Once the tree holds a test run, a test, class fixture or
+# subtest starting in any process (its mark, written under HQ_TEST_MARKS) or
+# the tree spending 1% of a core is progress; with neither for twice the
+# test's stall bound, so a test's own watch fails it first, each marked
+# process dumps its stacks (faulthandler, on SIGUSR1) and the whole tree is
+# stopped, the line before the usual one naming the test each was in, and
+# the run exits 124, as timeout(1) does. A busy spin is left to the task's
+# timeout, as the stall watch leaves it. HQ_TEST_STALL_SECONDS=0 turns both off.
 set -eu
 
 [ "$#" -gt 0 ] || { echo "usage: tools/lib/measured <command...>" >&2; exit 64; }
@@ -57,8 +69,16 @@ exec perl -e '
     use warnings;
     use POSIX ":sys_wait_h";
     use Time::HiRes ();
+    use File::Temp ();
 
     my $began = Time::HiRes::time;
+    # The test stall bound, as stalls.py reads it (DEFAULT_STALL_SECONDS); the run is given twice it.
+    my $test_bound = $ENV{HQ_TEST_STALL_SECONDS};
+    $test_bound = 300 unless defined $test_bound && $test_bound =~ /\S/;
+    my $bound = $test_bound =~ /^\s*(\d+(?:\.\d+)?)\s*$/ ? 2 * $1 : 0;
+    my $marks = eval { File::Temp::tempdir("hq-marks.XXXXXX", TMPDIR => 1, CLEANUP => 1) };
+    $bound = 0 unless defined $marks;
+    $ENV{HQ_TEST_MARKS} = $marks if defined $marks;
     my $pid = fork // do { warn "heavy: not measured: fork: $!\n"; exec { $ARGV[0] } @ARGV; exit 127 };
     if (!$pid) { exec { $ARGV[0] } @ARGV; warn "heavy: $ARGV[0]: $!\n"; POSIX::_exit(127) }
     # A stop reaches the command too, by its group or from here; the line
@@ -71,6 +91,8 @@ exec perl -e '
     # say nothing and the line goes to the stderr the command has.
     my $report = \*STDERR;
     if (open my $saved, ">&", \*STDERR) { $report = $saved; open STDERR, ">", "/dev/null" }
+    # Written at once, so a stop is said before the stacks it asks for.
+    select((select($report), $| = 1)[0]);
 
     my $linux = -r "/proc/self/smaps_rollup";
     # PR_SET_CHILD_SUBREAPER, by the prctl number of each architecture CI and the hosts run.
@@ -91,14 +113,26 @@ exec perl -e '
             && ($command =~ /\bmultiprocessing\.(?:spawn|forkserver)\b/ || ($up eq "test run" && $command eq $above));
         return "children";
     }
+    # The CPU seconds each process of the tree has spent, by pid, and whether
+    # it has held a test run, as of the last sample.
+    my (%cpu, $tested);
+    my $ticks = POSIX::sysconf(POSIX::_SC_CLK_TCK()) || 100;
+    # ps prints CPU time as [[dd-]hh:]mm:ss[.ss]; Linux only to the second, so it is read from /proc there.
+    sub seconds_of {
+        my ($days, $clock) = $_[0] =~ /^(?:(\d+)-)?([\d:.]+)$/ or return 0;
+        my $spent = 0;
+        $spent = $spent * 60 + $_ for split /:/, $clock;
+        return ($days // 0) * 86400 + $spent;
+    }
     # The bytes each role of the tree holds now, and the most one process of it holds.
     sub held {
-        my (%children, %command, %role, %bytes, %sum, %most);
-        open my $ps, "-|", "ps", "-A", "-o", "pid=,ppid=,command=" or return ();
+        my (%children, %command, %role, %bytes, %sum, %most, %time);
+        open my $ps, "-|", "ps", "-A", "-o", "pid=,ppid=,time=,command=" or return ();
         while (<$ps>) {
-            my ($each, $parent, $command) = /^\s*(\d+)\s+(\d+)\s+(.*)$/ or next;
+            my ($each, $parent, $time, $command) = /^\s*(\d+)\s+(\d+)\s+(\S+)\s+(.*)$/ or next;
             push @{ $children{$parent} }, $each;
             $command{$each} = $command;
+            $time{$each} = $time;
         }
         close $ps;
         return () unless %command;
@@ -110,6 +144,16 @@ exec perl -e '
                 $role{$_} = role($role{$each}, $command{$each}, $command{$_});
                 push @todo, $_;
             }
+        }
+        %cpu = ();
+        for my $each (keys %role) {
+            $tested = 1 if $role{$each} eq "test run";
+            $cpu{$each} = seconds_of($time{$each});
+            # utime, stime and what its reaped children spent, after the command name (proc_pid_stat(5)).
+            next unless $linux && open my $stat, "<", "/proc/$each/stat";
+            my $line = <$stat> // next;
+            my @fields = split " ", substr($line, rindex($line, ")") + 2);
+            $cpu{$each} = ($fields[11] + $fields[12] + $fields[13] + $fields[14]) / $ticks if @fields > 14;
         }
         if ($linux) {
             for my $each (keys %role) {
@@ -145,6 +189,53 @@ exec perl -e '
         }
         return 1;
     }
+    # The progress of the run (the comment at the top): since when it has made
+    # none, and the CPU each process had spent then, the reaped ones under 0.
+    my ($since, %then, $stalled);
+    sub judge {
+        my ($times) = @_;
+        my $now = Time::HiRes::time;
+        my %now = (%cpu, 0 => $times->[2] + $times->[3] - $sampled);
+        my $grew = 0;
+        for (keys %now) { my $more = $now{$_} - ($then{$_} // 0); $grew += $more if $more > 0 }
+        my $idle = defined $since ? $now - $since : 0;
+        if (!defined $since || marked_since($since) || ($idle >= $bound / 10 && $grew >= 0.01 * $idle)) {
+            ($since, %then) = ($now, %now);
+        } elsif ($idle >= $bound) {
+            stop($now, $idle);
+        }
+    }
+    sub marks_read {
+        opendir my $dir, $marks or return ();
+        my @read;
+        for my $name (grep { /^\d+$/ } readdir $dir) {
+            my $when = (Time::HiRes::stat("$marks/$name"))[9] // next;
+            open my $mark, "<", "$marks/$name" or next;
+            push @read, [$name, scalar(<$mark>) // "", $when];
+        }
+        return sort { $b->[2] <=> $a->[2] } @read;
+    }
+    sub marked_since { return grep { $_->[2] > $_[0] } marks_read() }
+    # Says which test each marked process of the tree was in, has each dump
+    # its stacks, then stops every process of the tree, killing what is left.
+    sub stop {
+        my ($now, $idle) = @_;
+        my @read = marks_read();
+        my @hung = grep { exists $cpu{ $_->[0] } } @read;
+        my $where = @hung ? join "; ", map { sprintf "%s (pid %d, for %s)", $_->[1], $_->[0], span($now - $_->[2]) } @hung
+            : @read ? "after $read[0][1], whose process has ended"
+            : "before its first test";
+        printf $report "heavy: no test began and the run spent under 1%% of a core for %s, so it is stopped; hung in %s\n",
+            span($idle), $where;
+        $stalled = 1;
+        if (kill "USR1", map { $_->[0] } @hung) { Time::HiRes::sleep(1) }
+        eval { held() };
+        kill "TERM", keys %cpu;
+        my $until = Time::HiRes::time + 5;
+        while (reap() && !$ended && Time::HiRes::time < $until) { Time::HiRes::sleep(0.2) }
+        eval { held() };
+        kill "KILL", keys %cpu;
+    }
     until (!reap() || $ended) {
         Time::HiRes::sleep($pause);
         last if !reap() || $ended;
@@ -158,6 +249,7 @@ exec perl -e '
         my $spent = 0;
         $spent += $after[$_] - $before[$_] for 0 .. 3;
         $pause = 20 * $spent > 2 ? 20 * $spent : 2;
+        judge(\@after) if $bound && $tested && $sum;
     }
     my $grace = Time::HiRes::time + 1;
     while (reap() && (my $left = $grace - Time::HiRes::time) > 0) { Time::HiRes::sleep($left) }
@@ -192,5 +284,6 @@ exec perl -e '
     chomp $load;
     printf $report "heavy: %s wall, %s CPU, load average %s%s; sampling took %s CPU%s\n",
         span($wall), span($cpu), $load, $memory, span($user + $system + $sampled), $orphans;
+    exit 124 if $stalled;
     exit($status & 127 ? 128 + ($status & 127) : $status >> 8);
 ' -- "$@"

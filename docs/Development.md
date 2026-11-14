@@ -743,10 +743,10 @@ the workers asked for. So `mise run test <module>.<Class>` takes a share of
 one, and a run across the cores (fast's selection, a module of many classes,
 the suite) waits for the whole turn. The decision weighs the arguments the
 run passes: a task hands it its run's own options before the labels
-(`test_arguments`), which `HeavyTaskTests` holds to the run. `dev:look` is
-one process whatever pages it names and declares its share
-(`turn_share=2`), save with `--base` or `--perf`, which run perf in the whole
-turn. A task whose weight depends on what it is given (`test`, `fast`'s
+(`test_arguments`), which `HeavyTaskTests` holds to the run. `dev:look`
+declares its share (`turn_share`): a browser's two tokens for each process
+it splits its pages among, one for each twenty pages up to what the machine
+holds, save with `--base` or `--perf`, which run perf in the whole turn. A task whose weight depends on what it is given (`test`, `fast`'s
 tests, `lint:source`, the composed suite, `dev:look`, `browser --linux`) runs
 its whole runs through the hidden task `turn`, which holds the lock, and its
 shares through `python -m tools.gate.turn --share` (`tools/lib/heavy-turn.sh`
@@ -815,7 +815,8 @@ label is that one command.
 
 The line is a report, never a check: load and the mix of tests move both
 memory and time, so nothing fails on them, and the command's exit status is
-the run's whatever the measuring did. A measurement it cannot take (no
+the run's whatever the measuring did, unless it stopped a run of tests that
+made no progress ([Policy, fonts and stalls](#policy-fonts-and-stalls)). A measurement it cannot take (no
 `footprint`, a sample that failed) is named in the line in its place.
 
 ### Gates on a second machine
@@ -1086,6 +1087,20 @@ turn or a CI job until its bound. A loop that spins (a renderer inside
 `page.evaluate`) spends CPU, so the watch keeps it; its job's
 `timeout-minutes` bounds it on CI.
 
+A hang outside every test process's watch (a worker that never starts, a
+parent waiting on a pipe, a process stuck on its way out) is the measurer's
+(`tools/lib/measured`, which runs every heavy gate). Once its tree holds a
+test run, a test beginning in any process (each mark is left in the folder
+`HQ_TEST_MARKS` names) or the tree spending 1% of a core is progress. With
+neither for twice `HQ_TEST_STALL_SECONDS`, so a test's own watch fails it
+first, it names the test each process was in, has each dump its stacks
+(faulthandler, on `SIGUSR1`), stops the whole tree and exits 124, which
+frees the heavy turn:
+
+```text
+heavy: no test began and the run spent under 1% of a core for 10m00s, so it is stopped; hung in example.tests.Hung.test_forever (pid 4121, for 10m02s)
+```
+
 #### Looking at a page
 
 `mise run dev:look <pages>...` is the same browser for looking rather than
@@ -1109,6 +1124,14 @@ page that answers anything but 200 fails the run. A query rides on the page's na
 (`'search/?q=docker'`, `'control_plane:containers?q=hq'`), on any page the
 server answers, so a page drawn from its query (Command Center's results, a
 filtered list) is a name like any other.
+
+A look of many pages (`all`) is split among processes, each with its own
+browser and a copy of the test database, its pages dealt as CI deals a
+browser gate's sweep (`hq/platform/core/tests/look_shares.py`). Each says
+the page it is on as it starts, after its share (`share 2/4:`); every page's
+lines then follow in the order asked, as one process prints them, and a
+line names how many processes looked. A share that ends early fails the
+run, naming its pages. `--deep` stays one process.
 
 A component catalog entry (`part/notice-error`, `table/figures`, every key of
 `CATALOG`, which `hq/platform/core/tests/browser/catalog/` gathers from its

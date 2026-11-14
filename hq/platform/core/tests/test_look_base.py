@@ -173,6 +173,8 @@ class _AgainstABase:
 
     close = look.Look.close
     shooting = True
+    # One process, as a look of few pages is.
+    share_at, unlooked, unlooked_pages = look.Look.share_at, (), ()
 
     def __init__(self):
         self.base = {("part/example", 402): ["overflow: a box past the edge"]}
