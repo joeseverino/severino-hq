@@ -77,6 +77,21 @@ class RowControlsTests(SimpleTestCase):
         line = [each for each in all_elements(html) if "row-columns" in each.classes]
         self.assertEqual([each.words for each in line], ["Do Later"])
 
+    def test_the_heading_of_each_column_of_words_is_marked_as_its_words(self):
+        """A narrow box gives a stacked row's room to its words, and their
+        heading takes it on the heading's line too; a figure's never does, nor
+        any heading of a table whose rows offer no controls."""
+
+        def words(head, row):
+            html = _table(row, head)
+            return [each.words for each in all_elements(html) if each.tag == "th" and "data-words" in each.attrs]
+
+        head = '{% table_heading "#" "numeric" gutter=True %}{% table_heading "Name" %}'
+        row = "<tr><td>1</td><td>Example words</td>{}</tr>"
+        control = '<td class="row-actions"><a class="btn compact" href="/example/">Open</a></td>'
+        self.assertEqual(words(head + '{% table_heading "Do" "control" hidden=True %}', row.format(control)), ["Name"])
+        self.assertEqual(words(head, row.format("")), [])
+
     def test_a_column_of_choices_is_no_rows_controls(self):
         """A choice is a value the row holds, so it keeps its column."""
 

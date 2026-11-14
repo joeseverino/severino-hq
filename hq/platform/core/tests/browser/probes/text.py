@@ -555,7 +555,11 @@ IDENTIFIER = "code, kbd, samp, time, .token, [data-entity]"
 # column of buttons sized by another row leaves a gap the words' own box never
 # sees), else to the words' own box's edge (WebKit's `pretty`, a balanced rag,
 # breaks inside it). A run with no space in it (a name, a path) is one word,
-# however its pieces are drawn.
+# however its pieces are drawn, as is a run joined by a no-break space (a
+# count and its noun), and its width holds the edges of the inline
+# boxes it opens or closes (a `code`'s padding and border), which take the
+# line's room as its letters do; an inline block moves whole, one word. A line
+# the markup ends (`<br>`) is no break.
 LINES_SHORT_OF_THEIR_ROOM = (
     "(unseen) => {"
     + DESCRIBE
@@ -566,6 +570,9 @@ LINES_SHORT_OF_THEIR_ROOM = (
   for (const block of document.querySelectorAll('.data-table > tbody > tr > * :is(p, dd, .row-line > *)')) {
     if (!block.checkVisibility() || block.closest(unseen)) continue;
     const style = getComputedStyle(block);
+    // Words the browser skips drawing (`hidden="until-found"`, a row not
+    // open) keep the boxes they last had, which are no line of the page.
+    if (style.contentVisibility === 'hidden') continue;
     if (style.whiteSpace.startsWith('nowrap') || style.textWrapMode === 'nowrap') continue;
     const own = block.getBoundingClientRect().right - parseFloat(style.paddingRight);
     const cell = block.closest('td, th');
@@ -584,33 +591,80 @@ LINES_SHORT_OF_THEIR_ROOM = (
       const beside = after.filter(([rect]) => rect.top < line.bottom && rect.bottom > line.top);
       return beside.length ? Math.min(...beside.map(([rect, gap]) => rect.left - gap)) : own;
     };
-    // Each word's boxes, a word running on across the pieces it is drawn in.
+    // The edges of the inline boxes a piece of a word opens and closes (a
+    // `code`'s padding and border): those whose words start or end with it.
+    const bare = document.createRange();
+    const edges = (node, start, end) => {
+      let before = 0;
+      let after = 0;
+      for (let el = node.parentElement; el && el !== block; el = el.parentElement) {
+        const css = getComputedStyle(el);
+        if (css.display === 'contents') continue;
+        if (css.display !== 'inline') break;
+        bare.setStart(el, 0);
+        bare.setEnd(node, start);
+        if (!bare.toString().trim()) before += parseFloat(css.marginLeft) + parseFloat(css.borderLeftWidth) + parseFloat(css.paddingLeft);
+        bare.setStart(node, end);
+        bare.setEnd(el, el.childNodes.length);
+        if (!bare.toString().trim()) after += parseFloat(css.marginRight) + parseFloat(css.borderRightWidth) + parseFloat(css.paddingRight);
+      }
+      return [before, after];
+    };
+    // An inline block (a chip an open row sets whole) moves to the next line
+    // as one box, so it is one word, as wide as its box.
+    const atomic = (el) => /^inline-(block|flex|grid|table)$/.test(getComputedStyle(el).display);
+    // Each word's pieces, a word running on across the pieces it is drawn in.
     const words = [];
     let open = false;
-    const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+    let inside = null;
+    const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (inside?.contains(node)) continue;
+      // A line the markup ends (`<br>`) was broken where it was written.
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        if (node.tagName === 'BR' && words.length) words.at(-1).ended = true;
+        if (node.tagName === 'BR') open = false;
+        const rect = node.getBoundingClientRect();
+        if (atomic(node) && node.checkVisibility() && rect.width > 0) {
+          const css = getComputedStyle(node);
+          words.push([{ rect, before: parseFloat(css.marginLeft), after: parseFloat(css.marginRight) }]);
+          inside = node;
+          open = false;
+        }
+        continue;
+      }
       if (!node.parentElement.checkVisibility()) continue;
       const text = node.textContent;
-      for (const match of text.matchAll(/\\S+/g)) {
+      for (const match of text.matchAll(/[^ \\t\\n\\r\\f]+/g)) {
+        const end = match.index + match[0].length;
         range.setStart(node, match.index);
-        range.setEnd(node, match.index + match[0].length);
+        range.setEnd(node, end);
         const rects = [...range.getClientRects()].filter((rect) => rect.width > 0);
         if (!rects.length) continue;
-        if (open && match.index === 0 && words.length) words.at(-1).push(...rects);
-        else words.push(rects);
-        open = match.index + match[0].length === text.length;
+        const [before, after] = edges(node, match.index, end);
+        const pieces = rects.map((rect, index) => ({
+          rect,
+          before: index ? 0 : before,
+          after: index === rects.length - 1 ? after : 0,
+        }));
+        if (open && match.index === 0 && words.length) words.at(-1).push(...pieces);
+        else words.push(pieces);
+        open = end === text.length;
       }
-      if (/\\s$/.test(text) || text === '') open = false;
+      if (/[ \\t\\n\\r\\f]$/.test(text) || text === '') open = false;
     }
     const space = parseFloat(style.fontSize) * 0.35;
     for (let at = 0; at + 1 < words.length; at += 1) {
-      const last = words[at].at(-1);
+      if (words[at].ended) continue;
+      const lastPiece = words[at].at(-1);
+      const last = lastPiece.rect;
       const next = words[at + 1];
-      if (next[0].top < last.bottom - 1) continue;
-      const width = next.reduce((sum, rect) => sum + rect.width, 0);
+      if (next[0].rect.top < last.bottom - 1) continue;
+      const width = next.reduce((sum, piece) => sum + piece.before + piece.rect.width + piece.after, 0);
       const edge = edgeOf(last);
-      if (last.right + space + width < edge - 1) {
-        found.push(`${describe(block)} breaks before "${block.textContent.trim().slice(0, 24)}…" ${Math.round(edge - last.right)}px short of its row's room`);
+      const right = last.right + lastPiece.after;
+      if (right + space + width < edge - 1) {
+        found.push(`${describe(block)} breaks before "${block.textContent.trim().slice(0, 24)}…" ${Math.round(edge - right)}px short of its row's room`);
         break;
       }
     }

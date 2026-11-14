@@ -156,7 +156,17 @@ const cellRoles = [
 // that read the mark would miss the box no script measures.
 const narrowMark = String.raw`/\.data-table(?![-\w])[^\s,>+~]*\[data-narrow\]/`;
 const narrowMessage = "a table's narrow box is `--box` (`@container style(--box: narrow)` or `whole`), never the script's `[data-narrow]` mark, which a page with no script never gets";
-const selectorRule = (patterns, message) => [patterns, { splitList: true, message: (selector) => (new RegExp(narrowMark.slice(1, -1)).test(selector) ? narrowMessage : message(selector)) }];
+// A child of one parent that `:is()` asks to be a child of another: both
+// parents are the one element's, so the selector names a parent twice and
+// matches nothing a page draws (`.btn > :is(.words > .token)`).
+const childInIs = String.raw`/>\s*:is\([^()]*>/`;
+const childInIsMessage = "a child combinator before `:is()` and another inside it ask one element's parent to be both: write each path whole inside `:is()` (`:is(.a > .b, .a > .c > .b)`)";
+const selectorMessage = (selector, message) => {
+  if (new RegExp(narrowMark.slice(1, -1)).test(selector)) return narrowMessage;
+  if (new RegExp(childInIs.slice(1, -1)).test(selector)) return childInIsMessage;
+  return message(selector);
+};
+const selectorRule = (patterns, message) => [[...patterns, childInIs], { splitList: true, message: (selector) => selectorMessage(selector, message) }];
 
 // A sheet that draws a primitive may write that one's variants.
 const restyledBySheet = [...new Set(primitives.flatMap((each) => each.sheets))].map((name) => ({

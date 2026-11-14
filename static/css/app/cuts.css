@@ -16,6 +16,10 @@
 /* A row's controls beneath its words in a narrow box (tables.css) keep their
    labels on one line: one longer than the line is cut at its button's edge. */
 .data-table > tbody > tr > [data-beneath] > * { overflow: hidden; }
+/* The heading of their column keeps its place on the row's first line at no width (tables.css), its words there for a screen reader and cut away by its own edge, which is none. */
+@container style(--box: narrow) {
+  .data-table:has(> * > tr > [data-beneath]) > thead > tr:has(> :nth-child(2)) > [data-beneath] { flex-basis: 0; padding-inline: 0; contain: inline-size; overflow: hidden; white-space: nowrap; }
+}
 /* A head is one short line, and stays so: what one of its controls says is
    said over the head's reading line (ask.js, partials/_ask.html), in the room the words the
    server drew there keep, hidden and not removed, and cut to their width,
@@ -129,9 +133,9 @@
   & > .part::before { content: ""; float: inline-end; inline-size: 1px; }
   & > .part { overflow: hidden; text-overflow: ellipsis; }
 }
-/* A control's label is the control's to cut, as one line at its end; a part longer than the control is held to it and cut there, set on the line by its top since a box that clips takes its bottom edge as its baseline. */
-.data-table td .btn > .button-words { min-width: 0; }
-.data-table td .btn > :is(.token, .button-words > .token):not([data-sole]) {
+/* A control's label is the control's to cut, as one line at its end: its words (`button_words`, one box) are cut where the control ends, a part among them text of that line so the cut lands inside it; a part alone, longer than the control, is held to it and cut there, set on the line by its top since a box that clips takes its bottom edge as its baseline. */
+.data-table td .btn > .button-words { min-width: 0; overflow: hidden; text-overflow: ellipsis; & .whole { display: contents; } }
+.data-table td .btn > .token:not([data-sole]) {
   max-width: 100%;
   & > .whole { vertical-align: top; overflow: hidden; text-overflow: ellipsis; }
 }
@@ -142,10 +146,10 @@
 }
 /* The muted line under a row's name: one line. */
 .data-table td .muted [data-entity] { -webkit-line-clamp: 1; line-clamp: 1; }
-/* The muted line under the row's name is one line cut at the column's edge, asking no width of its own (`contain: inline-size`) so the name alone sizes it; `narrow-only` words in it are never cut away. A name in it is text of the line (no box of its own, figures.css), so its words ("on") stay on the line with it and the line's ellipsis cuts it. A chip (`code`) is a box of its own, where the line's ellipsis cannot land, so a line holding one is left to the chip's own cut; a description (`.table-clamp`) keeps its two lines and asks for its length, so its column takes the room its row has. */
-.data-table td.row-gutter > br + .muted:not(.table-clamp, :has(.narrow-only, code)) { display: block; contain: inline-size; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The muted line under the row's name is one line cut at the column's edge, asking no width of its own (`contain: inline-size`) so the name alone sizes it; `narrow-only` words in it are never cut away. A name in it, and a part of an identifier, is text of the line (no box of its own, figures.css), so its words ("on") stay on the line with it and the line's ellipsis cuts it. A chip (`code`) is a box of its own, where the line's ellipsis cannot land, so a line holding one is left to the chip's own cut; a description (`.table-clamp`) keeps its two lines and asks for its length, so its column takes the room its row has. */
+.data-table td.row-gutter > br + .muted:not(.table-clamp, :has(.narrow-only, code)) { display: block; contain: inline-size; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; & .whole { display: contents; } }
 @container style(--box: whole) {
-  .data-table td.row-gutter > br + .muted:not(.table-clamp, :has(code)) { display: block; contain: inline-size; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .data-table td.row-gutter > br + .muted:not(.table-clamp, :has(code)) { display: block; contain: inline-size; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; & .whole { display: contents; } }
 }
 .data-table td.row-gutter > br + .muted [data-entity] { display: inline; }
 /* What the line holds wraps as the line does: a time a tight table lets wrap would otherwise open a break inside the one cut line and split a word at its edge. */

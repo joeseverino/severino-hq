@@ -386,6 +386,9 @@ class Cells(HTMLParser):
         # The columns of the row's controls, which stand beneath its words in
         # a narrow box (tables.css) and so never leave for its open line.
         beneath = {place for row in records for place, _ in _row_controls(row, kinds, named)}
+        # The columns of the words beside them, whose heading takes the room
+        # of its row's first line there as the words do.
+        words = {place for row in records for place, _ in _row_words(row, kinds)}
         if not (self.sorts and _sorts(records)):
             self.cuts += _sort_controls(heads)
         for row in self.rows:
@@ -400,6 +403,9 @@ class Cells(HTMLParser):
                 for place in beneath:
                     if cell := _at_place(row.cells, place):
                         self.marks.setdefault(cell.start, []).append(" data-beneath")
+                for place in words if beneath else ():
+                    if cell := _at_place(row.cells, place):
+                        self.marks.setdefault(cell.start, []).append(" data-words")
             if row.section == "tbody" and row.end:
                 for _, cell in _row_controls(row, kinds, named):
                     self.marks.setdefault(cell.start, []).append(" data-beneath")
@@ -457,21 +463,9 @@ class Cells(HTMLParser):
 
     def _mark_words(self, row: _Row, kinds: dict[int, str]) -> None:
         """Mark the words a row stands beside its controls, which keep a line
-        of their own there rather than wrap a few to a line beside buttons. A
-        column of tick-boxes is no control a row offers."""
+        of their own there rather than wrap a few to a line beside buttons."""
 
-        place, controls, words = 0, False, []
-        for cell in row.cells:
-            kind = kinds.get(place)
-            place += int(cell.attrs.get("colspan") or 1)
-            classes = _classes(cell.attrs)
-            if "colspan" in cell.attrs or "select-column" in classes:
-                continue
-            if "control" in (kind, cell.attrs.get("data-kind")) or "row-actions" in classes:
-                controls = True
-            elif kind not in _KEPT_KINDS and not cell.says_nothing:
-                words.append(cell)
-        for cell in words if controls else ():
+        for _, cell in _row_words(row, kinds):
             mark = ' data-words="line"' if cell.longest <= ROW_WORDS else ' data-words="floor"'
             self.marks.setdefault(cell.start, []).append(mark)
 
@@ -541,6 +535,25 @@ class Cells(HTMLParser):
 
 def _classes(attrs: dict[str, str | None]) -> list[str]:
     return (attrs.get("class") or "").split()
+
+
+def _row_words(row: _Row, kinds: dict[int, str]) -> list[tuple[int, _Cell]]:
+    """Each cell of words a row stands beside its controls, by its place; none
+    in a row that offers no controls. A column of tick-boxes is no control a
+    row offers."""
+
+    place, controls, words = 0, False, []
+    for cell in row.cells:
+        at, kind = place, kinds.get(place)
+        place += int(cell.attrs.get("colspan") or 1)
+        classes = _classes(cell.attrs)
+        if "colspan" in cell.attrs or "select-column" in classes:
+            continue
+        if "control" in (kind, cell.attrs.get("data-kind")) or "row-actions" in classes:
+            controls = True
+        elif kind not in _KEPT_KINDS and not cell.says_nothing:
+            words.append((at, cell))
+    return words if controls else []
 
 
 def _row_controls(row: _Row, kinds: dict[int, str], named: int) -> list[tuple[int, _Cell]]:

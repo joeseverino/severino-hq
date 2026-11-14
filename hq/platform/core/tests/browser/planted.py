@@ -316,11 +316,20 @@ PASSES = {
         '<tr data-folded="example-family" data-open><td>Example</td><td>Example</td></tr></tbody></table>',
         scripted=True,
     ),
-    # The same words filling each line, and a name that will not fit its line's end.
+    # The same words filling each line, and at a line's end what will not fit
+    # there: a name, words a no-break space holds to their count, a code
+    # chip whose padding takes the room its letters leave, a chip set as an
+    # inline block that moves whole, and a line the markup ends.
     "row words to the end of their line": Plant(
         '<table class="data-table"><tbody><tr><td><p style="inline-size: 20rem">'
         "Example words enough to run over two lines of a row with room to spare</p>"
-        '<p style="inline-size: 20rem">Example words then an-example-name-too-long-for-the-end</p></td></tr></tbody></table>'
+        '<p style="inline-size: 20rem">Example words then an-example-name-too-long-for-the-end</p>'
+        '<p style="inline-size: 20rem">Example words then 1&nbsp;example&nbsp;held&nbsp;whole&nbsp;to&nbsp;its&nbsp;count</p>'
+        '<p style="inline-size: 20rem">Example words then <code style="padding-inline: 6rem">name</code></p>'
+        '<p style="inline-size: 20rem">Example words then <code style="display: inline-block">'
+        "example chip of words held whole</code></p>"
+        '<p style="inline-size: 20rem">Example words <br>then more</p>'
+        "</td></tr></tbody></table>"
     ),
     "row actions beside squeezed words": Plant(
         '<table class="data-table" style="inline-size: 60rem"><tbody><tr>'
