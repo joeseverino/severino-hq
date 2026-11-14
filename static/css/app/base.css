@@ -241,23 +241,23 @@ pre ::selection { color: var(--code-ink); }
   background: var(--accent); display: inline-block;
 }
 .brand:hover { text-decoration: none; }
-/* A popover (base.html) set in the header's row: what the browser gives a
-   popover (hidden, fixed, framed, painted Canvas) is undone here; open, it
-   is a panel (routes.css). */
+/* A popover set in a row (the header's nav, base.html; a filter bar's
+   choices unfolded, forms.css): what the browser gives a popover (hidden,
+   fixed, framed, painted Canvas) is undone here; open, each is a panel
+   (routes.css, forms.css). `overflow` stays visible: the popover's own
+   `overflow: auto` would make the row a scroll container. */
+.primary-nav, .filter-bar-choices {
+  position: static; inset: auto; inline-size: auto; block-size: auto;
+  margin: 0; padding: 0; border: 0; background: none; color: inherit; overflow: visible;
+}
 .primary-nav {
   grid-area: nav;
   display: flex;
-  position: static; inset: auto; inline-size: auto; block-size: auto;
-  margin: 0; padding: 0; border: 0; background: none; color: inherit;
   /* Single row, deliberately: a control wrapped onto a second row would sit
      beneath an open dropdown, where the panel covers it and swallows its
      clicks. Grouping keeps the bar short enough that one row is enough. */
   flex-wrap: nowrap;
   gap: var(--space-1);
-  /* Never squeezed below its own content, which its track gives it, and
-     `overflow` stays visible: the popover's own `overflow: auto` would make
-     the bar a scroll container. */
-  overflow: visible;
 }
 .primary-nav a {
   color: var(--muted); font-weight: 500; font-size: var(--text-sm);

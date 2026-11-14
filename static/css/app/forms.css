@@ -466,14 +466,7 @@ select.toned:not(.toned-neutral) { border-color: currentColor; }
 .filter-bar-query:has(> .filter-bar-fit) .filter-bar-controls { flex-wrap: nowrap; }
 /* stylelint-disable-next-line declaration-property-value-disallowed-list -- the sizer is drawn for its width alone, never seen */
 .filter-bar-sizer { block-size: 0; overflow: clip; visibility: hidden; }
-/* Unfolded, the choices are the row's: what the browser gives a popover
-   (hidden, fixed, framed, painted Canvas) is undone, as the header's nav
-   undoes it (base.css). */
-.filter-bar-choices {
-  display: flex; flex: 0 0 auto; align-items: center; gap: var(--space-4);
-  position: static; inset: auto; inline-size: auto; block-size: auto;
-  margin: 0; padding: 0; border: 0; background: none; color: inherit; overflow: visible;
-}
+.filter-bar-choices { display: flex; flex: 0 0 auto; align-items: center; gap: var(--space-4); }
 .filter-bar-choices > .toggle-set { flex-wrap: nowrap; }
 .filter-bar-fold { display: none; gap: var(--space-3); }
 @container filter-bar-fit (inline-size < 1px) {
