@@ -1,5 +1,5 @@
 {
-  "api_version": 12,
+  "api_version": 13,
   "modules": {
     "audit": {
       "AuditAction": {
@@ -182,7 +182,8 @@
           "observation=",
           "connection=",
           "redact_for=",
-          "subject="
+          "subject=",
+          "required="
         ]
       },
       "seeded_by_hand": {
@@ -296,7 +297,9 @@
         ]
       },
       "CapabilitySpec": {
-        "bases": [],
+        "bases": [
+          "Requires"
+        ],
         "constructor": [
           "name",
           "summary",
@@ -331,9 +334,6 @@
               "*",
               "again="
             ]
-          },
-          "required_capabilities": {
-            "kind": "property"
           },
           "title": {
             "kind": "property"
@@ -395,6 +395,24 @@
         "fields": [],
         "kind": "dataclass",
         "members": {}
+      },
+      "InputError": {
+        "bases": [
+          "HostRefusal",
+          "ValueError"
+        ],
+        "constructor": [
+          "reason",
+          "*",
+          "details="
+        ],
+        "kind": "class",
+        "members": {
+          "code": {
+            "kind": "attribute",
+            "type": "str"
+          }
+        }
       },
       "Names": {
         "bases": [],
@@ -595,7 +613,9 @@
         "members": {}
       },
       "ConnectionSpec": {
-        "bases": [],
+        "bases": [
+          "Requires"
+        ],
         "constructor": [
           "name",
           "label",
@@ -613,11 +633,7 @@
         ],
         "fields": [],
         "kind": "dataclass",
-        "members": {
-          "required_capabilities": {
-            "kind": "property"
-          }
-        }
+        "members": {}
       },
       "describe_connections": {
         "kind": "function",
@@ -885,7 +901,8 @@
           "title=",
           "primary=",
           "compact=",
-          "disabled="
+          "disabled=",
+          "outcome="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -1406,7 +1423,9 @@
         "members": {}
       },
       "ResourceSpec": {
-        "bases": [],
+        "bases": [
+          "Requires"
+        ],
         "constructor": [
           "name",
           "label",
@@ -1427,11 +1446,7 @@
         ],
         "fields": [],
         "kind": "dataclass",
-        "members": {
-          "required_capabilities": {
-            "kind": "property"
-          }
-        }
+        "members": {}
       },
       "StatusFilter": {
         "kind": "value",
@@ -2164,9 +2179,12 @@
           "family=",
           "since=",
           "observed_at=",
+          "reads=",
           "facts=",
           "links=",
-          "read_capabilities="
+          "read_capabilities=",
+          "why=",
+          "clears="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -3095,7 +3113,6 @@
       }
     },
     "hooks": [
-      "data-chart",
       "data-sort",
       "data-submit-busy",
       "data-submit-label",
@@ -3235,10 +3252,10 @@
       },
       "partials/_icon.html": {
         "about": "One of the host's icons, by `name`, the height of the text beside it.",
-        "optional": [
+        "optional": [],
+        "required": [
           "name"
-        ],
-        "required": []
+        ]
       },
       "partials/_insight_grid.html": {
         "about": "Readings that need interpreting, each with its next step.",
@@ -3314,6 +3331,9 @@
         ]
       }
     },
+    "styled": [
+      "data-chart"
+    ],
     "tags": {
       "arrow": {
         "classes": [],
@@ -3394,6 +3414,7 @@
           "css=",
           "filtered=",
           "held=",
+          "id=",
           "more=",
           "shown=",
           "total=",
@@ -3401,6 +3422,7 @@
           "**data"
         ],
         "parts": [
+          "choices",
           "summary"
         ]
       },
@@ -3476,7 +3498,9 @@
         "parameters": [
           "actions=",
           "*",
-          "gap="
+          "gap=",
+          "first=",
+          "put_away="
         ],
         "parts": []
       },
@@ -3570,6 +3594,7 @@
           "*",
           "css=",
           "drop=",
+          "beneath=",
           "sort=",
           "descending=",
           "local_sort=",

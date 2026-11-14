@@ -3,13 +3,15 @@
     argv: [df, -Pk, "{{ mount }}"]
   register: used
   changed_when: false
-# The run's result, which HQ shows as what the run found: set_stats with
-# per_host false is what ansible-runner hands the worker. Keyed by machine,
-# so a run on several merges each machine's line.
+# The run's result, which HQ shows as what the run found, and the file system
+# as a host.filesystem reading: set_stats with per_host false is what
+# ansible-runner hands the worker. Keyed by machine, so a run on several
+# merges each machine's.
 - name: State the mount's use
   vars:
     df: "{{ used.stdout_lines[-1].split() }}"
   ansible.builtin.set_stats:
     data:
       result: "{{ {inventory_hostname: mount ~ ': ' ~ ((df[2] | int) * 1024) | human_readable ~ ' of ' ~ ((df[1] | int) * 1024) | human_readable ~ ' used (' ~ df[4] ~ ')'} }}"
+      readings: "{{ {inventory_hostname: {'host.filesystem': [{'mount': df[5:] | join(' '), 'free_bytes': (df[3] | int) * 1024, 'total_bytes': (df[1] | int) * 1024, 'read_at': now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ')}]}} }}"
     per_host: false

@@ -1,0 +1,38 @@
+# A fact whose value is several lines is a stack list, so each item is a row
+# the part spaces and wraps alike, never text a <br> splits inside a loop. Read
+# by the <br> a loop writes (after {% for %} or {% if not forloop.last %}) in a
+# fact's value. No fix: each item becomes an <li>.
+id: fact-list-drawn-by-stack-list
+language: html
+severity: error
+message: A fact's lines joined with <br> in a loop, where the stack list part draws them.
+note: Write {% fact "Label" %}{% stack_list %}{% for x in xs %}<li>...</li>{% endfor %}{% endstack_list %}{% endfact %}.
+files:
+  - "**/templates/**/*.html"
+rule:
+  kind: element
+  has:
+    kind: start_tag
+    has:
+      kind: tag_name
+      regex: ^br$
+  follows:
+    kind: text
+    regex: '\{% (?:for\b[^%]*|if not forloop\.last) %\}$'
+  any:
+    - follows:
+        stopBy: end
+        kind: text
+        regex: '\{% fact\b[^}]*%\}(?:[^{]|\{[^%]|\{% (?:[^e]|e[^n]|en[^d]))*$'
+    - inside:
+        stopBy: end
+        kind: element
+        has:
+          kind: start_tag
+          has:
+            kind: tag_name
+            regex: ^span$
+        follows:
+          stopBy: end
+          kind: text
+          regex: '\{% fact\b[^}]*%\}(?:[^{]|\{[^%]|\{% (?:[^e]|e[^n]|en[^d]))*$'

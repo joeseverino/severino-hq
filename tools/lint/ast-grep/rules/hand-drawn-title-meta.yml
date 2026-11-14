@@ -5,7 +5,7 @@ id: hand-drawn-title-meta
 language: html
 severity: error
 message: A title's line of facts drawn by hand, where the title meta part draws it.
-note: Write {% title_meta %}parts{% endtitle_meta %}, with element="ul" for <li> parts.
+note: Write {% title_meta %}parts{% endtitle_meta %}, each part an <li>.
 files:
   - "**/templates/**/*.html"
 rule:

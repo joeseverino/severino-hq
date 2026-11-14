@@ -1,0 +1,17 @@
+#!/bin/sh
+#MISE description="What the browser gates' own WebKit and Chromium answer to CSS.supports for each condition given, a line per engine per condition; browser-compat-data (audit:bcd) cannot say, since the gates' WebKit is ahead of every Safari release; read-only"
+#MISE hide=true
+#MISE extends="audit"
+#MISE depends=[{task="setup:browser", args=["webkit"]}, {task="setup:browser", args=["chromium"]}, "setup:sandbox"]
+#USAGE arg "<engine>" help="The engine to ask, or gates for both the browser gates draw in" {
+#USAGE   choices "webkit" "chromium" "gates"
+#USAGE }
+#USAGE arg "<conditions>" var=#true help="Each a property and value ('color-scheme: light only', 'color: alpha(from red / 50%)') or a whole condition ('selector(:heading)')"
+
+# tools/audit_supports.py launches each engine as the gates do, from the
+# locked Playwright and the builds setup:browser installs, and asks a blank
+# page. The words are mise's shell-quoted parse of the arguments.
+set -euf
+
+eval "set -- ${usage_conditions:-}"
+uv run --group browser python -m tools.audit_supports "${usage_engine:?}" "$@"

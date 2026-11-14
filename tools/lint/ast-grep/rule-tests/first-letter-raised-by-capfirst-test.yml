@@ -1,0 +1,13 @@
+id: first-letter-raised-by-capfirst
+valid:
+  - 'said = capfirst(words)'
+  - 'said = words.upper()'
+  - 'said = f"{words[0]} and {words[1:]}"'
+  - 'keyword = words[0].upper()'
+  - 'said = words[:1].lower() + words[1:]'
+invalid:
+  - 'said = words[:1].upper() + words[1:]'
+  - 'return self.unread[0].upper() + self.unread[1:]'
+  - 'said = "".join(part[:1].upper() + part[1:] for part in parts)'
+  - 'message = f"{outcome[:1].upper()}{outcome[1:]}{took}"'
+  - 'label = f"{title[0].upper()}{title[1:]} records"'

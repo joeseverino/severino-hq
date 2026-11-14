@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, TypeAdapter
 from .display_words import display
 from .json_schemas import fields, json_schema
 from .search_contracts import SearchDefinition
-from .security import Capability, Principal
+from .security import Capability, Principal, Requires
 from .ui import ended
 lazy from . import records
 lazy from .labels import human_label, lower_first
@@ -244,7 +244,7 @@ class CommandAbout:
 
 
 @dataclass(frozen=True, slots=True)
-class CapabilitySpec:
+class CapabilitySpec(Requires):
     name: str
     summary: str
     effect: str
@@ -291,12 +291,6 @@ class CapabilitySpec:
     # is drawn, so what it lists (a run that just ended) is current, and
     # given its reader, so it lists only what they may read.
     about: Callable[[Principal], CommandAbout] | None = None
-
-    @property
-    def required_capabilities(self) -> tuple[Capability | str, ...]:
-        if isinstance(self.required_capability, tuple):
-            return self.required_capability
-        return (self.required_capability,)
 
     @property
     def title(self) -> str:
@@ -400,7 +394,7 @@ def typed_keys(kind: type) -> tuple[str, ...]:
 
 
 @dataclass(frozen=True, slots=True)
-class ResourceSpec:
+class ResourceSpec(Requires):
     """One declaration of a readable domain and every operation it supports."""
 
     name: str
@@ -437,9 +431,3 @@ class ResourceSpec:
     def __post_init__(self) -> None:
         if self.row_type is not None and not self.list_fields and is_typeddict(self.row_type):
             object.__setattr__(self, "list_fields", typed_keys(self.row_type))
-
-    @property
-    def required_capabilities(self) -> tuple[Capability | str, ...]:
-        if isinstance(self.required_capability, tuple):
-            return self.required_capability
-        return (self.required_capability,)

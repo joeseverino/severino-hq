@@ -9,7 +9,7 @@ value: which network the link rides over, and for a link that crosses the
 internet, a lookup of the address it crosses from.
 {% endcomment %}
 <div class="conn-peering-frame">
-  <div class="conn-peering conn-{{ connection.channel.id }} conn-verdict-{{ connection.verdict }}">
+  <div class="conn-peering {{ connection.tone|tone_class }}">
     <div class="conn-peer">
       <span class="conn-peer-role">You</span>
       {% if connection.peer_label and connection.machine_url %}

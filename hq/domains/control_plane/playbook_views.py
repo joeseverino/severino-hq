@@ -15,14 +15,15 @@ from typing import ClassVar, override
 
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
-from django.http import Http404, JsonResponse
 from django.shortcuts import redirect
+from django.utils import timezone
 from django.views import View
 from django.views.generic import TemplateView
 
 from hq.domains.control_plane.models import SourceProposal
 from hq.platform.application.action_links import capability_action_link
 from hq.platform.application.automation_adoption import ADOPT, REJECT
+from hq.platform.application.automation_findings import worker_problems
 from hq.platform.application.automation_sources import (
     REFRESH,
     SourceStanding,
@@ -37,9 +38,10 @@ from hq.platform.application.routes import reverse
 from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.web_writes import execute_posted, refused
 lazy from hq.domains.jobs.models import JobState
-lazy from hq.platform.application.asks import FAILED, WATCH_LIMIT, Ask, Standing, answer, watch_token, watched
+lazy from hq.platform.application.asks import FAILED, Ask, AskMixin, Standing, Took, WatchView, watch_token
+lazy from hq.platform.application.cadence import automation_standing
 lazy from hq.platform.application.refusal_status import WANTS_A_GRANT, refusal_of
-lazy from hq.platform.application.work_runs import TONES
+lazy from hq.platform.application.work_runs import TONES, UNENDED
 lazy from hq.platform.core.templatetags.action_tags import MOST_BESIDE
 
 
@@ -63,20 +65,31 @@ class PlaybooksView(PageMixin, TemplateView):
     def principal(self):
         return web_principal(self.request.user)
 
+    @cached_property
+    def untaken(self) -> str:
+        """Why a Refresh would be refused, while no playbook worker reports; ""."""
+
+        return automation_standing().cannot("refresh", now=timezone.now())
+
     @override
     def get_page_actions(self):
         refresh = capability_action_link(REFRESH, principal=self.principal)
         scanned, scan = self.sources.scanned, self.sources.scan
-        # A page loaded while a scan is under way follows it; one that ended
-        # is said on the title's line (``_playbooks_read.html``).
-        live = scan is not None and scanned.live
+        # A page loaded while a scan is under way follows it, and one that
+        # has not started says so; one that ended is said on the title's line
+        # (``_playbooks_read.html``).
+        unended = scan is not None and scan.state in UNENDED
+        live = unended and scanned.live
         asked = (
             Ask(
                 refresh.label,
                 reverse("control_plane:playbooks_refresh"),
-                standing=scanned if live else Standing(),
+                standing=scanned if unended else Standing(),
                 status_url=scan_status_url(str(scan.pk)) if live else "",
-                title="Read your repository for a newer commit.",
+                title=self.untaken or "Read your repository for a newer commit.",
+                # Refused while no worker would take it: the problem drawn on
+                # the page says how to set one up.
+                disabled=bool(self.untaken),
             )
             if refresh is not None
             else None
@@ -100,44 +113,31 @@ class PlaybooksView(PageMixin, TemplateView):
             # When HQ last reached the repository: a scan result is kept only by a read that succeeded.
             read_at=SourceProposal.objects.order_by("-pk").values_list("created_at", flat=True).first(),
             rows=playbook_rows(sources.procedures, sources.pending, self.principal),
+            # HQ's playbook worker absent, with how to set it up: about no
+            # record with a page, so found by its key.
+            problems=worker_problems(self.principal),
         )
         return context
 
 
-class RefreshView(View):
-    """Ask HQ's runner to scan the repository now: the scan is
-    queued and the request answers at once, and ``ScanStatusView`` says how
-    it stands."""
+class RefreshView(AskMixin, View):
+    """Ask HQ's runner to scan the repository now."""
 
-    http_method_names: ClassVar[list[str]] = ["post"]
+    capability = REFRESH
+    back_to = "control_plane:playbooks"
 
-    def post(self, request):
-        back = reverse("control_plane:playbooks")
-        result = execute_posted(request, REFRESH, {})
-        if not result.get("ok"):
-            return answer(request, Standing(FAILED, refusal_of(result).message), fallback=back)
+    @override
+    def asked(self, result, at) -> Took:
         operation = str(result["operation"]["id"])
-        return answer(
-            request,
-            scan_standing(operation) or Standing(),
-            fallback=back,
-            status_url=scan_status_url(operation),
-        )
+        return Took(scan_standing(operation) or Standing(), scan_status_url(operation))
 
 
-class ScanStatusView(View):
-    """How a scan stands, for a page following it: only one HQ handed that
-    page to watch, signed."""
+class ScanStatusView(WatchView):
+    """How a scan stands."""
 
-    http_method_names: ClassVar[list[str]] = ["get"]
-
-    def get(self, request):
-        token = str(request.GET.get("watch", ""))
-        found = watched(token) if 0 < len(token) <= WATCH_LIMIT else None
-        scan = scan_standing(str(found["scan"])) if found and isinstance(found.get("scan"), str) else None
-        if scan is None:
-            raise Http404("Nothing to watch.")
-        return JsonResponse(scan.as_json())
+    @override
+    def standing(self, subject):
+        return scan_standing(subject["scan"]) if isinstance(subject.get("scan"), str) else None
 
 
 class ProposalDecisionView(View):

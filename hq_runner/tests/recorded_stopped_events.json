@@ -1,0 +1,136 @@
+{
+  "broken_role": [
+    {
+      "counter": 1,
+      "created": "2026-11-13T06:00:55.577120+00:00",
+      "end_line": 1,
+      "event": "verbose",
+      "runner_ident": "11111111-2222-4333-8444-555555555555",
+      "start_line": 0,
+      "stdout": "\u001b[0;31m[ERROR]: YAML parsing failed: While parsing a flow sequence expected ',' or ']', but got '<stream end>'.\u001b[0m",
+      "uuid": "333a05e2-f0bc-4405-9370-2082faa36b1c"
+    },
+    {
+      "counter": 2,
+      "created": "2026-11-13T06:00:55.577661+00:00",
+      "end_line": 2,
+      "event": "verbose",
+      "runner_ident": "11111111-2222-4333-8444-555555555555",
+      "start_line": 1,
+      "stdout": "\u001b[0;31mOrigin: /srv/example/project/roles/broken/tasks/main.yml:4:1\u001b[0m",
+      "uuid": "3590821a-ed88-4f9c-a576-9fd887421acd"
+    },
+    {
+      "counter": 3,
+      "created": "2026-11-13T06:00:55.577734+00:00",
+      "end_line": 3,
+      "event": "verbose",
+      "runner_ident": "11111111-2222-4333-8444-555555555555",
+      "start_line": 2,
+      "stdout": "\u001b[0;31m\u001b[0m",
+      "uuid": "0fbb5765-5d55-4371-9e42-c0cf67c94957"
+    },
+    {
+      "counter": 4,
+      "created": "2026-11-13T06:00:55.577781+00:00",
+      "end_line": 4,
+      "event": "verbose",
+      "runner_ident": "11111111-2222-4333-8444-555555555555",
+      "start_line": 3,
+      "stdout": "\u001b[0;31m(source not shown: file truncated)\u001b[0m",
+      "uuid": "0d5f6505-5132-448b-b4cc-270ad21e7d67"
+    },
+    {
+      "counter": 5,
+      "created": "2026-11-13T06:00:55.577824+00:00",
+      "end_line": 5,
+      "event": "verbose",
+      "runner_ident": "11111111-2222-4333-8444-555555555555",
+      "start_line": 4,
+      "stdout": "\u001b[0;31m\u001b[0m",
+      "uuid": "fe74f499-05ff-4021-bc61-b51971552d6f"
+    }
+  ],
+  "missing_collection": [
+    {
+      "counter": 1,
+      "created": "2026-11-13T06:00:58.769854+00:00",
+      "end_line": 1,
+      "event": "verbose",
+      "runner_ident": "11111111-2222-4333-8444-555555555555",
+      "start_line": 0,
+      "stdout": "\u001b[0;31m[ERROR]: couldn't resolve module/action 'example.absent.compose_restart'. This often indicates a misspelling, missing collection, or incorrect module path.\u001b[0m",
+      "uuid": "89eed1a6-3dab-47b3-b88b-fe6e370615be"
+    },
+    {
+      "counter": 2,
+      "created": "2026-11-13T06:00:58.770299+00:00",
+      "end_line": 2,
+      "event": "verbose",
+      "runner_ident": "11111111-2222-4333-8444-555555555555",
+      "start_line": 1,
+      "stdout": "\u001b[0;31mOrigin: /srv/example/project/playbooks/missing_collection.yml:7:7\u001b[0m",
+      "uuid": "099b382b-23ba-475c-8d7c-b4bed853f431"
+    },
+    {
+      "counter": 3,
+      "created": "2026-11-13T06:00:58.770438+00:00",
+      "end_line": 3,
+      "event": "verbose",
+      "runner_ident": "11111111-2222-4333-8444-555555555555",
+      "start_line": 2,
+      "stdout": "\u001b[0;31m\u001b[0m",
+      "uuid": "f62f5806-811b-4561-83c9-0dc44a38d5ef"
+    },
+    {
+      "counter": 4,
+      "created": "2026-11-13T06:00:58.770509+00:00",
+      "end_line": 4,
+      "event": "verbose",
+      "runner_ident": "11111111-2222-4333-8444-555555555555",
+      "start_line": 3,
+      "stdout": "\u001b[0;31m5     ansible_connection: local\u001b[0m",
+      "uuid": "6c6d446c-09fa-499b-8026-6d631fd177ec"
+    },
+    {
+      "counter": 5,
+      "created": "2026-11-13T06:00:58.770562+00:00",
+      "end_line": 5,
+      "event": "verbose",
+      "runner_ident": "11111111-2222-4333-8444-555555555555",
+      "start_line": 4,
+      "stdout": "\u001b[0;31m6   tasks:\u001b[0m",
+      "uuid": "f70730fe-b42a-44f8-8596-e5b0dd7cc032"
+    },
+    {
+      "counter": 6,
+      "created": "2026-11-13T06:00:58.770761+00:00",
+      "end_line": 6,
+      "event": "verbose",
+      "runner_ident": "11111111-2222-4333-8444-555555555555",
+      "start_line": 5,
+      "stdout": "\u001b[0;31m7     - name: Restart the stack\u001b[0m",
+      "uuid": "8d5d08ce-57ed-4467-abbf-71d1a98545c2"
+    },
+    {
+      "counter": 7,
+      "created": "2026-11-13T06:00:58.770852+00:00",
+      "end_line": 7,
+      "event": "verbose",
+      "runner_ident": "11111111-2222-4333-8444-555555555555",
+      "start_line": 6,
+      "stdout": "\u001b[0;31m        ^ column 7\u001b[0m",
+      "uuid": "83261f0a-eb78-4099-9649-e73ac96fe123"
+    },
+    {
+      "counter": 8,
+      "created": "2026-11-13T06:00:58.770900+00:00",
+      "end_line": 8,
+      "event": "verbose",
+      "runner_ident": "11111111-2222-4333-8444-555555555555",
+      "start_line": 7,
+      "stdout": "\u001b[0;31m\u001b[0m",
+      "uuid": "0f2d733d-ab07-4517-b549-d6ddf542f8af"
+    }
+  ]
+}

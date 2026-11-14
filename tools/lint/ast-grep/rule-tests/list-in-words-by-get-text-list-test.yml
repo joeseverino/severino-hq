@@ -1,0 +1,13 @@
+id: list-in-words-by-get-text-list
+valid:
+  - 'said = get_text_list(names, "and")'
+  - 'said = ", ".join(names)'
+  - 'said = f"{first} and {second}"'
+  - '# Not f"{", ".join(names[:-1])} and {names[-1]}", which joins by hand.'
+invalid:
+  - |
+    said = f"{', '.join(names[:-1])} and {names[-1]}"
+  - |
+    said = names[0] if len(names) == 1 else f"{', '.join(names[:-1])} or {names[-1]}"
+  - |
+    said = f"Needs {', '.join(self.words[:-1])} and {self.words[-1]}."

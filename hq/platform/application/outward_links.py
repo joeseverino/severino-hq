@@ -9,11 +9,11 @@ lazy from urllib.parse import urlsplit
 
 lazy from django.conf import settings
 
-from hq.domains.control_plane.models import ProviderConnection
 lazy from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 lazy from hq.platform.application.routes import reverse
 
 from .derivations import derivation
+lazy from .connections import connection_rows
 lazy from .labels import human_label
 lazy from .pins import DASHBOARD_LINK, pinned
 lazy from .published_sites import public_sites
@@ -38,7 +38,7 @@ def consoles() -> tuple[tuple[str, str, str], ...]:
     """
 
     found = []
-    for connection in ProviderConnection.objects.all():
+    for connection in connection_rows():
         endpoint = connection.endpoint.strip()
         if not endpoint or "://" not in endpoint:
             continue

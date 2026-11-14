@@ -21,7 +21,7 @@ which shares the "Runs on" column with the origin it would duplicate.
           <tr>
             {% table_heading "Name" "identifier" gutter=True local_sort=True %}
             {% for id, label, value in unmanaged.0.facets %}{% table_heading label "identifier" drop=forloop.revcounter|add:1 local_sort=True %}{% endfor %}
-            {% table_heading "Actions" "control" drop=1 hidden=True %}
+            {% table_heading "Actions" "control" hidden=True %}
           </tr>
         </thead>
         <tbody>

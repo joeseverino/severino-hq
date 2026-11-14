@@ -207,13 +207,18 @@ CLASSES = (
 
 # ``data-`` attributes the host's scripts act on that an extension may write.
 HOOKS = (
-    "data-chart",
     "data-sort",
     "data-submit-busy",
     "data-submit-label",
     "data-submit-status",
     "data-tip",
 )
+
+# ``data-`` attributes the host's stylesheets act on that an extension may
+# write: ``data-chart`` marks a chart, whose region scrolls sideways with its
+# heading held (tables.css); on a chart drawn outside a region it changes
+# nothing.
+STYLED = ("data-chart",)
 
 
 # The value tags that write a figure together with its own words, each joined
@@ -507,6 +512,7 @@ def describe() -> dict[str, Any]:
     tags, filters = _host_tags(engine)
     defined = _defined_classes()
     scripts = _scripts()
+    sheets = stylesheet()
     return {
         "frames": _frames(engine),
         "partials": _partials(engine),
@@ -515,6 +521,7 @@ def describe() -> dict[str, Any]:
         "django": _django(engine),
         "classes": _checked(CLASSES, defined.__contains__, "classes"),
         "hooks": _checked(HOOKS, lambda hook: _read_by(scripts, hook), "hooks"),
+        "styled": _checked(STYLED, lambda hook: f"[{hook}]" in sheets, "styled attributes"),
     }
 
 
@@ -602,7 +609,7 @@ def markdown(templates: dict[str, Any]) -> str:
         "",
         f"Classes: {_code(templates['classes'])}.",
         "",
-        f"Script hooks: {_code(templates['hooks'])}.",
+        f"Script hooks: {_code(templates['hooks'])}. Styled attributes: {_code(templates['styled'])}.",
         "",
         "| Rule | Drawn by hand | Write instead |",
         "| --- | --- | --- |",

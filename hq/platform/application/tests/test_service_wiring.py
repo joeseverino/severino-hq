@@ -6,9 +6,14 @@ from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_spec import SERVICE_FACET_IDS, SERVICE_FACETS
 from hq.domains.control_plane.providers import PROVIDERS
 
-from ..attention import services as service_attention
+from ..findings import estate_findings
+from ..security import cli_principal
 from ..services import find_service, service_catalog
 from .service_world import declare_world, healthy
+
+
+def wiring():
+    return estate_findings(principal=cli_principal(), rule="service-wiring-incomplete")
 
 
 class WiringFaultTests(TestCase):
@@ -62,10 +67,11 @@ class WiringFaultTests(TestCase):
             )
 
         (fault,) = find_service("app.example.com").faults
-        (insight,) = (item for item in service_attention() if item.key == "service:app.example.com")
+        (finding,) = wiring()
 
-        self.assertIn("app.example.com", insight.title)
-        self.assertIn(fault.split(". ", 1)[0].rstrip("."), insight.title)
+        self.assertEqual(finding.subject, "service:app.example.com")
+        self.assertIn("app.example.com", finding.title)
+        self.assertIn(fault.split(". ", 1)[0].rstrip("."), finding.title)
 
     def test_two_declarations_of_different_kinds_on_one_facet_are_not_a_fault(self):
         """An internal answer and a public one are both DNS and legitimately differ."""
@@ -174,7 +180,7 @@ class WiringFaultTests(TestCase):
         resource.conditions = [{"type": "Degraded", "status": True, "reason": "", "message": "No answer."}]
         resource.save(update_fields=["conditions"])
 
-        self.assertEqual(service_attention(), ())
+        self.assertEqual(wiring(), ())
 
 
 class ProviderFacetContractTests(TestCase):

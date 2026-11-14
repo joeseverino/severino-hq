@@ -14,7 +14,7 @@ from typing import Any
 from .container_standard import POWERFUL_CAPABILITIES, holds_socket, writable_system_binds
 from .standards import UNMET
 from .ui import ended
-lazy from .container_attention import socket_holder_link
+lazy from .container_findings import socket_holder_link
 lazy from .upgrades import data_of
 
 # Where HQ has no reading of what it uses: enough for most small services,

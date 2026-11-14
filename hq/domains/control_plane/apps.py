@@ -2,6 +2,9 @@ from typing import override
 
 from django.apps import AppConfig
 
+READ_REQUEST = "Read request"
+DASHBOARD = "Dashboard"
+
 
 class ControlPlaneConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
@@ -17,10 +20,15 @@ class ControlPlaneConfig(AppConfig):
         from .models import (
             AdoptedCatalog,
             ApprovalRequest,
+            CapabilityRule,
+            DashboardConfiguration,
+            DashboardMachine,
+            DashboardRefreshRequest,
             ManagedResource,
             NotManaged,
             OperationRequest,
             ReadRequest,
+            SealedSecret,
             SourceProposal,
         )
 
@@ -45,11 +53,27 @@ class ControlPlaneConfig(AppConfig):
         # Who asked for a held change, who agreed to it and when.
         register_audit(ApprovalRequest, APPROVAL_AUDIT_LABEL, subject=lambda held: held.resource_key)
         # Who asked for a connection to be read now, and when.
-        register_audit(ReadRequest, "Read request", connection=lambda request: request.connection_ref)
+        register_audit(ReadRequest, READ_REQUEST, connection=lambda request: request.connection_ref)
+        # Who asked for a dashboard panel to be read now, filed with the other
+        # asks for a reading, so the log's one toggle shows or hides them all.
+        register_audit(DashboardRefreshRequest, READ_REQUEST, observation=("completed_at",), required=True)
+        # What the dashboard shows, and on which machines, under one label.
+        register_audit(DashboardConfiguration, DASHBOARD, required=True)
+        register_audit(DashboardMachine, DASHBOARD, subject=lambda placement: placement.machine.key, required=True)
         # What a Refresh found in the automation source, under the source's key.
         register_audit(SourceProposal, "Playbook scan result", subject=lambda proposal: proposal.operation.resource.key)
         # Which commit of it became the catalog HQ runs from, and who adopted it.
         register_audit(AdoptedCatalog, "Adopted playbooks", subject=_source_key)
+        # An operator's rule for what one agent may run.
+        register_audit(CapabilityRule, "Capability policy", required=True)
+        # A secret handed to one resource: that it was set, never what it holds.
+        register_audit(
+            SealedSecret,
+            "Sealed secret",
+            redact=("sealed",),
+            subject=lambda secret: secret.resource.key,
+            required=True,
+        )
 
 
 def _source_key(_catalog) -> str:

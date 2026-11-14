@@ -214,5 +214,6 @@ RULES: tuple[FindingRule, ...] = (
         _restarts,
         operator_action="On the machine, read what waits on the restart, then schedule it for a time that suits.",
         no_help_reason=cannot_run_commands(),
+        bars={"attention": "an update waits on a restart to take effect"},
     ),
 )

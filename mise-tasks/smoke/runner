@@ -6,13 +6,16 @@
 #USAGE flag "--image <image>" help="Run it in this worker image (image:build --runner-tag), confined as hq-host confines the worker's container, instead of in an environment of the runner group here"
 set -eu
 if [ -z "${usage_image:-}" ]; then
-    # Its own environment under var/, so the checkout's .venv keeps the default
-    # groups CI tests with. uv run puts that environment's bin, where
-    # ansible-runner finds ansible-playbook, first on PATH.
-    UV_PROJECT_ENVIRONMENT=var/runner/venv uv run --group runner python -m hq_runner.tests.smoke
+    # shellcheck source=tools/lib/runner-environment.sh
+    . ./tools/lib/runner-environment.sh
+    # uv run puts that environment's bin, where ansible-runner finds
+    # ansible-playbook, first on PATH.
+    UV_PROJECT_ENVIRONMENT=$runner_venv uv run --group runner python -m hq_runner.tests.smoke
     exit
 fi
 
+# Docker's VM holds memory of its own, so the run takes every token.
+turn_share=all
 turn_bound=30m
 # shellcheck source=tools/lib/heavy-turn.sh
 . ./tools/lib/heavy-turn.sh

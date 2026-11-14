@@ -31,9 +31,11 @@ class AuditDeadListingTests(SimpleTestCase):
             (root / "hq" / "a_testing.py").write_text(SUPPORT)
             (root / "hq" / "product.py").write_text(PRODUCT)
             (root / "hq" / "tests" / "test_a.py").write_text(TEST)
+            # ripgrep is lazy, so mise installs it on its first use and puts it
+            # on PATH only for a command it runs, as `mise run audit:dead` does.
+            in_folder = ["/bin/sh", "-c", 'cd "$1" && exec /bin/sh "$2"', "sh", str(root), str(SCRIPT)]
             run = subprocess.run(
-                ["/bin/sh", str(SCRIPT)],
-                cwd=root,
+                ["mise", "-C", str(ROOT), "exec", "ripgrep", "--", *in_folder],
                 env=os.environ | {"UV_PROJECT": str(ROOT), "HQ_LOCAL_PYTHONPATH": ""},
                 capture_output=True,
                 text=True,

@@ -1,8 +1,6 @@
 """Every audit row written inside one operation carries that operation's id,
 so the log reads as events: one operation, with the items it changed."""
 
-from unittest import mock
-
 from django.test import TestCase
 from django.utils import timezone
 
@@ -15,6 +13,7 @@ from hq_sdk.capabilities import StrictCommand
 from ..approvals import APPROVE, ApprovalError, ApproveCommand, RejectCommand, approve, lapse_expired, reject
 from ..capabilities import CapabilitySpec, execute_capability, run_capability
 from ..infrastructure import ManagedResourceCommand, save_managed_resource
+from ..integration_testing import commands_registered
 from ..security import Capability, cli_principal, mcp_principal
 from .test_approvals import POLICY_KEY, an_operator, declare_policy, policy_document, update_payload
 from .writers import keyed
@@ -62,7 +61,7 @@ def last_row() -> int:
 class CapabilityRunTests(TestCase):
     def run_pair(self, prefix: str) -> list[AuditLog]:
         mark = last_row()
-        with mock.patch("hq.platform.application.capabilities.capability_registry", return_value={NAME: PAIR}):
+        with commands_registered({NAME: PAIR}):
             result = execute_capability(NAME, {"prefix": prefix}, principal=cli_principal())
         self.assertTrue(result["ok"], result)
         return list(rows_after(mark))
@@ -207,7 +206,7 @@ class ApprovalLifeTests(TestCase):
 class JobTests(TestCase):
     def test_a_capability_run_inside_a_job_writes_under_the_jobs_id(self):
         def work(progress):
-            with mock.patch("hq.platform.application.capabilities.capability_registry", return_value={NAME: PAIR}):
+            with commands_registered({NAME: PAIR}):
                 return execute_capability(NAME, {"prefix": "example-job"}, principal=cli_principal())
 
         mark = last_row()

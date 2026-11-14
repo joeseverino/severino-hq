@@ -22,6 +22,7 @@ from hq.config.devtools import (
     DEBUG_TOOLBAR_APP,
     DEBUG_TOOLBAR_MIDDLEWARE,
     debug_toolbar_enabled,
+    scratch_account,
     without_trusted_types,
 )
 
@@ -242,8 +243,8 @@ SEVERINO_OUTBOUND_IN_REQUEST = "refuse"
 # https://web.dev/articles/strict-csp
 # Objects and framing are disabled outright.
 # A style element comes only from HQ's own sheets. Attributes stay allowed
-# while WebKit reports one for every <select> (playwright#43617, the canary in
-# browser/reports.py); test_rendered and the template contract keep HQ's out.
+# while WebKit reports one for every <select> (playwright#43617); test_rendered
+# and the template contract keep HQ's out.
 #
 # `require-trusted-types-for` is the one directive here that is not about where
 # content may come from. Every other line describes an origin; this one removes
@@ -530,7 +531,7 @@ DATABASES = {
 }
 
 # Django's own runner, plus a WAL checkpoint before it clones the test database
-# for parallel workers. See core/test_runner.py for why that is necessary.
+# for parallel workers. See core/file_clones.py for why that is necessary.
 TEST_RUNNER = "hq.platform.core.test_runner.SeverinoTestRunner"
 
 # Under test, a warning from this codebase and any leaked resource fail the run.
@@ -815,6 +816,11 @@ FORMAT_MODULE_PATH = ["hq.config.formats"]
 STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = Path(env_str("DJANGO_STATIC_ROOT", str(BASE_DIR / "var" / "static")))
+# The Design page's gallery of every shared part, which the image build writes
+# once (hq.platform.core.design_gallery) where its ENV names, so production
+# reads a file rather than importing the test code that draws it. Unset, as in
+# a checkout, the server draws it from the catalog it runs on each request.
+SEVERINO_DESIGN_GALLERY = Path(_gallery) if (_gallery := env_str("SEVERINO_DESIGN_GALLERY")) else None
 
 # /static/ has one server, the ASGI mount in hq.config.asgi (core.static), and
 # one collected tree: the image build runs collectstatic, so STATIC_ROOT is
@@ -964,3 +970,13 @@ if SEVERINO_DEBUG_TOOLBAR:
 # Who sees the toolbar: loopback, unless a developer behind a proxy names more.
 # Empty, Django's default, whenever it is off.
 INTERNAL_IPS = env_list("SEVERINO_DEBUG_TOOLBAR_IPS", ["127.0.0.1", "::1"]) if SEVERINO_DEBUG_TOOLBAR else []
+
+# The throwaway account the scratch server's sign-in link signs in
+# (core/dev_sign_in.py); empty, and the link not routed, on any other server.
+SEVERINO_SCRATCH_ACCOUNT = scratch_account(
+    debug=DEBUG,
+    profile=env_str("HQ_DEV_PROFILE"),
+    host=env_str("UVICORN_HOST"),
+    account=env_str("HQ_DEV_ACCOUNT"),
+    testing=RUNNING_TESTS,
+)

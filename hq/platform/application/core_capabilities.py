@@ -833,6 +833,7 @@ def dashboard() -> tuple[CapabilitySpec, ...]:
             request_dashboard_refresh,
             execution_notes=("Ask only for panels a controller has a way to read.",),
             label="Refresh the dashboard",
+            verb="Refresh",
         ),
         CapabilitySpec(
             DASHBOARD_REFRESH_STALE,

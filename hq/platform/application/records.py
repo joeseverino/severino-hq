@@ -2,19 +2,17 @@
 
 Its commands, deletion, write and delete permissions, web write and health count
 are read off ``application.domains``, so a record domain is declared there once
-and never listed here. Agents, MCP, the HTTP API and the CLI send a command to
-the domain's ``save`` service and the web calls ``save_form``; both end in the
-model's own ``full_clean``, so a rule on the model holds on every path.
+and never listed here. Every door, the web's forms included
+(``writes.RecordFormMixin``), sends a command to the domain's ``save`` service
+through its capability, which ends in the model's own ``full_clean``.
 """
 
 from collections.abc import Callable
 from typing import Any
 
 from django.core.validators import MaxValueValidator, MinValueValidator
-from django.db import transaction
 from django.forms import ModelForm
-
-from hq.platform.core.audit import audit_operation
+from django.utils.text import capfirst
 
 from .deletion import DeleteCommand, RecordDeleted, delete_record
 from .describe import meanings
@@ -150,41 +148,7 @@ def display_noun(records: Records) -> str:
     """What a message calls one record: "Content item", "Expense"."""
 
     name = records.title or records.noun
-    return f"{name[0].upper()}{name[1:]}"
-
-
-@transaction.atomic
-def save_form(form: ModelForm[Any], *, principal: Principal) -> Any:
-    """Create or update a plain record from a bound, valid ``ModelForm``.
-
-    The form has already run the model's validation on the fields it shows;
-    this runs ``full_clean`` on the whole instance, the same call the command
-    path makes, so what the web stores was held to exactly the same rules.
-    """
-
-    instance = form.instance
-    records = records_for(type(instance))
-    principal.require(records.write)
-    verb = "create" if instance._state.adding else "update"
-    with audit_operation(operation=f"{records.noun}.{verb}", principal=principal):
-        instance.full_clean()
-        return form.save()
-
-
-def delete_instance(instance: Any, *, principal: Principal) -> RecordDeleted:
-    """Delete one record the web already holds, through its declared deleter.
-
-    The person confirmed on the page, so the confirmation is the record's own
-    target, which is what ``delete_record`` checks for.
-    """
-
-    records = records_for(type(instance))
-    target = getattr(instance, records.lookup)
-    return deleter(records.resource)(
-        DeleteCommand(confirm=str(target)),
-        principal=principal,
-        **{TARGET_KINDS[records.target].keyword: target},
-    )
+    return capfirst(name)
 
 
 def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
@@ -238,7 +202,7 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
         ),
     )
     wording = {verb: (summary, label) for verb, summary, label in records.wording}
-    target_label = f"{title[0].upper()}{title[1:]} {_TARGET_NAMES[records.target]}"
+    target_label = f"{capfirst(title)} {_TARGET_NAMES[records.target]}"
     return tuple(
         CapabilitySpec(
             f"{records.noun}.{verb}",

@@ -20,7 +20,6 @@ from hq.platform.core.models import AuditLog
 lazy from hq.domains.receipts.specs import ReceiptRow
 
 from .command_fields import Describe, Names, Upload
-from .forms import file_as_sent
 from .integration_specs import Kept, keeps
 from .projection import iso
 from .record_errors import InputError, RecordNotFound
@@ -240,20 +239,3 @@ def file_cleanup(receipt: Receipt):
     if not name or storage is None:
         return None
     return lambda: storage.delete(name)
-
-
-def receipt_payload(data: dict[str, Any], upload: UploadedFile | None = None) -> dict[str, Any]:
-    """A receipt form's cleaned data as the receipt capabilities take it, with
-    the file the form brought, if it brought one."""
-
-    payload: dict[str, Any] = {
-        "vendor": data["vendor"],
-        "date": iso(data["date"]),
-        "amount": str(data["amount"]),
-        "notes": data["notes"],
-        "related_expense": data["related_expense"].id if data["related_expense"] else None,
-        "related_asset": data["related_asset"].slug if data["related_asset"] else None,
-    }
-    if upload is not None:
-        payload["file"] = file_as_sent(upload)
-    return payload

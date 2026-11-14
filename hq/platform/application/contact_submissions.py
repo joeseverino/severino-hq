@@ -20,8 +20,7 @@ from hq.domains.control_plane.desired_state import desired_fingerprint
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_adapters.cloudflare import CONTACT_CHANGES_LIMIT, ContactStatus
 from hq.domains.control_plane.providers import validate_spec
-from hq.platform.core.audit import audit_operation, record_event
-from hq.platform.core.models import AuditLog
+from hq.platform.core.audit import audit_operation
 
 from .adoption import WriteGap, require_writable, write_gap
 from .cadence import request_reading
@@ -159,8 +158,8 @@ def _ids(spec: dict[str, Any]) -> dict[str, str]:
     return {name: str(spec.get(name, "")) for name in ("connection_ref", "account_id", "database_id")}
 
 
-def _declare(spec: dict[str, Any], *, principal: Principal) -> None:
-    """Write the declaration and queue the controller to apply it."""
+def _declare(spec: dict[str, Any], *, principal: Principal, said: str) -> None:
+    """Write the declaration and queue the controller to apply it; ``said`` is what its audit row says."""
 
     validated = validate_spec(inbox.DECLARATION, spec)
     require_writable(inbox.DECLARATION, validated)
@@ -175,6 +174,7 @@ def _declare(spec: dict[str, Any], *, principal: Principal) -> None:
         resource.kind, validated, enabled=True, resource_key=resource.key
     )
     resource.full_clean()
+    resource.audit_said = said
     resource.save()
     queue_reconcile(resource, principal=principal, reason="A contact message was changed.")
     transaction.on_commit(lambda: request_reading(inbox.READING))
@@ -214,17 +214,10 @@ def execute_contact_review(
     status = review["status"] = _status(review["status"])
     review["assigned_to"] = review["assigned_to"].strip()
     with audit_operation(operation=REVIEW, principal=principal):
-        _declare(_change(current, review), principal=principal)
-        record_event(
-            action=AuditLog.Action.UPDATED,
-            type_label="Contact submission",
-            message=f"Asked for contact submission #{current_id} to be reviewed.",
-            metadata={
-                "id": current_id,
-                "status": status,
-                "previous_status": before.get("status", ""),
-            },
-            required=True,
+        _declare(
+            _change(current, review),
+            principal=principal,
+            said=f"Asked for contact submission #{current_id} to be reviewed.",
         )
     return {"ok": True, "id": current_id, "status": status, "queued": True}
 
@@ -264,12 +257,9 @@ def execute_contact_delete(
         # state either way, so a retry succeeds.
         return {"ok": True, "deleted": {"id": current_id, "already_absent": True}}
     with audit_operation(operation=DELETE, principal=principal):
-        _declare(_change(current, {"delete": current_id}), principal=principal)
-        record_event(
-            action=AuditLog.Action.DELETED,
-            type_label="Contact submission",
-            message=f"Asked for contact submission #{current_id} to be deleted.",
-            metadata={"id": current_id, "status": before.get("status", "")},
-            required=True,
+        _declare(
+            _change(current, {"delete": current_id}),
+            principal=principal,
+            said=f"Asked for contact submission #{current_id} to be deleted.",
         )
     return {"ok": True, "deleted": {"id": current_id, "already_absent": False}, "queued": True}

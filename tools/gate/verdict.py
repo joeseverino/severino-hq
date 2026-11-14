@@ -32,7 +32,7 @@ from tools.gate.tree import working_tree
 
 ROOT = Path(__file__).resolve().parents[2]
 # The folder a step's test runs write their failed tests into, a JSON list of
-# FailedTest records per run (hq/platform/core/test_runner.py, which this
+# FailedTest records per run (hq/platform/core/run_report.py, which this
 # helper does not import, so it runs where only tools/ is). GateVerdictTests
 # runs that runner's record under a gate, which holds the two to one shape.
 REPORTS = "HQ_TEST_REPORTS"
@@ -49,26 +49,21 @@ RERUN = "HQ_GATE_RERUN"
 # under the name of each task it runs inside. Anchored, so a tool that quotes
 # such a line from a file (a formatter's diff of a test) names nothing.
 TASK = re.compile(r"^((?:\[[^\]\s]+\] )*)\[([^\]\s]+)\] (?:exited with status \d+|ERROR task failed)\s*$")
-# The task that runs a command in the heavy turn for the task that asked
-# (mise-tasks/turn): its failure is that task's, named by the prefix it is
-# printed under, or by the step when nothing asked.
-TURN = "turn"
 
 
 def failed_task(line: str) -> str | None:
     """The task a line of mise's says failed, as the gate names it."""
 
-    if not (task := TASK.match(line)):
-        return None
-    if task[2] != TURN:
-        return task[2]
-    under = re.findall(r"\[([^\]\s]+)\] ", task[1])
-    return under[-1] if under else None
+    return task[2] if (task := TASK.match(line)) else None
 
 
-# The line mise prints once a task that waited for the heavy turn's lock holds
-# it, the wait as mise writes one: 4.2s, 3m02s, 2h01m.
-WAITED = re.compile(r"^(?:\[[^\]\s]+\] )*got lock heavy after ((?:\d+(?:\.\d+)?[hms])+)\s*$")
+# The line once a run that waited holds the heavy turn, the wait as mise
+# writes one (4.2s, 3m02s, 2h01m): mise's for a task's locks, every lock the
+# task holds named (src/task/task_lock.rs, held_names), and tools/gate/turn.py's
+# for a share of it.
+WAITED = re.compile(
+    r"^(?:\[[^\]\s]+\] )*got (?:locks? [\w.:-]+(?:, [\w.:-]+)*|a share of \d+) after ((?:\d+(?:\.\d+)?[hms])+)\s*$"
+)
 PART = re.compile(r"(\d+(?:\.\d+)?)([hms])")
 SPAN = {"h": 3600.0, "m": 60.0, "s": 1.0}
 # The runner's heading over a failed test's traceback, under the task whose
@@ -81,7 +76,7 @@ TIMED = re.compile(r"\[([^\]\s]+)\] (?:Finished|passed) in (\d+(?:\.\d+)?)(ns|µ
 UNITS = {"ns": 1e-9, "µs": 1e-6, "ms": 1e-3, "s": 1.0}
 # What a run says it spent, kept in the verdict file under the step times,
 # since that file is what outlives the run: the test runner's slowest classes
-# under their heading (hq/platform/core/test_runner.py, report_class_times),
+# under their heading (hq/platform/core/run_report.py, report_class_times),
 # and tools/lib/measured's line on a heavy run's process tree.
 CLASSES = re.compile(r"^(?:\[[^\]\s]+\] )*(Slowest test classes .*)$")
 CLASS_TIME = re.compile(r"^(?:\[[^\]\s]+\] )*(\s+\d+(?:\.\d+)?s\s+\S+)\s*$")

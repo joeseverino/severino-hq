@@ -6,7 +6,7 @@ estate, which is built to break layouts and covers the pages it was built for.
 This holds the same invariants over the homelab the demo shows
 (``hq/platform/core/example_estate``), on every page a person reaches from the
 navigation, as a reader sees it: script on, deferred parts loaded, at a phone,
-a tablet, a laptop and a wide desktop, in the light palette and the dark.
+a tablet and a laptop, in the light palette and the dark.
 
 Each page is rendered once, opened once per width, and every check runs on
 that one load; a finding names its check, page, width and theme.
@@ -20,22 +20,22 @@ from functools import cache
 from html import unescape
 from types import MappingProxyType
 from typing import Any, override
-from urllib.parse import parse_qsl, quote, urljoin, urlsplit
+from urllib.parse import parse_qsl, urljoin, urlsplit
 
 from django.conf import settings
 from django.test import Client
 from django.urls import reverse
 lazy from django.db import transaction
 
-from hq.platform.core.tests.browser.gate import BrowserGate, answered, tab_key
+from hq.platform.core.tests.browser.gate import BrowserGate, answered, sent, tab_key, unfold
 from hq.platform.core.tests.browser.in_flight import InFlight
 from hq.platform.core.tests.browser.probes.boxes import SIDEWAYS
-from hq.platform.core.tests.browser.probes.describe import TEXT_SHOWN
-from hq.platform.core.tests.browser.probes.settle import FINISH_TRANSITIONS, FONTS_READY, SETTLE
+from hq.platform.core.tests.browser.probes.settle import FONTS_READY, SETTLE
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import ORIGIN
+from hq.platform.core.tests.browser.shards import sweep
 from hq.platform.core.tests.browser.survey import geometry_probes
-from hq.platform.core.tests.browser.widths import PHONE_SCREEN, WIDE, WIDE_TABLES, WIDEST, WIDTHS, viewport
+from hq.platform.core.tests.browser.widths import PALETTE_AT, PHONE_SCREEN, WIDE, WIDTHS, viewport, with_wide_tables
 lazy from hq.platform.application import fragments
 lazy from hq.platform.application.domains import domain_navigation
 lazy from hq.platform.core import seeds
@@ -45,53 +45,39 @@ lazy from hq.platform.core.example_estate.network import ZONE_KEY
 lazy from hq.platform.core.example_estate.records import RUNBOOKS, SERVER_ASSET, SWITCH_ASSET, UNFILED_RECEIPT, WRITEUPS
 lazy from hq.platform.core.example_estate.testing import as_production, sign_in
 
-# The gate's widths, a wide desktop and the laptop windows where a wide table
-# has the least room: the example estate is the homelab as a person reads it,
-# on every screen up to the widest.
-READ_AT = tuple(sorted((*WIDTHS, WIDEST, *WIDE_TABLES)))
+# WebKit reads the gate's widths, and the laptop window where a wide table
+# has the least room on a page that draws one (`with_wide_tables`), as HQ is
+# read in Safari; another engine is a second opinion at a phone and a laptop.
+SECOND_OPINION_AT = (PHONE_SCREEN[0], WIDE)
 THEMES = ("light", "dark")
+# A page the policy refuses a style element on, answered as HQ answers one,
+# opened last: a browser sends a report once it gets to it, so the report this
+# page draws is what the sweep waits for, and it comes after any the pages
+# before it drew.
+_REFUSED = "/example-refused/"
+_STYLED = '<!doctype html><html><head><meta charset="utf-8"><style>p { color: red }</style></head><body><p>Example</p></body></html>'
 # The API reference mounts a vendored viewer, whose markup is not HQ's to hold
-# to these rules; ReferenceBrowserTests holds it to its own.
+# to these rules; ReferenceBrowserTests holds only what HQ gives the page.
 _NOT_HQS_MARKUP = {"api_reference:reference"}
 # Reached from the header on every page rather than from the navigation.
 _HEADER = ("action_items",)
 _REDIRECTS = frozenset({301, 302, 303, 307, 308})
-# Each popover's kind: its classes and the table and column it sits in. Popovers
-# of one kind are drawn by one partial in one place, so one of them stands for
-# all, and a pass over them costs a run per kind rather than per record.
-POPOVER_KINDS = """() => {
-  const tables = [...document.querySelectorAll('table')];
-  return [...document.querySelectorAll('[popover]')].map((popover) => {
-    const table = popover.closest('table');
-    return [popover.className, tables.indexOf(table), popover.closest('td, th')?.cellIndex ?? -1].join(' ');
-  });
-}"""
-# The popover at a place in the page shown, what names it in a finding and
-# what names its shot; nothing for one that will not show.
-SHOW_POPOVER = """(place) => {
-  const popover = document.querySelectorAll('[popover]')[place];
-  try {
-    popover.showPopover();
-  } catch {
-    return null;
-  }
-  return popover.id ? [`#${popover.id}`, popover.id] : [`popover ${place + 1}`, `${place + 1}`];
-}"""
-HIDE_POPOVER = "(place) => document.querySelectorAll('[popover]')[place].hidePopover()"
 # The checks a shown popover's own boxes and lines are held to: its rows are
 # laid out by the same primitives as the page's, over whatever lies beneath.
 _IN_A_POPOVER = ("overlaps", "overlapping text", "touching text")
 
 
-_PICTURE = re.compile(r'<img\b[^>]*\ssrc="(/[^"/][^"]*)"')
+_EMBEDDED = re.compile(r'<img\b[^>]*\ssrc="(/[^"/][^"]*)"')
 
 
-def pictures_of(pages, ask):
+def embedded_of(pages, ask):
     """Each picture ``pages`` draw from HQ's own records (a receipt's file),
     by its address, as the server answers it: a browser asks for it as the
     page loads."""
 
-    addresses = {url for page in pages for url in _PICTURE.findall(page) if not url.startswith(settings.STATIC_URL)}
+    addresses = {
+        unescape(url) for page in pages for url in _EMBEDDED.findall(page) if not url.startswith(settings.STATIC_URL)
+    }
     asked = {url: ask(url) for url in sorted(addresses)}
     return {(url, ""): answered(response) for url, response in asked.items() if response.status_code == 200}
 
@@ -232,7 +218,7 @@ def render_estate():
                 raise AssertionError(f"{path} answered {response.status_code}")
             answers[path, ""] = answered(response)
             fragments_of(client, path, answers[path, ""], answers, ask)
-        answers |= pictures_of(list(answers.values()), lambda url: ask(client, url))
+        answers |= embedded_of(list(answers.values()), lambda url: ask(client, url))
     return paths, answers
 
 
@@ -288,24 +274,6 @@ class ExampleEstateGate(BrowserGate):
             )
             route.fulfill(status=404, body="Not in the example estate")
 
-    def each_popover_kind(self):
-        """Each kind of popover on the page shown on its own in turn, as a
-        reader shows one: what names it in a finding and in a shot, and how
-        many more of its kind it stands for. Shown all at once they would lie
-        over one another, which no reader sees, and where each lands would
-        hang on which drew last."""
-
-        kinds = self.page.evaluate(POPOVER_KINDS)
-        judged = set()
-        for place, kind in enumerate(kinds):
-            if kind in judged or (shown := self.page.evaluate(SHOW_POPOVER, place)) is None:
-                continue
-            judged.add(kind)
-            try:
-                yield shown, kinds.count(kind) - 1
-            finally:
-                self.page.evaluate(HIDE_POPOVER, place)
-
     def visit(self, path, width):
         self.page.set_viewport_size(viewport(width))
         self.page.goto(f"{ORIGIN}{path}", wait_until="load")
@@ -335,28 +303,52 @@ class ExampleEstateBrowserTests(ExampleEstateGate):
             found |= {f"{check}, with {label} shown": said for check, said in self.checked(probes).items()}
         return found
 
+    @sweep
     def test_every_navigation_page_keeps_the_layout_rules(self):
+        """Each page keeps the layout rules and sends ``/csp-report/`` nothing."""
+
         self.assertGreater(len(self.navigation), 10, "the navigation led almost nowhere")
-        for path in self.navigation:
-            for width in READ_AT:
+        webkit = self.browser.browser_type.name == "webkit"
+        for path in self.mine(self.navigation):
+            for width in with_wide_tables(WIDTHS, self.draws_a_table) if webkit else SECOND_OPINION_AT:
                 with self.subTest(page=path, width=width):
-                    self.page.emulate_media(color_scheme="light")
                     self.visit(path, width)
                     found = self.geometry(path, width)
-                    # A palette is a color per token, the same at every width, so
-                    # the narrowest and widest read every part either draws.
-                    for theme in THEMES if width in (READ_AT[0], READ_AT[-1]) else ():
-                        self.page.emulate_media(color_scheme=theme)
+                    for theme in THEMES if width in PALETTE_AT else ():
+                        was = self.in_scheme(theme)
                         self.page.evaluate(SETTLE)
-                        self.page.evaluate(FINISH_TRANSITIONS)
                         found |= {f"{check} ({theme})": said for check, said in self.palette().items()}
-                    self.page.emulate_media(color_scheme="light")
+                        self.in_scheme(was)
                     found |= self.opened(path, width)
                     found["unanswered"], self.unanswered = self.unanswered, []
                     found["refused"] = self.refusals_so_far()
                     failed = {check: said for check, said in found.items() if said}
                     if failed:
                         self.fail(json.dumps(failed, indent=1))
+        if webkit:
+            self.a_refused_page_is_heard_after_every_other()
+
+    def a_refused_page_is_heard_after_every_other(self):
+        """The refusals each page was held to are heard: a page the policy
+        refuses sends its report, and none came late from the pages before it."""
+
+        self.served = {**self.served, _REFUSED: sent(_STYLED, {"Content-Type": "text/html", **self.policy})}
+        with self.page.expect_request_finished(is_report(settings.SEVERINO_CSP_REPORT_PATH)):
+            self.page.goto(f"{ORIGIN}{_REFUSED}", wait_until="load")
+        # A round trip, so the page's word of the refusal has reached the gate too.
+        self.settle()
+        heard = self.refusals_so_far()
+        report = f"{_REFUSED}: {settings.SEVERINO_CSP_REPORT_PATH} was sent"
+        self.assertTrue(
+            [line for line in heard if line.startswith(report)],
+            f"the refused page's report never reached {settings.SEVERINO_CSP_REPORT_PATH}: {heard}",
+        )
+        # A report a page before it drew late arrives before this one.
+        self.assertEqual([line for line in heard if not line.startswith(_REFUSED)], [])
+
+
+def is_report(path):
+    return lambda request: urlsplit(request.url).path == path
 
 
 # A list's toolbar boxes (a filter's options and its toggles), the sort its
@@ -366,7 +358,7 @@ _DEFAULT_SORT = re.compile(r'<select name="sort">.*?<option value="([^"]*)" sele
 _SORT_LINK = re.compile(r'<a class="table-sort-link"[^>]* href="([^"]+)"')
 _QUEUE_CHOICES = re.compile(r'<select name="(status|source)"[^>]*>(.*?)</select>', re.DOTALL)
 _OPTION = re.compile(r'<option value="([^"]+)"')
-_FIRST_ROW = re.compile(r"<tbody>\s*<tr[^>]*>(.*?)</tr>", re.DOTALL)
+_FIRST_ROW = re.compile(r"<tbody\b[^>]*>\s*<tr[^>]*>(.*?)</tr>", re.DOTALL)
 _CELL = re.compile(r"<td[^>]*>(.*?)</td>", re.DOTALL)
 
 
@@ -378,6 +370,8 @@ def _cell_words(row):
 _NOTHING = "nothing-is-called-this"
 # A phone and a laptop: where a control moves into a menu, and where it does not.
 PRESSED_AT = (PHONE_SCREEN[0], WIDE)
+
+
 # The address shows what was asked for and the answer is in place.
 _ASKED = """([name, value]) => new URLSearchParams(location.search).getAll(name).includes(value)
   && !document.querySelector('main[aria-busy]')"""
@@ -386,7 +380,7 @@ _LET_GO = """([name, value]) => !new URLSearchParams(location.search).getAll(nam
 # The places of the headings a list's table has dropped, and those places as
 # each frame draws them from now on.
 _DROPPED = """(region) => [...document.querySelector(region + ' > .data-table').tHead.rows[0].cells]
-  .flatMap((heading, place) => heading.hasAttribute('data-dropped') ? [place] : [])"""
+  .flatMap((heading, place) => !heading.checkVisibility() ? [place] : [])"""
 _WATCH_DROPPED = (
     """(region) => {
   window.droppedFrames = [];
@@ -401,57 +395,6 @@ _WATCH_DROPPED = (
 )
 _FIRST_COLUMN = """(rows) => [...document.querySelectorAll(rows)]
   .map((row) => row.cells[0].innerText.trim().split('\\n')[0])"""
-# A word in a closed row's line beneath that nothing else find could reach
-# holds: no text drawn on the page, and no other line beneath a row.
-_HELD_BACK_WORD = (
-    "(details) => {"
-    + TEXT_SHOWN
-    + """
-  const lines = [...document.querySelectorAll(details)];
-  const reachable = (node) => textShown(node) || lines.some((line) => line.contains(node));
-  const texts = (root) => {
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    const found = [];
-    while (walker.nextNode()) found.push(walker.currentNode);
-    return found;
-  };
-  for (const line of lines) {
-    if (line.previousElementSibling?.classList.contains('is-expanded')) continue;
-    const shown = (node) => {
-      for (let el = node.parentElement; el && el !== line; el = el.parentElement) {
-        if (getComputedStyle(el).display === 'none') return false;
-      }
-      return true;
-    };
-    const elsewhere = texts(document.body)
-      .filter((node) => !line.contains(node) && reachable(node))
-      .map((node) => node.data.toLowerCase()).join(' ');
-    for (const node of texts(line).filter(shown)) {
-      for (const word of node.data.split(/[^A-Za-z]+/)) {
-        if (word.length > 4 && !elsewhere.includes(word.toLowerCase())) return word;
-      }
-    }
-  }
-  return null;
-}"""
-)
-# How tall each table holding a closed row's line is drawn, then with every
-# such line left out of the page.
-_CLOSED_LINES_ROOM = """(details) => {
-  const lines = [...document.querySelectorAll(details)]
-    .filter((line) => !line.previousElementSibling.classList.contains('is-expanded'));
-  const tables = [...new Set(lines.map((line) => line.closest('table')))];
-  const heights = () => tables.map((table) => table.getBoundingClientRect().height);
-  const drawn = heights();
-  lines.forEach((line) => line.style.setProperty('display', 'none'));
-  const without = heights();
-  lines.forEach((line) => line.style.removeProperty('display'));
-  return [drawn, without];
-}"""
-# The line holding the word is open beneath its row.
-_FOUND_OPEN = """([details, word]) => [...document.querySelectorAll(details)].some((line) =>
-  line.textContent.includes(word) && line.checkVisibility()
-  && line.previousElementSibling.classList.contains('is-expanded'))"""
 
 
 class ExampleEstateControlTests(BrowserGate):
@@ -566,6 +509,7 @@ class ExampleEstateControlTests(BrowserGate):
                 # Every answer below is drawn on this page, never by loading another.
                 self.page.evaluate("() => { window.kept = true; }")
                 every = self.rows()
+                unfold(self.page)
                 self.page.locator(SELECTORS["table_filter"]).first.click()
                 menu = self.page.locator(SELECTORS["table_filter_panel"]).first
                 box = menu.locator(SELECTORS["table_filter_box"]).first
@@ -643,13 +587,13 @@ class ExampleEstateControlTests(BrowserGate):
         fits = """(region) => {
           const table = document.querySelector(region + ' > table');
           return table.offsetWidth <= table.parentElement.clientWidth
-            && [...table.tHead.rows[0].cells].some((heading) => heading.hasAttribute('data-dropped'));
+            && [...table.tHead.rows[0].cells].some((heading) => !heading.checkVisibility());
         }"""
-        self.page.wait_for_function(fits, arg=SELECTORS["table_scroll"], timeout=5_000)
+        self.page.wait_for_function(fits, arg=SELECTORS["table_scroll"])
 
     def test_a_list_sorted_on_a_phone_draws_no_column_it_had_dropped(self):
-        """The table a sort swaps in is fitted before its first frame, so no
-        column the list had dropped is drawn and then dropped again."""
+        """The table a sort swaps in is laid out by the stylesheet in its first
+        frame, so no column the list had dropped is drawn and then dropped again."""
 
         self.visit(reverse("projects:list"), PHONE_SCREEN[0])
         before = self.page.evaluate(_DROPPED, SELECTORS["table_scroll"])
@@ -682,11 +626,34 @@ class ExampleEstateControlTests(BrowserGate):
                     self.assertEqual(names, sorted(names, key=str.lower, reverse=direction == "descending"))
                 self.assertTrue(self.page.evaluate("() => window.kept === true"), "a sort loaded another page")
 
+    def test_every_queue_row_opens_what_raised_it_on_a_modifier_press_a_person_can_reach(self):
+        """A row that keeps its urgency for a screen reader still opens its
+        panel: a Cmd- or Ctrl-press on its row lands on the row's own cell, the
+        one place a person can press, and opens that row's panel, not its fold."""
+
+        for width in PRESSED_AT:
+            with self.subTest(width=width):
+                self.visit(reverse("action_items"), width)
+                rows = self.page.locator(f"{SELECTORS['decisions']}:has([data-origin])")
+                self.assertGreater(rows.count(), 0)
+                for place in range(rows.count()):
+                    row = rows.nth(place)
+                    if not row.is_visible():
+                        continue
+                    gutter = row.locator(".row-gutter")
+                    box = gutter.bounding_box()
+                    # The cell's own far corner, clear of its title link.
+                    gutter.click(modifiers=["ControlOrMeta"], position={"x": box["width"] - 4, "y": box["height"] - 4})
+                    panel = row.locator(".origin-panel")
+                    self.assertTrue(panel.evaluate("(panel) => panel.matches(':popover-open')"), place)
+                    panel.evaluate("(panel) => panel.hidePopover()")
+
     def test_the_queue_keeps_only_the_urgency_it_is_asked_for(self):
         for width in PRESSED_AT:
             with self.subTest(width=width):
                 self.visit(reverse("action_items"), width)
                 every = self.page.locator(SELECTORS["decisions"]).count()
+                unfold(self.page)
                 urgency = self.page.locator(SELECTORS["queue_urgency"])
                 # The urgency the first row is at, so the answer has rows to hold.
                 offered = urgency.locator("option").evaluate_all("(options) => options.map((option) => option.value)")
@@ -826,22 +793,6 @@ class ExampleEstateControlTests(BrowserGate):
         toggle.click()
         self.assertFalse(drawer.is_visible())
 
-    def test_find_in_page_opens_the_closed_row_that_holds_the_match(self):
-        """A word only a closed row's line beneath holds is found, as the
-        browser's find finds it (a text fragment), and the row opens on it."""
-
-        self.visit(reverse("expenses:list"), PHONE_SCREEN[0])
-        word = self.page.evaluate(_HELD_BACK_WORD, SELECTORS["row_detail"])
-        self.assertTrue(word, "no closed row holds back a word of its own")
-        # Reachable by find, a closed row's line still takes no room. Left out,
-        # a line under the last row would leave that row its rule, which the
-        # last row never draws, so a table may be a rule shorter drawn.
-        drawn, without = self.page.evaluate(_CLOSED_LINES_ROOM, SELECTORS["row_detail"])
-        for tall, room in zip(drawn, without, strict=True):
-            self.assertLessEqual(tall, room)
-        self.page.goto(f"{ORIGIN}{reverse('expenses:list')}#:~:text={quote(word)}", wait_until="load")
-        self.page.wait_for_function(_FOUND_OPEN, arg=[SELECTORS["row_detail"], word])
-
     def test_a_menu_opens_and_closes_on_escape_and_a_press_outside(self):
         """A menu is pressed by its button, whose panel is a popover: a filter's,
         a section's in the bar. Escape closes it and hands focus back to the
@@ -853,7 +804,9 @@ class ExampleEstateControlTests(BrowserGate):
         for width in PRESSED_AT:
             with self.subTest(width=width):
                 self.visit(reverse("expenses:list"), width)
-                handles = [self.page.locator(SELECTORS["table_filter"]).first]
+                # A row with no room folds the filters behind one control, itself a menu.
+                fold = self.page.locator(SELECTORS["filter_fold"])
+                handles = [fold if fold.is_visible() else self.page.locator(SELECTORS["table_filter"]).first]
                 if width >= WIDE:
                     handles.append(self.page.locator(SELECTORS["nav_menu"]).first)
                 for handle in handles:

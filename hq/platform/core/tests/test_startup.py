@@ -14,6 +14,7 @@ from pathlib import Path
 from django.test import SimpleTestCase, tag
 
 from hq.platform.application.tests.facts import imports, scan
+from hq.platform.application.tests.reads import reads
 from hq.platform.application.tests.tree import SUITE
 from hq.platform.core.tests.test_settings_env import REPO_ROOT, subprocess_env
 
@@ -129,6 +130,15 @@ def lazy_names_in_class_annotations(*paths: Path, root: Path = REPO_ROOT) -> lis
 
 
 @tag("source", "tree")
+@reads(
+    "demo/**/*.py",
+    "hq/**/*.py",
+    "hq_runner/**/*.py",
+    "hq_sdk/**/*.py",
+    "tests/**/*.py",
+    "tools/**/*.py",
+    lists=("demo/**", "hq/**", "hq_runner/**", "hq_sdk/**", "tests/**", "tools/**"),
+)
 class LazyImportAnnotationTests(SimpleTestCase):
     def test_no_class_annotation_names_a_lazy_import(self):
         self.assertEqual(

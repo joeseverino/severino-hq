@@ -12,15 +12,16 @@ and Ruff's TID251 (`banned-api` in `pyproject.toml`) refuses an import of
 | `dev/` | the development server, the local config examples to copy, and the vendoring of the API reference bundle |
 | `fonts/` | the source font and the subset of it HQ serves (`mise run fix`) |
 | `gate/` | the inner-loop gate, `check`, `test`'s runs by label and at a ref, and the list of shell files the shell gate checks |
-| `lib/` | shell libraries the file tasks source: the heavy-gate lock, the tree export, the composed set, the source URL |
+| `lib/` | shell libraries the file tasks source: the heavy-gate lock, the tree export, the composed set, the source URL, the worker's environment |
 | `pipeline/` | CI and release programs: reports, composition, image checks, the release rehearsals |
 | `structural/` | the structural bar and its baseline |
-| `lint/` | the locked lint tools (axe-core, ESLint, Redocly, Stylelint), installed by `setup:lint-tools`; `lint/bcd/`, browser-compat-data, which `audit:bcd` installs for itself |
+| `lint/` | the locked lint tools (axe-core, browser-compat-data, ESLint, Redocly, Stylelint), installed by `setup:lint-tools`, and the browser floor Stylelint and `audit:bcd` hold the stylesheet to |
 | `tests/` | the tests of the top-level modules |
 
 The top level holds the credential minting (`credentials.py`) and the
 permission lists it and its tests read, `audit:image`'s reader of a built
-image (`audit_image.py`), and `lint:openapi-breaking`, which holds the API
+image (`audit_image.py`), `audit:supports`'s asker of the gates' engines
+(`audit_supports.py`), and `lint:openapi-breaking`, which holds the API
 document to its base's clients (`openapi_breaking.py`).
 
 Language: shell (POSIX sh) for a short pipeline of other programs; Python for

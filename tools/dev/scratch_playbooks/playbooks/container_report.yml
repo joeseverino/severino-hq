@@ -1,0 +1,20 @@
+# A read through a module of a collection the worker ships
+# (hq_runner/collections.yml) rather than ansible.builtin, which needs nothing
+# installed on the machine it reads.
+- name: Report whether the worker runs in a container
+  hosts: all
+  gather_facts: false
+  vars:
+    ansible_connection: local
+  tasks:
+    - name: Read the container facts
+      community.docker.current_container_facts:
+    - name: State them
+      ansible.builtin.set_stats:
+        data:
+          result: "{{ {inventory_hostname: (ansible_module_container_type or 'a') ~ ' container' if ansible_module_running_in_container else 'no container'} }}"
+        per_host: false
+  post_tasks:
+    - name: The facts say whether it runs in a container
+      ansible.builtin.assert:
+        that: ansible_module_running_in_container is boolean

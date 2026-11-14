@@ -12,8 +12,9 @@ from dataclasses import dataclass
 from typing import Any
 
 from hq.domains.control_plane.models import ManagedResource
+from hq.domains.control_plane.provider_adapters.automation import OPERATION_KIND, SOURCE_KIND
 from hq.platform.application.analytics import analytics_plan, record_analytics
-from hq.platform.application.cadence import note_controller, sweep_due
+from hq.platform.application.cadence import note_automation, note_controller, sweep_due
 from hq.platform.application.certificates import material_for
 from hq.platform.application.controller import (
     ControllerReport,
@@ -38,6 +39,9 @@ Run = Callable[[Parameters, Any], Any]
 
 # Who a controller's report is recorded under, in the audit trail.
 CONTROLLER = "controller"
+# The records whose work only HQ's playbook worker claims: a playbook's runs
+# and the source's scans.
+AUTOMATION_KINDS = frozenset({OPERATION_KIND, SOURCE_KIND})
 
 
 def _capabilities(parameters: Parameters) -> tuple[tuple[str, str], ...]:
@@ -51,13 +55,19 @@ def _claim(parameters: Parameters, payload: Any) -> Any:
     # Every applying pass claims, an idle one included, before any work that
     # could end it early, and neither a preflight nor a glance pass does: so
     # this is the controller arriving. A glance pass runs when a person asks,
-    # and counted, it would hide a controller that had stopped.
+    # and counted, it would hide a controller that had stopped. A claim of
+    # nothing but scans and runs is HQ's playbook worker arriving instead,
+    # which would hide a stopped controller just the same.
     del payload
-    note_controller()
+    capabilities = _capabilities(parameters)
+    if capabilities and all(kind in AUTOMATION_KINDS for kind, _action in capabilities):
+        note_automation()
+    else:
+        note_controller()
     return claim_next_operation(
         parameters["controller-id"],
         lease_seconds=parameters["lease-seconds"],
-        capabilities=_capabilities(parameters),
+        capabilities=capabilities,
         attempt=parameters["attempt"] or "",
     )
 

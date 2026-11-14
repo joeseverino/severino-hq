@@ -1,4 +1,4 @@
-"""The dashboard's ask for a fresh reading: a read request, naming its panels."""
+"""The dashboard's ask for a fresh reading: a read request for each panel, naming it."""
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -37,23 +37,24 @@ class DashboardAskTests(TestCase):
         DashboardConfiguration.objects.create(weather_point="41.0000,-87.0000", weather_label="Example town")
         DashboardMachine.objects.create(machine=self.machine)
 
-    def ask(self) -> AuditLog:
+    def ask(self) -> list[AuditLog]:
         principal = cli_principal()
         with audit_operation(operation="dashboard.panels.refresh", principal=principal):
             request_dashboard_refresh(DashboardRefreshCommand(), principal=principal)
-        return AuditLog.objects.get(metadata__has_key="panels")
+        return list(AuditLog.objects.filter(metadata__operation="dashboard.panels.refresh"))
 
     def test_it_is_filed_as_a_read_request_naming_each_panel(self):
-        row = self.ask()
+        rows = self.ask()
 
-        self.assertEqual(row.object_type, READ_REQUEST)
-        self.assertIn("app", row.message)
-        self.assertIn("Example town", row.message)
-        self.assertNotIn(f"machine-{self.machine.pk}", row.message)
+        self.assertEqual({row.object_type for row in rows}, {READ_REQUEST})
+        said = " ".join(row.message for row in rows)
+        self.assertIn("app", said)
+        self.assertIn("Example town", said)
+        self.assertNotIn(f"machine-{self.machine.pk}", said)
 
     def test_the_log_leaves_it_out_until_read_requests_are_shown(self):
         self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.test", "x" * 14))
-        row = self.ask()
+        asked = {row.pk for row in self.ask()}
         # An ask the dashboard filed under its own name before, as older rows are.
         older = AuditLog.objects.create(
             action=AuditLog.Action.CREATED, object_type="Dashboard", message="Asked", metadata={"panels": ["weather"]}
@@ -63,5 +64,5 @@ class DashboardAskTests(TestCase):
             page = self.client.get(reverse("core:audit_list"), params)
             return {event.pk for line in page.context["events"] for event in line.events}
 
-        self.assertFalse({row.pk, older.pk} & shown())
-        self.assertLessEqual({row.pk, older.pk}, shown(reads=1))
+        self.assertFalse({*asked, older.pk} & shown())
+        self.assertLessEqual({*asked, older.pk}, shown(reads=1))

@@ -18,7 +18,7 @@ from hq.domains.expenses.models import Expense
 from hq.domains.receipts import validation
 from hq.domains.receipts.models import Receipt
 from hq.domains.receipts.validation import MAX_RECEIPT_BASE64_CHARS
-from hq.platform.application.capabilities import execute_capability
+from hq.platform.application.capabilities import Ran, execute_capability
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.receipts import REPLACE, UPDATE, UPLOAD
 from hq.platform.application.security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal
@@ -186,7 +186,7 @@ class CreateViewTests(_PrivateMedia):
 
     def test_the_capabilitys_refusal_is_said_on_the_form(self):
         refusal = {"ok": False, "error": {"code": "not_found", "message": "A related expense or asset was not found."}}
-        with mock.patch("hq.domains.receipts.views.execute_posted", return_value=refusal):
+        with mock.patch("hq.platform.application.writes.run_posted", return_value=Ran(refusal)):
             response = self.post()
 
         self.assertIn("A related expense or asset was not found.", text(response))
@@ -258,7 +258,7 @@ class EditViewTests(_PrivateMedia):
 
     def test_the_capabilitys_refusal_is_said_on_the_form(self):
         refusal = {"ok": False, "error": {"code": "conflict", "message": "That receipt changed after it was read."}}
-        with mock.patch("hq.domains.receipts.views.execute_posted", return_value=refusal):
+        with mock.patch("hq.platform.application.writes.run_posted", return_value=Ran(refusal)):
             response = self.post(file=self.a_new_file())
 
         self.assertIn("That receipt changed after it was read.", text(response))

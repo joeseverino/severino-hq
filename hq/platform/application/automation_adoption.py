@@ -42,6 +42,7 @@ from typing import Annotated, Any, Literal, TypedDict
 from django.conf import settings
 from django.db import DatabaseError, transaction
 from django.utils import timezone
+from django.utils.text import capfirst
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -176,6 +177,15 @@ def generation() -> str:
         return catch_up()
     known = _THIS_PROCESS.known
     return known.digest if known is not None else catch_up()
+
+
+def held() -> str:
+    """The digest of the catalog this process last read, "" before its first
+    read, asking the database nothing: for what is the same in every
+    generation (``integrations.held_graph``)."""
+
+    known = _THIS_PROCESS.known
+    return known.digest if known is not None else ""
 
 
 # Set by a request's door: whether this request has read the newest catalog yet.
@@ -454,7 +464,7 @@ def _procedure(
         manifest(procedure)
     except (ValidationError, ValueError) as exc:
         said = exc.errors(include_url=False)[0]["msg"] if isinstance(exc, ValidationError) else str(exc)
-        problems.append(ended(said[:1].upper() + said[1:]))
+        problems.append(ended(capfirst(said)))
         return None
     return procedure
 

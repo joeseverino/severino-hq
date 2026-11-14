@@ -6,8 +6,10 @@ lives, as a named type alias (``json_schemas``), and the document writes it
 once under that name with each use a ``$ref``. ``described_once`` refuses a
 document still holding two identical described fragments, or a use that
 describes itself beside a ``$ref`` to a described component. It runs on the
-host's document and the composed one here, never as a step of serving the
-document: a wording rule fails a gate, never a request.
+host's document beside the type each MCP tool answers, since a shape the two
+doors share is declared once for both, and on the composed one here, never
+as a step of serving the document: a wording rule fails a gate, never a
+request.
 """
 
 import json
@@ -26,6 +28,8 @@ from hq.platform.application.integration_testing import override_integration_gra
 from hq.platform.application.integrations import compile_integration_graph
 from hq.platform.application.json_schemas import json_schemas
 from hq.platform.application.resources import TopQuery
+from hq.platform.mcp.declarations import HANDLERS
+from hq.platform.mcp.shapes import answer_type
 from hq_sdk.capabilities import StrictCommand
 
 from .. import openapi
@@ -232,8 +236,19 @@ def _document(*schemas: dict) -> dict:
 
 
 class DescribedOnceTests(SimpleTestCase):
-    def test_the_document_holds_no_two_identical_described_fragments(self):
-        described_once(openapi.document())
+    def test_the_document_and_the_mcp_answers_hold_no_two_identical_described_fragments(self):
+        # A tool lists its answer without words, so its declarations are read
+        # here as the document would write them, beside the document's own.
+        document = openapi.document()
+        _, answers = json_schemas(
+            {handler.__name__: answer_type(handler) for handler in HANDLERS},
+            mode="serialization",
+            ref_template=openapi.SCHEMAS + "{model}",
+        )
+        document["components"]["schemas"] = {**answers, **document["components"]["schemas"]}
+
+        self.assertIn("AgentFinding", answers)
+        described_once(document)
 
     def test_a_document_with_no_resources_holds_no_two_identical_described_fragments(self):
         # The fuzz test's graph: one capability, and every generic list and

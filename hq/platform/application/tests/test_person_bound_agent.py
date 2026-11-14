@@ -78,14 +78,15 @@ class PersonBoundAgentTests(TestCase):
                 self.assertFalse(ActionItemRead.objects.exists())
 
                 _run(CHOOSE, {"kind": SERVICE, "keys": []}, agent)
-        # Each write is the person's, and says the agent made it.
+        # Each write is the person's, and says the agent made it: the person
+        # first, then the agent they acted through.
         for operation in (SET_THEME, PIN, MOVE, CHOOSE, SET_ASIDE, RESTORE):
             with self.subTest(operation=operation):
-                self.assertTrue(
-                    AuditLog.objects.filter(
-                        user=self.person, metadata__operation=operation, metadata__actor=AGENT
-                    ).exists()
-                )
+                row = AuditLog.objects.filter(
+                    user=self.person, metadata__operation=operation, metadata__actor=AGENT
+                ).first()
+                self.assertIsNotNone(row)
+                self.assertEqual(row.who.words, f"{self.person.get_username()}, through {AGENT}")
 
     def test_a_machines_token_is_refused_them_and_never_offered_them(self):
         personal = [

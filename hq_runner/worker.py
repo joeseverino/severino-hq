@@ -18,7 +18,20 @@ from typing import Any, Protocol
 from . import tracing
 from .bridge import BridgeError
 from .claim import CAPABILITIES, Claimed, Installed, Reach, Refused, Run, bind, claimed
-from .events import Event, bounded, from_ansible, learned, stated, strike
+from .events import (
+    ELSEWHERE,
+    MISSHAPEN,
+    PAST_BOUNDS,
+    Event,
+    Stated,
+    Stopped,
+    bounded,
+    from_ansible,
+    learned,
+    stated,
+    strike,
+    struck_all,
+)
 from .journal import Journal
 
 # The lease a claim asks for, and how often a running run renews it: three
@@ -117,7 +130,13 @@ def _condition(reason: str, message: str) -> list[dict[str, Any]]:
 
 
 def _report(
-    generation: int, *, success: bool, message: str, reason: str = "", events: Sequence[Event] = ()
+    generation: int,
+    *,
+    success: bool,
+    message: str,
+    reason: str = "",
+    events: Sequence[Event] = (),
+    stated: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     report: dict[str, Any] = {
         "success": success,
@@ -125,37 +144,73 @@ def _report(
         "message": message,
         "events": [event.as_report() for event in events],
     }
+    if stated:
+        report["stated"] = dict(stated)
     if not success:
         report["conditions"] = _condition(reason, message)
     return report
 
 
-def _ended(run: Run, status: str, result: str | None) -> tuple[bool, str, str]:
+def _left_out(stated: Stated) -> str:
+    """What a run's report says of the parts of what its playbook stated that it leaves out."""
+
+    counts = [(stated.left_out[why], why) for why in (ELSEWHERE, PAST_BOUNDS, MISSHAPEN) if stated.left_out.get(why)]
+    if not counts:
+        return ""
+    total = sum(count for count, _ in counts)
+    said = ", ".join(f"{count} {why}" for count, why in counts)
+    parts = "1 part of what the playbook stated is" if total == 1 else f"{total} parts of what the playbook stated are"
+    return f"{parts} not reported: {said}."
+
+
+# The outcomes that say why a failed run failed, so a run with none of them
+# failed before any task did.
+_FAILED = frozenset({"failed", "unreachable"})
+
+
+def _ended(
+    run: Run, status: str, result: str | None, events: Sequence[Event], stopped: str | None
+) -> tuple[bool, str, str]:
     """Whether a run ansible-runner ended as ``status`` succeeded, and why not.
 
     A run that succeeded says what its playbook stated it found or did, else
-    what its record says shows it worked, which its checks have just held.
+    what its record says shows it worked, which its checks have just held. A
+    run that failed with no task failed or machine unreached says the error
+    Ansible stopped it with (``events.Stopped``).
     """
 
     if status == "successful":
         return True, "", result or " ".join(f"{each.rstrip('.')}." for each in run.verification)
     if status == "failed":
+        if stopped and not any(event.outcome in _FAILED for event in events):
+            return False, "Failed", stopped
         return False, "Failed", "A task failed or a machine could not be reached."
     if status == "timeout":
         return False, "TimedOut", f"It ran past its procedure's {run.timeout_seconds} second timeout."
     return False, "Failed", f"ansible-runner ended it as {status}."
 
 
-def _finish(run: Run, status: str, hold: _Hold, events: list[Event], result: str | None) -> dict[str, Any]:
+def _finish(
+    run: Run, status: str, hold: _Hold, events: list[Event], said: Stated | None, stopped: str | None
+) -> dict[str, Any]:
     kept, left_out = bounded(events)
     if hold.stopped is not None:
         reason, message = hold.stopped
         success = False
     else:
-        success, reason, message = _ended(run, status, result)
+        success, reason, message = _ended(run, status, said.result if said else None, events, stopped)
     if left_out:
         message = f"{message} {left_out} task outcomes that were fine or skipped are not listed.".lstrip()
-    return _report(run.generation, success=success, message=message, reason=reason, events=kept)
+    if said is not None and (unreported := _left_out(said)):
+        message = f"{message} {unreported}".lstrip()
+    return _report(
+        run.generation,
+        success=success,
+        message=message,
+        reason=reason,
+        events=kept,
+        stated=said.as_report() if said else None,
+    )
 
 
 def run_claimed(
@@ -167,16 +222,19 @@ def run_claimed(
     secrets: Collection[str] = (),
 ) -> dict[str, Any]:
     """Run ``run`` under its held lease and answer the report it ends with,
-    struck of ``secrets``, of its secret parameters and of its key paths."""
+    struck of ``secrets``, of its secret parameters and of its key paths, and
+    stating only about ``run``'s own machines (``events.stated``)."""
 
     secrets = learned(run.parameters) | frozenset(secrets) | {str(target.identity) for target in run.targets}
     hold = _Hold(bridge, controller_id, run, clock, secrets)
     events: list[Event] = []
-    result: list[str] = []
+    said: list[Stated] = []
+    stopped = Stopped(run.procedure.project_dir, secrets)
 
     def on_event(event: Mapping[str, Any]) -> None:
-        if (said := stated(event, secrets)) is not None:
-            result.append(said)
+        stopped.read(event)
+        if (found_stated := stated(event, run.hosts, secrets)) is not None:
+            said.append(found_stated)
         found = from_ansible(event, secrets)
         if found is not None:
             events.append(found)
@@ -187,22 +245,10 @@ def run_claimed(
         hold.span = ran
         status = runner(run, on_event=on_event, should_stop=hold.should_stop)
         tracing.note(**{"ansible.status": status})
-    report = _finish(run, status, hold, events, result[-1] if result else None)
+    report = _finish(run, status, hold, events, said[-1] if said else None, stopped.message)
     if hold.stopped is not None:
         tracing.note(**{"hq.stopped": hold.stopped[0]})
     return report
-
-
-def _struck(node: Any, secrets: Collection[str]) -> Any:
-    """``node`` with ``secrets`` struck from every string in it, at any depth."""
-
-    if isinstance(node, str):
-        return strike(node, secrets)
-    if isinstance(node, Mapping):
-        return {key: _struck(value, secrets) for key, value in node.items()}
-    if isinstance(node, list):
-        return [_struck(value, secrets) for value in node]
-    return node
 
 
 def scan_claimed(claim: Claimed, scan: Scan, secrets: Collection[str] = ()) -> dict[str, Any]:
@@ -222,7 +268,7 @@ def scan_claimed(claim: Claimed, scan: Scan, secrets: Collection[str] = ()) -> d
         tracing.note(**{"hq.procedures": len(catalog["procedures"])})
     message = f"Read commit {catalog['revision'][:12]} on {catalog['branch']}: {len(catalog['procedures'])} playbooks."
     report = _report(claim.generation, success=True, message=strike(message, secrets))
-    report["catalog"] = _struck(dict(catalog), secrets)
+    report["catalog"] = struck_all(dict(catalog), secrets)
     return report
 
 

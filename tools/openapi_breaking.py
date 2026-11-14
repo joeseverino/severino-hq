@@ -17,7 +17,7 @@ from collections import Counter
 from collections.abc import Iterable
 from pathlib import Path
 
-from tools.gate.fast import ROOT, merge_base
+from tools.gate.chain import ROOT, merge_base
 
 DOCUMENT = "hq/platform/api/hq-api.openapi.json"
 EXEMPTIONS = "hq/platform/api/hq-api.breaking-exemptions.md"

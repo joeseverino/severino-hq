@@ -2,16 +2,31 @@
 and the page of its own it is drawn on."""
 
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Literal, override
+from unittest import mock
 
+from django.forms import BaseForm
 from django.template import Context, Template
+from django.template.defaulttags import CsrfTokenNode
 from django.template.loader import render_to_string
 from django.test import RequestFactory, override_settings
+from django.utils import timezone
 from django.utils.html import escape
 from django.utils.safestring import mark_safe
+from django.utils.text import slugify
 
 from hq.platform.application.pages import Page
+from hq.platform.core.templatetags import write_tags
 lazy from hq.platform.core.templatetags.stylesheet_tags import stylesheets
+
+# The retry key every example form carries. The catalog draws no CSRF token,
+# so an entry's form can act nowhere, and one fixed key makes each entry the
+# same markup on every run, the image's gallery with it.
+EXAMPLE_KEY = "web:example"
+
+# The moment every entry is drawn at, and its example times are told from,
+# so a time a part counts from now draws the same between two renders.
+DRAWN_AT = timezone.now()
 
 
 @dataclass(frozen=True)
@@ -39,20 +54,47 @@ class Entry:
     settings: dict[str, Any] = field(default_factory=dict)
 
     def drawn(self, name):
-        with override_settings(**self.settings):
-            head = "" if self.heads_the_page or self.frame else _head(name)
+        """The entry under its name, as a page draws it under its head."""
+
+        head = "" if self.heads_the_page or self.frame else head_of(name)
+        return head + self.part(name)
+
+    def part(self, name):
+        """The part alone, as its template draws it."""
+
+        with (
+            override_settings(**self.settings),
+            mock.patch.object(write_tags, "new_key", return_value=EXAMPLE_KEY),
+            mock.patch.object(write_tags, "CsrfTokenNode", _NoToken),
+            mock.patch.object(timezone, "now", return_value=DRAWN_AT),
+        ):
+            # A form names its fields' ids after the entry, as a page drawing
+            # two forms gives each its own.
+            for form in (value for value in self.context.values() if isinstance(value, BaseForm)):
+                form.auto_id = f"{slugify(name)}-%s"
             context = _Asked(self.context, self.address) if self.address else Context(self.context)
-            return head + Template(self.template).render(context)
+            return Template(self.template).render(context)
 
     def page(self, name):
         """The entry on a page of its own: in its main, or beside it for a part of the frame."""
 
         drawn = self.drawn(name)
-        return part_page(name, _head(name), **{self.frame: drawn}) if self.frame else part_page(name, drawn)
+        return part_page(name, head_of(name), **{self.frame: drawn}) if self.frame else part_page(name, drawn)
 
 
-def _head(name):
+def head_of(name):
+    """The page head every page draws, titled `name`."""
+
     return render_to_string(HEAD, {"page": Page(title=name)})
+
+
+class _NoToken(CsrfTokenNode):
+    """The CSRF field of a form that may act nowhere: nothing, where Django's
+    own node, given no token, warns that one went missing."""
+
+    @override
+    def render(self, context):
+        return ""
 
 
 class _Asked(Context):
@@ -65,6 +107,7 @@ class _Asked(Context):
 
 
 HEAD = "partials/_page_head.html"
+COLOR_SCHEME = "partials/_color_scheme.html"
 MAIN = "partials/_page_main.html"
 
 
@@ -77,6 +120,6 @@ def part_page(name, markup, before="", after=""):
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
-        f"<title>{escape(name)}</title>{stylesheets()}</head>"
+        f"{render_to_string(COLOR_SCHEME)}<title>{escape(name)}</title>{stylesheets()}</head>"
         f"<body>{before}{main}{after}</body></html>"
     )

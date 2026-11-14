@@ -15,7 +15,6 @@ from .finding_model import (
     FindingRule,
     OperatorStep,
     Said,
-    built_findings,
     connections_carrying,
     per_connection,
 )
@@ -251,10 +250,6 @@ def _loopback_steps(item: LoopbackGrant) -> tuple[OperatorStep, ...]:
     return (edit, *last)
 
 
-def _trusted_wider_than_tailnet(estate: FindingEstate) -> tuple[Finding, ...]:
-    return built_findings(trusted_networks.wider_than_tailnet(estate))
-
-
 # The rules this module raises, beside the detectors that decide them.
 RULES: tuple[FindingRule, ...] = (
     FindingRule(
@@ -264,6 +259,7 @@ RULES: tuple[FindingRule, ...] = (
         _tag_granted_to_nobody,
         operator_action="Remove the tag from the rules that name it, or tag the devices it was meant for.",
         no_help_reason="HQ cannot tell whether the rule or the devices are wrong.",
+        bars={"neutral": "the policy grants a tag that no device carries"},
     ),
     FindingRule(
         "tailnet-dns-off-tailnet",
@@ -274,6 +270,7 @@ RULES: tuple[FindingRule, ...] = (
             "In the Tailscale admin console, open DNS and set the nameserver to the DNS server's tailnet address."
         ),
         no_help_reason=("HQ cannot change the tailnet's DNS settings."),
+        bars={"attention": "the tailnet's nameserver is not a tailnet address"},
     ),
     FindingRule(
         "devices-join-without-approval",
@@ -284,6 +281,7 @@ RULES: tuple[FindingRule, ...] = (
             "In the Tailscale admin console, open Settings, then Device management, and turn on Device approval."
         ),
         no_help_reason=("HQ cannot change this setting."),
+        bars={"attention": "a new device can join the tailnet without anyone approving it"},
     ),
     FindingRule(
         "empty-group-granted",
@@ -294,6 +292,7 @@ RULES: tuple[FindingRule, ...] = (
             "Remove the group from the policy's groups and from every rule that names it, or add its members."
         ),
         no_help_reason=("HQ can only edit the policy once the policy is managed in HQ."),
+        bars={"neutral": "the policy grants access to a group with no members"},
     ),
     FindingRule(
         GRANT_REACHES_ONLY_LOOPBACK,
@@ -304,15 +303,17 @@ RULES: tuple[FindingRule, ...] = (
             "In Tailscale's admin console, remove the port from the grant and deny it in the test that accepts it."
         ),
         no_help_reason="HQ cannot edit the tailnet policy in Tailscale's admin console.",
+        bars={"neutral": "a grant opens a port that only answers on the machine itself"},
     ),
     FindingRule(
         "trusted-wider-than-tailnet",
         "Trusted networks wider than the tailnet",
         "neutral",
-        _trusted_wider_than_tailnet,
+        trusted_networks.wider_than_tailnet,
         operator_action=(
             "Narrow the trusted networks in HQ's settings to the addresses and routes the tailnet uses, then restart HQ."
         ),
         no_help_reason=("HQ cannot change its own deploy settings."),
+        bars={"neutral": "HQ trusts addresses beyond the tailnet's"},
     ),
 )

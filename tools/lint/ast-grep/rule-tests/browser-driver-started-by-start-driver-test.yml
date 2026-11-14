@@ -1,0 +1,14 @@
+id: browser-driver-started-by-start-driver
+valid:
+  - 'from playwright.sync_api import sync_playwright'
+  - 'driver = start_driver(cls, sync_playwright)'
+  - |
+    def start_driver(owner, sync_playwright):
+        pass
+invalid:
+  - 'driver = sync_playwright().start()'
+  - |
+    with sync_playwright() as playwright:
+        pass
+  - 'driver = sync_api.sync_playwright().start()'
+  - 'driver = await async_playwright().start()'

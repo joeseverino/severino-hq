@@ -3,8 +3,7 @@ closing on the line tools/gate/verdict.py prints.
 
 mise parses the task's arguments (its usage in mise-tasks/test.toml) and this
 reads what it parsed. What `--at` and `--keep` do is the task's help
-(`mise run test --help`). A run takes the heavy turn (mise-tasks/turn) unless
-tools/gate/turn.py finds it narrow; a run at a ref builds a worktree, so it always takes it.
+(`mise run test --help`). A run takes the share of the heavy turn ``weight`` gives it.
 """
 
 import fnmatch
@@ -13,7 +12,6 @@ import os
 import re
 import shlex
 import signal
-import subprocess
 import sys
 from collections.abc import Callable, Collection
 from dataclasses import dataclass, field, replace
@@ -34,12 +32,14 @@ from hq.platform.core.tests.task import (
     worktree,
 )
 from tests.mise_tasks import mise_tasks
-from tools.gate.turn import in_turn, inside
+from tools.gate.turn import CAPACITY, ONE, in_share, inside, weighed
 from tools.gate.verdict import REPORTS, FailedTest, Gate, Step, run
 
 ROOT = Path(__file__).resolve().parents[2]
 # Everything after it is the developer's, so a later --parallel or -k wins.
 TEST = ["manage.py", "test", "--noinput", "--parallel", "auto"]
+# The tokens mise run test weighed the run at (`python -m tools.gate.at --weight`) before it chose the machine.
+WEIGHED = "HQ_TEST_WEIGHED"
 # The ref's own dependencies, as `mise run test` installs them here.
 UV_RUN = ["uv", "run", "--group", "browser", "python"]
 # How the test loader reports a label whose module raised on import.
@@ -99,10 +99,6 @@ MISE = ["mise"]
 # A folder of fixtures a test reads by path, from any tree: Go's convention, which go build skips
 # (`go help packages`), and a Python test may read another tree's (a case table the controller shares).
 TESTDATA = "testdata"
-# Ends a run with the line on what its process tree spent; a run inside a measured one adds none.
-MEASURER = str(ROOT / "tools" / "lib" / "measured")
-# Set by the run that found itself narrow, for the run it execs under the measurer, which pops it.
-FOUND_NARROW = "HQ_FOUND_NARROW"
 
 
 class KeepRefused(Exception):
@@ -566,28 +562,41 @@ def stop(signum: int, _frame: object) -> None:
     raise SystemExit(128 + signum)
 
 
-def take_the_turn(typed: Typed) -> None:
-    """Run again inside the heavy turn, unless this run is in it or narrow; a narrow run runs again
-    under the measurer, so every run ends with its line. The run again inherits mise's parse through
-    the environment."""
+def weight(typed: Typed) -> int:
+    """The tokens of the share the run takes. Go's tests under the race detector and the shell suites need
+    the whole machine, as test:controller and lint:shell do. A run of tests takes what tools/gate/turn.py
+    weighs this tree's run of its labels at: TEST's own options, then the developer's arguments. At a ref
+    it is the same: the worktree it builds is files, and the ref's run of those labels, and the run again
+    with a support file kept, each start one at a time and load no more tests than this tree has."""
 
-    # The narrow run re-run below was found narrow already; the marker is popped so no child inherits it.
-    if os.environ.pop(FOUND_NARROW, None) or inside():
+    try:
+        if typed.go or shell_run(typed):
+            return CAPACITY
+    except ValueError:
+        # main refuses it before any run.
+        return ONE
+    return weighed([*TEST[2:], *typed.args], ROOT)
+
+
+def handed_weight() -> str:
+    """The weight mise run test handed this run, taken out of the environment so no run under it reads it."""
+
+    handed = os.environ.get(WEIGHED, "")
+    os.environ.pop(WEIGHED, None)
+    return handed
+
+
+def take_the_turn(typed: Typed, handed: str = "") -> None:
+    """Run again in the share ``weight`` gives it, or the weight ``handed`` the task handed it, unless this
+    run is in the turn or a share already, which ends the run with the line on what its process tree spent.
+    The run again inherits mise's parse through the environment."""
+
+    if inside():
         return
-    # Whether it is narrow is asked in a process of its own, as tools/lib/heavy-turn.sh asks: the
-    # settings it loads start a run, which the exec below would leave with nothing to remove it.
-    heavy = [sys.executable, "-m", "tools.gate.turn", *typed.args]
-    if typed.at is not None or typed.go or subprocess.call(heavy, cwd=ROOT):
-        # A run at a ref builds a worktree and may run the suite there twice.
-        command = [*in_turn("2h"), sys.executable, "-m", "tools.gate.at"]
-        os.execvp(command[0], command)
-    # Measured already (a gate's run of tests): the line is the outer one's.
-    if os.environ.get("HQ_MEASURED"):
-        return
-    os.environ[FOUND_NARROW] = "1"
-    command = [MEASURER, sys.executable, "-m", "tools.gate.at"]
+    tokens = int(handed) if handed.isdigit() else weight(typed)
+    command = [*in_share(tokens, "2h"), sys.executable, "-m", "tools.gate.at"]
     os.chdir(ROOT)
-    os.execv(command[0], command)
+    os.execvp(command[0], command)
 
 
 def run_here(argv: list[str], *, go: bool = False, shell: bool = False) -> int:
@@ -673,8 +682,12 @@ def main(typed: Typed) -> int:
 
 if __name__ == "__main__":
     typed = Typed.from_usage(usage())
+    if sys.argv[1:] == ["--weight"]:
+        print(weight(typed))
+        sys.exit(0)
+    handed = handed_weight()
     # Refused before the turn, so a mistyped label waits for nothing.
     if refuse_tasks(typed):
         sys.exit(2)
-    take_the_turn(typed)
+    take_the_turn(typed, handed)
     sys.exit(main(typed))

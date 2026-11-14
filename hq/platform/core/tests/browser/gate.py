@@ -6,13 +6,18 @@ import mimetypes
 import os
 import pickle
 import re
+import shlex
+import sys
 import tempfile
 from collections import deque
 from collections.abc import Mapping
+from contextlib import contextmanager
 from functools import cache, partial
 from hashlib import sha256
 from html import unescape
+from itertools import pairwise
 from pathlib import Path
+from time import perf_counter
 from typing import TYPE_CHECKING, Any, cast, override
 from unittest import TestResult, mock
 from urllib.parse import urlsplit
@@ -24,19 +29,23 @@ from django.utils.csp import CSP
 lazy from playwright.sync_api import Error as BrowserError
 
 from hq.platform.core.csp_views import _blocked, _csp_violations, _directive
+from hq.platform.core.run_report import Cost, tally
 from hq.platform.core.speculation import rules_document
+from hq.platform.core.stalls import stall_watch
 from hq.platform.core.stylesheets import stylesheet
-from hq.platform.core.test_runner import browser_failures, stall_watch
+from hq.platform.core.table_cells import sets_only_custom_properties
+from hq.platform.core.test_runner import browser_engine, browser_failures
+from hq.platform.core.tests.browser.probes.axe import rules_read
 from hq.platform.core.tests.browser.probes.palette import (
     FILL_PAINTERS,
     FILL_STEPS,
     LINE_CONTRAST,
+    PAINT_IN,
     losses,
     lost_fills,
 )
 from hq.platform.core.tests.browser.probes.settle import (
     DEAF_WHILE_PROBED,
-    FINISH_TRANSITIONS,
     FONTS_READY,
     PAINTED,
     PUT_BACK,
@@ -45,14 +54,23 @@ from hq.platform.core.tests.browser.probes.settle import (
     STILL,
     hushed,
 )
-from hq.platform.core.tests.browser.probes.tables import opened_tables_read
+from hq.platform.core.tests.browser.probes.tables import PRESS, TABLE_LAYOUT, UNPRESS, tables_read
 from hq.platform.core.tests.browser.reading import _in_one_trip, taken
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import NONCE, ORIGIN, static_file
+from hq.platform.core.tests.browser.shards import share, sweeps
 from hq.platform.core.tests.browser.shots import shoot_page
-from hq.platform.core.tests.browser.survey import AS_FINDINGS, _as_is, geometry_probes, palette_probes, table_probes
+from hq.platform.core.tests.browser.survey import (
+    AS_FINDINGS,
+    CHECKS,
+    _as_is,
+    geometry_probes,
+    palette_probes,
+    table_probes,
+)
 from hq.platform.core.tests.browser.uncaught import Uncaught
 from hq.platform.core.tests.browser.widths import LARGEST, NARROWEST, query_edges, viewport, viewport_queries
+lazy from hq.platform.core.tests.browser import catalog
 
 # Named for annotations alone: a class's annotations can be read as it is made
 # (a dataclass's are), which would load a lazy import at once.
@@ -70,10 +88,9 @@ def failure_name(params):
     return re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-")[:150] or "subtest"
 
 
-# A failure's shot of a long page, the opened API reference above all, is a
-# capture the browser lays the whole page out for, past an action's 5 s; it is
-# given a navigation's 30 s, the failure it shows being already decided.
-_FAILURE_SHOT_WITHIN = 30_000
+# How long a test waits on the page for anything it asks: an action, a
+# navigation, a failure's shot of a long page.
+_ACTION_WITHIN = 30_000
 # A browser that never comes up fails its class rather than holding the heavy
 # turn for Playwright's own three minutes.
 _LAUNCH_WITHIN = 30_000
@@ -147,21 +164,9 @@ class _Watched:
 
     def addSubTest(self, test, subtest, err):
         # Reported as the subtest ends, so the page is still the one it failed on.
-        if err is not None:
+        if err is not None and (err := self.test.as_reported(subtest.params, err)) is not None:
             self.test.subtest_failed(subtest.params)
         self.result.addSubTest(test, subtest, err)
-
-
-@cache
-def cuts_marked_after():
-    """How long after a resize tables.js measures the tables' cuts again
-    (`markTablesSoon`), in milliseconds, read from the script itself."""
-
-    asset = static_file("js/tables.js")
-    said = re.search(r"setTimeout\(markTables, (\d+)\)", asset[1].decode() if asset else "")
-    if not said:
-        raise AssertionError("tables.js no longer measures cuts on a timer after a resize the way the sweep waits for")
-    return int(said[1])
 
 
 def tab_key(browser):
@@ -169,6 +174,15 @@ def tab_key(browser):
     Safari has it (plain Tab there skips buttons and links), Tab elsewhere."""
 
     return "Alt+Tab" if browser.browser_type.name == "webkit" else "Tab"
+
+
+def unfold(page) -> None:
+    """Opens the Filters control of a filter bar that folds its choices
+    behind it, so they can be pressed as a reader presses them there."""
+
+    fold = page.locator(SELECTORS["filter_fold"])
+    if fold.count() and fold.is_visible():
+        fold.click()
 
 
 def add_css(page, css):
@@ -250,7 +264,8 @@ def answered(response):
 # and in a layer named before HQ's, where an !important one outranks HQ's own
 # as an inline one does. A page HQ answered is never lifted: a style it writes
 # is refused, which is the policy's point, and test_rendered holds HQ's markup
-# to writing none.
+# to writing none but the custom properties a table's layout hands its sheet,
+# which the gate leaves where HQ writes them.
 _STYLE_ATTRIBUTE = re.compile(r'(<[a-zA-Z][^>]*?)\sstyle="([^"]*)"')
 _HEAD = re.compile(r"<head\b[^>]*>", re.IGNORECASE)
 _DOCTYPE = re.compile(r"<!doctype html>", re.IGNORECASE)
@@ -275,7 +290,10 @@ def lifted(body):
     declared = []
 
     def named(match):
-        declared.append(unescape(match[2]))
+        style = unescape(match[2])
+        if sets_only_custom_properties(style):
+            return match[0]
+        declared.append(style)
         return f'{match[1]} data-gate-style="{len(declared)}"'
 
     body = _STYLE_ATTRIBUTE.sub(named, body)
@@ -354,19 +372,43 @@ DRIVER_LOG_SHOWN = 80
 
 
 def start_driver(owner, sync_playwright):
-    """Playwright's driver for ``owner``'s class, its log shown in a stall report."""
+    """Playwright's driver for ``owner``'s class, on a stderr of its own, its log shown in a stall report.
 
-    if not stall_watch.enabled:
-        return sync_playwright().start()
-    handle, log = tempfile.mkstemp(prefix="hq-playwright-", suffix=".log")
-    os.close(handle)
-    owner.addClassCleanup(os.unlink, log)
-    with mock.patch.dict(os.environ, {"DEBUG": DRIVER_DEBUG, "DEBUG_FILE": log}):
+    The driver is Node, which makes the stderr it inherits non-blocking while
+    it runs. Playwright hands it ``sys.stderr``'s descriptor, or the process's
+    own when that has none (``_get_stderr_fileno`` in its ``transport.py``):
+    the pipe every worker and the run's parent share, where a failure longer
+    than the pipe holds would then stop part way with ``BlockingIOError``. So
+    the driver starts with ``sys.stderr`` a file of its own, which the class
+    repeats on the process's stderr once the driver is gone.
+    """
+
+    said = tempfile.TemporaryFile()  # noqa: SIM115 - open for the class's life, closed by its cleanup
+    owner.addClassCleanup(repeat_on_stderr, said)
+    environment = {}
+    if stall_watch.enabled:
+        handle, log = tempfile.mkstemp(prefix="hq-playwright-", suffix=".log")
+        os.close(handle)
+        owner.addClassCleanup(os.unlink, log)
+        environment = {"DEBUG": DRIVER_DEBUG, "DEBUG_FILE": log}
+    with mock.patch.object(sys, "stderr", said), mock.patch.dict(os.environ, environment):
         driver = sync_playwright().start()
-    evidence = partial(driver_log, log)
-    stall_watch.evidence.append(evidence)
-    owner.addClassCleanup(stall_watch.evidence.remove, evidence)
+    if environment:
+        evidence = partial(driver_log, environment["DEBUG_FILE"])
+        stall_watch.evidence.append(evidence)
+        owner.addClassCleanup(stall_watch.evidence.remove, evidence)
     return driver
+
+
+def repeat_on_stderr(said) -> None:
+    """What the driver wrote to its stderr, on the process's own, where it would have gone."""
+
+    with said:
+        said.seek(0)
+        # None only under pythonw, which no test runs under.
+        if (text := said.read().decode(errors="replace")) and (stream := sys.__stderr__):
+            stream.write(text)
+            stream.flush()
 
 
 def driver_log(path, stream):
@@ -376,6 +418,104 @@ def driver_log(path, stream):
         tail = deque(log, maxlen=DRIVER_LOG_SHOWN)
     stream.write(f"--- Playwright {DRIVER_DEBUG}, last {len(tail)} lines ({path}) ---\n")
     stream.writelines(tail)
+
+
+# Each popover's kind: its classes and the table and column it sits in. Popovers
+# of one kind are drawn by one partial in one place, so one of them stands for
+# all, and a pass over them costs a run per kind rather than per record.
+POPOVER_KINDS = """() => {
+  const tables = [...document.querySelectorAll('table')];
+  return [...document.querySelectorAll('[popover]')].map((popover) => {
+    const table = popover.closest('table');
+    return [popover.className, tables.indexOf(table), popover.closest('td, th')?.cellIndex ?? -1].join(' ');
+  });
+}"""
+# The popover at a place in the page shown as a reader shows it: the folds and
+# popovers that hold its opener opened, the opener brought to the middle of the
+# view, then the popover. A popover hung from an anchor is placed against what
+# the view leaves room for beside its opener, so one shown with its opener off
+# screen has no room on either side and is drawn where no reader sees it.
+# What names it in a finding and its shot, and whether it hangs from an anchor;
+# nothing for one no reader can show, its opener drawn nowhere.
+SHOW_POPOVER = """(place) => {
+  const popover = document.querySelectorAll('[popover]')[place];
+  const id = popover.id && CSS.escape(popover.id);
+  const opener = id && document.querySelector(
+    `[popovertarget="${id}"]:not([popovertargetaction=hide]), [commandfor="${id}"]:is([command=show-popover], [command=toggle-popover])`
+  );
+  const held = [];
+  for (let up = opener?.parentElement; up; up = up.parentElement) {
+    if (up.matches('details:not([open]), [popover]:not(:popover-open)')) held.unshift(up);
+  }
+  const was = {held: [], x: scrollX, y: scrollY};
+  const putBack = () => {
+    was.held.reverse().forEach((up) => {
+      if (up.matches('details')) up.open = false;
+      else if (up.matches(':popover-open')) up.hidePopover();
+    });
+    scrollTo(was.x, was.y);
+  };
+  try {
+    held.forEach((up) => {
+      if (up.matches('details')) up.open = true;
+      else up.showPopover();
+      was.held.push(up);
+    });
+    if (opener && !opener.getClientRects().length) throw new Error('its opener is drawn nowhere');
+    opener?.scrollIntoView({block: 'center', inline: 'nearest'});
+    popover.showPopover();
+  } catch {
+    putBack();
+    return null;
+  }
+  popover.lookPutBack = putBack;
+  const placed = getComputedStyle(popover);
+  const hung = ![undefined, 'auto', 'none', 'normal'].includes(placed.positionAnchor)
+    || ![undefined, 'none', 'normal'].includes(placed.positionArea);
+  return [popover.id ? `#${popover.id}` : `popover ${place + 1}`, popover.id || `${place + 1}`, hung];
+}"""
+# The popover SHOW_POPOVER showed hidden alone, the view and what was opened
+# to show it left as they stand, so the page beneath reads as it did with the
+# popover shown.
+SET_ASIDE = "() => [...document.querySelectorAll('[popover]')].find((p) => p.lookPutBack)?.hidePopover()"
+# The popover at a place hidden, and what was opened to show it closed again.
+HIDE_POPOVER = """(place) => {
+  const popover = document.querySelectorAll('[popover]')[place];
+  if (popover.matches(':popover-open')) popover.hidePopover();
+  popover.lookPutBack?.();
+  delete popover.lookPutBack;
+}"""
+
+
+# The ledgers a browser test keeps for the run's report (`report_costs`): each
+# check's time in the page, a probe timed where it runs (`_in_one_trip`), and
+# each rule's subtest, its probes' time in the page included (`hold`).
+CHECK_COSTS = "Browser checks, time in the page"
+RULE_COSTS = "Browser rules, time per subtest"
+
+
+def findings_in(said, check):
+    """A failure's findings by check, when it says them as findings do (a
+    JSON list, or a JSON object of lists by check), or None. A list is
+    ``check``'s."""
+
+    try:
+        found = json.loads(said)
+    except ValueError:
+        return None
+    if isinstance(found, list):
+        return {check: found}
+    if isinstance(found, dict) and all(isinstance(lines, list) for lines in found.values()):
+        return found
+    return None
+
+
+def signature(check, finding):
+    """What a finding says, its measures aside: the same defect at another
+    width or on another load differs only in its numbers."""
+
+    said = finding if isinstance(finding, str) else json.dumps(finding, sort_keys=True)
+    return check, re.sub(r"\d+", "#", said)
 
 
 class BrowserGate(SimpleTestCase):
@@ -391,8 +531,13 @@ class BrowserGate(SimpleTestCase):
 
     databases = {"default"}
     scripted = False
+    # A failure says its findings whole: a reader acts on all of them.
+    maxDiff = None
     # Whether a test keeps Playwright's trace of what it did (``start``).
     traced = True
+    # Whether `dev:look` draws the pages a subtest names by the name it gives
+    # them, so a failure can say the look that finds it again (``rerun``).
+    looked_at = True
     # Set once a class by setUpClass, and a test's context by start.
     policy: dict[str, str]
     pages: Mapping[Any, Any]
@@ -426,9 +571,7 @@ class BrowserGate(SimpleTestCase):
             raise RuntimeError("Playwright is not installed. Run: mise run browser") from exc
         cls.playwright = start_driver(cls, sync_playwright)
         cls.addClassCleanup(cls.playwright.stop)
-        engine = os.environ.get("HQ_BROWSER_ENGINE", "webkit")
-        if engine not in {"chromium", "firefox", "webkit"}:
-            raise ValueError("HQ_BROWSER_ENGINE must be chromium, firefox, or webkit.")
+        engine = browser_engine()
         options: dict[str, object] = {"headless": True, "timeout": _LAUNCH_WITHIN}
         if channel := os.environ.get("HQ_BROWSER_CHANNEL"):
             options["channel"] = channel
@@ -440,12 +583,30 @@ class BrowserGate(SimpleTestCase):
         self.context = None
         self.uncaught = None
         self.refusals = []
+        self.swept = False
+        self.addCleanup(self.read_its_share)
         self.start()
         self.addCleanup(self.close_context)
         self.addCleanup(self.capture_failure)
         # First out: a refusal no subtest took fails the test, while it can
         # still be shot.
         self.addCleanup(self.kept_the_policy)
+
+    def mine(self, items):
+        """This job's share of the pages a sweep reads (``shards.share``):
+        all of them unless CI split the gate."""
+
+        if not sweeps(self):
+            raise AssertionError(f"{self.id()} reads its pages through mine: mark it @sweep, so every share runs it")
+        self.swept = True
+        return share(items, self.id())
+
+    def read_its_share(self):
+        """A test marked ``@sweep`` that read no pages through ``mine`` would
+        run whole in every share."""
+
+        if sweeps(self) and not self.swept and not self.failed:
+            self.fail(f"{self.id()} is marked @sweep but read no pages through mine")
 
     def close_context(self):
         """Closes the context the test last started, if it has one, keeping
@@ -465,11 +626,12 @@ class BrowserGate(SimpleTestCase):
         # Scripts asked for while this is a list wait in it, unanswered.
         self.held = None
         self.context = self.browser.new_context(**options)
-        self.context.set_default_timeout(5000)
-        # A page's load waits on the server, which a loaded machine slows;
-        # how fast the server answers is perf's question, so a navigation
-        # gets Playwright's own 30 s while an action keeps 5 s.
-        self.context.set_default_navigation_timeout(30_000)
+        # A loaded machine slows the server and the engine alike, and an
+        # action waits on both: a press that posts waits for its answer to
+        # commit, and every press for its element to hold still over two
+        # frames. How fast either goes is perf's question, so an action gets
+        # a navigation's 30 s.
+        self.context.set_default_timeout(_ACTION_WITHIN)
         # Playwright's record of what the test did, each step with the page as
         # it stood, kept beside a failure's screenshot (``shoot``).
         if self.traced:
@@ -480,6 +642,9 @@ class BrowserGate(SimpleTestCase):
             self.context.add_init_script(DEAF_WHILE_PROBED)
         self.context.route("**/*", self.respond)
         self.page = self.context.new_page()
+        # The sheets a test laid over the page (``lay_css``), which a load drops.
+        self.laid: list[str] = []
+        self.page.on("load", lambda _page: self.laid.clear())
         self.page.on("console", self.heard)
         # A report is a ping the browser sends past the routes, so it is heard
         # as a request rather than answered.
@@ -558,15 +723,24 @@ class BrowserGate(SimpleTestCase):
         self.held.append(route)
         return True
 
-    def outcomes(self, probes):
-        """What each of ``probes`` returned or threw, in one round trip
-        the page's own scripts do not hear (``hushed``):
-        ``[(True, value) | (False, error), ...]``."""
+    def timed_outcomes(self, probes):
+        """What each of ``probes`` returned or threw, and the seconds it took
+        in the page, in one round trip the page's own scripts do not hear
+        (``hushed``): ``[(True, value, s) | (False, error, s), ...]``."""
 
         if not probes:
             return []
         sources, args = zip(*probes, strict=True)
-        return [tuple(outcome) for outcome in self.page.evaluate(hushed(_in_one_trip(sources)), list(args))]
+        return [
+            (returned, value, ms / 1000)
+            for returned, value, ms in self.page.evaluate(hushed(_in_one_trip(sources)), list(args))
+        ]
+
+    def outcomes(self, probes):
+        """What each of ``probes`` returned or threw, in one round trip:
+        ``[(True, value) | (False, error), ...]``."""
+
+        return [outcome[:2] for outcome in self.timed_outcomes(probes)]
 
     def read(self, probes):
         """What each of ``probes`` returned, in one round trip."""
@@ -616,8 +790,123 @@ class BrowserGate(SimpleTestCase):
     def run(self, result=None):
         self.failed = False
         self.failures = None
+        self.costs: dict[str, dict[str, Cost]] = {}
+        # Each finding a failed subtest reported, by its signature, with
+        # every place it was found.
+        self.places: dict[tuple[str, str], tuple[str, list[str]]] = {}
         # _Watched stands in for the result, passing on what it does not keep.
-        return super().run(result if result is None else cast(TestResult, _Watched(result, self)))
+        ran = super().run(result if result is None else cast(TestResult, _Watched(result, self)))
+        if result is not None and self.costs and (keep := getattr(result, "addCosts", None)):
+            keep(self, self.costs)
+        if again := [(said, places) for said, places in self.places.values() if len(places) > 1]:
+            print(f"{self.id()}: each finding reported once, at its first place, and found again:")
+            for said, places in again:
+                print(f"  {said}\n    at {', '.join(places)}")
+        return ran
+
+    @override
+    @contextmanager
+    def subTest(self, *args, **params):
+        """A subtest, with a trace of its own steps: a failure keeps what the
+        subtest did, never what the test did before it.
+
+        A trace chunk holds the steps since it started (Playwright's
+        ``tracing.start_chunk``); stopped with no path it is discarded
+        (``_tracing.py``, ``_do_stop_chunk``). The bodies the context fetched
+        (its stylesheets, its pages) stay in every chunk, so the snapshots of
+        a later one still draw."""
+
+        if self.traced and self.context is not None:
+            tracing = self.context.tracing
+            tracing.stop_chunk()
+            tracing.start_chunk()
+        with super().subTest(*args, **params):
+            yield
+
+    def spent(self, ledger, row, seconds, where=""):
+        """``seconds`` more for ``row`` of ``ledger``, which the run reports."""
+
+        tally(self.costs.setdefault(ledger, {}), row, Cost(1, seconds, seconds, where))
+
+    @override
+    def assertEqual(self, first, second, msg=None):
+        """As unittest's, but what was to be found empty and was not fails
+        as its findings, whole, in JSON: a rule's ``assertEqual(found, [])``
+        says every finding, never unittest's shortened repr, and the subtest
+        that fails reads them by check (``as_reported``)."""
+
+        if msg is None and second in ([], {}) and first != second and isinstance(first, list | dict):
+            self.fail(json.dumps(first, indent=1, default=str))
+        super().assertEqual(first, second, msg)
+
+    def lay_css(self, css):
+        """``css`` laid over the page as it stands (``add_css``), kept until
+        the next load so a failure's look lays it too (``rerun``)."""
+
+        add_css(self.page, css)
+        self.laid.append(css)
+
+    def where_found(self, params):
+        """Where a subtest ran, as its page and width and whatever else names it."""
+
+        width = params.get("width") or (self.page.viewport_size or {}).get("width")
+        place = " ".join(str(part) for part in (params.get("page"), f"at {width}px" if width else "") if part)
+        rest = ", ".join(f"{key}={value}" for key, value in params.items() if key not in ("page", "width", "rule"))
+        return ", ".join(part for part in (place, rest) if part) or self.id()
+
+    def as_reported(self, params, err):
+        """A failed subtest's error as it is reported: each finding the test
+        already reported dropped, the place it was found again kept for the
+        test's closing lines, and the look that finds the rest again added.
+        None when nothing is left to report."""
+
+        kind, value, trace = err
+        said = str(value)
+        rule = params.get("rule") or "findings"
+        place = self.where_found(params)
+        found = findings_in(said, rule)
+        new: dict[str, list] = {}
+        for check, lines in (found or {rule: [said]}).items():
+            for line in lines:
+                key = signature(check, line)
+                if key in self.places:
+                    self.places[key][1].append(place)
+                else:
+                    self.places[key] = (f"{check}: {line}", [place])
+                    new.setdefault(check, []).append(line)
+        if not new:
+            return None
+        if found is not None:
+            said = json.dumps(new.get(rule, []) if isinstance(json.loads(said), list) else new, indent=1)
+        if command := self.rerun(params):
+            said += f"\n\nFound again by: {command}"
+        if len(value.args) == 1 and str(value) == value.args[0]:
+            value.args = (said,)
+        else:
+            print(said)
+        return kind, value, trace
+
+    def rerun(self, params):
+        """The `dev:look` that draws a failed subtest's page as it was drawn
+        and judges it by the same rule, when the subtest names a page the look
+        draws: the engine, the width, script, the palette, what was opened and
+        what was laid over it. A subtest that names no rule is judged by every
+        check the gates hold (``survey``)."""
+
+        if not self.looked_at or "page" not in params or self.context is None:
+            return ""
+        width = params.get("width") or self.page.viewport_size["width"]
+        flags = [
+            f"--rule {params.get('rule') or 'survey'}",
+            f"--engine {self.browser.browser_type.name}",
+            *(["--no-script"] if not self.runs_script else []),
+            *(["--dark"] if params.get("scheme") == "dark" else []),
+            *(["--open"] if params.get("disclosures") == "open" else []),
+            *(["--expand"] if params.get("rows") == "open" else []),
+            *([f"--css {shlex.quote(' '.join(' '.join(self.laid).split()))}"] if self.laid else []),
+            f"--widths {width}",
+        ]
+        return " ".join(["mise run dev:look", *flags, shlex.quote(str(params["page"]))])
 
     @override
     def __getstate__(self):
@@ -651,7 +940,7 @@ class BrowserGate(SimpleTestCase):
             tracing.stop_chunk(path=trace)
             tracing.start_chunk()
             print(f"Browser failure trace: {trace}")
-        cut = shoot_page(self.page, path, timeout=_FAILURE_SHOT_WITHIN)
+        cut = shoot_page(self.page, path)
         print(f"Browser failure screenshot: {path}" + (f" ({cut})" if cut else ""))
 
     def subtest_failed(self, params):
@@ -685,73 +974,100 @@ class BrowserGate(SimpleTestCase):
         """What the layout invariants find on the page as loaded, by check:
         every one the gates hold on a page as a reader has it."""
 
-        return self.checked(geometry_probes())
+        return self.checked(self.geometry_on(path))
+
+    def geometry_on(self, path, scripted=True):
+        """The geometry's probes on the page at ``path``, axe's without the
+        rules that page leaves out (``left_out_on``): the one place a check of
+        a page learns what it leaves out."""
+
+        geometry = dict(geometry_probes(scripted))
+        if "axe" in geometry and (left_out := self.left_out_on(path)):
+            geometry["axe"] = rules_read(left_out)
+        return geometry
 
     def table_defects_at_every_width(self):
         """What the table checks (`Check(table=True)`) find on the loaded page
-        at some window width from the narrowest phone up, as it was resized and
-        with every row a reader can open opened, and whether opening them
+        at some window width from the narrowest phone up, as it was resized,
+        in each state a reader can draw its tables in (rows as drawn, folds
+        open, every row a reader can open opened), and whether opening rows
         moved what stayed closed, by check, each finding with the first width
-        it was found at; the page is left at the width it was loaded at, its
-        rows closed.
+        it was found at and the state it was found in; the page is left at
+        the width it was loaded at, its rows closed.
 
-        A table's room changes only where the layout around it changes shape
-        (`TABLE_LAYOUT`): at an edge of the stylesheet's viewport queries, and
-        between two edges wherever a box around it wraps or adds a track, which
-        moves one way as the window grows. So the sweep reads each span between
-        edges at its two ends, and halves a span whose ends differ down to the
-        first width of each new shape. Within a shape a region grows with the
-        window and a table at its narrowest asks no more than it did, so a
-        table that fits at the first width of a shape fits at every width of
-        it. Each width is one trip and one page state (`opened_tables_read`)."""
+        A table's room changes only where its shape changes (`TABLE_LAYOUT`):
+        at an edge of the stylesheet's viewport queries, and between two edges
+        wherever a box around it wraps or adds a track, or a table gives way
+        or takes back what it gave, each of which moves one way as the window
+        grows. Within a shape a region grows with the window and a table at
+        its narrowest asks no more than it did, so a table that holds every
+        check at the first width of a shape holds them at every width of it.
+        So the sweep finds those widths, reading only the shape at each span's
+        two ends and halving a span whose ends differ down to the first width
+        of each new shape, and reads the checks once at each (`tables_read`).
+        It does so with the rows the page's folds hold folded, then again with
+        them open, since a table fits the rows it shows; the rows are opened
+        with the folds open, so every row is read open."""
 
         loaded = self.page.viewport_size
-        queries = viewport_queries(stylesheet())
+        layout = [SELECTORS["table_scroll"], viewport_queries(stylesheet())]
         probes = table_probes()
         sources, args = zip(*probes.values(), strict=True)
-        script = opened_tables_read(hushed(_in_one_trip(sources)))
-        arg = [
-            [SELECTORS["table_scroll"], queries],
-            cuts_marked_after(),
-            SELECTORS["row_fold"],
-            SELECTORS["row_opener"],
-            SELECTORS["own_records"],
-            list(args),
-        ]
+        script = tables_read(hushed(_in_one_trip(sources)))
         # Each finding once, as first found: the same defect at another width
-        # differs only in its measures.
+        # or in another state differs only in its measures.
         found: dict[str, dict[str, str]] = {}
-        shapes: dict[int, str] = {}
 
-        def take(check, said, width):
+        def take(check, said, where):
             kept = found.setdefault(check, {})
             for line in said:
-                kept.setdefault(re.sub(r"\d+", "#", str(line)), f"{line} at {width}px")
+                kept.setdefault(re.sub(r"\d+", "#", str(line)), f"{line} {where}")
 
-        def read(width):
-            self.page.set_viewport_size(viewport(width))
-            shape, sizes, misfits, outcomes, moved = self.page.evaluate(script, arg)
-            take("tables fit", misfits, width)
-            for check, (returned, value) in zip(probes, outcomes, strict=False):
-                take(check, AS_FINDINGS.get(check, _as_is)(value) if returned else [f"the probe threw: {value}"], width)
-            take("opening rows moves", moved, width)
-            shapes[width] = shape
-            return sizes
+        def sweep(state, rows):
+            shapes: dict[int, str] = {}
 
-        def between(low, high):
-            if high - low > 1 and shapes[low] != shapes[high]:
-                middle = (low + high) // 2
-                read(middle)
-                between(low, middle)
-                between(middle, high)
+            def shape(width):
+                self.page.set_viewport_size(viewport(width))
+                shapes[width], sizes = self.page.evaluate(TABLE_LAYOUT, layout)
+                return sizes
 
-        # A page with no table region has nothing to sweep.
-        if read(NARROWEST):
-            edges = query_edges(queries)
+            def between(low, high):
+                if high - low > 1 and shapes[low] != shapes[high]:
+                    middle = (low + high) // 2
+                    shape(middle)
+                    between(low, middle)
+                    between(middle, high)
+
+            # A page with no table region has nothing to sweep.
+            if not shape(NARROWEST):
+                return
+            edges = query_edges(layout[1])
             for low, high in zip([NARROWEST, *edges], [edge - 1 for edge in edges] + [LARGEST], strict=True):
                 for width in {low, high} - shapes.keys():
-                    read(width)
+                    shape(width)
                 between(low, high)
+            widths = sorted(shapes)
+            for width in [NARROWEST, *(width for before, width in pairwise(widths) if shapes[width] != shapes[before])]:
+                self.page.set_viewport_size(viewport(width))
+                states, moved = self.page.evaluate(
+                    script, [layout[0], state, rows, SELECTORS["own_records"], list(args)]
+                )
+                for said_state, outcomes in states:
+                    where = f"at {width}px" + (f", {said_state}" if said_state else "")
+                    for check, (returned, value, ms) in zip(probes, outcomes, strict=False):
+                        self.spent(CHECK_COSTS, check, ms / 1000, f"{self.where()} {where}")
+                        said = AS_FINDINGS.get(check, _as_is)(value) if returned else [f"the probe threw: {value}"]
+                        take(check, said, where)
+                take("opening rows moves", moved, f"at {width}px")
+
+        folds = self.page.evaluate_handle(PRESS, SELECTORS["row_fold"])
+        if self.page.evaluate("(pressed) => pressed.length", folds):
+            sweep("its folds open", SELECTORS["row_opener"])
+            folds.evaluate(UNPRESS)
+            sweep("", None)
+        else:
+            sweep("", SELECTORS["row_opener"])
+        folds.dispose()
         self.page.set_viewport_size(loaded)
         self.page.evaluate(SETTLE)
         return {check: list(said.values()) for check, said in found.items() if said}
@@ -766,10 +1082,9 @@ class BrowserGate(SimpleTestCase):
         this load, each with what paints its fill in the palette that loses
         it; the page is left in the palette it was in."""
 
-        was = self.scheme()
-        reads = {}
+        reads, before = {}, []
         for palette in ("light", "dark"):
-            self.in_scheme(palette)
+            before.append(self.in_scheme(palette))
             reads[palette] = self.page.evaluate(FILL_STEPS, [SELECTORS["contrast_scope"], SELECTORS["vendored"]])
         # A box only one reading saw came or went between them.
         both = {str(at) for at in reads["light"]["seen"]} & {str(at) for at in reads["dark"]["seen"]}
@@ -781,15 +1096,20 @@ class BrowserGate(SimpleTestCase):
             if places := [at for at, lost in losses(steps, LINE_CONTRAST) if lost == palette]:
                 self.in_scheme(palette)
                 painted |= self.read([(FILL_PAINTERS, [places, SELECTORS["vendored"]])])[0]
-        self.in_scheme(was)
+        self.in_scheme(before[0])
         return lost_fills(steps, LINE_CONTRAST, painted)
 
     def in_scheme(self, scheme):
-        """The same load in the other palette. Its colors are finished rather
-        than waited for: without script no animation frame runs."""
+        """The same load painted in ``scheme``'s palette (``PAINT_IN``), or as
+        the system asks when ``scheme`` is none; the answer is the palette it
+        was painted in before, to put back."""
 
-        self.page.emulate_media(color_scheme=scheme)
-        self.page.evaluate(FINISH_TRANSITIONS)
+        return self.page.evaluate(PAINT_IN, scheme)
+
+    def draws_a_table(self):
+        """Whether the page holds a table, shown or not at this width."""
+
+        return self.page.locator("table").count() > 0
 
     def palette(self):
         """What depends on the palette: text, and the edges of fields and
@@ -800,27 +1120,76 @@ class BrowserGate(SimpleTestCase):
     def findings(self, path, width):
         """What the layout rules find in HQ's own markup, checks that found
         nothing left out: the geometry and the palette checks in the palette
-        loaded, and the fills in both.
-        The vendored markup is stood in for while they read, and put back
-        however they end: each probe runs on its own."""
+        loaded, and the fills in both; on a page with no script, only those
+        that hold without it. The vendored markup is stood in for while they
+        read, and put back however they end: each probe runs on its own."""
 
         found = self.checked(
             {
                 "stand in": (STAND_IN, SELECTORS["vendored"]),
-                **geometry_probes(),
+                **self.geometry_on(path, self.runs_script),
                 **palette_probes(),
                 "put back": (PUT_BACK, None),
             }
         )
+        began = perf_counter()
         found["fills"] = self.lost_fills()
+        # Its reads are several trips, each palette's, so it is timed here.
+        self.spent(CHECK_COSTS, "fills", perf_counter() - began, self.where_and_width())
         return {check: said for check, said in found.items() if said}
 
-    def checked(self, probes):
-        """Each check's findings, read in one round trip; a probe that threw
-        is a finding of its own check, so it hides no other."""
+    def left_out_on(self, path) -> tuple[str, ...]:
+        """The axe rules the page at ``path`` declares it leaves out, beside
+        those every page does (probes/axe.py's LEFT_OUT): the gallery's on the
+        Design page, which draws it, and else none but where a page's class
+        says."""
 
-        outcomes = self.outcomes(list(probes.values()))
-        return {
-            check: AS_FINDINGS.get(check, _as_is)(value) if returned else [f"the probe threw: {value}"]
-            for check, (returned, value) in zip(probes, outcomes, strict=True)
-        }
+        return catalog.left_out_on(catalog.GALLERY) if path == reverse("design") else ()
+
+    def checked(self, probes):
+        """Each check's findings, read in one round trip, each check's time
+        in the page kept for the run's ledger; a probe that threw is a finding
+        of its own check, so it hides no other."""
+
+        outcomes = self.timed_outcomes(list(probes.values()))
+        where = self.where_and_width()
+        found = {}
+        for check, (returned, value, seconds) in zip(probes, outcomes, strict=True):
+            if check in CHECKS:
+                self.spent(CHECK_COSTS, check, seconds, where)
+            found[check] = AS_FINDINGS.get(check, _as_is)(value) if returned else [f"the probe threw: {value}"]
+        return found
+
+    @contextmanager
+    def popover_shown(self, place):
+        """The popover at ``place`` shown as a reader shows it
+        (``SHOW_POPOVER``) for as long as the block runs: what names it in a
+        finding and in a shot, and whether it hangs from an anchor; None for
+        one no reader can show."""
+
+        shown = self.page.evaluate(SHOW_POPOVER, place)
+        try:
+            yield shown
+        finally:
+            if shown is not None:
+                self.page.evaluate(HIDE_POPOVER, place)
+
+    def each_popover_kind(self, *, anchored=False):
+        """Each kind of popover on the page shown on its own in turn, as a
+        reader shows one: what names it in a finding and in a shot, and how
+        many more of its kind it stands for. Shown all at once they would lie
+        over one another, which no reader sees, and where each lands would
+        hang on which drew last. ``anchored``, only those hung from an anchor
+        in the page (a menu's panel, a filter's choices): a centered one, a
+        modal, covers the page by design and is held by the dialog checks."""
+
+        kinds = self.page.evaluate(POPOVER_KINDS)
+        judged = set()
+        for place, kind in enumerate(kinds):
+            if kind in judged:
+                continue
+            with self.popover_shown(place) as shown:
+                if shown is None or (anchored and not shown[2]):
+                    continue
+                judged.add(kind)
+                yield tuple(shown[:2]), kinds.count(kind) - 1

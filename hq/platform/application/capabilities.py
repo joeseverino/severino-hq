@@ -8,7 +8,8 @@ from typing import Annotated, Any, Literal, NamedTuple, TypedDict
 from django.db import transaction
 from pydantic import ConfigDict, with_config
 
-from hq.platform.core.audit import audit_connection, audit_operation
+from hq.platform.core.audit import audit_connection, audit_operation, record_event, tallied
+from hq.platform.core.models import AuditLog
 from hq.platform.core.tracing import note, span
 lazy from hq.platform.core.doorbell import ask_soon
 
@@ -40,7 +41,7 @@ from .integration_specs import (
     takes_sent_fields,
     takes_stale_write_token,
 )
-from .integrations import integration_graph
+from .integrations import held_graph, integration_graph
 from .labels import human_label
 from .projection import QueryRefusal
 from .refusal_status import Refusal, next_call, refusal_of, refuse, refused
@@ -54,23 +55,44 @@ from .security import (
     require_all,
 )
 from .ui import ended
-lazy from . import agent_registry
+lazy from . import agent_registry, automation_runs
 
 
 def capability_title(name: str) -> str:
     """What a person calls the command named ``name``, registered or not."""
 
-    spec = capability_registry().get(name)
+    spec = capability_spec(name)
     return spec.title if spec else human_label(name)
 
 
 def capability_words(name: str, variant: str = "") -> str:
     """What a button for the command named ``name`` says (``CapabilitySpec.words``)."""
 
-    return capability_registry()[name].words(variant)
+    return command_spec(name).words(variant)
+
+
+def capability_spec(name: str) -> CapabilitySpec | None:
+    """The command named ``name``, or None for a name nothing registers. Only
+    an adopted procedure's reads the adopted catalog; every other command is
+    the same at every adoption, so a page that names one asks nothing."""
+
+    graph = integration_graph() if automation_runs.runs_procedure(name) else held_graph()
+    return graph.capabilities.get(name)
+
+
+def command_spec(name: str) -> CapabilitySpec:
+    """The registered command named ``name`` (``capability_spec``), which a
+    caller names knowing it is registered."""
+
+    spec = capability_spec(name)
+    if spec is None:
+        raise KeyError(name)
+    return spec
 
 
 def capability_registry() -> dict[str, CapabilitySpec]:
+    """Every command, at the catalog adopted now; one command is ``capability_spec``."""
+
     return dict(integration_graph().capabilities)
 
 
@@ -279,7 +301,7 @@ def _named_run(
     expected_updated_at: str | None,
     idempotency_key: str | None,
 ) -> Ran:
-    spec = capability_registry().get(name)
+    spec = capability_spec(name)
     if spec is None:
         return Ran(
             refuse(
@@ -515,6 +537,10 @@ def _consent(
     return None, principal
 
 
+# What the act of a write that recorded no row of its own is filed under.
+CAPABILITY_AUDIT_TYPE = "Capability"
+
+
 def _run(
     spec: CapabilitySpec,
     command: Any,
@@ -540,8 +566,18 @@ def _run(
     with (
         audit_operation(operation=spec.name, principal=principal),
         audit_connection(getattr(command, "connection_ref", "") or ""),
+        tallied() as written,
     ):
         result = spec.handler(command, principal=principal, **arguments)
+        if spec.effect != "read" and not written:
+            # A write whose handler recorded no row still leaves its act: what
+            # ran, under the row's operation, and how it ended.
+            record_event(
+                action=AuditLog.Action.DONE if result.get("ok", True) else AuditLog.Action.FAILED,
+                type_label=CAPABILITY_AUDIT_TYPE,
+                message=str(result.get("message") or ""),
+                required=True,
+            )
     if spec.effect != "read":
         # Every write a person or credential makes passes here, so this is the
         # one place that starts the controller at once rather than at the next

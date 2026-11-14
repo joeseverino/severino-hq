@@ -1,0 +1,12 @@
+id: hand-drawn-run-state
+valid:
+  - '{% status run.word tone=run.tone data_ask_label=True %}'
+  - '{% include "partials/_ask.html" with ask=refresh %}'
+  - '<span class="job-progress-head">A</span>'
+  - '<p>The refresh finished.</p>'
+invalid:
+  - '<span class="job-state" data-ask-label>{{ job.seen_state_display }}</span>'
+  - '<strong data-ask-label>{{ job.seen_state_display }}</strong>'
+  - '<span class="muted job-state">Running</span>'
+  - '<span>{% if failed %}Refresh failed{% endif %}</span>'
+  - '<span>Started {% status "Running" tone="attention" %}</span>'

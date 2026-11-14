@@ -1,17 +1,22 @@
 """A run's task outcomes as its report carries them: one per task and machine,
-struck of secrets and held to the bridge's ``RunEvent`` bounds.
+struck of secrets and held to the bridge's ``RunEvent`` bounds; and what its
+playbook stated as it ended (``stated``), held to ``RunStated``'s.
 
 An event is built from four fields of what Ansible said (the host, the task's
 name, its outcome and its own one-line ``msg``), never from its whole result,
 its stdout or its arguments, so what a module returned beside its message
 never leaves the worker. A task marked ``no_log`` says only that it was hidden.
-HQ strikes the credential shapes it knows again at the bridge's door; this is
-the worker's own strike, of what it alone knows to be secret.
+The one line of stdout read is the error that stops a run before any task
+ends (``Stopped``), struck as a task's message is. HQ strikes the credential
+shapes it knows again at the bridge's door; this is the worker's own strike,
+of what it alone knows to be secret.
 """
 
+import json
 import re
-from collections.abc import Collection, Iterable, Mapping
+from collections.abc import Callable, Collection, Iterable, Mapping
 from dataclasses import dataclass
+from pathlib import PurePath
 from typing import Any
 
 # The bridge contract's RunEvent bounds, and its report's.
@@ -120,25 +125,249 @@ def from_ansible(event: Mapping[str, Any], secrets: Collection[str] = ()) -> Eve
     return Event(_clip(host, HOST_LIMIT), _clip(task, TASK_LIMIT), outcome, _clip(message, MESSAGE_LIMIT))
 
 
-# The stat a playbook states its result under, with ``ansible.builtin.set_stats``.
+# How ansible-core 2.22 begins a line it prints as an error
+# (``ansible/utils/display.py``, ``Display.error``), and the line after it
+# that says where the error is, as ``<path>:<line>:<column>``.
+ERROR = "[ERROR]: "
+ORIGIN = "Origin: "
+# A terminal's color code, which Ansible wraps an error line in.
+_COLOR = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+
+
+def _printed(event: Mapping[str, Any]) -> str | None:
+    """The line Ansible printed outside any task, as ansible-runner 2.4.3
+    delivers one: a ``verbose`` event whose ``stdout`` is that line
+    (``ansible_runner/utils/__init__.py``, ``OutputEventFilter._emit_event``),
+    color stripped; None for any other event."""
+
+    if event.get("event") != "verbose":
+        return None
+    return _one_line(_COLOR.sub("", str(event.get("stdout", ""))))
+
+
+class Stopped:
+    """Why Ansible stopped a run before any task ended: the first line it
+    printed as an error (a playbook or role file that does not parse, a module
+    no collection installed provides), with the file and line it named when
+    that file is in the project.
+
+    It is the one event read from stdout, so it keeps that one line, struck of
+    secrets and clipped as a task's message is, and a path outside the project
+    (the worker's own directories) is never said.
+    """
+
+    def __init__(self, project_dir: PurePath, secrets: Collection[str] = ()) -> None:
+        self._project_dir = project_dir
+        self._secrets = secrets
+        self._error = ""
+        self._where = ""
+        self._next = False
+
+    def read(self, event: Mapping[str, Any]) -> None:
+        line = _printed(event)
+        if line is None:
+            return
+        if not self._error:
+            if line.startswith(ERROR):
+                self._error = line.removeprefix(ERROR)
+                self._next = True
+            return
+        if self._next:
+            self._next = False
+            if line.startswith(ORIGIN):
+                self._where = self._within(line.removeprefix(ORIGIN))
+
+    def _within(self, origin: str) -> str:
+        path, _, place = origin.rpartition(":")
+        path, _, line = path.rpartition(":")
+        if not (line.isdigit() and place.isdigit()):
+            return ""
+        try:
+            relative = PurePath(path).relative_to(self._project_dir)
+        except ValueError:
+            return ""
+        if ".." in relative.parts:
+            return ""
+        return f"{relative.as_posix()}:{line}:{place}"
+
+    @property
+    def message(self) -> str | None:
+        if not self._error:
+            return None
+        said = f"{self._where}: {self._error}" if self._where else self._error
+        return _clip(strike(said, self._secrets), MESSAGE_LIMIT)
+
+
+# The stats a playbook states with ``ansible.builtin.set_stats`` that a report
+# carries: its result, and its readings and preview (``RunStated``).
 RESULT_STAT = "result"
+READINGS_STAT = "readings"
+PREVIEW_STAT = "preview"
+
+# The bridge contract's RunStated bounds: the compact JSON of all of it, the
+# records of one machine and kind (and the lines of one machine's preview),
+# every text in it and a kind's name.
+STATED_BYTES = 65536
+RECORD_LIMIT = 200
+TEXT_LIMIT = 500
+KIND_LIMIT = 100
+
+# Why a part of what a playbook stated is not reported, in the words its
+# report says it in. A part is one machine's records of one kind, one
+# machine's preview, or everything a stat held for a machine the run is not on.
+ELSEWHERE = "for a machine it was not run on"
+PAST_BOUNDS = "past the bridge's bounds"
+MISSHAPEN = "not shaped as a reading or a preview"
 
 
-def stated(event: Mapping[str, Any], secrets: Collection[str] = ()) -> str | None:
-    """What a playbook said it found or did, from the ``playbook_on_stats``
-    event that ends its run, or None for any other event or a playbook that
-    set no ``result``.
+@dataclass(frozen=True, slots=True)
+class Stated:
+    """What a playbook stated as its run ended: its result in a line, its
+    readings (``{machine: {kind: [record]}}``) and preview (``{machine:
+    [line]}``) on the run's machines alone, and how many parts were left out
+    and why."""
+
+    result: str | None
+    readings: dict[str, dict[str, list[Any]]]
+    preview: dict[str, list[str]]
+    left_out: dict[str, int]
+
+    def as_report(self) -> dict[str, Any]:
+        """The report's ``stated``: each stat that holds anything."""
+
+        said = {READINGS_STAT: self.readings, PREVIEW_STAT: self.preview}
+        return {name: value for name, value in said.items() if value}
+
+
+def struck_all(node: Any, secrets: Collection[str]) -> Any:
+    """``node`` with ``secrets`` struck from every string in it, at any depth."""
+
+    if isinstance(node, str):
+        return strike(node, secrets)
+    if isinstance(node, Mapping):
+        return {key: struck_all(value, secrets) for key, value in node.items()}
+    if isinstance(node, list):
+        return [struck_all(value, secrets) for value in node]
+    return node
+
+
+def stated_bytes(stated: Mapping[str, Any]) -> int:
+    """How many bytes ``stated`` is as the contract measures it: compact JSON in UTF-8."""
+
+    return len(json.dumps(stated, separators=(",", ":"), ensure_ascii=False).encode())
+
+
+def _texts_within(node: Any) -> bool:
+    """Whether every text in ``node``, a member's name or a value, is within ``TEXT_LIMIT``."""
+
+    if isinstance(node, str):
+        return len(node) <= TEXT_LIMIT
+    if isinstance(node, Mapping):
+        return all(isinstance(key, str) and len(key) <= TEXT_LIMIT and _texts_within(v) for key, v in node.items())
+    if isinstance(node, list):
+        return all(_texts_within(value) for value in node)
+    return True
+
+
+class _Parts:
+    """The parts of what a playbook stated a report carries, each kept whole or
+    left out whole: a part past a bound is never cut down, since a reading cut
+    short would say something false."""
+
+    def __init__(self, hosts: Collection[str], secrets: Collection[str]) -> None:
+        self._hosts = hosts
+        self._secrets = secrets
+        self.left_out: dict[str, int] = {}
+
+    def leave_out(self, why: str, parts: int = 1) -> None:
+        if parts:
+            self.left_out[why] = self.left_out.get(why, 0) + parts
+
+    def by_machine(self, stat: Any) -> dict[str, Any]:
+        """A stat's value on each of the run's machines; any other machine's left out."""
+
+        if stat is None:
+            return {}
+        if not isinstance(stat, Mapping):
+            self.leave_out(MISSHAPEN)
+            return {}
+        mine: dict[str, Any] = {}
+        for machine, value in stat.items():
+            if machine in self._hosts:
+                mine[machine] = value
+            else:
+                self.leave_out(ELSEWHERE)
+        return mine
+
+    def kept(self, values: Any, shaped: Callable[[Any], bool]) -> list[Any] | None:
+        """``values`` struck of secrets, or None when it is left out."""
+
+        if not isinstance(values, list) or not all(shaped(value) for value in values):
+            self.leave_out(MISSHAPEN)
+            return None
+        struck: list[Any] = struck_all(values, self._secrets)
+        if len(struck) > RECORD_LIMIT or not _texts_within(struck):
+            self.leave_out(PAST_BOUNDS)
+            return None
+        return struck
+
+    def readings(self, stat: Any) -> dict[str, dict[str, list[Any]]]:
+        found: dict[str, dict[str, list[Any]]] = {}
+        for machine, kinds in self.by_machine(stat).items():
+            if not isinstance(kinds, Mapping):
+                self.leave_out(MISSHAPEN)
+                continue
+            for kind, records in kinds.items():
+                if len(kind) > KIND_LIMIT:
+                    self.leave_out(PAST_BOUNDS)
+                    continue
+                kept = self.kept(records, lambda record: isinstance(record, Mapping))
+                if kept is not None:
+                    found.setdefault(machine, {})[kind] = kept
+        return found
+
+    def preview(self, stat: Any) -> dict[str, list[str]]:
+        found: dict[str, list[str]] = {}
+        for machine, lines in self.by_machine(stat).items():
+            kept = self.kept(lines, lambda line: isinstance(line, str))
+            if kept is not None:
+                found[machine] = kept
+        return found
+
+
+def stated(event: Mapping[str, Any], hosts: Collection[str] = (), secrets: Collection[str] = ()) -> Stated | None:
+    """What a playbook stated as it ended, from the ``playbook_on_stats``
+    event that ends its run, or None for any other event.
 
     ansible-runner carries a run's stats set with ``per_host: false`` as that
-    event's ``artifact_data``. A result keyed by machine, as a playbook on
-    several sets it, is said machine by machine.
+    event's ``artifact_data``, each machine's merged into one where the stat
+    is keyed by machine. Only ``result``, ``readings`` and ``preview`` are
+    read; any other stat is dropped. What it states about a machine that is
+    not one of ``hosts``, the run's, is left out, so a run states nothing
+    about a machine it was not asked on; so is a part that is misshapen or
+    past a bound of ``RunStated``, and everything when all of it is past
+    ``STATED_BYTES``. What is kept is struck of secrets.
     """
 
     data = event.get("event_data")
     if event.get("event") != "playbook_on_stats" or not isinstance(data, Mapping):
         return None
     artifact = data.get("artifact_data")
-    result = artifact.get(RESULT_STAT) if isinstance(artifact, Mapping) else None
+    artifact = artifact if isinstance(artifact, Mapping) else {}
+    parts = _Parts(hosts, secrets)
+    readings = parts.readings(artifact.get(READINGS_STAT))
+    preview = parts.preview(artifact.get(PREVIEW_STAT))
+    found = Stated(_result(artifact.get(RESULT_STAT), secrets), readings, preview, parts.left_out)
+    if stated_bytes(found.as_report()) <= STATED_BYTES:
+        return found
+    parts.leave_out(PAST_BOUNDS, sum(map(len, readings.values())) + len(preview))
+    return Stated(found.result, {}, {}, parts.left_out)
+
+
+def _result(result: Any, secrets: Collection[str]) -> str | None:
+    """A playbook's ``result`` in one line; a result keyed by machine, as a
+    playbook on several sets it, is said machine by machine."""
+
     if isinstance(result, Mapping):
         said = (
             [str(value) for value in result.values()]

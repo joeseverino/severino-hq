@@ -102,11 +102,27 @@ RECORDED: list[dict[str, Any]] = json.loads(Path(__file__).with_name("recorded_e
 CHECKED: list[dict[str, Any]] = json.loads(
     Path(__file__).with_name("recorded_validation_events.json").read_text("utf-8")
 )
+# Two runs ansible-runner 2.4.3 recorded that Ansible stopped before their
+# first task: a role file that does not parse (``broken_role``) and a module
+# from a collection the worker lacks (``missing_collection``). Each path is
+# where the checkout sat on the machine that recorded it, rewritten to
+# ``PROCEDURES``' project directory; the smoke holds each first error line to
+# a real run.
+STOPPED: dict[str, list[dict[str, Any]]] = json.loads(
+    Path(__file__).with_name("recorded_stopped_events.json").read_text("utf-8")
+)
 # The run up to the task that failed, and its stats: a run that ends well.
 WELL = [event for event in RECORDED if event.get("event_data", {}).get("task") != "Fail"]
 # The stats event ansible-runner 2.4.3 recorded ending a real run whose play
 # stated its result with ``ansible.builtin.set_stats``.
 STATED: dict[str, Any] = json.loads(Path(__file__).with_name("recorded_stats_event.json").read_text("utf-8"))
+# The stats event ansible-runner 2.4.3 recorded ending a real run on two
+# machines, app.example.com and db.example.com, whose play stated a result,
+# readings of two kinds and a preview for each, in separate set_stats tasks
+# Ansible merged by machine, and one more task that stated a reading for
+# elsewhere.example.com, outside its inventory, and a stat of no name a
+# report carries (``extra``).
+READINGS: dict[str, Any] = json.loads(Path(__file__).with_name("recorded_readings_event.json").read_text("utf-8"))
 # Its task outcomes alone, one per task, so a test counts the tasks that ran.
 OUTCOMES = [event for event in RECORDED if event["event"] in ("runner_on_ok", "runner_on_failed", "runner_on_skipped")]
 
@@ -164,6 +180,35 @@ def role_spec(role: str, playbook_dir: Path, project_dir: Path) -> Any:
     del playbook_dir, project_dir
     # ansible-doc's answer for a role it cannot find is an empty object.
     return entry_point(role, {role: RECORDED_ROLE_SPECS[role]} if role in RECORDED_ROLE_SPECS else {})
+
+
+# Some of the modules ``ansible-doc -l -j -t module`` lists in the worker's
+# environment, each by its full name; the smoke holds each to that listing.
+MODULES = frozenset(
+    {
+        "ansible.builtin.assert",
+        "ansible.builtin.command",
+        "ansible.builtin.copy",
+        "ansible.builtin.debug",
+        "ansible.builtin.import_playbook",
+        "ansible.builtin.import_tasks",
+        "ansible.builtin.include_role",
+        "ansible.builtin.include_tasks",
+        "ansible.builtin.include_vars",
+        "ansible.builtin.set_fact",
+        "ansible.builtin.systemd_service",
+        "ansible.builtin.template",
+        "ansible.posix.sysctl",
+        "community.docker.current_container_facts",
+        "community.docker.docker_compose_v2",
+    }
+)
+
+
+def modules() -> frozenset[str]:
+    """The modules the worker's Ansible finds, as ansible-doc lists them."""
+
+    return MODULES
 
 
 def verified(revision: str) -> dict[str, Any]:

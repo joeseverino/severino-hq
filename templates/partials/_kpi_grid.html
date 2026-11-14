@@ -34,7 +34,7 @@
           {% endcomment %}
           {% comment %}
           <!-- ast-grep-ignore: hand-drawn-icon --> a figure's trend line, drawn by the figure part
-          {% endcomment %}<svg class="kpi-trend" viewBox="-5 -3 110 30" preserveAspectRatio="none" aria-hidden="true" focusable="false"><polyline points="{{ drawing.points }}"></polyline>{% for mark in drawing.marks %}<rect class="kpi-trend-hit" x="{{ mark.left }}" y="0" width="{{ mark.width }}" height="24" data-tip="{{ mark.tip }}"></rect><line class="kpi-trend-dot{% if mark.latest %} is-latest{% endif %}" x1="{{ mark.x }}" y1="{{ mark.y }}" x2="{{ mark.x }}" y2="{{ mark.y }}"></line>{% endfor %}</svg>
+          {% endcomment %}<svg class="kpi-trend" viewBox="-5 -3 110 30" preserveAspectRatio="none" aria-hidden="true" focusable="false"><polyline points="{{ drawing.points }}"></polyline>{% for mark in drawing.marks %}<rect class="kpi-trend-hit" x="{{ mark.left }}" y="0" width="{{ mark.width }}" height="24" data-tip="{{ mark.tip }}"></rect><line class="chart-dot kpi-trend-dot{% if mark.latest %} is-latest{% endif %}" x1="{{ mark.x }}" y1="{{ mark.y }}" x2="{{ mark.x }}" y2="{{ mark.y }}"></line>{% endfor %}</svg>
         {% endif %}
       </span>
       {% comment %}The line under the value, alone or above the parts of its whole.{% endcomment %}

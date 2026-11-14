@@ -153,13 +153,14 @@ compile_section.__wrapped__ = SECTION  # type: ignore[attr-defined]  # a functio
 
 
 class HeadedNode(template.Node):
-    def __init__(self, nodelist: template.NodeList) -> None:
+    def __init__(self, nodelist: template.NodeList, *, top: bool = False) -> None:
         self.nodelist = nodelist
+        self.top = top
 
     def render(self, context) -> str:
         root = context.render_context.dicts[0]
         level = root.get(_LEVEL, TOP_LEVEL)
-        root[_LEVEL] = min(level + 1, LAST_LEVEL)
+        root[_LEVEL] = TOP_LEVEL + 1 if self.top else min(level + 1, LAST_LEVEL)
         try:
             return self.nodelist.render(context)
         finally:
@@ -170,10 +171,14 @@ class HeadedNode(template.Node):
 def compile_headed(parser, token) -> HeadedNode:
     """``{% headed %}body{% endheaded %}``: a body under a heading its part
     draws itself at the level a section here would take (a dialog's title,
-    an insight's), so a section in the body heads itself a level below it."""
+    an insight's), so a section in the body heads itself a level below it.
+    ``{% headed top %}`` is a body under a title drawn at the top level
+    wherever the part stands (a dialog's), so a dialog opened from inside a
+    section still heads its own sections a level under its title."""
 
-    if len(token.split_contents()) != 1:
-        raise template.TemplateSyntaxError("headed takes no arguments")
+    bits = token.split_contents()[1:]
+    if bits not in ([], ["top"]):
+        raise template.TemplateSyntaxError("headed takes nothing, or top")
     nodelist = parser.parse(("endheaded",))
     parser.delete_first_token()
-    return HeadedNode(nodelist)
+    return HeadedNode(nodelist, top=bool(bits))

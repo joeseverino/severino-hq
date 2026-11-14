@@ -19,8 +19,6 @@ from hq.platform.application.security import cli_principal
 from hq.platform.application.tests.markup import all_elements, elements, hrefs, links, select, text, with_class
 from hq.platform.application.ui import ChartSeries, DomainOverview, stacked_bar_chart
 
-SHAPES = frozenset({"circle", "line", "path", "polyline", "rect"})
-
 
 def contributor(number, *, overview=None):
     return Domain(
@@ -271,20 +269,15 @@ class FigureDrawingTests(SimpleTestCase):
         self.assertEqual((cell.attrs["href"], cell.words), ("/", "First 1"))
         self.assertEqual(elements(html, "svg") + with_class(html, "kpi-dot"), [])
 
-    def test_an_icon_goes_before_the_label_and_an_unknown_one_draws_nothing(self):
+    def test_an_icon_goes_before_the_label_by_its_name(self):
         known = self.render(Kpi("Domains", "4", icon="globe"))
-        unknown = self.render(Kpi("Domains", "4", icon="no-such-icon"))
-
-        def drawn(html):
-            return [element for element in all_elements(html) if element.tag in SHAPES]
 
         page = all_elements(known)
         (label,) = with_class(known, "label")
         self.assertEqual(page[page.index(label) + 1].tag, "svg")
+        (use,) = elements(known, "use")
+        self.assertTrue(use.attrs["href"].endswith("#globe"))
         self.assertEqual(label.words, "Domains")
-        self.assertTrue(drawn(known))
-        self.assertEqual(drawn(unknown), [])
-        self.assertIn("Domains", text(unknown))
 
 
 class DashboardHighlightQueryTests(TestCase):

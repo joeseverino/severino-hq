@@ -1,7 +1,7 @@
 """Two writes in flight together with one retry key act once, though one came by the API and one by MCP.
 
 Each runs on a thread with a database connection of its own, against the WAL
-SQLite file production writes (``hq/platform/core/test_runner.py``).
+SQLite file production writes (``hq/platform/core/file_clones.py``).
 """
 
 import json

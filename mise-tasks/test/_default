@@ -21,9 +21,16 @@
 #USAGE arg "[arguments]..." var=#true double_dash="automatic" help="Test labels, dotted, then any options for Django's test command, passed as typed (with --go, go test's); or shell suites by path (tests/shell/test-heavy.sh), each run as lint:shell runs it, under every shell its first line calls for, with --at on <ref>'s scripts. Without one, every test:* gate on every Python and the controller's tests"
 
 # Labels, shell suites, a ref or --go are handed to tools/gate/at.py, which reads mise's parse and takes
-# the heavy turn unless tools/gate/turn.py finds the run narrow. The lint tools
+# the heavy turn, or a share of it when tools/gate/turn.py weighs the run one process. The lint tools
 # are installed for a label that reaches Stylelint.
 set -eu
+# A run by label is weighed before the machine is chosen (tools/lib/remote.sh), and the run here takes
+# that weight; the composed suite and every gate at once take every token.
+if [ "${usage_composed:-}" != true ] && { [ -n "${usage_arguments:-}" ] || [ -n "${usage_at+set}" ] || [ "${usage_go:-}" = true ]; }; then
+    turn_share="$(uv run --group browser python -m tools.gate.at --weight)"
+fi
+# shellcheck source=tools/lib/remote.sh
+. ./tools/lib/remote.sh
 
 if [ "${usage_composed:-}" = true ]; then
     # The composed suite runs this checkout, so a ref it was handed would go unread.
@@ -36,7 +43,7 @@ if [ "${usage_composed:-}" = true ]; then
     exec mise run test:composed -- "$@"
 fi
 if [ -n "${usage_arguments:-}" ] || [ -n "${usage_at+set}" ] || [ "${usage_go:-}" = true ]; then
-    exec uv run --group browser python -m tools.gate.at
+    exec env HQ_TEST_WEIGHED="${turn_share:-}" uv run --group browser python -m tools.gate.at
 fi
 
 # Every gate, each suite and the Go tests in a heavy turn of their own. A

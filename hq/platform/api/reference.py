@@ -16,6 +16,7 @@ from django.views.decorators.http import require_safe
 
 from hq.config.devtools import without_trusted_types
 from hq.platform.api.openapi import document
+from hq.platform.application.pages import Page
 
 # The one page served under a policy of its own, derived from the real one so
 # tightening that cannot leave a stale copy here. It differs in two ways:
@@ -38,6 +39,5 @@ def reference(request: HttpRequest) -> HttpResponse:
     # The longest path the document serves, in characters: every list of a
     # tag's operations is that wide, so their edges line up (api-reference.css).
     longest = max(map(len, document()["paths"]), default=0)
-    return TemplateResponse(
-        request, "hq_api/reference.html", {"document_url": reverse("hq_api:openapi"), "longest_path": longest}
-    )
+    context = {"page": Page(title="API"), "document_url": reverse("hq_api:openapi"), "longest_path": longest}
+    return TemplateResponse(request, "hq_api/reference.html", context)

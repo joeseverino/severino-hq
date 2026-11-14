@@ -14,7 +14,7 @@ part's heading shows only when there is more than one.
           {% table_heading "Reads" drop=3 local_sort=True %}
           {% table_heading "Reaches" css="optional-col" drop=1 local_sort=True %}
           {% table_heading "State" "status" css="tight-col key-col" local_sort=True %}
-          {% table_heading "Actions" css="actions-col" drop=2 hidden=True %}
+          {% table_heading "Actions" css="actions-col" hidden=True %}
         </tr>
       </thead>
       {% for purpose, purpose_rows in connections.purposes %}

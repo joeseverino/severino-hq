@@ -63,6 +63,22 @@ class IntegrationGraphTests(TestCase):
 
         self.assertIsNot(integration_graph(), first)
 
+    def test_no_command_but_an_adopted_procedure_is_named_as_one(self):
+        from dataclasses import replace
+        from unittest.mock import patch
+
+        from ..core_capabilities import CORE_CAPABILITY_SPECS
+
+        squatter = replace(CORE_CAPABILITY_SPECS[0], name="automation.example.check.run")
+        with (
+            patch("hq.platform.application.integrations.CORE_CAPABILITY_SPECS", (*CORE_CAPABILITY_SPECS, squatter)),
+            self.assertRaises(IntegrationGraphError) as raised,
+        ):
+            clear_integration_graph_cache()
+            integration_graph()
+
+        self.assertEqual([v.code for v in raised.exception.violations], ["capability_in_procedure_namespace"])
+
     def test_compilation_reports_every_cross_spec_violation_together(self):
         resource = ResourceSpec(
             "example.records",

@@ -18,19 +18,17 @@ from hq.platform.application.security import (
     person,
     subject_of,
 )
-from hq.platform.core.audit import record_event
-from hq.platform.core.models import AgentAccess, AgentIdentity, AuditLog
+from hq.platform.core.models import AgentAccess, AgentIdentity
 
 from . import agent_devices
 from .agent_devices import DeviceStanding, Unplaced
-from .agent_registry import AUDIT_LABEL as IDENTITY_LABEL, identity_of
+from .agent_registry import identity_of
 from .command_fields import Describe
 from .record_errors import PolicyError, RecordNotFound
 from .refusal_status import Refusal
 
 logger = logging.getLogger("severino.agents")
 
-AUDIT_LABEL = "Agent access"
 
 SET_AGENT_ACCESS = "agent.access.set"
 SET_AGENT_BLOCK = "agent.block.set"
@@ -203,21 +201,14 @@ def set_agents_paused(command: AgentAccessCommand, *, principal: Principal) -> A
     user = person(principal)
     paused = command.paused
     with transaction.atomic():
-        row, _ = AgentAccess.objects.select_for_update().get_or_create(pk=1)
+        row = AgentAccess.objects.select_for_update().filter(pk=1).first() or AgentAccess(pk=1)
         if row.paused == paused:
             return {"ok": True, "paused": paused}
         row.paused = paused
         row.changed_by = user
         row.changed_at = timezone.now()
-        row.save(update_fields=["paused", "changed_by", "changed_at"])
-        record_event(
-            action=AuditLog.Action.UPDATED,
-            obj=row,
-            type_label=AUDIT_LABEL,
-            message="Agents paused" if paused else "Agents resumed",
-            user=user,
-            required=True,
-        )
+        row.audit_said = "Agents paused" if paused else "Agents resumed"
+        row.save()
     return {"ok": True, "paused": paused}
 
 
@@ -251,16 +242,8 @@ def set_agent_blocked(command: AgentBlockCommand, *, principal: Principal, curre
             return answer
         row.blocked_at = timezone.now() if blocking else None
         row.blocked_by = user if blocking else None
+        row.audit_said = f"{'Blocked' if blocking else 'Allowed'} {row}"
         row.save(update_fields=["blocked_at", "blocked_by"])
-        record_event(
-            action=AuditLog.Action.UPDATED,
-            obj=row,
-            type_label=IDENTITY_LABEL,
-            message=f"{'Blocked' if blocking else 'Allowed'} {row}",
-            metadata={"client_id": row.client_id, "subject": current_key, "blocked": blocking},
-            user=user,
-            required=True,
-        )
     return answer
 
 
@@ -292,25 +275,15 @@ def remove_agent(_command: AgentRemoveCommand, *, principal: Principal, current_
     changes it asked for, which a person still decides.
     """
 
-    user = person(principal)
+    person(principal)
     with transaction.atomic():
         row = identity_of(current_key).select_for_update().first()
         if row is None:
             raise RecordNotFound("No agent with that client has called HQ.")
         if row.blocked_at is not None:
             raise PolicyError("Allow this agent before you remove it. A blocked agent stays listed so its block holds.")
-        subject = subject_of(row.client_id, row.person_key)
-        named = str(row)
-        rules, _ = CapabilityRule.objects.filter(subject=subject).delete()
+        rules, _ = CapabilityRule.objects.filter(subject=subject_of(row.client_id, row.person_key)).delete()
         devices = row.devices.count()
-        record_event(
-            action=AuditLog.Action.DELETED,
-            obj=row,
-            type_label=IDENTITY_LABEL,
-            message=f"Removed {named}",
-            metadata={"client_id": row.client_id, "subject": subject, "devices": devices, "rules": rules},
-            user=user,
-            required=True,
-        )
+        row.audit_gone = f"Removed {row}"
         row.delete()
     return {"ok": True, "client_id": row.client_id, "subject": current_key, "devices": devices, "rules": rules}

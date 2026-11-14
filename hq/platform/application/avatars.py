@@ -17,14 +17,12 @@ import httpx2
 from django.db import transaction
 from django.utils import timezone
 
-from hq.platform.core.audit import record_event
-from hq.platform.core.models import AuditLog, Avatar
+from hq.platform.core.models import Avatar
 
 from .http_read import at_most
 
 logger = logging.getLogger("severino.auth")
 
-AUDIT_LABEL = "Avatar"
 # Where a session says which picture its person has: the picture's digest.
 SESSION_KEY = "avatar"
 # A profile picture, not a photograph: larger than this is not one.
@@ -116,24 +114,14 @@ def remember_avatar(user: Any, url: str, *, issuer: str, access_token: str = "",
     kind, image = fetched
     digest = hashlib.sha256(image).hexdigest()
     with transaction.atomic():
-        avatar, created = Avatar.objects.update_or_create(
-            user=user,
-            defaults={
-                "content_type": kind,
-                "image": image,
-                "digest": digest,
-                "source": url,
-                "fetched_at": now,
-            },
-        )
-        if created or kept is None or kept.digest != digest:
-            record_event(
-                action=AuditLog.Action.CREATED if created else AuditLog.Action.UPDATED,
-                obj=avatar,
-                type_label=AUDIT_LABEL,
-                message="Picture taken from your sign-in service when you signed in",
-                user=user,
-            )
+        avatar = Avatar.objects.select_for_update().filter(user=user).first() or Avatar(user=user)
+        avatar.content_type = kind
+        avatar.image = image
+        avatar.digest = digest
+        avatar.source = url
+        avatar.fetched_at = now
+        avatar.audit_said = "Picture taken from your sign-in service when you signed in"
+        avatar.save()
     return digest
 
 
@@ -142,13 +130,7 @@ def _forget(user: Any) -> None:
         avatar = Avatar.objects.filter(user=user).only("id", "digest").first()
         if avatar is None:
             return
-        record_event(
-            action=AuditLog.Action.DELETED,
-            obj=avatar,
-            type_label=AUDIT_LABEL,
-            message="Your sign-in service no longer gives a picture",
-            user=user,
-        )
+        avatar.audit_gone = "Your sign-in service no longer gives a picture"
         avatar.delete()
 
 

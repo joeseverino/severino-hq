@@ -192,6 +192,7 @@ def _readers(modules: dict[str, _Module]) -> set[Unit]:
 
 
 @tag("source", "tree")
+@reads("hq/platform/application/**/*.py", lists=("hq/platform/application/**",))
 class ReadingItemsCarryTheirAgeTests(SimpleTestCase):
     def test_every_item_built_from_a_stored_reading_carries_observed_at(self):
         """Without it a card cannot say how old its claim is, and an old
@@ -222,7 +223,7 @@ class ReadingItemsCarryTheirAgeTests(SimpleTestCase):
         missing = sorted(f"{module}:{line}" for (module, line), aged in held.items() if not aged)
 
         self.assertTrue(held, "no item is built from a stored reading: the rule checks nothing")
-        self.assertIn(("container_attention", "attention"), readers, "the walk no longer follows an indirect reader")
+        self.assertIn(("container_findings", "add"), readers, "the walk no longer follows an indirect reader")
         self.assertEqual(missing, [])
 
 
@@ -247,7 +248,5 @@ class OneWordingTests(SimpleTestCase):
             for match in OWN_WORDING.finditer(text)
         ]
 
-        self.assertRegex(
-            PARTIAL.read_text(), OWN_WORDING, "the partial no longer words an age: the rule checks nothing"
-        )
+        self.assertRegex('Last read {{ at|when:"ago" }}', OWN_WORDING, "the rule no longer finds an age worded by hand")
         self.assertEqual(found, [])

@@ -10,7 +10,7 @@ from unittest import mock
 
 from django.test import TestCase
 
-from hq.platform.application.asks import job_standing
+from hq.platform.application.work_runs import job_run
 from hq.platform.core.models import AuditLog
 
 from ..models import Job
@@ -38,7 +38,7 @@ class FaultTests(TestCase):
         self.assertIn("ConnectionError", job.error)
         self.assertNotIn(HELD, job.error)
         self.assertNotIn("Traceback", job.error)
-        self.assertEqual(job_standing(job).note, job.error)
+        self.assertEqual(job_run(job).note, job.error)
         self.assertIn('"kind": "ConnectionError"', _audited(job))
         self.assertNotIn(HELD, _audited(job))
         self.assertIn(HELD, "\n".join(logged.output))

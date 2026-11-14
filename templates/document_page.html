@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% comment %}
+A page that is one document under the site header, such as the API reference
+or the Design page's gallery: no page head and no footer, its title spoken
+alone, and the document filling the view edge to edge, scrolled as the page
+scrolls (`[data-document-page]`, page.css). The document brings its own gutters.
+The view supplies `page` (application.pages) for its title, and the page
+fills only `{% block document %}`.
+{% endcomment %}
+{% block title %}{{ page.title }}{% endblock %}
+{% block content %}
+{% comment %}
+<!-- ast-grep-ignore: hand-drawn-heading --> the title of a page that is one document, spoken alone
+{% endcomment %}<h1 class="visually-hidden">{{ page.title|breakable }}</h1>
+<div data-document-page>{% block document %}{% endblock %}</div>
+{% endblock %}
+{% block site_footer %}{% endblock %}

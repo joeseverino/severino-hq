@@ -42,6 +42,6 @@ jq -r --arg support "${support}" \
 
 # One line per function, sorted by file and line, so two runs are compared by
 # a diff. The closing line holds the total.
-sort -t: -k1,1 -k2,2n "${work}/found" >"${work}/listed"
+LC_ALL=C sort -t: -k1,1 -k2,2n "${work}/found" >"${work}/listed"
 cat "${work}/listed"
 printf '%s functions no main reaches\n' "$(wc -l <"${work}/listed" | tr -d ' ')"

@@ -26,6 +26,7 @@ from hq.platform.core.dashboard_views import (
     DashboardLinkChoiceView,
     DashboardView,
 )
+from hq.platform.core.dev_sign_in import scratch_sign_in
 from hq.platform.core.health_views import health_live, health_ready
 from hq.platform.core.oidc import HANDSHAKE
 from hq.platform.core.oidc_logout import backchannel_logout
@@ -39,6 +40,7 @@ from hq.platform.core.views import (
     AvatarView,
     ConnectionPageView,
     DemoModeView,
+    DesignView,
     HQView,
     OwnDeviceView,
     PublicAddressView,
@@ -117,6 +119,7 @@ urlpatterns = [
     path("agents/agent-devices/", AgentDeviceView.as_view(), name="agent_device"),
     path("connection/", ConnectionPageView.as_view(), name="connection"),
     path("hq/", HQView.as_view(), name="hq_self"),
+    path("design/", DesignView.as_view(), name="design"),
     path(
         "connection/address/",
         PublicAddressView.as_view(),
@@ -148,6 +151,10 @@ urlpatterns = [
     # Each installed extension's, at the prefix its manifest declares.
     *(path(plugin.url_prefix, include(plugin.urlconf)) for plugin in installed_plugins() if plugin.urlconf),
 ]
+
+# Not routed at all off the scratch server (config/devtools.py).
+if settings.SEVERINO_SCRATCH_ACCOUNT:
+    urlpatterns.append(path("dev/sign-in/<str:token>/", scratch_sign_in, name="scratch_sign_in"))
 
 if settings.SEVERINO_DEBUG_TOOLBAR:
     urlpatterns.extend(debug_toolbar_urls())

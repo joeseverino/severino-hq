@@ -287,7 +287,10 @@ class ConnectionPageTests(SentinelMixin, TestCase):
             for element in page
             if element.tag == "li"
             and "line-rest" not in element.attrs.get("class", "").split()
-            and any(ancestor is reads_cell for ancestor in element.ancestors)
+            and (
+                any(ancestor is reads_cell for ancestor in element.ancestors)
+                or (element.inside(tr) and any("row-below" in ancestor.classes for ancestor in element.ancestors))
+            )
         ]
         changes = [item.words for item in items if any(a.attrs.get("data-label") == "Changes" for a in item.ancestors)]
         # Each read's name is its first element; a state word may follow it.

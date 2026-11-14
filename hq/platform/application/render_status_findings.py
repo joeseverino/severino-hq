@@ -524,6 +524,11 @@ RULES: tuple[FindingRule, ...] = (
             "On the machine, read the refresh job's log for why it failed, fix that, then start the job again."
         ),
         no_help_reason=cannot_run_commands(),
+        bars={
+            "serious": f"a refresh fails and nothing has confirmed credentials current for {duration(CONFIRMED_WITHIN)}",
+            "attention": "the last refresh of credentials failed",
+        },
+        clears="a refresh of credentials succeeds",
     ),
     FindingRule(
         "render-stale",
@@ -532,6 +537,13 @@ RULES: tuple[FindingRule, ...] = (
         _stale,
         operator_action=("On the machine, check that the refresh job's timer is on, then start the job."),
         no_help_reason=cannot_run_commands(),
+        bars={
+            "serious": (
+                f"nothing has confirmed credentials current for {duration(CONFIRMED_WITHIN)}, "
+                f"or read 1Password in full for {duration(RENDERED_WITHIN)}"
+            )
+        },
+        clears=f"a refresh confirms credentials current within {duration(CONFIRMED_WITHIN)}",
     ),
     FindingRule(
         "connect-sync-stalled",
@@ -540,6 +552,7 @@ RULES: tuple[FindingRule, ...] = (
         _sync_stalled,
         operator_action=("Restart 1Password Connect on the machine, then start the refresh job."),
         no_help_reason=cannot_run_commands(),
+        bars={"attention": "1Password Connect no longer reports its sync as active"},
     ),
     FindingRule(
         "render-status-unread",
@@ -548,5 +561,6 @@ RULES: tuple[FindingRule, ...] = (
         _unread,
         operator_action=("Start the refresh job on the machine. If this stays, deploy HQ."),
         no_help_reason=cannot_run_commands(),
+        bars={"attention": "HQ cannot read when credentials were last refreshed"},
     ),
 )

@@ -150,6 +150,14 @@ def _scanning(owner) -> None:
     example_estate.automation.scanning(owner)
 
 
+def _unattended(owner) -> None:
+    """The example estate once its playbook worker stopped reporting, so the
+    Playbooks page and the run that waits say what is missing."""
+
+    _estate(owner)
+    example_estate.automation.unattended()
+
+
 @contextmanager
 def seeded_by_hand(path: str, *, at: datetime) -> Iterator[None]:
     """Each audit event the block records, written as the set's owner made it
@@ -185,6 +193,7 @@ SEEDS: dict[str, Seed] = {
     "read-empty": Seed(_read_empty, _SET_UP),
     "rescanned": Seed(_rescanned, _SET_UP),
     "scanning": Seed(_scanning, _SET_UP),
+    "unattended": Seed(_unattended, _SET_UP),
     # A fresh install: its one signed-up user, and nothing else.
     "empty": Seed(lambda _owner: None),
     # Years of records, to measure pages at the size they grow to.

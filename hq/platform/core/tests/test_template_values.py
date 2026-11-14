@@ -30,8 +30,8 @@ from hq.platform.core.templatetags.value_tags import breakable, entity, readable
 from hq_sdk.template_contract import WORDED_FIGURES
 
 # Filters whose output holds every name in it: `breakable` itself, and the
-# filters that build on it or print a `<time>`.
-HOLDING = {"breakable", "code_spans", "or_empty", "readout", "when", "readable"}
+# filters that build on it (`button_words`) or print a `<time>` (`last_read`).
+HOLDING = {"breakable", "code_spans", "button_words", "or_empty", "readout", "when", "last_read", "readable"}
 
 # Filters whose output can never hold a hyphen or a seam, so it has nothing
 # to hold.
@@ -55,7 +55,10 @@ MARKUP_ATTRIBUTES = {
     "errors": "a form's error list, as Django renders it",
     "non_field_errors": "a form's error list, as Django renders it",
 }
-MARKUP_FILTERS = {"safe": "markup its author wrote"}
+MARKUP_FILTERS = {
+    "safe": "markup its author wrote",
+    "title_parts": "the list items a title's line is given, refused when they are anything else",
+}
 
 # Elements whose text is never a token: a span inside one is not markup, is
 # not drawn (an SVG drawing), or is not shown on the page; and a `<time>`,
@@ -952,6 +955,7 @@ class UnheldBuilderTests(SimpleTestCase):
 
 
 @tag("source", "tree")
+@reads("hq/**/*.py", "hq_sdk/**/*.py", lists=("hq/**", "hq_sdk/**"))
 class BuilderValueTests(SimpleTestCase):
     def test_every_value_a_builder_prints_as_text_holds_its_names(self):
         root = Path(settings.BASE_DIR)

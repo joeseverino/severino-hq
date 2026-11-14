@@ -11,7 +11,7 @@ from unittest import mock
 from django.test import SimpleTestCase, tag
 
 from hq.platform.core.stylesheets import SHEETS
-from hq.platform.core.tests.browser import planted, probes as probe_package, survey
+from hq.platform.core.tests.browser import probes as probe_package, survey
 from hq.platform.core.tests.browser.probes import axe, settle
 from hq.platform.core.tests.browser.probes.audit import AUDIT
 from hq.platform.core.tests.browser.probes.palette import LINE_CONTRAST, losses, lost_fills
@@ -83,21 +83,20 @@ class ProbeTests(SimpleTestCase):
         )
 
 
-class PlantTests(SimpleTestCase):
-    def test_every_geometry_check_has_a_known_bad_case(self):
-        """A check is proven able to fail by the plant PlantedBrowserTests
-        requires it to find: one with none could pass every page forever."""
+class SurveyCheckTests(SimpleTestCase):
+    def test_a_check_that_holds_only_once_script_has_run_is_left_out_without_it(self):
+        """Only script folds a row, so a page with none is never held to keep
+        its rows folded; the gate and the look both read the survey this way."""
 
-        checks = survey_checks("/", WIDE)
-        self.assertIn("sideways", checks)
-        self.assertEqual(sorted(set(checks) - set(planted.PLANTS)), [], "a check with no plant in planted.PLANTS")
-        self.assertEqual(sorted(set(planted.PLANTS) - set(checks)), [], "a plant for no check the survey runs")
-        self.assertEqual(sorted(set(planted.PASSES) - set(checks)), [], "a near miss for no check the survey runs")
+        scripted = {name for name, check in survey.CHECKS.items() if check.scripted}
+        self.assertIn("folded rows stay folded", scripted)
+        self.assertLessEqual(scripted, set(survey_checks("/", WIDE)))
+        self.assertEqual(scripted & set(survey_checks("/", WIDE, scripted=False)), set())
 
     def test_every_palette_check_reads_the_page_settled(self):
         """A color caught mid-transition is one the page never settles on,
         so each check of the colors a page paints finishes its transitions
-        first; the near miss of PASSES["contrast"] shows one caught so."""
+        first."""
 
         first = f"async (arg) => {{ ({settle.FINISH_TRANSITIONS})(); return "
         axe.axe_probe.cache_clear()
@@ -111,32 +110,62 @@ class PlantTests(SimpleTestCase):
         self.assertEqual(sorted(check for check, source in sources.items() if not source.startswith(first)), [])
 
 
-def _declared_names(path: Path) -> list[str]:
-    """The check names a module's ``CHECKS`` literal declares, a repeated key
-    included, which the dict it builds keeps once."""
+def _declared(path: Path) -> list[tuple[str, ast.expr]]:
+    """Each check a module's ``CHECKS`` literal declares and what it declares
+    it as, a repeated key included, which the dict it builds keeps once."""
 
     for node in ast.parse(path.read_text(encoding="utf-8")).body:
         if isinstance(node, ast.Assign) and [getattr(t, "id", None) for t in node.targets] == ["CHECKS"]:
             if not isinstance(node.value, ast.Dict):
                 raise AssertionError(f"{path.name}'s CHECKS is not a dict literal")
-            return [key.value for key in node.value.keys if isinstance(key, ast.Constant)]
+            return [
+                (key.value, value)
+                for key, value in zip(node.value.keys, node.value.values, strict=True)
+                if isinstance(key, ast.Constant)
+            ]
     return []
+
+
+def _every_declared() -> list[tuple[str, ast.expr]]:
+    folder = Path(probe_package.__file__).parent
+    return [
+        entry
+        for module in pkgutil.iter_modules(probe_package.__path__)
+        for entry in _declared(folder / f"{module.name}.py")
+    ]
+
+
+def _reader_sees(declared: ast.expr) -> str:
+    """What a ``Check(...)`` says a reader sees when it fails, written out as
+    a string; empty for anything else."""
+
+    if not (isinstance(declared, ast.Call) and getattr(declared.func, "id", None) == "Check"):
+        return ""
+    said = next((word.value for word in declared.keywords if word.arg == "reader_sees"), None)
+    return said.value.strip() if isinstance(said, ast.Constant) and isinstance(said.value, str) else ""
 
 
 @tag("source")
 class CheckRegistryTests(SimpleTestCase):
     """A check is declared once, beside its probe, so a new one is an edit to
-    its probe module and planted.py and never to the survey."""
+    its probe module and never to the survey."""
 
     def test_no_check_is_declared_twice(self):
-        folder = Path(probe_package.__file__).parent
-        declared = Counter(
-            name
-            for module in pkgutil.iter_modules(probe_package.__path__)
-            for name in _declared_names(folder / f"{module.name}.py")
-        )
+        declared = Counter(name for name, _declared in _every_declared())
         self.assertIn("sideways", declared)
         self.assertEqual(sorted(name for name, times in declared.items() if times > 1), [])
+
+    def test_every_check_says_what_a_reader_sees_when_it_fails(self):
+        """A check holds only what a reader would see break (docs/Design.md),
+        so each is a ``Check`` whose ``reader_sees`` says what that is, written
+        where its author declares it."""
+
+        self.assertEqual(_reader_sees(ast.parse('Check(P, reader_sees="text cut off")').body[0].value), "text cut off")
+        self.assertEqual(_reader_sees(ast.parse("(P, A)").body[0].value), "")
+        self.assertEqual(_reader_sees(ast.parse('Check(P, reader_sees="")').body[0].value), "")
+        declared = _every_declared()
+        self.assertIn("sideways", dict(declared))
+        self.assertEqual(sorted(name for name, entry in declared if not _reader_sees(entry)), [])
 
     def test_the_survey_names_no_check(self):
         source = Path(survey.__file__).read_text(encoding="utf-8")

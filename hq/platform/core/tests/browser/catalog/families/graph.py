@@ -2,15 +2,15 @@
 panel of the selected one, and the edges a node stands at the end of, drawn
 from an example graph through the view that draws the map's page."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 
 from hq.domains.control_plane.topology_views import TopologyView
 from hq.platform.application.entity_links import EntityLink
 from hq.platform.application.topology_lenses import apply_trace
 from hq.platform.application.topology_model import Topology, TopologyEdge, TopologyNode
-from hq.platform.core.tests.browser.catalog.common import Entry
+from hq.platform.core.tests.browser.catalog.common import DRAWN_AT, Entry
 
-_READ = (datetime.now(UTC) - timedelta(minutes=40)).isoformat()
+_READ = (DRAWN_AT - timedelta(minutes=40)).isoformat()
 
 # Every lane the map draws, a card in each standing and one whose name is
 # long enough to wrap, a lane of context nothing links to, and edges of
@@ -114,6 +114,8 @@ def _map(focus="", **asked):
 
 
 _MAP = '{% include "partials/_topology_map.html" %}'
+# A map beside another on the gallery's page, its ids its own.
+_ANOTHER_MAP = '{% include "partials/_topology_map.html" with map_id=map_id %}'
 
 ENTRIES = {
     # The whole map, its quiet lane and unlinked card left out until asked,
@@ -121,9 +123,11 @@ ENTRIES = {
     "graph/map": Entry(_MAP, _map()),
     # Everything asked for, and one node selected: its details beside the
     # lanes where there is room and under them where there is not.
-    "graph/map-selected": Entry(_MAP, _map("machine:example-host-01")),
+    "graph/map-selected": Entry(_ANOTHER_MAP, {**_map("machine:example-host-01"), "map_id": "example-map-selected"}),
     # A map with nothing on it.
-    "graph/map-empty": Entry(_MAP, TopologyView.drawn(Topology(nodes=(), edges=()))),
+    "graph/map-empty": Entry(
+        _ANOTHER_MAP, {**TopologyView.drawn(Topology(nodes=(), edges=())), "map_id": "example-map-empty"}
+    ),
     # The edges a node stands at the end of, both ways, in a section of its own.
     "graph/relations": Entry(
         '{% section "Example host" %}{% include "partials/_relation_list.html" with relations=item.relations only %}'

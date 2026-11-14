@@ -39,6 +39,7 @@ MARKER = "Sentence"
 # size), whatever the value was, so long as it is the one its module declares.
 FORMATTERS = {
     "when_day": "hq/platform/application/moments.py",
+    "duration": "hq/platform/application/moments.py",
     "counted": "hq/platform/application/ui.py",
     "human_bytes": "hq/platform/application/labels.py",
 }

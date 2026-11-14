@@ -11,6 +11,7 @@ a tailnet, a call it cannot place is refused; only a deployment with none
 answers for the client alone.
 """
 
+import contextlib
 import logging
 from dataclasses import dataclass
 from datetime import timedelta
@@ -21,8 +22,7 @@ from django.db import DatabaseError, IntegrityError, transaction
 from django.db.models import Exists, OuterRef, Q, QuerySet
 from django.utils import timezone
 
-from hq.platform.core.audit import record_event
-from hq.platform.core.models import AgentDevice, AgentIdentity, AuditLog
+from hq.platform.core.models import AgentDevice, AgentIdentity
 
 from . import tailnet, tailscaled
 from .command_fields import Describe
@@ -33,7 +33,6 @@ lazy from .routes import reverse
 
 logger = logging.getLogger("severino.agents")
 
-AUDIT_LABEL = "Agent device"
 
 APPROVE_AGENT_DEVICE = "agent.device_approval.set"
 BLOCK_AGENT_DEVICE = "agent.device_block.set"
@@ -94,44 +93,27 @@ def place(address: str) -> Placement:
     return Placement(found)
 
 
-def observe(identity: AgentIdentity, person, device: tailnet.Device, *, interface: str) -> None:
+def observe(identity: AgentIdentity, person, device: tailnet.Device) -> None:
     """Record ``identity``'s call from ``device`` for ``person``; its first is audited.
 
     A device first seen waits for approval: its row is what the person approves.
-    Its first sighting names the agent and its door itself, since admission
-    records it before the door binds the caller.
     """
 
     now = timezone.now()
     row = AgentDevice.objects.filter(identity=identity, person=person, node_id=device.node_id).first()
     if row is None:
-        try:
-            with transaction.atomic():
-                row = AgentDevice.objects.create(
-                    identity=identity,
-                    person=person,
-                    node_id=device.node_id,
-                    name=device.label,
-                    os=device.os,
-                    owner=device.user,
-                    last_seen=now,
-                )
-        except IntegrityError:
-            return
-        record_event(
-            action=AuditLog.Action.CREATED,
-            obj=row,
-            type_label=AUDIT_LABEL,
-            message=f"First seen: {identity.client_id} from {device.label}, awaiting approval",
-            metadata={
-                "actor": identity.client_id,
-                "interface": interface,
-                "client_id": identity.client_id,
-                "device": device.node_id,
-                "owner": device.user,
-                "person": "" if person is None else person.get_username(),
-            },
+        row = AgentDevice(
+            identity=identity,
+            person=person,
+            node_id=device.node_id,
+            name=device.label,
+            os=device.os,
+            owner=device.user,
+            last_seen=now,
         )
+        row.audit_said = f"First seen: {identity.client_id} from {device.label}, awaiting approval"
+        with contextlib.suppress(IntegrityError), transaction.atomic():
+            row.save()
         return
     seen = {"name": device.label, "os": device.os, "owner": device.user}
     changed = [field for field, value in seen.items() if getattr(row, field) != value]
@@ -292,8 +274,8 @@ def set_device_approved(
             return {"ok": True, "device": str(row.pk), "approved": approving}
         row.approved_at = timezone.now() if approving else None
         row.approved_by = user if approving else None
+        row.audit_said = f"{'Approved' if approving else 'Withdrew approval of'} {row}"
         row.save(update_fields=["approved_at", "approved_by"])
-        _record(row, f"{'Approved' if approving else 'Withdrew approval of'} {row}", user, approved=approving)
     return {"ok": True, "device": str(row.pk), "approved": approving}
 
 
@@ -310,8 +292,8 @@ def set_device_blocked(
             return {"ok": True, "device": str(row.pk), "blocked": blocking}
         row.blocked_at = timezone.now() if blocking else None
         row.blocked_by = user if blocking else None
+        row.audit_said = f"{'Blocked' if blocking else 'Allowed'} {row}"
         row.save(update_fields=["blocked_at", "blocked_by"])
-        _record(row, f"{'Blocked' if blocking else 'Allowed'} {row}", user, blocked=blocking)
     return {"ok": True, "device": str(row.pk), "blocked": blocking}
 
 
@@ -333,15 +315,3 @@ def _locked(key: str) -> AgentDevice:
     if row is None:
         raise RecordNotFound("No agent has called HQ from that device.")
     return row
-
-
-def _record(row: AgentDevice, message: str, user, **state: bool) -> None:
-    record_event(
-        action=AuditLog.Action.UPDATED,
-        obj=row,
-        type_label=AUDIT_LABEL,
-        message=message,
-        metadata={"client_id": row.identity.client_id, "device": row.node_id, **state},
-        user=user,
-        required=True,
-    )

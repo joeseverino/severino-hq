@@ -1,0 +1,18 @@
+id: ask-answered-by-ask-mixin
+valid:
+  - |
+    class RefreshView(AskMixin, View):
+        capability = REFRESH
+
+        def asked(self, result, at):
+            return Took(scan_standing(result["id"]), scan_status_url(result["id"]))
+  - 'return Took(Standing(FAILED, result.get("message", "")))'
+  - 'return render(request, "strip.html", context, status=202 if result["requested"] else 200)'
+invalid:
+  - |
+    def post(self, request):
+        found = execute_posted(request, VISIT_REFRESH, {})
+        return JsonResponse(found, status=202 if found["live"] else 200)
+  - 'return JsonResponse(standing.as_json(), status=202 if standing.live else 200)'
+  - 'standing = Standing(FAILED, refusal_of(result).message)'
+  - 'standing = Standing(FAILED, refusal_of(result).message, since=asked)'

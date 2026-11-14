@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from django.conf import settings
+from django.utils.text import capfirst
 
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_POLICY_KIND
 from hq.platform.application.labels import dotted
@@ -322,7 +323,7 @@ def _scoped_where_offered(connections, scoped: set[str]) -> CheckOutcome:
     if whole:
         said.append(f"nothing narrower offered for {', '.join(whole)}")
     evidence = ", ".join(said)
-    return CheckOutcome(met=True, evidence=evidence[:1].upper() + evidence[1:], qualified=bool(whole))
+    return CheckOutcome(met=True, evidence=capfirst(evidence), qualified=bool(whole))
 
 
 def _approval(_inputs) -> CheckOutcome:

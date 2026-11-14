@@ -556,6 +556,13 @@ def stored_snapshots() -> Mapping[str, tuple[Any, ...]]:
     return _stored()
 
 
+def every_snapshot() -> Iterator[Any]:
+    """Every stored snapshot, connected or not, from the same read."""
+
+    for rows in _stored().values():
+        yield from rows
+
+
 def _stored() -> dict[str, tuple[Any, ...]]:
     """One read of every stored snapshot, shared by the joins and credential sight."""
 

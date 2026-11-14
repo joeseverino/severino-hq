@@ -34,11 +34,13 @@ from hq.domains.control_plane.models import (
     SourceProposal,
 )
 from hq.domains.control_plane.provider_adapters.automation import OPERATION_KIND, SOURCE_KIND
+from hq.platform.application.agent_registry import observe
 from hq.platform.application.approvals import is_held
 from hq.platform.application.automation_adoption import AdoptProposal, adopt, catch_up
 from hq.platform.application.automation_manifest import OperationManifest
 from hq.platform.application.automation_runs import capability_name, command_type, operation_registry, request_run
 from hq.platform.application.automation_sources import RefreshCommand, refresh
+from hq.platform.application.cadence import AUTOMATION_HEARTBEAT, AUTOMATION_WORK, note_automation
 from hq.platform.application.capabilities import run_capability
 from hq.platform.application.controller import ControllerReport, claim_next_operation, renew_operation, report_operation
 from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
@@ -47,9 +49,10 @@ from hq.platform.application.machines import machine_catalog
 from hq.platform.application.security import MCP_INTERFACE, Principal, cli_principal, web_principal
 from hq.platform.application.tokens import token_principal
 from hq.platform.core.audit import stamped
+from hq.platform.core.models import UpstreamReading
 
 from . import doors
-from .agents import AGENT, CLAIMS
+from .agents import CLAIMS, ruled
 from .names import LAPTOP_NAME, MACHINE, PHONE_NAME
 
 # The automation worker, as it names itself when it claims.
@@ -261,6 +264,8 @@ def _scanned(
     so the estate's scans read on Jobs in the order they tell."""
 
     at = timezone.now() - ago if ago is not None else None
+    # Its worker reached HQ a moment ago, so what is asked of it is taken.
+    note_automation()
     with stamped(lambda *_: {"created_at": at} if at is not None else None):
         with doors.page("command", name="automation.source.refresh"):
             queued = refresh(RefreshCommand(idempotency_key=key), principal=person)["operation"]
@@ -324,10 +329,22 @@ def scanning(owner) -> None:
     """A Refresh by ``owner`` after the estate's, which its worker has
     claimed and is reading now."""
 
+    note_automation()
     with doors.page("command", name="automation.source.refresh"):
         refresh(RefreshCommand(idempotency_key="example-refresh-scanning"), principal=web_principal(owner))
     with doors.controller("claim"):
         claim_next_operation(WORKER, capabilities=CLAIMS_SCANS)
+
+
+def unattended() -> None:
+    """HQ's playbook worker last arrived three hours ago, longer than its
+    timer lets pass, and its run's lease ran out then: the run that waits
+    reads as not started, and Refresh and each run are refused."""
+
+    then = timezone.now() - timedelta(hours=3)
+    UpstreamReading.objects.filter(key=AUTOMATION_HEARTBEAT).update(observed_at=then)
+    work = OperationRequest.objects.filter(action__in=AUTOMATION_WORK, claimed_at__gt=then)
+    work.update(claimed_at=then, lease_expires_at=then)
 
 
 # The id the agent's runs are found by, as an investigation's would be.
@@ -346,6 +363,8 @@ class Ended:
     success: bool
     message: str
     events: tuple[tuple[str, str, str], ...] = ()
+    # The readings its playbook stated on its machine, by kind (``RunStated``).
+    readings: dict[str, list[dict[str, Any]]] | None = None
 
 
 def _events(host: str, events: tuple[tuple[str, str, str], ...]) -> list[dict[str, Any]]:
@@ -366,7 +385,14 @@ FAILED = Ended(
 )
 # How the read ended on the machine it last ran on: the result its playbook stated.
 REPORTED = Ended(
-    success=True, message="/: 120.5 GB of 460.4 GB used (27%)", events=(("Read the mount's use", "ok", ""),)
+    success=True,
+    message="/: 120.5 GB of 460.4 GB used (27%)",
+    events=(("Read the mount's use", "ok", ""),),
+    readings={
+        "host.filesystem": [
+            {"mount": "/", "free_bytes": 365226196992, "total_bytes": 494345830400, "read_at": "2026-11-13T12:00:00Z"}
+        ]
+    },
 )
 
 
@@ -441,7 +467,10 @@ def _held(manifest, host, agent, owner) -> None:
     the one it asks for on ``host`` waits for a person."""
 
     name = capability_name(manifest.id)
-    CapabilityRule.objects.create(subject=AGENT, capability=name, rule=CapabilityRule.Rule.APPROVE, changed_by=owner)
+    # An agent has connected before anyone can set its rules.
+    with doors.mcp():
+        observe(agent)
+    ruled(owner, name, CapabilityRule.Rule.APPROVE)
     key = f"example-held-run-{manifest.id}"
     with doors.mcp():
         answer = run_capability(
@@ -512,6 +541,7 @@ def _reported(ended: Ended) -> Callable[[OperationRequest], None]:
             observed_generation=run.input["generation"],
             message=ended.message,
             events=_events(run.input["hosts"][0], ended.events),
+            stated={"readings": {run.input["hosts"][0]: ended.readings}} if ended.readings else None,
         )
         with doors.controller("report"):
             report_operation(str(run.pk), report, controller_id=WORKER)

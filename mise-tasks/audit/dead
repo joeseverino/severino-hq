@@ -54,7 +54,7 @@ cat "${uses}/found" >>"${uses}/names"
 rg -o --no-filename --no-line-number -g '!*.py' -g '!*.md' -g '!**/tests/**' \
     "${dotted}|from (hq|hq_sdk)[A-Za-z0-9_.]* import ${name}(, ${name})*" . >"${uses}/found" || matched $?
 sed -E 's/^from .* import //; s/.*[.:]//' "${uses}/found" | tr -s ', ' '\n' >>"${uses}/names"
-sort -u "${uses}/names" | sed 's/.*/getattr(_, "&")/' >"${uses}/names.py"
+LC_ALL=C sort -u "${uses}/names" | sed 's/.*/getattr(_, "&")/' >"${uses}/names.py"
 rm "${uses}/found" "${uses}/names"
 
 frameworks="$(uv run python -c 'import django, mozilla_django_oidc as oidc; print(django.__path__[0]); print(oidc.__path__[0])')"
@@ -89,6 +89,6 @@ if [ "${usage_fields:-false}" = true ]; then kinds="${kinds}|variable|attribute"
 # One line per name, sorted by file and line, so two runs are compared by a
 # diff. The closing line holds the total.
 sed -n -E "s#^((hq|hq_sdk)/[^:]+:[0-9]+): unused (${kinds}) '([^']+)'.*#\1 \4 \3#p" "${uses}/found" \
-    | grep -v '/migrations/' | sort -t: -k1,1 -k2,2n >"${uses}/listed" || true
+    | grep -v '/migrations/' | LC_ALL=C sort -t: -k1,1 -k2,2n >"${uses}/listed" || true
 cat "${uses}/listed"
 printf '%s names nothing outside tests reads\n' "$(wc -l <"${uses}/listed" | tr -d ' ')"

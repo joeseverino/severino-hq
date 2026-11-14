@@ -16,6 +16,7 @@ from django.views.generic import base, dates, detail, edit, list as listing
 
 import hq
 from hq.platform.application.tests.facts import module_name, scan
+from hq.platform.application.tests.reads import reads
 
 # Attributes Django documents as a subclass's to set, each why it is safe.
 MEANT_TO_SET = {
@@ -118,6 +119,7 @@ def shadowing(cls: type) -> list[str]:
 
 
 @tag("source", "tree")
+@reads("hq/**/*.py", lists=("hq/**",))
 class ViewAttributeTests(SimpleTestCase):
     def test_no_view_defines_an_attribute_django_reads(self):
         found = [

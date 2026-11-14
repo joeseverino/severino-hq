@@ -26,6 +26,7 @@ from django.test import Client, TestCase, override_settings
 lazy from django.contrib.staticfiles.storage import staticfiles_storage
 
 from demo import first_glance
+from demo.examples import own
 from hq.platform.application.decisions import item_anchor
 from hq.platform.application.fragments import regions
 from hq.platform.core import seeds
@@ -311,6 +312,7 @@ class _Offered:
         """What ``page`` at ``path`` offers; ``depth`` is how many copies from
         a page its addresses with a query are, one for a page's own."""
 
+        page = own(page)
         links = {urljoin(path, unescape(address)) for address in _QUERY_HREF.findall(page)}
         links.update(_list_pages(path, page))
         for address in links | _filter_choices(path, page):
@@ -418,12 +420,12 @@ class DemoBuild(TestCase):
         page = response.content.decode()
         links: list[str] = []
         for fragment in self._save_fragments(client, path, page, fragments):
-            links.extend(unescape(href) for href in _HREF.findall(fragment))
+            links.extend(unescape(href) for href in _HREF.findall(own(fragment)))
             offered.read(path, fragment)
         offered.read(path, page)
         page = _PICTURE.sub(lambda found: self._save_picture(client, found), page)
         _write(path, _inject(page, response))
-        links.extend(unescape(href) for href in _HREF.findall(page))
+        links.extend(unescape(href) for href in _HREF.findall(own(page)))
         return links
 
     def _save_picture(self, client: Client, found: re.Match) -> str:
@@ -447,7 +449,7 @@ class DemoBuild(TestCase):
         pending = [(address, page)]
         while pending:
             at, body = pending.pop()
-            for url, name in regions(body, at):
+            for url, name in regions(own(body), at):
                 if not _wanted(urlsplit(url).path):
                     continue
                 answer = self._save_answer(client, url, name, fragments)
@@ -500,7 +502,7 @@ class DemoBuild(TestCase):
                     copies += palette
             elif not (copies := self._save_reads(client, offered, read, fragments)):
                 break
-            links = [unescape(href) for copy in copies for href in _HREF.findall(copy)]
+            links = [unescape(href) for copy in copies for href in _HREF.findall(own(copy))]
             self._walk(client, links, seen, fragments, offered)
         return {
             "variants": variants,

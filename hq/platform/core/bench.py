@@ -628,7 +628,7 @@ def _connections(now: datetime, address: dict[str, str]) -> None:
     )
 
 
-def _operations(scale: float, user, resources: list[ManagedResource]) -> None:
+def _operations(scale: float, resources: list[ManagedResource]) -> None:
     now = timezone.now()
     OperationRequest.objects.bulk_create(
         [
@@ -636,7 +636,6 @@ def _operations(scale: float, user, resources: list[ManagedResource]) -> None:
                 resource=resources[index % len(resources)],
                 action="reconcile",
                 state="succeeded" if index % 9 else "failed",
-                requested_by=user,
                 requested_actor="bench",
                 requested_interface=WEB_INTERFACE,
                 idempotency_key=f"example-operation-{index}",
@@ -695,7 +694,7 @@ def seed(scale: float = 1.0, owner: Any = None) -> Seeded:
     jobs = _jobs(scale, user)
     _analytics(rng, scale, today)
     resources = _infrastructure(scale)
-    _operations(scale, user, resources)
+    _operations(scale, resources)
     # After the operations, whose dates are spread over every operation then written.
     _runs(scale, user)
     _references(assets, expenses, entries)

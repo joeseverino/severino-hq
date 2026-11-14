@@ -34,7 +34,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 from hq.domains.control_plane.observations.portainer import RUNTIME_KIND
-lazy from hq.domains.control_plane.models import ReadRequest
+lazy from hq.domains.control_plane.models import DashboardConfiguration, ReadRequest
 lazy from hq.platform.core.audit import ROUTINE_EVENTS, audited_labels
 lazy from hq.platform.core.audit_words import words_of
 lazy from hq.platform.core.models import AuditLog, object_type_label, object_type_plural
@@ -46,7 +46,6 @@ from .labels import lower_first, plural
 from .routes import reverse
 from .timestamps import moment
 from .ui import counted
-lazy from .glance import AUDIT_LABEL as DASHBOARD_AUDIT_TYPE
 lazy from .inventory import READING_AUDIT_TYPE
 
 # How far either side of a moment counts as near it.
@@ -509,7 +508,9 @@ def read_requests() -> Q:
     panels they named.
     """
 
-    return Q(object_type=read_request_type()) | Q(object_type=DASHBOARD_AUDIT_TYPE, metadata__has_key="panels")
+    return Q(object_type=read_request_type()) | Q(
+        object_type=audited_labels()[DashboardConfiguration], metadata__has_key="panels"
+    )
 
 
 def routine() -> Q:
@@ -543,17 +544,42 @@ def who_did(object_types: Iterable[str], ids: Iterable[object], *, action: str =
     keeps of its own.
     """
 
-    wanted = {str(each) for each in ids}
-    rows = AuditLog.objects.filter(object_type__in=tuple(object_types))
-    # Asked about no record it still asks, so a page costs the same whether
-    # it names none or many.
-    rows = rows.filter(object_id__in=wanted) if wanted else rows.filter(pk__lt=0)
-    if action:
-        rows = rows.filter(action=action)
+    (found,) = who_did_each(Acts(tuple(object_types), ids, action))
+    return found
+
+
+@dataclass(frozen=True)
+class Acts:
+    """The records ``ids`` names, of any of ``object_types``, whose first audit
+    row (of ``action``, given one) says who did each (``who_did``)."""
+
+    object_types: tuple[str, ...]
+    ids: Iterable[object]
+    action: str = ""
+
+
+def who_did_each(*asked: Acts) -> list[dict[str, Attribution]]:
+    """``who_did`` for each of ``asked``, in its order, read in one query: a
+    page naming records of several kinds asks once, and a record of one kind
+    is never taken for another's of the same id."""
+
+    each = []
+    for place, acts in enumerate(asked):
+        wanted = {str(one) for one in acts.ids}
+        # Asked about no record it still asks, so a page costs the same
+        # whether it names none or many.
+        condition = Q(object_type__in=acts.object_types) & (Q(object_id__in=wanted) if wanted else Q(pk__lt=0))
+        each.append((place, condition & Q(action=acts.action) if acts.action else condition))
+    found: list[dict[str, Attribution]] = [{} for _ in asked]
+    rows = AuditLog.objects.filter(Q(*(condition for _place, condition in each), _connector=Q.OR))
+    asks = Case(*(When(condition, then=Value(place)) for place, condition in each), default=Value(-1))
     first = rows.annotate(
-        place=Window(RowNumber(), partition_by=F("object_id"), order_by=(F("created_at").asc(), F("pk").asc()))
+        asked=asks,
+        place=Window(RowNumber(), partition_by=(asks, F("object_id")), order_by=(F("created_at").asc(), F("pk").asc())),
     ).filter(place=1)
-    return {row.object_id: row.who for row in first.select_related("user")}
+    for row in first.select_related("user"):
+        found[row.asked][row.object_id] = row.who
+    return found
 
 
 def changes(since: datetime, until: datetime):

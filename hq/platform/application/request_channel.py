@@ -55,6 +55,16 @@ ELSEWHERE_CHANNEL = Channel(
     "Unrecognized",
     "This address is in none of the ranges HQ accepts.",
 )
+# What HQ does with the chain a peer outside its trusted proxies forwarded.
+UNTRUSTED_FORWARDER = "Not a trusted proxy, so HQ ignores the address it forwarded."
+
+
+def encryption(channel: Channel, secure: bool) -> str:
+    """The encryption a request on ``channel`` can prove, ``secure`` when it arrived over TLS."""
+
+    if channel.id == "tailnet":
+        return "WireGuard + TLS" if secure else "WireGuard only"
+    return "TLS" if secure else "Encryption not confirmed"
 
 
 def channel_of(address: str) -> Channel:

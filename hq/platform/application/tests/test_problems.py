@@ -26,7 +26,7 @@ from ..security import cli_principal
 from ..sweep import record_sweep
 from .host_only import host_only
 from .inventory_records import kind_read
-from .markup import select, text, with_class
+from .markup import select, text
 
 REWRITE = "adguard.rewrite"
 
@@ -84,7 +84,7 @@ class ProblemsAboutTests(TestCase):
         # One card: the page draws the queue's own card, with no second link to itself.
         self.assertEqual(len(select(page, "data-attention-item")), 1)
         self.assertTrue(select(queue, "data-attention-item"))
-        self.assertNotIn(self.url, [title.attrs.get("href") for title in with_class(page, "attention-title")])
+        self.assertNotIn(self.url, [title.attrs.get("href") for title in select(page, "data-attention-title")])
 
     def test_a_page_with_nothing_open_draws_nothing(self):
         self.resource.conditions = [{"type": "Ready", "status": True}]

@@ -17,24 +17,7 @@
   <link rel="icon" href="{% static 'img/favicon.ico' %}" sizes="any">
   <link rel="icon" type="image/svg+xml" href="{% static 'img/favicon.svg' %}">
   <link rel="apple-touch-icon" href="{% static 'img/apple-touch-icon.png' %}">
-  {% comment %}
-  The theme is decided here, before the stylesheet arrives, so a chosen theme
-  paints on the first frame without a script. `color-scheme` tells the browser
-  which canvas to clear to while it waits; the theme colors tint its chrome
-  and repeat the header surface in each palette (`--accent` light, `--surface`
-  dark in css/app/tokens.css).
-  {% endcomment %}
-  {% if THEME == "light" %}
-  <meta name="color-scheme" content="light">
-  <meta name="theme-color" content="#1f4d57">
-  {% elif THEME == "dark" %}
-  <meta name="color-scheme" content="dark">
-  <meta name="theme-color" content="#18191c">
-  {% else %}
-  <meta name="color-scheme" content="light dark">
-  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#1f4d57">
-  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#18191c">
-  {% endif %}
+  {% include "partials/_color_scheme.html" %}
   {% comment %}
   The face the stylesheet asks for, fetched beside it so the first paint
   already has it: the stylesheet shows it only if it is ready (optional), so
@@ -50,7 +33,6 @@
   <link rel="expect" href="#parsed" blocking="render">
   {% stylesheets %}
   <script src="{% static 'js/transitions.js' %}" {% csp_nonce_attr %}></script>
-  <script src="{% static 'js/tables.js' %}" {% csp_nonce_attr %}></script>
   {% block head_extra %}{% endblock %}
 </head>
 <body data-sign-in="{% url 'login' %}" data-ask-refreshing="{% refreshing %}" data-ask-newer="{% newer_reading %}" data-ask-show="{% show_newer %}">
@@ -91,6 +73,7 @@
   {% endif %}
 
   <script src="{% static 'js/fragment.js' %}" {% csp_nonce_attr %} defer></script>
+  <script src="{% static 'js/tables.js' %}" {% csp_nonce_attr %} defer></script>
   <script src="{% static 'js/app.js' %}" {% csp_nonce_attr %} defer></script>
   <script src="{% static 'js/ask.js' %}" {% csp_nonce_attr %} defer></script>
   <script src="{% static 'js/connection.js' %}" {% csp_nonce_attr %} defer></script>

@@ -5,8 +5,12 @@ Expects `rows`, every playbook adopted and, while a newer scanned commit
 waits, each one it brings, with how it changes each and what a reader may
 do about it (`_playbook_table.html`). The commit they were adopted at is
 said on the title's line (`_playbooks_read.html`), and what to do about the
-whole commit is the page's actions, so the table is all the body holds.
-Every name on it is the catalog's or the scan's.
+whole commit is the page's actions, so the body holds the table and, above
+it while no playbook worker reports to take a scan or a run, the problem that
+says so with how to set one up (`problems`,
+`automation_findings.worker_problems`). Every name on it is the catalog's or
+the scan's.
 {% endcomment %}
+{% include "partials/_problems.html" with problems=problems %}
 {% include "control_plane/_playbook_table.html" with rows=rows deciding=sources.pending %}
 {% endblock %}

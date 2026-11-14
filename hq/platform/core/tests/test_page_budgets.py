@@ -119,6 +119,10 @@ STORED_PAGES = (
     "command:run",
     "control_plane:services",
     "control_plane:service",
+    "control_plane:connections",
+    "control_plane:containers",
+    "control_plane:machines",
+    "hq_self",
     "zones:detail",
     "calendar:month",
     "search?q=example",
@@ -135,28 +139,43 @@ class StoredPageBudgetTests(TestCase):
     procedure's command list.
     """
 
-    def _costs(self, seeded: Seeded) -> tuple[dict[str, tuple[int, int]], Counter, Counter]:
+    def _costs(self, seeded: Seeded) -> tuple[dict[str, tuple[int, int]], Counter, Counter, dict[str, list[str]]]:
         self.client.force_login(seeded.user)
         urls = dict(_pages(seeded)[0])
         with host_only(), frozen():
             with counting() as (first, _served):
                 for name in STORED_PAGES:
                     self.assertEqual(self.client.get(urls[name]).status_code, 200, name)
-            found, again = {}, Counter()
+            found, again, repeated = {}, Counter(), {}
             for name in STORED_PAGES:
                 with counting() as (ran, served), CaptureQueriesContext(connection) as captured:
                     self.client.get(urls[name])
                 again.update(ran)
                 found[name] = (len(captured), sum(served.values()))
-        return found, Counter(first), again
+                asked = Counter(query["sql"] for query in captured.captured_queries)
+                if twice := [sql for sql, times in asked.items() if times > 1]:
+                    repeated[name] = twice
+        return found, Counter(first), again, repeated
 
-    def test_a_page_costs_the_same_at_any_size_and_a_second_visit_derives_nothing(self):
-        (small, small_first, small_again), (large, large_first, large_again) = at_both_sizes(self._costs)
+    def test_a_page_costs_the_same_at_any_size_asks_each_query_once_and_a_second_visit_derives_nothing(self):
+        (small, small_first, small_again, small_twice), (large, large_first, large_again, large_twice) = at_both_sizes(
+            self._costs
+        )
 
         self.assertEqual(large, small)
         self.assertEqual(large_first, small_first)
         self.assertLessEqual(max(large_first.values()), READERS)
         self.assertEqual((small_again, large_again), (Counter(), Counter()))
+        self.assertEqual((small_twice, large_twice), ({}, {}))
+
+    def test_a_page_that_shows_no_provider_reads_none(self):
+        seeded = seed(SMALL)
+        self.client.force_login(seeded.user)
+        with host_only(), CaptureQueriesContext(connection) as captured:
+            self.assertEqual(self.client.get(django_reverse("docs_index:list")).status_code, 200)
+
+        tables = {"control_plane_providerinventory", "control_plane_providerconnection"}
+        self.assertEqual([query["sql"] for query in captured if any(table in query["sql"] for table in tables)], [])
 
 
 class BenchPagesTests(TestCase):

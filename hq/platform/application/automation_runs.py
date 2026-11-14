@@ -45,7 +45,7 @@ lazy from .action_links import command_url
 lazy from .approval_review import ChangePreview, asked_by
 lazy from .approvals import ApprovalSubject, every_call, measured_by, waits_for_a_person
 lazy from .automation_sources import PLAYBOOKS, SHORT_REVISION
-lazy from .cadence import ring_automation_doorbell
+lazy from .cadence import automation_standing, ring_automation_doorbell
 lazy from .capabilities import capability_words
 lazy from .controller import release_lapsed
 lazy from .doors import NOBODY
@@ -96,6 +96,13 @@ def capability_name(operation_id: str) -> str:
     """The command a procedure is run through, which a grant or a rule names it by."""
 
     return f"automation.{operation_id}.run"
+
+
+def runs_procedure(name: str) -> bool:
+    """Whether the command named ``name`` is in the namespace ``capability_name``
+    gives the adopted catalog's procedures, the only commands an adoption moves."""
+
+    return name.startswith("automation.") and name.endswith(".run")
 
 
 def run_title(operation_id: str, titles: Mapping[str, str]) -> str:
@@ -459,6 +466,11 @@ def request_run(
         ):
             raise IdempotencyConflict("That retry key was already used for a different request.")
         return {"ok": True, "queued": False, "operation": serialize_operation(existing)}
+    # A run no worker will take would wait for nothing: the finding that says
+    # so (``automation_findings``) carries how to set one up.
+    untaken = automation_standing().cannot("run", now=timezone.now())
+    if untaken:
+        raise PolicyError(untaken)
     with audit_operation(operation="automation.run.request", principal=principal):
         resource = _record(manifest, principal=principal)
         if not resource.enabled:

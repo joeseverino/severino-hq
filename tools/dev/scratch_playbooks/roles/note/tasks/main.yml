@@ -1,0 +1,10 @@
+- name: Write the note
+  ansible.builtin.copy:
+    content: "{{ text }}"
+    dest: "{{ note_path }}"
+    mode: "0600"
+- name: State the note
+  ansible.builtin.set_stats:
+    data:
+      result: "{{ {inventory_hostname: (note_path | basename) ~ ' holds the note'} }}"
+    per_host: false

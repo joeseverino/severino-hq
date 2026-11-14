@@ -42,8 +42,8 @@ controller reports HQ's own pages use. It:
 - declines the agent's held requests except its DNS change;
 - lets the worker finish what waits, and runs again each playbook whose newest
   run did not finish;
-- has the controller's next sweep find the machine restarted, room on its root
-  and the failing service fixed;
+- has the controller's next sweep find the machine restarted, room on its
+  root, the failing service fixed and the laptop's tailnet key renewed;
 - files the dropped-in receipt against its expense;
 - dismisses everything on Needs you except four things left on purpose: an
   image update, an image run by tag alone, a certificate to renew and the
@@ -114,7 +114,10 @@ so Scalar does not offer GitHub Pages as one.
 
 ## What the checks hold (`demo/check.py`)
 
-- Every address a page links or a script reads is a file in the demo.
+- Every address a page links or a script reads is a file in the demo. An
+  example the Design page draws in a shadow root links where it links in HQ
+  (nowhere, for its synthetic `/example/` addresses), so it is held only to
+  what it loads.
 - Next and Prev under a list, filtered or not, open a saved copy, up to the
   sixth page.
 - Every address with a query a page links opens a saved copy, and so does
@@ -183,4 +186,5 @@ repository's Pages settings. `demo/` is not copied into the Docker image.
 | `first_glance.py` | The estate settled for a first-time visitor, and the things it leaves to do on purpose. |
 | `demo.js` | The script the demo adds to each page. |
 | `demo-theme.js` | Runs first: the chosen theme, and the saved copy of an address with a query. |
+| `examples.py` | A page's own markup apart from the examples it draws in shadow roots, which the build never follows or saves. |
 | `check.py` | The checks above; plain unittest, no Django. |

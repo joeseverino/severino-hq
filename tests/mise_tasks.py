@@ -95,12 +95,3 @@ def locks(name: str) -> list[str]:
 # The machine's heavy turn, the lock tools/gate/turn.py names; hq's tests read
 # this module and may not import tools/.
 HEAVY_LOCK = "heavy"
-# The line a file task sources to run itself again in the turn when its run is heavy.
-SOURCES_THE_TURN = re.compile(r'(?m)^\s*\. .*tools/lib/heavy-turn\.sh"?$')
-
-
-def takes_the_turn(task: dict[str, Any]) -> bool:
-    """Whether the task holds the machine's heavy turn: it takes the lock, or its
-    file sources the line that runs it again in the turn when its run is heavy."""
-
-    return HEAVY_LOCK in locks(task["name"]) or bool(task["file"] and SOURCES_THE_TURN.search(body(task)))

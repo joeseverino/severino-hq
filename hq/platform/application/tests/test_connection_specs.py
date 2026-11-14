@@ -559,7 +559,7 @@ class ConnectionWorkspaceTests(TestCase):
 
         self.assertContains(response, "No key needed")
         # The row names it beside the connection, so its state cell does not repeat it.
-        state_cells = re.findall(r'<td class="tight-col"[^>]*>(.*?)</td>', response.content.decode(), re.DOTALL)
+        state_cells = re.findall(r'<td [^>]*class="tight-col"[^>]*>(.*?)</td>', response.content.decode(), re.DOTALL)
         self.assertTrue(state_cells)
         self.assertFalse([cell for cell in state_cells if "No key needed" in cell])
         self.assertNotContains(response, "Does not say where its secret is kept")

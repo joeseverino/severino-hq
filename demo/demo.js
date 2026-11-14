@@ -59,6 +59,13 @@
   const READ_AGAIN = "The demo can't read it again: this is as it was saved.";
   const readsAgain = (url) => [...document.querySelectorAll("[data-ask-button], form[data-ask-auto]")]
     .some((control) => (control.formAction || control.action) === url.href);
+  // The addresses an ask was just pressed at, each until its post is
+  // answered: one may be a region's own address too (a dashboard panel's
+  // Refresh posts to the strip), whose saved copy is no answer to an ask.
+  const pressed = new Set();
+  const readAgain = () => new Response(JSON.stringify({ state: "idle", live: false, note: READ_AGAIN }), {
+    headers: { "Content-Type": "application/json" },
+  });
   window.fetch = async (input, init = {}) => {
     // A request is asked by a string, a URL (the command center's) or a Request.
     const url = new URL(input instanceof Request ? input.url : String(input), location.href);
@@ -69,6 +76,7 @@
     // answered as it was drawn: nothing changed, and an empty answer would
     // empty the region.
     if (method !== "GET" && !partial) return new Response("", { status: 200 });
+    if (partial && method !== "GET" && pressed.delete(url.href)) return readAgain();
     if (partial) {
       const name = headers.get("X-Fragment") || "";
       const [saved, found] = await Promise.all([answers(), demo.routes()]);
@@ -89,11 +97,7 @@
       if (copy) return plainFetch(copy);
       // A post with no saved answer (a page asking for its readings as it
       // opens) is answered with nothing changed, as above.
-      if (method !== "GET" && readsAgain(url)) {
-        return new Response(JSON.stringify({ state: "idle", live: false, note: READ_AGAIN }), {
-          headers: { "Content-Type": "application/json" },
-        });
-      }
+      if (method !== "GET" && readsAgain(url)) return readAgain();
       if (method !== "GET") return new Response("", { status: 200 });
       if (url.search) return new Response("", { status: 404 });
     }
@@ -167,9 +171,9 @@
     // Re-apply saved dismissals.
     const state = read();
     document.querySelectorAll("[data-attention-item]").forEach((row) => {
-      const key = row.querySelector("[data-triage] button")?.value;
+      const key = row.querySelector(':scope > .row-actions > button[name="key"]')?.value;
       if (key && state.dismissed.includes(key)) {
-        row.dataset.dismissed = `Dismissed: ${row.querySelector(".attention-title")?.textContent.trim() || ""}`;
+        row.dataset.dismissed = `Dismissed: ${row.querySelector("[data-attention-title]")?.textContent.trim() || ""}`;
       }
     });
 
@@ -193,7 +197,8 @@
 
   // Save dismissals and un-dismissals.
   document.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-triage] button[formaction]");
+    // The row's own Dismiss or Restore, as app.js finds it.
+    const button = event.target.closest('[data-attention-item] .row-actions > button[name="key"][formaction]');
     if (!button) return;
     const state = read();
     const dismissing = /set-aside/.test(button.getAttribute("formaction"));
@@ -206,7 +211,11 @@
   // asks for a reading again, and says the demo can't; an ask's own control
   // says so where it was pressed.
   document.addEventListener("submit", async (event) => {
-    if (event.defaultPrevented || event.submitter?.matches("[data-ask-button]")) return;
+    if (event.defaultPrevented) return;
+    if (event.submitter?.matches("[data-ask-button]")) {
+      pressed.add(event.submitter.formAction);
+      return;
+    }
     if ((event.target.getAttribute("method") || "get").toLowerCase() === "get") return;
     event.preventDefault();
     // A button's formAction is the page's own address when it names none.

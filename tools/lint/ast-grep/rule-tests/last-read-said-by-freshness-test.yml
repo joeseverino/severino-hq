@@ -1,0 +1,10 @@
+id: last-read-said-by-freshness
+valid:
+  - 'return last_read(observed)'
+  - 'evidence = (LAST_READ, when(taken))'
+  - 'label = "Last read in full"'
+  - 'label = "Last tried"'
+invalid:
+  - 'return f"Last read {ago(observed)}"'
+  - 'evidence = ("Last read", when(taken))'
+  - "fact = _when('Last read', newest)"

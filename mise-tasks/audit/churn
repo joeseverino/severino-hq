@@ -20,10 +20,10 @@ git ls-files -z >"${work}/tracked.z"
 tr '\0' '\n' <"${work}/tracked.z" >"${work}/tracked"
 git log -z --since="${since}" --format= --name-only -- . \
     ':(exclude,attr:linguist-generated)' ':(exclude,attr:linguist-vendored)' >"${work}/touched.z"
-tr '\0' '\n' <"${work}/touched.z" | grep -v '^$' | sort | uniq -c >"${work}/counted" || true
+tr '\0' '\n' <"${work}/touched.z" | grep -v '^$' | LC_ALL=C sort | uniq -c >"${work}/counted" || true
 # One line per file, the most commits first and then by path, so two runs
 # are compared by a diff. The closing line holds the totals.
 awk 'NR == FNR { tracked[$0] = 1; next } { n = $1; sub(/^ *[0-9]+ /, ""); if ($0 in tracked) printf "%d\t%s\n", n, $0 }' \
-    "${work}/tracked" "${work}/counted" | sort -t "$(printf '\t')" -k1,1nr -k2,2 >"${work}/listed"
+    "${work}/tracked" "${work}/counted" | LC_ALL=C sort -t "$(printf '\t')" -k1,1nr -k2,2 >"${work}/listed"
 cat "${work}/listed"
 printf '%s files changed since %s\n' "$(wc -l <"${work}/listed" | tr -d ' ')" "${since}"

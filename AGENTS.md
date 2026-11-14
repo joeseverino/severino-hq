@@ -45,10 +45,9 @@ checkouts. To compose an extension worktree instead, set
 
 A test that reads the repository's files carries `@tag("source")`, since no
 image ships those files. It runs only in `lint:source` (`mise run lint:source
-<labels>` for some). One that walks a tree also carries `tree`
-(`test_tree_tag.py` says when). The suite runs in parallel on WAL SQLite
-through `hq/platform/core/test_runner.py`: read it before changing the test
-database. Adding a host domain: [New Domain](docs/New-Domain.md). How agents
+<labels>` for some). One that walks a tree also carries `tree`. The
+suite runs in parallel on WAL SQLite through
+`hq/platform/core/file_clones.py`: read it before changing the test database. Adding a host domain: [New Domain](docs/New-Domain.md). How agents
 build and operate HQ: [AI and HQ](docs/AI.md).
 
 ## Architecture in one minute
@@ -179,8 +178,8 @@ adding UI; grow a primitive rather than styling a page.
   (`hq/platform/core/speculation.py`).
 - Avoid N+1 queries. Prefetch relation panels and add a query-budget regression
   test for a projection that can grow with data or plugins.
-- Scripts are deferred and respect `prefers-reduced-motion`; only the two
-  `test_script_loading.py` names run before the first frame. Nothing moves
+- Scripts are deferred and respect `prefers-reduced-motion`; only the one
+  `test_script_loading.py` names runs before the first frame. Nothing moves
   once a page is drawn: a script fills space the server's HTML already holds.
 
 ## Structural checks

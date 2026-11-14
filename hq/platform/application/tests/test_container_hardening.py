@@ -8,8 +8,11 @@ from django.urls import reverse
 from hq.domains.control_plane.models import ManagedResource
 
 from ..action_links import command_url
-from ..containers import attention, containers
+from ..attention import infrastructure
+from ..containers import containers
+from ..derivation_testing import uncached
 from ..exposure import OPEN, PRIVATE
+from ..findings import rule_of
 from .markup import select, text
 from .test_container_standard import KEPT, runtime
 from .test_containers import HIGH, estate, exposed, inventory
@@ -250,11 +253,17 @@ class PageTests(TestCase):
         self.assertFalse(select(page, "id", "hardening"))
 
 
-class AttentionHelpTests(TestCase):
-    def items(self):
-        return {item.key: item for item in attention()}
+class FindingHelpTests(TestCase):
+    """Each container finding carries its help: a button, a read link, or the steps by hand."""
 
-    def test_the_socket_item_offers_to_mark_each_watched_container(self):
+    def items(self):
+        with uncached():
+            return {(rule_of(item.key), item.part): item for item in infrastructure() if rule_of(item.key)}
+
+    def remedies(self, item):
+        return [action for step in item.workflow.steps for action in step.actions if action.name == "remedy"]
+
+    def test_the_socket_item_offers_to_mark_a_watched_container_and_to_adopt_one_unwatched(self):
         estate()
         declare("web")
         inventory(
@@ -264,21 +273,21 @@ class AttentionHelpTests(TestCase):
                 runtime("kuma", **{**KEPT, "mounts": [SOCKET]}),
             ],
         )
+        items = self.items()
 
-        item = self.items()["container-posture:no-docker-socket"]
-        by_method = {action.method: action for action in item.actions}
-        self.assertEqual(set(by_method), {"GET", "POST"})
-        mark = by_method["GET"]
+        (mark,) = self.remedies(items["container-hardening", "web"])
         self.assertEqual(mark.url, command_url("infrastructure.resource.update", "example-box-web"))
         self.assertEqual((mark.capability, mark.target), ("infrastructure.resource.update", "example-box-web"))
-        self.assertIn("/adopt/record/portainer.container/", by_method["POST"].url)
+        (adopt,) = self.remedies(items["container-hardening", "kuma"])
+        self.assertEqual(adopt.method, "POST")
+        self.assertIn("/adopt/record/portainer.container/", adopt.url)
 
     def test_the_socket_button_opens_the_update_prefilled_with_its_declaration(self):
         self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.test", "pw"))
         estate()
         declare("web")
         inventory("portainer.runtime", [runtime("web", **{**KEPT, "mounts": [SOCKET]})])
-        (mark,) = self.items()["container-posture:no-docker-socket"].actions
+        (mark,) = self.remedies(self.items()["container-hardening", "web"])
 
         page = self.client.get(mark.url)
 
@@ -291,52 +300,64 @@ class AttentionHelpTests(TestCase):
         declare("web", holds_docker_socket=True)
         inventory("portainer.runtime", [runtime("web", **{**KEPT, "mounts": [SOCKET]})])
 
-        self.assertNotIn("container-posture:no-docker-socket", self.items())
+        self.assertNotIn(("container-hardening", "web"), self.items())
 
-    def test_every_other_reach_item_links_each_container_to_its_compose_change(self):
+    def test_every_other_reach_item_links_its_container_to_its_compose_change(self):
+        """The detector's own read link stands beside the machine's own."""
+
         estate()
         declare("web")
         inventory("portainer.runtime", [runtime("web", **{**KEPT, "privileged": True})])
 
-        item = self.items()["container-posture:not-privileged"]
+        item = self.items()["container-hardening", "web"]
 
-        (action,) = item.actions
-        self.assertTrue(action.url.endswith("/example-box-web/#hardening"))
+        self.assertTrue(any(link.url.endswith("/example-box-web/#hardening") for link in item.links))
+        self.assertIn(item.subject.url, {link.url for link in item.links})
 
     def test_an_advisory_says_which_upgrade_clears_it_and_why_it_cannot_run_yet(self):
         estate(advisories=[HIGH])
         declare("app")
 
-        item = self.items()["container-advisory:ghcr.io/example/app:v1.2.0"]
+        item = self.items()["container-image-advisory", "app"]
 
-        self.assertIn("v1.3.0", item.action)
-        self.assertEqual([step.phase for step in item.workflow.steps], ["do", "cannot"])
-        self.assertIn("ghcr.io/example/app:v1.3.0", item.workflow.steps[0].summary)
+        said = {step.phase: step.summary for step in item.workflow.steps}
+        self.assertIn("ghcr.io/example/app:v1.3.0", said["do"])
+        self.assertEqual(said["cannot"], "HQ cannot apply an update itself yet.")
         self.assertTrue(item.url.endswith("/example-box-app/#upgrade"))
-        (action,) = item.actions
-        self.assertTrue(action.url.endswith("/example-box-app/#upgrade"))
 
-    def test_an_unwatched_advisory_says_adopt_it_first(self):
+    def test_a_watched_update_leads_with_its_upgrade_plan(self):
+        estate()
+        declare("kuma")
+
+        item = self.items()["container-image-update", "kuma"]
+
+        self.assertEqual(item.action, "Upgrade plan for kuma")
+        self.assertTrue(item.url.endswith("/example-box-kuma/#upgrade"))
+        self.assertIn(reverse("control_plane:containers"), [link.url for link in item.links])
+
+    def test_an_unwatched_advisory_is_updated_by_hand_with_no_plan(self):
         estate(advisories=[HIGH])
 
-        item = self.items()["container-advisory:ghcr.io/example/app:v1.2.0"]
+        item = self.items()["container-image-advisory", "app"]
 
-        (action,) = item.actions
-        self.assertEqual(action.method, "POST")
-        self.assertIn("/adopt/record/", action.url)
+        # Adopting plans an upgrade but does not clear the advisory, so it is
+        # no remedy here; the card still says how to move the image by hand.
+        self.assertEqual(self.remedies(item), [])
+        self.assertIn("ghcr.io/example/app:v1.3.0", {step.phase: step.summary for step in item.workflow.steps}["do"])
+        self.assertFalse(any(link.url.endswith("#upgrade") for link in item.links))
 
     def test_a_private_advisory_no_release_fixes_is_not_an_action_item(self):
         estate(advisories=[HIGH], app_tags=("v1.2.0",))
 
         with exposed(PRIVATE):
-            self.assertNotIn("container-advisory:ghcr.io/example/app:v1.2.0", self.items())
+            self.assertNotIn(("container-image-advisory", "app"), self.items())
         with exposed(OPEN):
-            self.assertIn("container-advisory:ghcr.io/example/app:v1.2.0", self.items())
+            self.assertIn(("container-image-advisory", "app"), self.items())
 
-    def test_an_advisory_no_release_fixes_keeps_saying_so(self):
+    def test_an_advisory_no_release_fixes_offers_no_upgrade(self):
         estate(advisories=[HIGH], app_tags=("v1.2.0",))
 
-        item = self.items()["container-advisory:ghcr.io/example/app:v1.2.0"]
+        item = self.items()["container-image-advisory", "app"]
 
-        self.assertEqual(item.actions, ())
-        self.assertIsNone(item.workflow)
+        self.assertEqual(self.remedies(item), [])
+        self.assertFalse(any("#upgrade" in link.url for link in item.links))

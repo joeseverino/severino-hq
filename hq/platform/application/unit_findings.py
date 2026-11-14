@@ -512,6 +512,10 @@ RULES: tuple[FindingRule, ...] = (
         _failed,
         operator_action=("On the machine, read the job's log for why it failed, fix that, then start it again."),
         no_help_reason=cannot_run_commands(),
+        bars={
+            "serious": "a job nothing starts again on its own has failed",
+            "attention": "a scheduled job's last run failed, which its timer runs again",
+        },
     ),
     FindingRule(
         "unit-not-installed",
@@ -520,6 +524,7 @@ RULES: tuple[FindingRule, ...] = (
         _absent,
         operator_action=("Deploy HQ, which sets up every background job, or turn the job on on the machine."),
         no_help_reason=cannot_run_commands(),
+        bars={"serious": "a job HQ's machine needs is not installed or not turned on"},
     ),
     FindingRule(
         "timer-stalled",
@@ -528,6 +533,13 @@ RULES: tuple[FindingRule, ...] = (
         _stalled,
         operator_action=("On the machine, see when the timer last ran and read its job's log, then start the job."),
         no_help_reason=cannot_run_commands(),
+        bars={
+            "serious": (
+                f"a timer is {duration(OVERDUE_AFTER)} past when it was due, "
+                f"or its job has been starting for {duration(STARTING_TOO_LONG)}"
+            )
+        },
+        clears=f"the timer runs within {duration(OVERDUE_AFTER)} of when it is due",
     ),
     FindingRule(
         "unit-restarting",
@@ -538,6 +550,13 @@ RULES: tuple[FindingRule, ...] = (
             "On the machine, read the service's log for why it keeps stopping, fix that, then clear its restart count."
         ),
         no_help_reason=cannot_run_commands(),
+        bars={
+            "serious": (
+                f"systemd has restarted a service on its own {RESTARTING_FROM} times "
+                f"and it has not stayed up for {duration(SETTLED_AFTER)}"
+            )
+        },
+        clears=f"the service stays up for {duration(SETTLED_AFTER)}, or its restart count is cleared",
     ),
     FindingRule(
         "unit-state-unread",
@@ -548,5 +567,6 @@ RULES: tuple[FindingRule, ...] = (
             "Check that systemd answers on the controller's machine. If it does and this stays, deploy HQ."
         ),
         no_help_reason=cannot_run_commands(),
+        bars={"attention": "HQ cannot read whether its background jobs run"},
     ),
 )

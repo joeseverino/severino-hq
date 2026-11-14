@@ -1,0 +1,10 @@
+argument_specs:
+  main:
+    short_description: Write a note
+    description:
+      - Writes one file in the run's temporary directory.
+    options:
+      text:
+        type: str
+        required: true
+        description: What the note says.

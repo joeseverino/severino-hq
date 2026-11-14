@@ -270,6 +270,8 @@ class JobStatusViewTests(TestCase):
         self.assertEqual(payload["percent"], 42)
         self.assertEqual(payload["note"], "halfway")
         self.assertTrue(payload["live"])
+        # The word and the tone a following control's pill takes, the run table's.
+        self.assertEqual((payload["label"], payload["tone"]), ("Running", "active"))
 
     def test_status_requires_a_session(self):
         job = Job.objects.create(kind="test.private", label="Private")
@@ -308,11 +310,12 @@ class RunOnTheCallingThreadTests(TestCase):
         self.assertEqual((ran, Job.objects.count()), ([], 0))
 
     def test_a_state_is_called_the_same_by_a_control_the_list_and_a_read(self):
-        from hq.platform.application.asks import DONE, FAILED, QUEUED, RUNNING, Standing, job_standing
+        from hq.platform.application.asks import DONE, FAILED, QUEUED, RUNNING, Standing
+        from hq.platform.application.work_runs import job_run, standing_of
 
         for state in Job.State:
             job = Job(kind="test.words", label="Words", state=state, created_at=timezone.now())
-            self.assertEqual(job_standing(job).label, job.get_state_display())
+            self.assertEqual(standing_of(job_run(job)).label, job.get_state_display())
         for state in (QUEUED, RUNNING, DONE, FAILED):
             self.assertIn(Standing(state).label, Job.State.labels)
 
@@ -337,7 +340,7 @@ class RunOnTheCallingThreadTests(TestCase):
             self.assertEqual(state.label, state.as_job.label)
 
     def test_failed_is_the_sentence_the_control_says(self):
-        from hq.platform.application.asks import job_standing
+        from hq.platform.application.work_runs import job_run, standing_of
 
         def work(progress):
             raise Failed("The registry lists nothing for it.")
@@ -345,7 +348,7 @@ class RunOnTheCallingThreadTests(TestCase):
         job = run("test.inline", "Inline", work)
 
         self.assertEqual((job.state, job.error), ("failed", "The registry lists nothing for it."))
-        self.assertEqual(job_standing(job).note, "The registry lists nothing for it.")
+        self.assertEqual(standing_of(job_run(job)).note, "The registry lists nothing for it.")
         failed = AuditLog.objects.filter(operation_id=str(job.pk), action=AuditLog.Action.FAILED).get()
         self.assertEqual(
             failed.metadata["failure"], {"message": "The registry lists nothing for it.", "kind": "Failed"}
@@ -396,11 +399,20 @@ class JobListOrderTests(TestCase):
 
         Job.objects.filter(state=Job.State.LOST).delete()
 
-        (notice,) = with_class(self.client.get(reverse("jobs:list")).content, "notice-warning")
+        (notice,) = with_class(self.client.get(reverse("jobs:list")).content, "notice-error")
 
         said = re.findall(rf"\b{Job.State.FAILED.label}\b", notice.words, re.IGNORECASE)
         self.assertEqual(len(said), 1)
         self.assertIn("Read the example", notice.words)
+
+    def test_the_banner_is_in_the_tone_of_the_worst_run_it_names(self):
+        page = self.client.get(reverse("jobs:list")).content
+        self.assertEqual(len(with_class(page, "notice-error")), 1)
+
+        Job.objects.filter(state=Job.State.FAILED).delete()
+
+        page = self.client.get(reverse("jobs:list")).content
+        self.assertEqual(len(with_class(page, "notice-warning")), 1)
 
     def test_newest_first_is_still_one_choice_away(self):
         page = self.client.get(reverse("jobs:list"), {"sort": "-created_at"})

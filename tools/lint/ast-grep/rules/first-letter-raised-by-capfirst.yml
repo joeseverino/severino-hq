@@ -1,0 +1,25 @@
+# Django's capfirst raises a text's first letter and leaves the rest as it
+# is, and an empty text stays empty. Raising the first character by hand
+# beside the rest says the same thing a second way. composition_set stays its
+# own: the compose workflow runs it with the system python3, where nothing
+# but the standard library imports.
+id: first-letter-raised-by-capfirst
+language: python
+severity: error
+message: Python raises a first letter by hand.
+note: Write capfirst(text) from django.utils.text.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+  - "tools/**"
+ignores:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/migrations/**"
+  - "tools/pipeline/composition_set.py"
+rule:
+  any:
+    - pattern: $TEXT[:1].upper() + $TEXT[1:]
+    - pattern: $TEXT[0].upper() + $TEXT[1:]
+    - kind: string
+      regex: \{[^{}]+\[(0|:1)\]\.upper\(\)\}\{[^{}]+\[1:\]\}

@@ -18,6 +18,7 @@ from tempfile import TemporaryDirectory
 from django.test import SimpleTestCase, tag
 
 from hq.domains.control_plane.models import OperationRequest
+from hq.platform.application.tests.reads import reads
 
 from ..action_links import capability_action_link, command_action, read_now_link
 from ..capabilities import capability_registry
@@ -36,7 +37,6 @@ COMMAND_BUILDERS = {
 VARIANT_CALLS = ("capability_words", "command_action", "capability_action_link", "FindingRemedy")
 # Text a template writes that is a declared word for something no command does.
 TEMPLATE_EXEMPT = {
-    ("core/_dashboard_glance.html", "Refresh"): "fetches the glance panels again; no command runs",
     ("dashboard.html", "Edit"): "opens the chooser of the dashboard's links, whose save is a preference",
 }
 # What a control says (a constructor's label or intent, a confirmation's
@@ -170,6 +170,7 @@ class CommandBuilderTests(SimpleTestCase):
 
 
 @tag("source", "tree")
+@reads("hq/**/*.py", "**/templates/**/*.html", lists=("hq/**", "**/templates/**"))
 class CallSiteWordsTests(SimpleTestCase):
     """No button, link or toast for a command brings text of its own.
 
@@ -245,6 +246,7 @@ class CallSiteWordsTests(SimpleTestCase):
 
 
 @tag("source", "tree")
+@reads("hq/**/*.py", "**/templates/**/*.html", lists=("hq/**", "**/templates/**"))
 class DeclaredWordsTests(SimpleTestCase):
     """Every action has the words a surface asks it for."""
 

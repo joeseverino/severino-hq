@@ -56,7 +56,8 @@ def request_fingerprint(name: str, envelope: dict[str, Any]) -> str:
 def execute_form_once(
     *, actor: str, key: str, write: str, form: dict[str, Any], operation: Callable[[], dict[str, Any]]
 ) -> tuple[dict[str, Any], bool]:
-    """``execute_once`` for a form view whose write is no capability (``writes``' mixins).
+    """``execute_once`` for an extension's form write that is no capability
+    (``writes.outside_the_runner``), the one keyed write outside the runner.
 
     ``write`` names the write, as a capability's name does, so the same key
     and body sent to another form is a conflict, never that form's answer;
@@ -68,19 +69,16 @@ def execute_form_once(
     )
 
 
-def form_answer(*, actor: str, key: str, write: str, form: dict[str, Any]) -> dict[str, Any] | None:
-    """The answer ``key`` committed for this same post, or None while it has none.
+def answered(*, actor: str, key: str) -> dict[str, Any] | None:
+    """The answer ``actor``'s ``key`` committed, or None while it has none.
 
     For a form that must answer a resend before it can be validated again:
-    one whose first post created what its validation now refuses as taken. A
-    key used for another request is ``execute_once``'s conflict to report.
+    one whose first post created what its validation now refuses as taken.
+    A form draws a fresh key, so the key alone names the post it was drawn for.
     """
 
     record = IdempotencyRecord.objects.filter(
-        actor_sha256=_actor_sha256(actor),
-        key=key,
-        request_sha256=request_fingerprint(f"form:{write}", form),
-        expires_at__gt=timezone.now(),
+        actor_sha256=_actor_sha256(actor), key=key, expires_at__gt=timezone.now()
     ).first()
     return None if record is None else record.response
 

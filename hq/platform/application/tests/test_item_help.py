@@ -66,6 +66,18 @@ class EveryItemComesWithHelpTests(SimpleTestCase):
         with self.assertRaisesRegex(ValueError, "why HQ cannot"):
             FindingRule("example", "Example", "attention", lambda estate: (), "Do it.", no_help_reason=" ")
 
+    def test_a_rule_without_the_bar_for_its_severity_is_refused(self):
+        with self.assertRaisesRegex(ValueError, "bar its attention findings cross"):
+            FindingRule(
+                "example",
+                "Example",
+                "attention",
+                lambda estate: (),
+                "Do it.",
+                no_help_reason="HQ cannot.",
+                bars={"serious": "it is worse"},
+            )
+
 
 def _finding(**fields) -> Finding:
     return Finding(
@@ -135,14 +147,16 @@ class ItemHelpTests(SimpleTestCase):
 
 
 class ComposedQueueTests(TestCase):
-    """The queue as the dashboard composes it, every host item helped."""
+    """The queue as the dashboard composes it, every host item helped and explained."""
 
-    def test_every_item_in_the_composed_queue_carries_help(self):
+    def test_every_item_in_the_composed_queue_carries_help_and_says_why(self):
         from hq.domains.assets.models import Asset
         from hq.domains.content.models import ContentItem
         from hq.domains.expenses.models import Expense
         from hq.domains.receipts.models import Receipt
 
+        from ..dashboard import queue_item
+        from ..decisions import decision
         from ..domains import all_domains, domain_attention_items
         from .test_github_estate import store
 
@@ -177,3 +191,69 @@ class ComposedQueueTests(TestCase):
         for entry in entries:
             with self.subTest(item=entry["item"].key):
                 self.assertTrue(item_help(entry["item"]))
+                # The panel behind its urgency leads with why, in words.
+                shown = decision(queue_item(entry["source_id"], entry["source"], entry["item"]))
+                self.assertTrue(shown["origin"]["why"].strip())
+
+    def test_every_finding_the_example_estate_raises_says_what_was_read_and_the_bar_it_crossed(self):
+        """Each finding's severity is one its rule declares a bar for, so its
+        why never falls back to the evidence alone."""
+
+        from hq.platform.core import example_estate
+        from hq.platform.core.example_estate.testing import throwaway_media
+
+        from ..attention import finding_why
+        from ..findings import estate_findings, rule_for
+        from ..security import cli_principal
+
+        with throwaway_media():
+            example_estate.seed()
+        raised = estate_findings(principal=cli_principal())
+
+        self.assertGreaterEqual(len({finding.rule for finding in raised}), 5)
+        for finding in raised:
+            with self.subTest(rule=finding.rule, severity=finding.severity, title=finding.title):
+                rule = rule_for(finding.rule)
+                self.assertIn(finding.severity, rule.bars)
+                self.assertIn(rule.bars[finding.severity], finding_why(finding, rule))
+
+
+class FindingWhyTests(SimpleTestCase):
+    """A finding's why is worded once, from what was read and its rule's bar."""
+
+    def test_every_bar_reads_as_what_was_read_and_the_bar_never_as_the_rule(self):
+        from ..attention import finding_why
+
+        for rule in RULES:
+            for severity, bar in rule.bars.items():
+                with self.subTest(rule=rule.name, severity=severity):
+                    finding = Finding(
+                        rule=rule.name,
+                        subject="example",
+                        title="Example",
+                        severity=severity,
+                        explanation="Example.",
+                        evidence=(("Read", "a value HQ read"),),
+                    )
+                    why = finding_why(finding, rule)
+                    self.assertIn("Read: a value HQ read", why)
+                    self.assertIn(bar, why)
+                    self.assertNotIn(rule.title, why)
+                    self.assertNotIn(rule.name, bar)
+                    # A clause after "urgent once", so the why closes it.
+                    self.assertFalse(bar.endswith("."))
+
+    def test_the_why_quotes_two_readings_and_counts_the_rest(self):
+        from ..attention import finding_why
+
+        rule = RULES[0]
+        finding = Finding(
+            rule=rule.name,
+            subject="example",
+            title="Example",
+            severity=rule.severity,
+            explanation="Example.",
+            evidence=(("One", "1"), ("Two", "2"), ("Three", "3"), ("Four", "4")),
+        )
+
+        self.assertTrue(finding_why(finding, rule).startswith("One: 1; Two: 2 (and 2 more); "))

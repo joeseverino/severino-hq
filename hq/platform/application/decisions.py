@@ -14,7 +14,11 @@ from typing import Any
 lazy from .approvals import APPROVE, REJECT
 lazy from .entity_links import web_url
 lazy from .findings import rule_origin
+lazy from .freshness import cadence, freshness
+lazy from .moments import duration
 lazy from .routes import reverse
+lazy from .timestamps import moment
+lazy from .ui import ended
 
 # How urgent, in the words a card's pill says.
 URGENCY = {"serious": "Urgent", "attention": "Needs attention", "neutral": "Note", "good": "Fine"}
@@ -118,11 +122,25 @@ def _decided_here(actions: list[dict[str, Any]]) -> bool:
     return any(_plain(action).get("name") in (APPROVE, REJECT) for action in actions)
 
 
-def _one_primary(actions: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """The first recommended action leads; every other is a plain button, so a
-    card never shows two of equal weight competing to be the fix."""
+def _late(item: dict[str, Any]) -> dict[str, Any] | None:
+    """The reading a row is drawn from, said on the row only once it is out
+    of date for its kind, with how often that kind is read."""
+
+    kind = item.get("reads", "")
+    reading = freshness(kind, moment(item.get("observed_at", ""))) if kind else None
+    if reading is None or not reading.stale:
+        return None
+    return {"reading": reading, "every": f"Read every {duration(cadence(kind).every).removeprefix('1 ')}"}
+
+
+def _one_primary(actions: list[dict[str, Any]], named: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The first recommended action leads, else the owner's named page; every
+    other is a plain button, so a card never shows two of equal weight
+    competing to be the fix."""
 
     lead = next((index for index, action in enumerate(actions) if action.get("recommended")), None)
+    if lead is None and named:
+        lead = actions.index(named[0])
     return [{**action, "recommended": index == lead} for index, action in enumerate(actions)]
 
 
@@ -138,19 +156,33 @@ def _facts(pairs: Any) -> list[dict[str, Any]]:
 
 
 def _origin(item: dict[str, Any]) -> dict[str, Any]:
-    """What raised an item: a finding's rule and where it is declared, or the
-    domain that raised anything else and the key it raised it under."""
+    """Why an item is as urgent as it is, in its raiser's words (``Insight.why``)
+    and what clears it (``Insight.clears``), then what raised it: the domain and
+    the key it raised it under, and for a finding its rule and where that is
+    declared. ``panel`` is the id its panel and the pill that opens it share,
+    short since a page writes it five times for each item."""
 
     key = str(item.get("key", ""))
     _, finding, rest = key.partition(":finding:")
     rule = rule_origin(rest.split(":", 1)[0]) if finding else None
-    return {"source": item.get("source", ""), "key": key, **(rule or {})}
+    why, clears = item.get("why", ""), item.get("clears", "")
+    return {
+        "why": f"{why} {ended(f'Clears once {clears}')}" if why and clears else why,
+        "source": item.get("source", ""),
+        "key": key,
+        "panel": f"origin-{_digest(key)}",
+        **(rule or {}),
+    }
 
 
 def item_anchor(key: str) -> str:
     """Where an item's card is on the queue page, stable while its key is."""
 
-    return "item-" + hashlib.sha256(key.encode()).hexdigest()[:12]
+    return f"item-{_digest(key)}"
+
+
+def _digest(key: str) -> str:
+    return hashlib.sha256(key.encode()).hexdigest()[:12]
 
 
 def _own_page(item: dict[str, Any], subject: dict[str, Any], actions: list[dict[str, Any]], anchor: str) -> str:
@@ -186,7 +218,15 @@ def decision(item: dict[str, Any]) -> dict[str, Any]:
         "anchor": anchor,
         "page": _own_page(item, subject, actions, anchor),
         "urgency": NOTICE if item.get("notice") else urgency(item.get("status", "")),
-        "actions": _one_primary(actions + links),
+        # A check again waits behind the owner's named page, so the two that
+        # stand on the row are the fix and where it is done.
+        "actions": _one_primary(
+            [action for action in actions if action.get("name") != "verify"]
+            + links
+            + [action for action in actions if action.get("name") == "verify"],
+            links,
+        ),
+        "late": _late(item),
         "facts": _facts(item.get("facts", ())),
         "origin": _origin(item),
         "advice": advice,

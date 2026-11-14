@@ -19,7 +19,7 @@ from hq.platform.application.routes import reverse
 
 from .card_items import Insight
 from .derivations import passed
-from .github_estate import Repository, attention as repository_attention, repositories
+from .github_estate import REPOSITORY_KIND, Repository, attention as repository_attention, repositories
 from .item_help import cannot_help, do_step, run_step, steps
 from .standards import UNMET, Check as _Check, Measurement, measure
 from .timestamps import moment
@@ -551,11 +551,13 @@ def attention() -> tuple[Insight, ...]:
                 # A setting to change in each repository that misses it.
                 magnitude=len(missing),
                 body=f"{ended(', '.join(missing))} {check.fix}",
+                why=check.why,
                 action="Open repo checks",
                 url=reverse("posture"),
                 workflow=help_for(check, unmet),
                 # The oldest of the readings it names: the claim is no newer.
                 observed_at=min((repo.observed_at for repo in unmet if repo.observed_at), default=None),
+                reads=REPOSITORY_KIND,
             )
         )
     return tuple(items)

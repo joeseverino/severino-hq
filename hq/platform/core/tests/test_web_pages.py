@@ -278,10 +278,12 @@ class DashboardWorkflowTests(_AuthedTestCase):
             self.captureOnCommitCallbacks(execute=True),
             patch("hq.platform.application.glance.ring_glance_doorbell") as ring,
         ):
-            response = self.client.post("/dashboard/glance/", form_keyed())
+            response = self.client.post(
+                "/dashboard/glance/", form_keyed(), headers={"X-Requested-With": "XMLHttpRequest"}
+            )
 
-        self.assertEqual(response.status_code, 202)
-        self.assertTrue(select(response, "data-refreshing"))
+        self.assertEqual((response.status_code, response.json()["live"]), (202, True))
+        self.assertTrue(select(self.client.get("/dashboard/glance/"), "data-refreshing"))
         self.assertEqual(
             list(DashboardRefreshRequest.objects.values_list("panel_id", flat=True)),
             [f"machine-{machine.pk}"],

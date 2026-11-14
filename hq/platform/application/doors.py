@@ -66,22 +66,22 @@ def approved_words(approver: str) -> str:
 @dataclass(frozen=True, slots=True)
 class Attribution:
     """Who did something, as every page and read says it: the actor, the door
-    they came through, whom they acted as, and who approved it.
+    they came through or the agent they acted through, and who approved it.
 
     Built from the record that holds the act (``AuditLog.who``,
     ``OperationRequest.who``, ``ApprovalRequest.who``, ``Job.who``), so one
-    act reads alike on Jobs, its run, its audit entry and its approval. Whom
-    they acted as, and who approved it, are said only where that is someone
-    other than the actor.
+    act reads alike on Jobs, its run, its audit entry and its approval. The
+    agent, and who approved it, are said only where that is someone other
+    than the actor.
     """
 
     actor: str
     interface: str = ""
-    acting_as: str = ""
+    through: str = ""
     approved_by: str = ""
 
     def __post_init__(self) -> None:
-        for name in ("acting_as", "approved_by"):
+        for name in ("through", "approved_by"):
             if getattr(self, name) == self.actor:
                 object.__setattr__(self, name, "")
 
@@ -94,10 +94,12 @@ class Attribution:
 
     @property
     def asker(self) -> str:
-        """Who acted and through which door: "example-agent, over MCP"."""
+        """Who acted and how: "example-agent, over MCP", or a person first and
+        then the agent that acted for them, "joe, through example-agent"."""
 
-        said = f"{self.actor}, {self.door}" if self.door else self.actor
-        return f"{said} as {self.acting_as}" if self.acting_as else said
+        if self.through:
+            return f"{self.actor}, through {self.through}"
+        return f"{self.actor}, {self.door}" if self.door else self.actor
 
     @property
     def approval(self) -> str:

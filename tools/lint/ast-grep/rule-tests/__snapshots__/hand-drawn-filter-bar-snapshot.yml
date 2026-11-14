@@ -28,3 +28,67 @@ snapshots:
       style: secondary
       start: 0
       end: 25
+  <form class="filters" method="get"><div><select name="kind"></select></div></form>:
+    labels:
+    - source: >-
+        <form class="filters" method="get"><div><select
+        name="kind"></select></div></form>
+      style: primary
+      start: 0
+      end: 82
+    - source: form
+      style: secondary
+      start: 1
+      end: 5
+    - source: method="get"
+      style: secondary
+      start: 22
+      end: 34
+    - source: <form class="filters" method="get">
+      style: secondary
+      start: 0
+      end: 35
+    - source: select
+      style: secondary
+      start: 41
+      end: 47
+    - source: <select name="kind">
+      style: secondary
+      start: 40
+      end: 60
+    - source: <select name="kind"></select>
+      style: secondary
+      start: 40
+      end: 69
+  <form method="get"><input type="search" name="q"><select name="kind"></select></form>:
+    labels:
+    - source: >-
+        <form method="get"><input type="search" name="q"><select
+        name="kind"></select></form>
+      style: primary
+      start: 0
+      end: 85
+    - source: form
+      style: secondary
+      start: 1
+      end: 5
+    - source: method="get"
+      style: secondary
+      start: 6
+      end: 18
+    - source: <form method="get">
+      style: secondary
+      start: 0
+      end: 19
+    - source: select
+      style: secondary
+      start: 50
+      end: 56
+    - source: <select name="kind">
+      style: secondary
+      start: 49
+      end: 69
+    - source: <select name="kind"></select>
+      style: secondary
+      start: 49
+      end: 78

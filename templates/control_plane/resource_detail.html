@@ -91,11 +91,11 @@ declaration's machinery: the controller's actions are the buttons above, and
 {% endif %}
 
 {% comment %}
-The record's own card, what it is used by, where it is saved and how it
-relates: each a card as tall as what it holds, two to a row, so no short one
-stretches across the page.
+The record's own card heads the page on a row of its own, as the
+certificate's and the container's sections do: it is as long as its provider
+makes it, so beside it a short card would stretch empty. What it is used by,
+where it is saved and how it relates follow, short cards sharing rows.
 {% endcomment %}
-<div class="section-flow">
   {% comment %}
   One card for every kind that is not a certificate, rendered from what the
   provider says about itself rather than from markup that knows what a proxy
@@ -188,6 +188,8 @@ stretches across the page.
     {% endif %}
   {% endsection %}
   {% endif %}
+
+<div class="section-flow">
 {% comment %}
 A certificate from the side of what it serves: each service served with it,
 and the names on it nothing is served under. The service's own page names the
@@ -259,42 +261,9 @@ saying a thing cannot be done yet is a status report filed in the wrong place.
 </p>
 
 {% comment %}
-Each operation that changed something: a check that ran and found what the row
-above it found is not a row.
+Each operation that changed something, in the row every list of work draws
+(`service_context.operation_history`): a check that ran and found what the
+row above it found is not a row.
 {% endcomment %}
-{% if operations %}
-{% section "History" %}
-{% table_region "History" %}
-  <table class="data-table">
-    <thead><tr>{% table_heading "Action" gutter=True local_sort=True %}{% table_heading "Result" local_sort=True %}{% table_heading "By" drop=1 local_sort=True %}{% table_heading "Time" "status" local_sort=True %}</tr></thead>
-    <tbody>
-      {% for operation in operations %}
-        <tr>
-          <td>{{ operation.action_label|breakable }}</td>
-          <td class="cell-data">
-            {% status operation.state_label tone=operation.tone %}<br>
-            <strong>{{ operation.headline|breakable }}</strong>
-            {% if operation.affected %}
-              <span class="muted">{{ operation.affected|length|counted:"name serves a different certificate,names serve a different certificate" }}</span>
-              {% stack_list below="Affected" %}
-                {% for item in operation.affected %}
-                  <li><strong>{{ item.consumer|breakable }}</strong>{% dot %}{{ item.domain|breakable }}<br><span class="muted">Expected <code title="{{ operation.expected_fingerprint_sha256 }}">{{ operation.expected_fingerprint_sha256|slice:":12"|breakable }}…</code>, found <code title="{{ item.fingerprint_sha256 }}">{{ item.fingerprint_sha256|slice:":12"|breakable }}…</code></span></li>
-                {% endfor %}
-              {% endstack_list %}
-            {% elif operation.matched %}
-              <p class="muted">{{ operation.matched|counted:"name serves,names serve" }} this certificate<span title="{{ operation.expected_fingerprint_sha256 }}"> ({{ operation.expected_fingerprint_sha256|slice:":8"|breakable }}…)</span>.</p>
-            {% endif %}
-            {% if operation.raw_result %}
-              <div class="row-below" data-label="Raw result"><pre tabindex="0">{{ operation.raw_result|breakable }}</pre></div>
-            {% endif %}
-          </td>
-          <td>{{ operation.by|or_empty }}{% if operation.attempt_count > 1 %}<br><span class="muted">Attempt {{ operation.attempt_count|breakable }}</span>{% endif %}</td>
-          <td class="muted date-col">{{ operation.created_at|when }}</td>
-        </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-{% endtable_region %}
-{% endsection %}
-{% endif %}
+{% include "partials/_page_sections.html" with sections=history spans_row=True %}
 {% endblock %}

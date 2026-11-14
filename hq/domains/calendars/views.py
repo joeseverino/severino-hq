@@ -15,27 +15,26 @@ from hq.platform.application.calendar import calendar_day, calendar_month, month
 from hq.platform.application.calendar_entries import (
     CHOOSE_SOURCE,
     calendar_choices,
-    entry_command,
     repeat_label,
-    save_entry,
     upcoming,
     when_label,
 )
 from hq.platform.application.capabilities import capability_title, capability_words
 from hq.platform.application.card_items import ListRow
-from hq.platform.application.deletion import delete_calendar_entry
 from hq.platform.application.moments import when_day
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.references import ReferencePickerMixin, reference_of
 from hq.platform.application.security import Capability, safe_next, web_principal
 from hq.platform.application.web_writes import execute_posted, refusal_response
-from hq.platform.application.writes import CommandFormPage, ServiceCreateMixin, ServiceDeleteMixin, ServiceUpdateMixin
+from hq.platform.application.writes import CapabilityDeleteMixin, CapabilityFormMixin, CommandFormPage
 
 from .forms import EntryForm
 from .models import Entry
 
 # What makes a new event, its form and its command.
 CREATE = "calendar.entry.create"
+UPDATE = "calendar.entry.update"
+DELETE = "calendar.entry.delete"
 
 CALENDAR_TRAIL = (("Calendar", reverse_lazy("calendar:month")),)
 
@@ -199,23 +198,26 @@ class EntryPage(PageMixin):
 
 
 class EntryWrite:
-    model = Entry
+    """How an event's write names it; each write names its own capabilities,
+    so no base holds a placeholder for them that another base contradicts."""
+
     noun = "Event"
     result_key = "entry"
     identity_attr = "uid"
-    identity_kwarg = "current_key"
 
 
 # The fields its form page draws beyond the form's own loop.
 FORM_PAGE = {"form_fields": "calendars/_entry_fields.html"}
 
 
-class EntryFormPage(CommandFormPage):
+class EntryFormPage(EntryWrite, CommandFormPage, EntryPage, ReferencePickerMixin, CapabilityFormMixin):
     """An event's form, said as its command's page says it."""
 
     creates = CREATE
+    updates = UPDATE
     listed_route = "calendar:month"
     extra_context = FORM_PAGE
+    form_class = EntryForm
 
 
 class EntryDetailView(RedirectView):
@@ -228,11 +230,7 @@ class EntryDetailView(RedirectView):
         return get_object_or_404(Entry, uid=uid).get_absolute_url()
 
 
-class EntryCreateView(EntryWrite, EntryFormPage, EntryPage, ReferencePickerMixin, ServiceCreateMixin, CreateView):
-    form_class = EntryForm
-    service = staticmethod(save_entry)
-    command_from_cleaned_data = staticmethod(entry_command)
-
+class EntryCreateView(EntryFormPage, CreateView):
     @override
     def get_page_title(self):
         return capability_title(CREATE)
@@ -243,16 +241,13 @@ class EntryCreateView(EntryWrite, EntryFormPage, EntryPage, ReferencePickerMixin
         return {"starts_on": on or timezone.localdate()}
 
 
-class EntryUpdateView(EntryWrite, EntryFormPage, EntryPage, ReferencePickerMixin, ServiceUpdateMixin, UpdateView):
+class EntryUpdateView(EntryFormPage, UpdateView):
     page_title = "Edit event"
-    form_class = EntryForm
-    service = staticmethod(save_entry)
-    command_from_cleaned_data = staticmethod(entry_command)
 
 
-class EntryDeleteView(EntryWrite, EntryPage, ServiceDeleteMixin, DeleteView):
+class EntryDeleteView(EntryWrite, EntryPage, CapabilityDeleteMixin, DeleteView):
+    deletes = DELETE
     page_title = "Delete event?"
     template_name = "calendars/entry_confirm_delete.html"
     success_url = reverse_lazy("calendar:month")
     context_object_name = "entry"
-    service = staticmethod(delete_calendar_entry)

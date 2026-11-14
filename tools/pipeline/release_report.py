@@ -18,9 +18,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from django.utils.text import capfirst
+
 from hq.platform.core.tests.task import RefError, commit_of, usage
 from tools.perf import report as perf_report
-from tools.perf.table import SERVER, SUMMARY
+from tools.perf.table import SERVER, SUMMARY, server_totals
 from tools.pipeline.production import DEPLOYMENTS, Releases, gh, releases, statuses
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -69,16 +71,6 @@ def change(here: float | None, base: float | None, places: int) -> str:
     return "" if here is None or base is None else f"{here - base:+.{places}f}"
 
 
-def totals(side: dict[str, Any]) -> dict[str, float | None]:
-    """Each server column summed over every page, as perf's total row sums it."""
-
-    found: dict[str, float | None] = {}
-    for label, read, _ in SERVER:
-        present = [value for entry in side["pages"] if (value := read(entry.get("server") or {})) is not None]
-        found[label] = sum(present) if present else None
-    return found
-
-
 def headline(here: dict[str, Any], base: dict[str, Any]) -> list[Row]:
     """The before/after numbers: memory, cold start and the server's totals, each beside its move."""
 
@@ -90,7 +82,7 @@ def headline(here: dict[str, Any], base: dict[str, Any]) -> list[Row]:
             rows.append((label, "?", "?", "not measured"))
             continue
         rows.append((label, shown(theirs, places, unit), shown(mine, places, unit), change(mine, theirs, places)))
-    mine_totals, their_totals = totals(here), totals(base)
+    mine_totals, their_totals = server_totals(here["pages"]), server_totals(base["pages"])
     for label, _, places in SERVER:
         mine, theirs = mine_totals[label], their_totals[label]
         rows.append(
@@ -112,7 +104,7 @@ def perf_rows(made: Report, doc: dict[str, Any]) -> None:
     made.moved = perf_report.verdict(here)
     made.perf.append(("server time, page by page", "", "", made.moved))
     if reused := perf_report.kept_from(doc):
-        made.notes.append(f"{reused[0].upper()}{reused[1:]}")
+        made.notes.append(capfirst(reused))
     made.notes.append(f"Every page: var/perf/{doc['run']}.table")
 
 

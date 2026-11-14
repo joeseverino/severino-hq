@@ -15,7 +15,7 @@
    the first paint (optional) and never swapped in after, so text never moves;
    cached a year, it is there from the second page on. */
 @font-face { font-family: Inter; font-style: normal; font-weight: 400 700; font-display: optional; src: url("../../fonts/inter/inter-variable-latin.woff2") format("woff2"); }
-@layer tokens, base, components;
+@layer tokens, base, components, fit;
 
 /* Markup a vendored script draws (`data-vendored` on its mount) is styled by
    its own sheets alone. HQ's words for its parts (`section`, `card`) are
@@ -38,6 +38,15 @@
   :where([data-vendored]) :not(#_):not(#_)::backdrop { all: revert-layer; }
 }
 @layer components {
+  :where([data-vendored]) :not(#_):not(#_),
+  :where([data-vendored]) :not(#_):not(#_)::before,
+  :where([data-vendored]) :not(#_):not(#_)::after,
+  :where([data-vendored]) :not(#_):not(#_)::marker,
+  :where([data-vendored]) :not(#_):not(#_)::placeholder,
+  :where([data-vendored]) :not(#_):not(#_)::selection,
+  :where([data-vendored]) :not(#_):not(#_)::backdrop { all: revert-layer; }
+}
+@layer fit {
   :where([data-vendored]) :not(#_):not(#_),
   :where([data-vendored]) :not(#_):not(#_)::before,
   :where([data-vendored]) :not(#_):not(#_)::after,
@@ -325,6 +334,11 @@
      past which a value is no easier to read whole. Left unresolved here: its
      `ch` is the identifier's own font, its `cqi` the region it sits in. */
   --identifier-max: clamp(28ch, 45cqi, 85ch);
+  /* The narrowest line a row's words wrap to beside its buttons, in the
+     words' own font (left unresolved here): a row with less waits its buttons
+     in the line beneath (cards.css). The survey's ROW_WORDS holds every row
+     of buttons to it (probes/controls.py). */
+  --row-words: 30ch;
   /* Track floors for a band of a fixed number of cells, so it lays out as a
      whole number of even rows at any width: 4, 2 or 1 columns (never 3+1),
      or 3 or 1. Read where they are used, so 100% is that grid's width.

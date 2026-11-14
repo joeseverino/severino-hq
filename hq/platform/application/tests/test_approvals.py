@@ -501,7 +501,8 @@ class DecisionTests(TestCase):
 
         held.refresh_from_db()
         self.assertEqual(held.state, ApprovalRequest.State.STALE)
-        self.assertFalse(OperationRequest.objects.exists())
+        # The editor's own save applies its change; the stale approval applies nothing.
+        self.assertFalse(OperationRequest.objects.filter(requested_interface="mcp").exists())
 
     def test_a_request_nobody_answers_lapses(self):
         held = self.held()
@@ -660,9 +661,10 @@ class PreviewTests(TestCase):
         self.assertEqual(
             said["Document › Grants › Entry 1 › Dst"], ("changed", "tag:example", "tag:example, tag:other")
         )
-        self.assertEqual(said["Document › Grants › Entry 2 › Src"], ("added", "", "group:example, group:other"))
-        self.assertEqual(said["Document › Grants › Entry 2 › Ip"], ("added", "", "443"))
-        self.assertEqual(len(said), 4)
+        change, _, gained = said["Document › Grants › Entry 2"]
+        self.assertEqual(change, "added")
+        self.assertIn("group:example, group:other", gained)
+        self.assertEqual(len(said), 2)
 
     def test_content_that_will_not_parse_falls_back_to_a_line_diff(self):
         """A policy document may carry comments, and then it is text.

@@ -37,10 +37,11 @@ from hq.platform.application.page_parts import html_attributes
 from hq.platform.application.printable import admitted
 from hq.platform.application.timestamps import moment
 from hq.platform.application.ui import MISSING, STATUS_VALUES, counted as _counted
-from hq.platform.core.templatetags.line_breaks import breakable, code_spans, held, mark_text
+from hq.platform.core.templatetags.line_breaks import breakable, button_words, code_spans, held, mark_text
 lazy from hq.domains.control_plane.provider_spec import expiry_phrase
 lazy from hq.platform.application import references, request_identity, security
 lazy from hq.platform.application.derivations import this_year
+lazy from hq.platform.application.freshness import LAST_READ
 lazy from hq.platform.application.problems import problems_about as _problems_about
 lazy from hq.platform.application.references import reference_of
 lazy from hq.platform.application.where_it_runs import named_links as _named_links
@@ -48,6 +49,7 @@ lazy from hq.platform.core.oidc import SIGNED_IN_SESSION_KEY
 
 register = template.Library()
 register.filter("breakable", breakable, is_safe=True)
+register.filter("button_words", button_words, is_safe=True)
 register.filter("code_spans", code_spans, is_safe=True)
 
 # The one form a link to a page outside HQ takes, whichever tag writes it.
@@ -215,6 +217,14 @@ def when(value, form=""):
         _when_exact(found),
         _WHEN_FORMS[form](found),
     )
+
+
+@register.filter
+def last_read(value):
+    """``{{ moment|last_read }}``: when a reading was taken, said as every page
+    says it (``freshness.LAST_READ``), its age a ``when`` that shows the moment."""
+
+    return format_html("{} {}", LAST_READ, when(value, "ago"))
 
 
 @register.filter

@@ -9,6 +9,7 @@ from django.test import SimpleTestCase, TestCase, tag
 
 from hq.domains.assets.models import Asset
 from hq.domains.receipts.models import Receipt
+from hq.platform.application.tests.reads import reads
 
 from ..domains import records_of
 from ..expenses import ExpenseCommand, save_expense
@@ -87,6 +88,7 @@ def _serializers() -> dict[str, str]:
 
 
 @tag("source", "tree")
+@reads("hq/platform/application/*.py")
 class ListItemsComeFromTheSerializerTests(SimpleTestCase):
     def test_a_list_of_a_serialized_record_names_its_serializer(self):
         """A list that builds its own item drifts from the record a save or a

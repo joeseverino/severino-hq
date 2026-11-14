@@ -1,0 +1,92 @@
+{
+ "uuid": "38d76e17-6f9b-4f82-b1b5-07d04887c5fc",
+ "counter": 16,
+ "stdout": "\r\nPLAY RECAP *********************************************************************\r\n\u001b[0;32mapp.example.com\u001b[0m            : \u001b[0;32mok=3   \u001b[0m changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   \r\n\u001b[0;32mdb.example.com\u001b[0m             : \u001b[0;32mok=2   \u001b[0m changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   ",
+ "start_line": 13,
+ "end_line": 18,
+ "runner_ident": "52e98a98-1f5f-40cd-9263-742043dd52f6",
+ "event": "playbook_on_stats",
+ "pid": 68944,
+ "created": "2026-11-13T07:39:25.771282+00:00",
+ "parent_uuid": "0e0c47b2-ca71-44d1-b7e6-6280ead0db77",
+ "event_data": {
+  "playbook": "play.yml",
+  "playbook_uuid": "0e0c47b2-ca71-44d1-b7e6-6280ead0db77",
+  "changed": {},
+  "dark": {},
+  "failures": {},
+  "ignored": {},
+  "ok": {
+   "app.example.com": 3,
+   "db.example.com": 2
+  },
+  "processed": {
+   "app.example.com": 1,
+   "db.example.com": 1
+  },
+  "rescued": {},
+  "skipped": {},
+  "artifact_data": {
+   "readings": {
+    "app.example.com": {
+     "host.filesystem": [
+      {
+       "mount": "/",
+       "free_bytes": 107374182400,
+       "total_bytes": 494384795648,
+       "read_at": "2026-11-13T12:00:00Z"
+      }
+     ],
+     "host.reboot": [
+      {
+       "required": false
+      }
+     ]
+    },
+    "db.example.com": {
+     "host.filesystem": [
+      {
+       "mount": "/",
+       "free_bytes": 107374182400,
+       "total_bytes": 494384795648,
+       "read_at": "2026-11-13T12:00:00Z"
+      }
+     ],
+     "host.reboot": [
+      {
+       "required": false
+      }
+     ]
+    },
+    "elsewhere.example.com": {
+     "host.filesystem": [
+      {
+       "mount": "/",
+       "free_bytes": 0,
+       "total_bytes": 1,
+       "read_at": "2026-11-13T12:00:00Z"
+      }
+     ]
+    }
+   },
+   "result": {
+    "app.example.com": "/: 92% free",
+    "db.example.com": "/: 92% free"
+   },
+   "preview": {
+    "app.example.com": [
+     "would write /etc/example.conf",
+     "+ example = true"
+    ],
+    "db.example.com": [
+     "would write /etc/example.conf",
+     "+ example = true"
+    ]
+   },
+   "extra": {
+    "note": "not a stat HQ takes"
+   }
+  },
+  "uuid": "38d76e17-6f9b-4f82-b1b5-07d04887c5fc"
+ }
+}

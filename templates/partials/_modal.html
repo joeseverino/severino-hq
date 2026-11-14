@@ -38,6 +38,10 @@ urgency's origin).
 `popover` draws it as a popover rather than a modal dialog, for a panel a
 script shows beside what opened it (`showPopover()`, partials/_urgency_pill.html),
 which a press elsewhere dismisses; its close button hides the popover.
+
+`foot_template` draws one quiet line at the dialog's bottom right, after its
+body, for what dates the rest (an urgency's last reading); it is rendered
+with the surrounding context and holds phrasing content only.
 {% endcomment %}
 <dialog class="modal{% if size %} modal-{{ size }}{% endif %}{% if modal_class %} {{ modal_class }}{% endif %}" id="modal-{{ id }}" aria-labelledby="modal-{{ id }}-title"{% if popover %} popover{% endif %}>
   {% comment %}
@@ -52,6 +56,7 @@ which a press elsewhere dismisses; its close button hides the popover.
       <button class="modal-close" type="button" command="{% if popover %}hide-popover{% else %}close{% endif %}" commandfor="modal-{{ id }}" aria-label="Close">&times;</button>
     </div>
     {% if lede %}<p class="modal-lede">{{ lede|breakable }}</p>{% endif %}
-    {% if body_template %}{% headed %}{% include body_template %}{% endheaded %}{% endif %}
+    {% if body_template %}{% headed top %}{% include body_template %}{% endheaded %}{% endif %}
+    {% if foot_template %}<p class="modal-foot">{% include foot_template %}</p>{% endif %}
   </div>
 </dialog>

@@ -1,0 +1,9 @@
+id: fact-list-drawn-by-stack-list
+valid:
+  - '{% fact "Known" %}{% stack_list %}{% for f in x %}<li>{{ f }}</li>{% endfor %}{% endstack_list %}{% endfact %}'
+  - '<td>{% for h in hosts %}{{ h }}{% if not forloop.last %}<br>{% endif %}{% endfor %}</td>'
+  - '{% fact "One" %}{{ a }}<br><span>{{ b }}</span>{% endfact %}'
+invalid:
+  - '{% fact "Known" %}{% for f in x %}{{ f }}{% if not forloop.last %}<br>{% endif %}{% endfor %}{% endfact %}'
+  - '{% fact "Known" %}<span class="prose">{% for f in x %}{{ f }}{% if not forloop.last %}<br>{% endif %}{% endfor %}</span>{% endfact %}'
+  - '{% fact "Run" %}{{ a }}{% for r in rs %}<br><span>{{ r }}</span>{% endfor %}{% endfact %}'

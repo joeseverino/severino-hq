@@ -1,8 +1,7 @@
 """Trusted networks that admit a whole Tailscale range the tailnet only uses part of.
 
 Informational: trust is configuration, and HQ never narrows it itself. Raised
-only while the tailnet policy leaves HQ's machine open to anyone; the rule
-returns a ``Finding``'s fields; ``findings`` builds the finding.
+only while the tailnet policy leaves HQ's machine open to anyone.
 """
 
 from ipaddress import ip_network
@@ -12,13 +11,13 @@ from django.conf import settings
 
 from hq.platform.core.network import parse_ip
 
-from .finding_model import OperatorStep
+from .finding_model import Finding, FindingEstate, OperatorStep
 from .reach import TAILNET
 from .tailnet import HQ_ADMITS_ONLY_NAMED
 from .ui import counted
 
 
-def wider_than_tailnet(estate: Any) -> tuple[dict[str, Any], ...]:
+def wider_than_tailnet(estate: FindingEstate) -> tuple[Finding, ...]:
     """Trusted networks admit a whole Tailscale range; the tailnet uses less.
 
     Only when that width can matter. The tailnet policy decides who reaches
@@ -30,7 +29,7 @@ def wider_than_tailnet(estate: Any) -> tuple[dict[str, Any], ...]:
     wide = _wide_trust()
     if not wide:
         return ()
-    found: list[dict[str, Any]] = []
+    found: list[Finding] = []
     for node in estate.nodes():
         if node.kind != "connection" or any(key == HQ_ADMITS_ONLY_NAMED for key, _ in node.facts):
             continue
@@ -42,31 +41,31 @@ def wider_than_tailnet(estate: Any) -> tuple[dict[str, Any], ...]:
         if routes:
             uses += f" and {counted(len(routes), 'subnet route', 'subnet routes')}"
         found.append(
-            {
-                "rule": "trusted-wider-than-tailnet",
-                "subject": node.id,
-                "title": f"HQ trusts all of {', '.join(map(str, wide))}, and the tailnet uses {uses}",
-                "severity": "neutral",
-                "explanation": (
+            Finding(
+                rule="trusted-wider-than-tailnet",
+                subject=node.id,
+                title=f"HQ trusts all of {', '.join(map(str, wide))}, and the tailnet uses {uses}",
+                severity="neutral",
+                explanation=(
                     "HQ accepts requests from every address in the range. "
                     "You can narrow the trusted networks in HQ's settings to "
                     "the addresses the tailnet uses."
                 ),
-                "evidence": (
+                evidence=(
                     *(("Trusted", str(network)) for network in wide),
                     *(("Device address", address) for address in addresses),
                     *(("Subnet route", route) for route in routes),
                 ),
-                "steps": (
+                steps=(
                     OperatorStep(
                         label="Set this where HQ is deployed, then restart HQ",
                         command=(f"SEVERINO_TRUSTED_NETWORKS={narrowed(wide, addresses, routes)}"),
                         notes=("A device that joins later is refused until it is added.",),
                     ),
                 ),
-            }
+            )
         )
-    return tuple(sorted(found, key=lambda finding: finding["title"]))
+    return tuple(sorted(found, key=lambda finding: finding.title))
 
 
 def _network(cidr: Any):

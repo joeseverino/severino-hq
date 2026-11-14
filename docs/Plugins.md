@@ -34,7 +34,7 @@ plugin = PluginManifest(
     distribution="example-notes",
     source_repository="example/example-notes",
     source_workflow=".github/workflows/admit-plugin.yml",
-    api_version=12,
+    api_version=13,
     integration_provider="example_notes.plugin:integration",
     django_apps=("example_notes",),
     url_prefix="notes/",
@@ -173,7 +173,12 @@ operation as its row's `cause`, so a chain of operations is followed from
 either end. A model whose rows are about another record (an operation on a
 declaration, a decision on one) passes `register_audit(..., subject=...)`, a
 function returning that record's key, so one indexed read of the log's
-`subject` is the record's whole story.
+`subject` is the record's whole story. A change to a row is written by its
+model's registration alone: the code saving it sets `audit_said` on the row
+(`audit_gone` before a delete) for the sentence its row says, and
+`register_audit(..., required=True)` fails the save when its row cannot be
+written. `record_event` is for an act that changes no row: a sign-in, an
+export, a refusal.
 
 Every extension's `.github/workflows/admit-plugin.yml` is the same, because it
 names nothing about the extension:
@@ -543,6 +548,8 @@ is wrong and holds what fixes it"):
 | `Insight.action` with `Insight.url` | the page the work is done on (a short label; a sentence is shown as a sentence) |
 | `Insight.workflow` | commands and their check |
 | `Insight.since` | the moment it began, when that is known |
+| `Insight.why` | why it is as urgent as its status says: what was read and what makes that this urgent, in one sentence. Required of every item the queue may show, never a restatement of its rating; the plugin check's `attention-item-says-why` fails an `Insight` built without it, and `attention-why-restates-rating` one that closes on "which needs attention" or "which is urgent" |
+| `Insight.clears` | what clears an item a threshold raises, worded from that same threshold as a clause after "Clears once" ("a balance newer than 3 days arrives"); the panel says it after the why. The plugin check's `threshold-says-what-clears-it` fails a why that names a constant without it |
 
 **Capabilities.** HQ validates every `CapabilitySpec` before describing or
 invoking the registry: name, effect, required permissions, target kind and
@@ -869,6 +876,8 @@ shared parts drew it: `chart-card`, `danger-link`, `domain-head`,
 `domain-head-copy`, `domain-stack`, `field-row`, `figure-hero`,
 `figure-hero-note`, `figure-stats`, `finding-evidence`, `pie-chart`, `pie-row`
 and `section-period`.
+`PLUGIN_API_VERSION` 13 retires `{% title_meta %}`'s `element` option: its
+parts are always `<li>` elements.
 
 A notice is `{% notice tone=... title=... %}body{% endnotice %}`, with a
 title the page composes as its `{% title %}` part after the body
@@ -910,6 +919,10 @@ the refusal, whose `status` the view answers with, or None when the write ran.
 A post no page is drawn for answers `refusal_response(answer)`: the refusal's
 sentence at its status. A form view whose write is a service call of
 its own inherits `hq_sdk.writes`' mixins, which run it once under the same key.
+A service refuses in words the person reads by raising
+`hq_sdk.capabilities.InputError(sentence)`, a sentence the extension wrote
+(`PLUGIN_API_VERSION` 13); any other exception's text stays in the log, and
+the person reads that the capability could not be executed.
 A test that posts a form without opening its page first sends
 `hq_sdk.testing.form_keyed(data)`.
 
@@ -942,7 +955,7 @@ A test that posts a form without opening its page first sends
 | `partials/_form.html` | `bar`, `cancel_url`, `choice_field`, `choices`, `form`, `note`, `verb` | `action`, `fields`, `gap`, `hooks`, `in_place`, `method`, `next`, `table_body` | A form that writes: its token, its errors, its fields or its table, and its closing row. |
 | `partials/_form_actions.html` | `choice_field`, `verb` | `bar`, `cancel_url`, `choices`, `gap`, `in_place`, `live`, `note` | A form's closing row: its one verb, Cancel, and what saving does. |
 | `partials/_form_errors.html` | nothing | `form` | What was wrong with a submitted form as a whole, above its fields. |
-| `partials/_icon.html` | nothing | `name` | One of the host's icons, by `name`, the height of the text beside it. |
+| `partials/_icon.html` | `name` | nothing | One of the host's icons, by `name`, the height of the text beside it. |
 | `partials/_insight_grid.html` | `items` | `label`, `level` | Readings that need interpreting, each with its next step. |
 | `partials/_job_progress.html` | `job` | nothing | A running job and what it is doing. |
 | `partials/_kpi_grid.html` | `items` | `featured`, `label` | Responsive linked or static figures. |
@@ -957,7 +970,7 @@ Host tags: `{% arrow %}`, `{% card %}`, `{% dot %}`, `{% empty_value %}`, `{% en
 
 Classes: `actions-col`, `address-list`, `allocation`, `allocation-legend`, `btn`, `cell-data`, `cell-part`, `cell-whole`, `chart-axis`, `chart-legend`, `code-list`, `compact`, `compact-table`, `count`, `danger`, `data-table`, `date-col`, `domain-charts`, `errors`, `eyebrow`, `field`, `finding`, `form`, `form-actions`, `ghost`, `help`, `icon-link`, `inline`, `key-col`, `keyboard-only`, `list-rows`, `muted`, `name-line`, `narrow-more`, `narrow-only`, `nowrap`, `one-line`, `optional-col`, `page-lede`, `primary`, `print-footer`, `print-only`, `prose-list`, `route-band-1`, `route-band-2`, `route-band-3`, `route-band-4`, `route-band-5`, `route-frame`, `route-line`, `route-map`, `route-marker`, `route-scale`, `route-swatch`, `row-actions`, `row-below`, `row-empty`, `row-group`, `row-gutter`, `row-less`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-flow`, `section-foot`, `split`, `stacked`, `subtle-link`, `table-clamp`, `table-scroll`, `tight-col`, `two-col`, `visually-hidden`, `whole`.
 
-Script hooks: `data-chart`, `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit-status`, `data-tip`.
+Script hooks: `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit-status`, `data-tip`. Styled attributes: `data-chart`.
 
 | Rule | Drawn by hand | Write instead |
 | --- | --- | --- |
@@ -967,7 +980,7 @@ Script hooks: `data-chart`, `data-sort`, `data-submit-busy`, `data-submit-label`
 | `hand-drawn-empty-state` | An empty state drawn by hand, where the empty state part draws it. | Write `{% include "partials/_empty_state.html" with message="..." %}`. |
 | `hand-drawn-facts` | Label and value facts drawn by hand, where the facts part draws them. | Write `{% facts %}` around each `{% fact "Label" value=... %}`, or `{% facts layout="band" %}` for a band. |
 | `hand-drawn-figure` | A figure drawn by hand, where the figure part draws it. | Write `{% include "partials/_kpi_grid.html" %}` from hq_sdk.ui.Kpi. |
-| `hand-drawn-filter-bar` | A filter bar drawn by hand, where the filter bar part draws it. | Write `{% filter_bar filtered=... clear=... %}`controls`{% summary %}`count`{% endfilter_bar %}`. |
+| `hand-drawn-filter-bar` | A filter bar drawn by hand, where the filter bar part draws it. | Write `{% filter_bar filtered=... clear=... %}`search`{% choices %}`controls`{% summary %}`count`{% endfilter_bar %}`. |
 | `hand-drawn-findings` | A list of findings drawn by hand, where the work queue part draws it. | Write `{% include "partials/_work_queue.html" with items=... %}` from the queue's items (hq_sdk.ui.Insight), with dense=True for problems inside a section. |
 | `hand-drawn-fold` | A fold drawn by hand, where the section part draws it. | Write `{% section "Heading" fold=True %}`body`{% endsection %}`. |
 | `hand-drawn-form` | A form that writes drawn by hand, where the form part draws it. | Write `{% include "partials/_form.html" %}`, or `{% post_button %}` for a single verb. |
@@ -977,12 +990,14 @@ Script hooks: `data-chart`, `data-sort`, `data-submit-busy`, `data-submit-label`
 | `hand-drawn-notice` | A notice drawn by hand, where the notice part draws it. | Write `{% notice %}`body`{% endnotice %}`, with tone= and a `{% title %}` part where it has them. |
 | `hand-drawn-row-actions` | A row's actions drawn by hand, where the row actions part draws them. | Write `{% row_actions actions %}` from hq_sdk.pages.PageAction, which draws the row's cell. |
 | `hand-drawn-row-group` | A group of rows headed by hand, where the row group tag heads it. | Write `{% row_group label count %}`. |
+| `hand-drawn-run-state` | How work stands is drawn by hand, where the ask or the status part draws it. | Draw the work as an Ask (`partials/_ask.html`), or its state with `{% status run.word tone=run.tone data_ask_label=True %}` from job\|job_run. |
 | `hand-drawn-section` | A `<section>` element drawn by hand, where the section part draws it. | Write `{% section "Heading" %}`body`{% endsection %}`, or a `<div>` for one that only groups a layout. |
 | `hand-drawn-split-count` | A count split from its words, where the counted filter writes them as one. | Write {{ n\|counted:"thing" }}, the figure and its words as one, or `{% fact "Label" value=n %}`. |
 | `hand-drawn-split-figure` | A figure apart from its word, where a value filter writes them as one. | Write {{ n\|counted:"thing" }} for a count, or {{ x\|measured:"mi" }} for a unit or a word the count leaves alone ("more"), the figure and its word as one value. |
 | `hand-drawn-stack-list` | A stack list drawn by hand, where the stack list part draws it. | Write `{% stack_list %}``<li>`...`</li>``{% endstack_list %}`, with below="Label" for a list the open row shows. |
+| `hand-drawn-stretched-shape` | A round shape or text inside a stretched drawing, which distorts it. | Draw a dot as a zero-length line of class chart-dot, and a label in the unscaled svg.chart-labels layer. |
 | `hand-drawn-table` | A table drawn outside its region. | Write `{% table_region "Label" %}` around its `<table class="data-table">`. |
-| `hand-drawn-title-meta` | A title's line of facts drawn by hand, where the title meta part draws it. | Write `{% title_meta %}`parts`{% endtitle_meta %}`, with element="ul" for `<li>` parts. |
+| `hand-drawn-title-meta` | A title's line of facts drawn by hand, where the title meta part draws it. | Write `{% title_meta %}`parts`{% endtitle_meta %}`, each part an `<li>`. |
 | `hand-drawn-toned-value` | A toned value drawn by hand, where the status part draws it. | Write `{% status value tone=tone pill=False %}`. |
 
 <!-- /sdk_contract -->

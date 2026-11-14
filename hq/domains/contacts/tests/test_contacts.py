@@ -26,6 +26,7 @@ from hq.platform.application.record_errors import RecordNotFound
 from hq.platform.application.security import Capability, Principal
 from hq.platform.application.tests.facts import ROOT, STRING, scan, strings
 from hq.platform.application.tests.markup import elements, select, with_class
+from hq.platform.application.tests.reads import reads
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog
 
@@ -194,7 +195,10 @@ class ContactViewTests(TestCase):
         self.assertEqual(ManagedResource.objects.get(kind=inbox.DECLARATION).spec["reviews"][0]["status"], "read")
         self.assertTrue(
             AuditLog.objects.filter(
-                metadata__operation=REVIEW, metadata__interface="web", metadata__actor="joe", metadata__id=1
+                metadata__operation=REVIEW,
+                metadata__interface="web",
+                metadata__actor="joe",
+                message="Asked for contact submission #1 to be reviewed.",
             ).exists()
         )
 
@@ -249,7 +253,9 @@ class ContactViewTests(TestCase):
         self.assertEqual(ManagedResource.objects.get(kind=inbox.DECLARATION).spec["deletions"], [1])
         self.assertTrue(
             AuditLog.objects.filter(
-                action=AuditLog.Action.DELETED, metadata__operation=DELETE, metadata__actor="joe"
+                metadata__operation=DELETE,
+                metadata__actor="joe",
+                message="Asked for contact submission #1 to be deleted.",
             ).exists()
         )
 
@@ -401,6 +407,7 @@ class NoCredentialTests(TestCase):
 
 
 @tag("source", "tree")
+@reads("hq/domains/contacts/*.py", "hq/platform/application/contact_submissions.py")
 class NoCredentialSourceTests(SimpleTestCase):
     """The contacts code, read for a token setting."""
 

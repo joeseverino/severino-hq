@@ -16,8 +16,9 @@ from django.db import transaction
 from pydantic import Field
 lazy from django.core.exceptions import ValidationError
 lazy from django.utils import timezone
+lazy from django.utils.text import get_text_list
 
-from hq.domains.control_plane.models import ManagedResource, NotManaged, ProviderConnection, ProviderInventory
+from hq.domains.control_plane.models import ManagedResource, NotManaged, ProviderConnection
 from hq.domains.control_plane.names import normalized_hostname
 from hq.domains.control_plane.providers import PROVIDERS, record_spec, registry_label, service_facets
 lazy from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS, connection_credential
@@ -31,6 +32,7 @@ lazy from .connection_catalog import EVIDENCE_DETAILS, PROVEN_EVIDENCE, grant_ev
 lazy from .connection_contracts import ConnectionAbility, ConnectionInstance
 lazy from .connection_setup import MANAGES_FIELD
 lazy from .connections import connection_rows
+lazy from .facts import every_snapshot
 lazy from .infrastructure import (
     ManagedResourceCommand,
     save_managed_resource,
@@ -133,7 +135,7 @@ class _Management:
             needs = [f"a {label} connection"]
             refusal = NO_CONNECTION
         else:
-            reading = _and(sorted(ref for _, ref, flag in found if not flag))
+            reading = get_text_list(sorted(ref for _, ref, flag in found if not flag), "and")
             unset = f"its 1Password item does not let HQ make changes through it ({MANAGES_FIELD})."
             said = [f"HQ only reads through {label} connection {reading}: {unset}"]
             needs = [f"{MANAGES_FIELD}: 1"]
@@ -141,10 +143,10 @@ class _Management:
         permissions = CONNECTION_KINDS[provider].writes
         evidence = _write_evidence(kind, provider, permissions, connection_ref)
         if permissions and evidence not in PROVEN_EVIDENCE:
-            also = ended(f"A change through it also needs {_and(permissions)}")
+            also = ended(f"A change through it also needs {get_text_list(permissions, 'and')}")
             said.append(f"{also} {EVIDENCE_DETAILS[evidence]}")
             needs.extend(permissions)
-        return WriteGap(" ".join(said), refusal, f"Needs {_and(needs)}", setup_url(provider))
+        return WriteGap(" ".join(said), refusal, f"Needs {get_text_list(needs, 'and')}", setup_url(provider))
 
     def _every_of_kind_manages(self, kind: str) -> bool:
         provider = PROVIDERS.get(kind)
@@ -167,11 +169,6 @@ def observes_only(kind: str, spec, manages=None) -> bool:
         return False
     test = manages or manages_through()
     return not test(kind, str((spec or {}).get("connection_ref", "")))
-
-
-def _and(words) -> str:
-    words = list(words)
-    return f"{', '.join(words[:-1])} and {words[-1]}" if len(words) > 1 else "".join(words)
 
 
 def _write_evidence(kind: str, provider: str, permissions: tuple[str, ...], connection_ref: str) -> str:
@@ -338,7 +335,7 @@ def unmanaged() -> tuple[Unmanaged, ...]:
 
     manages = manages_through()
     found: list[Unmanaged] = []
-    for snapshot in ProviderInventory.objects.all():
+    for snapshot in every_snapshot():
         provider = PROVIDERS.get(snapshot.kind)
         if provider is None or provider.from_record is None:
             continue

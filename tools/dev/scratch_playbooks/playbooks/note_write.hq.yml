@@ -1,0 +1,11 @@
+id: example.note_write
+target_kinds: [machine]
+effect: infrastructure_change
+timeout_seconds: 60
+retry: safe
+recovery:
+  - Nothing to recover. The note goes with the run's temporary directory.
+inputs:
+  text:
+    pattern: "^[A-Za-z0-9 _.-]+$"
+    max_length: 80

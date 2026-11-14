@@ -225,7 +225,7 @@ class AnExtensionActionAnswersAtOnceTests(ComposedExample):
         with held_jobs(), mock.patch("hq.platform.application.web_writes.web_principal", return_value=nobody):
             response = self.press(headers=SCRIPT)
 
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["state"], "failed")
         self.assertFalse(Job.objects.exists())
 
     def test_work_nobody_declared_has_no_route(self):

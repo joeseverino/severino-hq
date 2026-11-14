@@ -237,6 +237,15 @@ def a_refused_answer(request: HttpRequest, form: forms.Form, answer: dict[str, A
     return capabilities.refusal_response(answer)
 
 
+def a_refusal_a_person_reads(starts_on: str) -> None:
+    # A service's refusal in the extension's own words, which the runner shows.
+    refusal = capabilities.InputError("A period cannot end before it starts.")
+    assert_type(refusal.reason, str)
+    assert isinstance(refusal, ValueError)
+    capabilities.InputError()  # type: ignore[call-arg]
+    raise capabilities.InputError("The period overlaps another.", details={"field": starts_on})
+
+
 def a_person_holding() -> None:
     # A test asks the real page gate as a person holding only the capabilities it names.
     assert_type(testing.holding("example.read", "example.write"), AbstractContextManager[Any])
@@ -646,6 +655,17 @@ def an_insight_about_one_part() -> None:
     about = ui.Insight("attention", "Finding", "Example is restarting", "", "", part="example-web")
     assert_type(about.part, str)
     ui.Insight("attention", "Finding", "Example", "", "", part=("example-web",))  # type: ignore[arg-type]
+
+
+def an_insight_that_says_why() -> None:
+    # An item says why it is as urgent as it is, which the panel behind its
+    # urgency leads with.
+    said = ui.Insight("serious", "Renewals", "Passport expires", "", "", why="It expires in 20 days.")
+    assert_type(said.why, str)
+    ui.Insight("serious", "Renewals", "Passport", "", "", why=("It expires.",))  # type: ignore[arg-type]
+    # One a threshold raises says what clears it.
+    held = ui.Insight("attention", "Renewals", "Passport", "", "", why="Under 90 days.", clears="it is renewed")
+    assert_type(held.clears, str)
 
 
 def a_section(hosts: int) -> None:

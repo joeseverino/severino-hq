@@ -11,6 +11,7 @@ lazy from dataclasses import asdict, is_dataclass
 
 from django import template
 from django.middleware.csrf import get_token
+from django.urls import reverse
 from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
 
@@ -19,7 +20,7 @@ lazy from hq.platform.application.asks import Ask
 lazy from hq.platform.application.capabilities import capability_words
 lazy from hq.platform.application.dashboard import queue_item
 lazy from hq.platform.application.pages import PageAction, offered_now
-lazy from hq.platform.core.templatetags.value_tags import _request, breakable, is_this_page
+lazy from hq.platform.core.templatetags.value_tags import _request, button_words, is_this_page
 lazy from hq.platform.core.templatetags.write_tags import write_token
 
 register = template.Library()
@@ -32,6 +33,23 @@ def row_value(item):
     """``{{ item|row_value }}``: what a queue row's own button names, from its one owner."""
 
     return action_items.row_value(item)
+
+
+@register.simple_tag
+def triage(item=None, *, sorts=True, family="", url=""):
+    """``{% triage item sorts=triage as away %}``: the reader's own way to sort
+    a queue row, Dismiss, or Restore once it is dismissed, posting the row's
+    key; none where the queue is not the reader's to sort (``sorts``). With
+    ``family`` and the part's dismiss ``url``, Dismiss of a whole family."""
+
+    if not sorts:
+        return None
+    if family:
+        return PageAction("Dismiss", f"{url}&family={family}", method="post")
+    restore = bool(item.get("aside"))
+    route = "action_items_bring_back" if restore else "action_items_set_aside"
+    label = "Restore" if restore else "Dismiss"
+    return PageAction(label, reverse(route), method="post", field="key", value=action_items.row_value(item))
 
 
 @register.filter
@@ -122,7 +140,7 @@ def post_button(label, url, *, name="action", value="", css="btn", title="", dis
         format_html_join("", ' {}="{}"', ((key, val) for key, val in attributes.items() if val)),
         mark_safe(" data-hit") if hit else "",
         mark_safe(" disabled") if disabled else "",
-        breakable(label),
+        button_words(label),
     )
 
 
@@ -147,7 +165,7 @@ def post_form(context, action, extra=""):
             '<button type="submit" class="{}"{}>{}</button></form>',
             " ".join(part for part in (action.css, extra) if part),
             format_html_join("", ' {}="{}"', ((key, val) for key, val in attributes.items() if val)),
-            breakable(action.label),
+            button_words(action.label),
         )
     )
 
@@ -279,7 +297,7 @@ def ask_button(ask, extra=""):
         " ".join(part for part in (ask.css, extra) if part),
         format_html_join("", ' {}="{}"', ((key, val) for key, val in attributes.items() if val)),
         mark_safe(" disabled") if ask.disabled else "",
-        breakable(ask.label),
+        button_words(ask.label),
     )
 
 

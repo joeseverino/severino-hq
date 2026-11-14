@@ -22,6 +22,10 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   font-feature-settings: "cv11", "ss01", "ss03";
+  /* A weight past the heaviest the face is served in (a `strong` asking
+     `bolder` in a line already bold) is drawn in that heaviest weight,
+     never smeared thicker by the browser. */
+  font-synthesis-weight: none;
   /* A word too long for its line (a URL, a key, a digest) breaks rather than
      pushing the page wide. It breaks only where it would overflow, and does
      not change how wide a table cell asks to be. */
@@ -49,14 +53,15 @@ a:is(:hover, :focus-visible) { color: var(--accent); text-decoration: underline;
 /* A link among words differs from them by more than its color (WCAG 1.4.1),
    which beside muted text no link color can be while it holds its contrast
    with the page: a quiet underline, full on hover. Words are a paragraph, a
-   line of small print, a muted line, or a value or item that reads as a
-   sentence (`.prose`). A muted dot list is items, not a line, so its item
-   is words only where it is `.prose`. Anywhere else a link is the whole of its line, row,
-   item or chip, and a link with a class of its own is a control, so both
-   read by their color and underline on hover and focus. An external link
-   keeps its class and its place among words; a bold link already stands out
-   from them. */
-:where(p, small, .muted:not(.dot-list), .prose) a:where(:not([class]), .external-link):not(strong a, :has(> strong:only-child)) {
+   line of small print, a muted line, or a value, item or notice that reads
+   as a sentence (`.prose`). A muted dot list is items, not a line, so its
+   item is words only where it is `.prose`. Anywhere else a link is the whole
+   of its line, row, item or chip, and a link with a class of its own is a
+   control, so both read by their color and underline on hover and focus. An
+   external link keeps its class and its place among words; a bold link
+   already stands out from them, and a link drawn as a chip is marked by its
+   frame. */
+:where(p, small, .muted:not(.dot-list), .prose) a:where(:not([class]), .external-link):not(strong a, :has(> strong:only-child), :has(> .scope-chip)) {
   text-decoration: underline;
   text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
   text-decoration-thickness: 1px;
@@ -205,9 +210,7 @@ pre ::selection { color: var(--code-ink); }
 .site-header {
   --header-user: minmax(var(--control-size), calc(4 * var(--control-size)));
   display: grid;
-  grid-template-areas: "brand nav demo search badge user";
-  grid-template-columns: auto auto 1fr minmax(150px, 210px) var(--control-size) var(--header-user);
-  grid-template-rows: var(--control-size);
+  grid-template: "brand nav demo search badge user" var(--control-size) / auto auto 1fr minmax(150px, 210px) var(--control-size) var(--header-user);
   align-items: center;
   column-gap: var(--space-7);
   padding: var(--space-5) var(--space-14);

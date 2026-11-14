@@ -43,6 +43,7 @@ lazy from hq.platform.application.request_path import request_path
 lazy from hq.platform.application.visit_refresh import worth_asking
 lazy from hq.platform.mcp import listing
 
+from . import design_gallery
 from .audit import record_event
 from .forms import OwnDeviceForm, PolicyForm
 from .middleware import DEMO_SESSION_KEY
@@ -660,6 +661,20 @@ class HQView(PageMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         context["hq"] = hq_context(self.request, principal=web_principal(self.request.user))
         context["page_aside"] = "core/_hq_status.html"
+        return context
+
+
+class DesignView(PageMixin, TemplateView):
+    """Every shared part HQ draws its pages from, as the component catalog
+    fills each with example data: read-only, the same for every reader."""
+
+    template_name = "core/design.html"
+    page_title = "Design"
+
+    @override
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["gallery"] = design_gallery.markup()
         return context
 
 

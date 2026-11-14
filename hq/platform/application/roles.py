@@ -12,15 +12,12 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db import models, transaction
 from django.utils import timezone
 
-lazy from hq.platform.core.audit import record_event
-lazy from hq.platform.core.models import AuditLog, PersonRole
+lazy from hq.platform.core.models import PersonRole
 
 lazy from . import agent_registry
 lazy from .linked_accounts import SIGN_IN
 lazy from .plugins import plugin_capabilities
 lazy from .security import Capability, operator_capabilities
-
-AUDIT_LABEL = "Role"
 
 
 class Role(models.TextChoices):
@@ -111,17 +108,12 @@ def assign(user, role: str) -> None:
             held.save(update_fields=["resolved_at"])
             user.person_role = held
             return
-        before = "" if held is None else held.role
-        row, _ = PersonRole.objects.update_or_create(user=user, defaults={"role": role, "resolved_at": now})
-        record_event(
-            action=AuditLog.Action.CREATED if held is None else AuditLog.Action.UPDATED,
-            obj=row,
-            type_label=AUDIT_LABEL,
-            message=f"{user} is now {Role(role).label.lower()}" + (f", was {before}" if before else ""),
-            metadata={"role": role, "was": before},
-            user=user,
-            required=True,
-        )
+        row = held or PersonRole(user=user)
+        before = row.role
+        row.role = role
+        row.resolved_at = now
+        row.audit_said = f"{user} is now {Role(role).label.lower()}" + (f", was {before}" if before else "")
+        row.save()
         # A token this person signed in holds what their role holds, so each
         # stream an agent of theirs holds open is told to list its tools again.
         agent_registry.persons_tools_changed(user)
@@ -134,5 +126,8 @@ def give_operator(user) -> None:
     Creating a superuser is not audited either; its next sign-in resolves its role afresh.
     """
 
-    row, _ = PersonRole.objects.get_or_create(user=user, defaults={"role": Role.OPERATOR})
+    row = PersonRole.objects.filter(user=user).first()
+    if row is None:
+        # Past the model's audit signal, which bulk_create does not send.
+        (row,) = PersonRole.objects.bulk_create([PersonRole(user=user, role=Role.OPERATOR)])
     user.person_role = row

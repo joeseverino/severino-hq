@@ -152,21 +152,22 @@ ENTRIES = {
     ),
     # The filter bar ({% filter_bar %}) narrowed, with its way back, its
     # count and a fact about what shows; holding a part back, with the one
-    # link that shows it; with one choice and nothing narrowed; and with
+    # link that shows it, its choices folded under the id it is given; with one choice and nothing narrowed; and with
     # labeled choices asking another page, its verb its own. A new option of
     # the tag comes with an entry here (test_filter_tags).
     "form/filter-bar": Entry(
         '{% filter_bar filtered=True clear="#" shown=3 total=12 %}'
         '<input type="search" name="q" value="example" placeholder="Filter example records" '
         'aria-label="Filter example records">'
+        "{% choices %}"
         '{% select "state" states chosen="on" label="Example state" every="example state" %}'
         '{% select "kind" kinds label="Example kind" every="example kind" %}'
         "{% summary %}1 needs a look.{% endfilter_bar %}",
         {"states": (("on", "Online"), ("off", "Offline")), "kinds": (("host", "Example host"),)},
     ),
     "form/filter-bar-held": Entry(
-        '{% filter_bar shown=93 total=170 held=held more="#" %}'
-        '<input type="search" placeholder="Find an example" aria-label="Find an example">'
+        '{% filter_bar id="example-held" shown=93 total=170 held=held more="#" %}'
+        '<input type="search" placeholder="Find an example" aria-label="Find an example">{% choices %}'
         '{% select "view" views label="Example view" %}{% endfilter_bar %}',
         {
             "views": (("", "Example main view"), ("everything", "Everything")),
@@ -189,7 +190,7 @@ ENTRIES = {
     # to wrap in a narrow bar, and a control a script shows only once it has
     # something to act on.
     "form/filter-bar-toggles": Entry(
-        '{% filter_bar shown=12 total=12 %}<input type="search" placeholder="Find an example" aria-label="Find an example">'
+        '{% filter_bar shown=12 total=12 %}<input type="search" placeholder="Find an example" aria-label="Find an example">{% choices %}'
         '{% include "partials/_toggle_set.html" with legend="Example kinds" set="kind" name="kind" toggles=toggles only %}'
         '<button class="btn ghost compact" type="button" hidden>Example clear</button>'
         "{% endfilter_bar %}",
@@ -228,7 +229,7 @@ ENTRIES = {
         {"form": _ExampleFiles()},
     ),
     "form/dropzone-errors": Entry(
-        '{% section "Example import" %}{% include "partials/_dropzone.html" with field=form.exports %}{% endsection %}',
+        '{% section "Example import 2" %}{% include "partials/_dropzone.html" with field=form.exports %}{% endsection %}',
         {"form": _ExampleFiles(data={})},
     ),
 }

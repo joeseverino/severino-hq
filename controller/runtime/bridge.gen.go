@@ -1473,6 +1473,9 @@ type ControllerReport struct {
 	Message            string     `json:"message,omitempty"`
 	ObservedGeneration int64      `json:"observed_generation"`
 
+	// Stated What a run's playbook stated beside its result; an operation other than a run reports none.
+	Stated *RunStated `json:"stated,omitempty"`
+
 	// Status The provider's status for the resource; its shape belongs to the kind.
 	Status  any  `json:"status,omitempty"`
 	Success bool `json:"success"`
@@ -2378,6 +2381,15 @@ type RunInput struct {
 	Revision string `json:"revision"`
 }
 
+// RunStated What a playbook stated with set_stats beside its result, keyed by the machines of its run alone. Its compact JSON is at most StatedBytes' maxLength bytes.
+type RunStated struct {
+	// Preview Each machine's lines of what a change would do.
+	Preview map[string][]string `json:"preview,omitempty"`
+
+	// Readings Each machine's readings by kind, each kind a list of records.
+	Readings map[string]map[string][]map[string]any `json:"readings,omitempty"`
+}
+
 // RunnerReach One login the automation worker has: the machine it reaches, by its name in HQ, and the privilege profile the login is. Never its address, user or key.
 type RunnerReach struct {
 	Machine string `json:"machine"`
@@ -2422,6 +2434,24 @@ type SourceCatalog struct {
 	// Verification Whether GitHub verified the commit's signature, and the GitHub account that committed it.
 	Verification CommitVerification `json:"verification"`
 }
+
+// StatedBytes What a run's playbook stated (RunStated) as compact JSON in UTF-8: maxLength is the most bytes it may be.
+type StatedBytes = string
+
+// StatedKind A kind of reading, by its name.
+type StatedKind = string
+
+// StatedMachine A machine of the run, as its input's hosts name it.
+type StatedMachine = string
+
+// StatedRecord One record of a reading, its shape the kind's.
+type StatedRecord = map[string]any
+
+// StatedText One text a playbook stated: a member's name or value in a record, or a line of a preview.
+type StatedText = string
+
+// StatedValue A value in a stated record, at any depth.
+type StatedValue = any
 
 // StepFailure Work one pass could not finish; subject is the connection ref it used.
 type StepFailure struct {

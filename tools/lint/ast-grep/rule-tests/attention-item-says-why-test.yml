@@ -1,0 +1,10 @@
+id: attention-item-says-why
+valid:
+  - 'Insight(status="attention", eyebrow="Example", title="Example", value="1", body="", why="Example reads late.")'
+  - 'ui.Insight(title="Example", why=reason)'
+  - 'Insight(status="attention", title="Example", **said)'
+  - 'Insightful(title="Example")'
+invalid:
+  - 'Insight(status="attention", eyebrow="Example", title="Example", value="1", body="")'
+  - 'ui.Insight(title="Example", workflow=plan)'
+  - 'Insight("attention", "Example", "Example", "", "")'

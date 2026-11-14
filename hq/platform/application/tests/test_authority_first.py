@@ -1,12 +1,11 @@
 """A capability call is authorized before HQ reads anything about its target."""
 
-from unittest import mock
-
 from django.test import TestCase
 
 from hq_sdk.capabilities import StrictCommand
 
 from ..capabilities import CapabilitySpec, execute_capability
+from ..integration_testing import commands_registered
 from ..security import Capability, Principal
 
 
@@ -31,7 +30,7 @@ class AuthorityFirstTests(TestCase):
 
     def call(self, spec, *, target):
         reader = Principal("example-reader", "cli", frozenset({Capability.READ}))
-        with mock.patch("hq.platform.application.capabilities.capability_registry", return_value={spec.name: spec}):
+        with commands_registered({spec.name: spec}):
             return execute_capability(spec.name, {}, principal=reader, target=target)
 
     def test_a_caller_without_the_grant_is_refused_it_whatever_target_it_sent(self):

@@ -1,0 +1,15 @@
+# The Ansible collections the automation worker ships, each pinned to one
+# release: the image installs exactly these (ansible-galaxy collection install
+# -r, in the Dockerfile's runner-build stage), the scan admits a module only
+# from ansible.builtin or one of them (hq_runner/catalog.py), and the smoke
+# holds what is installed to this list. A collection another one depends on is
+# listed too, so nothing reaches the image that this file does not name.
+# Renovate's ansible-galaxy manager moves each pin.
+collections:
+  - name: ansible.posix
+    version: 2.2.2
+  - name: community.docker
+    version: 5.4.0
+  # community.docker's dependency: plugin utilities, no modules.
+  - name: community.library_inventory_filtering_v1
+    version: 1.1.5

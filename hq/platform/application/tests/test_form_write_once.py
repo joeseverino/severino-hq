@@ -1,8 +1,9 @@
-"""A form mixin's write acts once per drawing of its form, as a capability's does.
+"""A record's form writes through its capability, once per drawing of the form.
 
-Each mixin in ``writes``: a post writes, the same post again is answered as
-the first was, the same key with a changed form is refused and the form drawn
-again with a fresh key, and a refused write leaves its key free.
+Each form mixin in ``writes``: a post writes, the same post again is answered
+as the first was, the same key with a changed form is refused and the form
+drawn again with a fresh key, a refused write leaves its key free, and a
+person without the grant is refused on the form.
 """
 
 from datetime import date
@@ -14,7 +15,6 @@ from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.sessions.middleware import SessionMiddleware
-from django.core.exceptions import ValidationError
 from django.http import HttpResponse
 from django.template import RequestContext, Template
 from django.test import RequestFactory, TestCase
@@ -22,13 +22,15 @@ from django.urls import reverse
 from django.views.generic import FormView
 
 from hq.domains.calendars.models import Entry
-from hq.domains.calendars.views import EntryCreateView, EntryDeleteView, EntryUpdateView
+from hq.domains.calendars.views import EntryCreateView
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
+from hq.platform.core.models import AuditLog
 
-from .. import records
+from .. import writes
 from ..expenses import ExpenseCommand, save_expense
 from ..plugin_testing import form_keyed
+from ..security import OPERATOR_CAPABILITIES, Principal
 from ..web_writes import RETRY_KEY_FIELD, run_posted
 from .markup import text
 from .writers import drawn_key
@@ -44,6 +46,7 @@ EXPENSE = {
     "total_cost": "1.00",
     "business_use_percentage": "100",
 }
+REFUSED = {"ok": False, "error": {"code": "conflict", "message": "Refused by the capability."}}
 
 
 def _entry(**fields: Any) -> Entry:
@@ -60,18 +63,20 @@ def _expense(**fields: Any) -> Expense:
     return expense
 
 
-def _once_refused(real, error: Exception):
-    """``real``, refusing with ``error`` the first time it is called."""
+def refused_once():
+    """``run_posted`` as the form mixins call it, refusing the first call."""
 
     calls = []
 
-    def refusing(*args, **kwargs):
+    def refusing(request, *args, **kwargs):
         calls.append(1)
-        if len(calls) == 1:
-            raise error
-        return real(*args, **kwargs)
+        return writes.Ran(REFUSED) if len(calls) == 1 else run_posted(request, *args, **kwargs)
 
-    return refusing
+    return mock.patch.object(writes, "run_posted", refusing)
+
+
+def as_principal(principal: Principal):
+    return mock.patch("hq.platform.application.web_writes.web_principal", return_value=principal)
 
 
 class FormWriteCase(TestCase):
@@ -92,7 +97,7 @@ class FormWriteCase(TestCase):
         self.assertNotEqual(drawn_key(response, *form), posted[RETRY_KEY_FIELD])
 
 
-class ServiceCreateTests(FormWriteCase):
+class CapabilityFormTests(FormWriteCase):
     def test_the_same_post_again_creates_one_event_and_goes_to_it(self):
         posted = form_keyed(ENTRY)
 
@@ -102,6 +107,8 @@ class ServiceCreateTests(FormWriteCase):
         (entry,) = Entry.objects.all()
         self.assertRedirects(first, entry.get_absolute_url(), fetch_redirect_response=False)
         self.assertReplayed(first, again, rows=Entry.objects.count, written=1)
+        created = AuditLog.objects.get(action=AuditLog.Action.CREATED, object_id=str(entry.pk))
+        self.assertEqual(created.metadata["operation"], "calendar.entry.create")
 
     def test_the_same_key_with_another_form_is_refused_on_the_form(self):
         posted = form_keyed(ENTRY)
@@ -112,30 +119,30 @@ class ServiceCreateTests(FormWriteCase):
         self.assertRedrawnRefusing(changed, posted)
         self.assertEqual(list(Entry.objects.values_list("title", flat=True)), ["Haircut"])
 
-    def test_a_refused_create_frees_its_key(self):
+    def test_a_refused_create_is_said_on_the_form_and_frees_its_key(self):
         posted = form_keyed(ENTRY)
-        refusing = _once_refused(EntryCreateView.service, ValueError("Refused by the service."))
-        self.client.raise_request_exception = False
 
-        with mock.patch.object(EntryCreateView, "service", staticmethod(refusing)):
+        with refused_once():
             refused = self.client.post(reverse("calendar:entry_new"), posted)
             self.assertFalse(Entry.objects.exists())
             landed = self.client.post(reverse("calendar:entry_new"), posted)
 
-        self.assertEqual(refused.status_code, 500)
+        self.assertIn("Refused by the capability.", refused.context["form"].non_field_errors())
         self.assertRedirects(landed, Entry.objects.get().get_absolute_url(), fetch_redirect_response=False)
 
-    def test_reload_is_handed_the_services_result_and_its_own_call_replays_on_a_resend(self):
-        """An extension's ``reload`` reads past the identity, and may run a
-        capability of its own after the save under the key the form posted."""
+    def test_reload_is_handed_the_answer_and_its_own_call_replays_on_a_resend(self):
+        """A view's ``reload`` reads past the identity, and may run a capability
+        of its own after the save under the key the form posted. One that adds
+        a record the form's pickers offer would change what the resend sends,
+        which the key then refuses as a different request."""
 
         seen = []
         real = EntryCreateView.reload
 
-        def reload(view, result):
-            ran = run_posted(view.request, "project.create", {"name": "Example", "slug": "example-after-the-save"})
-            seen.append((dict(result), ran.replayed))
-            return real(view, result)
+        def reload(view, answer):
+            ran = run_posted(view.request, "calendar.entry.create", {"title": "After", "starts_on": "2026-10-18"})
+            seen.append((dict(answer), ran.replayed))
+            return real(view, answer)
 
         posted = form_keyed(ENTRY)
         with mock.patch.object(EntryCreateView, "reload", reload):
@@ -146,7 +153,7 @@ class ServiceCreateTests(FormWriteCase):
         self.assertEqual(again, first)
         self.assertIn("entry", first)
         self.assertEqual([replayed for _, replayed in seen], [False, True])
-        self.assertEqual(Project.objects.count(), 1)
+        self.assertEqual(Entry.objects.count(), 2)
 
     def test_a_post_without_a_key_is_refused_on_the_form(self):
         refused = self.client.post(reverse("calendar:entry_new"), ENTRY)
@@ -154,8 +161,6 @@ class ServiceCreateTests(FormWriteCase):
         self.assertRedrawnRefusing(refused, form_keyed(), code=400)
         self.assertFalse(Entry.objects.exists())
 
-
-class ServiceUpdateTests(FormWriteCase):
     def test_the_same_post_again_amends_once_and_goes_to_the_event(self):
         entry = _entry()
         posted = form_keyed(ENTRY)
@@ -167,34 +172,18 @@ class ServiceUpdateTests(FormWriteCase):
         self.assertRedirects(first, entry.get_absolute_url(), fetch_redirect_response=False)
         self.assertReplayed(first, again, rows=lambda: Entry.objects.get().updated_at, written=entry.updated_at)
 
-    def test_the_same_key_with_another_form_is_refused_on_the_form(self):
-        entry = _entry()
+    def test_a_person_without_the_grant_is_refused_on_the_form(self):
         posted = form_keyed(ENTRY)
-        self.client.post(reverse("calendar:entry_edit", args=[entry.uid]), posted)
 
-        changed = self.client.post(reverse("calendar:entry_edit", args=[entry.uid]), {**posted, "title": "Dentist"})
+        with as_principal(Principal("operator", "web", OPERATOR_CAPABILITIES - {"write_calendar"})):
+            refused = self.client.post(reverse("calendar:entry_new"), posted)
 
-        self.assertRedrawnRefusing(changed, posted)
-        entry.refresh_from_db()
-        self.assertEqual(entry.title, "Haircut")
-
-    def test_a_refused_amendment_frees_its_key(self):
-        entry = _entry()
-        posted = form_keyed(ENTRY)
-        refusing = _once_refused(EntryUpdateView.service, ValueError("Refused by the service."))
-        self.client.raise_request_exception = False
-
-        with mock.patch.object(EntryUpdateView, "service", staticmethod(refusing)):
-            self.client.post(reverse("calendar:entry_edit", args=[entry.uid]), posted)
-            entry.refresh_from_db()
-            self.assertEqual(entry.title, "Entry")
-            self.client.post(reverse("calendar:entry_edit", args=[entry.uid]), posted)
-
-        entry.refresh_from_db()
-        self.assertEqual(entry.title, "Haircut")
+        self.assertEqual(refused.status_code, 403)
+        self.assertTrue(refused.context["form"].non_field_errors())
+        self.assertFalse(Entry.objects.exists())
 
 
-class ServiceDeleteTests(FormWriteCase):
+class CapabilityDeleteTests(FormWriteCase):
     def test_the_same_post_again_deletes_once_and_goes_back_to_the_list(self):
         entry = _entry()
         posted = form_keyed()
@@ -219,14 +208,13 @@ class ServiceDeleteTests(FormWriteCase):
     def test_a_refused_delete_frees_its_key(self):
         entry = _entry()
         posted = form_keyed()
-        refusing = _once_refused(EntryDeleteView.service, ValueError("Refused by the service."))
-        self.client.raise_request_exception = False
 
-        with mock.patch.object(EntryDeleteView, "service", staticmethod(refusing)):
-            self.client.post(reverse("calendar:entry_delete", args=[entry.uid]), posted)
+        with refused_once():
+            refused = self.client.post(reverse("calendar:entry_delete", args=[entry.uid]), posted)
             self.assertTrue(Entry.objects.exists())
             self.client.post(reverse("calendar:entry_delete", args=[entry.uid]), posted)
 
+        self.assertIn("Refused by the capability.", text(refused))
         self.assertFalse(Entry.objects.exists())
 
 
@@ -241,6 +229,14 @@ class RecordFormTests(FormWriteCase):
         self.assertRedirects(first, expense.get_absolute_url(), fetch_redirect_response=False)
         self.assertReplayed(first, again, rows=Expense.objects.count, written=1)
 
+    def test_a_resend_its_first_post_made_invalid_is_answered_as_the_first(self):
+        posted = form_keyed({"name": "Example", "slug": "example", "category": "other", "status": "idea"})
+
+        first = self.client.post(reverse("projects:create"), posted)
+        again = self.client.post(reverse("projects:create"), posted)
+
+        self.assertReplayed(first, again, rows=Project.objects.count, written=1)
+
     def test_the_same_post_again_amends_once(self):
         expense = _expense()
         posted = form_keyed({**EXPENSE, "item": "Charger"})
@@ -250,6 +246,7 @@ class RecordFormTests(FormWriteCase):
         again = self.client.post(reverse("expenses:edit", args=[expense.pk]), posted)
 
         self.assertRedirects(first, expense.get_absolute_url(), fetch_redirect_response=False)
+        self.assertEqual(expense.item, "Charger")
         self.assertReplayed(first, again, rows=lambda: Expense.objects.get().updated_at, written=expense.updated_at)
 
     def test_the_same_key_with_another_form_is_refused_on_the_form(self):
@@ -261,16 +258,28 @@ class RecordFormTests(FormWriteCase):
         self.assertRedrawnRefusing(changed, posted)
         self.assertEqual(list(Expense.objects.values_list("item", flat=True)), ["Cable"])
 
-    def test_a_refused_save_frees_its_key(self):
+    def test_a_refusal_naming_a_field_lands_beside_it_and_frees_the_key(self):
         posted = form_keyed(EXPENSE)
-        refusing = _once_refused(records.save_form, ValidationError({"vendor": "Refused by the model."}))
+        beside = {
+            "ok": False,
+            "error": {"code": "invalid_input", "message": "Refused.", "details": [{"loc": ["vendor"], "msg": "No."}]},
+        }
 
-        with mock.patch("hq.platform.application.writes.save_form", refusing):
+        with mock.patch.object(writes, "run_posted", return_value=writes.Ran(beside)):
             refused = self.client.post(reverse("expenses:create"), posted)
-            landed = self.client.post(reverse("expenses:create"), posted)
+        landed = self.client.post(reverse("expenses:create"), posted)
 
-        self.assertIn("Refused by the model.", refused.context["form"].errors["vendor"])
+        self.assertEqual(refused.context["form"].errors["vendor"], ["No."])
+        self.assertFalse(refused.context["form"].non_field_errors())
         self.assertRedirects(landed, Expense.objects.get().get_absolute_url(), fetch_redirect_response=False)
+
+    def test_a_person_without_the_grant_is_refused_on_the_form(self):
+        with as_principal(Principal("operator", "web", OPERATOR_CAPABILITIES - {"write_expenses"})):
+            refused = self.client.post(reverse("expenses:create"), form_keyed(EXPENSE))
+
+        self.assertEqual(refused.status_code, 403)
+        self.assertTrue(refused.context["form"].non_field_errors())
+        self.assertFalse(Expense.objects.exists())
 
 
 class RecordDeleteTests(FormWriteCase):
@@ -295,18 +304,14 @@ class RecordDeleteTests(FormWriteCase):
         self.assertIn("different request", text(refused))
         self.assertEqual(list(Expense.objects.values_list("item", flat=True)), ["Kept"])
 
-    def test_a_refused_delete_frees_its_key(self):
+    def test_a_person_without_the_grant_is_refused(self):
         expense = _expense()
-        posted = form_keyed()
-        refusing = _once_refused(records.delete_instance, ValueError("Refused by the deleter."))
-        self.client.raise_request_exception = False
 
-        with mock.patch("hq.platform.application.writes.delete_instance", refusing):
-            self.client.post(reverse("expenses:delete", args=[expense.pk]), posted)
-            self.assertTrue(Expense.objects.exists())
-            self.client.post(reverse("expenses:delete", args=[expense.pk]), posted)
+        with as_principal(Principal("operator", "web", OPERATOR_CAPABILITIES - {"delete_expenses"})):
+            refused = self.client.post(reverse("expenses:delete", args=[expense.pk]), form_keyed())
 
-        self.assertFalse(Expense.objects.exists())
+        self.assertEqual(refused.status_code, 403)
+        self.assertTrue(Expense.objects.exists())
 
 
 class ExpenseCommandForm(forms.Form):
@@ -315,14 +320,11 @@ class ExpenseCommandForm(forms.Form):
     item = forms.CharField()
 
 
-def _command_view():
-    """A page whose submit is ``save_expense``, as an extension's command form is."""
+def _command_view(service=save_expense):
+    """A page whose submit is ``service``, as an extension's command form is."""
 
-    from ..writes import CommandFormMixin
-
-    class ExpenseCommandView(CommandFormMixin, FormView):
+    class ExpenseCommandView(writes.CommandFormMixin, FormView):
         form_class = ExpenseCommandForm
-        service = staticmethod(save_expense)
         command = ExpenseCommand
         success_url_name = "expenses:list"
         success_message = "Expense saved."
@@ -333,10 +335,16 @@ def _command_view():
             )
             return HttpResponse(page.render(RequestContext(self.request, context)), **response_kwargs)
 
+    ExpenseCommandView.service = staticmethod(service)
     return ExpenseCommandView
 
 
 class CommandFormTests(TestCase):
+    """The published ``CommandFormMixin``: its service's capability through the
+    runner, or a service that is none outside it."""
+
+    POSTED = {"date": "2026-07-25", "vendor": "Example Store", "item": "Cable"}
+
     def setUp(self):
         self.person = get_user_model().objects.create_user("operator", password="unused-test-pass")
         self.view = _command_view().as_view()
@@ -349,7 +357,7 @@ class CommandFormTests(TestCase):
         return self.view(request), request
 
     def test_the_same_post_again_saves_once_and_says_so_again(self):
-        posted = form_keyed({"date": "2026-07-25", "vendor": "Example Store", "item": "Cable"})
+        posted = form_keyed(self.POSTED)
 
         first, _ = self.post(posted)
         again, request = self.post(posted)
@@ -359,8 +367,15 @@ class CommandFormTests(TestCase):
         self.assertEqual(Expense.objects.count(), 1)
         self.assertEqual([str(message) for message in get_messages(request)], ["Expense saved."])
 
+    def test_a_registered_service_is_run_as_its_capability(self):
+        with as_principal(Principal("operator", "web", OPERATOR_CAPABILITIES - {"write_expenses"})):
+            refused, _ = self.post(form_keyed(self.POSTED))
+
+        self.assertEqual(refused.status_code, 403)
+        self.assertFalse(Expense.objects.exists())
+
     def test_the_same_key_with_another_form_is_refused_on_the_form(self):
-        posted = form_keyed({"date": "2026-07-25", "vendor": "Example Store", "item": "Cable"})
+        posted = form_keyed(self.POSTED)
         self.post(posted)
 
         changed, _ = self.post({**posted, "item": "Charger"})
@@ -369,27 +384,25 @@ class CommandFormTests(TestCase):
         self.assertNotEqual(drawn_key(changed, "class", "form"), posted[RETRY_KEY_FIELD])
         self.assertEqual(list(Expense.objects.values_list("item", flat=True)), ["Cable"])
 
-    def test_the_same_key_and_body_sent_to_another_form_is_refused_there(self):
-        class AnotherExpenseView(self.view.view_class):
-            success_message = "Another form's answer."
+    def test_a_service_that_is_no_capability_writes_once_outside_the_runner(self):
+        calls = []
 
-        posted = form_keyed({"date": "2026-07-25", "vendor": "Example Store", "item": "Cable"})
-        self.post(posted)
-        self.view = AnotherExpenseView.as_view()
+        def unregistered(command, *, principal):
+            calls.append(1)
+            if len(calls) == 1:
+                raise ValueError("Refused by the domain.")
+            return save_expense(command, principal=principal)
 
-        refused, _ = self.post(posted)
+        self.view = _command_view(unregistered).as_view()
+        posted = form_keyed(self.POSTED)
 
-        self.assertEqual(refused.status_code, 409)
-        self.assertEqual(Expense.objects.count(), 1)
-
-    def test_a_refused_command_frees_its_key(self):
-        posted = form_keyed({"date": "2026-07-25", "vendor": "Example Store", "item": "Cable"})
-        refusing = _once_refused(save_expense, ValueError("Refused by the domain."))
-
-        with mock.patch.object(self.view.view_class, "service", staticmethod(refusing)):
+        with mock.patch.object(writes, "outside_the_runner", wraps=writes.outside_the_runner) as outside:
             refused, _ = self.post(posted)
             landed, _ = self.post(posted)
+            again, _ = self.post(posted)
 
         self.assertContains(refused, "Refused by the domain.")
         self.assertRedirects(landed, reverse("expenses:list"), fetch_redirect_response=False)
-        self.assertEqual(Expense.objects.count(), 1)
+        self.assertEqual(again["Location"], landed["Location"])
+        self.assertEqual((Expense.objects.count(), len(calls)), (1, 2))
+        self.assertTrue(outside.called)

@@ -17,7 +17,6 @@ from hq.platform.core.tests.estate_sizes import at_both_sizes
 
 from ..capabilities import run_capability
 from ..controller import ControllerReport, claim_next_operation, report_operation
-from ..doors import NOBODY
 from ..resource_operations import operation_summary
 from ..security import Capability, Principal
 from ..work_runs import (
@@ -101,7 +100,7 @@ class OneListTests(WorkRunsTestCase):
 
         (row,) = self.listed()
 
-        summary = operation_summary(run, row.by)
+        summary = operation_summary(row, run)
         self.assertEqual((row.by.words, row.by.approved_by, row.note), (summary["by"], summary["approved_by"], "Done."))
         self.assertEqual((row.word, row.tone), (JobState.SUCCEEDED.label, TONES[JobState.SUCCEEDED]))
         self.assertEqual(row.evidence.hosts, (APP, DB))
@@ -111,6 +110,27 @@ class OneListTests(WorkRunsTestCase):
         self.assertIn(RESTART, row.title)
         self.assertEqual((row.started, row.finished), (run.claimed_at, run.completed_at))
 
+    def test_who_started_each_job_and_asked_each_run_is_read_at_once(self):
+        from django.contrib.auth import get_user_model
+
+        from hq.domains.jobs.runner import AUDIT_TYPE, run as run_job
+        from hq.platform.core.models import AuditLog
+
+        from ..history import who_did
+        from ..resource_operations import asked_by
+
+        asked = self.run_of(APP)
+        person = get_user_model().objects.create_user("example-person", password="x" * 14)
+        job = run_job("example.work", "Example work", lambda progress: {}, requested_by=person)
+
+        with CaptureQueriesContext(connection) as sent:
+            rows = {row.source: row for row in self.listed()}
+
+        self.assertEqual(rows[JOB].by, who_did((AUDIT_TYPE,), [job.pk])[str(job.pk)])
+        self.assertEqual(rows[RUN].by, asked_by([asked])[str(asked.pk)])
+        self.assertNotEqual(rows[JOB].by, rows[RUN].by)
+        self.assertEqual(len([query for query in sent if AuditLog._meta.db_table in query["sql"]]), 1)
+
     def test_an_approved_run_names_who_approved_it(self):
         run = self.run_of(APP)
 
@@ -119,14 +139,14 @@ class OneListTests(WorkRunsTestCase):
         self.assertEqual((row.id, row.by.approved_by), (str(run.pk), APPROVER))
 
     def test_a_job_s_row_is_its_standing(self):
-        from ..asks import job_standing
+        from ..work_runs import standing_of
 
-        job = self.job(JobState.FAILED, error="The registry lists nothing.")
+        self.job(JobState.FAILED, error="The registry lists nothing.")
 
         (row,) = self.listed()
 
-        standing = job_standing(job)
-        self.assertEqual((row.word, row.note), (standing.label, standing.note))
+        standing = standing_of(row)
+        self.assertEqual((row.word, row.note), (standing.label, "The registry lists nothing."))
         self.assertEqual(row.tone, TONES[JobState.FAILED])
 
     def test_a_held_run_is_not_listed(self):
@@ -152,21 +172,23 @@ class OneListTests(WorkRunsTestCase):
 
 
 class SameWordsTests(WorkRunsTestCase):
-    def test_a_run_tone_agrees_with_its_operation_summary(self):
-        """``TONES`` and ``operation_summary`` give a run in each plain state one tone."""
+    def test_a_run_in_each_plain_state_takes_that_state_s_tone(self):
+        """A run waiting, under way, done and failed is toned as a job in that state is."""
+
+        def tone(run):
+            return next(row.tone for row in self.listed() if row.id == str(run.pk))
 
         run = self.run_of(APP)
-        self.assertEqual(operation_summary(run, NOBODY)["tone"], TONES[JobState.QUEUED])
-        self.assertEqual(operation_summary(self.claimed(run), NOBODY)["tone"], TONES[JobState.RUNNING])
+        self.assertEqual(tone(run), TONES[JobState.QUEUED])
+        self.assertEqual(tone(self.claimed(run)), TONES[JobState.RUNNING])
         report_operation(
             str(run.pk),
             ControllerReport(success=True, observed_generation=run.input["generation"], message="Done."),
             controller_id=WORKER,
         )
-        run.refresh_from_db()
-        self.assertEqual(operation_summary(run, NOBODY)["tone"], TONES[JobState.SUCCEEDED])
+        self.assertEqual(tone(run), TONES[JobState.SUCCEEDED])
         failed = self.reported(self.run_of(DB, name=f"automation.{LOGS}.run"), success=False)
-        self.assertEqual(operation_summary(failed, NOBODY)["tone"], TONES[JobState.FAILED])
+        self.assertEqual(tone(failed), TONES[JobState.FAILED])
 
     def test_a_run_not_yet_ended_says_only_its_state(self):
         """Its State column says Waiting or Running; its Result has nothing yet."""

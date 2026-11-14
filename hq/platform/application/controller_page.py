@@ -16,8 +16,8 @@ from django.utils import timezone
 from hq.domains.control_plane.models import OperationRequest, ProviderInventory, attempted_at
 
 from .cadence import (
-    ControllerStanding,
     ForcedRead,
+    WorkerStanding,
     controller_standing,
     every_sweep,
     forced_reads,
@@ -25,6 +25,7 @@ from .cadence import (
 )
 from .entity_links import kind_label
 from .moments import duration
+lazy from .facts import every_snapshot
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,7 +53,7 @@ class QueuedWork:
 
 @dataclass(frozen=True, slots=True)
 class ControllerPage:
-    standing: ControllerStanding
+    standing: WorkerStanding
     swept_at: datetime | None
     sweep_due: bool
     next_sweep_at: datetime | None
@@ -112,7 +113,7 @@ def controller_page(now: datetime | None = None) -> ControllerPage:
     verdict: dict[str, Any] = sweep_due()
     readings = tuple(
         sorted(
-            (_reading(row) for row in ProviderInventory.objects.all()),
+            (_reading(row) for row in every_snapshot()),
             # What failed first, then the kinds in a stable order.
             key=lambda reading: (reading.ok, reading.label.lower()),
         )
