@@ -14,6 +14,7 @@ from typing import Annotated, Literal, TypedDict
 
 from django.db import transaction
 from django.utils import timezone
+from django.utils.text import get_text_list
 
 from hq.domains.control_plane.models import CapabilityRule
 from hq.platform.core.audit import record_event
@@ -365,7 +366,7 @@ def _approved_types(spec) -> str:
     )
     if not names:
         return "types that need approval"
-    return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
+    return get_text_list(names, "and")
 
 
 def _cell(spec, column: Column, current, grants, group: str) -> PolicyCell:

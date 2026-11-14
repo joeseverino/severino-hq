@@ -1,0 +1,20 @@
+# Django's get_text_list says a list in words ("a, b and c", "a and b", "a"),
+# and an empty one as nothing. A join of all but the last item beside the
+# last says the same list a second way. describe.listed stays its own: it
+# runs while modules are imported, before the translation machinery
+# get_text_list reads is ready, and describe imports nothing but the
+# standard library.
+id: list-in-words-by-get-text-list
+language: python
+severity: error
+message: Python joins a list into words by hand.
+note: Say it with get_text_list(items, "and") from django.utils.text.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+ignores:
+  - "**/tests/**"
+  - "hq/platform/application/describe.py"
+rule:
+  kind: string
+  regex: join\([^)]*\[:-1\]\)\}\s+(and|or)\s+\{
