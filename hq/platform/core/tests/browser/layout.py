@@ -48,6 +48,11 @@ _NO_OP_KEY = "Shift"
 # What runs past the page's edge, wherever a box that scrolls does not hold it.
 _ESCAPES_READ = (SIDEWAYS, ANY_SCROLLER)
 
+# A list's table in the markup a page was served, read apart from the table
+# probe's selector, so a probe that misses the tables it judges is caught; a
+# drawing laid out as a table (a calendar's month) is none.
+_DATA_TABLE = re.compile(r'<table\b[^>]*\bclass="(?:[^"]*\s)?data-table[\s"]')
+
 # A page's note on its readings, saying nothing and then the longest line it
 # says (a failure that names what it could not read), against the band
 # between the bar and the page: where it stands, how far its end is from the
@@ -346,7 +351,7 @@ class LayoutBrowserTests(BrowserGate):
         # The probe counts the tables it skips as undrawn (in a closed
         # disclosure) by its own test, so a page whose every table is in one
         # is told apart from a page whose tables it failed to find.
-        if "<table" in (self.pages.get(name) or self.page.content()):
+        if _DATA_TABLE.search(self.pages.get(name) or self.page.content()):
             self.assertGreater(tables["seen"] + tables["undrawn"], 0, "the probe found no table")
 
     @reads(OVERLAPS)
