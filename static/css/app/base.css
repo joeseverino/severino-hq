@@ -110,7 +110,6 @@ pre code { background: transparent; padding: 0; color: inherit; }
    on to the parts inside it, which are boxes of their own. */
 .cut:not(pre *, td *, th *) { text-decoration: inherit; }
 :is(code, .token):is(td *, th *) { overflow-wrap: break-word; }
-.whole:is(td *, th *) { display: inline-block; max-width: 100%; }
 /* A row header's identifier is a box of its own, as a cell's is (tables.css):
    WebKit leaves an inline chip's padding out of the width its column asks
    for, so the name would run into the cell's padding. */

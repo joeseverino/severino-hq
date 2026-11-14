@@ -92,21 +92,23 @@
    line show it whole. Only words are held: each part of words in it
    (`data-cell`) is clamped on its own, so a mark or a toggle beside them
    stays whole, and a cell of no such part is clamped whole. WebKit lays a
-   value's boxes out past the clamp, so the box holds three lines too. */
-.cell-clamp:not(:has([data-cell])) { display: -webkit-box; }
-.cell-clamp [data-cell]:not([data-cell] *) { display: -webkit-inline-box; vertical-align: top; }
-.cell-clamp:not(:has([data-cell])), .cell-clamp [data-cell]:not([data-cell] *) {
+   value's boxes out past the clamp, so the box holds three lines too. The
+   open line shows the value whole, so nothing there is clamped. */
+.cell-clamp:not(:has([data-cell]), .row-detail *) { display: -webkit-box; }
+.cell-clamp:not(.row-detail *) [data-cell]:not([data-cell] *) { display: -webkit-inline-box; vertical-align: top; }
+.cell-clamp:not(:has([data-cell]), .row-detail *), .cell-clamp:not(.row-detail *) [data-cell]:not([data-cell] *) {
   -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; max-block-size: 3lh; overflow: hidden;
+  /* Each of its lines is one of its own line-heights tall, so three of them
+     fill the box; one that holds something to press has lines a target tall. */
+  &:has(a[href], [tabindex]) { line-height: var(--target-min); }
+  & * { line-height: inherit; }
 }
-/* Words may break anywhere, so a string with no break in it (a hash, a key)
-   asks its column for no more than a letter: the table still gives each
-   column its whole line when the box holds it. A row's open line holds the
-   same values, so it breaks them the same way. */
-.data-table > tbody > tr > :is([data-kind="name"], [data-kind="prose"], [data-kind="identifier"]),
-.data-table > tbody > tr.row-detail > td {
-  overflow-wrap: anywhere;
-  & :is(code:not(.cell-whole), .token, .whole) { overflow-wrap: anywhere; }
-}
+/* An identifier (a hash, a key, a host) may break anywhere, so one with no
+   break in it asks its column for no more than a letter: the table still
+   gives each column its whole line when the box holds it. Words break only
+   where one alone is wider than its column (tables.css). */
+.data-table > tbody > tr > [data-kind="identifier"],
+.data-table td :is(code:not(.cell-whole), .token) { overflow-wrap: anywhere; }
 /* A part of a run (`line_list`) is whole on its line while the line holds it (the run wraps between its parts); one longer than the line takes the line and wraps at its words. */
 .data-table > tbody > tr > td .line-list > :not(.line-rest) { min-inline-size: 0; }
 .data-table > tbody > tr > td .line-list > :not(.line-rest) > .cell-part { white-space: normal; }
@@ -170,8 +172,8 @@
 
 /* A description under a row's name: two lines at most, as wide as its
    column lets it be; it holds out for its longest word, so its column gives
-   way with the others. */
-.table-clamp { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; -webkit-line-clamp: 2; line-clamp: 2; }
+   way with the others. A row's open line shows it whole. */
+.table-clamp:not(.row-detail *) { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; -webkit-line-clamp: 2; line-clamp: 2; }
 
 /* The command center: a result's title and what it says, one line each,
    two on a phone. */
@@ -212,7 +214,7 @@
    wrap with their column as words do, and the rest (`line-rest`) shows only
    on the row's open line (tables.css), where the run stands whole. */
 .line-list { display: flex; flex-wrap: wrap; align-items: baseline; row-gap: var(--space-1); }
-.line-rest, .line-run { display: contents; }
+.line-rest, .line-list .line-run { display: contents; }
 /* In a run with separators (page.css) the rest's first part takes the
    separator its place in the run gives it. */
 .dot-list > .line-rest::before { content: none; }

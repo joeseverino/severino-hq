@@ -300,9 +300,9 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 /* A row's buttons moved or copied there stand side by side, wrapping as the line asks. */
 .row-detail .row-later { display: flex; }
 .row-detail :is(.row-later, .row-controls) { flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-4); }
-/* An entry: its label in one column, what it shows beside it, on a panel. */
+/* An entry: its label in a column as wide as the labels, what it shows beside it in the rest of the row, on a panel. */
 .row-columns {
-  display: grid; grid-template-columns: 7rem minmax(0, 1fr); align-items: baseline; gap: var(--space-5) var(--space-6); margin: 0;
+  display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: baseline; gap: var(--space-5) var(--space-6); margin: 0;
   padding: var(--space-5) var(--space-6); border-radius: var(--radius); background: var(--bg-tint); container: row-columns / inline-size;
 }
 .row-columns > * { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; align-items: inherit; }
