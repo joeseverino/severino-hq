@@ -61,19 +61,10 @@ SELECTORS = {
     # an item of its own.
     "running_text": ":is(p, li:not(.line-rest), .row-detail)",
     "code": "code",
-    # The boxes that cut a cell's identifier: the token, the box it draws
-    # the name in (a chip in code), a part inside it.
-    "cut_box": ":is(.token[data-sole], .token[data-sole] > .cut, .token[data-sole] .whole, code)",
-    # The box a name in a cell is held by.
-    "name_box": "[data-entity], code, .token[data-sole]",
-    # The box a cell cuts a one-token name in, and the parts it lays out on
-    # its line.
-    "name_cut": "main td :is(.token[data-sole], .cell-line):not(code *) > .cut:has(.whole)",
+    # The box of a one-token name in a cell, and the parts it lays out on its
+    # line.
+    "name_box": "main td :is(.token[data-sole], .cell-line):not(code *):has(.whole)",
     "part": ".whole",
-    # A cell's kept line, the icon it opens with and the name beside it.
-    "kept_line": "main td > .kept-line",
-    "line_icon": ".icon",
-    "line_name": ".token",
     "decision_actions": "[data-attention-item] > td.row-actions",
     # The queue's table, and its cells of what is wrong and of its buttons.
     "queue_table": ".data-table:has(> tbody > tr[data-attention-item])",
@@ -213,14 +204,15 @@ SELECTORS = {
     # where one may break (figures.css): the line a row opens, each part a
     # cell marks with its role (the row's own name, what a row means, free
     # text, a context line), a preview, a chip that wraps, a control, a
-    # phrase's word whose hyphenated parts are each cut at the cell's edge,
-    # and a panel the cell shows, which is laid out as a page.
+    # value among the words of a phrase, which wraps at its seams as they
+    # do, a value set after words on its line, and a panel the cell shows,
+    # which is laid out as a page.
     "cell_token": "main .data-table > tbody > tr > td .token",
     # An identifier as `breakable` draws it, one run however its seams split it.
     "identifier": ".token",
     "wraps_in_a_cell": (
         "tr.row-detail, .row-gutter, [data-cell], .table-clamp, code.cell-whole, .btn,"
-        " .token:not([data-sole]):has(> .whole), [popover]"
+        " .token:not([data-sole]), .token[data-in-line], [popover]"
     ),
     # Words said to a reader and never drawn.
     "unseen": ".visually-hidden",

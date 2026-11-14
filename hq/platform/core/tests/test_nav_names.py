@@ -23,9 +23,10 @@ class NavigationNameTests(TestCase):
                 if item.route in NAMED_FOR_ITS_SUBJECT:
                     continue
                 response = self.client.get(reverse(item.route), follow=True)
-                page = response.context.get("page") if response.context else None
-                # A page that draws its own head (the API reference) has no
-                # title to hold to.
+                # The view's own context, never one a part of the page was
+                # drawn with (the Design page's examples). A page a function
+                # draws (the API reference) has no title to hold to.
+                page = (getattr(response, "context_data", None) or {}).get("page")
                 if page is not None and page.title != item.label:
                     differing[item.route] = (item.label, page.title)
 

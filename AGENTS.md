@@ -179,8 +179,8 @@ adding UI; grow a primitive rather than styling a page.
   (`hq/platform/core/speculation.py`).
 - Avoid N+1 queries. Prefetch relation panels and add a query-budget regression
   test for a projection that can grow with data or plugins.
-- Scripts are deferred and respect `prefers-reduced-motion`; only the two
-  `test_script_loading.py` names run before the first frame. Nothing moves
+- Scripts are deferred and respect `prefers-reduced-motion`; only the one
+  `test_script_loading.py` names runs before the first frame. Nothing moves
   once a page is drawn: a script fills space the server's HTML already holds.
 
 ## Structural checks

@@ -334,7 +334,9 @@ class LineChartTests(TestCase):
             "Jan 1, 2026\xa0· Resting heart rate: 52 bpm",
             [mark.attrs["data-tip"] for mark in select(rendered, "data-tip")],
         )
-        self.assertEqual(select(rendered, "title"), [])
+        # No browser tooltip of its own: the chart's data table titles its cells.
+        self.assertEqual(elements(rendered, "title"), [])
+        self.assertEqual([mark for mark in select(rendered, "data-tip") if "title" in mark.attrs], [])
 
     def test_a_slot_outside_the_palette_is_refused(self):
         with self.assertRaises(ValueError):

@@ -3113,7 +3113,6 @@
       }
     },
     "hooks": [
-      "data-chart",
       "data-sort",
       "data-submit-busy",
       "data-submit-label",
@@ -3332,6 +3331,9 @@
         ]
       }
     },
+    "styled": [
+      "data-chart"
+    ],
     "tags": {
       "arrow": {
         "classes": [],

@@ -67,7 +67,8 @@ _OPEN_READINGS = (
     + "</div>"
 )
 
-_TABLE = '<table class="data-table" style="table-layout: fixed; inline-size: 10rem"><tbody><tr><td>{}</td></tr></tbody></table>'
+# A table of one column 10rem wide, its track written as the server writes one.
+_TABLE = '<table class="data-table" style="--tracks: minmax(0px, auto); inline-size: 10rem"><tbody><tr><td>{}</td></tr></tbody></table>'
 
 # An ask as partials/_ask.html draws one, asking for the work at its address.
 _ASK = (
@@ -133,16 +134,14 @@ PLANTS = {
         '<p><code style="display: inline-block; inline-size: 4ch; block-size: 1lh; background: #eee">Example overrun</code></p>'
     ),
     "tables": Plant(_TABLE.format("Example").replace('style="', 'style="display: block; ', 1)),
-    # Held only once script has run, which alone fits a table to its box.
     "tables fit": Plant(
         '<div class="table-scroll" style="inline-size: 10rem"><table class="data-table" style="min-inline-size: 20rem">'
-        "<tbody><tr><td>Example</td></tr></tbody></table></div>",
-        scripted=True,
+        "<tbody><tr><td>Example</td></tr></tbody></table></div>"
     ),
     # A column hidden while a cell still spans it, so the table keeps its width.
     "unseen columns": Plant(
-        '<div class="table-scroll"><table class="data-table" style="inline-size: 100%">'
-        '<colgroup><col><col style="inline-size: 50%"></colgroup><thead><tr>'
+        '<div class="table-scroll"><table class="data-table" style="--tracks: minmax(0px, auto) minmax(0px, auto)">'
+        "<thead><tr>"
         '<th>Example</th><th style="display: none">Gone</th></tr></thead><tbody>'
         '<tr><td>Example</td><td style="display: none">Gone</td></tr>'
         '<tr><td colspan="2">Example spanning both</td></tr></tbody></table></div>'
@@ -175,26 +174,34 @@ PLANTS = {
         '<p>Example <code style="display: inline-block; max-inline-size: 4ch; overflow: hidden; white-space: nowrap">'
         "example_identifier</code> words.</p>"
     ),
-    # A short name cut in a table with room to spare.
-    "cut with room": Plant(
-        '<div class="table-scroll"><table class="data-table"><tbody><tr><td>'
-        '<span class="token" data-sole style="display: inline-block; max-inline-size: 3ch; overflow: hidden; '
-        'white-space: nowrap">example-name</span></td><td>Example</td></tr></tbody></table></div>'
-    ),
     # A value cut short of the room its cell holds, beside a column wider than it asks.
     "cut beside room": Plant(
         '<div class="table-scroll"><table class="data-table"><tbody><tr><td>'
         '<span style="display: block; max-inline-size: 6ch; overflow: hidden; text-overflow: ellipsis; '
         'white-space: nowrap">Example value cut short</span></td><td>Example</td></tr></tbody></table></div>'
     ),
+    # A column of a short word handed the table's room while the column of
+    # prose beside it is held narrower than its words ask.
+    "room unshared": Plant(
+        '<div class="table-scroll" style="inline-size: 30rem">'
+        '<table class="data-table" style="--tracks: minmax(0px, 1fr) minmax(0px, 6rem)"><tbody><tr>'
+        '<td data-kind="name">Example</td>'
+        '<td data-kind="prose">An example value broken over lines in its narrow column</td>'
+        "</tr></tbody></table></div>"
+    ),
+    # A row's state let go with a column its region dropped.
+    "row state kept": Plant(
+        '<table class="data-table" style="--tracks: minmax(0px, auto) minmax(0px, auto)"><tbody><tr><td>Example</td>'
+        '<td data-drop="1" data-label="Status" style="display: none"><span class="pill pill-good">Done</span></td>'
+        "</tr></tbody></table>"
+    ),
     # A value cut with an ellipsis in a row with no toggle to open it, and no
-    # title, which only script gives a cut.
+    # title, which the server gives a cut cell of the region's own.
     "cut and closed": Plant(
         _TABLE.format(
             '<span style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">'
             "an-example-value-far-too-long-for-its-cell</span>"
-        ),
-        scripted=True,
+        )
     ),
     # The same in a row drawn open, held past the stylesheet's lifting of an
     # open row's cuts.
@@ -453,7 +460,7 @@ PASSES = {
     ),
     # A value cut at its cell's edge beside a sentence that wraps: its row has
     # no room left. The second fills a padded box, whose padding is no room;
-    # the third is cut beside room too narrow to show it whole. Last, a tight
+    # the third is cut beside room too narrow to show it whole. Last, a narrow
     # table's status pill, a header's name too long for its column at its
     # narrowest, beside a short address whose column has room past it: the
     # pill's column takes that room and shows the name.
@@ -471,7 +478,7 @@ PASSES = {
         'white-space: nowrap">an-example-value-far-longer-than-the-room-its-cell-leaves-beside-it</span></td>'
         f"<td>{_LINES}</td></tr></tbody></table></div>"
         '<div style="inline-size: 15rem">{% table_region "Example" %}'
-        '<table class="data-table" data-narrow data-tight><thead><tr>'
+        '<table class="data-table"><thead><tr>'
         '{% table_heading "Value" "identifier" %}{% table_heading "Type" "status" %}</tr></thead><tbody>'
         '<tr><td><code class="cell-whole">{{ address|breakable }}</code></td>'
         '<td>{% status header tone="neutral" %}</td></tr></tbody></table>{% endtable_region %}</div>',

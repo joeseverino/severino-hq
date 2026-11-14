@@ -115,7 +115,9 @@ print(run.is_dir())
 TAKES_THE_TURN = """
 import os, sys
 from pathlib import Path
-from tools.gate import at
+from tools.gate import at, turn
+# The suite this runs in holds a share; the task is typed outside one.
+os.environ.pop(turn.SHARE, None)
 def execvp(file, args):
     print(sorted(path.name for path in Path(sys.argv[1]).iterdir()))
     sys.exit(0)

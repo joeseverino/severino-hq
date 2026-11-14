@@ -10,7 +10,7 @@ something else: its meaning waits in the opened line with the rest.
 {% endcomment %}
 {% if items %}
 {% table_region "Queue" %}
-  <table class="data-table" data-columns="2" data-line="flat">
+  <table class="data-table" data-line="flat">
     <tbody>{% with folding=fold|default:False %}{% include "partials/_queue_entries.html" with entries=items|families:folding prefix="problem" %}{% endwith %}</tbody>
   </table>
 {% endtable_region %}

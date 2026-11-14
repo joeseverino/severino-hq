@@ -1310,8 +1310,9 @@ ENTRIES = {
     # queue row draws a plan for each container behind: the hyphenated part is
     # a box of its own (`breakable`), set on the line of the words before it.
     "part/row-buttons": Entry(
-        '<div class="table-scroll"><table class="data-table"><tbody>{% for action in actions %}<tr><td>'
-        '{% include "partials/_action_links.html" with actions=action only %}</td></tr>{% endfor %}</tbody></table></div>',
+        '{% table_region "Example plans" %}<table class="data-table"><tbody>{% for action in actions %}<tr><td>'
+        '{% include "partials/_action_links.html" with actions=action only %}</td></tr>{% endfor %}</tbody></table>'
+        "{% endtable_region %}",
         {
             "actions": (
                 (PageAction("Upgrade plan for example", "/example/"),),

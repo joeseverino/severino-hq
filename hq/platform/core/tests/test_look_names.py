@@ -15,6 +15,7 @@ from unittest import mock
 
 from django.test import SimpleTestCase, TestCase, tag
 from django.urls import resolve, reverse
+from django.utils import timezone
 
 from hq.platform.core.tests import look
 from hq.platform.core.tests.browser.estate import ask_as_production, estate_once, landings, owner_client
@@ -87,7 +88,9 @@ class CatalogNamesTests(SimpleTestCase):
         from hq.platform.core.tests.browser import catalog
 
         self.assertEqual(_named("gallery"), ["gallery"])
-        self.assertEqual(look.catalog_pages(["gallery"]), {"gallery": catalog.page("gallery")})
+        # Both are drawn at one moment: an example says how long ago, by the clock.
+        with mock.patch("django.utils.timezone.now", return_value=timezone.now()):
+            self.assertEqual(look.catalog_pages(["gallery"]), {"gallery": catalog.page("gallery")})
         self.assertEqual(look.catalog_pages(["gallery", "part/notice-error"]).keys(), {"gallery", "part/notice-error"})
 
     def test_a_name_that_begins_entries_is_every_one_of_them(self):

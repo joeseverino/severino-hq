@@ -479,14 +479,13 @@ class LayoutBrowserTests(BrowserGate):
     def nothing_a_summary_names_is_hidden(self, _name, found):
         self.assertEqual(found, [])
 
-    # With script: the page a person reads, sorted, selectable and with its
-    # cut values marked.
+    # With script: the page a person reads, sorted and selectable.
 
     def a_table_fits_its_box(self, name):
         """A table never overflows its box at the width the page stands at:
-        while it is wider, its ranked columns leave, then it is narrow, then
-        tight (tables.js). Every table on the page, with every disclosure open.
-        """
+        while it is narrower than its columns' floors, its ranked columns
+        leave, then its controls stand beneath its words (tables.css). Every
+        table on the page, with every disclosure open."""
 
         self.open_every_disclosure(name)
         self.page.evaluate(SETTLE)

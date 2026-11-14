@@ -432,10 +432,11 @@ class CredentialSightPageTests(TestCase):
             {"example-ssh": "ssh", "example-api": "cloudflare_api", "example-tailnet": "tailscale"},
         )
         # The refusal is the product's words: said once, for the credential.
-        self.assertContains(
-            response,
-            "Cloudflare API refused this credential: Cannot use the access token from location: 192.0.2.1",
-            count=1,
+        self.assertEqual(
+            text(response).count(
+                "Cloudflare API refused this credential: Cannot use the access token from location: 192.0.2.1"
+            ),
+            1,
         )
         api = rows["example-api"].sight
         self.assertFalse([sight.remedy for sight in api.sights if sight.remedy])

@@ -218,21 +218,20 @@ class StyleContractTests(SimpleTestCase):
                 self.assertRegex(background.group(1), r"transparent|/\s*[.\d]+\)|rgba|hsla")
 
     def test_a_table_part_is_never_given_a_block_flex_or_grid_display(self):
-        """`display: flex` or `block` on a table part drops it out of table layout.
-
-        The row then stacks into a single narrow column, and a colspan header
-        collapses to one column's width. Neither fails loudly and both read as
-        a styling nudge, so this reads the classes the templates actually put
-        on table parts and rejects the declaration there. Lay out a div inside
-        the cell instead. On a phone a wide table scrolls sideways in its
-        `.table-scroll`; it does not stack into cards.
+        """A table is laid out by its primitive alone (tables.css, a grid whose
+        rows are its subgrids), so a box display any other sheet gives a table
+        part takes the row out of its tracks: its cells no longer line up with
+        the columns, and neither fails loudly. This reads the classes the
+        templates actually put on table parts and rejects the declaration
+        there. Lay out a div inside the cell instead.
         """
 
         cell_classes = _table_part_classes()
         offences = []
         # Comments first: one sitting above a rule is otherwise read as part of
         # that rule's selector.
-        source = re.sub(r"/\*.*?\*/", " ", self._stylesheet(), flags=re.DOTALL)
+        sheets = "\n".join(path.read_text(encoding="utf-8") for path in sheet_paths() if path.name != "tables.css")
+        source = re.sub(r"/\*.*?\*/", " ", sheets, flags=re.DOTALL)
         for selector, block in re.findall(r"([^{}]+)\{([^{}]*)\}", source):
             declared = re.search(r"(?<![\w-])display\s*:\s*([a-z-]+)", block)
             if not declared or declared.group(1) not in _BOXES:

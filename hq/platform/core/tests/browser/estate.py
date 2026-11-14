@@ -381,7 +381,7 @@ _LET_GO = """([name, value]) => !new URLSearchParams(location.search).getAll(nam
 # The places of the headings a list's table has dropped, and those places as
 # each frame draws them from now on.
 _DROPPED = """(region) => [...document.querySelector(region + ' > .data-table').tHead.rows[0].cells]
-  .flatMap((heading, place) => heading.hasAttribute('data-dropped') ? [place] : [])"""
+  .flatMap((heading, place) => !heading.checkVisibility() ? [place] : [])"""
 _WATCH_DROPPED = (
     """(region) => {
   window.droppedFrames = [];
@@ -639,13 +639,13 @@ class ExampleEstateControlTests(BrowserGate):
         fits = """(region) => {
           const table = document.querySelector(region + ' > table');
           return table.offsetWidth <= table.parentElement.clientWidth
-            && [...table.tHead.rows[0].cells].some((heading) => heading.hasAttribute('data-dropped'));
+            && [...table.tHead.rows[0].cells].some((heading) => !heading.checkVisibility());
         }"""
         self.page.wait_for_function(fits, arg=SELECTORS["table_scroll"], timeout=5_000)
 
     def test_a_list_sorted_on_a_phone_draws_no_column_it_had_dropped(self):
-        """The table a sort swaps in is fitted before its first frame, so no
-        column the list had dropped is drawn and then dropped again."""
+        """The table a sort swaps in is laid out by the stylesheet in its first
+        frame, so no column the list had dropped is drawn and then dropped again."""
 
         self.visit(reverse("projects:list"), PHONE_SCREEN[0])
         before = self.page.evaluate(_DROPPED, SELECTORS["table_scroll"])

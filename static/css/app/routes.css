@@ -128,6 +128,8 @@ span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-
 .notice p { margin: var(--space-2) 0 0; }
 
 .pagination { display: flex; gap: var(--space-6); align-items: center; margin: var(--space-8) 0; font-size: var(--text-sm); }
+/* A page link stands alone, so it is a target tall, as a link on a line of its own is (figures.css). */
+.pagination a { line-height: var(--target-min); }
 
 
 /* A card that is the whole of a page outside the page frame ({% card alone=True %},

@@ -24,6 +24,7 @@ from django.urls import reverse
 from hq.platform.core import example_estate
 from hq.platform.core.example_estate import names, records
 from hq.platform.core.example_estate.testing import throwaway_media
+from hq.platform.core.table_cells import sets_only_custom_properties
 
 from ..routes import routed
 
@@ -106,6 +107,11 @@ class _Page(HTMLParser):
         self.unwrapped_tables = 0
         # Each element that writes a style the policy refuses.
         self.styled: list[str] = []
+        # Each open template, marked when it is a shadow root. What a shadow
+        # root holds is a tree of its own (the Design page's examples, each in
+        # the frame the component catalog holds it to): its headings, ids,
+        # forms, links and styles are no part of the page's.
+        self._templates: list[bool] = []
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
@@ -114,6 +120,16 @@ class _Page(HTMLParser):
             self.unwrapped_tables += 1
         if tag not in _VOID:
             self._open.append((tag, "table-scroll" in classes))
+        if tag in {"script", "style", "template"}:
+            self._hidden += 1
+        if tag == "template":
+            self._templates.append("shadowrootmode" in attrs)
+        if any(self._templates):
+            return
+        if tag == "style":
+            self.styled.append("<style>")
+        elif "style" in attrs and not sets_only_custom_properties(attrs["style"] or ""):
+            self.styled.append(f'<{tag} style="{(attrs["style"] or "")[:80]}">')
         if tag == "form":
             self.form_depth += 1
             self.nested_forms += self.form_depth > 1
@@ -121,22 +137,21 @@ class _Page(HTMLParser):
             self.h1 += 1
         if attrs.get("id"):
             self.ids[attrs["id"]] = self.ids.get(attrs["id"], 0) + 1
-        if tag == "style" or "style" in attrs:
-            self.styled.append("<style>" if tag == "style" else f"<{tag} style>")
         if tag == "a" and attrs.get("href"):
             self.links.append(attrs["href"])
-        if tag in {"script", "style", "template"}:
-            self._hidden += 1
 
     def handle_endtag(self, tag):
         for index in range(len(self._open) - 1, -1, -1):
             if self._open[index][0] == tag:
                 del self._open[index:]
                 break
-        if tag == "form":
-            self.form_depth = max(self.form_depth - 1, 0)
         if tag in {"script", "style", "template"}:
             self._hidden = max(self._hidden - 1, 0)
+        if tag == "template" and self._templates:
+            self._templates.pop()
+            return
+        if tag == "form" and not any(self._templates):
+            self.form_depth = max(self.form_depth - 1, 0)
 
     def handle_data(self, data):
         if not self._hidden:
@@ -156,6 +171,9 @@ def _onward(links, seen: set[str]):
 
 
 class RenderedPageTests(TestCase):
+    # The failure is the list of what the pages got wrong, said whole.
+    maxDiff = None
+
     @classmethod
     def setUpTestData(cls):
         cls.user = get_user_model().objects.create_superuser(

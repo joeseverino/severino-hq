@@ -192,7 +192,10 @@ STRAYS_OPENING_A_LINE = (
           if (rect) add(block, {ch: child.data[at], rect, el: child.parentElement});
         }
       } else if (child.nodeType === Node.ELEMENT_NODE) {
-        if (child.matches(`${unseen}, script, style, template, pre`) || !child.checkVisibility({visibilityProperty: true})) continue;
+        // `checkVisibility()` is false on a box with no box of its own (a
+        // table's row groups, `display: contents`), whose children are drawn.
+        const boxless = getComputedStyle(child).display === 'contents';
+        if (child.matches(`${unseen}, script, style, template, pre`) || (!boxless && !child.checkVisibility({visibilityProperty: true}))) continue;
         if (child.matches('br')) { add(blockOf(child.parentElement), {br: true}); continue; }
         const separator = drawnSeparator(child);
         if (separator) add(blockOf(child), {ch: separator, rect: [...child.getClientRects()].find((r) => r.width), el: child});
@@ -484,6 +487,34 @@ PAST_THE_CLAMP = (
       if (c.top >= bottom - 1) { lines += 1; bottom = c.bottom; } else bottom = Math.max(bottom, c.bottom);
     }
     if (lines > clamp) found.push(`${describe(el)} "${el.textContent.trim().slice(0, 40)}" shows ${lines} lines, clamped to ${clamp}`);
+    // A box drawn taller than its clamp (stretched to its row) shows a sliver
+    // of the next line, cut through its glyphs by its own edge.
+    const style = getComputedStyle(el);
+    const foot = box.bottom - parseFloat(style.borderBottomWidth);
+    const sliver = chars(el).find((c) => c.top !== null && c.ch.trim() && c.top < foot - 1 && c.bottom > foot + 1);
+    if (sliver) found.push(`${describe(el)} "${el.textContent.trim().slice(0, 40)}" cuts a line through its glyphs at its foot`);
+    // A cut the clamp marks takes no second mark: a part cut at its own end
+    // (`text-overflow`) on the clamp's last line draws a second ellipsis
+    // beside the clamp's, and one whose value runs on past it (the rest of
+    // its token, drawn after the mark) cuts that value twice. The clamp marks
+    // a cut only once it holds all its lines and more follow.
+    if (lines < clamp || el.scrollHeight <= el.clientHeight + 1) continue;
+    const line = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.5;
+    const rest = document.createRange();
+    const runsOn = (part) => {
+      const token = part.parentElement?.closest('.token');
+      if (!token || !el.contains(token)) return false;
+      rest.setStartAfter(part);
+      rest.setEnd(token, token.childNodes.length);
+      return Boolean(rest.toString().trim()) && [...rest.getClientRects()].some((r) => r.width > 0 && r.top < foot);
+    };
+    const twice = [...el.querySelectorAll('*')].find((part) => {
+      const s = getComputedStyle(part);
+      if (s.textOverflow !== 'ellipsis' || part.scrollWidth <= part.clientWidth + 1 || !part.checkVisibility()) return false;
+      const r = part.getBoundingClientRect();
+      return r.top < foot && (r.bottom > foot - line || runsOn(part));
+    });
+    if (twice) found.push(`${describe(el)} "${el.textContent.trim().slice(0, 40)}" marks one cut twice: ${describe(twice)} and the clamp`);
   }
   return found;
 }"""
@@ -513,7 +544,7 @@ CUT_DECISIONS = (
 
 # An identifier (`|breakable`'s token) drawn on more than one line in a table
 # that still has a column to let go: the table should have let it go
-# (tables.js) rather than break the name. A table in a narrow box has none
+# (tables.css) rather than break the name. A table in a narrow box has none
 # left, a line past a clamp is not drawn, and what wraps by design (`wraps`,
 # figures.css: a row's own name, free text, a context line) and an opened row
 # are not counted.
@@ -525,7 +556,9 @@ BROKEN_TOKENS = (
   const found = [];
   const range = document.createRange();
   for (const token of document.querySelectorAll(tokens)) {
-    if (token.closest(wraps) || token.closest('[data-narrow], tr:has(> * > [aria-expanded="true"])')) continue;
+    const table = token.closest('table');
+    const narrow = table && getComputedStyle(table).getPropertyValue('--whole').trim() === '0';
+    if (narrow || token.closest(wraps) || token.closest('tr:has(> * > [aria-expanded="true"])')) continue;
     const lines = [];
     const walker = document.createTreeWalker(token, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
@@ -639,7 +672,11 @@ LINES_SHORT_OF_THEIR_ROOM = (
         }
         continue;
       }
-      if (!node.parentElement.checkVisibility()) continue;
+      // A box drawn as its contents (`display: contents`) has no box to be
+      // seen by, so its words are seen as the box around it is.
+      let drawn = node.parentElement;
+      while (drawn !== block && getComputedStyle(drawn).display === 'contents') drawn = drawn.parentElement;
+      if (!drawn.checkVisibility()) continue;
       const text = node.textContent;
       for (const match of text.matchAll(/[^ \\t\\n\\r\\f]+/g)) {
         const end = match.index + match[0].length;

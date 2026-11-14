@@ -39,5 +39,5 @@ def reference(request: HttpRequest) -> HttpResponse:
     # The longest path the document serves, in characters: every list of a
     # tag's operations is that wide, so their edges line up (api-reference.css).
     longest = max(map(len, document()["paths"]), default=0)
-    context = {"page": Page(title="API reference"), "document_url": reverse("hq_api:openapi"), "longest_path": longest}
+    context = {"page": Page(title="API"), "document_url": reverse("hq_api:openapi"), "longest_path": longest}
     return TemplateResponse(request, "hq_api/reference.html", context)

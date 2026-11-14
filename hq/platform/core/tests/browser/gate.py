@@ -32,6 +32,7 @@ from hq.platform.core.run_report import Cost, tally
 from hq.platform.core.speculation import rules_document
 from hq.platform.core.stalls import stall_watch
 from hq.platform.core.stylesheets import stylesheet
+from hq.platform.core.table_cells import sets_only_custom_properties
 from hq.platform.core.test_runner import browser_engine, browser_failures
 from hq.platform.core.tests.browser.probes.axe import rules_read
 from hq.platform.core.tests.browser.probes.palette import (
@@ -168,18 +169,6 @@ class _Watched:
         self.result.addSubTest(test, subtest, err)
 
 
-@cache
-def cuts_marked_after():
-    """How long after a resize tables.js measures the tables' cuts again
-    (`markTablesSoon`), in milliseconds, read from the script itself."""
-
-    asset = static_file("js/tables.js")
-    said = re.search(r"setTimeout\(markTables, (\d+)\)", asset[1].decode() if asset else "")
-    if not said:
-        raise AssertionError("tables.js no longer measures cuts on a timer after a resize the way the sweep waits for")
-    return int(said[1])
-
-
 def tab_key(browser):
     """The key that moves focus to every control: Option-Tab in WebKit, as
     Safari has it (plain Tab there skips buttons and links), Tab elsewhere."""
@@ -275,7 +264,8 @@ def answered(response):
 # and in a layer named before HQ's, where an !important one outranks HQ's own
 # as an inline one does. A page HQ answered is never lifted: a style it writes
 # is refused, which is the policy's point, and test_rendered holds HQ's markup
-# to writing none.
+# to writing none but the custom properties a table's layout hands its sheet,
+# which the gate leaves where HQ writes them.
 _STYLE_ATTRIBUTE = re.compile(r'(<[a-zA-Z][^>]*?)\sstyle="([^"]*)"')
 _HEAD = re.compile(r"<head\b[^>]*>", re.IGNORECASE)
 _DOCTYPE = re.compile(r"<!doctype html>", re.IGNORECASE)
@@ -300,7 +290,10 @@ def lifted(body):
     declared = []
 
     def named(match):
-        declared.append(unescape(match[2]))
+        style = unescape(match[2])
+        if sets_only_custom_properties(style):
+            return match[0]
+        declared.append(style)
         return f'{match[1]} data-gate-style="{len(declared)}"'
 
     body = _STYLE_ATTRIBUTE.sub(named, body)
@@ -982,7 +975,7 @@ class BrowserGate(SimpleTestCase):
         with the folds open, so every row is read open."""
 
         loaded = self.page.viewport_size
-        layout = [SELECTORS["table_scroll"], viewport_queries(stylesheet()), cuts_marked_after()]
+        layout = [SELECTORS["table_scroll"], viewport_queries(stylesheet())]
         probes = table_probes()
         sources, args = zip(*probes.values(), strict=True)
         script = tables_read(hushed(_in_one_trip(sources)))
@@ -1022,7 +1015,7 @@ class BrowserGate(SimpleTestCase):
             for width in [NARROWEST, *(width for before, width in pairwise(widths) if shapes[width] != shapes[before])]:
                 self.page.set_viewport_size(viewport(width))
                 states, moved = self.page.evaluate(
-                    script, [layout[0], layout[2], state, rows, SELECTORS["own_records"], list(args)]
+                    script, [layout[0], state, rows, SELECTORS["own_records"], list(args)]
                 )
                 for said_state, outcomes in states:
                     where = f"at {width}px" + (f", {said_state}" if said_state else "")

@@ -10,13 +10,13 @@ CELLS = (
     + """
   // A cell's content stays in the cell. Inside a table that scrolls, running
   // past the edge is not caught by anything else: it lands under the next
-  // column, readable in neither. What a box inside the cell cuts (a line cut
-  // with an ellipsis) shows only as far as that box, which is held on its own.
-  // A popover or a modal dialog shown is drawn in the top layer, over the
-  // page, so the cell it sits in does not hold it.
+  // column, readable in neither. What a box cuts (a line cut with an
+  // ellipsis, the cell itself cut by its kind) shows only as far as that box,
+  // which is held on its own. A popover or a modal dialog shown is drawn in
+  // the top layer, over the page, so the cell it sits in does not hold it.
   const found = [];
   const cut = (el, cell) => {
-    for (let b = el.parentElement; b && b !== cell; b = b.parentElement) {
+    for (let b = el.parentElement; b && b !== cell.parentElement; b = b.parentElement) {
       if (getComputedStyle(b).overflowX !== 'visible') return true;
     }
     return false;
@@ -39,11 +39,17 @@ TABLES = (
     "() => {"
     + DESCRIBE
     + """
+  // A table is laid out on its own grid (tables.css): a row group drawn with
+  // no box of its own names the role its tag no longer gives it,
+  // its heading row is drawn, every row is a subgrid of its columns, and each
+  // cell on a row's first line stands under the heading of its column. A
+  // cell its row draws on a line of its own (a column the region let go, a
+  // row's controls beneath its words) spans the row, under no heading.
   const width = document.documentElement.clientWidth;
   const found = [];
   let seen = 0;
   let undrawn = 0;
-  for (const table of document.querySelectorAll('main table')) {
+  for (const table of document.querySelectorAll('main table.data-table')) {
     const r = box(table);
     // A table in a closed disclosure is not drawn, so it has no box to fit
     // until it opens; the rules read with every disclosure open read it then.
@@ -53,22 +59,34 @@ TABLES = (
     }
     seen += 1;
     const name = describe(table);
-    if (getComputedStyle(table).display !== 'table') found.push(`${name} is not laid out as a table`);
+    if (getComputedStyle(table).display !== 'grid') found.push(`${name} is not laid out on its grid`);
+    const groups = [...table.querySelectorAll(':scope > :is(thead, tbody, tfoot)')];
+    if (groups.some((group) => getComputedStyle(group).display === 'contents' && group.getAttribute('role') !== 'rowgroup')) {
+      found.push(`${name} draws a row group with no box and no role`);
+    }
     const head = table.querySelector('thead');
-    if (head && (getComputedStyle(head).display !== 'table-header-group'
-                 || getComputedStyle(head).position === 'absolute')) {
+    const headings = head ? [...head.querySelectorAll(':scope > tr:last-child > th')] : [];
+    if (head && (getComputedStyle(head).display !== 'contents'
+                 || headings.length && !headings.some((heading) => heading.checkVisibility()))) {
       found.push(`${name} hides its column headings`);
     }
-    // A row folded away is not drawn at all, which is not drawn as a card. A
-    // row of a table with a column of controls (`data-beneath`) wraps them to
-    // a line beneath its words in a narrow box, each cell still a cell under
-    // its heading (tables.css), which is no card either.
-    const beneath = table.querySelector(':scope > * > tr > [data-beneath]');
-    for (const row of table.querySelectorAll('tbody tr')) {
-      const display = getComputedStyle(row).display;
-      if (beneath && display === 'flex' && row.matches('tr:has(> :nth-child(2))')) continue;
-      if (!['table-row', 'none'].includes(display)) {
-        found.push(`${name} stacks its rows`); break;
+    // A row folded away is not drawn at all.
+    for (const row of table.querySelectorAll(':scope > * > tr')) {
+      const style = getComputedStyle(row);
+      if (style.display !== 'none' && !style.gridTemplateColumns.startsWith('subgrid')) {
+        found.push(`${name} draws a row off its columns`); break;
+      }
+    }
+    // A row's cells and its heading row's stand in the same order, every column present in each.
+    const edges = new Map(headings.map((heading, place) => [place, heading.checkVisibility() && box(heading)]));
+    for (const cell of table.querySelectorAll(':scope > tbody > tr > :is(td, th):not([colspan])')) {
+      const at = edges.get(cell.cellIndex);
+      const style = getComputedStyle(cell);
+      if (!at || !cell.checkVisibility() || style.gridRowStart !== '1') continue;
+      const c = box(cell);
+      if (Math.abs(c.left - at.left) > 1 || Math.abs(c.right - at.right) > 1) {
+        found.push(`${name} draws column ${cell.cellIndex + 1} off its heading by ${Math.round(c.left - at.left)}px`);
+        break;
       }
     }
     let scroller = table.parentElement;
@@ -86,32 +104,55 @@ TABLES = (
 )
 
 
-# A row that arrives in a table already fitted, as the parser adds a long
-# table's later rows after the first are fitted, then for every record's row
-# the places where a cell shows in a column whose heading left, or the other
-# way about.
-ROW_ARRIVES = """async (scroll) => {
-  const table = document.querySelector('main ' + scroll + ' > table');
-  const headings = [...table.querySelectorAll(':scope > thead > tr:last-child > th')];
-  // A record's row has a cell under every heading; a group's heading row and
-  // the line beneath a row span them.
-  const records = () => [...table.querySelectorAll(':scope > tbody > tr')]
-    .filter((row) => row.children.length === headings.length);
-  const record = records()[0];
-  const arriving = record.cloneNode(true);
-  arriving.querySelectorAll('[data-dropped]').forEach((cell) => cell.removeAttribute('data-dropped'));
-  record.parentElement.append(arriving);
-  await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
-  const left = headings.map((heading) => heading.hasAttribute('data-dropped'));
-  return records()
-    .map((row) => [...row.children].map((cell, place) => cell.hasAttribute('data-dropped') !== left[place]))
-    .flatMap((row, at) => row.flatMap((wrong, place) => (wrong ? [[at, place]] : [])));
+# What a grid table promises past what `TABLES` reads: a group's heading
+# spans its table, the heading
+# row sticks, a value its cell cuts on a closed row carries its whole text as
+# its cell's title, and the row's controls drawn beneath its words (a narrow
+# box) stand below every cell of its first line, in the order the row holds
+# them. What breaks one, each named once.
+TABLE_PROMISES = """(scroll) => {
+  const found = new Set();
+  const text = (el) => el.textContent.replace(/\\s+/g, ' ').trim();
+  for (const region of document.querySelectorAll('main ' + scroll)) {
+    const table = region.querySelector(':scope > table');
+    if (!table || !table.checkVisibility()) continue;
+    const name = (region.getAttribute('aria-label') || text(table.querySelector('th') || table)).slice(0, 24);
+    const width = table.getBoundingClientRect().width;
+    for (const cell of table.querySelectorAll(':scope > tbody > tr > [colspan]')) {
+      if (cell.checkVisibility() && cell.getBoundingClientRect().width < width - 2) found.add(`${name}: a cell across its row spans less`);
+    }
+    const head = table.querySelector(':scope > thead > tr');
+    if (head && getComputedStyle(head).position !== 'sticky') found.add(`${name}: its heading row does not stick`);
+    for (const row of table.querySelectorAll(':scope > tbody > tr:not(.is-expanded):not([data-row-detail])')) {
+      for (const cell of row.querySelectorAll(':scope > [data-kind]')) {
+        if (!cell.checkVisibility() || getComputedStyle(cell).gridRowStart !== '1') continue;
+        const parts = [cell, ...cell.querySelectorAll('*')].filter((el) => el.checkVisibility());
+        const cut = parts.some((el) => el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1);
+        const said = text(cell);
+        if (cut && said && !(cell.title || '').replace(/\\s+/g, ' ').includes(said.slice(0, 24))) {
+          found.add(`${name}: ${said.slice(0, 24)} is cut with no title holding it whole`);
+        }
+      }
+      const cells = [...row.children].filter((cell) => cell.checkVisibility());
+      const line = cells.filter((cell) => getComputedStyle(cell).gridRowStart === '1');
+      const beneath = cells.filter((cell) => cell.hasAttribute('data-beneath') && !line.includes(cell));
+      const floor = Math.max(...line.map((cell) => cell.getBoundingClientRect().bottom));
+      let last = -Infinity;
+      for (const cell of beneath) {
+        const top = cell.getBoundingClientRect().top;
+        if (top < floor - 1) found.add(`${name}: its controls stand beside the row's first line`);
+        if (top < last - 1) found.add(`${name}: its controls stand out of the row's order`);
+        last = top;
+      }
+    }
+  }
+  return [...found];
 }"""
 
 # The first table on a page as a phone lays it out: whether it runs past its
-# box, how wide each showing column is, how tall each record's row is, how
-# many rows show their toggle, and what the open rows' lines beneath name.
-# The line is the server's (`table_tags._detail_row`), found by attribute.
+# box, where each showing column starts and how wide it is, how tall each record's row is, how
+# many rows show their toggle, and the columns whose cells the open rows
+# draw beneath them, each under its column's name (`data-label`).
 PHONE_TABLE = """(scroll) => {
   const box = document.querySelector('main ' + scroll);
   const table = box && box.querySelector('table');
@@ -121,11 +162,11 @@ PHONE_TABLE = """(scroll) => {
     sideways: Math.round(box.scrollWidth - box.clientWidth),
     headings: table.querySelectorAll('thead th').length,
     columns: [...table.querySelectorAll('thead th')].filter(showing)
-      .map((heading) => Math.round(heading.getBoundingClientRect().width)),
+      .map((heading) => [heading.getBoundingClientRect().left, heading.getBoundingClientRect().width].map(Math.round)),
     rows: [...table.querySelectorAll('tbody > tr:not([data-row-detail]):not(:has(> th[scope="rowgroup"]))')]
       .map((row) => Math.round(row.getBoundingClientRect().height)),
-    toggles: [...table.querySelectorAll('tbody button[aria-expanded]')].filter((el) => el.checkVisibility()).length,
-    details: [...table.querySelectorAll('tr[data-row-detail] dt')].filter((term) => term.checkVisibility()).map((term) => term.textContent),
+    toggles: [...table.querySelectorAll('tbody button[aria-expanded]:not([data-fold-toggle])')].filter((el) => el.checkVisibility()).length,
+    details: [...table.querySelectorAll('tbody > tr > [data-drop][data-label]')].filter((cell) => cell.checkVisibility() && getComputedStyle(cell).gridRowStart !== '1').map((cell) => cell.dataset.label),
   };
 }"""
 
@@ -144,17 +185,13 @@ TABLES_THAT_DO_NOT_FIT = """(scroll) => [...document.querySelectorAll('main ' + 
 # layout around it changes shape as the window grows: which viewport queries
 # hold, whether the page scrolls, around each region how many tracks each grid
 # has and how many lines each wrapping flex box makes, and how far each
-# region's table has given way (tables.js: how many of its columns have left,
-# and whether it is narrow, tight, broken or scrolls). Each of those moves one
-# way as the window grows, so a sweep that finds it changed between two widths
-# knows a change of shape lies between them. It is read, with each region's
-# width, once tables.js has measured the tables' cuts at this width (``marked``,
-# `tables_read`), which can take back what a table gave as the window moved,
-# and a frame after (two, so WebKit's observer has fitted the tables too).
-# Opening a row changes no table's shape, since tables.js fits a table with its
-# rows closed.
-TABLE_LAYOUT = """async ([scroll, queries, marked]) => {
-  await new Promise((done) => setTimeout(done, marked));
+# region's table has given way (tables.css: which ranks it keeps, and whether
+# its controls stand beneath its words). Each of those moves one way as the
+# window grows, so a sweep that finds it changed between two widths knows a
+# change of shape lies between them. It is read, with each region's width, a
+# frame after the resize (two, so WebKit has laid the page out again). Opening
+# a row changes no table's shape, since a region is read by its width alone.
+TABLE_LAYOUT = """async ([scroll, queries]) => {
   await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
   const lines = (el) => {
     const shown = [...el.children].filter((child) => child.getClientRects().length);
@@ -166,8 +203,12 @@ TABLE_LAYOUT = """async ([scroll, queries, marked]) => {
     if (style.display.endsWith('flex') && style.flexWrap !== 'nowrap') return `f${lines(el)}`;
     return '';
   };
-  const gave = (table) => !table ? '' : table.querySelectorAll(':scope > thead > tr:last-child > th[data-dropped]').length
-    + ['narrow', 'tight', 'break', 'scrolls'].filter((step) => table.hasAttribute(`data-${step}`)).map((step) => step[0]).join('');
+  const gave = (table) => {
+    if (!table) return '';
+    const style = getComputedStyle(table);
+    return ['--whole', '--keep-1', '--keep-2', '--keep-3', '--keep-4', '--keep-5', '--keep-6']
+      .map((name) => style.getPropertyValue(name).trim()).join('');
+  };
   const regions = [...document.querySelectorAll('main ' + scroll)];
   const around = regions.map((region) => {
     let said = gave(region.querySelector(':scope > table')) + ':';
@@ -230,21 +271,16 @@ UNPRESS = "(pressed) => [...pressed].reverse().forEach((toggle) => toggle.click(
 
 
 def tables_read(trip):
-    """One width's read of the tables in one trip, once tables.js has
-    measured their cuts at it: ``trip`` run on the page as it stands (said to
-    be in the state ``state`` names) and, if ``rows``, again with every row a
-    reader can open opened, and what opening them moved, the rows closed
-    again last, so the next width is the page as a reader resized it. A page
-    with no row to open has no second state to read.
+    """One width's read of the tables in one trip: ``trip`` run on the page
+    as it stands (said to be in the state ``state`` names) and, if ``rows``,
+    again with every row a reader can open opened, and what opening them
+    moved, the rows closed again last, so the next width is the page as a
+    reader resized it. A page with no row to open has no second state to
+    read."""
 
-    tables.js measures a resized window's cuts on a timer the resize starts
-    (`markTablesSoon`); a timer at least as long started after it runs after
-    it (HTML's timer ordering), so ``marked`` is that timer's delay."""
-
-    return f"""async ([scroll, marked, state, rows, records, args]) => {{
+    return f"""async ([scroll, state, rows, records, args]) => {{
   const frame = () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
   const places = {_PLACES};
-  await new Promise((done) => setTimeout(done, marked));
   await frame();
   const states = [[state, await ({trip})(args)]];
   if (!rows) return [states, []];
@@ -258,55 +294,6 @@ def tables_read(trip):
   await frame();
   return [states, moved];
 }}"""
-
-
-# A cell's identifier cut in a table whose columns still give way (no
-# `data-narrow`, tables.js): one no longer than its column's hold
-# (`--name-hold`, read off a box sized by it in the same cell) had the room to
-# be shown whole.
-CUT_WITH_ROOM = (
-    "([boxes, holders, unseen]) => {"
-    + DESCRIBE
-    + CUTS
-    + """
-  const found = [];
-  // What a name asks for on one line: its runs end to end, however a clamp
-  // wraps them, inside its own padding.
-  const asked = (el) => {
-    const pad = getComputedStyle(el);
-    let width = parseFloat(pad.paddingLeft) + parseFloat(pad.paddingRight);
-    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      if (!textShown(node) || node.parentElement.closest(`${unseen}, [aria-hidden=true]`)) continue;
-      cutRange.selectNodeContents(node);
-      for (const r of cutRange.getClientRects()) width += r.width;
-    }
-    return Math.round(width);
-  };
-  for (const table of document.querySelectorAll('main table:not([data-narrow])')) {
-    if (!table.checkVisibility() || table.closest('details:not([open])')) continue;
-    for (const el of table.querySelectorAll(`:scope > tbody > tr:not([data-row-detail], :has(> * > [aria-expanded="true"])) > td ${boxes}`)) {
-      if (!el.checkVisibility() || !cutsIn(el, unseen).some((run) => run.boxes.includes(el))) continue;
-      const asks = asked(el);
-      const cell = el.closest('td');
-      const ruler = document.createElement('div');
-      ruler.style.cssText = 'position: absolute; visibility: hidden; block-size: 0; inline-size: var(--name-hold)';
-      cell.append(ruler);
-      const hold = ruler.getBoundingClientRect().width;
-      ruler.remove();
-      // The hold bounds the name's whole box, an external link's arrow with it.
-      let holder = el;
-      for (let up = el.parentElement; up && up !== cell; up = up.parentElement) {
-        if (up.matches(holders) && up.getClientRects().length) holder = up;
-      }
-      const beside = holder.getBoundingClientRect().width - el.clientWidth;
-      if (asks + beside <= hold + 1)
-        found.push(`${describe(el)} "${el.textContent.trim().slice(0, 40)}" is cut to ${el.clientWidth}px of ${asks}px though its column holds ${Math.round(hold)}px`);
-    }
-  }
-  return [...new Set(found)];
-}"""
-)
 
 
 # A value cut in a closed row while the row leaves room that would show it
@@ -406,11 +393,93 @@ CUT_BESIDE_ROOM = (
 )
 
 
+# The room a table has past what its columns ask goes to the columns that
+# share it alike (`--tracks`, table_cells), never to one while another goes
+# short: a column drawn wider than its widest cell asks while a column that
+# shares (a name, prose, an identifier, unless it can stand beneath the row's
+# words, which holds) is drawn narrower than its own asks,
+# or, every such column given what it asks, one holding the room the others
+# the table keeps go without (a column that may leave takes no room past its
+# asks, since a track that grows into room grows while its column is gone
+# too). What a column asks is read from the table laid out again at its
+# max-content, unseen, beside it; a cell drawn across the row asks no column
+# for anything, so it counts for neither.
+ROOM_UNSHARED = (
+    "() => {"
+    + DESCRIBE
+    + """
+  const found = [];
+  const records = ':scope > tbody > tr:not(.row-detail, [data-row-detail], .is-expanded)';
+  const placed = (table) => [...table.querySelectorAll(records)].filter((row) => row.checkVisibility())
+    .flatMap((row) => [...row.querySelectorAll(':scope > :is(td, th)')])
+    .filter((cell) => cell.colSpan === 1 && cell.checkVisibility() && getComputedStyle(cell).gridColumnEnd !== '-1');
+  for (const table of document.querySelectorAll('main table.data-table')) {
+    if (!table.checkVisibility() || getComputedStyle(table).display !== 'grid') continue;
+    const cells = placed(table);
+    if (!cells.length) continue;
+    const ruler = table.cloneNode(true);
+    ruler.setAttribute('aria-hidden', 'true');
+    ruler.style.cssText += '; position: absolute; visibility: hidden; inset: 0 auto auto 0; inline-size: max-content; max-inline-size: none';
+    table.after(ruler);
+    const asks = new Map();
+    for (const cell of placed(ruler)) asks.set(cell.cellIndex, Math.max(asks.get(cell.cellIndex) ?? 0, cell.getBoundingClientRect().width));
+    ruler.remove();
+    const columns = new Map();
+    for (const cell of cells) {
+      if (columns.has(cell.cellIndex) || !asks.has(cell.cellIndex)) continue;
+      columns.set(cell.cellIndex, {
+        slack: cell.getBoundingClientRect().width - asks.get(cell.cellIndex),
+        shares: ['name', 'prose', 'identifier'].includes(cell.dataset.kind) && !('beneath' in cell.dataset),
+        kept: !cell.dataset.drop,
+      });
+    }
+    const heads = [...table.querySelectorAll(':scope > thead > tr:last-child > th')];
+    const named = (place) => heads[place]?.textContent.trim() || `column ${place + 1}`;
+    const all = [...columns];
+    const [roomy, most] = all.reduce((best, [place, {slack}]) => slack > best[1] ? [place, slack] : best, [null, 24]);
+    if (roomy === null) continue;
+    const sharing = all.filter(([, {shares}]) => shares);
+    const short = sharing.find(([place, {slack}]) => place !== roomy && slack < -2);
+    if (short) {
+      found.push(`${describe(table)}: ${named(roomy)} holds ${Math.round(most)}px past its widest cell while ${named(short[0])} gets ${Math.round(-short[1].slack)}px less than it asks`);
+      continue;
+    }
+    const least = sharing.filter(([, {kept}]) => kept).reduce((low, entry) => !low || entry[1].slack < low[1].slack ? entry : low, null);
+    if (least && least[0] !== roomy && most - least[1].slack > 24) {
+      found.push(`${describe(table)}: ${named(roomy)} holds ${Math.round(most)}px past its widest cell while ${named(least[0])} holds ${Math.round(least[1].slack)}px`);
+    }
+  }
+  return found;
+}"""
+)
+
+
+# What a row is (its state, a cell its pills say) and what a reader changes in it (a field)
+# never leave with a column a narrow box lets go: a row without them no
+# longer says what it is or does what it is for.
+STATE_LEFT = (
+    "() => {"
+    + DESCRIBE
+    + """
+  const found = [];
+  for (const cell of document.querySelectorAll('main table.data-table > tbody > tr:not(.is-expanded) > [data-drop]:not([data-blank])')) {
+    if (!cell.closest('table').checkVisibility() || cell.checkVisibility()) continue;
+    // A pill beside a value is a note on it; a cell its pills alone say is the row's state.
+    const pills = [...cell.querySelectorAll('.pill')];
+    const stated = pills.length && pills.map((pill) => pill.textContent).join('').replace(/\\s+/g, '') === cell.textContent.replace(/\\s+/g, '');
+    const held = cell.querySelector('select, textarea, input:not([type="hidden"])') || (stated ? pills[0] : null);
+    if (held) found.push(`${describe(cell)} "${(cell.dataset.label || '').slice(0, 30)}" leaves with its column, holding ${describe(held)}`);
+  }
+  return found;
+}"""
+)
+
+
 # A value cut short that nothing shows whole: its row does not open at this
 # width, and either the cut draws no ellipsis, so nothing tells a reader there
-# is more to see, or, outside a narrow box (`--box`, tables.css), where a
-# pointer can hover, nothing around it carries its whole text as a title or a
-# tip (`data-tip`, app.js). Cut is read as `CUTS` reads it, up to the cell.
+# is more to see, or nothing around it carries its whole text as a title or a
+# tip (`data-tip`, app.js), or its box is narrow (`--whole`: 0, tables.css),
+# where no pointer hovers. Cut is read as `CUTS` reads it, up to the cell.
 CUT_AND_CLOSED = (
     "(unseen) => {"
     + DESCRIBE
@@ -429,16 +498,14 @@ CUT_AND_CLOSED = (
     return false;
   };
   const rows = 'main table > tbody > tr:not([data-row-detail], .row-detail, .is-expanded)';
-  const scripted = matchMedia('(scripting: enabled)').matches;
   for (const row of document.querySelectorAll(rows)) {
     if (!row.checkVisibility() || row.closest('details:not([open])')) continue;
     if ([...row.querySelectorAll('[aria-expanded]')].some((toggle) => toggle.checkVisibility())) continue;
-    const narrow = getComputedStyle(row.closest('table')).getPropertyValue('--box').trim() === 'narrow';
+    const narrow = getComputedStyle(row.closest('table')).getPropertyValue('--whole').trim() === '0';
     for (const cell of row.querySelectorAll(':scope > :is(td, th)')) {
       for (const {node, boxes, marked} of cutsIn(cell, unseen)) {
         const by = boxes.at(-1);
-        // Without script no row opens and nothing gives a cut its title, so a cut shown by its ellipsis is all a page can say.
-        const why = !marked ? 'with no ellipsis' : !scripted ? '' : narrow ? 'in a narrow box' : titled(node, boxes[0], cell) ? '' : 'with no title';
+        const why = !marked ? 'with no ellipsis' : narrow ? 'in a narrow box' : titled(node, boxes[0], cell) ? '' : 'with no title';
         if (why) found.push(`${describe(by)} "${by.textContent.trim().slice(0, 40)}" is cut ${why}, in a row that does not open`);
       }
     }
@@ -508,12 +575,50 @@ SORT_BY = """([scroll, column]) => {
   };
 }"""
 
-# Press the first toggle that shows in the page's first table, and say which
+# In every table on the page with a row toggle, opens its first row and reads
+# each part of that row's cells that showed whole before it opened, a box
+# holding text that neither it nor anything up to its cell cuts: each that
+# moved or changed width once the row opened, as text. Opening a row only
+# lifts cuts, so a part that was whole keeps its box.
+WHOLE_PARTS_MOVED_BY_OPENING = """async (scroll) => {
+  const frame = () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+  const cuts = (el) => el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1;
+  const whole = (part, cell) => {
+    for (let el = part; el; el = el.parentElement) {
+      if (getComputedStyle(el).overflow !== 'visible' && cuts(el)) return false;
+      if (el === cell) return true;
+    }
+    return true;
+  };
+  const edges = (part) => [part.getBoundingClientRect().left, part.getBoundingClientRect().width].map(Math.round).join(' ');
+  const moved = [];
+  for (const table of document.querySelectorAll('main ' + scroll + ' > table')) {
+    const toggle = [...table.querySelectorAll('tbody button[aria-expanded="false"]:not([data-fold-toggle])')].find((el) => el.checkVisibility());
+    if (!toggle) continue;
+    const row = toggle.closest('tr');
+    const parts = [...row.children].filter((cell) => cell.checkVisibility()).flatMap((cell) =>
+      [...cell.querySelectorAll('*')].filter((part) => part.checkVisibility()
+        && [...part.childNodes].some((node) => node.nodeType === 3 && node.textContent.trim())
+        && whole(part, cell)));
+    const before = parts.map(edges);
+    toggle.click();
+    await frame();
+    parts.forEach((part, at) => {
+      const after = edges(part);
+      if (after !== before[at]) moved.push(`${part.tagName.toLowerCase()} "${part.textContent.trim().slice(0, 24)}": ${before[at]} became ${after}`);
+    });
+    toggle.click();
+    await frame();
+  }
+  return moved;
+}"""
+
+# Press the first row toggle (never a family fold) that shows in the page's first table, and say which
 # of its records (counted as PHONE_TABLE counts them) it opened.
 PRESS_FIRST_ROW_TOGGLE = """(scroll) => {
   const table = document.querySelector('main ' + scroll).querySelector('table');
   const records = [...table.querySelectorAll('tbody > tr:not([data-row-detail]):not(:has(> th[scope="rowgroup"]))')];
-  const toggle = [...table.querySelectorAll('tbody button[aria-expanded]')].find((el) => el.checkVisibility());
+  const toggle = [...table.querySelectorAll('tbody button[aria-expanded]:not([data-fold-toggle])')].find((el) => el.checkVisibility());
   toggle.click();
   return records.indexOf(toggle.closest('tr'));
 }"""
@@ -659,27 +764,17 @@ ROW_ACTIONS_TABLES = """<section class="card">
 </tbody></table>{% endtable_region %}
 </section>"""
 
-# How far a table's heading is drawn below the top of its row on a page with
-# a header: a heading that sticks inside a box that scrolls is pushed down by
-# the inset it keeps for the page's chrome, over the rows under it.
-HEADING_DROP = """async (probe) => {
-  document.documentElement.style.setProperty('--site-header-height', '3rem');
-  await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
-  const heading = document.querySelector(`[data-probe=${probe}]`).tHead.rows[0].cells[0];
-  return Math.round(heading.getBoundingClientRect().top - heading.parentElement.getBoundingClientRect().top);
-}"""
-
 COLUMNS_SHOWN = """() => [...document.querySelectorAll('thead th')]
   .filter((th) => getComputedStyle(th).display !== 'none').map((th) => th.textContent.replace(/[^A-Za-z ]/g, '').trim())"""
 
-# Two tables whose every row the server made openable. In the first a narrow
-# box drops a column: one row has something in it, one has a dash there. One
-# row's only clipped text is for screen readers, beside a decoration hidden
-# from them, and one row's value really is cut off. In the second a row folds
-# part of a list, so the gutter is kept at every width, and a row's value is
-# cut off there too. In the third a run of parts (`line_list`) shows them all
-# in a cell with room, and in a cell held narrow it cuts the parts its line
-# has no room for.
+# Three tables whose every row the server made openable. In the first a
+# narrow box drops a column: one row has something in it, one has a dash
+# there. One row's only clipped text is for screen readers, beside a
+# decoration hidden from them, and one row's value is longer than a line of
+# its column (`data-long`). In the second a row folds part of a list, and a
+# row's value is that long too. In the third a run of parts (`line_list`)
+# holds only the parts that size its column, and another holds a rest past
+# them.
 ROW_TOGGLE_TABLES = """
 {% table_region "Dropping" %}<table class="data-table"><thead><tr>
 {% table_heading "Name" gutter=True %}{% table_heading "Value" %}{% table_heading "Note" drop=1 %}</tr></thead><tbody>
@@ -690,14 +785,14 @@ ROW_TOGGLE_TABLES = """
 <td><span class="cadence-mark is-hit" aria-hidden="true"></span>
 <span class="visually-hidden">One session in the week of Aug 10, said in full</span></td><td>–</td></tr>
 <tr data-probe="cut"><td>Name</td>
-<td><div style="max-width: 40px; overflow: hidden; white-space: nowrap">a value far too long to fit</div></td><td>–</td></tr>
+<td>a value far too long to show whole on one line of its column</td><td>–</td></tr>
 </tbody></table>{% endtable_region %}
 {% table_region "Folding" %}<table class="data-table"><thead><tr>
 {% table_heading "Name" gutter=True %}{% table_heading "Value" %}</tr></thead><tbody>
 <tr data-probe="folded"><td>Folded</td>
 <td><span class="tag">One</span><span class="muted row-less">+1</span><span class="row-more"><span class="tag">Two</span></span></td></tr>
 <tr data-probe="cut-in-a-kept-gutter"><td>Name</td>
-<td><div style="max-width: 40px; overflow: hidden; white-space: nowrap">a value far too long to fit</div></td></tr>
+<td>a value far too long to show whole on one line of its column</td></tr>
 </tbody></table>{% endtable_region %}
 {% table_region "Lining" %}<table class="data-table"><thead><tr>
 {% table_heading "Name" gutter=True %}{% table_heading "Parts" %}</tr></thead><tbody>
@@ -708,28 +803,27 @@ ROW_TOGGLE_TABLES = """
 </tbody></table>{% endtable_region %}"""
 
 ROW_TOGGLE_VALUES = {
-    "fits": ("One", "Two", "Three", "Four"),
+    "fits": ("One", "Two", "Three"),
     "many": ("One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight"),
 }
 
 # A table of cut values, each the word its row is probed by then more: one
-# with no title, one carrying its whole text as a title, one titled in a row
-# that opens, two past the line a clamp ends with an ellipsis (a block and a
+# with no title, one carrying its whole text as a title, one longer than a
+# line of its column in a row that opens, two past the line a clamp ends with an ellipsis (a block and a
 # link set in its line, as a cell's name is), one cut where no ellipsis can
 # land, a box of words around a box of its own, and a name's chip in the muted
 # line under a row's name, as a unit's page drew one, which draws its own; the
-# third, titled too, stands in a table of its own whose rows open, since every
-# row under a gutter heading does. A note wider than a phone puts each table in
-# a narrow box there, which keeps the gutter of a table whose rows open, so the
-# third opens, and breaks the chip whole; a wide box shows each titled value
-# whole on hover, and a cut with no ellipsis tells no one to hover.
+# third stands in a table of its own whose rows open, since every row under a
+# gutter heading does, and offers its toggle for its long value. A note wider
+# than a phone puts each table in a narrow box there, where a row that cannot
+# open breaks the chip whole; a wide box shows each titled value whole on
+# hover, and a cut with no ellipsis tells no one to hover.
 _CUT = (
     '<div style="max-width: 40px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap"{}>'
     "{} value far too long to fit</div>"
 )
 _CHIP = "chip-" + "-".join(["example-unit-name-long-enough-to-be-cut"] * 4) + ".timer"
 _NOTE = '<td><span style="display: inline-block; inline-size: 30rem">A note wider than a phone</span></td>'
-_OPENS_TITLE = ' title="opens value far too long to fit"'
 CUT_TABLE = (
     '{% load value_tags %}{% table_region "Cuts" %}<table class="data-table"><thead><tr>'
     '{% table_heading "Name" %}{% table_heading "Value" %}{% table_heading "Note" %}</tr></thead><tbody>'
@@ -749,7 +843,7 @@ CUT_TABLE = (
     + "</tbody></table>{% endtable_region %}"
     + '{% table_region "Opening" %}<table class="data-table"><thead><tr>'
     '{% table_heading "Name" gutter=True %}{% table_heading "Value" %}{% table_heading "Note" %}</tr></thead><tbody>'
-    + f"<tr><td>Opens</td><td>{_CUT.format(_OPENS_TITLE, 'opens')}</td>{_NOTE}</tr>"
+    + f"<tr><td>Opens</td><td>opens value far too long to show whole on one line of its column</td>{_NOTE}</tr>"
     "</tbody></table>{% endtable_region %}"
 )
 
@@ -759,32 +853,17 @@ CUT_VALUES = {"chip": _CHIP}
 
 # Rows that open, as an event's log draws them: a host name in a column a
 # phone lets go, so an opened row shows it in the line beneath, and a value
-# its own cell cuts.
+# its cell cuts while the row is closed.
 OPEN_ROW_TABLE = """{% load value_tags %}
 {% table_region "Opened" %}<table class="data-table"><thead><tr>
 {% table_heading "Name" gutter=True %}{% table_heading "Object" drop=1 %}{% table_heading "Note" %}</tr></thead><tbody>
 <tr><td>Updated</td><td>{{ host|breakable }}</td>
 <td><span style="display: inline-block; inline-size: 14rem">A note that keeps its line</span></td></tr>
 <tr><td>Created</td><td>{{ host|breakable }}</td>
-<td><div style="max-width: 40px; overflow: hidden; white-space: nowrap">a value far too long to fit</div></td></tr>
+<td>a value far too long to show whole on one line of its column, so its cell cuts it while the row is closed</td></tr>
 </tbody></table>{% endtable_region %}"""
 
 OPEN_ROW_VALUES = {"host": "example-hostname-with-a-long-descriptive-name-01.example.com"}
-
-# A value cut at half the window's width, whole on a wide one, in a row that
-# cannot open, and one always cut in a row that can, whose toggle a wide box
-# does not show; tables.js titles each while it is cut and its row is closed.
-TITLED_CUTS = """{% table_region "Titled" %}<table class="data-table"><thead><tr>
-{% table_heading "Name" %}{% table_heading "Value" %}</tr></thead><tbody>
-<tr data-probe="narrows"><td>Narrows</td>
-<td><div style="max-inline-size: 50vw; overflow: hidden; white-space: nowrap; text-overflow: ellipsis">
-a value that is whole on a wide screen and cut at half of a phone's</div></td></tr>
-</tbody></table>{% endtable_region %}
-{% table_region "Opening" %}<table class="data-table"><thead><tr>
-{% table_heading "Name" gutter=True %}{% table_heading "Value" %}</tr></thead><tbody>
-<tr data-probe="opens"><td>Opens</td>
-<td><div style="max-inline-size: 40px; overflow: hidden; white-space: nowrap">a value far too long to fit</div></td></tr>
-</tbody></table>{% endtable_region %}"""
 
 # A panel shown from a cell, as an item's origin is: a key and a source too
 # long for the cell, which the panel has the room to show whole.
@@ -800,11 +879,6 @@ POPOVER_VALUES = {
     "key": "example.approvals:approval:d7f2b3ed-186d-402a-9c5e-1f0b2a3c4d5e",
     "source": "an-example-source-with-a-deliberately-long-name",
 }
-
-# The rows whose values tables.js titled for being cut, by `data-probe`.
-TITLED_ROWS = (
-    "() => [...document.querySelectorAll('[data-cut-title]')].map((el) => el.closest('tr').dataset.probe).sort()"
-)
 
 ROW_TOGGLES = """() => [...document.querySelectorAll('tbody tr:not([data-row-detail])')].map((row) => ({
   probe: row.dataset.probe,
@@ -852,25 +926,22 @@ CHECKS = {
     "tables": Check(
         TABLES, table=True, findings=lambda report: report["found"], reader_sees="a table wider than its box"
     ),
-    # Only script fits a table to its box (tables.js); without it a table scrolls in its region.
     "tables fit": Check(
         (TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]),
         table=True,
-        scripted=True,
-        reader_sees="a table running past its box once script has fitted it",
+        reader_sees="a table running past its box",
     ),
     "unseen columns": Check(
         (UNSEEN_COLUMNS, SELECTORS["table_scroll"]),
         table=True,
         reader_sees="a column cut off where nothing scrolls to it",
     ),
-    "cut with room": Check(
-        (CUT_WITH_ROOM, [SELECTORS["cut_box"], SELECTORS["name_box"], SELECTORS["unseen"]]),
-        table=True,
-        reader_sees="a value cut while its cell has room to show it",
-    ),
     "cut beside room": Check(
         (CUT_BESIDE_ROOM, SELECTORS["unseen"]), table=True, reader_sees="a value cut while its row has room to show it"
+    ),
+    "room unshared": Check(ROOM_UNSHARED, table=True, reader_sees="a column holding room another column goes without"),
+    "row state kept": Check(
+        STATE_LEFT, table=True, reader_sees="a row's state or its field gone with a column a narrow box let go"
     ),
     "cut and closed": Check(
         (CUT_AND_CLOSED, SELECTORS["unseen"]), table=True, reader_sees="a cut value with no way to read it whole"

@@ -122,7 +122,7 @@ const primitives = [
     names: String.raw`(?:\.(?:data-table|row-detail|row-columns)(?![-\w])|(?<![-\w.#])(?:table|caption|thead|tbody|tfoot|tr|td|th)(?![-\w]))`,
     sheets: ["base", "cuts", "figures", "tables", "surfaces"],
     parts: [
-      "btn", "button-words", "cell-line", "cell-part", "cell-whole", "cut", "external-link", "icon-link", "is-expanded", "kept-line", "line-list", "line-rest", "line-run", "muted",
+      "btn", "button-words", "cell-line", "cell-part", "cell-whole", "cut", "external-link", "icon-link", "is-expanded", "line-list", "line-rest", "line-run", "muted",
       "name-line", "narrow-more", "narrow-only", "part", "pill", "readout", "row-actions", "row-below", "row-gutter",
       "row-editor", "row-later", "row-less", "row-more", "select-column", "strut", "table-clamp", "table-scroll", "token", "visually-hidden", "whole",
     ],
@@ -150,19 +150,12 @@ const cellRoles = [
   `/(?:${cell})[\\s\\S]*\\.(?!(?:${[table.classes, ...table.parts].join("|")})(?![-\\w]))[a-zA-Z][\\w-]*/`,
 ];
 
-// A table's narrow box is a property, `--box`, which the script's mark
-// (`data-narrow`, tables.js) sets and a phone's region with no script sets
-// too, so a rule reads the property (`@container style(--box: narrow)`): one
-// that read the mark would miss the box no script measures.
-const narrowMark = String.raw`/\.data-table(?![-\w])[^\s,>+~]*\[data-narrow\]/`;
-const narrowMessage = "a table's narrow box is `--box` (`@container style(--box: narrow)` or `whole`), never the script's `[data-narrow]` mark, which a page with no script never gets";
 // A child of one parent that `:is()` asks to be a child of another: both
 // parents are the one element's, so the selector names a parent twice and
 // matches nothing a page draws (`.btn > :is(.words > .token)`).
 const childInIs = String.raw`/>\s*:is\([^()]*>/`;
 const childInIsMessage = "a child combinator before `:is()` and another inside it ask one element's parent to be both: write each path whole inside `:is()` (`:is(.a > .b, .a > .c > .b)`)";
 const selectorMessage = (selector, message) => {
-  if (new RegExp(narrowMark.slice(1, -1)).test(selector)) return narrowMessage;
   if (new RegExp(childInIs.slice(1, -1)).test(selector)) return childInIsMessage;
   return message(selector);
 };
@@ -247,7 +240,7 @@ export default {
     "declaration-property-value-allowed-list": { "font-display": ["optional"] },
     "property-disallowed-list": disallowedProperties(caseProperties),
     "rule-selector-property-disallowed-list": { [`/${inTable}/`]: boxWidth },
-    "selector-disallowed-list": selectorRule([narrowMark], () => narrowMessage),
+    "selector-disallowed-list": selectorRule([], () => childInIsMessage),
   },
   overrides: [
     {
@@ -256,7 +249,7 @@ export default {
       rules: {
         "rule-selector-property-disallowed-list": null,
         "selector-disallowed-list": selectorRule(
-          [...cellRoles, narrowMark],
+          cellRoles,
           (selector) =>
             `"${selector}" tells a cell's part by a page's class or its tags: key it on its role (\`[data-cell~=name|prose|data]\`, table_tags.mark_cells) or a part the table primitive draws`,
         ),

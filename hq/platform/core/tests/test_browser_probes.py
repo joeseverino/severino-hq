@@ -95,11 +95,11 @@ class PlantTests(SimpleTestCase):
         self.assertEqual(sorted(set(planted.PASSES) - set(checks)), [], "a near miss for no check the survey runs")
 
     def test_a_check_that_holds_only_once_script_has_run_is_left_out_without_it(self):
-        """Only script fits a table to its box, so a page with none is never
-        held to fit; the gate and the look both read the survey this way."""
+        """Only script folds a row, so a page with none is never held to keep
+        its rows folded; the gate and the look both read the survey this way."""
 
         scripted = {name for name, check in survey.CHECKS.items() if check.scripted}
-        self.assertIn("tables fit", scripted)
+        self.assertIn("folded rows stay folded", scripted)
         self.assertLessEqual(scripted, set(survey_checks("/", WIDE)))
         self.assertEqual(scripted & set(survey_checks("/", WIDE, scripted=False)), set())
         # Its plant is found where it is held.

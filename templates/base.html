@@ -33,7 +33,6 @@
   <link rel="expect" href="#parsed" blocking="render">
   {% stylesheets %}
   <script src="{% static 'js/transitions.js' %}" {% csp_nonce_attr %}></script>
-  <script src="{% static 'js/tables.js' %}" {% csp_nonce_attr %}></script>
   {% block head_extra %}{% endblock %}
 </head>
 <body data-sign-in="{% url 'login' %}" data-ask-refreshing="{% refreshing %}" data-ask-newer="{% newer_reading %}" data-ask-show="{% show_newer %}">
@@ -74,6 +73,7 @@
   {% endif %}
 
   <script src="{% static 'js/fragment.js' %}" {% csp_nonce_attr %} defer></script>
+  <script src="{% static 'js/tables.js' %}" {% csp_nonce_attr %} defer></script>
   <script src="{% static 'js/app.js' %}" {% csp_nonce_attr %} defer></script>
   <script src="{% static 'js/ask.js' %}" {% csp_nonce_attr %} defer></script>
   <script src="{% static 'js/connection.js' %}" {% csp_nonce_attr %} defer></script>

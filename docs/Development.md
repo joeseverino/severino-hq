@@ -1050,14 +1050,12 @@ palette at each and the dark at 402 and 1360 (in
 Chromium at 402 and 1360 only). A finding names its check, page, width and
 theme.
 
-Its tables are also read at every shape of the layout
-(`hq.platform.core.tests.browser.table_fit`): from 320
-pixels up, at each edge of the stylesheet's viewport queries and wherever a
-box around a table changes shape between two, every row a reader can open is
-opened and every table check is read, with what opening the rows moved. A
-finding names its check and the first width it was found at.
-`TableSweepPlantedTests` plants a defect of each kind in a span of widths no
-other gate reads, and requires the sweep to find it there.
+A list's tables are also read at every shape of the layout
+(`a_table_fits_its_box_at_every_width`): from 320 pixels up, at each edge
+of the stylesheet's viewport queries and wherever a box around a table
+changes shape or its table lets a rank go between two, every row a reader
+can open is opened and every table check is read, with what opening the rows
+moved. A finding names its check and the first width it was found at.
 
 `WIDE_TABLES` is read from the stylesheet: the narrowest window where a
 table's region, on the page and in a card, has passed the breakpoint its wide

@@ -250,29 +250,9 @@
   @media (prefers-reduced-motion: reduce) { :is(.row-expand, .row-fold)::before { transition: none; } }
   /* With no script a fold cannot open or close, and every row it would fold shows (tables.css), so it is not drawn. */
   @media (scripting: none) { .row-fold { display: none; } }
-  /* What holds a value to its line, lifted with its cut (cuts.css) in an open row and the line beneath it, and in a panel a cell shows; outranking each column's own rule on purpose. */
-  .data-table :is(tr.is-expanded, tr.is-expanded + tr.row-detail) :is(td, th),
-  .data-table :is(tr.is-expanded, tr.is-expanded + tr.row-detail) :is(td, th) *:not(.visually-hidden, .visually-hidden *),
-  .data-table :is(td, th) [popover] *:not(.visually-hidden, .visually-hidden *) {
-    white-space: normal !important;
-    max-height: none !important;
-  }
-  /* The row's own caps go with them. Nothing in it or in the line beneath asks for more than its cell, whatever a page's own rule says: no box holds out for a width of its own or grows wider than what holds it, and a chip is a box, its padding inside that width, set on its first line, so a lifted value wraps inside its held column (tables.js). */
-  .data-table tr.is-expanded :is(td, th) { max-width: none !important; }
-  .data-table :is(tr.is-expanded, tr.is-expanded + tr.row-detail) :is(td, th) *:not(.visually-hidden, .visually-hidden *, [popover], [popover] *) {
-    min-width: auto !important;
-    max-width: 100% !important;
-  }
-  .data-table :is(tr.is-expanded, tr.is-expanded + tr.row-detail) :is(td, th) code:not(:has(> .token[data-sole]):not(.cell-whole), [popover] *) { display: inline-block !important; vertical-align: baseline !important; baseline-source: first !important; }
-  /* An uncut value breaks inside its held column (tables.js) rather than under the next: `anywhere` breaks count toward min-content, so a box sized to its content (a part, a code chip, the unseen strut a name's column holds out with) does not hold out for its longest word, wider than the column. */
-  .data-table :is(tr.is-expanded, tr.is-expanded + tr.row-detail) :is(td, th),
-  .data-table :is(tr.is-expanded, tr.is-expanded + tr.row-detail) :is(td, th) *:not(.visually-hidden, .visually-hidden *, [popover], [popover] *),
-  .data-table :is(tr.is-expanded, tr.is-expanded + tr.row-detail) :is(td, th) *:not(.visually-hidden, .visually-hidden *, [popover], [popover] *)::before,
-  .data-table :is(tr.is-expanded, tr.is-expanded + tr.row-detail) :is(td, th) *:not(.visually-hidden, .visually-hidden *, [popover], [popover] *)::after {
-    overflow-wrap: anywhere !important;
-  }
-  /* A panel is as wide as it is drawn, so what it holds is held to its line and wraps there. */
-  .data-table :is(td, th) [popover] *:not(.visually-hidden, .visually-hidden *) { max-width: 100% !important; }
+  /* An open row shows each value whole, wrapping inside its column wherever it must, so nothing in it runs past its cell; a panel a cell shows is no part of the column. */
+  .data-table > tbody > tr.is-expanded > :is(td, th),
+  .data-table > tbody > tr.is-expanded > :is(td, th) *:not(.visually-hidden, .visually-hidden *, [popover], [popover] *) { white-space: normal; overflow-wrap: anywhere; }
 
   /* A band too narrow for two cells is a list, like every other summary:
      each fact one row, its label and its value at the right edge, the detail

@@ -41,7 +41,6 @@ from hq.platform.core.tests.browser.probes.tables import (
     CUT_TABLE,
     CUT_VALUES,
     CUT_WHEN_OPEN,
-    HEADING_DROP,
     IDENTIFIER_TABLES,
     IDENTIFIER_VALUES,
     OPEN_ROW_TABLE,
@@ -51,14 +50,14 @@ from hq.platform.core.tests.browser.probes.tables import (
     POPOVER_VALUES,
     PRESS_FIRST_ROW_TOGGLE,
     ROW_ACTIONS_TABLES,
-    ROW_ARRIVES,
     ROW_TOGGLE_TABLES,
     ROW_TOGGLE_VALUES,
     ROW_TOGGLES,
     SORT_BY,
+    TABLE_PROMISES,
+    TABLES,
     TABLES_THAT_DO_NOT_FIT,
-    TITLED_CUTS,
-    TITLED_ROWS,
+    WHOLE_PARTS_MOVED_BY_OPENING,
 )
 from hq.platform.core.tests.browser.probes.text import (
     BROKEN_TOKENS,
@@ -73,7 +72,7 @@ from hq.platform.core.tests.browser.reading import probe
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import ORIGIN
 from hq.platform.core.tests.browser.stress import ALL_PAGES
-from hq.platform.core.tests.browser.widths import NARROWEST, PHONE_SCREEN, TARGET_MIN, WIDE, WIDTHS, viewport
+from hq.platform.core.tests.browser.widths import NARROWEST, PHONE_SCREEN, TARGET_MIN, WIDE, WIDTHS
 from hq.platform.core.tests.test_browser_fixtures import PAGES
 
 
@@ -137,8 +136,9 @@ _SHOWN_BENEATH = "(row, selector) => row.nextElementSibling?.querySelector(selec
 # A table whose one cell holds a phrase, which a probe measures beside a
 # one-line twin it puts in place and takes away.
 _ANSWERING_TABLE = (
-    '<div class="table-scroll"><table class="data-table"><thead><tr><th>State</th></tr></thead>'
-    '<tbody><tr><td><span class="pill">Example running</span></td></tr></tbody></table></div>'
+    '{% table_region "Answering" %}<table class="data-table"><thead><tr>{% table_heading "State" "status" %}'
+    '</tr></thead><tbody><tr><td><span class="pill">Example running</span></td></tr></tbody></table>'
+    "{% endtable_region %}"
 )
 
 # A page script that squeezes the phrase in a cell whose content changed
@@ -171,7 +171,7 @@ _MEASURE_A_COPY = """() => {
 _QUEUE_COLUMNS = """([queue, act]) => {
   const table = document.querySelector(queue);
   return {
-    narrow: table.hasAttribute('data-narrow'),
+    narrow: getComputedStyle(table).getPropertyValue('--whole').trim() === '0',
     acts: [...table.querySelectorAll(act)].filter((cell) => cell.checkVisibility())
       .map((cell) => Math.round(cell.getBoundingClientRect().width)),
   };
@@ -209,7 +209,7 @@ _SCROLLED_TABLE = """const table = [...document.querySelectorAll(region)]
   const heading = table.tHead.rows[0].cells[0];
   const clear = (box) => Math.round(box.getBoundingClientRect().top - heading.getBoundingClientRect().bottom);"""
 
-# A row deep in the table landed on by a link to it, as tables.js lands one:
+# A row deep in the table landed on by a link to it, as the browser lands one:
 # how far below the heading the row's top is.
 _LAND_ON_A_ROW = (
     """async (region) => {
@@ -387,8 +387,8 @@ class ComponentLayoutTests(LayoutBrowserTests):
 
     @with_script
     def test_a_folds_rows_offer_their_toggles_as_they_appear(self):
-        """The rows a fold shows are measured before the frame that draws
-        them, so a row with something cut offers its toggle as it appears."""
+        """A row a fold shows offers its toggle in the frame that draws it,
+        since the stylesheet decides it from what the server wrote."""
 
         self.pages = {
             **self.pages,
@@ -397,8 +397,8 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 '{% table_heading "Name" gutter=True %}{% table_heading "Value" %}</tr></thead><tbody>'
                 '{% row_group "Example group" 1 folds="example-fold" %}'
                 '<tr id="example-cut" data-folded="example-fold"><td>Name</td>'
-                '<td><div style="max-width: 40px; overflow: hidden; white-space: nowrap">a value far too long to fit</div>'
-                "</td></tr></tbody></table>{% endtable_region %}"
+                "<td>a value far too long to show whole on one line of its column</td>"
+                "</tr></tbody></table>{% endtable_region %}"
             ),
         }
         self.open("fold-probe", PHONE_SCREEN[0])
@@ -801,12 +801,12 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.pages = {
             **self.pages,
             "word-before-a-name-probe": probe(
-                '<div class="table-scroll" style="inline-size: 20rem"><table class="data-table"><thead><tr>'
-                '<th class="row-gutter">Name</th><th>Change</th></tr></thead><tbody><tr>'
-                '<td class="row-gutter"><strong data-cell="name">example.com</strong><br>'
+                '<div style="inline-size: 20rem">{% table_region "Changes" %}<table class="data-table"><thead><tr>'
+                '{% table_heading "Name" gutter=True %}{% table_heading "Change" %}</tr></thead><tbody><tr>'
+                "<td><strong>example.com</strong><br>"
                 f'<span class="muted">on <a href="#" data-entity="Machine">{host}</a></span></td>'
-                f'<td class="cell-data" data-cell="data">Created {record} from a request</td>'
-                "</tr></tbody></table></div>"
+                f'<td class="cell-data">Created {record} from a request</td>'
+                "</tr></tbody></table>{% endtable_region %}</div>"
             ),
         }
         self.open("word-before-a-name-probe", PHONE_SCREEN[0])
@@ -822,49 +822,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
             })"""
         )
         self.assertEqual(lines, [["on", True], ["Created", True]])
-
-    @with_script
-    def test_a_column_holds_out_for_the_longest_part_its_cut_names_cannot_break(self):
-        """A name cut short in a narrow table opens whole in its row, its
-        columns held where they were, so its column is already as wide as
-        the longest run of the name between hyphens, measured unconstrained,
-        where that run is within the column's share."""
-
-        from hq.platform.core.templatetags.value_tags import breakable
-
-        prose = "example words that wrap over many lines of a cell of its own " * 3
-        self.pages = {
-            **self.pages,
-            "cut-name-probe": probe(
-                '<div class="table-scroll" style="inline-size: 500px"><table class="data-table"><thead><tr>'
-                '<th class="row-gutter">Unit</th><th>Runs</th><th>Result</th></tr></thead><tbody><tr>'
-                f'<td class="row-gutter"><code>{breakable("example-examplehost.path")}</code></td>'
-                f"<td>{prose}</td><td>{prose}</td></tr></tbody></table></div>"
-            ),
-        }
-        self.open("cut-name-probe", PHONE_SCREEN[0])
-        widths = self.page.evaluate(
-            """async ([part, scroll]) => {
-          const region = document.querySelector(scroll);
-          await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
-          // The part alone, in the face the name is drawn in.
-          const style = getComputedStyle(region.querySelector('code').lastElementChild);
-          const free = document.createElement('span');
-          free.textContent = part;
-          for (const property of ['font-family', 'font-size', 'font-weight', 'letter-spacing']) {
-            free.style.setProperty(property, style.getPropertyValue(property));
-          }
-          free.style.setProperty('white-space', 'nowrap');
-          document.body.append(free);
-          const heading = region.querySelector('th');
-          const pad = getComputedStyle(heading);
-          const inside = heading.clientWidth - parseFloat(pad.paddingLeft) - parseFloat(pad.paddingRight);
-          return [inside, free.getBoundingClientRect().width];
-        }""",
-            ["examplehost.path", SELECTORS["table_scroll"]],
-        )
-        column, part = widths
-        self.assertGreaterEqual(column, part)
 
     def test_a_popover_open_over_a_table_cell_is_not_held_to_the_cell_and_a_box_in_the_cell_is(self):
         """A shown popover is drawn in the top layer, over the page, wherever
@@ -1487,20 +1444,18 @@ class ComponentLayoutTests(LayoutBrowserTests):
         """Every row the server made openable has its toggle in the HTML, in
         the cell that names it, and shows it only while the row holds
         something back: a column that left a table wider than its box, with
-        something in it, a part of a list it folds, or a value cut short (a
-        run of parts' rest past its line's room, never one whose parts all show),
-        which opens its row only where the gutter is kept already. A narrow
-        box keeps it for every table whose rows open, since touch has no
-        hover title; a wide one only for a table with something else to open. A dash in a dropped column says
+        something in it, a part of a list it folds, a run of parts with a rest
+        past the ones that size its column, or a value longer than a line of
+        its column, as the server marks it. A dash in a dropped column says
         nothing, screen-reader text is clipped to a pixel by design and a
         decoration is hidden from assistive technology: none is content a row
-        withholds. Whether a value is cut is measured, so script is on.
+        withholds. Nothing is measured: the server and the region decide.
         """
 
         self.pages = {**self.pages, "row-toggle-probe": probe(ROW_TOGGLE_TABLES, **ROW_TOGGLE_VALUES)}
         shown_at = {
             PHONE_SCREEN[0]: {"dropped", "cut", "folded", "cut-in-a-kept-gutter", "line-cut"},
-            1280: {"folded", "cut-in-a-kept-gutter", "line-cut"},
+            1280: {"cut", "folded", "cut-in-a-kept-gutter", "line-cut"},
         }
         for width, expected in shown_at.items():
             with self.subTest(width=width):
@@ -1513,8 +1468,8 @@ class ComponentLayoutTests(LayoutBrowserTests):
     @with_script
     def test_a_cut_value_reads_whole_where_its_row_opens_or_a_wide_box_titles_it(self):
         """A cut value is shown whole by its row opening, or outside a narrow
-        box by its title on hover, which tables.js gives a cut value that has
-        none; touch has no hover, so in a narrow box only an opening row
+        box by its title on hover, which the server gives every cut value
+        that has none; touch has no hover, so in a narrow box only an opening row
         shows it, and a cut there in a row that cannot open is found. A cut
         that draws no ellipsis (a clamp's counts) is found at any width,
         title or not, since nothing tells a reader there is more to hover
@@ -1553,48 +1508,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 self.assertEqual(self.page.evaluate(CUT_WHEN_OPEN, SELECTORS["unseen"]), [])
 
     @with_script
-    def test_a_cut_value_keeps_its_title_only_while_it_is_cut_and_its_row_closed(self):
-        """tables.js titles a cut value where its row's toggle does not show,
-        and takes the title away once the value is whole (its box widened)
-        and once its row opens, so no title outlives its cut; closed again,
-        the row's value is titled again. A window resized is measured as its
-        tables are fitted, so the frames that draw the new width carry the
-        titles it needs, with no wait for the resizing to settle."""
-
-        self.pages = {**self.pages, "titled-probe": probe(TITLED_CUTS)}
-        self.open("titled-probe", PHONE_SCREEN[0])
-        self.page.evaluate(SETTLE)
-        self.assertIn("narrows", self.page.evaluate(TITLED_ROWS))
-
-        self.page.set_viewport_size(viewport(WIDE))
-        self.page.evaluate(SETTLE)
-        self.assertEqual(self.page.evaluate(TITLED_ROWS), ["opens"])
-
-        toggle = self.page.locator("main " + SELECTORS["row_toggle"])
-        toggle.evaluate("(button) => button.click()")
-        self.page.evaluate(SETTLE)
-        self.assertEqual(self.page.evaluate(TITLED_ROWS), [])
-        toggle.evaluate("(button) => button.click()")
-        self.page.evaluate(SETTLE)
-        self.assertEqual(self.page.evaluate(TITLED_ROWS), ["opens"])
-
-    @with_script
-    def test_a_table_that_arrives_after_the_page_marks_its_cuts(self):
-        """A table a fragment brings in once the page has loaded is measured
-        as it arrives, so a cut value in a row whose toggle does not show
-        reads whole on hover there as on a table the page was drawn with."""
-
-        later = probe(f"<template>{TITLED_CUTS}</template>")
-        self.pages = {**self.pages, "later-probe": later}
-        self.open("later-probe", WIDE)
-        self.page.evaluate("""async () => {
-          const later = document.querySelector('main > template');
-          later.replaceWith(later.content.cloneNode(true));
-          await new Promise((done) => requestAnimationFrame(done));
-        }""")
-        self.assertEqual(self.page.evaluate(TITLED_ROWS), ["opens"])
-
-    @with_script
     def test_a_panel_a_cell_shows_shows_its_values_whole(self):
         """A panel opened from a cell, drawn over the page, is no part of the
         column, so an identifier in it reads whole however narrow the cell."""
@@ -1629,10 +1542,8 @@ class ComponentLayoutTests(LayoutBrowserTests):
     def test_a_wide_table_fits_a_phone_and_opening_a_row_moves_nothing(self):
         """A table of four columns or more keeps the column that names each row
         and the ones marked key, and fits the screen; it does not stack into
-        cards and is not swiped through. What left is listed when a row is
-        opened, beneath that row, and opening it changes no column's width and
-        no other row's height: the reader's place in the table holds. Closed
-        again, the line beneath names nothing.
+        cards and is not swiped through. What left shows when a row is
+        opened, beneath that row's first line, each under its column's name.
         """
 
         for name in ("connections", "services", "containers", "projects"):
@@ -1644,18 +1555,84 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 self.assertLessEqual(closed["sideways"], 1)
                 self.assertGreater(closed["toggles"], 0)
 
-                pressed = self.page.evaluate(PRESS_FIRST_ROW_TOGGLE, SELECTORS["table_scroll"])
+                self.page.evaluate(PRESS_FIRST_ROW_TOGGLE, SELECTORS["table_scroll"])
                 opened = self.page.evaluate(PHONE_TABLE, SELECTORS["table_scroll"])
                 self.assertTrue(opened["details"])
-                self.assertEqual(opened["columns"], closed["columns"])
-                self.assertEqual(others(opened["rows"], pressed), others(closed["rows"], pressed))
-                self.assertLessEqual(opened["sideways"], 1)
-
                 self.page.evaluate(PRESS_FIRST_ROW_TOGGLE, SELECTORS["table_scroll"])
-                again = self.page.evaluate(PHONE_TABLE, SELECTORS["table_scroll"])
-                self.assertEqual(again["details"], [])
-                self.assertEqual(again["columns"], closed["columns"])
-                self.assertEqual(again["rows"], closed["rows"])
+                self.assertEqual(self.page.evaluate(PHONE_TABLE, SELECTORS["table_scroll"])["details"], [])
+
+    @with_script
+    def test_opening_a_row_moves_no_column_and_no_other_row(self):
+        """A row's cells stand in its table's tracks, so what an open row
+        shows whole (a column that left, a cut value, a block it keeps beneath
+        itself) stands on lines of its own beneath its first and asks no
+        column for width: every column keeps its edges and every other row
+        its height, at every width, on each of the table's catalog entries and
+        the wide tables of the estate, and a part shown whole keeps its box;
+        closed again, the table is as it was."""
+
+        from hq.platform.core.tests.browser.catalog import CATALOG
+
+        entries = {name: CATALOG[name].page(name) for name in CATALOG if name.startswith("table/")}
+        self.pages = {**self.pages, **entries}
+        opened_any = 0
+        for name in (*entries, "connections", "services", "containers", "projects", "machine"):
+            for width in WIDTHS:
+                with self.subTest(page=name, width=width):
+                    self.open(name, width)
+                    self.page.evaluate(SETTLE)
+                    self.assertEqual(self.page.evaluate(WHOLE_PARTS_MOVED_BY_OPENING, SELECTORS["table_scroll"]), [])
+                    closed = self.page.evaluate(PHONE_TABLE, SELECTORS["table_scroll"])
+                    if not closed or not closed["toggles"]:
+                        continue
+                    opened_any += 1
+                    pressed = self.page.evaluate(PRESS_FIRST_ROW_TOGGLE, SELECTORS["table_scroll"])
+                    self.page.evaluate(SETTLE)
+                    opened = self.page.evaluate(PHONE_TABLE, SELECTORS["table_scroll"])
+                    self.assertEqual(opened["columns"], closed["columns"])
+                    self.assertEqual(others(opened["rows"], pressed), others(closed["rows"], pressed))
+                    self.assertLessEqual(opened["sideways"], 1)
+                    self.page.evaluate(PRESS_FIRST_ROW_TOGGLE, SELECTORS["table_scroll"])
+                    self.page.evaluate(SETTLE)
+                    again = self.page.evaluate(PHONE_TABLE, SELECTORS["table_scroll"])
+                    self.assertEqual(again["columns"], closed["columns"])
+                    self.assertEqual(again["rows"], closed["rows"])
+        self.assertGreater(opened_any, 0)
+
+    @with_script
+    def test_a_table_keeps_its_promises_on_every_catalog_entry(self):
+        """The table primitive, on each of its catalog entries at every width:
+        a grid that names its role and each cell's; its first lines under their headings, a group's heading across
+        its table and the heading row stuck; nothing past its region, and a
+        value it cuts whole in its cell's title; in a narrow box the row's
+        controls beneath its first line, in the row's order. Laid out by the
+        stylesheet alone, it draws every column where it does with no script."""
+
+        from hq.platform.core.tests.browser.catalog import CATALOG
+
+        entries = {name: CATALOG[name].page(name) for name in CATALOG if name.startswith("table/")}
+        self.pages = {**self.pages, **entries}
+        scroll = SELECTORS["table_scroll"]
+        drawn = {}
+        for name in entries:
+            for width in WIDTHS:
+                with self.subTest(page=name, width=width):
+                    self.open(name, width)
+                    self.page.evaluate(SETTLE)
+                    read = self.page.evaluate(TABLES)
+                    self.assertEqual(read["found"], [])
+                    self.assertEqual(self.page.evaluate(TABLES_THAT_DO_NOT_FIT, scroll), [])
+                    self.assertEqual(self.page.evaluate(TABLE_PROMISES, scroll), [])
+                    drawn[name, width] = self.page.evaluate(PHONE_TABLE, scroll)
+        self.assertTrue(any(each and each["columns"] for each in drawn.values()))
+        self.start(java_script_enabled=False)
+        for (name, width), scripted in drawn.items():
+            with self.subTest(page=name, width=width, script=False):
+                self.open(name, width)
+                unscripted = self.page.evaluate(PHONE_TABLE, scroll)
+                self.assertEqual(
+                    (unscripted or {}).get("columns"), (scripted or {}).get("columns"), "a script moved a column"
+                )
 
     @with_script
     def test_opening_every_row_a_reader_can_open_moves_nothing_they_did_not_ask_for(self):
@@ -1682,18 +1659,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
                         self.settle()
                     self.assertTrue(self.page.locator(rows + '[aria-expanded="true"]').count())
                     self.assertEqual(self.page.evaluate(LAYOUT_SHIFTS, read), [])
-
-    @with_script
-    def test_a_row_that_arrives_after_its_table_is_fitted_leaves_out_the_columns_that_left(self):
-        """The parser hands a long table its rows in pieces, and the table is
-        fitted as each piece arrives: a row added once columns have left
-        leaves them out too, so it is no wider or taller than the rows
-        before it."""
-
-        self.open("containers", PHONE_SCREEN[0])
-        fitted = self.page.evaluate(PHONE_TABLE, SELECTORS["table_scroll"])
-        self.assertLess(len(fitted["columns"]), fitted["headings"])
-        self.assertEqual(self.page.evaluate(ROW_ARRIVES, SELECTORS["table_scroll"]), [])
 
     @with_script
     def test_a_fragment_that_is_not_percent_encoding_breaks_no_table(self):
@@ -1883,31 +1848,25 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 self.assertEqual(self.page.evaluate(BROKEN_WORDS, SELECTORS["identifier"]), [])
 
     @with_script
-    def test_a_rows_controls_stay_in_its_card_and_a_table_that_cannot_fit_scrolls(self):
-        """On the narrowest phone a row's controls, each label whole, leave
-        with their column for the line beneath the row, so their table fits
-        its card; a table nothing it gives can fit scrolls in its region, its
-        heading on its first row, and nothing on the page runs past it
-        sideways."""
+    def test_a_rows_controls_stay_in_its_card_and_no_table_runs_past_it(self):
+        """On the narrowest phone a row's controls, each label whole, stand on
+        the line beneath the row's words, so their table fits its card; a
+        value wider than any phone is cut in its cell, so its table fits too.
+        Neither region scrolls or is a stop for the keyboard, and nothing on
+        the page runs past it sideways."""
 
         self.pages = {**self.pages, "row-actions-probe": probe(ROW_ACTIONS_TABLES)}
         self.open("row-actions-probe", NARROWEST)
         self.page.evaluate(SETTLE)
-        misfits = self.page.evaluate(TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"])
-        # One table, the one that scrolls below: a region draws no landmark, so
-        # the probe names a table by its heading.
-        self.assertEqual(len(misfits), 1, misfits)
-        region = "(probe) => getComputedStyle(document.querySelector(`[data-probe=${probe}]`).parentElement).overflowX"
-        self.assertEqual(self.page.evaluate(region, "unfittable"), "auto")
-        self.assertEqual(self.page.evaluate(region, "actions"), "visible")
-        # The server draws each region as a stop for the keyboard; the one
-        # that scrolls stays one, by its name, and the one that fits is none.
-        stop = """(probe) => ['role', 'aria-label', 'tabindex'].map((attribute) =>
-          document.querySelector(`[data-probe=${probe}]`).parentElement.getAttribute(attribute))"""
-        self.assertEqual(self.page.evaluate(stop, "unfittable"), ["group", "Unfittable", "0"])
-        self.assertEqual(self.page.evaluate(stop, "actions"), [None, None, None])
+        self.assertEqual(self.page.evaluate(TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), [])
+        region = """(probe) => {
+          const region = document.querySelector(`[data-probe=${probe}]`).parentElement;
+          return [getComputedStyle(region).overflowX, region.getAttribute('tabindex')];
+        }"""
+        for name in ("unfittable", "actions"):
+            self.assertEqual(self.page.evaluate(region, name), ["visible", None])
+        self.assertEqual(self.page.evaluate(TABLE_PROMISES, SELECTORS["table_scroll"]), [])
         self.assertEqual(self.page.evaluate(SIDEWAYS, SELECTORS["sideways"]), [])
-        self.assertEqual(self.page.evaluate(HEADING_DROP, "unfittable"), 0)
 
     @with_script
     def test_an_identifier_in_a_table_is_whole_while_a_column_can_leave(self):
@@ -1933,15 +1892,10 @@ class ComponentLayoutTests(LayoutBrowserTests):
 
     @with_script
     def test_a_name_a_cell_cuts_is_drawn_whole_on_its_line_where_its_cell_has_room(self):
-        """A one-token name cut by a box of its own (a bare name, a cell's
-        line, a link, a kept line an icon opens), in a cell with room to spare, draws every part on its
-        one line uncut, in a box at least as wide as what it draws. A box
-        sized by its own measure is short wherever an engine measures it a
-        fraction short of the parts it lays out, and then the last part
-        leaves the line and only its ellipsis shows. Read in every engine, at
-        each density a screen has, and again with the box measured as nothing,
-        as an engine that mismeasures it most would: the track never reads
-        the box's own measure."""
+        """A one-token name in a box of its own (a bare name, a cell's line,
+        a link, a name an icon opens), in a cell with room to spare, draws
+        every part on its one line uncut, in a box at least as wide as what it
+        draws, read in every engine at each density a screen has."""
 
         from hq.platform.core.templatetags.value_tags import breakable, cell_line
 
@@ -1952,17 +1906,15 @@ class ComponentLayoutTests(LayoutBrowserTests):
             *(breakable(name) for name in names),
             *(cell_line(name) for name in names),
             *(f'<a data-entity href="/example/">{breakable(name)}</a>' for name in names),
-            *(
-                f'<span class="kept-line">{icon} {breakable(name)}</span>'
-                for name in [*names, "2024.12.1-ubu2404-ls48"]
-            ),
+            *(f"{icon} {breakable(name)}" for name in [*names, "2024.12.1-ubu2404-ls48"]),
         ]
         rows = "".join(f"<tr><td>{cell}</td><td>Example</td></tr>" for cell in cells)
         self.pages = {
             **self.pages,
             "name-room-probe": probe(
-                '<div class="table-scroll"><table class="data-table"><thead><tr><th>Directory</th><th>State</th></tr>'
-                f"</thead><tbody>{rows}</tbody></table></div>"
+                '{% table_region "Directories" %}<table class="data-table"><thead><tr>'
+                '{% table_heading "Directory" "identifier" %}{% table_heading "State" "status" %}</tr>'
+                f"</thead><tbody>{rows}</tbody></table>{{% endtable_region %}}"
             ),
         }
         short = """([boxes, whole]) => {
@@ -1984,71 +1936,21 @@ class ComponentLayoutTests(LayoutBrowserTests):
           }
           return {read, found};
         }"""
-        for scale, mismeasured in ((1, False), (1.5, False), (2, False), (1, True)):
-            with self.subTest(scale=scale, mismeasured=mismeasured):
+        for scale in (1, 1.5, 2):
+            with self.subTest(scale=scale):
                 self.start(java_script_enabled=True, device_scale_factor=scale)
                 self.open("name-room-probe", WIDE)
-                if mismeasured:
-                    add_css(self.page, ".cut { contain: inline-size; }")
                 self.page.evaluate(SETTLE)
-                drawn = self.page.evaluate(short, [SELECTORS["name_cut"], SELECTORS["part"]])
+                drawn = self.page.evaluate(short, [SELECTORS["name_box"], SELECTORS["part"]])
                 self.assertGreater(drawn["read"], 0)
                 self.assertEqual(drawn["found"], [])
 
     @with_script
-    def test_an_icon_a_kept_line_opens_stays_beside_its_name_inside_its_cell(self):
-        """A kept line an icon opens, its column held short of the icon and
-        the name together, keeps the icon on the name's first line and both
-        inside the cell, the name cut there: a name the line cuts is as wide
-        as what the line holds out for, never wider than the room its first
-        line leaves it beside the icon."""
-
-        from hq.platform.core.templatetags.value_tags import breakable
-
-        icon = render_to_string("partials/_icon.html", {"name": "deploy"}).strip()
-        names = ("2024.12.1-ubu2404-ls48", "/opt/apps/example2-proxy-web", "example-connect")
-        rows = "".join(
-            f'<tr><td><span class="kept-line">{icon} {breakable(name)}</span></td><td>Example</td></tr>'
-            for name in names
-        )
-        self.pages = {
-            **self.pages,
-            "hang-probe": probe(
-                '<div class="table-scroll"><table class="data-table"><thead><tr><th>Update</th><th>State</th></tr>'
-                f"</thead><tbody>{rows}</tbody></table></div>"
-            ),
-        }
-        placed = """([lines, mark, name]) => [...document.querySelectorAll(lines)].flatMap((line) => {
-          const cell = line.closest('td');
-          const pad = getComputedStyle(cell);
-          const edge = cell.getBoundingClientRect().right - parseFloat(pad.paddingRight) + 0.5;
-          const icon = line.querySelector(mark).getBoundingClientRect();
-          const token = line.querySelector(name);
-          const first = token.getClientRects()[0];
-          const found = [];
-          if (Math.max(icon.right, token.getBoundingClientRect().right, line.getBoundingClientRect().right) > edge)
-            found.push(`${token.textContent} runs past its cell`);
-          if (icon.bottom <= first.top || icon.top >= first.bottom) found.push(`${token.textContent} leaves its icon`);
-          return found;
-        })"""
-        self.start(java_script_enabled=True)
-        for hold in ("4em", "7em", "9em", "11em"):
-            with self.subTest(hold=hold):
-                self.open("hang-probe", WIDE)
-                add_css(self.page, f".data-table {{ --hold: {hold}; }}")
-                self.page.evaluate(SETTLE)
-                self.assertEqual(
-                    self.page.evaluate(
-                        placed, [SELECTORS["kept_line"], SELECTORS["line_icon"], SELECTORS["line_name"]]
-                    ),
-                    [],
-                )
-
-    @with_script
-    def test_a_table_whose_content_widens_after_its_fit_gives_way_again(self):
-        """A table fitted at its region's width whose own content then grows
-        (a face settling, a style arriving) with the region unchanged lets a
-        ranked column go again, so it still fits its box."""
+    def test_a_table_whose_content_widens_after_it_is_drawn_still_fits_and_moves_no_column(self):
+        """A table whose own content grows once it is drawn (a face settling,
+        a style arriving) with its region unchanged keeps the columns it drew
+        and still fits its box: a column leaves by the region's width alone,
+        and what grows is cut in its cell."""
 
         self.pages = {**self.pages, "identifier-probe": probe(IDENTIFIER_TABLES, **IDENTIFIER_VALUES)}
         self.open("identifier-probe", 820)
@@ -2057,16 +1959,14 @@ class ComponentLayoutTests(LayoutBrowserTests):
         # A style's change, which no script hears as a change to the tree:
         # every sentence now asks for its whole line.
         self.page.evaluate("() => { document.querySelector('main table').style.whiteSpace = 'nowrap'; }")
-        # The size a layout reports reaches the page's observers a frame or two later.
         self.page.evaluate("() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))")
         self.assertEqual(self.page.evaluate(TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), [])
-        self.assertLess(len(self.page.evaluate(COLUMNS_SHOWN)), len(shown), "no column left")
+        self.assertEqual(self.page.evaluate(COLUMNS_SHOWN), shown)
 
     @with_script
     def test_the_survey_finds_the_same_twice_on_a_page_that_answers_changes_to_its_tree(self):
-        """A page script that answers a change in its tree, as tables.js fits
-        a region again when what it holds changes (here the phrase in the
-        changed cell is squeezed), hears nothing of what the probes put in
+        """A page script that answers a change in its tree (here the phrase in
+        the changed cell is squeezed), hears nothing of what the probes put in
         place and take away to measure, so a second survey judges the page
         the first did. A change from outside the probes is heard and found."""
 

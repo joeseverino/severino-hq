@@ -27,6 +27,7 @@ AUDIT = ROOT / "hq/platform/core" / "browser_audit.js"
 TEMPLATE_ROOTS = (ROOT / "templates", ROOT / "tests/fixtures/example_hq_plugin" / "templates")
 # The tag libraries write markup into those templates.
 TAG_LIBRARIES = ROOT / "hq/platform/core/templatetags"
+TABLE_MARKS = ROOT / "hq/platform/core/table_cells.py"
 
 _CLASS = re.compile(r"\.(-?[A-Za-z_][\w-]*)")
 _ID = re.compile(r"#(-?[A-Za-z_][\w-]*)")
@@ -125,6 +126,10 @@ def markup() -> tuple[set[str], set[str], str]:
         # `classes`), its interpolations aside.
         for value in re.findall(r'\bclasses = f?"([\w\s{}-]*)"', source):
             classes.update(re.sub(r"\{\w*\}", " ", value).split())
+    # A table's marks are written in code too: each attribute `table_cells`
+    # adds to a row, a cell or what a cell holds.
+    marks = re.findall(r'" (data-[a-z-]+)', TABLE_MARKS.read_text(encoding="utf-8"))
+    text.append(f"<td {' '.join(sorted(set(marks)))}>")
     return classes, ids, "\n".join(text)
 
 
@@ -192,7 +197,7 @@ class SelectorExtractionTests(SimpleTestCase):
 
 
 @tag("source", "tree")
-@reads("**/templates/**", "**/templatetags/*.py")
+@reads("**/templates/**", "**/templatetags/*.py", "hq/platform/core/table_cells.py")
 class BrowserGateSelectorTests(SimpleTestCase):
     def test_every_gate_selector_names_rendered_markup(self):
         missing = sorted(
@@ -205,7 +210,9 @@ class BrowserGateSelectorTests(SimpleTestCase):
 
 
 @tag("source", "tree")
-@reads("**/templates/**", "**/templatetags/*.py", "hq/platform/core/browser_audit.js")
+@reads(
+    "**/templates/**", "**/templatetags/*.py", "hq/platform/core/table_cells.py", "hq/platform/core/browser_audit.js"
+)
 class LayoutAuditSelectorTests(SimpleTestCase):
     def test_the_audit_reads_selectors(self):
         self.assertGreater(len(audit_selectors(AUDIT.read_text(encoding="utf-8"))), 5)

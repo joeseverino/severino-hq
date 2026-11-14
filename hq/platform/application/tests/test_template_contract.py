@@ -39,7 +39,7 @@ OUTSIDE = {
         '{% post_button "Go" url color="red" %}'
     ),
     "templates/example/markup.html": (
-        '<div class="compact invented {% if on %}pill-good{% endif %} pill-{{ tone }}">\n<p data-secret>x</p></div>\n'
+        '<div class="compact invented {% if on %}pill-good{% endif %} pill-{{ tone }}">\n<p data-secret>x</p><svg data-chart></svg></div>\n'
         '<span class="muted" style="--part: {{ width }}">x</span>'
     ),
     "templates/example/parts.html": (
