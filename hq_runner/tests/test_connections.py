@@ -9,6 +9,7 @@ The documents are written as the root renderer writes them: the shape
 own private file.
 """
 
+import json
 import shlex
 import tempfile
 import unittest
@@ -108,21 +109,44 @@ class InventoryTests(DocumentTestCase):
         )
 
     def test_a_run_through_the_read_login_has_escalation_off_above_all_it_plays(self):
-        from hq_runner.ansible import arguments
+        from hq_runner.ansible import arguments, extravars
 
-        found = arguments(self.bound_run(parameters={"service": "web", "ansible_become": True}), self.root / "run")
+        run = self.bound_run(parameters={"service": "web", "ansible_become": True})
+        found = arguments(run, self.root / "run")
 
         # An extra var, which outranks every keyword and variable a playbook sets.
-        self.assertEqual(found["extravars"], {"service": "web", "ansible_become": False})
+        self.assertEqual(extravars(run), {"service": "web", "ansible_become": False})
         for host in found["inventory"]["all"]["hosts"].values():
             self.assertNotIn("ansible_become", host)
 
     def test_a_run_through_a_privilege_s_login_leaves_escalation_to_its_playbook(self):
-        from hq_runner.ansible import arguments
+        from hq_runner.ansible import extravars
 
-        found = arguments(self.bound_run("example.service_control", {"service": "web"}), self.root / "run")
+        self.assertEqual(extravars(self.bound_run("example.service_control", {"service": "web"})), {"service": "web"})
 
-        self.assertEqual(found["extravars"], {"service": "web"})
+    def test_a_parameter_s_text_reaches_ansible_as_data_never_a_template(self):
+        from hq_runner.ansible import arguments, write_extravars
+
+        template = "{{ lookup('ansible.builtin.pipe', 'id') }}"
+        run = self.bound_run(parameters={"service": template, "names": [template, 3], "keep": True})
+        private = self.root / "run"
+        private.mkdir()
+
+        written = write_extravars(run, private)
+
+        # The file ansible-runner is pointed at, which no other account reads.
+        self.assertEqual(arguments(run, private)["extravars"], str(written))
+        self.assertEqual(written.stat().st_mode & 0o777, 0o600)
+        # Every text is tagged, at any depth, and nothing else is: the tags
+        # aside, it is the JSON of the values sent. smoke:runner holds that
+        # Ansible leaves a tagged text as it is.
+        text = written.read_text(encoding="utf-8")
+        self.assertEqual(text.count("!unsafe "), 2)
+        self.assertEqual(text.count(f"!unsafe {json.dumps(template)}"), 2)
+        self.assertEqual(
+            json.loads(text.replace("!unsafe ", "")),
+            {"service": template, "names": [template, 3], "keep": True, "ansible_become": False},
+        )
 
     def test_ansible_s_working_files_stay_inside_the_run_s_private_directory(self):
         from hq_runner.ansible import arguments

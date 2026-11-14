@@ -79,6 +79,29 @@ ESCALATING_FILES = {
 }
 
 
+# A read given a template as a parameter. Ansible reads an extra var's text as
+# a template and runs its lookups on the worker, so the run ends well, and
+# leaves no marker, only while the worker hands each parameter over as data.
+TEMPLATED = "playbooks/templated_input.yml"
+TEMPLATED_FILES = {
+    TEMPLATED: """\
+- name: Take a parameter that holds a template
+  hosts: all
+  gather_facts: false
+  vars:
+    ansible_connection: local
+  tasks:
+    - name: The parameter is the text sent
+      ansible.builtin.assert:
+        that: said is ansible.builtin.search('lookup')
+""",
+}
+
+
+def _templated(marker: Path) -> str:
+    return "{{ lookup('ansible.builtin.pipe', 'touch " + str(marker) + "') }}"
+
+
 def _environment(root: Path) -> dict[str, str]:
     connections = root / "connections.json"
     fakes.write_connections(connections, fakes.runner("localhost", host="127.0.0.1"))
@@ -122,13 +145,20 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="hq-runner-") as directory:
         root = Path(directory)
         remote = Remote(root / "remote")
-        revision = remote.commit({**project_files(), **ESCALATING_FILES})
-        run, escalating = (fakes.pending(revision=revision, effect="read", privilege="") for _ in range(2))
-        for asked, playbook in ((run, "playbooks/host_health.yml"), (escalating, ESCALATING)):
+        revision = remote.commit({**project_files(), **ESCALATING_FILES, **TEMPLATED_FILES})
+        run, escalating, templated = (fakes.pending(revision=revision, effect="read", privilege="") for _ in range(3))
+        for asked, playbook in (
+            (run, "playbooks/host_health.yml"),
+            (escalating, ESCALATING),
+            (templated, TEMPLATED),
+        ):
             asked["resource"]["spec"]["playbook"] = playbook
             asked["input"]["hosts"] = ["localhost"]
         escalating["operation"]["id"] = "33333333-4444-4555-8666-777777777777"
-        bridge = fakes.Bridge(fakes.scan_pending(), run, escalating)
+        templated["operation"]["id"] = "44444444-5555-4666-8777-888888888888"
+        evaluated = root / "evaluated"
+        templated["input"]["parameters"] = {"said": _templated(evaluated)}
+        bridge = fakes.Bridge(fakes.scan_pending(), run, escalating, templated)
         config = Config.read(_environment(root))
         # The one change from the configuration the environment gives: the
         # repository is this machine's, reached over git's file transport.
@@ -139,7 +169,11 @@ def main() -> int:
         left = sorted(path.name for path in (root / "scratch").iterdir())
         if loaded.exists():
             wrong.append("the project's own ansible.cfg loaded a callback of the project's")
-    scanned, ran, read = [*bridge.reports, {}, {}, {}][:3]
+        if evaluated.exists():
+            wrong.append("a parameter's template was evaluated on the worker")
+    scanned, ran, read, given = [*bridge.reports, {}, {}, {}, {}][:4]
+    if given.get("success") is not True:
+        wrong.append(f"a run given a template as a parameter did not take it as text: {given.get('message')}")
     specs = {
         found["role"]: found["argument_spec"]
         for procedure in scanned.get("catalog", {}).get("procedures", [])
@@ -156,7 +190,7 @@ def main() -> int:
         wrong.append(
             f"the scan reported the logins {scanned.get('catalog', {}).get('reaches')}, not the one its connections hold"
         )
-    if worked != 3 or scanned.get("success") is not True:
+    if worked != 4 or scanned.get("success") is not True:
         wrong.append(f"wanted a scan that succeeded first, not {scanned}")
     elif specs != recorded:
         wrong.append(f"ansible-doc answered {specs}, not the role specs recorded_role_specs.json holds")

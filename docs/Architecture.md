@@ -1481,7 +1481,12 @@ connection's address, port and user, its identity file alone (no agent, no
 password), its pinned `known_hosts` with host key checking on, since
 ansible-runner turns it off unless told otherwise, and its `shell_type` when
 it carries one. The hosts and extra-vars come from the claim's `input`, and
-every ansible-runner argument is fixed in `hq_runner/ansible.py`. Each run's
+every ansible-runner argument is fixed in `hq_runner/ansible.py`. A parameter
+is data, never a template: Ansible reads an extra var's text as one and runs
+its lookups on the worker, so the worker hands the extra vars over as a file
+of its own in which every text is tagged `!unsafe` (`ansible.as_data`), as AWX
+marks a job's extra vars, and never on the command line. The smoke holds that
+with a parameter that would leave a file behind were it evaluated. Each run's
 private data directory is new and empty, and nothing is read from or written
 to its `env/` (`suppress_env_files`), so no file there adds an option, a
 variable or a callback. Its artifacts keep no stdout and no event the handler

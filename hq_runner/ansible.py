@@ -6,6 +6,7 @@ docs/Architecture.md, "The automation worker".
 """
 
 import json
+import os
 import shlex
 import tempfile
 from collections.abc import Callable, Mapping
@@ -59,6 +60,10 @@ PLUGIN_PATHS = (
 ROLES = "roles"
 # The variable that says whether a task escalates, above each keyword.
 BECOME = "ansible_become"
+# The file a run's extra vars are handed over in, inside its private directory.
+EXTRAVARS = "extravars.yml"
+# Ansible's tag for text it must never read as a template.
+UNSAFE = "!unsafe"
 # How long ansible-doc may take to read one role's argument spec.
 DOC_TIMEOUT_SECONDS = 60
 
@@ -127,6 +132,34 @@ def extravars(run: Run) -> dict[str, Any]:
     return found
 
 
+def as_data(value: Any) -> str:
+    """``value`` as YAML in which every text is tagged ``!unsafe``.
+
+    Ansible reads an extra var's text as a template, lookups included, which
+    run on the worker. A run's parameters are data from whoever asked, so each
+    text is tagged as the one thing Ansible never templates. JSON is YAML, so
+    each scalar is written as JSON, and a tag before it is YAML's own.
+    """
+
+    if isinstance(value, str):
+        return f"{UNSAFE} {json.dumps(value)}"
+    if isinstance(value, Mapping):
+        return "{" + ", ".join(f"{json.dumps(str(key))}: {as_data(each)}" for key, each in value.items()) + "}"
+    if isinstance(value, (list, tuple)):
+        return "[" + ", ".join(as_data(each) for each in value) + "]"
+    return json.dumps(value)
+
+
+def write_extravars(run: Run, private_data_dir: Path) -> Path:
+    """The run's extra vars as the file ``arguments`` names, the worker's alone to read."""
+
+    path = private_data_dir / EXTRAVARS
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        handle.write(as_data(extravars(run)) + "\n")
+    return path
+
+
 def arguments(run: Run, private_data_dir: Path) -> dict[str, Any]:
     """What ansible-runner is called with for ``run``, callbacks aside."""
 
@@ -137,7 +170,9 @@ def arguments(run: Run, private_data_dir: Path) -> dict[str, Any]:
         "project_dir": str(run.procedure.project_dir),
         "playbook": run.procedure.playbook,
         "inventory": _inventory(run.hosts, run.targets),
-        "extravars": extravars(run),
+        # A file (``write_extravars``), never a mapping: ansible-runner puts a
+        # mapping on the command line as JSON, where no text can be tagged.
+        "extravars": str(private_data_dir / EXTRAVARS),
         "envvars": environment(private_data_dir, run.procedure.project_dir),
         # ansible-runner's own job timeout: past it, the run is killed and
         # ends as ``timeout``.
@@ -163,6 +198,7 @@ def runner(scratch: Path) -> Callable[..., str]:
                 # report is the only record of a run that leaves the worker.
                 return False
 
+            write_extravars(run, Path(private))
             thread, started = ansible_runner.run_async(
                 **arguments(run, Path(private)),
                 event_handler=event_handler,
