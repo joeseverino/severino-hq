@@ -375,8 +375,7 @@ A long value in a cell (a line past `table_cells.LONG`) wraps and is held to
 its third line by a clamp with its mark (`.cell-clamp`, cuts.css), its whole
 value in its cell's title (written by the server). Only words are held: each
 part of words in it (`data-cell`) is clamped on its own, so a pill or a
-toggle beside them stays whole. A hyphenated word in a name or a sentence
-(`|breakable`'s `.whole`) is a word and never breaks at its hyphens. A
+toggle beside them stays whole. A
 status, a figure, a date or a control is never cut: its column is as wide
 as it is. `room=` on a region is accepted, since an extension passes it, and
 asks for nothing.

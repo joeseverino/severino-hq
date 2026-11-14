@@ -171,8 +171,6 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 /* An identifier the row is read by, among many columns, wraps at its seams with a chip on each line. */
 .data-table td code.cell-whole { display: inline; white-space: normal; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 .data-table td code.cell-whole :is(.token, .whole) { display: inline; }
-/* A hyphenated word in a name or a sentence (`|breakable`'s `.whole`) is a word: it never breaks at its hyphens, so its column is at least as wide as it. */
-.data-table > tbody > tr > :is([data-kind="name"], [data-kind="prose"]) .whole { white-space: nowrap; }
 /* A square for a glyph, and as wide as its word when it holds one. */
 .icon-link {
   display: inline-flex;
