@@ -324,3 +324,134 @@ class LinkedSheetTests(TestCase):
 
         links = [link.attrs["href"] for link in elements(response, "link") if link.attrs.get("rel") == "stylesheet"]
         self.assertEqual(links, [static(sheet) for sheet in SHEETS])
+
+
+# A state's color is its tone, declared once in the tone classes (cadence.css),
+# so a rule that colors an element by a state it names draws a second color for
+# the same state. A state is named by a state class (`is-*`, `has-*`), a state
+# attribute (`[data-state]`, `[data-ask-state]`) or a class that ends in a
+# state or verdict word (`conn-verdict-failing`, `sweep-item-stale`).
+STATE_CLASS = re.compile(r"\.(?:is|has)-[\w-]+")
+STATE_ATTRIBUTE = re.compile(r"\[data-[\w-]*state\b")
+STATE_WORD = re.compile(
+    r"\.[\w-]*-(?:verdict|good|attention|serious|neutral|failing|failed|failure|confirmed|unconfirmed"
+    r"|stale|unreachable|met|unmet|proven|contradicted|relay|relayed|idle|succeeded|lost)(?![\w-])"
+)
+# The colors a state draws in: the status colors and the tone tokens behind
+# them. A tone class's own variables (`--toned`, `--tone-ink`) are its tone.
+STATE_COLOR = re.compile(
+    r"var\(--(?:ok|warn|danger|attn|tone-(?:positive|caution|critical|info|notable|severe|special|neutral)-[\w-]+)(?![\w-])"
+)
+# The line, which a state or verdict word may draw a state not yet decided in.
+LINE = re.compile(r"var\(--line(?![\w-])")
+COLORED = re.compile(
+    r"(?:^|;)\s*((?:color|background(?:-color)?|border(?:-[\w-]+)?|outline(?:-color)?|fill|stroke"
+    r"|box-shadow|text-decoration(?:-color)?|accent-color|caret-color)\s*:[^;]*)"
+)
+# The tone classes themselves, the one place a tone takes its color.
+TONE_CLASS = re.compile(r"\.toned-(?:good|attention|serious|neutral)")
+
+# The sites that still color a state by hand, each a sheet and its selector.
+# The list only shrinks: a site moved onto the tone classes leaves it.
+HAND_COLORED_STATES = frozenset(
+    {
+        ("cadence.css", '.job-progress:is([data-state="failed"], [data-state="lost"]) .job-bar'),
+        ("cadence.css", '.job-progress[data-state="succeeded"] .job-bar'),
+        ("cards.css", ".reading-age.is-stale"),
+        ("connection.css", ".check-ladder.is-route > .ladder-rung::before"),
+        ("connection.css", '.check-ladder.is-route > .ladder-rung[data-state="does-not"]::before'),
+        ("connection.css", '.check-ladder.is-route > .ladder-rung[data-state="unknown"]::before'),
+        ("connection.css", ".conn-carriage-relay > strong"),
+        ("connection.css", '.ladder-rung[data-state="does-not"] .ladder-mark'),
+        ("connection.css", '.ladder-rung[data-state="unknown"] .ladder-mark'),
+        ("connection.css", '.ladder-rung[data-state="unknown"]'),
+        ("connection.css", ".sweep-item-stale .sweep-age"),
+        ("connection.css", ".sweep-item-unreachable .sweep-age"),
+        ("connection.css", ".sweep-item-unreachable"),
+        ("cuts.css", '.page-head [data-reading-age][data-ask-state="failed"]::after'),
+        ("forms.css", ".field.has-errors input, .field.has-errors textarea, .field.has-errors select"),
+        ("layout.css", ".calendar-source-failure"),
+        ("page.css", ".reading-standing.is-attention"),
+        ("page.css", ".reading-standing.is-stale"),
+        ("pages.css", '.ask[data-ask-state="failed"] .ask-note'),
+        (
+            "pages.css",
+            '.visit-status:is(.ask[data-ask-state="done"] > *, :root:has(.ask[data-ask-state="done"] > #page-visit) [form="page-visit"])::before',
+        ),
+        (
+            "pages.css",
+            '.visit-status:is(.ask[data-ask-state="failed"] > *, :root:has(.ask[data-ask-state="failed"] > #page-visit) [form="page-visit"])::before',
+        ),
+        ("routes.css", ".request-path li.is-attention .hop-icon"),
+        ("routes.css", ".request-path li.is-attention::before"),
+        ("routes.css", ".request-path li.is-proven .hop-icon, .hop-proof-key"),
+        ("surfaces.css", ".kpi-dot.is-filled"),
+        ("watching.css", ".posture-access .is-unmet"),
+        ("watching.css", ".posture-meter .is-met"),
+        ("watching.css", ".posture-meter .is-unmet"),
+        ("watching.css", ".posture-score.is-met"),
+        ("watching.css", ".posture-score.is-unmet"),
+    }
+)
+
+
+def hand_colored_states(css: str) -> set[str]:
+    """The selector of each rule in ``css`` that colors an element by a state
+    it names, outside the tone classes, as written when nested."""
+
+    found = set()
+    for preludes, selector, body in _leaf_rules(_uncommented(css)):
+        if TONE_CLASS.fullmatch(selector.strip()):
+            continue
+        written = " ".join([*(p for p in preludes if not p.startswith("@")), selector])
+        worded = STATE_WORD.search(written)
+        if not (worded or STATE_CLASS.search(written) or STATE_ATTRIBUTE.search(written)):
+            continue
+        colors = (STATE_COLOR, LINE) if worded else (STATE_COLOR,)
+        if any(color.search(declaration) for declaration in COLORED.findall(body) for color in colors):
+            found.add(" ".join(written.split()))
+    return found
+
+
+@tag("source")
+class StateColorTests(SimpleTestCase):
+    def test_a_state_takes_its_color_from_its_tone(self):
+        """A state colored by a rule of its own draws one state in two colors
+        beside a status drawn in its tone: set the element's ``toned-*`` class
+        from the tone the state carries and read ``var(--toned)``."""
+
+        found = {
+            (path.name, selector)
+            for path in sheet_paths()
+            for selector in hand_colored_states(path.read_text(encoding="utf-8"))
+        }
+
+        self.assertEqual(sorted(found - HAND_COLORED_STATES), [], "a rule colors a state outside the tone classes")
+        self.assertEqual(sorted(HAND_COLORED_STATES - found), [], "a listed site is gone: delete it from the list")
+
+    def test_the_reader_finds_each_shape_of_a_hand_colored_state(self):
+        refused = [
+            ".panel.conn-verdict-failing { border-left-color: var(--attn); }",
+            ".a.is-good { border-left-color: var(--ok); }",
+            '.a[data-state="unknown"] .b { background: color-mix(in srgb, var(--warn) 38%, var(--line)); }',
+            ".a-unconfirmed .line { background: var(--line); }",
+            ".a { .is-unmet { color: var(--danger); } }",
+            ".a.has-errors input { border-color: var(--danger); }",
+            '.a[data-state="succeeded"] .bar { color: var(--ok, var(--accent)); }',
+            ".a.is-attention .icon { background: linear-gradient(var(--tone-critical-tint) 0 0), var(--surface); }",
+        ]
+        allowed = [
+            ".toned-good { --toned: var(--ok); }",
+            ".a.toned-serious { border-inline-start: 3px solid var(--toned); }",
+            ".btn.danger { color: var(--danger); }",
+            ".a.is-related { border-color: color-mix(in srgb, var(--accent) 45%, var(--surface)); }",
+            ".a.is-good { font-weight: 600; }",
+            ".a.is-pane thead th { border-bottom: 1px solid var(--line); }",
+            ".fact:is(.tone-good, .tone-serious) .fact-value { color: var(--tone-ink); }",
+        ]
+        for css in refused:
+            with self.subTest(css=css):
+                self.assertTrue(hand_colored_states(css))
+        for css in allowed:
+            with self.subTest(css=css):
+                self.assertFalse(hand_colored_states(css))

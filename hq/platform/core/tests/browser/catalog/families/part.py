@@ -350,11 +350,12 @@ def _runs():
     )
 
 
-def _connection(channel=TAILNET_CHANNEL, *, path="direct", held=True, linked=True):
+def _connection(channel=TAILNET_CHANNEL, *, path="direct", held=True, linked=True, failing=False):
     """A request as the connection panel reads it: from an example laptop to
     an example HQ, over ``path`` (``direct``, ``relayed``, or ``""`` for no
     tailnet reading), its checks confirmed when ``held`` and one not yet
-    read otherwise, each end leading to its machine when ``linked``."""
+    read otherwise, or one read and not holding when ``failing``, each end
+    leading to its machine when ``linked``."""
 
     laptop = Device("example-laptop", addresses=("192.0.2.10",), user="example-person@example.com")
     hq = Device("example-hq", addresses=("192.0.2.20",))
@@ -376,7 +377,15 @@ def _connection(channel=TAILNET_CHANNEL, *, path="direct", held=True, linked=Tru
         serves=hq if tailnet else None,
         observer=None,
         identity=Identity(username="example", tailnet_user=laptop.user if tailnet else ""),
-        layers=(Layer("example-check", "Example check", holds=True, detail="An example check.", conclusive=held),),
+        layers=(
+            Layer(
+                "example-check",
+                "Example check",
+                holds=not failing,
+                detail="An example check.",
+                conclusive=held or failing,
+            ),
+        ),
         secure_transport=True,
         host="hq.example.com",
         machine_url="/example/machines/example-laptop/" if linked else "",
@@ -2006,6 +2015,12 @@ ENTRIES = {
             "connection": _connection(path="relayed", held=False, linked=False),
             "posture": _posture((True, False, None), advanced=False),
         },
+    ),
+    # Over the tailnet with a check that does not hold, drawn in the tone
+    # the panel's status dot takes.
+    "part/connection-peering-failing": Entry(
+        '{% include "partials/_connection_peering.html" %}',
+        {"connection": _connection(failing=True)},
     ),
     # Dots beside a figure, a part of a whole and a history whose dots lead
     # to each run; and a history in a table's cell.

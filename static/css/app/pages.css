@@ -51,14 +51,11 @@
 .topology-node {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;
   gap: 1px var(--space-3); padding: var(--space-4) var(--space-5);
-  border: 1px solid var(--line); border-left: 3px solid var(--muted);
+  border: 1px solid var(--line); border-left: 3px solid var(--toned);
   border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--shadow-sm);
   cursor: pointer; scroll-margin-top: var(--topology-lane-head);
   transition: border-color 100ms ease, box-shadow 100ms ease, opacity 100ms ease;
 }
-.topology-node.is-good { border-left-color: var(--ok); }
-.topology-node.is-attention { border-left-color: var(--warn); }
-.topology-node.is-serious { border-left-color: var(--danger); }
 .topology-node-title { display: contents; }
 .topology-node-title strong { grid-column: 1 / -1; overflow-wrap: break-word; font-size: var(--text-sm); color: var(--ink); }
 /* A record's value can be one long word (a key, a token), which wraps at its

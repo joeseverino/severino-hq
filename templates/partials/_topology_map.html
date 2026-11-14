@@ -40,7 +40,7 @@ back, and topology_more the view that shows it.
               the panel beside the lanes, never inside the card.
             {% endcomment %}
             <article
-              class="topology-node topology-node-{{ item.node.kind }} is-{{ item.node.status }}"
+              class="topology-node topology-node-{{ item.node.kind }} {{ item.node.status|tone_class }}"
               data-topology-node="{{ item.node.id }}"
               data-topology-node-kind="{{ item.node.kind }}"
               data-topology-neighbors="{{ item.neighbors }}"

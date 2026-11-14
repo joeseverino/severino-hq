@@ -144,6 +144,25 @@ def severity_tone(severity):
     return _severity_tone(severity)
 
 
+# Each written whole, so the stylesheet's usage check finds it.
+_TONE_CLASSES = {
+    "good": "toned-good",
+    "attention": "toned-attention",
+    "serious": "toned-serious",
+    "neutral": "toned-neutral",
+}
+
+
+@register.filter
+def tone_class(tone):
+    """``class="frame {{ tone|tone_class }}"``: the class that sets a part's
+    ``--toned`` to a state's tone, for a frame or a line drawn in the color the
+    state's `{% status %}` takes. A tone outside the status vocabulary is
+    neutral, as a status's is."""
+
+    return _TONE_CLASSES.get(tone, "toned-neutral")
+
+
 def _field(thing, name: str) -> str:
     """A queue item's field, from its projection (a mapping) or a record."""
 
