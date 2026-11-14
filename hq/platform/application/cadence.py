@@ -536,6 +536,12 @@ def _answered(read: ForcedRead, stored: dict[str, datetime], probed: dict[str, d
     return all(stored.get(kind, asked) > asked for kind in read.kinds)
 
 
+def asked_at(kind: str) -> datetime | None:
+    """When a read of this kind was asked for and has not been tried yet."""
+
+    return next((read.requested_at for read in forced_reads() if read.kind == kind), None)
+
+
 def forced_reads() -> tuple[ForcedRead, ...]:
     """Read requests not yet answered and not yet expired, oldest first."""
 

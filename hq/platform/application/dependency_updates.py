@@ -26,7 +26,7 @@ from .command_fields import Describe
 from .projection import iso, read_once
 from .refusal_status import RefusalEnvelope, refuse
 from .security import Principal
-lazy from .cadence import forced_reads, request_reads
+lazy from .cadence import asked_at as read_asked_at, request_reads
 lazy from .projects import repository_key
 lazy from .timestamps import moment
 
@@ -101,7 +101,7 @@ def _last_runs() -> dict[str, Run]:
 def asked_at() -> datetime | None:
     """When a run was asked for and has not been handed off yet."""
 
-    return next((read.requested_at for read in forced_reads() if read.kind == KIND), None)
+    return read_asked_at(KIND)
 
 
 def plan(now: datetime | None = None) -> dict[str, Any]:

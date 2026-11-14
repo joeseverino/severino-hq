@@ -23,6 +23,9 @@ lazy from hq.platform.application.run_pages import run_context
 
 from .models import Job, JobState
 
+# A run's tone (``work_runs.TONES``) in the notice's own names for it.
+NOTICE_TONES = {"serious": "error", "attention": "warning"}
+
 
 class JobListView(PageMixin, TableListMixin, ListView):
     """All the work HQ started, its own jobs and the automation runs it
@@ -101,6 +104,9 @@ class JobListView(PageMixin, TableListMixin, ListView):
         context["ended_badly"] = [(JobState(state).label, titles) for state, titles in ended.items() if titles]
         if context["ended_badly"]:
             (first, _), *rest = context["ended_badly"]
+            # The worst state leads ENDED_BADLY, and the banner reads in the tone its run does.
+            worst = next(state for state, titles in ended.items() if titles)
+            context["ended_badly_tone"] = NOTICE_TONES[work_runs.TONES[JobState(worst)]]
             said = " or ".join((first, *(lower_first(label) for label, _ in rest)))
             many = sum(len(titles) for _, titles in context["ended_badly"]) > 1
             context["ended_badly_title"] = f"{said} on {'their' if many else 'its'} last run"

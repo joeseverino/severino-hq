@@ -297,7 +297,9 @@
         ]
       },
       "CapabilitySpec": {
-        "bases": [],
+        "bases": [
+          "Requires"
+        ],
         "constructor": [
           "name",
           "summary",
@@ -332,9 +334,6 @@
               "*",
               "again="
             ]
-          },
-          "required_capabilities": {
-            "kind": "property"
           },
           "title": {
             "kind": "property"
@@ -614,7 +613,9 @@
         "members": {}
       },
       "ConnectionSpec": {
-        "bases": [],
+        "bases": [
+          "Requires"
+        ],
         "constructor": [
           "name",
           "label",
@@ -632,11 +633,7 @@
         ],
         "fields": [],
         "kind": "dataclass",
-        "members": {
-          "required_capabilities": {
-            "kind": "property"
-          }
-        }
+        "members": {}
       },
       "describe_connections": {
         "kind": "function",
@@ -1425,7 +1422,9 @@
         "members": {}
       },
       "ResourceSpec": {
-        "bases": [],
+        "bases": [
+          "Requires"
+        ],
         "constructor": [
           "name",
           "label",
@@ -1446,11 +1445,7 @@
         ],
         "fields": [],
         "kind": "dataclass",
-        "members": {
-          "required_capabilities": {
-            "kind": "property"
-          }
-        }
+        "members": {}
       },
       "StatusFilter": {
         "kind": "value",

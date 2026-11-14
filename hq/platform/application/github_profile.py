@@ -22,7 +22,7 @@ from .command_fields import Describe
 from .linked_accounts import GITHUB
 from .record_errors import RecordNotFound
 from .security import Principal
-lazy from .cadence import forced_reads, request_reads
+lazy from .cadence import asked_at, request_reads
 lazy from .timestamps import moment
 
 # GitHub's allowance is by the hour, so a read that failed is tried again after one.
@@ -97,12 +97,6 @@ def accounts() -> tuple[str, ...]:
     )
 
 
-def asked_at() -> datetime | None:
-    """When a read of the profile was asked for and has not been tried yet."""
-
-    return next((read.requested_at for read in forced_reads() if read.kind == KIND), None)
-
-
 def plan(now: datetime | None = None) -> dict[str, Any]:
     """Whose profile the controller reads, and whether to read now.
 
@@ -116,7 +110,7 @@ def plan(now: datetime | None = None) -> dict[str, Any]:
     if not wanted:
         return {"accounts": [], "due": False}
     snapshot = _snapshot()
-    if snapshot is None or asked_at() is not None:
+    if snapshot is None or asked_at(KIND) is not None:
         return {"accounts": list(wanted), "due": True}
     now = now or timezone.now()
     held = {login.lower() for login in profiles()}
@@ -131,7 +125,7 @@ def plan(now: datetime | None = None) -> dict[str, Any]:
 def standing() -> Standing:
     """How a read somebody asked for stands; idle when nobody is waiting on one."""
 
-    asked = asked_at()
+    asked = asked_at(KIND)
     return read_standing((KIND,), asked) if asked is not None else Standing()
 
 
@@ -156,4 +150,4 @@ def request_read(command: ProfileReadCommand, *, principal: Principal) -> Profil
     if command.login not in accounts():
         raise RecordNotFound("No sign-in names that GitHub account.")
     request_reads((KIND,))
-    return {"ok": True, "login": command.login, "asked_at": (asked_at() or timezone.now()).isoformat()}
+    return {"ok": True, "login": command.login, "asked_at": (asked_at(KIND) or timezone.now()).isoformat()}

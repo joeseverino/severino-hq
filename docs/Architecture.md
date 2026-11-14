@@ -48,7 +48,8 @@ same lifecycle. The adapter parses and steps aside. The service validates,
 authorizes, opens the transaction, guards against stale state, writes, audits
 and returns one result. The adapter only chooses how it looks.
 
-A view reaches a domain write only through `execute_capability`.
+A view reaches a domain write only through `run_posted` or `execute_posted`
+(`hq/platform/application/web_writes.py`), which run `execute_capability`.
 `test_view_writes` follows every call made from the module of each view the
 URL configuration routes, and of its bases. An audit row, a refusal or an
 agent's identity observation is not a domain write.

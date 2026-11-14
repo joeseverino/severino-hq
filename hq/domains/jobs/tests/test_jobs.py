@@ -397,11 +397,20 @@ class JobListOrderTests(TestCase):
 
         Job.objects.filter(state=Job.State.LOST).delete()
 
-        (notice,) = with_class(self.client.get(reverse("jobs:list")).content, "notice-warning")
+        (notice,) = with_class(self.client.get(reverse("jobs:list")).content, "notice-error")
 
         said = re.findall(rf"\b{Job.State.FAILED.label}\b", notice.words, re.IGNORECASE)
         self.assertEqual(len(said), 1)
         self.assertIn("Read the example", notice.words)
+
+    def test_the_banner_is_in_the_tone_of_the_worst_run_it_names(self):
+        page = self.client.get(reverse("jobs:list")).content
+        self.assertEqual(len(with_class(page, "notice-error")), 1)
+
+        Job.objects.filter(state=Job.State.FAILED).delete()
+
+        page = self.client.get(reverse("jobs:list")).content
+        self.assertEqual(len(with_class(page, "notice-warning")), 1)
 
     def test_newest_first_is_still_one_choice_away(self):
         page = self.client.get(reverse("jobs:list"), {"sort": "-created_at"})
