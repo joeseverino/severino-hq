@@ -21,6 +21,7 @@ from hq.platform.application.calendar_entries import (
 )
 from hq.platform.application.capabilities import capability_title, capability_words
 from hq.platform.application.card_items import ListRow
+from hq.platform.application.entity_links import web_url
 from hq.platform.application.moments import when_day
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.references import ReferencePickerMixin, reference_of
@@ -146,7 +147,7 @@ def _upcoming(calendar) -> tuple:
                 title=event.title,
                 meta=" ".join(filter(None, (when_day(day), event.time_label))),
                 url=event.url or month_url(day.replace(day=1), day),
-                external=event.url.startswith("http"),
+                external=bool(web_url(event.url)),
             )
         )
     return tuple(rows)
@@ -164,7 +165,7 @@ def _rows(day, *, opened: str = "") -> tuple:
                 detail=event.detail,
                 meta=event.time_label or _range(event),
                 url=event.url,
-                external=event.url.startswith("http"),
+                external=bool(web_url(event.url)),
             )
             for event in events
             if not (opened and event.id.startswith(f"{opened}:"))

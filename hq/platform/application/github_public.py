@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 from pydantic import AfterValidator
 
 from .http_read import UNREACHABLE, fetch
+lazy from .entity_links import https_url
 
 API = "https://api.github.com"
 TIMEOUT_SECONDS = 10
@@ -60,9 +61,9 @@ def get(path: str, *, accept: str = JSON, missing_ok: bool = False) -> Any:
 def github_repository(repository_url: str) -> tuple[str, str] | None:
     """``(owner, repository)`` when the URL names a GitHub repository, else None."""
 
-    parsed = urlparse(str(repository_url or ""))
+    parsed = urlparse(https_url(repository_url))
     parts = [part for part in parsed.path.split("/") if part]
-    if parsed.scheme != "https" or parsed.hostname not in {"github.com", "www.github.com"} or len(parts) != 2:
+    if parsed.hostname not in {"github.com", "www.github.com"} or len(parts) != 2:
         return None
     owner, repository = parts[0], parts[1].removesuffix(".git")
     return (owner, repository) if owner and repository else None

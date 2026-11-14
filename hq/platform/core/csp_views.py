@@ -11,6 +11,8 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
+lazy from hq.platform.application.entity_links import web_url
+
 from .audit import record_event
 from .models import AuditLog
 from .network import client_ip
@@ -123,7 +125,7 @@ def _blocked(violation: dict) -> str:
     scheme = parts.scheme.lower()
     if scheme in _KEYWORDS:
         return scheme
-    if scheme not in ("http", "https") or not parts.hostname:
+    if not web_url(value) or not parts.hostname:
         return ""
     host = f"[{parts.hostname}]" if ":" in parts.hostname else parts.hostname
     return f"{scheme}://{host}" + (f":{port}" if port is not None else "")

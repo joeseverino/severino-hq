@@ -18,7 +18,7 @@ from django.utils import timezone
 
 lazy from hq.platform.application.routes import reverse
 
-from .entity_links import web_url
+from .entity_links import link_url
 lazy from . import domains
 lazy from .calendar_entries import own_sources
 lazy from .moments import month as month_name, weekday
@@ -76,7 +76,7 @@ class CalendarEvent:
             raise ValueError("A mark is one day; a longer event is a span.")
         # A source says where its record lives; an address that is not HQ's own
         # path or an http(s) URL is no link at all.
-        object.__setattr__(self, "url", self.url if self.url.startswith("/") else web_url(self.url))
+        object.__setattr__(self, "url", link_url(self.url))
 
     @property
     def timed(self) -> bool:

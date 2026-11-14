@@ -254,7 +254,9 @@ class PathTests(TestCase):
             ),
         )
         # A source that is not a web address is not made into a link.
-        self.assertEqual(_running_facts({"revision": "0123456789abcdef", "source": "git@x:y"}), (("0123456", ""),))
+        for source in ("git@x:y", "https://github.com/example/app\x7f"):
+            with self.subTest(source=source):
+                self.assertEqual(_running_facts({"revision": "0123456789abcdef", "source": source}), (("0123456", ""),))
 
     def test_a_container_hop_says_how_long_it_is_up_as_the_machine_page_does(self):
         """Docker's phrase is fixed when it is read and rounds its own way, so

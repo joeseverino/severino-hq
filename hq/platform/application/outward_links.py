@@ -14,6 +14,7 @@ lazy from hq.platform.application.routes import reverse
 
 from .derivations import derivation
 lazy from .connections import connection_rows
+lazy from .entity_links import web_url
 lazy from .labels import human_label
 lazy from .pins import DASHBOARD_LINK, pinned
 lazy from .published_sites import public_sites
@@ -125,11 +126,7 @@ def operator_links() -> list[dict[str, str]]:
     except ValueError:
         return []
     return [
-        {
-            "label": str(item.get("label", ""))[:80],
-            "sub": str(item.get("sub", ""))[:80],
-            "href": str(item.get("href", ""))[:500],
-        }
+        {"label": str(item.get("label", ""))[:80], "sub": str(item.get("sub", ""))[:80], "href": href}
         for item in parsed
-        if isinstance(item, dict) and str(item.get("href", "")).startswith("http")
+        if isinstance(item, dict) and (href := web_url(str(item.get("href", ""))[:500]))
     ]

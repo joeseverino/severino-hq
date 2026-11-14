@@ -17,6 +17,7 @@ import httpx2
 from .http_read import UNREACHABLE, fetch
 from .images import DOCKER_HUB, ImageRef
 from .reach import public_host
+lazy from .entity_links import https_url
 
 TIMEOUT_SECONDS = 10
 # Docker Hub serves its registry API from a different host than its name.
@@ -51,7 +52,7 @@ def _checked(request: httpx2.Request) -> None:
     before it is made. httpx2 leaves the registry's token behind once a
     redirect changes origin."""
 
-    if request.url.scheme != "https" or not request.url.host:
+    if not https_url(str(request.url)):
         raise RegistryReadError("A registry pointed somewhere other than an HTTPS address.")
     if not _public_host(request.url.host):
         raise RegistryReadError(f"{request.url.host} is not a public address, so HQ does not read it.")
@@ -246,7 +247,7 @@ def _json(body: bytes, limit: int) -> dict[str, Any]:
 def _anonymous_token(challenge: str, image: ImageRef) -> str:
     fields = dict(_CHALLENGE.findall(challenge))
     realm = fields.get("realm", "")
-    if not realm.startswith("https://"):
+    if not https_url(realm):
         raise RegistryReadError(f"{image.name}: the registry offers no anonymous access.")
     query = {"service": fields.get("service", ""), "scope": f"repository:{image.repository}:pull"}
     url = f"{realm}?{urllib.parse.urlencode({key: value for key, value in query.items() if value})}"

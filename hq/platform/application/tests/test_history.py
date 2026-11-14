@@ -127,6 +127,15 @@ class HistoryTests(TestCase):
         self.assertEqual(found[1].url, "/infrastructure/machines/example-box/#container-app")
         self.assertFalse(found[1].external)
 
+    def test_a_deploy_links_only_a_web_address_its_reading_gave(self):
+        inventory = ProviderInventory.objects.get(kind="github.repository")
+        inventory.records[0]["deployments"][0]["url"] = "javascript:alert(1)"
+        inventory.save()
+
+        (deploy,) = [item for item in moments(since=self.now - timedelta(days=1)) if item.source == "Deploy"]
+
+        self.assertEqual((deploy.url, deploy.page), ("", ""))
+
     def test_near_is_what_happened_closest_to_the_moment(self):
         (closest, *_rest) = near(self.now - timedelta(hours=2, minutes=5))
 

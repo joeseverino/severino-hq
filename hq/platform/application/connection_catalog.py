@@ -32,12 +32,11 @@ from .connection_lifecycle import WORKING, Lifecycle, standing
 from .contracts import SCOPE_NAME, endpoint_has_private_parts
 from .derivations import passed, present
 from .freshness import last_read
-from .integration_validation import safe_connection_url
 from .integrations import held_graph
 from .moments import ago
 from .projection import read_once
 from .security import Principal
-lazy from .entity_links import entity_link
+lazy from .entity_links import entity_link, link_url
 lazy from .ui import STATUS_VALUES
 
 # The family the controller observes on HQ's behalf. It leads every inventory
@@ -369,7 +368,7 @@ def _sound_link(link: ConnectionLink) -> bool:
 
     if not link.label.strip():
         return False
-    if link.url and not safe_connection_url(link.url):
+    if link.url and not link_url(link.url):
         return False
     return link.resource_key == link.resource_key.strip()
 

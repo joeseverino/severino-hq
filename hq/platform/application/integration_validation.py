@@ -30,18 +30,13 @@ from .integration_specs import (
 )
 from .search_contracts import SearchDefinition
 from .security import Capability
+lazy from .entity_links import link_url
 
 IntegrationSpec = CapabilitySpec | ResourceSpec | ConnectionSpec
 
 
 def required_capability_names(spec: IntegrationSpec) -> tuple[str, ...]:
     return tuple(item.value if isinstance(item, Capability) else item for item in spec.required_capabilities)
-
-
-def safe_connection_url(url: str) -> bool:
-    """Allow explicit web URLs and local paths, never executable schemes."""
-
-    return url.startswith(("http://", "https://")) or (url.startswith("/") and not url.startswith("//"))
 
 
 def validate_capability_spec(spec: CapabilitySpec) -> None:
@@ -281,7 +276,7 @@ def validate_connection_spec(spec: ConnectionSpec) -> None:
     for route in (spec.web_route, spec.management_route, spec.setup_route):
         if route and not DJANGO_ROUTE.fullmatch(route):
             raise ImproperlyConfigured(f"Connection {spec.name!r} has invalid route {route!r}.")
-    if spec.documentation_url and not safe_connection_url(spec.documentation_url):
+    if spec.documentation_url and not link_url(spec.documentation_url):
         raise ImproperlyConfigured(f"Connection {spec.name!r} has an invalid documentation URL.")
     # A bool is an int to the type checker, and no number of hours.
     if isinstance(spec.stale_after_hours, bool) or spec.stale_after_hours <= 0:

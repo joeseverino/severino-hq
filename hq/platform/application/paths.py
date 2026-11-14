@@ -19,7 +19,7 @@ from hq.domains.control_plane.provider_spec import expiry_phrase
 from hq.domains.control_plane.providers import PROVIDERS, read_spec, record_spec
 lazy from hq.platform.core.network import split_host_port
 
-from .entity_links import EntityLink, entity_link, kind_label
+from .entity_links import EntityLink, entity_link, kind_label, web_url
 from .facts import Joined, Subject, readings, refusals_about, snapshots_of
 from .infrastructure import enabled_resources
 from .labels import dotted, lower_first
@@ -614,8 +614,7 @@ def _running_facts(record: Mapping[str, Any]) -> tuple[tuple[str, str], ...]:
     repository = str(record.get("source", "") or "").rstrip("/")
     facts = [(uptime, "")] if uptime else []
     if revision:
-        url = f"{repository}/commit/{revision}" if repository.startswith("https://") else ""
-        facts.append((revision[:7], url))
+        facts.append((revision[:7], web_url(f"{repository}/commit/{revision}")))
     image = str(record.get("image", "") or "")
     if image:
         # The standing says what the signature said and more: verified before

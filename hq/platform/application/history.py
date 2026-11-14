@@ -40,7 +40,7 @@ lazy from hq.platform.core.audit_words import words_of
 lazy from hq.platform.core.models import AuditLog, object_type_label, object_type_plural
 
 from .doors import Attribution
-from .entity_links import container_link
+from .entity_links import container_link, web_url
 from .facts import inventory_records
 from .labels import lower_first, plural
 from .routes import reverse
@@ -136,7 +136,7 @@ class Moment:
 
     @property
     def external(self) -> bool:
-        return self.url.startswith("https://")
+        return bool(web_url(self.url))
 
     @property
     def page(self) -> str:
@@ -628,7 +628,7 @@ def _deploys(since: datetime | None, until: datetime | None) -> list[Moment]:
                     "Deploy",
                     f"Deployed {sha} to {deployment.get('environment') or 'an environment'}".replace("  ", " "),
                     detail=str(record.get("repository") or ""),
-                    url=str(deployment.get("url") or ""),
+                    url=web_url(deployment.get("url")),
                     actor="GitHub",
                     like=(
                         "deploy",

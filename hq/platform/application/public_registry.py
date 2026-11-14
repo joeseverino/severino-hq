@@ -43,6 +43,7 @@ from .timestamps import moment
 lazy from . import osv, services, zones
 lazy from .attestations import reduce
 lazy from .containers import containers
+lazy from .entity_links import https_url
 lazy from .github_public import GitHubReadError, get
 lazy from .images import ImageRef, newer, version
 lazy from .infrastructure import declared_machines
@@ -82,9 +83,7 @@ def read_every(kind: str) -> timedelta:
 
 
 def _configured() -> bool:
-    endpoint = settings.SEVERINO_RDAP_ENDPOINT.strip()
-    parsed = urlsplit(endpoint)
-    return parsed.scheme == "https" and bool(parsed.hostname)
+    return bool(https_url(settings.SEVERINO_RDAP_ENDPOINT))
 
 
 def public_address(value: str) -> str:
@@ -367,8 +366,8 @@ def read_vulnerabilities(key: str) -> dict[str, Any]:
 def _github_link(value: Any) -> str:
     """A link GitHub gave, kept only when it is a GitHub page: it becomes an href."""
 
-    text = str(value or "")
-    return text if text.startswith("https://github.com/") else ""
+    url = https_url(value)
+    return url if urlsplit(url).hostname == "github.com" else ""
 
 
 def read_upstream(repository: str) -> dict[str, Any]:

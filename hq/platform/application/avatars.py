@@ -20,6 +20,7 @@ from django.utils import timezone
 from hq.platform.core.models import Avatar
 
 from .http_read import at_most
+lazy from .entity_links import web_url
 
 logger = logging.getLogger("severino.auth")
 
@@ -60,8 +61,7 @@ def picture_allowed(url: str, issuer: str) -> bool:
 
     if not url or not issuer:
         return False
-    scheme, host, _port = _origin(url)
-    return scheme in ("https", "http") and bool(host) and _origin(url) == _origin(issuer)
+    return bool(web_url(url)) and _origin(url) == _origin(issuer)
 
 
 def fetch_picture(url: str, *, access_token: str = "") -> tuple[str, bytes] | None:

@@ -85,10 +85,38 @@ class WebUrlProperties(SimpleTestCase):
             if href:
                 self.assertRegex(_as_a_browser_reads(href), r"(?i)^https?://[^/?#\\]")
 
+        @given(st.one_of(st.text(), ADDRESSY, PATH, st.builds("/{}".format, ADDRESSY), st.none()))
+        @example("/\\evil.example.com/")
+        @example("/\t/evil.example.com/")
+        @example(" //evil.example.com/")
+        def test_whatever_link_url_returns_a_browser_reads_as_hq_or_a_web_address(self, value):
+            from ..entity_links import link_url
+
+            href = link_url(value)
+
+            if value in HOSTILE:
+                self.assertEqual(href, "")
+            if href:
+                self.assertRegex(_as_a_browser_reads(href).replace("\\", "/"), r"(?i)^(https?://[^/?#]|/(?!/))")
+
+        @given(st.one_of(st.text(), ADDRESSY, st.none()))
+        @example("http://example.com/")
+        def test_whatever_https_url_returns_is_an_https_web_address(self, value):
+            from ..entity_links import https_url
+
+            href = https_url(value)
+
+            if href:
+                self.assertEqual(href, web_url(href))
+                self.assertRegex(href, r"(?i)^https://")
+
         # Each link seen hostile so far is tried on every run.
         for hostile in HOSTILE:
             test_whatever_it_returns_a_browser_reads_as_a_web_address = example(hostile)(
                 test_whatever_it_returns_a_browser_reads_as_a_web_address
+            )
+            test_whatever_link_url_returns_a_browser_reads_as_hq_or_a_web_address = example(hostile)(
+                test_whatever_link_url_returns_a_browser_reads_as_hq_or_a_web_address
             )
         del hostile
 
@@ -107,9 +135,24 @@ class WebUrlTests(SimpleTestCase):
     def test_a_declared_link_keeps_hq_pages_and_web_addresses_only(self):
         self.assertEqual(declared_link("page", "/infrastructure/").url, "/infrastructure/")
         self.assertTrue(declared_link("site", "https://app.example.com/").external)
-        for url in HOSTILE:
+        # A browser reads a backslash as a slash, so this path names another host.
+        for url in (*HOSTILE, "/\\evil.example.com/"):
             with self.subTest(url=url):
                 self.assertEqual(declared_link("target", url).url, "")
+
+    def test_a_calendar_event_links_hq_pages_and_web_addresses_only(self):
+        from datetime import date
+
+        from ..calendar import CalendarEvent
+
+        def event(url):
+            return CalendarEvent(id="example:1", title="Example", starts=date(2026, 1, 2), url=url)
+
+        self.assertEqual(event("/calendar/").url, "/calendar/")
+        self.assertEqual(event("https://calendar.example.com/e/1").url, "https://calendar.example.com/e/1")
+        for url in (*HOSTILE, "/\\evil.example.com/"):
+            with self.subTest(url=url):
+                self.assertEqual(event(url).url, "")
 
 
 class RenderedLinkTests(TestCase):

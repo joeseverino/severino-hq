@@ -197,6 +197,36 @@ def web_url(value: Any) -> str:
     on an operator's page is a phishing line at best, so it is not one.
     """
 
+    text = _as_read(value)
+    try:
+        parts = urlsplit(text)
+    except ValueError:  # a bracketed host that is no IPv6 address
+        return ""
+    return text if parts.scheme in ("http", "https") and parts.hostname else ""
+
+
+def https_url(value: Any) -> str:
+    """``value`` when it is an https URL naming a host, else "": a ``web_url``
+    HQ may also send a request to, or a credential over."""
+
+    text = web_url(value)
+    return text if urlsplit(text).scheme == "https" else ""
+
+
+def link_url(value: Any) -> str:
+    """``value`` when it is a page in HQ (a path) or a ``web_url``, else ""."""
+
+    text = _as_read(value)
+    # A path that starts with two slashes, as a browser reads it, names
+    # another host.
+    if text.startswith("/") and not text.startswith("//"):
+        return text
+    return web_url(text)
+
+
+def _as_read(value: Any) -> str:
+    """``value`` as a browser reads it in an href, or "" when the two would differ."""
+
     text = str(value or "").strip()
     # A browser drops control characters Python's parser keeps, so the two
     # would disagree about what the link names.
@@ -204,12 +234,7 @@ def web_url(value: Any) -> str:
         return ""
     # A browser reads a backslash in an http(s) address as a slash, so the
     # href is written as the browser reads it, never as a second spelling.
-    text = text.replace("\\", "/")
-    try:
-        parts = urlsplit(text)
-    except ValueError:  # a bracketed host that is no IPv6 address
-        return ""
-    return text if parts.scheme in ("http", "https") and parts.hostname else ""
+    return text.replace("\\", "/")
 
 
 def entity_link(
@@ -299,14 +324,11 @@ def declared_link(label: str, url: str = "", kind: str = "target") -> EntityLink
     The url is kept, marked external when it leaves HQ.
     """
 
-    url = str(url or "")
-    # A page in HQ stays as it is; anything else must be a web address.
-    internal = url.startswith("/") and not url.startswith("//")
-    url = url if internal else web_url(url)
+    url = link_url(url)
     return EntityLink(
         label=label,
         url=url,
-        external=bool(url) and not internal,
+        external=bool(web_url(url)),
         kind=kind,
         kind_label=kind_label(kind),
     )
@@ -334,7 +356,7 @@ def node_link(node: Any) -> EntityLink:
     return EntityLink(
         label=shown,
         url=url,
-        external=url.startswith(("http://", "https://")),
+        external=bool(web_url(url)),
         kind=node.kind,
         kind_label=kind_label(named),
         title=node.label if shown != node.label else "",
