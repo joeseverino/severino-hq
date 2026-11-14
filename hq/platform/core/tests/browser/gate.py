@@ -974,7 +974,17 @@ class BrowserGate(SimpleTestCase):
         """What the layout invariants find on the page as loaded, by check:
         every one the gates hold on a page as a reader has it."""
 
-        return self.checked(geometry_probes())
+        return self.checked(self.geometry_on(path))
+
+    def geometry_on(self, path, scripted=True):
+        """The geometry's probes on the page at ``path``, axe's without the
+        rules that page leaves out (``left_out_on``): the one place a check of
+        a page learns what it leaves out."""
+
+        geometry = dict(geometry_probes(scripted))
+        if "axe" in geometry and (left_out := self.left_out_on(path)):
+            geometry["axe"] = rules_read(left_out)
+        return geometry
 
     def table_defects_at_every_width(self):
         """What the table checks (`Check(table=True)`) find on the loaded page
@@ -1114,13 +1124,10 @@ class BrowserGate(SimpleTestCase):
         that hold without it. The vendored markup is stood in for while they
         read, and put back however they end: each probe runs on its own."""
 
-        geometry = dict(geometry_probes(self.runs_script))
-        if "axe" in geometry and (left_out := self.left_out_on(path)):
-            geometry["axe"] = rules_read(left_out)
         found = self.checked(
             {
                 "stand in": (STAND_IN, SELECTORS["vendored"]),
-                **geometry,
+                **self.geometry_on(path, self.runs_script),
                 **palette_probes(),
                 "put back": (PUT_BACK, None),
             }
