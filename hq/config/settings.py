@@ -22,6 +22,7 @@ from hq.config.devtools import (
     DEBUG_TOOLBAR_APP,
     DEBUG_TOOLBAR_MIDDLEWARE,
     debug_toolbar_enabled,
+    scratch_account,
     without_trusted_types,
 )
 
@@ -969,3 +970,13 @@ if SEVERINO_DEBUG_TOOLBAR:
 # Who sees the toolbar: loopback, unless a developer behind a proxy names more.
 # Empty, Django's default, whenever it is off.
 INTERNAL_IPS = env_list("SEVERINO_DEBUG_TOOLBAR_IPS", ["127.0.0.1", "::1"]) if SEVERINO_DEBUG_TOOLBAR else []
+
+# The throwaway account the scratch server's sign-in link signs in
+# (core/dev_sign_in.py); empty, and the link not routed, on any other server.
+SEVERINO_SCRATCH_ACCOUNT = scratch_account(
+    debug=DEBUG,
+    profile=env_str("HQ_DEV_PROFILE"),
+    host=env_str("UVICORN_HOST"),
+    account=env_str("HQ_DEV_ACCOUNT"),
+    testing=RUNNING_TESTS,
+)

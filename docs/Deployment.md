@@ -545,6 +545,11 @@ that variable names. `test_settings_env.py` holds this table to the code.
 | `DJANGO_WHITENOISE_AUTOREFRESH` | development | serves static files from the source trees, uncached; refused with `DJANGO_DEBUG` off in a deployment check |
 | `SEVERINO_DEBUG_TOOLBAR` | development | `1` with `DJANGO_DEBUG` shows Django Debug Toolbar |
 | `SEVERINO_DEBUG_TOOLBAR_IPS` | development | who sees the toolbar; loopback by default |
+| `HQ_DEV_PROFILE` | development | the development server's profile, `secure` for `dev` or `scratch` for `dev:scratch`; set by mise.toml |
+| `HQ_DEV_ACCOUNT` | development | the scratch server's throwaway account, which its sign-in link signs in; set by mise.toml |
+| `UVICORN_HOST` | development | the address a development server listens on; the scratch sign-in link is routed only on loopback |
+| `UVICORN_PORT` | development | the port a development server listens on, which its sign-in link names; set by `tools/dev/serve.py` once it has bound it |
+| `HQ_DEV_SEED` | development | the data set the scratch database was seeded with; `empty` adds a line to the server's log naming the command that fills it; set by `tools/dev/dev.sh` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | development | the OTLP/HTTP collector spans are sent to ([Tracing](Development.md#tracing)); unset, as in every image, nothing is traced |
 | `SEVERINO_CONTROLLER_HEARTBEAT` | development | where HQ records that the controller reached it; beside the database when unset |
 | `SEVERINO_ACTIVITY_MARKER` | development | where HQ marks itself in use; beside the database when unset |

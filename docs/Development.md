@@ -24,9 +24,10 @@ mise install
 mise run dev:scratch --seed showcase
 ```
 
-The log names the address and the throwaway account to sign in as. Nothing
-reads a `.env` file: production's configuration is in
-[Deployment](Deployment.md#configuration).
+The log ends on an `Open:` link at `http://localhost:<port>`, which signs a
+browser in as the throwaway account; without `--seed`, the line before it
+says the database is empty. Nothing reads a `.env` file:
+production's configuration is in [Deployment](Deployment.md#configuration).
 
 ## Tasks
 
@@ -110,9 +111,10 @@ database it opens; `tools/dev/dev.sh` refuses what env cannot express.
 | `dev` | the long-lived server behind a TLS proxy, configured by the gitignored `dev.local.toml` (copy `tools/dev/dev.local.example.toml`), with the automation worker always beside it |
 
 Every one collects versioned assets and runs Uvicorn with reload on the
-production ASGI path. It watches this checkout and each extension's sources
-through watchfiles (the `dev` group): a Python file or a template restarts
-it. Nothing under `.claude/worktrees`, `.venv` or `var/` does, so another
+production ASGI path, through `tools/dev/serve.py`, which answers a loopback
+host on both 127.0.0.1 and ::1, so `localhost` loads in every browser. It
+watches this checkout and each extension's sources through watchfiles (the
+`dev` group): a Python file or a template restarts it. Nothing under `.claude/worktrees`, `.venv` or `var/` does, so another
 worktree's edits leave it running. The extension set is the one
 `mise.local.toml` names ([The extension set](#the-extension-set)).
 
@@ -128,9 +130,16 @@ database, so servers in different worktrees run side by side; a second server
 on one database is refused. `dev` refuses a linked worktree and a bind past
 loopback and the tailnet range; scratch refuses anything but loopback.
 
-Every loopback server shares the browser's cookies for `127.0.0.1` whatever the
-port, so signing in to a second one signs the first out: open the second as
-`http://localhost:<port>`.
+The scratch server's `Open:` link signs in its throwaway account
+(`hq/platform/core/dev_sign_in.py`, as Jupyter's token URL does). It works
+once and expires after its `LIFETIME`, and each worker a reload starts
+prints a new one. The account's password is in the log above, for a second
+browser. The link is routed only on a scratch server with DEBUG on and bound
+to loopback, and answers a caller on loopback alone.
+
+Every loopback server shares the browser's cookies for one host name whatever
+the port, so signing in to a second one at `localhost` signs the first out:
+open the second's link with `127.0.0.1` in place of `localhost`.
 
 ### The automation worker beside a development server
 
