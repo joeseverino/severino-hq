@@ -151,41 +151,26 @@ transitions from nothing, so every button fades in on load.
 `test_viewport_breakpoints_only_go_down`, a ceiling that only falls.
 
 **A table fits its box, at every width.** No screen width is asked anywhere
-in the table primitive, and nothing is measured: a table is a grid on the
-browser's own layout, the same with script and without. The server writes
-its tracks on it as custom properties alone (`--tracks`,
-`table_cells._layout`), one per column from the column's kind
-(`table_cells.TRACKS`): a status, a figure or a control is as wide as what
-it holds, and the naming column, prose and identifiers share what is left.
-Each row is a subgrid of those tracks, so a column is one width down the
-table. A table, row or cell drawn on a grid keeps the role its tag gives
-it; a row group drawn as `display: contents` does not, so it says its role.
-Every column is in the markup, so a reader counts each cell's place itself
-(no `aria-colindex` or `aria-colcount`), and the stylesheet places each cell
-by its place among its row's cells (`sibling-index()`).
+in the table primitive, and nothing is measured: a table is laid out by the
+browser's automatic table layout, the same with script and without, so every
+cell stands under its column's heading and a column is one width down the
+table. No width is computed in Python. A column whose values keep their line
+(a status, a figure, a row's controls, a date) is as wide as its widest
+(`inline-size: 1px` on its heading), and the columns that wrap share the rest
+as the browser shares it. A long value wraps and is held to its third line
+(below); a heading's words wrap as a cell's do.
 
 Each column that may leave has a rank, 1 first
 (`{% table_heading ... drop=N %}`). A list's ranks are derived by `ranked`:
 `optional-col` first, then from the far end. It never ranks the column that
 names the row, one marked `key-col`, or the closing figure of a table that
-marks none.
-
-The server writes, for each rank, the sum of the floors of the columns the
-table draws while it keeps that rank (`--need-<rank>`), and the sum for every
-column it keeps (`--need-0`). The stylesheet turns each into an integer, 1
-while the region is at least that wide and 0 once it is narrower
-(`--keep-<rank>`, `--whole`, tables.css), and a style query lets go the
-columns of each rank whose integer is 0, rank 1 first. What leaves shows in
-the row once it opens. Once `--whole` is 0 the table is in a narrow box: a
-row's controls stand beneath its words (below). A table still wider than its
-region cuts what its shared columns hold (cuts.css) rather than run past it.
-The gates fail one that runs past its card: the narrowest phone (320px) and
-every width above it hold every table of each derived list.
-`a_table_fits_its_box_at_every_width` sweeps each from 320px up, reading it
-at the first width of each shape its layout and its tables take
-(`TABLE_LAYOUT`: the viewport queries, the boxes around each region, and
-which ranks each table keeps), with its rows as drawn, its folds open and
-every row opened. `test_a_table_keeps_its_promises_on_every_catalog_entry`
+marks none. The region turns a table's ranks into at most six levels from the
+widest (`data-drop`, `table_cells`): its first rank leaves while the region is
+narrower than 64rem, its next below 56rem, and so on down to 24rem, by six
+container-query rules written once in tables.css. Nothing is measured, so a
+column may leave a box that could still hold it. What leaves shows on the
+row's open line. Below 36rem the table is in a narrow box (below). The gates
+fail a table that runs past its card. `test_a_table_keeps_its_promises_on_every_catalog_entry`
 holds every promise of this section on the table's catalog entries, in each
 engine, with script and without.
 
@@ -218,11 +203,10 @@ the section or card around a table is one already, often by the same name.
 `test_a_section_and_the_table_in_it_are_one_landmark`. A pane (`pane=True`) is
 as tall as its rows up to a fixed reading height, as the topology ledger is,
 and scrolls past it. A table never stacks into cards and is not swiped through:
-a row that offers controls sets them on a line beneath its words in a narrow
-box, each cell still a cell of its row (below). A column of words every row
-must show, such as a change's two sides, stands beneath the same way under its
-column's name (`{% table_heading ... beneath=True %}`), since a rank would
-hide it behind the row's toggle.
+in a narrow box a row's controls leave for its open line (below). A column of words every row must
+show, such as a change's two sides, takes no rank
+(`{% table_heading ... beneath=True %}`), since a rank would hide it behind
+the row's toggle.
 
 A key/value table (row headers, no `thead`) sizes its label column to its
 longest label.
@@ -242,23 +226,21 @@ row's record ends the row as `{% row_actions actions %}`, under a heading of
 kind `control`. Each is a `PageAction` drawn as a compact control with its
 middle on the first line's. A page never draws a button in a cell (*Gate:* the
 `hand-drawn-row-actions` rule). A row's controls stand side by side on one
-line, which their column asks for. Beside them the column that names the row
-holds out for a line of `--row-words` in `--need-0`, so a table without room
-for both takes its narrow box rather than wrap a few words a line.
+line, which their column asks for, and the words beside them wrap first.
 
-**A row's controls stand beneath its words in a narrow box.** The region marks
-the cells of a row's actions, or of a column of kind `control` holding no
-field a reader fills in, `data-beneath`; in a narrow box the row stacks, the
-stacked row of a responsive table: its words take the first line, and its
-controls, drawn once in their own cell, take the line beneath, starting where
-the words start, each as wide as its label, after any column the open row
-shows. Each cell stays a cell of its row, in the row's order. So a column of
-controls never leaves for the row's open line, whatever rank it is given, and a reader never opens a row to find what
-it offers. The reader's way to set a row aside (`row_actions put_away=`,
-the queue's Dismiss) is the last of its buttons, drawn as they are, so a row
-whose only control it is still offers it as a button beneath its words. A choice (a select) is a value of the row and keeps its column. *Gates:* the survey's `row actions beside
-squeezed words` and `row actions behind the toggle`, and
-`test_row_controls.py`.
+**A row's controls leave a narrow box for its open line.** The region marks
+every cell of a column of the rows' controls, its heading included,
+`data-narrow`: a row's actions, or a column of kind `control`. In a narrow box
+that column leaves as a ranked column does, and each row's open line shows a
+copy of its controls (`.row-controls`), side by side at a target's size and
+wrapping where the line is full. The row's toggle is how a reader reaches
+them. The copy draws no id (`table_cells.without_ids`), so none is drawn
+twice. A field a reader fills in (a select) is the row's value: a copy would
+send it twice, so a column holding one never leaves, and in a cell it fills
+its cell and gives way with its column. The reader's way to set a row aside
+(`row_actions put_away=`, the queue's Dismiss) is the last of its buttons,
+drawn quiet. *Gates:* the survey's `row actions beside squeezed words` and
+`row actions behind the toggle`, and `test_row_controls.py`.
 
 A status said by one pill alone fills its
 column, as wide as its widest pill, so the pills down a column share both
@@ -294,12 +276,15 @@ class of the page's:
   `tr` with `{% row_state emphasized=True %}`: its cells are tinted and its
   links weigh more.
 
-**Opening a row moves nothing.** A row's first line holds a cell in each
-column it keeps. Once it opens, each cell of a column that left, and each
-`narrow-more` part, stands on a line of its own beneath that first line,
-under its column's name (`data-label`), asking its columns for no width; a
-value cut on the closed row shows whole. So every column keeps its edges and
-every other row its height. *Gate:*
+**Opening a row moves nothing.** An open row keeps its cells as they were,
+a clamp included. What it holds back stands on the line the server draws
+after it (`tr.row-detail`, `table_tags._detail_row`), whose content asks its
+columns for no width: its controls where they left it, the blocks it moves
+there, then an entry for each cell that holds something back, a copy under
+its column's name. A copy says when it shows: where its column has left
+(`data-drop`), in a narrow box (`data-narrow`: a `narrow-more` part, a clamped
+value), or always (a part the row never shows). So every column keeps its
+edges and every other row its height. *Gate:*
 `test_opening_a_row_moves_no_column_and_no_other_row`.
 
 - A `row-below` block, which the row's line never shows, and the row's editor
@@ -324,9 +309,12 @@ Every row that can open has its toggle drawn by the server. The region draws
 it, last in the row's cell under the heading that keeps the gutter
 (`table_heading ... gutter=True`), and marks that column's cells `row-gutter`;
 a toggle written by hand there is refused. Only a table with no headings to
-name its gutter draws its own (`{% row_toggle %}`). It shows only where the row holds something back now: a
-column that left with something in it, a `narrow-more`, `row-later` or `row-below` part, a
-fold, or a value whose line the server found longer than its column shows at its floor (`data-long`).
+name its gutter draws its own (`{% row_toggle %}`), last in its cell, outside
+the cell's clamp and its copy. It shows only where opening the row shows
+something now: an entry whose column has left or whose narrow box holds, a
+`row-later` or `row-below` part, a part the row never shows, or a fold. A
+value held by its clamp on a wide line is whole in its cell's title there,
+so it opens no row on a wide line.
 
 A run of short parts in a cell (a project's technologies, what a connection
 reads or reaches) is `{% line_list values as value %}…{% endline_list %}`, with
@@ -383,13 +371,15 @@ beside its declaration.
 *Gate:* `lint:css` (`cutText` in `tools/lint/stylelint.config.mjs`), and the
 layout survey's `cut and closed`, `cut when open` and `cut beside room`.
 
-On a closed row a name or prose is cut at its third line, an identifier at
-the end of its first, each with its whole value in its cell's title (written
-by the server) and in the open row, which lifts the cut and keeps every
-part's box. Only a row that can open (one holding its toggle) is cut: a row
-that cannot shows its values whole, breaking a long one where it must. A
-status or a figure is never cut: its column is as wide as it is. `room=` on
-a region is accepted and asks for nothing more.
+A long value in a cell (a line past `table_cells.LONG`) wraps and is held to
+its third line by a clamp with its mark (`.cell-clamp`, cuts.css), its whole
+value in its cell's title (written by the server). Only words are held: each
+part of words in it (`data-cell`) is clamped on its own, so a pill or a
+toggle beside them stays whole. A hyphenated word in a name or a sentence
+(`|breakable`'s `.whole`) is a word and never breaks at its hyphens. A
+status, a figure, a date or a control is never cut: its column is as wide
+as it is. `room=` on a region is accepted, since an extension passes it, and
+asks for nothing.
 
 An identifier the row is read by, in a row of many columns (a container's
 image), is `code.cell-whole`. A value told in several parts marks each
@@ -1249,10 +1239,9 @@ with no script every row shows all of it. The line beneath holds, in order:
 - the buttons past the first two, in one place under the rest.
 
 In a narrow box (a phone, or a narrow card on a wide screen) the row's
-buttons stand beneath its words and Dismiss or Restore ends the title's line,
-as every table's row controls do (A row's controls stand beneath its words in
-a narrow box). A reader never opens a row to find what it offers. The survey
-holds both: "row actions behind the toggle" and "words swapped for a glyph".
+buttons leave for its open line, as every table's row controls do (A row's
+controls leave a narrow box for its open line), and its toggle shows that it
+opens. The survey holds "words swapped for a glyph".
 
 The word is `partials/_urgency_pill.html`. A Cmd- or Ctrl-click on it opens
 what raised it, read from the code rather than written down. That is the finding rule,

@@ -9,7 +9,7 @@ from html.parser import HTMLParser
 
 # A cell that says nothing: dashes and space, and nothing drawn but the empty
 # value's own mark.
-SAYS_NOTHING = re.compile(r"[\s–—-]*")
+SAYS_NOTHING = re.compile(r"[\s\u2013\u2014-]*")
 
 
 _SECTIONS = ("thead", "tbody", "tfoot")
