@@ -1197,6 +1197,14 @@ through one kind-and-action map.
 | NPM | reconciles. One managed certificate is uploaded once, and every enabled proxy host its SANs cover is found, rebound, reloaded and live-verified |
 | TLS reconciliation | reuses the existing lineage without contacting ACME |
 | TLS renewal | issues through DNS-01 only when needed, snapshots the rollback artifact, deploys to every consumer, and verifies one fingerprint everywhere before reporting success |
+| Tailnet policy | writes the approved document over the version it read (`If-Match`); Tailscale runs the document's own tests on that write and refuses one that fails them, and a plan asks its validate endpoint |
+
+The tailnet policy's security property is consent: every change to its
+document waits for a person (`requires_approval`), or is that person's own act
+in the browser, and the apply writes only that change (`controller.over_live`).
+What the document opens, or which of its tests it drops, is judged by that
+person, from the approval's own words for it. HQ keeps no rule of its own on
+top of the document's tests.
 
 Issuance is the controller's Go ACME client
 (`controller/providers/tls_acme.go`). It signs in with one account key per
