@@ -9,6 +9,7 @@ from unittest import mock
 from django.test import SimpleTestCase, tag
 
 from . import look
+from .browser import shots
 
 
 @tag("source")
@@ -22,9 +23,9 @@ class BandTests(SimpleTestCase):
         self.assertEqual(look._bands(900, 900), [])
         self.assertEqual(look._bands(400, 900), [])
 
-    def shot(self, take):
-        """The files ``take`` shot of a page 2000 px tall in a window 900 tall
-        whose height never holds still, each as its name, top and height."""
+    def shot(self, take, tall=2000):
+        """The files ``take`` shot of a page ``tall`` px tall in a window 900
+        tall whose height never holds still, each as its name, top and height."""
 
         class Moved(Exception):
             pass
@@ -37,7 +38,7 @@ class BandTests(SimpleTestCase):
                 raise Moved("Timeout 5000ms exceeded.")
 
             def evaluate(self, *_args):
-                return [1360, 2000]
+                return [1360, tall]
 
             def screenshot(self, path, clip, **_options):
                 self.clips.append((Path(path).name, clip["y"], clip["height"]))
@@ -60,6 +61,13 @@ class BandTests(SimpleTestCase):
         self.assertEqual(clips[0], ("estate-hq-1360.png", 0, 2000))
         bands = [(f"estate-hq-1360.band-0{n}.png", *band) for n, band in enumerate(look._bands(2000, 900), start=1)]
         self.assertEqual(clips[1:], bands)
+
+    def test_the_bands_of_a_page_past_what_one_shot_holds_reach_its_end(self):
+        tall = 4 * shots.TALLEST + 100
+        clips = self.shot(lambda looker: looker.screenshot("gallery", 402), tall=tall)
+        _, top, height = clips[-1]
+        self.assertEqual(top + height, tall)
+        self.assertEqual(sum(height for _, _, height in clips[1:]), tall)
 
     def test_every_whole_page_shot_is_taken_where_it_is_cut_in_bands(self):
         tree = ast.parse(Path(look.__file__).read_text(encoding="utf-8"))

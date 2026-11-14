@@ -580,6 +580,51 @@ PAST_THE_GUTTER = (
     const far = Math.max(...lines.map((r) => r.right));
     if (far > inner + 1) found.push(`${describe(block)}: "${node.data.trim().slice(0, 40)}" runs ${Math.round(far - inner)}px past its padding`);
   }
+  // A mark the stylesheet writes (a fold's chevron, a ::before or ::after
+  // with words) is no element and has no box to read, so each is read as an
+  // element drawn in its place with its style, the mark itself left out
+  // while it stands there. Every stand-in goes in at once and is read in
+  // one layout, which draws the page as its marks did.
+  const quoted = /^"((?:[^"\\\\]|\\\\.)*)"/;
+  const marks = [];
+  for (const el of main.querySelectorAll('*')) {
+    for (const side of ['before', 'after']) {
+      const mark = getComputedStyle(el, `::${side}`);
+      const words = quoted.exec(mark.content)?.[1];
+      if (!words?.trim() || mark.display === 'none') continue;
+      if (el.matches('input, img, select, textarea, br, hr, iframe, svg, svg *') || !el.checkVisibility() || inScroller(el)) break;
+      const drawn = document.createElement('span');
+      for (const name of mark) {
+        if (name !== 'content') drawn.style.setProperty(name, mark.getPropertyValue(name));
+      }
+      drawn.style.setProperty('transition', 'none');
+      drawn.textContent = words;
+      marks.push({el, side, words, drawn});
+    }
+  }
+  // A constructed sheet, which the page's policy does not govern.
+  const stand = new CSSStyleSheet();
+  stand.replaceSync('[data-probe-mark~="before"]::before, [data-probe-mark~="after"]::after { content: none !important; }');
+  const sheets = document.adoptedStyleSheets;
+  document.adoptedStyleSheets = [...sheets, stand];
+  try {
+    for (const {el, side, drawn} of marks) {
+      el.dataset.probeMark = `${el.dataset.probeMark ?? ''} ${side}`.trim();
+      if (side === 'before') el.prepend(drawn); else el.append(drawn);
+    }
+    for (const {el, side, words, drawn} of marks) {
+      const r = painted(drawn, box(drawn), true);
+      if (r && r.width >= 1 && (r.right > right + 1 || r.left < left - 1)) {
+        found.push(`${describe(el)}::${side} "${words}" spans ${Math.round(r.left)}..${Math.round(r.right)}px, gutter ${Math.round(left)}..${Math.round(right)}px`);
+      }
+    }
+  } finally {
+    for (const {el, drawn} of marks) {
+      drawn.remove();
+      delete el.dataset.probeMark;
+    }
+    document.adoptedStyleSheets = sheets;
+  }
   return [...new Set(found)];
 }"""
 )

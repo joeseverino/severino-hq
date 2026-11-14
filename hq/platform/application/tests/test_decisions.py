@@ -306,6 +306,13 @@ class OriginTests(SimpleTestCase):
         self.assertEqual(found["origin"]["source"], "Example")
         self.assertEqual(found["origin"]["key"], "example.domain:Renewals:Passport")
 
+    def test_a_panel_is_named_apart_from_every_other_and_as_briefly_whatever_its_key(self):
+        keys = ("example.domain:a", "example.domain:b", "hq.example:finding:example-rule:" + "machine:example-" * 12)
+        panels = [decision({"key": key, "source": "Example", "status": "serious"})["origin"]["panel"] for key in keys]
+
+        self.assertEqual(len(set(panels)), len(keys))
+        self.assertEqual({len(panel) for panel in panels}, {len(panels[0])})
+
     def test_what_clears_an_item_follows_its_why(self):
         found = decision(
             {

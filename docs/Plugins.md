@@ -953,7 +953,7 @@ A test that posts a form without opening its page first sends
 | `partials/_form.html` | `bar`, `cancel_url`, `choice_field`, `choices`, `form`, `note`, `verb` | `action`, `fields`, `gap`, `hooks`, `in_place`, `method`, `next`, `table_body` | A form that writes: its token, its errors, its fields or its table, and its closing row. |
 | `partials/_form_actions.html` | `choice_field`, `verb` | `bar`, `cancel_url`, `choices`, `gap`, `in_place`, `live`, `note` | A form's closing row: its one verb, Cancel, and what saving does. |
 | `partials/_form_errors.html` | nothing | `form` | What was wrong with a submitted form as a whole, above its fields. |
-| `partials/_icon.html` | nothing | `name` | One of the host's icons, by `name`, the height of the text beside it. |
+| `partials/_icon.html` | `name` | nothing | One of the host's icons, by `name`, the height of the text beside it. |
 | `partials/_insight_grid.html` | `items` | `label`, `level` | Readings that need interpreting, each with its next step. |
 | `partials/_job_progress.html` | `job` | nothing | A running job and what it is doing. |
 | `partials/_kpi_grid.html` | `items` | `featured`, `label` | Responsive linked or static figures. |

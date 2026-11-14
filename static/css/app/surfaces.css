@@ -237,9 +237,14 @@
      cell moved to the line beneath an open row is open too. */
   .data-table tr:not(.is-expanded, .row-detail) .row-more,
   .data-table tr:is(.is-expanded, .row-detail) .row-less { display: none; }
-  :is(.row-expand, .row-fold) > .icon { width: 7px; height: 11px; transition: transform .12s ease; }
-  :is(.row-expand, .row-fold)[aria-expanded="true"] > .icon { transform: rotate(90deg); }
-  @media (prefers-reduced-motion: reduce) { :is(.row-expand, .row-fold) > .icon { transition: none; } }
+  /* Its chevron is its own border, pointing at what it holds back and turned down when open, so a row carries no drawing for it. */
+  :is(.row-expand, .row-fold)::before {
+    content: ""; box-sizing: border-box; width: 6px; height: 6px; margin-inline-end: var(--space-1);
+    border: solid currentColor; border-width: 1.6px 1.6px 0 0; border-radius: 0 1px 0 0;
+    transform: rotate(45deg); transition: transform .12s ease;
+  }
+  :is(.row-expand, .row-fold)[aria-expanded="true"]::before { transform: rotate(135deg); margin-inline-end: 0; margin-block-end: var(--space-1); }
+  @media (prefers-reduced-motion: reduce) { :is(.row-expand, .row-fold)::before { transition: none; } }
   /* With no script a fold cannot open or close, and every row it would fold shows (tables.css), so it is not drawn. */
   @media (scripting: none) { .row-fold { display: none; } }
   /* What holds a value to its line, lifted with its cut (cuts.css) in an open row and the line beneath it, and in a panel a cell shows; outranking each column's own rule on purpose. */
@@ -386,8 +391,8 @@
 /* A reading a section holds (raw JSON, a provider's readout) has paths of any
    length: wrapped, so only its height scrolls and never the page sideways. */
 .section-body > pre { max-block-size: 18rem; white-space: pre-wrap; overflow-wrap: anywhere; }
-/* A folded section's mark hangs before its heading, so the heading starts
-   where every other section's does. */
-details.section.section-fold > summary.section-head::before { margin-inline: calc(-1em - var(--space-1)) calc(var(--space-1) - var(--space-6)); }
+/* A folded section's mark stands inside the content edge, where a phone's
+   gutter cannot cut it, and as close to its heading as a details' mark is. */
+details.section.section-fold > summary.section-head::before { margin-inline-end: calc(var(--space-1) - var(--space-6)); }
 
 }

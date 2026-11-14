@@ -11,8 +11,6 @@ import hashlib
 from dataclasses import asdict, is_dataclass
 from typing import Any
 
-from django.utils.text import slugify
-
 lazy from .approvals import APPROVE, REJECT
 lazy from .entity_links import web_url
 lazy from .findings import rule_origin
@@ -161,7 +159,8 @@ def _origin(item: dict[str, Any]) -> dict[str, Any]:
     """Why an item is as urgent as it is, in its raiser's words (``Insight.why``)
     and what clears it (``Insight.clears``), then what raised it: the domain and
     the key it raised it under, and for a finding its rule and where that is
-    declared. ``panel`` is the id its panel and the pill that opens it share."""
+    declared. ``panel`` is the id its panel and the pill that opens it share,
+    short since a page writes it five times for each item."""
 
     key = str(item.get("key", ""))
     _, finding, rest = key.partition(":finding:")
@@ -171,7 +170,7 @@ def _origin(item: dict[str, Any]) -> dict[str, Any]:
         "why": f"{why} {ended(f'Clears once {clears}')}" if why and clears else why,
         "source": item.get("source", ""),
         "key": key,
-        "panel": slugify(f"origin-{key}"),
+        "panel": f"origin-{_digest(key)}",
         **(rule or {}),
     }
 
@@ -179,7 +178,11 @@ def _origin(item: dict[str, Any]) -> dict[str, Any]:
 def item_anchor(key: str) -> str:
     """Where an item's card is on the queue page, stable while its key is."""
 
-    return "item-" + hashlib.sha256(key.encode()).hexdigest()[:12]
+    return f"item-{_digest(key)}"
+
+
+def _digest(key: str) -> str:
+    return hashlib.sha256(key.encode()).hexdigest()[:12]
 
 
 def _own_page(item: dict[str, Any], subject: dict[str, Any], actions: list[dict[str, Any]], anchor: str) -> str:

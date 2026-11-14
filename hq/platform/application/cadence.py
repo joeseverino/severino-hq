@@ -19,7 +19,7 @@ from typing import Annotated, Literal, TypedDict
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Exists, F, Max, OuterRef
+from django.db.models import Exists, F, Max, OuterRef, Q
 from django.utils import timezone
 from pydantic import Field
 
@@ -283,13 +283,16 @@ def automation_standing() -> WorkerStanding:
     now = present()
     work = OperationRequest.objects.filter(action__in=AUTOMATION_WORK)
     heartbeat = readings.stored(AUTOMATION_HEARTBEAT)
-    claimed = work.aggregate(newest=Max("claimed_at"))["newest"]
+    # The last lease to run out decides whether any is still held.
+    found = work.aggregate(
+        newest=Max("claimed_at"), leased=Max("lease_expires_at", filter=Q(state=OperationRequest.State.CLAIMED))
+    )
+    claimed, leased = found["newest"], found["leased"]
     seen = [moment for moment in (heartbeat.observed_at if heartbeat else None, claimed) if moment is not None]
     if not seen:
         return WorkerStanding(seen_at=None, silent=False, named=PLAYBOOK_WORKER_NAMED)
     seen_at = max(seen)
-    leases = work.filter(state=OperationRequest.State.CLAIMED).values_list("lease_expires_at", flat=True)
-    holding = any(lease is not None and not passed(lease, now=now) for lease in leases)
+    holding = leased is not None and not passed(leased, now=now)
     silent = not holding and passed(seen_at + AUTOMATION_SILENT_AFTER, now=now)
     return WorkerStanding(seen_at=seen_at, silent=silent, here=True, named=PLAYBOOK_WORKER_NAMED)
 

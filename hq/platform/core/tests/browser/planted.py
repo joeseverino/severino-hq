@@ -204,6 +204,10 @@ PLANTS = {
     "links at rest": Plant('<div><a href="#" style="text-decoration: underline">Example</a></div>'),
     "dialogs": Plant('{% include "partials/_modal.html" with id="orphan" title="Orphan" %}'),
     "gutter": Plant('<div style="inline-size: calc(100% + 2rem)">Example</div>'),
+    # Two columns, the line a heading heads sent to the second.
+    "headings parted": Plant(
+        '<div style="columns: 2"><h2>Example heading</h2><p style="break-before: column">Example line</p></div>'
+    ),
     # A box cut to four lines that scrolls the rest, with no cap that says so.
     "audit": Plant(
         '<div style="display: flex; flex-direction: column; block-size: 4rem">'
@@ -518,6 +522,11 @@ _FOLDED_TABLE = (
 )
 
 
+# A mark the stylesheet writes before a line, hung past the page's gutter, as
+# a fold's chevron hangs before a heading.
+_HUNG = "planted/a-mark-hung-past-the-gutter"
+_HUNG_MARK = '[data-probe="hung"]::before { content: "\\203A"; margin-inline-start: -4rem }'
+
 # A catalog entry `dev:look` draws by name, and a defect laid over it as CSS,
 # which the look lays as well (`--css`): what a failure's look is proven on.
 _LOOKED = "part/section-bare"
@@ -570,6 +579,7 @@ class PlantedBrowserTests(LayoutBrowserTests):
             _LEFT: probe(_LEFT_BEHIND),
             _RESTS: probe(_RESTED),
             _FOLDED: probe(_FOLDED_TABLE),
+            _HUNG: probe('<p data-probe="hung">Example</p>'),
             **{name: probe(markup) for name, markup in _SHIFTS.items()},
         }
 
@@ -613,6 +623,10 @@ class PlantedBrowserTests(LayoutBrowserTests):
         found = self.found(_RESTS, Plant("")).get("cut beside room", [])
         self.assertTrue([said for said in found if '"example-capped' in said], found)
         self.assertFalse([said for said in found if '"example-full' in said], found)
+
+    def test_a_mark_the_stylesheet_hangs_past_the_gutter_is_past_the_gutter(self):
+        found = self.found(_HUNG, Plant("", css=_HUNG_MARK)).get("gutter", [])
+        self.assertTrue([said for said in found if "::before" in said], found)
 
     def test_a_page_whose_only_table_is_folded_away_holds_the_table_rule(self):
         """A table in a closed disclosure is one the table probe skips as

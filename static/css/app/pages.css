@@ -26,14 +26,21 @@
 }
 /* The lanes run down columns as a list does, as many columns as fit, so a
    short lane sits under the one before it instead of leaving a column of
-   empty map beside a long one. The page scrolls; the map never does inside
-   it. A lane with nothing in it, or nothing the filter left, is not drawn. */
+   empty map beside a long one. A lane stays whole in its column, as an
+   index's letter groups do, so its heading is never parted from its cards;
+   only a lane taller than a column breaks, between its cards. The page
+   scrolls; the map never does inside it. A lane with nothing in it, or
+   nothing the filter left, is not drawn. */
 .topology-map {
   columns: 15rem; column-gap: var(--space-8);
   padding: var(--space-5) var(--space-6); background: var(--surface-2);
   min-width: 0; max-width: 100%;
 }
-.topology-lane { min-width: 0; margin-block-end: var(--space-6); }
+/* The space under a lane is its list's padding, so it stays in the lane's
+   column: a margin of the lane's own would follow it to the next column's
+   top in WebKit and set that lane lower than its neighbors. */
+.topology-lane { min-width: 0; break-inside: avoid; }
+.topology-node-list { padding-block-end: var(--space-6); }
 .topology-lane:not(:has(.topology-node:not([hidden]))) { display: none; }
 .topology-node-list > * { break-inside: avoid; }
 .topology-kind-mark { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }

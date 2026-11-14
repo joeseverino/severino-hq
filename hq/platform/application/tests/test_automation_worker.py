@@ -65,6 +65,55 @@ class ArrivalTests(TestCase):
         self.assertIsNone(automation_standing().seen_at)
 
 
+class LeaseTests(TestCase):
+    """A worker past its silence bound that still holds a run's lease is not
+    silent, and its standing reads the work it was given in one query."""
+
+    def setUp(self):
+        def resource(key: str) -> ManagedResource:
+            return ManagedResource.objects.create(key=key, kind="automation.source", spec={})
+
+        self.claim = OperationRequest.objects.create(
+            resource=resource("example-app"),
+            action=OperationRequest.Action.RUN,
+            idempotency_key="example-claim",
+            state=OperationRequest.State.CLAIMED,
+            claimed_by="example-worker",
+            claimed_at=timezone.now() - timedelta(days=1),
+            lease_expires_at=timezone.now() + timedelta(minutes=5),
+        )
+        OperationRequest.objects.create(
+            resource=resource("example-other-app"),
+            action=OperationRequest.Action.RUN,
+            idempotency_key="example-earlier-claim",
+            state=OperationRequest.State.CLAIMED,
+            claimed_by="example-worker",
+            claimed_at=timezone.now() - timedelta(days=2),
+            lease_expires_at=timezone.now() - timedelta(days=2),
+        )
+        seen(None)
+
+    def test_a_live_lease_keeps_it_heard_and_its_end_leaves_it_silent(self):
+        from ..cadence import automation_standing
+
+        self.assertFalse(automation_standing().silent)
+
+        OperationRequest.objects.filter(pk=self.claim.pk).update(lease_expires_at=timezone.now() - timedelta(seconds=1))
+        self.assertTrue(automation_standing().silent)
+
+    def test_its_standing_reads_the_work_once(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from ..cadence import automation_standing
+
+        with CaptureQueriesContext(connection) as asked:
+            automation_standing()
+
+        work = [query for query in asked if "control_plane_operationrequest" in query["sql"]]
+        self.assertEqual(len(work), 1)
+
+
 class AbsentWorkerTests(TestCase):
     def setUp(self):
         self.supply = Supply(self, manifest())

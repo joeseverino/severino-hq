@@ -376,7 +376,8 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .page-title-row > h1 { margin: 0; max-width: 100%; }
 .page-title-meta { margin: 0; color: var(--muted); font-size: var(--text-sm); }
 
-.icon { width: 1em; height: 1em; flex: none; }
+/* With the line set's paint, which each symbol of img/icons.svg inherits through its <use> unless it says its own. */
+.icon { width: 1em; height: 1em; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 /* An icon a cell's kept line opens with (tables.css), its own or a status's (`icon=`), hangs in the line's padding, a float of no width there, so the value's lines start clear of it and a name the line cuts fills what the line holds out for, beside the icon on its first line. An indent would not do: a cut name is as wide as the line's box, which leaves out the indent its first line gets back. The hang is past the line's hold, so the value holds out for what it would with no icon. In a narrow box the line is no block, and the icon sits in it as in any line. */
 @container style(--box: whole) {
   .kept-line:has(> .icon:first-child, > .toned:first-child > .icon:first-child) {

@@ -27,7 +27,7 @@ class Kpi:
     detail: str = ""
     url: str = ""
     is_zero: bool = False
-    # A mark before the label, by its name in ``partials/_icon.html``: what
+    # A mark before the label, by its symbol in ``static/img/icons.svg``: what
     # kind of thing the figure counts, for an eye scanning a card of several.
     # A name the set does not draw shows nothing.
     icon: str = ""

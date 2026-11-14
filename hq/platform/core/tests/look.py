@@ -1960,16 +1960,16 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
 
     def in_bands(self, shot, extent, shows) -> list[Band]:
         """The page shot whole at ``shot`` and, when it is taller than the
-        window, cut into window-sized bands beside it, so each can be read at
-        once, each to ``TALLEST`` at most (``shoot_page``), all from the one
-        ``extent``. A page that moved past that extent ends its bands where
+        window, cut into window-sized bands beside it to the page's end, so
+        each can be read at once, the whole shot to ``TALLEST`` at most
+        (``shoot_page``), all from the one ``extent``. A page that moved past that extent ends its bands where
         it went, and the shot says so. The part of the page each file holds."""
 
         wide, tall = extent
         cut = shoot_page(self.page, shot, extent=extent, animations="disabled")
         said = [shows, cut]
         files: list[Band] = []
-        for number, band in enumerate(_bands(min(tall, TALLEST), self.page.viewport_size["height"]), start=1):
+        for number, band in enumerate(_bands(tall, self.page.viewport_size["height"]), start=1):
             path = shot.with_name(f"{shot.stem}.band-{number:02}.png")
             try:
                 shoot_page(self.page, path, extent=(wide, tall), band=band, animations="disabled")
