@@ -876,7 +876,9 @@ button by anchor positioning (`anchor-scope: --menu`, page.css "Menus"). It
 hangs below the button from its right edge, or from its left where that would
 cross the screen (`position-try-fallbacks: flip-inline`, decided against the
 viewport). A section's links open from its left edge, and in the drawer beside
-the list. A menu opens on a press. A section group also opens on hover where
+the list, down or up from their row on the side with more height, held to it
+and scrolling when longer (`position-try-order`), so every link can be reached
+on any screen. A menu opens on a press. A section group also opens on hover where
 the pointer can hover, and a press then keeps it open. WebKit has no
 `interestfor`, so a few lines of app.js do that one job, and the browser still
 opens, closes and dismisses the popover. Inside a menu every control is a plain

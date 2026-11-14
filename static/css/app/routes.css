@@ -195,16 +195,24 @@ span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-
   font-size: var(--text-md);
 }
 .primary-nav:popover-open .nav-group-button { display: flex; inline-size: 100%; }
-/* A section's own links fly out beside the list, from its row down: a
+/* A section's own links fly out beside the list, level with its row: a
    popover is drawn over the page, never in the list's flow. The list is
    anchored to the right edge, so the room is to its left; a screen with
-   none there takes them below the row. */
+   none there takes them below the row. They hang from the row down or up
+   from it, on the side with more height, and a section taller than that
+   side is held to it and scrolls, so every link of a long section low on a
+   short screen can be reached: the pattern of the spec's own example for
+   `position-try-order`. */
 .primary-nav:popover-open .nav-group-panel {
   position-area: inline-start span-block-end;
-  position-try-fallbacks: block-end span-inline-start;
+  position-try-fallbacks: --nav-panel-down-scrolling, inline-start span-block-start, --nav-panel-up-scrolling, block-end span-inline-start;
+  position-try-order: most-block-size;
+  overflow-y: auto;
   margin: 0 var(--space-3) 0 0;
   min-width: 168px;
 }
+@position-try --nav-panel-down-scrolling { position-area: inline-start span-block-end; max-block-size: 100%; }
+@position-try --nav-panel-up-scrolling { position-area: inline-start span-block-start; max-block-size: 100%; }
 .primary-nav:popover-open .nav-group-panel a {
   min-height: 44px;
   display: flex;
