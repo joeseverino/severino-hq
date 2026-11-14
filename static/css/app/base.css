@@ -199,7 +199,6 @@ pre ::selection { color: var(--code-ink); }
    only ever focused programmatically: an outline there would be a box drawn
    around the whole page. */
 .content:focus { outline: none; }
-@media (prefers-reduced-motion: reduce) { .skip-link { transition: none; } }
 
 /* One row, always. The sections are the header's job; the search field is the
    part that gives way. It collapses to a button that expands back over the nav

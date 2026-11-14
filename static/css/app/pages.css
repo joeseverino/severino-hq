@@ -96,7 +96,6 @@
 
 
 @media (prefers-reduced-motion: reduce) {
-  .topology-node { transition: none; }
   .topology-map { scroll-behavior: auto; }
 }
 

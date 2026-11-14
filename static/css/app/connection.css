@@ -117,7 +117,6 @@ textarea.code {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: .35; transform: scale(.72); }
 }
-@media (prefers-reduced-motion: reduce) { .conn-pulse { animation: none; } }
 .conn-samples { display: inline-flex; align-items: flex-end; gap: var(--space-1); height: 13px; }
 .conn-samples i {
   width: 3px; background: var(--accent-2); border-radius: 1px;
@@ -220,7 +219,6 @@ textarea.code {
 /* The fold's own mark, turned when it opens, as every other disclosure's is (surfaces.css). */
 .ladder-more::after { content: "\203A" / ""; display: inline-block; margin-inline-start: .3em; transition: transform .12s ease; }
 details[open] > summary .ladder-more::after { transform: rotate(90deg); }
-@media (prefers-reduced-motion: reduce) { .ladder-more::after { transition: none; } }
 .ladder-body {
   display: grid; gap: var(--space-3);
   margin: 0 var(--space-6) var(--space-4) calc(var(--space-6) + 17px + var(--space-5));

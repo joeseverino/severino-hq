@@ -607,9 +607,6 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
 }
 [aria-checked="true"] .switch-track { background: var(--accent); border-color: var(--accent); }
 [aria-checked="true"] .switch-knob { transform: translateX(11px); }
-@media (prefers-reduced-motion: reduce) {
-  .switch-track, .switch-knob { transition: none; }
-}
 /* The theme choice: a label in the row's own inset, then three buttons that
    share one track. The pressed one is the choice in force. */
 .menu-theme { display: grid; grid-template-columns: 1fr 1fr; align-items: center; padding: 0 var(--space-5); }

@@ -243,7 +243,6 @@
 @media (prefers-reduced-motion: reduce) {
   .job-bar:indeterminate { animation: none; background: color-mix(in srgb, currentcolor 35%, var(--surface-2)); }
   .job-bar::-webkit-progress-value { transition: none; }
-  .page-nav-list a { transition: none; }
 }
 
 /* Shown only on paper. In the document rather than in CSS `content` so it
