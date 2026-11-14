@@ -66,7 +66,9 @@ class RowControlsTests(SimpleTestCase):
                 (cell,) = [each for each in _leaving(html) if each.tag == "td"]
                 (copy,) = _copies(html)
                 for holder in (cell, copy):
-                    shown = [each.words for each in all_elements(html) if holder in each.ancestors and "btn" in each.classes]
+                    shown = [
+                        each.words for each in all_elements(html) if holder in each.ancestors and "btn" in each.classes
+                    ]
                     self.assertEqual(shown, ["Open", "Dismiss"] if given else ["Dismiss"])
 
     def test_what_a_row_offers_only_when_open_moves_to_its_open_line(self):
@@ -90,7 +92,9 @@ class RowControlsTests(SimpleTestCase):
                 html = _table(rows, head='{% table_heading "Name" gutter=True %}' + head)
                 self.assertEqual(_leaving(html), [])
                 self.assertEqual(_copies(html), [])
-                self.assertEqual([each.attrs.get("data-drop") for each in all_elements(html) if each.tag == "td"], [None] * 4)
+                self.assertEqual(
+                    [each.attrs.get("data-drop") for each in all_elements(html) if each.tag == "td"], [None] * 4
+                )
                 self.assertEqual(len([each for each in all_elements(html) if each.tag == "select"]), 1)
 
     def test_a_column_its_heading_sets_beneath_takes_no_rank(self):

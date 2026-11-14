@@ -125,6 +125,7 @@ class _Cell:
     @property
     def value_end(self) -> tuple[int, int] | None:
         return self.toggle_at or self.closed
+
     # A heading's sort control, as the spans that take it off again.
     sort: list[tuple[Point, Point]] = field(default_factory=list)
     sort_mark: Position | None = None
@@ -511,9 +512,7 @@ class Cells(HTMLParser):
             for start in cell.names:
                 self.roles.setdefault(start, set()).add("name")
 
-    def _detail(
-        self, row: _Row, width: int, leaving: set[int], names: list[str], levels: dict[int, int]
-    ) -> None:
+    def _detail(self, row: _Row, width: int, leaving: set[int], names: list[str], levels: dict[int, int]) -> None:
         """The row's open line: its controls where they leave the row, the blocks it moves there (its editor first,
         then each block it keeps beneath itself and its buttons past the
         first few), then an entry for each cell that holds something back,
