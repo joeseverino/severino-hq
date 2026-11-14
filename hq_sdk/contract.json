@@ -3469,7 +3469,8 @@
           "title=",
           "disabled=",
           "pressed=",
-          "hit="
+          "hit=",
+          "fields="
         ],
         "parts": []
       },

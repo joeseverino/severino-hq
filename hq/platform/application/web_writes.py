@@ -31,7 +31,7 @@ from django.http import HttpRequest, HttpResponse
 lazy from django.forms import BaseForm
 lazy from django.utils.html import format_html
 
-lazy from hq.platform.core.templatetags.action_tags import post_button
+lazy from hq.platform.core.templatetags.action_tags import post_button_markup
 lazy from hq.platform.core.templatetags.value_tags import breakable
 
 from .capabilities import Ran, run_capability
@@ -130,7 +130,9 @@ def _said(refusal: Refusal, principal: Principal | None) -> str:
     return format_html(
         "{} {}",
         said,
-        post_button(cancel.label, cancel.url, name=cancel.field, value=cancel.value, css=f"{cancel.css} compact"),
+        post_button_markup(
+            cancel.label, cancel.url, name=cancel.field, value=cancel.value, css=f"{cancel.css} compact"
+        ),
     )
 
 
