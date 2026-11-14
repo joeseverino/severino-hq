@@ -170,7 +170,7 @@ class CommandBuilderTests(SimpleTestCase):
 
 
 @tag("source", "tree")
-@reads("hq/**/*.py", "templates/**/*.html", lists=("hq/**", "templates/**"))
+@reads("hq/**/*.py", "**/templates/**/*.html", lists=("hq/**", "**/templates/**"))
 class CallSiteWordsTests(SimpleTestCase):
     """No button, link or toast for a command brings text of its own.
 
@@ -246,7 +246,7 @@ class CallSiteWordsTests(SimpleTestCase):
 
 
 @tag("source", "tree")
-@reads("hq/**/*.py", "templates/**/*.html", lists=("hq/**", "templates/**"))
+@reads("hq/**/*.py", "**/templates/**/*.html", lists=("hq/**", "**/templates/**"))
 class DeclaredWordsTests(SimpleTestCase):
     """Every action has the words a surface asks it for."""
 
