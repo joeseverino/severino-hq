@@ -19,7 +19,7 @@ from django.urls import Resolver404, resolve
 from hq.platform.application import request_context
 from hq.platform.application.arrivals import ARRIVALS, note as note_arrival
 from hq.platform.application.cadence import note_activity
-from hq.platform.application.demo import demo_scope
+from hq.platform.application.demo import DEMO_SESSION_KEY, demo_scope
 from hq.platform.core import speculation, tracing
 from hq.platform.core.attribution import operation_context
 from hq.platform.core.outbound import serving
@@ -29,11 +29,6 @@ lazy from hq.platform.application.pages import authorizes_itself, page_refusal
 lazy from hq.platform.application.projection import projection_scope
 lazy from hq.platform.application.request_identity import signed_in
 lazy from hq.platform.application.security import API_INTERFACE, API_NAMESPACE, WEB_INTERFACE
-
-# Where the browser's own answer to "show me stand-ins" is kept. Named here
-# because the middleware that reads it and the view that writes it are the only
-# two things that may know the spelling.
-DEMO_SESSION_KEY = "showing_demo"
 
 _request_logger = logging.getLogger("severino.request")
 

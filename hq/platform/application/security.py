@@ -64,6 +64,10 @@ class Capability(StrEnum):
     # only by HQ itself (``HELD_ONLY_AT``): the provider's signed logout token
     # is its credential, so no person or token signs anyone out through it.
     END_SESSIONS = "end_sessions"
+    # Shows stand-in values in place of real ones in one browser. Held only by
+    # a person (``HELD_ONLY_AT``): the mode lives in a browser's session, so
+    # no agent is offered it.
+    SHOW_DEMO = "show_demo"
 
 
 # Every interface a principal or a record names, declared once here, so a
@@ -143,6 +147,7 @@ HELD_ONLY_AT: dict[str, frozenset[str]] = {
     Capability.DECIDE_APPROVALS: INTERACTIVE_INTERFACES,
     Capability.GOVERN_AGENTS: INTERACTIVE_INTERFACES,
     Capability.END_SESSIONS: frozenset({INTERNAL_INTERFACE}),
+    Capability.SHOW_DEMO: INTERACTIVE_INTERFACES,
 }
 
 # Capabilities that keep something of a person's, held only by a principal with

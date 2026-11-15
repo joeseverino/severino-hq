@@ -1,0 +1,9 @@
+id: adapters-record-no-event
+valid:
+  - 'exported(filename, body, principal=web_principal(request.user))'
+  - 'file_taken(receipt, principal=web_principal(request.user))'
+  - 'record_violation(directive=directive, blocked=blocked, document=document, source=source)'
+invalid:
+  - 'record_event(action=AuditLog.Action.VIEWED, obj=receipt, type_label="Receipt")'
+  - 'audit.record_event(action=AuditLog.Action.EXPORTED, type_label="Export")'
+  - 'record_operation(action=AuditLog.Action.UPDATED, type_label="Asset")'

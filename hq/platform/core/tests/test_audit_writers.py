@@ -30,7 +30,6 @@ NOT_A_ROW = {
     ("hq/platform/application/pins.py", "_audit"): "one act on many of a person's pins at once",
     ("hq/platform/application/action_items.py", "_audit"): "one act on many queue items at once",
     ("hq/platform/application/projects.py", "refresh_project"): "the sum of a content sync over many rows",
-    ("hq/platform/core/views.py", "DemoModeView.post"): "a switch kept in the session alone",
     ("hq/platform/application/inventory.py", "_record_manages"): "a provider's own setting, as a read found it",
 }
 

@@ -54,6 +54,7 @@ from .approvals import (
 from .cadence import ControllerSweepCommand, request_controller_sweep
 from .capability_policy import SET_POLICY, PolicyCommand, apply_changes
 from .certificates import UPLOAD, UploadCertificateCommand, store_certificate
+from .demo import SET_DEMO, DemoCommand, set_demo, showing_demo
 from .dependency_updates import RUN_NOW as DEPENDENCY_RUN_NOW, DependencyRunCommand, request_run
 from .documentation import (
     SYNC as DOCUMENTATION_SYNC,
@@ -823,6 +824,18 @@ def dashboard() -> tuple[CapabilitySpec, ...]:
             set_theme,
             execution_notes=("Set the theme rather than cycle it, so asking twice changes nothing.",),
             label="Choose a theme",
+        ),
+        CapabilitySpec(
+            SET_DEMO,
+            "Show stand-in values in place of real ones in this browser, or the real ones again.",
+            "remote_write",
+            Capability.SHOW_DEMO,
+            DemoCommand,
+            set_demo,
+            execution_notes=("Set the mode rather than cycle it, so asking twice changes nothing.",),
+            label="Show or hide demo data",
+            variants=(("on", "Show demo data"), ("off", "Show real data")),
+            state=showing_demo,
         ),
         CapabilitySpec(
             DASHBOARD_REFRESH,

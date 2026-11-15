@@ -100,7 +100,7 @@ TITLES: dict[str, str] = {
     "tailnet.routes.approve.request": "Asked to approve a machine's routes",
     "certificate.renew.request": "Asked to renew a certificate",
     "project.refresh_content": "Refreshed the site's content",
-    "report.export": "Exported a year summary",
+    "report.export": "Exported a report",
 }
 # A controller's call runs as ``bridge.<action>``, and one the bridge turned
 # away as ``bridge.<action>.refused``, as the bridge binds them.

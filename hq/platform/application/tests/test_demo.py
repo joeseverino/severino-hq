@@ -7,6 +7,8 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
+from hq.platform.application.plugin_testing import form_keyed
+from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog
 
 from ..demo import amount, day, demo_scope, label, showing_demo
@@ -115,13 +117,13 @@ class ToggleTests(TestCase):
     def test_it_is_off_until_it_is_turned_on_and_survives_the_page(self):
         self.assertFalse(self.client.get(reverse("dashboard")).wsgi_request.showing_demo)
 
-        self.client.post(reverse("demo_mode"))
+        self.client.post(reverse("demo_mode"), form_keyed())
 
         self.assertTrue(self.client.get(reverse("dashboard")).wsgi_request.showing_demo)
 
     def test_turning_it_off_again_restores_real_values(self):
-        self.client.post(reverse("demo_mode"))
-        self.client.post(reverse("demo_mode"))
+        self.client.post(reverse("demo_mode"), form_keyed())
+        self.client.post(reverse("demo_mode"), form_keyed())
 
         self.assertFalse(self.client.get(reverse("dashboard")).wsgi_request.showing_demo)
 
@@ -137,19 +139,21 @@ class ToggleTests(TestCase):
         """An operator who forgets the mode is on can screenshot fiction and
         file it as fact, so the trail says when it was on."""
 
-        self.client.post(reverse("demo_mode"))
-        self.client.post(reverse("demo_mode"))
+        self.client.post(reverse("demo_mode"), form_keyed())
+        self.client.post(reverse("demo_mode"), form_keyed())
 
-        said = [event.message for event in AuditLog.objects.filter(object_type="Demo mode").order_by("id")]
+        from hq.platform.application.demo import SET_DEMO
+
+        said = [event.message for event in AuditLog.objects.filter(metadata__operation=SET_DEMO).order_by("id")]
         self.assertEqual(said, ["Demo mode on", "Demo mode off"])
 
     def test_it_returns_to_the_page_it_was_flipped_from(self):
-        response = self.client.post(reverse("demo_mode"), {"next": reverse("action_items")})
+        response = self.client.post(reverse("demo_mode"), form_keyed({"next": reverse("action_items")}))
 
         self.assertRedirects(response, reverse("action_items"), fetch_redirect_response=False)
 
     def test_a_destination_off_this_host_is_refused(self):
-        response = self.client.post(reverse("demo_mode"), {"next": "https://example.test/elsewhere"})
+        response = self.client.post(reverse("demo_mode"), form_keyed({"next": "https://example.test/elsewhere"}))
 
         self.assertRedirects(response, reverse("dashboard"), fetch_redirect_response=False)
 
@@ -163,7 +167,7 @@ class ToggleTests(TestCase):
 
         self.assertEqual(with_class(self.client.get(reverse("dashboard")), "demo-flag"), [])
 
-        self.client.post(reverse("demo_mode"))
+        self.client.post(reverse("demo_mode"), form_keyed())
 
         page = self.client.get(reverse("dashboard"))
         (flag,) = with_class(page, "demo-flag")
@@ -173,7 +177,7 @@ class ToggleTests(TestCase):
         """The About dialog describes the public demo; an operator's own HQ
         with demo data on is still a running HQ, so it shows the plain mark."""
 
-        self.client.post(reverse("demo_mode"))
+        self.client.post(reverse("demo_mode"), form_keyed())
 
         live = self.client.get(reverse("dashboard"))
         self.assertNotContains(live, 'data-modal-open="demo-about"')
@@ -193,7 +197,7 @@ class ToggleTests(TestCase):
         """Playbooks are the story the demo tells, and nothing else on the
         landing page leads there."""
 
-        self.client.post(reverse("demo_mode"))
+        self.client.post(reverse("demo_mode"), form_keyed())
         with override_settings(SEVERINO_RENDERED_COPY=True):
             copy = self.client.get(reverse("dashboard"))
 
@@ -207,16 +211,50 @@ class ToggleTests(TestCase):
         off = self.client.get(reverse("dashboard"))
         self.assertContains(off, 'role="switch" aria-checked="false"')
 
-        self.client.post(reverse("demo_mode"))
+        self.client.post(reverse("demo_mode"), form_keyed())
 
         on = self.client.get(reverse("dashboard"))
         self.assertContains(on, 'role="switch" aria-checked="true"')
 
     def test_signing_out_does_not_carry_the_mode_to_the_next_operator(self):
-        self.client.post(reverse("demo_mode"))
+        self.client.post(reverse("demo_mode"), form_keyed())
         self.client.post(reverse("logout"))
 
         other = get_user_model().objects.create_user("other", password="x" * 20)
         self.client.force_login(other)
 
         self.assertFalse(self.client.get(reverse("dashboard")).wsgi_request.showing_demo)
+
+
+class DoorTests(TestCase):
+    """The mode lives in one browser's session, so only the web holds its switch."""
+
+    def test_a_viewer_may_switch_it(self):
+        from hq.platform.application import roles
+
+        viewer = get_user_model().objects.create_user("viewer", password="x" * 20)
+        roles.assign(viewer, roles.Role.VIEWER)
+        self.client.force_login(viewer)
+
+        self.client.post(reverse("demo_mode"), form_keyed())
+
+        self.assertTrue(self.client.get(reverse("dashboard")).wsgi_request.showing_demo)
+
+    def test_no_agent_is_offered_it_or_may_run_it(self):
+        from hq.platform.application.capabilities import describe_capabilities, execute_capability
+        from hq.platform.application.demo import SET_DEMO
+        from hq.platform.application.security import (
+            API_INTERFACE,
+            MCP_INTERFACE,
+            OPERATOR_CAPABILITIES,
+            Principal,
+        )
+
+        for interface in (MCP_INTERFACE, API_INTERFACE):
+            with self.subTest(interface):
+                agent = Principal("example-agent", interface, OPERATOR_CAPABILITIES)
+                offered = {entry["name"] for entry in describe_capabilities(principal=agent)["capabilities"]}
+                self.assertNotIn(SET_DEMO, offered)
+                answer = execute_capability(SET_DEMO, keyed({"showing": True}), principal=agent)
+                self.assertFalse(answer["ok"])
+        self.assertFalse(AuditLog.objects.filter(metadata__operation=SET_DEMO, action=AuditLog.Action.DONE).exists())

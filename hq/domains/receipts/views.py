@@ -30,12 +30,10 @@ from hq.platform.application.labels import dotted, dotted_html, human_bytes
 from hq.platform.application.moments import when
 from hq.platform.application.money import money
 from hq.platform.application.pages import PageAction, PageMixin
-from hq.platform.application.receipts import REPLACE, UPDATE, UPLOAD, serialize_receipt
+from hq.platform.application.receipts import REPLACE, UPDATE, UPLOAD, file_taken, serialize_receipt
 from hq.platform.application.tables import TableColumn, TableListMixin, TableToggle
 from hq.platform.application.web_writes import execute_posted, refused
 from hq.platform.application.writes import CapabilityFormMixin, CommandFormPage, RecordDeleteMixin
-from hq.platform.core.audit import record_event
-from hq.platform.core.models import AuditLog
 from hq.platform.core.templatetags.value_tags import breakable
 
 from .forms import ReceiptUploadForm
@@ -329,12 +327,7 @@ class ReceiptFileView(View):
         if (path := stored_file(receipt)) is None:
             raise Http404("This receipt has no file HQ can open.")
 
-        record_event(
-            action=AuditLog.Action.VIEWED,
-            obj=receipt,
-            type_label="Receipt",
-            message=f"Receipt file viewed: {receipt.original_filename}",
-        )
+        file_taken(receipt)
 
         content_type = served_type(receipt)
         # Rendered in place only for the formats meant to be looked at.

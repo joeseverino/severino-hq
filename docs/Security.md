@@ -37,7 +37,7 @@ or anything acting for them may do. The roles are declared once, in
 | Role | Holds |
 | --- | --- |
 | `operator` | every capability, the host's and every extension's (`operator_capabilities`) |
-| `viewer` | the reads: `read` and every extension's read capabilities |
+| `viewer` | the reads: `read` and every extension's read capabilities, and `show_demo`, which switches stand-in values on in their own browser |
 
 What each subject holds, with `HELD_ONLY_AT` and `NEEDS_A_PERSON` applied on top:
 
@@ -282,6 +282,10 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
   internal interface (`HELD_ONLY_AT`), so no person, device or agent signs
   anyone out through it. A token HQ refuses is a 400, which Pocket ID does not
   retry; an unknown subject is a 200.
+- Demo data (`appearance.demo.set`) lives in one browser's session, so its
+  `show_demo` capability is held only by a person (`HELD_ONLY_AT`): no agent
+  is offered it, a device is refused it for having no session, and it ends
+  with the session.
 - Sign out (a POST; a GET is refused) ends Pocket ID's session as well as
   HQ's. The library's `OIDCLogoutView` sends a session signed in through the
   provider to its end-session endpoint (`end_session_url`) with the ID token

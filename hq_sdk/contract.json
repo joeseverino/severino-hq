@@ -274,7 +274,8 @@
           "SET_PREFERENCES",
           "PIN_FAVORITES",
           "SET_ASIDE_ACTION_ITEMS",
-          "END_SESSIONS"
+          "END_SESSIONS",
+          "SHOW_DEMO"
         ]
       },
       "CapabilitySpec": {

@@ -26,6 +26,14 @@ def export_year_summary(year: int, output_format: ExportFormat, *, principal: Pr
     render = exports.year_summary_markdown if output_format == "md" else exports.year_summary_json
     body = render(year, documentation=safe_records())
     filename = f"year-summary-{year}.{output_format}"
+    exported(filename, body, principal=principal)
+    return {"filename": filename, "format": output_format, "content": body}
+
+
+def exported(filename: str, body: str, *, principal: Principal) -> None:
+    """Record that ``principal`` took ``filename`` away: the one record of an
+    export, whichever door handed it over."""
+
     with audit_operation(operation="report.export", principal=principal):
         record_event(
             action=AuditLog.Action.EXPORTED,
@@ -33,4 +41,3 @@ def export_year_summary(year: int, output_format: ExportFormat, *, principal: Pr
             message=f"Generated export: {filename}",
             metadata={"filename": filename, "bytes": len(body.encode("utf-8"))},
         )
-    return {"filename": filename, "format": output_format, "content": body}
