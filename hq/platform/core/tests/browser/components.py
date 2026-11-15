@@ -966,6 +966,20 @@ class ComponentLayoutTests(LayoutBrowserTests):
         planted = [line.split(": ", 1)[1] for line in found if '"/' in line]
         self.assertEqual(planted, ['"/ bbbb"'])
 
+    def test_a_mark_inside_a_wrapping_identifier_is_part_of_the_value(self):
+        self.open(next(iter(PAGES)), WIDE)
+        self.page.evaluate("""() => {
+          for (const [words, name] of [['a-b', 'token'], ['c-d', '']]) {
+            const part = document.createElement('span');
+            part.textContent = words;
+            part.className = name;
+            part.style.cssText = 'display: block; inline-size: 1ch; font: 16px/1.5 monospace; overflow-wrap: anywhere; white-space: normal';
+            document.querySelector('main').prepend(part);
+          }
+        }""")
+        found = self.page.evaluate(STRAYS_OPENING_A_LINE, [SELECTORS["unseen"], IDENTIFIER])
+        self.assertEqual(len([line for line in found if 'holds "-"' in line]), 1)
+
     def test_an_identifier_split_at_its_seams_is_one_run_and_a_plain_word_is_not(self):
         """An identifier wider than its line breaks at its seam and then
         wherever it must, though the seam leaves its last part a text node of

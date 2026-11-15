@@ -422,10 +422,12 @@ class Cells(HTMLParser):
         kept |= {at for at, cell in enumerate(heads[-1] if heads else []) if "data-stacks" in cell.attrs}
         controls = {place for row in records for place, _ in _row_controls(row, kinds, named)}
         kept |= controls
-        # A column of the rows' controls leaves a narrow box for a copy on
-        # each row's open line, unless a row fills in a field there: a copy
-        # of a field would send its value twice.
-        leaving = controls - {place for row in records for place, cell in _placed(row) if cell.fields}
+        # A column a row fills in a field in holds the rows' values, each
+        # standing under its column's name once its table stacks. A column of
+        # the rows' controls leaves a narrow box for a copy on each row's open
+        # line, unless it holds such a field: a copy would send its value twice.
+        valued = {place for row in records for place, cell in _placed(row) if cell.fields}
+        leaving = controls - valued
         ranked = {at: rank for at, rank in drops.items() if at not in kept | empty}
         # Each rank is a width of the region (tables.css), counted from the
         # widest: a table's first rank leaves at the widest, and its others
@@ -442,7 +444,7 @@ class Cells(HTMLParser):
             if row.group:
                 self._span(row, width)
                 continue
-            self._mark_cells(row, kinds, named, empty, levels, leaving, names)
+            self._mark_cells(row, kinds, named, empty, levels, leaving, valued, names)
             if row.section == "thead":
                 self._mark_long_heads(row, longs)
             self._name(row, kinds, named)
@@ -488,13 +490,15 @@ class Cells(HTMLParser):
         empty: set[int],
         levels: dict[int, int],
         leaving: set[int],
+        valued: set[int],
         names: list[str],
     ) -> None:
         """What each cell says of itself: blank, its whole column blank, the
         width its column leaves at (a column of the rows' controls leaves in
         a narrow box, `data-narrow`), and in the body its kind, a cut cell's
         whole value and the name it stands under once its table stacks
-        (`data-label`; none for the cell naming the row or a control)."""
+        (`data-label`; none for the cell naming the row, nor for the row's
+        controls unless their column holds the rows' fields)."""
 
         body = row.section == "tbody"
         for at, cell in _placed(row):
@@ -507,7 +511,8 @@ class Cells(HTMLParser):
                     kind = _kind_at(at, kinds, named)
                     marks += self._body_marks(cell, kind, body=body)
                     label = names[at] if 0 <= at < len(names) else ""
-                    if label and kind not in {"name", "control"} and "data-label" not in cell.attrs:
+                    labeled = kind != "name" and (kind != "control" or at in valued)
+                    if label and labeled and "data-label" not in cell.attrs:
                         marks.append(f' data-label="{html.escape(label)}"')
             self.marks.setdefault(cell.start, []).extend(marks)
 
@@ -699,13 +704,16 @@ def _finished(cell: _Cell, kind: str) -> list[tuple[str | None, Span]]:
 
 def _kinds(heads: list[list[_Cell]], body: list[_Row]) -> dict[int, str]:
     """Each column's kind, by place, from the heading that declares it. A
-    table with no headings is read off its rows: a column of a row's actions
-    is its controls, and a row's header is held to what it says."""
+    column of a row's actions is its controls whatever its heading says, so
+    they keep one line. A table with no headings is read off its rows, where
+    a row's header is held to what it says."""
 
+    actions = {place for row in body for place, cell in _placed(row) if "row-actions" in _classes(cell.attrs)}
     if heads:
-        return {
+        declared = {
             index: kind for cells in heads for index, cell in enumerate(cells) if (kind := cell.attrs.get("data-kind"))
         }
+        return declared | dict.fromkeys(actions, "control")
     kinds: dict[int, str] = {}
     for row in body:
         for index, cell in enumerate(row.cells):

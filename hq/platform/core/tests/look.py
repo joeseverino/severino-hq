@@ -43,7 +43,7 @@ from hq.platform.core.stalls import stall_watch
 from hq.platform.core.tests import look_shares, task
 from hq.platform.core.tests.browser import probes
 from hq.platform.core.tests.browser.estate import ExampleEstateBrowserTests, estate_pages, navigation
-from hq.platform.core.tests.browser.gate import BrowserGate, add_css
+from hq.platform.core.tests.browser.gate import LIFTED, BrowserGate, add_css
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
 from hq.platform.core.tests.browser.probes.audit import AUDIT
 from hq.platform.core.tests.browser.reference import (
@@ -1425,7 +1425,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         another_region = _REGION in request.headers and parts.path != urlsplit(self.page.url).path
         if (
             self.estate_client is None
-            or parts.path.startswith(settings.STATIC_URL)
+            or parts.path.startswith((settings.STATIC_URL, LIFTED))
             or (not self.on_estate and parts.path.strip("/") in self.pages and not another_region)
         ):
             LayoutBrowserTests.respond(self, route)

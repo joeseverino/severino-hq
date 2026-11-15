@@ -375,7 +375,8 @@ CUT_BESIDE_ROOM = (
 # column's line is no finding. What a cell needs and how many lines it takes on its
 # line are read from the table laid out again at its max-content, unseen,
 # beside it, and a column needs the most its cells do; a cell drawn across
-# the row or stacked beneath it asks no column for anything.
+# the row or stacked beneath it asks no column for anything. A short value
+# holds its line up to its share, then wraps as the table contract allows.
 ROOM_UNSHARED = (
     "() => {"
     + DESCRIBE
@@ -389,9 +390,11 @@ ROOM_UNSHARED = (
     const style = getComputedStyle(cell);
     return parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
   };
-  const lineOf = (cell) => {
+  // A column's share is counted here, never read from the sheet it judges:
+  // the region over one more than the columns it shows, less a cell's padding.
+  const lineOf = (cell, share) => {
     const ruler = document.createElement('span');
-    ruler.style.cssText = 'position: absolute; visibility: hidden; inline-size: min(var(--row-words), var(--share, 100vw))';
+    ruler.style.cssText = `position: absolute; visibility: hidden; inline-size: min(var(--row-words), ${share - padded(cell)}px)`;
     cell.append(ruler);
     const width = ruler.getBoundingClientRect().width;
     ruler.remove();
@@ -403,9 +406,14 @@ ROOM_UNSHARED = (
     const region = table.closest('.table-scroll');
     const heads = [...table.querySelectorAll(':scope > thead > tr:last-child > th')];
     if (!cells.length || !region || !heads.length) continue;
+    const share = region.clientWidth / (heads.filter((head) => head.checkVisibility()).length + 1);
     const ruler = table.cloneNode(true);
     ruler.setAttribute('aria-hidden', 'true');
     ruler.style.cssText += '; position: absolute; visibility: hidden; inset: 0 auto auto 0; inline-size: max-content; max-inline-size: none';
+    // A column held to its widest line by a width on its heading asks no more than its narrowest there.
+    ruler.querySelectorAll(':scope > thead th').forEach((head) => { head.style.inlineSize = 'auto'; });
+    // A short value whole is the value past its share.
+    ruler.querySelectorAll('.cell-short').forEach((box) => { box.style.maxInlineSize = 'none'; });
     table.after(ruler);
     // A cell is as tall as its row, so its words' own box says how many lines they take.
     const range = document.createRange();
@@ -422,10 +430,12 @@ ROOM_UNSHARED = (
       const at = whole.get(cell);
       if (!at) continue;
       const r = said(cell);
-      const line = lineOf(cell);
+      const line = lineOf(cell, share);
       const asks = Math.min(at.width - padded(cell), line);
+      // A value that keeps its line (a state, a row's controls) needs it whole.
+      const keeps = getComputedStyle(cell).whiteSpace === 'nowrap';
       const column = columns.get(cell.cellIndex) ?? {width: r.width, needs: 0, name: heads[cell.cellIndex]?.textContent.trim()};
-      column.needs = Math.max(column.needs, asks + padded(cell));
+      column.needs = Math.max(column.needs, (keeps ? at.width - padded(cell) : asks) + padded(cell));
       columns.set(cell.cellIndex, column);
       if (r.height > at.height + 2 && r.width - padded(cell) + 8 < asks && /\\S/.test(cell.innerText)) {
         squeezed.push({cell, short: asks - (r.width - padded(cell)), asks});
@@ -989,6 +999,35 @@ IDENTIFIER_VALUES = {
 }
 
 
+# A stacked row's field, and every value of a column a row fills a field in,
+# stands under its column's name: without it a reader of a row of choices
+# cannot tell whose each one is, as a rule's choice for each agent is. The
+# cell that names the row says what the row is, so it carries no name.
+VALUES_UNNAMED = (
+    "() => {"
+    + DESCRIBE
+    + """
+  const found = [];
+  const field = 'select, textarea, input:not([type="hidden"], [type="submit"], [type="button"])';
+  for (const table of document.querySelectorAll('main table.data-table')) {
+    if (!table.checkVisibility() || getComputedStyle(table).display !== 'block') continue;
+    const heads = [...table.querySelectorAll(':scope > thead > tr:last-child > th')];
+    const rows = [...table.querySelectorAll(':scope > tbody > tr:not(.row-detail)')].filter((row) => row.checkVisibility());
+    const valued = new Set(rows.flatMap((row) => [...row.cells].filter((cell) => cell.querySelector(field)).map((cell) => cell.cellIndex)));
+    for (const row of rows) {
+      const naming = row.querySelector(':scope > .select-column + *') || row.cells[0];
+      for (const cell of row.cells) {
+        const name = (heads[cell.cellIndex]?.textContent || '').trim();
+        if (cell === naming || !name || !valued.has(cell.cellIndex) || !cell.checkVisibility() || !cell.innerText.trim() && !cell.querySelector(field)) continue;
+        if (getComputedStyle(cell, '::before').content === 'none') found.push(`${describe(table)}: "${naming.innerText.trim().replace(/\\s+/g, ' ').slice(0, 24)}" stacks its value under "${name.slice(0, 24)}" without the column's name`);
+      }
+    }
+  }
+  return found;
+}"""
+)
+
+
 # The survey checks these probes answer (`probes/__init__.py`); the table
 # checks (`table=True`) are read again by the sweep of every width
 # (`BrowserGate.table_defects_at_every_width`) at the first width of each shape
@@ -1013,7 +1052,12 @@ CHECKS = {
         (CUT_BESIDE_ROOM, SELECTORS["unseen"]), table=True, reader_sees="a value cut while its row has room to show it"
     ),
     "room unshared": Check(
-        ROOM_UNSHARED, table=True, reader_sees="words a few to a line beside a column holding room it does not need"
+        ROOM_UNSHARED,
+        table=True,
+        reader_sees="words a few to a line beside a column holding room it does not need",
+    ),
+    "values named": Check(
+        VALUES_UNNAMED, table=True, reader_sees="a row's choices stacked with no name saying whose each one is"
     ),
     "empty panels": Check(EMPTY_PANELS, table=True, reader_sees="a panel in a table with nothing in it"),
     "rows unruled": Check(ROWS_UNRULED, table=True, reader_sees="two rows with no rule between them"),

@@ -16,7 +16,7 @@ from django.views.generic import (
 
 from hq.platform.application import related
 from hq.platform.application.documentation import SYNC
-from hq.platform.application.labels import dotted_html
+from hq.platform.application.labels import dotted
 from hq.platform.application.pages import PageAction, PageMixin, page_context
 from hq.platform.application.tables import (
     TableColumn,
@@ -154,10 +154,10 @@ class DocsDetailView(PageMixin, DetailView):
     @override
     def get_page_lede(self):
         record = self.object
-        return dotted_html(
-            format_html("<code>{}</code>", breakable(record.doc_id)),
-            record.get_doc_type_display(),
-            record.get_environment_display(),
+        return format_html(
+            "{} {} {} {}",
+            format_html("<code>{}</code>", breakable(record.doc_id, "·")),
+            breakable(dotted(record.get_doc_type_display(), record.get_environment_display())),
             status_pill(record.state),
             status_pill(record.get_sensitivity_display(), chip=True),
         )
