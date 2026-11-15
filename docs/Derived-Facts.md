@@ -419,7 +419,8 @@ HQ's own names end at HQ, with the address and port the request reached it on.
 the request (`request_path.joined`): the address it came from, the proxy that
 forwarded it and its headers, the name it asked for, an Access assertion. Each
 hop is proven, contradicted (a finding with its fix) or not shown by the
-request, and carries the admission layers decided there.
+request, and carries the request standard's checks decided there (each placed by
+`standards.Check.hop`).
 `request_path.request_path(request)` is the connection page's projection and
 the `request.path` read. HQ also records which devices reached it
 (`hq.request_path`, read by `request`: per source device, how it arrived, last
