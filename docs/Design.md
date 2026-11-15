@@ -393,9 +393,11 @@ a change. `tables.js` sorts the rows on the
 page: ascending, descending, then as they came. Amounts, dates and lengths
 of time sort as what they are; a cell may say its own value with `data-sort`.
 Sections keep their own rows. No table is drawn by hand, an extension's
-included: `hand_drawn_tables` in `plugin_testing` refuses one, and the host's
-suite runs it over every installed extension's templates.
-*Gate:* `test_any_table_sorts_by_a_heading`,
+included: ast-grep's `hand-drawn-table` refuses a table outside its region,
+in the host and through the plugin check in every extension, and the host's
+suite reads every installed extension's templates for a heading, a region or
+a drop rank written by hand.
+*Gate:* `hand-drawn-table`, `test_any_table_sorts_by_a_heading`,
 `test_every_table_is_declared_through_the_tags`.
 
 **A table is laid out before any script runs.** Nothing is measured to lay

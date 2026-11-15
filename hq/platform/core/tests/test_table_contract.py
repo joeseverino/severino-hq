@@ -13,7 +13,7 @@ from django.urls import reverse
 from hq.platform.application import asks
 from hq.platform.application.asks import Ask, Standing
 from hq.platform.application.markup_testing import all_elements, elements, links, select, with_class, within
-from hq.platform.application.plugin_testing import hand_drawn_tables, table_problems
+from hq.platform.application.plugin_testing import table_problems
 from hq.platform.application.routes import routed
 from hq.platform.application.tables import TableColumn, TableListMixin, ranked, typed
 from hq.platform.application.tests.reads import reads
@@ -40,7 +40,12 @@ class TableContractTests(SimpleTestCase):
     maxDiff = None
 
     def test_every_table_is_declared_through_the_tags(self):
-        problems = [problem for root in _template_roots() for problem in hand_drawn_tables(root)]
+        problems = [
+            f"{template.relative_to(root)}: {problem}"
+            for root in _template_roots()
+            for template in sorted(root.rglob("*.html"))
+            for problem in table_problems(template.read_text(encoding="utf-8"))
+        ]
         self.assertEqual(problems, [], "Draw these tables with {% table_region %} and {% table_heading %}.")
 
     def test_no_template_writes_what_the_region_derives(self):
@@ -61,7 +66,6 @@ class TableContractTests(SimpleTestCase):
 
     def test_a_hand_drawn_table_is_refused(self):
         bare = '<table class="data-table"><thead><tr><th>Name</th></tr></thead></table>'
-        self.assertIn("a data table outside {% table_region %}", table_problems(bare))
         wrapped = f'<div class="table-scroll">{bare}</div>'
         self.assertIn("a scroll region written by hand", table_problems(wrapped))
         in_region = '{% table_region "Things" %}' + bare + "{% endtable_region %}"

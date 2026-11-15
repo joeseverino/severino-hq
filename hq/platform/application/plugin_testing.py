@@ -151,9 +151,10 @@ def _unshared_tables(markup: str) -> list[str]:
 
 
 def table_problems(source: str) -> list[str]:
-    """What keeps a template's tables off the contract: a table outside its region,
-    a heading written by hand, a region written by hand, a dropped name column,
-    and a region or heading around a table the shared stylesheet does not draw."""
+    """What keeps a template's tables off the contract, past a table outside
+    its region (ast-grep's hand-drawn-table): a heading written by hand, a
+    region written by hand, a dropped name column, and a region or heading
+    around a table the shared stylesheet does not draw."""
 
     markup = "".join(_flatten(engines["django"].from_string(source).template.nodelist, []))
     problems = []
@@ -161,9 +162,6 @@ def table_problems(source: str) -> list[str]:
         problems.append("a scroll region written by hand")
     problems.extend(_unshared_tables(markup))
     for table in _TABLE.finditer(markup):
-        before = markup[: table.start()]
-        if before.count(_OPEN) <= before.count(_CLOSE):
-            problems.append("a data table outside {% table_region %}")
         body = markup[table.start() : markup.find("</table>", table.start())]
         for head in _HEAD.findall(body):
             if _HAND_HEADING.search(head):
@@ -172,19 +170,6 @@ def table_problems(source: str) -> list[str]:
             if first and first.group() == _DROPPED_HEADING:
                 problems.append("a drop rank on the column that names each row")
     return problems
-
-
-def hand_drawn_tables(template_root: str | Path) -> list[str]:
-    """Tables an extension's templates draw by hand, which the host's script
-    neither sorts nor fits: every table is declared through ``{% table_region %}``
-    and ``{% table_heading %}``. Run from the extension's side like
-    ``undefined_style_classes``; returns "template.html: problem" strings."""
-
-    return [
-        f"{template.name}: {problem}"
-        for template in sorted(Path(template_root).rglob("*.html"))
-        for problem in table_problems(template.read_text(encoding="utf-8"))
-    ]
 
 
 def sibling(
