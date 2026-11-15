@@ -12,6 +12,7 @@ from django.test import TestCase, override_settings
 from hq.domains.control_plane.models import CapabilityRule, ManagedResource, OperationRequest
 from hq.platform.core.models import AgentIdentity, IdempotencyRecord
 
+from ..automation_runs import CANCEL
 from ..capabilities import capability_registry, run_capability
 from ..capability_policy import Rule, matrix, set_rule
 from ..controller import claim_next_operation
@@ -64,6 +65,17 @@ class QueuedRunTests(RunTestCase):
         )
         self.assertEqual(answer["operation"]["correlation"], "example-investigation-7")
         self.assertEqual(operation.resource.spec["revision"], REVISION)
+
+    def test_a_run_and_its_cancel_answer_how_each_stands_as_every_ask_does(self):
+        from ..asks import Asked
+
+        asked = self.ask(run_payload())
+        cancelled = self.ask({"operation_id": asked["operation"]["id"]}, key="example-cancel-1", name=CANCEL)
+
+        self.assertTrue(Asked.of(asked).standing.live, asked)
+        ended = Asked.of(cancelled).standing
+        self.assertFalse(ended.live, cancelled)
+        self.assertTrue(ended.label, cancelled)
 
     def test_the_claim_names_the_playbook_the_manifest_declares(self):
         self.supply(manifest(playbook="playbooks/linux/service_restart.yml"))

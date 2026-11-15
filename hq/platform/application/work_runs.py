@@ -466,10 +466,16 @@ def run_rows(operations: Iterable[OperationRequest], now: datetime | None = None
     found = list(operations)
     who = asked_by(found)
     now = now or timezone.now()
-    said = _untaken_of(JobState(operation.seen) for operation in found)
+    # Only a run or a scan waits on the playbook worker; the controller takes the rest.
+    said = _untaken_of(JobState(operation.seen) for operation in found if operation.action in _LISTED)
     return [
         _run_row(
-            operation, JobState(operation.seen), operation.title, now, who.get(str(operation.pk), NOBODY), untaken=said
+            operation,
+            JobState(operation.seen),
+            operation.title,
+            now,
+            who.get(str(operation.pk), NOBODY),
+            untaken=said if operation.action in _LISTED else "",
         )
         for operation in found
     ]

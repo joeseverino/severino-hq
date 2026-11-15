@@ -38,7 +38,7 @@ lazy from hq.platform.core.models import AuditLog
 from .automation_manifest import DottedName, ProcedureTerms
 from .command_fields import Describe
 from .integration_specs import CapabilitySpec
-from .resource_operations import OperationItem, Queued
+from .resource_operations import OperationAsked
 from .security import Capability, Principal
 from .ui import ended
 lazy from . import asks, automation_adoption, pages
@@ -51,7 +51,7 @@ lazy from .findings import rule_for
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
 lazy from .labels import effect_label
 lazy from .record_errors import PolicyError, RecordNotFound
-lazy from .resource_operations import Prepared, asked_fields, enqueue, serialize_operation
+lazy from .resource_operations import Prepared, asked_fields, enqueue, operation_asked
 lazy from .routes import reverse
 lazy from .work_runs import UNENDED, run_rows, run_url, seen_as_runs, standing_of
 
@@ -201,29 +201,23 @@ def _source(principal: Principal) -> ManagedResource:
     return models.ManagedResource.objects.select_for_update().get(key=SOURCE_KEY)
 
 
-class ScanAsked(asks.AskedAnswer):
-    """A scan of the automation source asked of HQ's playbook worker."""
-
-    queued: Queued
-    operation: OperationItem
-
-
 def scan_status_url(operation_id: str) -> str:
     """Where a page follows one scan, signed so it reports on nothing else."""
 
     return f"{reverse('control_plane:playbooks_status')}?watch={asks.watch_token({'scan': operation_id})}"
 
 
-def _scan_asked(operation: OperationRequest, *, queued: bool) -> ScanAsked:
+def _scan_asked(operation: OperationRequest, *, queued: bool) -> OperationAsked:
     """How the scan stands, saying nothing beyond its standing's own note."""
 
     scan = str(operation.pk)
-    asked = asks.Asked(scan_standing(scan) or asks.Standing(), scan_status_url(scan))
-    return {**asked.answer(), "queued": queued, "operation": serialize_operation(operation)}
+    return operation_asked(
+        operation, queued=queued, standing=scan_standing(scan) or asks.Standing(), status_url=scan_status_url(scan)
+    )
 
 
 @transaction.atomic
-def refresh(command: RefreshCommand, *, principal: Principal) -> ScanAsked:
+def refresh(command: RefreshCommand, *, principal: Principal) -> OperationAsked:
     """Queue one scan of the automation source for the worker, once per retry
     key, and answer the one already waiting while there is one."""
 

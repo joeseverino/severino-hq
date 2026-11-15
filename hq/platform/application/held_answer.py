@@ -107,7 +107,7 @@ def serialize_approval(held: ApprovalRequest) -> HeldRequest:
     }
 
 
-# The fields of an answer that carry the operation it queued: ``OperationQueued``'s
+# The fields of an answer that carry the operation it queued: ``OperationAsked``'s
 # ``operation``, and ``ResourceSaved``'s ``applying``, null where nothing was queued.
 _OPERATION_FIELDS = ("operation", "applying")
 

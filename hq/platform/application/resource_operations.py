@@ -9,7 +9,7 @@ import secrets
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Annotated, Any, Literal, NotRequired, TypedDict, cast
+from typing import Annotated, Any, Literal, TypedDict, cast
 
 from django.db import transaction
 from django.db.models import QuerySet
@@ -23,6 +23,7 @@ lazy from hq.platform.core.models import AuditLog
 
 from .adoption import NOTHING_LIVE_CHANGED, keep_out_declaration, observes_only, require_writable
 from .answer_fields import CallMessage
+from .asks import Asked, AskedAnswer, Standing
 from .cadence import ask, swept
 from .command_fields import Describe
 from .conditions import DRIFTED, PROBLEMS, holding
@@ -62,7 +63,7 @@ lazy from .machines import Machine, container_context
 lazy from .moments import when_day
 lazy from .resource_capabilities import public_dns_enabled, verb_words
 lazy from .tailnet import POLICY_KIND, device_at, may_reach, observer, policy_allowing
-lazy from .work_runs import WorkRun, run_rows, seen_as_runs, shown_result
+lazy from .work_runs import WorkRun, run_rows, seen_as_runs, shown_result, standing_of
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,26 +113,31 @@ class ResourceSaved(TypedDict):
 type Queued = Annotated[bool, Describe("Whether this call queued it; false when the same one was already waiting.")]
 
 
-class OperationQueued(TypedDict):
-    """An operation asked of the controller, and whether this call queued it."""
+class OperationAsked(AskedAnswer):
+    """An operation asked of a worker, as every ask answers: how it stands,
+    and the operation, and whether this call queued it."""
 
-    ok: Literal[True]
     queued: Queued
     operation: OperationItem
-    message: NotRequired[CallMessage]
 
 
-class RenewalAllowed(TypedDict):
-    """That the renewal is allowed, and why."""
+def operation_asked(
+    operation: OperationRequest,
+    *,
+    queued: bool,
+    message: str = "",
+    standing: Standing | None = None,
+    status_url: str = "",
+) -> OperationAsked:
+    """What asking for ``operation`` answers: how it stands as a list of work
+    says it (``work_runs.standing_of``) unless the caller words it, and
+    ``status_url`` where a page can follow it."""
 
-    allowed: Annotated[Literal[True], Describe("That renewing it is allowed.")]
-    explanation: Annotated[str, Describe("Why renewing it is allowed, in a sentence.")]
-
-
-class RenewalQueued(OperationQueued):
-    """A certificate renewal asked of the controller, and why it is allowed."""
-
-    policy: RenewalAllowed
+    if standing is None:
+        seen = seen_as_runs(OperationRequest.objects.filter(pk=operation.pk).select_related("resource")).get()
+        standing = standing_of(run_rows((seen,))[0])
+    asked = Asked(standing, status_url, message).answer()
+    return {**asked, "queued": queued, "operation": serialize_operation(operation)}
 
 
 class DeclarationForgotten(TypedDict):
@@ -396,7 +402,7 @@ def _queue_operation(
     action: str,
     require_enabled: bool = True,
     replaces: dict[str, Any] | None = None,
-) -> OperationQueued:
+) -> OperationAsked:
     def prepare() -> Prepared:
         if require_enabled and not resource.enabled:
             raise PolicyError("This record is switched off in HQ.")
@@ -419,17 +425,17 @@ def _queue_operation(
     operation, queued = enqueue(resource.key, action, prepare, idempotency_key=command.idempotency_key)
     said = requested(verb_words(action), resource.key, again=not queued)
     if not queued:
-        return {"ok": True, "queued": False, "operation": serialize_operation(operation), "message": said}
+        return operation_asked(operation, queued=False, message=said)
     # Every operation a person or credential asks for is created here, a
     # capability's or not, so this rings for all of them; with the runner's
     # ring in the same commit it is one ring.
     ask()
-    return {"ok": True, "queued": True, "operation": serialize_operation(operation), "message": said}
+    return operation_asked(operation, queued=True, message=said)
 
 
 def queue_reconcile(
     resource: ManagedResource, *, principal: Principal, reason: str, replaces: dict[str, Any] | None = None
-) -> OperationQueued:
+) -> OperationAsked:
     """Queue a reconcile of a declaration just written, as the write's own act.
 
     For a service that writes a declaration under its own capability (the
@@ -451,7 +457,7 @@ def request_reconcile(
     *,
     principal: Principal,
     current_key: str,
-) -> OperationQueued:
+) -> OperationAsked:
     resource = _resource_for_operation(current_key)
 
     if PROVIDERS[resource.kind].public_effect and not public_dns_enabled():
@@ -532,7 +538,7 @@ def _request_lifecycle(
     principal: Principal,
     current_key: str,
     action: str,
-) -> OperationQueued:
+) -> OperationAsked:
     """Ask the controller to start, stop or restart what a declaration names.
 
     Not reconciliation: cycling a container is asked for once, about something
@@ -590,19 +596,19 @@ def unit_gap(resource: ManagedResource) -> Sentence:
     return UNIT_OUT_OF_REACH if found is not None and not found.reachable else ""
 
 
-def request_restart(command: OperationCommand, *, principal: Principal, current_key: str) -> OperationQueued:
+def request_restart(command: OperationCommand, *, principal: Principal, current_key: str) -> OperationAsked:
     return _request_lifecycle(
         command, principal=principal, current_key=current_key, action=OperationRequest.Action.RESTART
     )
 
 
-def request_start(command: OperationCommand, *, principal: Principal, current_key: str) -> OperationQueued:
+def request_start(command: OperationCommand, *, principal: Principal, current_key: str) -> OperationAsked:
     return _request_lifecycle(
         command, principal=principal, current_key=current_key, action=OperationRequest.Action.START
     )
 
 
-def request_stop(command: OperationCommand, *, principal: Principal, current_key: str) -> OperationQueued:
+def request_stop(command: OperationCommand, *, principal: Principal, current_key: str) -> OperationAsked:
     return _request_lifecycle(
         command, principal=principal, current_key=current_key, action=OperationRequest.Action.STOP
     )
@@ -660,7 +666,7 @@ def request_removal(
     *,
     principal: Principal,
     current_key: str,
-) -> OperationQueued | DeclarationForgotten:
+) -> OperationAsked | DeclarationForgotten:
     """Queue removal of the thing this declaration describes.
 
     Not a plain row delete: the record lives at a provider, so forgetting the
@@ -724,7 +730,7 @@ def request_route_approval(
     *,
     principal: Principal,
     current_key: str,
-) -> OperationQueued:
+) -> OperationAsked:
     """Approve the routes a tailnet device is already advertising.
 
     The remedy the "advertises routes nothing approved" finding names. HQ does
@@ -819,15 +825,9 @@ def request_certificate_renewal(
     *,
     principal: Principal,
     current_key: str,
-) -> RenewalQueued:
+) -> OperationAsked:
     resource = _resource_for_operation(current_key)
     allowed, explanation = certificate_renewal_allowed(resource)
     if not allowed:
         raise PolicyError(explanation)
-    result = _queue_operation(
-        resource,
-        command,
-        principal=principal,
-        action=OperationRequest.Action.RENEW,
-    )
-    return {**result, "policy": {"allowed": True, "explanation": explanation}}
+    return _queue_operation(resource, command, principal=principal, action=OperationRequest.Action.RENEW)

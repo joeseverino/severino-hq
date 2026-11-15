@@ -4821,7 +4821,7 @@
         },
         "description": "Success."
       },
-      "OperationQueuedDeclarationForgottenSuccess": {
+      "OperationAskedDeclarationForgottenSuccess": {
         "content": {
           "application/json": {
             "schema": {
@@ -4830,8 +4830,8 @@
                 "data": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/OperationQueued",
-                      "title": "Operation queued"
+                      "$ref": "#/components/schemas/OperationAsked",
+                      "title": "Operation asked"
                     },
                     {
                       "$ref": "#/components/schemas/DeclarationForgotten",
@@ -4854,14 +4854,14 @@
         },
         "description": "Success."
       },
-      "OperationQueuedSuccess": {
+      "OperationAskedSuccess": {
         "content": {
           "application/json": {
             "schema": {
               "additionalProperties": false,
               "properties": {
                 "data": {
-                  "$ref": "#/components/schemas/OperationQueued"
+                  "$ref": "#/components/schemas/OperationAsked"
                 },
                 "ok": {
                   "$ref": "#/components/schemas/Outcome",
@@ -5119,30 +5119,6 @@
         },
         "description": "Success."
       },
-      "RenewalQueuedSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/RenewalQueued"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
-            }
-          }
-        },
-        "description": "Success."
-      },
       "RequestTooLarge": {
         "content": {
           "application/json": {
@@ -5229,30 +5205,6 @@
               "properties": {
                 "data": {
                   "$ref": "#/components/schemas/ResourceSaved"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
-            }
-          }
-        },
-        "description": "Success."
-      },
-      "ScanAskedSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/ScanAsked"
                 },
                 "ok": {
                   "$ref": "#/components/schemas/Outcome",
@@ -13549,6 +13501,35 @@
         "description": "What it does: `reconcile`, `renew`, `delete`, `restart`, `start`, `stop`, `approve-routes`, `run` or `scan`.",
         "type": "string"
       },
+      "OperationAsked": {
+        "additionalProperties": false,
+        "description": "An operation asked of a worker, as every ask answers: how it stands,\nand the operation, and whether this call queued it.",
+        "properties": {
+          "message": {
+            "$ref": "#/components/schemas/AskedMessage"
+          },
+          "operation": {
+            "$ref": "#/components/schemas/OperationItem"
+          },
+          "queued": {
+            "$ref": "#/components/schemas/Queued"
+          },
+          "standing": {
+            "$ref": "#/components/schemas/StandingAnswer"
+          },
+          "status_url": {
+            "$ref": "#/components/schemas/AskedStatusUrl"
+          }
+        },
+        "required": [
+          "standing",
+          "status_url",
+          "message",
+          "queued",
+          "operation"
+        ],
+        "type": "object"
+      },
       "OperationCommand": {
         "additionalProperties": false,
         "description": "The command: the fields its input schema names.",
@@ -13642,26 +13623,6 @@
           "attempt_count",
           "result",
           "correlation"
-        ],
-        "type": "object"
-      },
-      "OperationQueued": {
-        "additionalProperties": false,
-        "description": "An operation asked of the controller, and whether this call queued it.",
-        "properties": {
-          "message": {
-            "$ref": "#/components/schemas/CallMessage"
-          },
-          "operation": {
-            "$ref": "#/components/schemas/OperationItem"
-          },
-          "queued": {
-            "$ref": "#/components/schemas/Queued"
-          }
-        },
-        "required": [
-          "queued",
-          "operation"
         ],
         "type": "object"
       },
@@ -15998,50 +15959,6 @@
         "description": "What running it does, in its command's own terms: `read`, `remote_write` or `infrastructure_change`. A `destructive` one is never suggested.",
         "type": "string"
       },
-      "RenewalAllowed": {
-        "additionalProperties": false,
-        "description": "That the renewal is allowed, and why.",
-        "properties": {
-          "allowed": {
-            "const": true,
-            "description": "That renewing it is allowed.",
-            "type": "boolean"
-          },
-          "explanation": {
-            "description": "Why renewing it is allowed, in a sentence.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "allowed",
-          "explanation"
-        ],
-        "type": "object"
-      },
-      "RenewalQueued": {
-        "additionalProperties": false,
-        "description": "A certificate renewal asked of the controller, and why it is allowed.",
-        "properties": {
-          "message": {
-            "$ref": "#/components/schemas/CallMessage"
-          },
-          "operation": {
-            "$ref": "#/components/schemas/OperationItem"
-          },
-          "policy": {
-            "$ref": "#/components/schemas/RenewalAllowed"
-          },
-          "queued": {
-            "$ref": "#/components/schemas/Queued"
-          }
-        },
-        "required": [
-          "queued",
-          "operation",
-          "policy"
-        ],
-        "type": "object"
-      },
       "RepositoryPart": {
         "additionalProperties": false,
         "properties": {
@@ -16721,35 +16638,6 @@
             "type": "string"
           }
         },
-        "type": "object"
-      },
-      "ScanAsked": {
-        "additionalProperties": false,
-        "description": "A scan of the automation source asked of HQ's playbook worker.",
-        "properties": {
-          "message": {
-            "$ref": "#/components/schemas/AskedMessage"
-          },
-          "operation": {
-            "$ref": "#/components/schemas/OperationItem"
-          },
-          "queued": {
-            "$ref": "#/components/schemas/Queued"
-          },
-          "standing": {
-            "$ref": "#/components/schemas/StandingAnswer"
-          },
-          "status_url": {
-            "$ref": "#/components/schemas/AskedStatusUrl"
-          }
-        },
-        "required": [
-          "standing",
-          "status_url",
-          "message",
-          "queued",
-          "operation"
-        ],
         "type": "object"
       },
       "ScanChange": {
@@ -19765,7 +19653,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/OperationQueuedSuccess"
+            "$ref": "#/components/responses/OperationAskedSuccess"
           },
           "202": {
             "$ref": "#/components/responses/AwaitingApprovalAccepted"
@@ -19836,7 +19724,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/ScanAskedSuccess"
+            "$ref": "#/components/responses/OperationAskedSuccess"
           },
           "202": {
             "$ref": "#/components/responses/AwaitingApprovalAccepted"
@@ -20191,7 +20079,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/RenewalQueuedSuccess"
+            "$ref": "#/components/responses/OperationAskedSuccess"
           },
           "202": {
             "$ref": "#/components/responses/AwaitingApprovalAccepted"
@@ -21950,7 +21838,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/OperationQueuedSuccess"
+            "$ref": "#/components/responses/OperationAskedSuccess"
           },
           "202": {
             "$ref": "#/components/responses/AwaitingApprovalAccepted"
@@ -22033,7 +21921,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/OperationQueuedDeclarationForgottenSuccess"
+            "$ref": "#/components/responses/OperationAskedDeclarationForgottenSuccess"
           },
           "202": {
             "$ref": "#/components/responses/AwaitingApprovalAccepted"
@@ -22104,7 +21992,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/OperationQueuedSuccess"
+            "$ref": "#/components/responses/OperationAskedSuccess"
           },
           "202": {
             "$ref": "#/components/responses/AwaitingApprovalAccepted"
@@ -22175,7 +22063,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/OperationQueuedSuccess"
+            "$ref": "#/components/responses/OperationAskedSuccess"
           },
           "202": {
             "$ref": "#/components/responses/AwaitingApprovalAccepted"
@@ -22246,7 +22134,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/OperationQueuedSuccess"
+            "$ref": "#/components/responses/OperationAskedSuccess"
           },
           "202": {
             "$ref": "#/components/responses/AwaitingApprovalAccepted"
@@ -23900,7 +23788,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/OperationQueuedSuccess"
+            "$ref": "#/components/responses/OperationAskedSuccess"
           },
           "202": {
             "$ref": "#/components/responses/AwaitingApprovalAccepted"

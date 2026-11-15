@@ -55,7 +55,14 @@ lazy from .labels import effect_label, lower_first
 lazy from .machines import machine_catalog
 lazy from .moments import ago, moment, when
 lazy from .payload_words import ChangeRow, field_words, value_words
-lazy from .resource_operations import OperationQueued, Prepared, asked_fields, enqueue, serialize_operation
+lazy from .resource_operations import (
+    OperationAsked,
+    Prepared,
+    asked_fields,
+    enqueue,
+    operation_asked,
+    serialize_operation,
+)
 lazy from .routes import reverse
 lazy from .run_reads import RUNS
 lazy from .service_context import Cell, ServiceSection, machines_cell, recent_work
@@ -438,7 +445,7 @@ def _holder_cancel(holding: dict[str, Any], principal: Principal | None) -> Page
 
 
 @transaction.atomic
-def request_run(manifest: OperationManifest, command: RunCommand, *, principal: Principal) -> OperationQueued:
+def request_run(manifest: OperationManifest, command: RunCommand, *, principal: Principal) -> OperationAsked:
     """Queue one run of ``manifest`` for the automation worker, once per retry key.
 
     A read takes no retry key, so its run is keyed afresh (``enqueue``):
@@ -477,12 +484,12 @@ def request_run(manifest: OperationManifest, command: RunCommand, *, principal: 
         same=bound,
     )
     if not queued:
-        return {"ok": True, "queued": False, "operation": serialize_operation(operation)}
+        return operation_asked(operation, queued=False)
     OperationHost.objects.bulk_create(OperationHost(operation=operation, host=host) for host in bound["hosts"])
     # The worker pulls the run over the bridge; the ring only says one waits,
     # and only once it is stored for the claim to find.
     ask(doorbell="automation")
-    return {"ok": True, "queued": True, "operation": serialize_operation(operation)}
+    return operation_asked(operation, queued=True)
 
 
 CANCEL = "automation.run.cancel"
@@ -542,7 +549,7 @@ def _asked_it(operation: OperationRequest, principal: Principal) -> bool:
 
 
 @transaction.atomic
-def cancel_run(command: CancelRunCommand, *, principal: Principal) -> OperationQueued:
+def cancel_run(command: CancelRunCommand, *, principal: Principal) -> OperationAsked:
     """Cancel a run nothing has claimed, so it holds its playbook and machines no more.
 
     A claimed run is left to its runner, which ends it or lets its lease run
@@ -570,7 +577,7 @@ def cancel_run(command: CancelRunCommand, *, principal: Principal) -> OperationQ
         "reason": CANCELLED_REASON,
     }
     operation.save(update_fields=("state", "completed_at", "result", "updated_at"))
-    return {"ok": True, "queued": False, "operation": serialize_operation(operation)}
+    return operation_asked(operation, queued=False)
 
 
 def _offers_cancel(state: str, effect: str, principal: Principal) -> bool:

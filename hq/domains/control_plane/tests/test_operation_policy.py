@@ -231,6 +231,22 @@ class OperationPolicyTests(TestCase):
         "hq.platform.application.resource_operations.controller_action_policy",
         return_value=(True, "active"),
     )
+    def test_an_operation_answers_how_it_stands_as_every_ask_does(self, _policy):
+        from hq.platform.application.asks import Asked
+
+        answer = request_reconcile(
+            OperationCommand(idempotency_key="stands"), principal=cli_principal(), current_key=self.resource.key
+        )
+
+        asked = Asked.of(answer)
+        self.assertTrue(asked.standing.live)
+        self.assertEqual(answer["operation"]["state"], OperationRequest.State.QUEUED)
+        self.assertTrue(asked.message)
+
+    @patch(
+        "hq.platform.application.resource_operations.controller_action_policy",
+        return_value=(True, "active"),
+    )
     def test_a_retry_answers_what_its_first_call_queued_however_the_record_stands_now(self, _policy):
         """A client that lost the first answer learns what it did, and nothing is asked twice."""
 

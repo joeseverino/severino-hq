@@ -33,6 +33,7 @@ from hq.platform.application.integrations import held_graph
 from hq.platform.application.pages import page_context
 from hq.platform.application.payload_words import value_words
 from hq.platform.application.refusal_status import refusal_of
+from hq.platform.application.resource_operations import OperationAsked
 from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.service_context import Cell, ServiceSection
 from hq.platform.application.ui import MISSING
@@ -71,16 +72,17 @@ def _result_projection(payload: dict) -> tuple[tuple[tuple[str, str], ...], Serv
     return facts, _result_table(*listed) if listed else None
 
 
-# What a command that queues work answers beside it: whether this call queued
-# it, which the work's own row says as its state.
-_QUEUED_WORK = frozenset({"ok", "queued", "operation"})
+# What a command that queues work answers: how it stands and whether this
+# call queued it, which the work's own row says as its state.
+_QUEUED_WORK = OperationAsked.__required_keys__ | OperationAsked.__optional_keys__
 
 
 def _only_queues(payload: dict) -> bool:
-    """Whether a result says only that work was queued, so the page draws no
-    result: the work stands in its own row, among its runs or on Jobs."""
+    """Whether a result says only that work was queued, with no sentence of
+    its own, so the page draws no result: the work stands in its own row,
+    among its runs or on Jobs."""
 
-    return "operation" in payload and set(payload) <= _QUEUED_WORK
+    return "operation" in payload and set(payload) <= _QUEUED_WORK and not payload.get("message")
 
 
 def _is_flat_records(value: object) -> bool:
