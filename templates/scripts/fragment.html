@@ -1,0 +1,7 @@
+{% load static %}{% comment %}
+fragment.js with every frame it clones: a notice of each tone, the warning
+that ends in a link, and the messages' list. A page loads the script only
+through this part (ScriptFrameTests), so no page has it without its frames.
+{% endcomment %}{% include "partials/_notice_frames.html" %}
+{% include "partials/_messages.html#frame" %}
+<script src="{% static 'js/fragment.js' %}" {% csp_nonce_attr %} defer></script>

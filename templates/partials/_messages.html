@@ -1,8 +1,10 @@
 {% comment %}
 Messages: what a post said of how it went, first in the page's content
 (base.html), each line a notice of its message's tone. fragment.js adds a
-line an answer in place brings by cloning the frame below: the list with its
-one error line, or the line alone where the list is drawn.
+line an answer in place brings by cloning `#frame`: the list with its one
+error line, or the line alone where the list is drawn. The frame is drawn
+with the script (scripts/fragment.html), outside the content an answer
+replaces.
 {% endcomment %}
 {% if messages %}
   <ul class="messages">
@@ -11,4 +13,4 @@ one error line, or the line alone where the list is drawn.
     {% endfor %}
   </ul>
 {% endif %}
-<template data-messages><ul class="messages"><li>{% notice tone="error" %}{% endnotice %}</li></ul></template>
+{% partialdef frame %}<template data-messages><ul class="messages"><li>{% notice tone="error" %}{% endnotice %}</li></ul></template>{% endpartialdef %}

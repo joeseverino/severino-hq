@@ -23,7 +23,7 @@ from hq.platform.core.tests.browser.serving import NONCE, ORIGIN
 # the form a posting button posts.
 _PAGE = """{% load stylesheet_tags %}<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>{{ title }}</title>
-{% stylesheets %}<script defer src="{{ static }}js/fragment.js" nonce="{{ nonce }}"></script>
+{% stylesheets %}{% include "scripts/fragment.html" %}
 <script defer src="{{ static }}js/app.js" nonce="{{ nonce }}"></script></head>
 <body><main class="content">{{ content }}</main>
 <form id="hq-post" method="post" hidden></form></body></html>"""
@@ -60,7 +60,7 @@ def _page(content, title="Example", **values):
 
     drawn = Template("{% load table_tags %}" + content).render(Context(values))
     return Template(_PAGE).render(
-        Context({"static": settings.STATIC_URL, "nonce": NONCE, "content": drawn, "title": title})
+        Context({"static": settings.STATIC_URL, "nonce": NONCE, "csp_nonce": NONCE, "content": drawn, "title": title})
     )
 
 

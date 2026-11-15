@@ -18,9 +18,10 @@ const hqRoundTrip = (() => {
     }).then(() => performance.now() - started);
   };
 
-  // The readout the server draws (_connection_loading.html). Its bars are the
-  // samples the figure is taken over: the recent path, not the whole visit.
-  const frame = () => document.querySelector("template[data-rtt-live]")?.content.firstElementChild;
+  // The readout the server draws with this script (scripts/connection.html).
+  // Its bars are the samples the figure is taken over: the recent path, not
+  // the whole visit.
+  const frame = () => document.querySelector("template[data-rtt-live]").content.firstElementChild;
 
   const render = (slot, runs) => {
     const best = Math.min(...runs);
@@ -41,8 +42,7 @@ const hqRoundTrip = (() => {
   };
 
   const start = (slot, endpoint) => {
-    const bars = frame()?.querySelectorAll(".conn-samples > i").length;
-    if (!bars) return;
+    const bars = frame().querySelectorAll(".conn-samples > i").length;
     const runs = [];
     // Sampled by the shared loop, which leaves a hidden tab alone: nobody is
     // reading the figure there.

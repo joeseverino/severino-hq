@@ -4,7 +4,6 @@ import re
 from typing import override
 from urllib.parse import parse_qsl, urlsplit
 
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.template import Context, Template
@@ -18,11 +17,10 @@ from hq.platform.core.tests.browser.probes.settle import SETTLE
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import NONCE, ORIGIN
 
-# fragment.js, with the empty notices it clones, which base.html draws on
-# every page HQ serves.
-_FRAGMENT_JS = f'<script defer src="{settings.STATIC_URL}js/fragment.js" nonce="{NONCE}"></script>' + render_to_string(
-    "partials/_notice_frames.html"
-)
+# fragment.js and ask.js, each through the part that draws the frames it
+# clones, as base.html loads them.
+_FRAGMENT_JS = render_to_string("scripts/fragment.html", {"csp_nonce": NONCE})
+_ASK_JS = render_to_string("scripts/ask.html", {"csp_nonce": NONCE})
 
 # A region that polls and names its parts, a disclosure and a menu, a
 # placeholder behind a closed disclosure, and one whose address answers a
@@ -131,7 +129,7 @@ def _asking_dialog_probe():
     return (
         f"""<!doctype html><html><head><title>Probe</title>
 {_FRAGMENT_JS}
-<script defer src="{settings.STATIC_URL}js/ask.js" nonce="{NONCE}"></script>
+{_ASK_JS}
 </head><body><main>
 <button type="button" data-probe="open" command="show-modal" commandfor="modal-probe">Open</button>
 {dialog}
@@ -158,7 +156,7 @@ def _asking_head_probe():
     )
     scripts = f"""<!doctype html><html><head><title>Probe</title>
 {_FRAGMENT_JS}
-<script defer src="{settings.STATIC_URL}js/ask.js" nonce="{NONCE}"></script>
+{_ASK_JS}
 </head><body>"""
     return [
         scripts + _ASKING_HEAD.format(head=head, said=said, control=control) + "</body></html>"

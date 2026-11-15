@@ -22,7 +22,7 @@ def probe(markup, **values):
     holds a name (``breakable``) would pass it as it is."""
 
     return Template(_PROBE_PAGE + markup + "</main></body></html>").render(
-        Context({"static": settings.STATIC_URL, "nonce": NONCE, **values})
+        Context({"static": settings.STATIC_URL, "nonce": NONCE, "csp_nonce": NONCE, **values})
     )
 
 

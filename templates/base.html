@@ -45,8 +45,6 @@
   {% endpage_main %}
   {# What the head's expect link waits for: the content above is parsed. #}
   <template id="parsed"></template>
-  {% include "partials/_notice_frames.html" %}
-  {% include "partials/_ask.html#frames" %}
   {% include "partials/_tip.html" %}
 
   {% block site_footer %}
@@ -74,11 +72,12 @@
     {% endif %}
   {% endif %}
 
-  <script src="{% static 'js/fragment.js' %}" {% csp_nonce_attr %} defer></script>
+  {# A script that clones frames loads with them, through its part. #}
+  {% include "scripts/fragment.html" %}
   <script src="{% static 'js/tables.js' %}" {% csp_nonce_attr %} defer></script>
   <script src="{% static 'js/app.js' %}" {% csp_nonce_attr %} defer></script>
-  <script src="{% static 'js/ask.js' %}" {% csp_nonce_attr %} defer></script>
-  <script src="{% static 'js/connection.js' %}" {% csp_nonce_attr %} defer></script>
+  {% include "scripts/ask.html" %}
+  {% include "scripts/connection.html" %}
   {% block scripts_extra %}{% endblock %}
 </body>
 </html>

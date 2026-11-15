@@ -1,0 +1,6 @@
+{% load static %}{% comment %}
+connection.js with the frame it clones, the live round trip
+`_connection_loading.html#frame` draws. A page loads the script only through
+this part (ScriptFrameTests), so no page has it without its frame.
+{% endcomment %}{% include "partials/_connection_loading.html#frame" %}
+<script src="{% static 'js/connection.js' %}" {% csp_nonce_attr %} defer></script>
