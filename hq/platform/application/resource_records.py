@@ -292,6 +292,24 @@ class LayerPart(TypedDict):
     rules: Annotated[list[str], Describe("The rules behind it, where what decides it has rules.")]
 
 
+class StandardCheckPart(TypedDict):
+    id: Annotated[str, Describe("The check's stable id, such as `tailnet-lock`.")]
+    label: Annotated[str, Describe("What is true when it is met, in words.")]
+    met: Annotated[bool | None, Describe("Whether it is met; null when HQ could not read it.")]
+    evidence: Annotated[str, Describe("What it was judged from, or why HQ could not read it; empty for none.")]
+    qualified: Annotated[bool, Describe("Met, with a limit the reader should see.")]
+    stops: Annotated[str, Describe("What it stops, as a clause.")]
+    remedy: Annotated[str | None, Describe("What would let HQ read a check it could not; null for none.")]
+    remedy_url: Annotated[str | None, Describe("Where that is done; null for none.")]
+
+
+class StandardPart(TypedDict):
+    advanced: Annotated[bool, Describe("Whether Advanced HQ Posture raises each unmet check as a finding.")]
+    met: Annotated[int, Describe("How many checks are met.")]
+    unread: Annotated[int, Describe("How many checks HQ could not read.")]
+    checks: list[StandardCheckPart]
+
+
 class ObservedPart(TypedDict):
     relation: Annotated[str, Describe("What the reading says the hostname is to it, such as `Served by`.")]
     name: Annotated[str, Describe("What answers for the hostname, by name.")]

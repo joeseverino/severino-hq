@@ -39,7 +39,7 @@ from .labels import lower_first
 from .ui import ended
 from .workflow_contracts import ActionLink
 lazy from .container_standard import STANDARD
-lazy from .standards import UNMET
+lazy from .standards import Standing
 lazy from .upgrades import OVERRIDES, plan_for
 
 # Why an update is a person's to apply.
@@ -303,7 +303,7 @@ def _hardening(item: Container, subject: str) -> Iterator[Finding]:
     """The serious checks the container fails, as one finding about it.
     Hardening waits on its page; reach over a machine does not."""
 
-    failed = [check for check in STANDARD if check.serious and item.posture.state_of(check.id) == UNMET]
+    failed = [check for check in STANDARD if check.serious and item.posture.state_of(check.id) == Standing.UNMET]
     if not failed:
         return
     level, reached = _reach([item])

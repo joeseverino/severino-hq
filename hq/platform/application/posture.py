@@ -3,7 +3,6 @@
 With ``SEVERINO_POSTURE=advanced`` each unmet check is also a finding.
 """
 
-from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -11,7 +10,6 @@ from django.conf import settings
 from django.utils.text import capfirst
 
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_POLICY_KIND
-from hq.platform.application.labels import dotted
 from hq.platform.core.oidc import sso_only
 lazy from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
@@ -19,6 +17,7 @@ lazy from hq.domains.control_plane.observations.host import FIREWALL_KIND, TAILN
 lazy from hq.domains.control_plane.providers import PROVIDERS, registry_label
 
 from .connection_contracts import UNKNOWN_CREDENTIAL
+from .standards import Check, Measurement, Reading, Standing, measure
 from .ui import counted
 lazy from . import cadence, tailnet
 lazy from .connection_security import host_firewall_control, ingress_kinds, observed_connection_controls
@@ -30,126 +29,8 @@ lazy from .github_estate import REPOSITORY_KIND
 lazy from .hq_context.release_part import repository
 lazy from .hq_self import hq_hostnames
 lazy from .integration_validation import required_capability_names
+lazy from .resource_records import StandardPart
 lazy from .routes import reverse
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class CheckOutcome:
-    """``met`` is None when there is nothing to read it from."""
-
-    met: bool | None
-    evidence: str
-    # Met, with a limit the reader should see: a login whose service offers
-    # nothing narrower is the best it can be, not a clean pass.
-    qualified: bool = False
-    # What would let HQ read an unread check, and where that is done.
-    remedy: str = ""
-    remedy_url: str = ""
-    # What a reader must hold to be told the evidence: the read gates of the
-    # connection families whose instances it names. Empty for evidence that
-    # names nothing a family gates.
-    read_capabilities: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True, slots=True)
-class PostureCheck:
-    id: str
-    label: str
-    # The finding's title.
-    unmet: str
-    # Read after "Stops" in the check's sentence.
-    stops: str
-    # The panel's sentence when it is met.
-    holds: str
-    step: str
-    read: Callable[[Inputs], CheckOutcome]
-
-
-@dataclass(frozen=True, slots=True)
-class CheckStanding:
-    check: PostureCheck
-    reading: CheckOutcome
-    # Under Advanced HQ Posture an unmet check is a fault; otherwise it is
-    # an open item, shown quietly.
-    enforced: bool = False
-
-    @property
-    def met(self) -> bool:
-        return self.reading.met is True
-
-    @property
-    def state(self) -> str:
-        if self.met and not self.reading.qualified:
-            return "good"
-        return "attention" if self.enforced and self.reading.met is False else "neutral"
-
-    @property
-    def icon(self) -> str:
-        """A tick for met, a cross for a fault, a clock for not read yet: an
-        unread check is waiting on a reading, not failing."""
-
-        if self.met:
-            return "check-circle"
-        if self.reading.met is None:
-            return "clock"
-        return "x-circle" if self.state == "attention" else "circle"
-
-
-@dataclass(frozen=True, slots=True)
-class Posture:
-    advanced: bool
-    standings: tuple[CheckStanding, ...]
-
-    @property
-    def met_count(self) -> int:
-        return sum(standing.met for standing in self.standings)
-
-    @property
-    def unread_count(self) -> int:
-        return sum(standing.reading.met is None for standing in self.standings)
-
-    @property
-    def count_line(self) -> str:
-        """ "5 of 7 met · not met: Tailnet lock is on · 1 not read yet": a count
-        names what it is short of, and an unread check is not counted as unmet."""
-
-        parts = [f"{self.met_count} of {len(self.standings)} met"]
-        if failing := [standing.check.label for standing in self.unmet]:
-            parts.append(f"not met: {', '.join(failing)}")
-        if self.unread_count:
-            parts.append(f"{self.unread_count} not read yet")
-        return dotted(*parts)
-
-    @property
-    def unmet(self) -> tuple[CheckStanding, ...]:
-        """The checks read and found failing; an unread one waits on its reading."""
-
-        return tuple(standing for standing in self.standings if standing.reading.met is False)
-
-    def as_dict(self) -> dict[str, Any]:
-        return {
-            "advanced": self.advanced,
-            "met": self.met_count,
-            "unread": self.unread_count,
-            "checks": [
-                {
-                    "id": standing.check.id,
-                    "label": standing.check.label,
-                    "met": standing.reading.met,
-                    "evidence": standing.reading.evidence,
-                    "qualified": standing.reading.qualified,
-                    "stops": standing.check.stops,
-                    # What would let HQ read a check not read yet.
-                    "remedy": standing.reading.remedy or None,
-                    "remedy_url": standing.reading.remedy_url or None,
-                }
-                for standing in self.standings
-            ],
-        }
-
-    @property
-    def guide(self) -> str:
-        return docs_url("Posture.md")
 
 
 def advanced() -> bool:
@@ -164,13 +45,14 @@ class Inputs:
     groups: tuple[Any, ...]
 
 
-def _from_control(control, kinds: tuple[str, ...]) -> CheckOutcome:
+def _from_control(control, kinds: tuple[str, ...]) -> Reading:
     """Evidence only when unmet: a met check's label says it."""
 
-    met = {"good": True, "neutral": None, "attention": None}.get(control.state, False)
-    if met is None:
+    if control.state == "good":
+        return Reading.met()
+    if control.state in {"neutral", "attention"}:
         return _not_read(kinds, held=control.detail)
-    return CheckOutcome(met=met, evidence="" if met else control.evidence)
+    return Reading.unmet(control.evidence)
 
 
 def _readers(kinds: tuple[str, ...]) -> tuple[str, ...]:
@@ -185,7 +67,7 @@ def _readers(kinds: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(found))
 
 
-def _not_read(kinds: tuple[str, ...], *, held: str = "") -> CheckOutcome:
+def _not_read(kinds: tuple[str, ...], *, held: str = "") -> Reading:
     """A check HQ could not judge, and why, as its evidence: no connection
     reads it (and which to add), no controller has run, the last read failed,
     no read has arrived yet, or ``held``, what the reading held instead of an
@@ -195,47 +77,36 @@ def _not_read(kinds: tuple[str, ...], *, held: str = "") -> CheckOutcome:
     readers = [provider for provider in _readers(kinds) if provider in CONNECTION_LABELS]
     if readers and not connected.intersection(readers):
         labels = " or ".join(CONNECTION_LABELS[provider] for provider in readers)
-        return CheckOutcome(
-            met=None, evidence=f"No {labels} connection reads it", remedy=f"connect {labels}", remedy_url=_setup_url()
-        )
+        return Reading.unavailable(f"No {labels} connection reads it", fix=f"connect {labels}", fix_url=_setup_url())
     if not cadence.controller_standing(present()).known:
-        return CheckOutcome(
-            met=None,
-            evidence="HQ has not read it",
-            remedy="run the controller",
-            remedy_url=reverse("control_plane:controller"),
+        return Reading.unavailable(
+            "HQ has not read it", fix="run the controller", fix_url=reverse("control_plane:controller")
         )
     stored = stored_snapshots()
     rows = [row for kind in kinds for row in stored.get(kind, ())]
     if failed := next((row for row in rows if not row.reachable), None):
         said = failed.error or f"The last read of {registry_label(failed.kind)} failed"
-        return CheckOutcome(met=None, evidence=said.rstrip("."))
+        return Reading.unavailable(said.rstrip("."))
     if rows:
         labels = " and ".join(dict.fromkeys(registry_label(row.kind) for row in rows))
-        return CheckOutcome(
-            met=None, evidence=held.rstrip(".") or f"The reading of {labels} holds nothing to judge it by"
-        )
+        return Reading.unavailable(held.rstrip(".") or f"The reading of {labels} holds nothing to judge it by")
     waited = " or ".join(dict.fromkeys(registry_label(kind) for kind in kinds)) or "it"
-    return CheckOutcome(met=None, evidence=f"Waiting on the first read of {waited}")
+    return Reading.unavailable(f"Waiting on the first read of {waited}")
 
 
 def _setup_url() -> str:
     return reverse("control_plane:connections") + "#connection-setup-heading"
 
 
-def _sign_in(_inputs) -> CheckOutcome:
-    return (
-        CheckOutcome(met=True, evidence="")
-        if sso_only()
-        else CheckOutcome(met=False, evidence="Password sign-in installed")
-    )
+def _sign_in(_inputs) -> Reading:
+    return Reading.met() if sso_only() else Reading.unmet("Password sign-in installed")
 
 
-def _edge(inputs) -> CheckOutcome:
+def _edge(inputs) -> Reading:
     return _from_control(inputs.edge, ingress_kinds())
 
 
-def _firewall(_inputs) -> CheckOutcome:
+def _firewall(_inputs) -> Reading:
     return _from_control(
         host_firewall_control(next(iter(stored_snapshots().get(FIREWALL_KIND, ())), None)), (FIREWALL_KIND,)
     )
@@ -255,29 +126,25 @@ def _allows_everyone(policy) -> bool:
     return grants or acls
 
 
-def _tailnet_policy(_inputs) -> CheckOutcome:
+def _tailnet_policy(_inputs) -> Reading:
     policy = tailnet.policy()
     if not policy.known and not policy.acls:
         return _not_read((TAILNET_POLICY_KIND,))
     if _allows_everyone(policy):
-        return CheckOutcome(met=False, evidence="An allow-all rule")
-    return CheckOutcome(met=True, evidence=counted(len(policy.grants) + len(policy.acls), "rule", "rules"))
+        return Reading.unmet("An allow-all rule")
+    return Reading.met(counted(len(policy.grants) + len(policy.acls), "rule", "rules"))
 
 
-def _tailnet_lock(_inputs) -> CheckOutcome:
+def _tailnet_lock(_inputs) -> Reading:
     lock = tailnet.policy().lock
     if not lock:
         # A read that failed keeps the last reading, so with none it says why.
         return _not_read((TAILNET_LOCK_KIND,))
     keys = len(lock.get("signers") or ())
-    return (
-        CheckOutcome(met=True, evidence=counted(keys, "signing key", "signing keys"))
-        if lock.get("enabled")
-        else CheckOutcome(met=False, evidence="Off")
-    )
+    return Reading.met(counted(keys, "signing key", "signing keys")) if lock.get("enabled") else Reading.unmet("Off")
 
 
-def _scope(inputs) -> CheckOutcome:
+def _scope(inputs) -> Reading:
     """Unmet only where the provider takes a scoped token (its setup lists
     permissions); a login has no scoped form."""
 
@@ -290,15 +157,14 @@ def _scope(inputs) -> CheckOutcome:
         if connection.instance.credential_model == "coarse" and connection.instance.kind in scoped
     ]
     if broad:
-        return CheckOutcome(
-            met=False,
-            evidence=f"Full account access: {', '.join(sorted(connection.instance.label for _, connection in broad))}",
+        return Reading.unmet(
+            f"Full account access: {', '.join(sorted(connection.instance.label for _, connection in broad))}",
             read_capabilities=_gates_of(group for group, _ in broad),
         )
     if not any(connection.instance.credential_model != "none" for connection in connections):
-        return CheckOutcome(met=None, evidence="No connections yet", remedy="add a connection", remedy_url=_setup_url())
+        return Reading.unavailable("No connections yet", fix="add a connection", fix_url=_setup_url())
     if any(connection.instance.credential_model == UNKNOWN_CREDENTIAL for connection in connections):
-        return CheckOutcome(met=None, evidence="Unknown credential type")
+        return Reading.unavailable("Unknown credential type")
     return _scoped_where_offered(connections, scoped)
 
 
@@ -308,7 +174,7 @@ def _gates_of(groups) -> tuple[str, ...]:
     return tuple(dict.fromkeys(name for group in groups for name in required_capability_names(group.spec)))
 
 
-def _scoped_where_offered(connections, scoped: set[str]) -> CheckOutcome:
+def _scoped_where_offered(connections, scoped: set[str]) -> Reading:
     """Met, said as what was checked: the scoped tokens, and the logins whose
     service offers nothing narrower, by name, so a whole-account login is never
     read as a clean pass."""
@@ -323,98 +189,124 @@ def _scoped_where_offered(connections, scoped: set[str]) -> CheckOutcome:
     if whole:
         said.append(f"nothing narrower offered for {', '.join(whole)}")
     evidence = ", ".join(said)
-    return CheckOutcome(met=True, evidence=capfirst(evidence), qualified=bool(whole))
+    return Reading.met(capfirst(evidence), limited=bool(whole))
 
 
-def _approval(_inputs) -> CheckOutcome:
+def _approval(_inputs) -> Reading:
     found = repository(None)
     if found is None:
         return _not_read((REPOSITORY_KIND,))
     production = found.production_environment
     if production is None:
-        return CheckOutcome(met=False, evidence="No production environment")
+        return Reading.unmet("No production environment")
     reviewers = production.get("reviewers") or ()
-    return (
-        CheckOutcome(met=True, evidence=f"Reviewers: {', '.join(reviewers)}")
-        if reviewers
-        else CheckOutcome(met=False, evidence="No reviewers")
-    )
+    return Reading.met(f"Reviewers: {', '.join(reviewers)}") if reviewers else Reading.unmet("No reviewers")
 
 
-STANDARD: tuple[PostureCheck, ...] = (
-    PostureCheck(
+# ``why`` is what each stops, read after "Stops" in its sentence.
+STANDARD: tuple[Check, ...] = (
+    Check(
         "edge",
         "The proxy lets in tailnet addresses only",
-        "The proxy lets in more than the tailnet",
-        "the proxy exposing HQ beyond the tailnet",
-        "The proxy refuses any address outside the tailnet.",
-        "Give HQ's proxy host an access list that allows the two tailnet ranges and denies everything else.",
         _edge,
+        "the proxy exposing HQ beyond the tailnet",
+        "Give HQ's proxy host an access list that allows the two tailnet ranges and denies everything else.",
+        unmet="The proxy lets in more than the tailnet",
+        holds="The proxy refuses any address outside the tailnet.",
     ),
-    PostureCheck(
+    Check(
         "host-firewall",
         "The firewall requires the tailnet interface",
-        "The firewall accepts HQ's port by address alone",
-        "a forged tailnet address arriving another way",
-        "The firewall drops a tailnet address that arrives on any other interface.",
-        "Accept HQ's port only on the tailnet interface in the host firewall.",
         _firewall,
+        "a forged tailnet address arriving another way",
+        "Accept HQ's port only on the tailnet interface in the host firewall.",
+        unmet="The firewall accepts HQ's port by address alone",
+        holds="The firewall drops a tailnet address that arrives on any other interface.",
     ),
-    PostureCheck(
+    Check(
         "tailnet-policy",
         "The tailnet policy has no allow-all rule",
-        "The tailnet policy lets every device reach every device",
-        "any device on the tailnet opening HQ",
-        "A device on the tailnet can open only what the policy allows it.",
-        "Replace the allow-all rule with grants that name who reaches HQ.",
         _tailnet_policy,
+        "any device on the tailnet opening HQ",
+        "Replace the allow-all rule with grants that name who reaches HQ.",
+        unmet="The tailnet policy lets every device reach every device",
+        holds="A device on the tailnet can open only what the policy allows it.",
     ),
-    PostureCheck(
+    Check(
         "tailnet-lock",
         "Tailnet lock is on",
-        "Tailnet lock is off",
-        "a device added to your tailnet without your key",
-        "A device added to your tailnet without your key is refused by tailnet lock.",
-        "Turn on tailnet lock, with signing keys on devices you hold.",
         _tailnet_lock,
+        "a device added to your tailnet without your key",
+        "Turn on tailnet lock, with signing keys on devices you hold.",
+        unmet="Tailnet lock is off",
+        holds="A device added to your tailnet without your key is refused by tailnet lock.",
     ),
-    PostureCheck(
+    Check(
         "sign-in",
         "Sign-in is single sign-on only",
-        "Password sign-in is installed",
-        "a guessed or reused password",
-        "Every session starts with single sign-on.",
-        "Turn password sign-in off in HQ's settings once single sign-on works.",
         _sign_in,
+        "a guessed or reused password",
+        "Turn password sign-in off in HQ's settings once single sign-on works.",
+        unmet="Password sign-in is installed",
+        holds="Every session starts with single sign-on.",
     ),
-    PostureCheck(
+    Check(
         "scope",
         "Each token is scoped where its service allows it",
-        "A full-account token is used where a scoped one is offered",
-        "a stolen token reaching the whole account",
-        "A stolen token reaches only what its scopes allow.",
-        "Replace the full-account token with a scoped one holding the permissions its connection lists.",
         _scope,
+        "a stolen token reaching the whole account",
+        "Replace the full-account token with a scoped one holding the permissions its connection lists.",
+        unmet="A full-account token is used where a scoped one is offered",
+        holds="A stolen token reaches only what its scopes allow.",
     ),
-    PostureCheck(
+    Check(
         "approval",
         "Deploys wait for your approval",
-        "Deploys do not wait for approval",
-        "a merge reaching production before you see it",
-        "Nothing reaches production until you approve it.",
-        "Add yourself as a required reviewer on the repository's production environment.",
         _approval,
+        "a merge reaching production before you see it",
+        "Add yourself as a required reviewer on the repository's production environment.",
+        unmet="Deploys do not wait for approval",
+        holds="Nothing reaches production until you approve it.",
     ),
 )
 
 
-def posture(inputs: Inputs) -> Posture:
-    enforced = advanced()
-    return Posture(enforced, tuple(CheckStanding(check, check.read(inputs), enforced) for check in STANDARD))
+def posture(inputs: Inputs) -> Measurement:
+    """HQ against its standard: under Advanced HQ Posture an unmet check is a
+    fault; otherwise an open item, shown quietly."""
+
+    return measure(inputs, STANDARD, enforced=advanced())
 
 
-def estate_posture(groups) -> Posture:
+def estate_posture(groups) -> Measurement:
     """For callers that have not read the proxy's control for HQ's name."""
 
     _policy, edge = observed_connection_controls(next(iter(hq_hostnames()), ""))
     return posture(Inputs(edge, tuple(groups)))
+
+
+def guide() -> str:
+    return docs_url("Posture.md")
+
+
+def as_part(found: Measurement) -> StandardPart:
+    """HQ's standard as the connections read answers it."""
+
+    return {
+        "advanced": found.enforced,
+        "met": found.met,
+        "unread": found.unread,
+        "checks": [
+            {
+                "id": result.check.id,
+                "label": result.check.label,
+                "met": None if result.state == Standing.UNAVAILABLE else result.met,
+                "evidence": result.reading.evidence,
+                "qualified": result.reading.limited,
+                "stops": result.check.why,
+                "remedy": result.reading.fix or None,
+                "remedy_url": result.reading.fix_url or None,
+            }
+            for result in found.results
+        ],
+    }

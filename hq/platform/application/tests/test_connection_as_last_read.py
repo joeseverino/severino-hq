@@ -126,14 +126,14 @@ class PanelTests(TestCase):
         from ..security import cli_principal
 
         unread = [
-            standing
-            for standing in estate_posture(connection_catalog(principal=cli_principal())).standings
-            if standing.reading.met is None
+            result
+            for result in estate_posture(connection_catalog(principal=cli_principal())).results
+            if result.state == "unavailable"
         ]
         page = self.panel()
 
         shown = {element.attrs["data-posture-unread"]: element.words for element in select(page, "data-posture-unread")}
         self.assertTrue(unread)
-        for standing in unread:
-            with self.subTest(check=standing.check.id):
-                self.assertIn(standing.reading.evidence, shown[standing.check.id])
+        for result in unread:
+            with self.subTest(check=result.check.id):
+                self.assertIn(result.reading.evidence, shown[result.check.id])

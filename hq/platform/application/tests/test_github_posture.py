@@ -21,7 +21,7 @@ from ..github_posture import (
 )
 from ..item_help import CANNOT, DO, RUN
 from ..repository_findings import PROJECTS
-from ..standards import INTENDED, MET, UNAVAILABLE, UNMET
+from ..standards import INTENDED, Standing
 from .markup import hrefs, select
 from .test_github_estate import store
 from .test_item_help import COMMAND, item_help
@@ -71,10 +71,10 @@ class PostureTests(TestCase):
 
         found = postures()[0]
 
-        self.assertEqual(found.state_of("secret-scanning"), MET)
-        self.assertEqual(found.state_of("push-protection"), UNMET)
-        self.assertEqual(found.state_of("deletion-blocked"), UNMET)
-        self.assertEqual(found.state_of("code-scanning"), MET)
+        self.assertEqual(found.state_of("secret-scanning"), Standing.MET)
+        self.assertEqual(found.state_of("push-protection"), Standing.UNMET)
+        self.assertEqual(found.state_of("deletion-blocked"), Standing.UNMET)
+        self.assertEqual(found.state_of("code-scanning"), Standing.MET)
         self.assertEqual(len(found.results), 14)
 
     def test_what_hq_could_not_read_is_unavailable_not_a_failure(self):
@@ -82,8 +82,8 @@ class PostureTests(TestCase):
 
         found = postures()[0]
 
-        self.assertEqual(found.state_of("only-you"), UNAVAILABLE)
-        self.assertEqual(found.state_of("secret-scanning"), UNAVAILABLE)
+        self.assertEqual(found.state_of("only-you"), Standing.UNAVAILABLE)
+        self.assertEqual(found.state_of("secret-scanning"), Standing.UNAVAILABLE)
         self.assertEqual((found.measured, raised_items()), (0, ()))
 
     def test_someone_gaining_reach_is_serious_and_drift_is_not(self):
@@ -474,11 +474,11 @@ class FollowingTheHostTests(TestCase):
             "example/alpha", "example/host/.github/workflows/plugin-checks.yml@main", "actions/checkout@v4"
         )
 
-        self.assertEqual(state, UNMET)
+        self.assertEqual(state, Standing.UNMET)
 
     def test_the_host_is_held_to_pinning_itself(self):
-        self.assertEqual(self.state("example/host", "example/host/.github/actions/admit-plugin@main"), UNMET)
+        self.assertEqual(self.state("example/host", "example/host/.github/actions/admit-plugin@main"), Standing.UNMET)
 
     @override_settings(SEVERINO_HQ_SOURCE="")
     def test_a_host_that_names_no_source_excuses_nothing(self):
-        self.assertEqual(self.state("example/alpha", "example/host/.github/actions/admit-plugin@main"), UNMET)
+        self.assertEqual(self.state("example/alpha", "example/host/.github/actions/admit-plugin@main"), Standing.UNMET)

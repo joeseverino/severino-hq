@@ -10,7 +10,7 @@ from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 
 from ..containers import DECLARED, LABEL, PROVENANCE, REGISTRY, VULNERABLE, containers
 from ..security import cli_principal
-from ..standards import MET, UNAVAILABLE, UNMET
+from ..standards import Standing
 from .test_containers import estate, inventory
 from .test_upgrades import TARGET, declare, published
 
@@ -156,11 +156,11 @@ class StandardTests(TestCase):
 
         chain = item("app").supply_chain
 
-        self.assertEqual(chain.state_of("pinned"), MET)
-        self.assertEqual(chain.state_of("source-known"), MET)
-        self.assertEqual(chain.state_of("provenance"), MET)
-        self.assertEqual(chain.state_of("sbom"), MET)
-        self.assertEqual(chain.state_of("no-urgent"), UNMET)
+        self.assertEqual(chain.state_of("pinned"), Standing.MET)
+        self.assertEqual(chain.state_of("source-known"), Standing.MET)
+        self.assertEqual(chain.state_of("provenance"), Standing.MET)
+        self.assertEqual(chain.state_of("sbom"), Standing.MET)
+        self.assertEqual(chain.state_of("no-urgent"), Standing.UNMET)
         self.assertTrue(chain.serious)
 
     def test_what_was_not_read_is_unavailable_not_a_failure(self):
@@ -169,9 +169,9 @@ class StandardTests(TestCase):
 
         chain = item("app").supply_chain
 
-        self.assertEqual(chain.state_of("provenance"), UNAVAILABLE)
-        self.assertEqual(chain.state_of("sbom"), UNAVAILABLE)
-        self.assertEqual(chain.state_of("no-urgent"), UNAVAILABLE)
+        self.assertEqual(chain.state_of("provenance"), Standing.UNAVAILABLE)
+        self.assertEqual(chain.state_of("sbom"), Standing.UNAVAILABLE)
+        self.assertEqual(chain.state_of("no-urgent"), Standing.UNAVAILABLE)
 
 
 class UpgradeTests(TestCase):

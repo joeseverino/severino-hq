@@ -17,6 +17,7 @@ from ..connection_catalog import connection_catalog
 from ..inventory_testing import store
 from ..posture import STANDARD, estate_posture
 from ..security import cli_principal
+from ..standards import CheckResult, Reading, Standing
 from ..sweep import record_sweep
 from .test_tailnet_posture import raised, tailnet_connection
 
@@ -25,9 +26,9 @@ PASSWORDS = ["hq.platform.core.oidc.HQOIDCAuthenticationBackend", "django.contri
 SSO_ONLY = ["hq.platform.core.oidc.HQOIDCAuthenticationBackend"]
 
 
-def standing(check_id: str):
+def standing(check_id: str) -> CheckResult:
     found = estate_posture(connection_catalog(principal=cli_principal()))
-    return next(standing for standing in found.standings if standing.check.id == check_id)
+    return next(result for result in found.results if result.check.id == check_id)
 
 
 TAILNET_LOCK = "host.tailnet_lock"
@@ -61,9 +62,9 @@ class DeclarationTests(TestCase):
         self.assertEqual(len(ids), len(set(ids)))
         for check in STANDARD:
             with self.subTest(check=check.id):
-                self.assertFalse(check.stops.endswith("."), "it finishes 'Stops ...'")
+                self.assertFalse(check.why.endswith("."), "it finishes 'Stops ...'")
                 self.assertTrue(check.holds.endswith("."))
-                self.assertTrue(check.step.endswith("."))
+                self.assertTrue(check.fix.endswith("."))
                 self.assertNotEqual(check.label, check.unmet)
 
     def test_a_misspelt_setting_refuses_to_start(self):
@@ -93,15 +94,15 @@ class ReadingTests(TestCase):
     def test_a_check_with_no_reading_is_not_read_rather_than_unmet(self):
         found = standing("tailnet-lock")
 
-        self.assertIsNone(found.reading.met)
+        self.assertEqual(found.state, Standing.UNAVAILABLE)
         self.assertEqual(found.icon, "clock")
 
     def test_an_unread_check_names_the_connection_that_would_read_it(self):
         found = standing("tailnet-policy")
 
         self.assertEqual(found.reading.evidence, "No Tailscale connection reads it")
-        self.assertEqual(found.reading.remedy, "connect Tailscale")
-        self.assertEqual(found.reading.remedy_url, reverse("control_plane:connections") + "#connection-setup-heading")
+        self.assertEqual(found.reading.fix, "connect Tailscale")
+        self.assertEqual(found.reading.fix_url, reverse("control_plane:connections") + "#connection-setup-heading")
         self.assertEqual(found.icon, "clock")
 
     def test_once_connected_an_unread_check_only_waits(self):
@@ -118,7 +119,7 @@ class ReadingTests(TestCase):
 
         found = standing("tailnet-policy")
 
-        self.assertNotIn("connect", found.reading.remedy)
+        self.assertNotIn("connect", found.reading.fix)
 
     def test_an_allow_all_grant_is_unmet(self):
         policy(grants=[{"src": ["*"], "dst": ["*"], "ip": ["*"]}])
@@ -158,7 +159,7 @@ class ReadingTests(TestCase):
         sweep({TAILNET_LOCK: {"ok": False, "records": [], "error": LAUNCHER_REFUSED}})
 
         found = standing("tailnet-lock")
-        self.assertIsNone(found.reading.met)
+        self.assertEqual(found.state, Standing.UNAVAILABLE)
         self.assertEqual(found.reading.evidence, LAUNCHER_REFUSED)
 
     # No heartbeat: only the readings say whether a controller has run.
@@ -190,7 +191,7 @@ class ReadingTests(TestCase):
 
                 found = standing("tailnet-policy").reading
 
-                self.assertIsNone(found.met)
+                self.assertEqual(found.standing, Standing.UNAVAILABLE)
                 self.assertIn(said, found.evidence)
                 self.assertFalse(found.evidence.endswith("."), "the panel ends the sentence")
 
@@ -205,8 +206,8 @@ class ReadingTests(TestCase):
                 arrange()
                 unread = [
                     found
-                    for found in estate_posture(connection_catalog(principal=cli_principal())).standings
-                    if found.reading.met is None
+                    for found in estate_posture(connection_catalog(principal=cli_principal())).results
+                    if found.state == Standing.UNAVAILABLE
                 ]
 
                 self.assertTrue(unread)
@@ -222,18 +223,17 @@ class ReadingTests(TestCase):
 
         found = estate_posture(connection_catalog(principal=cli_principal()))
 
-        self.assertIn(f"{found.unread_count} not read yet", found.count_line)
-        self.assertTrue(found.count_line.startswith(f"{found.met_count} of {len(STANDARD)} met"))
+        self.assertIn(f"{found.unread} not read yet", found.count_line)
+        self.assertTrue(found.count_line.startswith(f"{found.met} of {len(STANDARD)} met"))
 
     def test_the_count_names_each_check_that_is_not_met(self):
         policy(grants=[{"src": ["*"], "dst": ["*"], "ip": ["*"]}], lock={"enabled": False, "signers": []})
 
         found = estate_posture(connection_catalog(principal=cli_principal()))
 
-        for standing in found.unmet:
-            if standing.reading.met is False:
-                self.assertIn(standing.check.label, found.count_line)
-        self.assertTrue(any(standing.reading.met is False for standing in found.unmet))
+        self.assertTrue(found.unmet)
+        for result in found.unmet:
+            self.assertIn(result.check.label, found.count_line)
 
 
 @override_settings(AUTHENTICATION_BACKENDS=PASSWORDS)
@@ -255,8 +255,8 @@ class FindingTests(TestCase):
 
         unread = [
             found
-            for found in estate_posture(connection_catalog(principal=cli_principal())).standings
-            if found.reading.met is None
+            for found in estate_posture(connection_catalog(principal=cli_principal())).results
+            if found.state == Standing.UNAVAILABLE
         ]
         self.assertIn("tailnet-policy", {found.check.id for found in unread})
 
@@ -265,7 +265,7 @@ class FindingTests(TestCase):
         for waiting in unread:
             with self.subTest(check=waiting.check.id):
                 self.assertNotIn(f"posture.{waiting.check.id}", {item["scope"] for item in found})
-                self.assertNotIn(waiting.check.step, steps)
+                self.assertNotIn(waiting.check.fix, steps)
         checks = connections_context(principal=cli_principal()).as_dict()["standard"]["checks"]
         served = next(check for check in checks if check["id"] == "tailnet-policy")
         self.assertIsNone(served["met"])
@@ -322,12 +322,12 @@ class ScopeTests(TestCase):
         edge = SimpleNamespace(state="good", evidence="")
         group = SimpleNamespace(connections=(connection,), spec=SimpleNamespace(required_capabilities=("read",)))
         found = posture(Inputs(edge, (group,)))
-        return next(standing for standing in found.standings if standing.check.id == "scope").reading
+        return next(result for result in found.results if result.check.id == "scope").reading
 
     def test_a_full_account_token_where_a_scoped_one_is_offered_is_unmet(self):
         reading = self.reading("coarse", "cloudflare_api")
 
-        self.assertFalse(reading.met)
+        self.assertEqual(reading.standing, Standing.UNMET)
         self.assertEqual(reading.evidence, "Full account access: Example")
 
     def test_a_certificate_authority_account_is_read_as_the_whole_account_it_is(self):
@@ -337,47 +337,47 @@ class ScopeTests(TestCase):
         reading = self.reading(credential, "acme")
 
         self.assertEqual(credential, "coarse")
-        self.assertTrue(reading.met)
-        self.assertTrue(reading.qualified)
+        self.assertEqual(reading.standing, Standing.MET)
+        self.assertTrue(reading.limited)
 
     def test_a_login_with_no_scoped_form_is_met_but_not_a_clean_pass(self):
         reading = self.reading("coarse", "npm")
 
-        self.assertTrue(reading.met)
-        self.assertTrue(reading.qualified)
+        self.assertEqual(reading.standing, Standing.MET)
+        self.assertTrue(reading.limited)
         self.assertEqual(reading.evidence, "Nothing narrower offered for Example")
 
     def test_a_scoped_token_is_met(self):
         reading = self.reading("scoped", "cloudflare_api")
 
-        self.assertTrue(reading.met)
-        self.assertFalse(reading.qualified)
+        self.assertEqual(reading.standing, Standing.MET)
+        self.assertFalse(reading.limited)
         self.assertEqual(reading.evidence, "1 scoped token")
 
     def test_with_no_key_held_there_is_nothing_to_judge(self):
-        self.assertIsNone(self.reading("none", "").met)
+        self.assertEqual(self.reading("none", "").standing, Standing.UNAVAILABLE)
 
 
 class ToneTests(TestCase):
-    def standing(self, *, met, enforced):
-        from ..posture import CheckOutcome, CheckStanding
-
-        return CheckStanding(STANDARD[0], CheckOutcome(met=met, evidence=""), enforced)
+    def result(self, reading, *, enforced=True):
+        return CheckResult(STANDARD[0], reading, enforced=enforced)
 
     def test_without_advanced_posture_an_unmet_check_is_quiet(self):
-        self.assertEqual(self.standing(met=False, enforced=False).state, "neutral")
-        self.assertEqual(self.standing(met=False, enforced=False).icon, "circle")
+        found = self.result(Reading.unmet(), enforced=False)
+
+        self.assertEqual((found.tone, found.icon), ("neutral", "circle"))
 
     def test_under_advanced_posture_an_unmet_check_is_a_fault(self):
-        self.assertEqual(self.standing(met=False, enforced=True).state, "attention")
+        found = self.result(Reading.unmet())
+
+        self.assertEqual((found.tone, found.icon), ("attention", "x-circle"))
 
     def test_an_unread_check_is_never_a_fault(self):
-        self.assertEqual(self.standing(met=None, enforced=True).state, "neutral")
-        self.assertEqual(self.standing(met=None, enforced=True).icon, "clock")
+        found = self.result(Reading.unavailable("Waiting on the first read of example"))
 
-    def test_a_qualified_pass_is_ticked_but_not_green(self):
-        from ..posture import CheckOutcome, CheckStanding
+        self.assertEqual((found.tone, found.icon), ("neutral", "clock"))
 
-        found = CheckStanding(STANDARD[0], CheckOutcome(met=True, evidence="", qualified=True))
+    def test_a_limited_pass_is_ticked_but_not_green(self):
+        found = self.result(Reading.met(limited=True))
 
-        self.assertEqual((found.state, found.icon), ("neutral", "check-circle"))
+        self.assertEqual((found.tone, found.icon), ("neutral", "check-circle"))

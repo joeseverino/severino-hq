@@ -36,7 +36,7 @@ from .record_links import linked
 from .record_saves import Held, held, linked_saver, saved_type
 from .refusal_status import RefusalEnvelope, refusal_of, refuse
 from .security import Principal
-from .standards import MET
+from .standards import Standing
 from .ui import counted
 from .upserts import upsert_by_slug
 lazy from . import capabilities
@@ -465,7 +465,7 @@ def _updates_refusal(project: Project, *, enabling: bool) -> str:
         return ""
     repository = repository_for(project.repository_url)
     posture = posture_of(repository) if repository is not None else None
-    if posture is not None and posture.state_of(UPDATES_NEED) == MET:
+    if posture is not None and posture.state_of(UPDATES_NEED) == Standing.MET:
         return ""
     check = next(check for check in STANDARD if check.id == UPDATES_NEED)
     return f'Dependency updates need the repository check "{check.label}" ({check.id}) to pass first. {check.fix}'

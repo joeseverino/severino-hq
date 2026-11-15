@@ -15,16 +15,16 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
   {% include "partials/_connection_peering.html" with connection=connection posture=posture only %}
 
   {% comment %}Each posture check HQ could not judge, with why: folded, since the line above already counts them.{% endcomment %}
-  {% if posture.unread_count %}
-    {% section "Not read" count=posture.unread_count fold=True lede="Checks HQ could not read, and why" %}
+  {% if posture.unread %}
+    {% section "Not read" count=posture.unread fold=True lede="Checks HQ could not read, and why" %}
         {% table_region "Not read" %}
           <table class="data-table">
             <thead><tr>{% table_heading "Check" %}{% table_heading "Reason" %}</tr></thead>
             <tbody>
-              {% for standing in posture.standings %}{% if standing.reading.met is None %}
-                <tr data-posture-unread="{{ standing.check.id }}">
-                  <td><strong>{{ standing.check.label|breakable }}</strong></td>
-                  <td><span class="cell-prose prose">{% if standing.reading.remedy %}{{ standing.reading.evidence|breakable:":" }} {% if standing.reading.remedy_url %}<a href="{{ standing.reading.remedy_url }}">{{ standing.reading.remedy|breakable:"." }}</a>{% else %}{{ standing.reading.remedy|breakable:"." }}{% endif %}{% else %}{{ standing.reading.evidence|breakable:"." }}{% endif %}</span></td>
+              {% for result in posture.results %}{% if result.state == "unavailable" %}
+                <tr data-posture-unread="{{ result.check.id }}">
+                  <td><strong>{{ result.check.label|breakable }}</strong></td>
+                  <td><span class="cell-prose prose">{% if result.reading.fix %}{{ result.reading.evidence|breakable:":" }} {% if result.reading.fix_url %}<a href="{{ result.reading.fix_url }}">{{ result.reading.fix|breakable:"." }}</a>{% else %}{{ result.reading.fix|breakable:"." }}{% endif %}{% else %}{{ result.reading.evidence|breakable:"." }}{% endif %}</span></td>
                 </tr>
               {% endif %}{% endfor %}
             </tbody>

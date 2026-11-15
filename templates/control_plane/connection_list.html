@@ -108,7 +108,7 @@ part's heading shows only when there is more than one.
   {% endnotice %}
 {% endif %}
 
-{% include "partials/_posture.html" with posture=connections.standard only %}
+{% include "partials/_posture.html" with posture=connections.standard guide=connections.standard_guide only %}
 
 {% section "Security checks" fold=True %}
   {% section "Request path" %}

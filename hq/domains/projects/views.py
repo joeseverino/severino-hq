@@ -41,6 +41,7 @@ from hq.platform.application.tables import (
 )
 from hq.platform.application.where_it_runs import where_it_runs
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
+lazy from hq.platform.application import standards
 lazy from hq.platform.application.asks import Ask, AskMixin, Standing, read_standing, read_status_url
 lazy from hq.platform.application.connection_setup import docs_url
 lazy from hq.platform.application.dependency_updates import KIND as RUN_KIND, RUN_NOW, asked_at, last_run
@@ -50,7 +51,7 @@ lazy from hq.platform.application.github_profile import KIND, READ_NOW, profile,
 lazy from hq.platform.application.linked_accounts import GITHUB, linked_login
 lazy from hq.platform.application.outbound_work import ask
 lazy from hq.platform.application.page_reads import Remedy
-lazy from hq.platform.application.standards import MET, UNMET, gap
+lazy from hq.platform.application.standards import gap
 lazy from hq.platform.application.workflow_contracts import ActionLink
 
 from .forms import ProjectForm
@@ -420,10 +421,10 @@ class PostureView(PageMixin, TemplateView):
         for check in STANDARD:
             states = [(item.subject, item.state_of(check.id)) for item in found]
             held = [state for _, state in states if state]
-            failing = [repo for repo, state in states if state == UNMET]
+            failing = [repo for repo, state in states if state == standards.Standing.UNMET]
             if failing:
                 unmet.append((check, failing, len(held)))
-            elif held and all(state == MET for state in held):
+            elif held and all(state == standards.Standing.MET for state in held):
                 everywhere.append(check)
         unmet.sort(key=lambda found: not found[0].serious)
         context["unmet"] = [

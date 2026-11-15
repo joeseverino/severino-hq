@@ -32,13 +32,13 @@ from hq.platform.application.finding_model import OperatorStep
 from hq.platform.application.freshness import CURRENT, STALE, Freshness
 from hq.platform.application.pages import Page, PageAction, PageVisit
 from hq.platform.application.payload_words import ChangeRow
-from hq.platform.application.posture import CheckOutcome, CheckStanding, Posture, PostureCheck
 from hq.platform.application.relationships import RelationGroup, Relationship, Relationships
 from hq.platform.application.request_channel import NETWORK_CHANNEL, TAILNET_CHANNEL
 from hq.platform.application.request_connection import Connection, Peering
 from hq.platform.application.request_identity import Identity
 from hq.platform.application.request_layers import Layer
 from hq.platform.application.security import MCP_INTERFACE
+from hq.platform.application.standards import Check, Reading, measure
 from hq.platform.application.tables import TableSort
 from hq.platform.application.tailnet import Device
 from hq.platform.application.tailnet_presence import Presence
@@ -424,12 +424,11 @@ def _posture(met, *, advanced=True):
     """The estate's posture, one example check for each reading in ``met``:
     met, not met, or ``None`` for not read."""
 
-    def standing(index, held):
-        outcome = CheckOutcome(met=held, evidence="")
-        check = PostureCheck(f"example-{index}", f"Example check {index}", "", "", "", "", read=lambda inputs: outcome)
-        return CheckStanding(check, outcome)
+    def check(index, held):
+        reading = Reading.unavailable("") if held is None else Reading.judged(held)
+        return Check(f"example-{index}", f"Example check {index}", lambda _subject: reading, "", "", unmet="")
 
-    return Posture(advanced, tuple(standing(index, held) for index, held in enumerate(met, 1)))
+    return measure(None, tuple(check(index, held) for index, held in enumerate(met, 1)), enforced=advanced)
 
 
 def _repository_postures():

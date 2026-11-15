@@ -48,12 +48,13 @@ from .hq_self import hq_hostnames
 from .moments import ago
 from .path_model import ServicePath
 from .paths import hq_path
-from .posture import Inputs, Posture, posture
+from .posture import Inputs, as_part, guide, posture
 from .problems import problem_counts
 from .projection import complete, projection_scope, read_once
 from .record_errors import RecordNotFound
 from .request_path import joined
 from .security import Principal
+from .standards import Measurement
 from .ui import counted
 from .workflow_contracts import ActionLink
 lazy from . import domains
@@ -285,7 +286,7 @@ class ConnectionsContext:
     # The estate alone, the same for every caller.
     estate_posture: ConnectionSecurityPosture
     # HQ's standard, read from the estate checks above.
-    standard: Posture
+    standard: Measurement
     # With the request's admission joined in, where there is a request.
     posture: ConnectionSecurityPosture
     hq_path: ServicePath | None
@@ -306,6 +307,12 @@ class ConnectionsContext:
         """Where adding a connection is written down."""
 
         return guide_url()
+
+    @property
+    def standard_guide(self) -> str:
+        """Where HQ's standard is written down."""
+
+        return guide()
 
     @property
     def connection_count(self) -> int:
@@ -366,7 +373,7 @@ class ConnectionsContext:
                     else None
                 ),
             },
-            "standard": self.standard.as_dict(),
+            "standard": as_part(self.standard),
             "not_connected": [
                 {
                     "family": group.spec.name,

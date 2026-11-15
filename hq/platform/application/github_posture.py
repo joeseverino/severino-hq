@@ -18,7 +18,7 @@ lazy from django.conf import settings
 from .derivations import passed
 from .github_estate import Repository, repositories
 from .moments import moment
-from .standards import Check as _Check, Measurement, measure
+from .standards import Check as _Check, Measurement, Reading, measure
 from .ui import ended
 lazy from .projects import repository_key
 
@@ -48,21 +48,30 @@ def Check(id: str, label: str, scope: str, test, why: str, fix: str, *, unmet: s
     )
 
 
+ACCESS_UNREAD = "Its access has not been read"
+
+
 def _access(repo: Repository) -> dict[str, Any] | None:
     return repo.record.get("access")
 
 
-def _only_you(repo: Repository) -> bool | None:
-    access = _access(repo)
-    if access is None:
-        return None
+def _on_access(test: Callable[[Repository, dict[str, Any]], bool]) -> Callable[[Repository], Reading]:
+    """A check of the access reading, unavailable when it was not read."""
+
+    def check(repo: Repository) -> Reading:
+        access = _access(repo)
+        return Reading.unavailable(ACCESS_UNREAD) if access is None else Reading.judged(test(repo, access))
+
+    return check
+
+
+def _only_you(repo: Repository, access: dict[str, Any]) -> bool:
     owner = repo.name.split("/", 1)[0].lower()
     return all(item["login"].lower() == owner for item in access["collaborators"])
 
 
-def _keys_read_only(repo: Repository) -> bool | None:
-    access = _access(repo)
-    return None if access is None else all(key["read_only"] for key in access["deploy_keys"])
+def _keys_read_only(_repo: Repository, access: dict[str, Any]) -> bool:
+    return all(key["read_only"] for key in access["deploy_keys"])
 
 
 def _idle(key: dict[str, Any]) -> bool:
@@ -70,42 +79,49 @@ def _idle(key: dict[str, Any]) -> bool:
     return seen is not None and passed(seen + timedelta(days=KEY_IDLE_DAYS))
 
 
-def _keys_in_use(repo: Repository) -> bool | None:
-    access = _access(repo)
-    return None if access is None else not any(_idle(key) for key in access["deploy_keys"])
+def _keys_in_use(_repo: Repository, access: dict[str, Any]) -> bool:
+    return not any(_idle(key) for key in access["deploy_keys"])
 
 
-def _setting(name: str, *, expected: Any) -> Callable[[Repository], bool | None]:
-    def test(repo: Repository) -> bool | None:
-        access = _access(repo)
-        return None if access is None else access.get(name) == expected
-
-    return test
+def _setting(name: str, *, expected: Any) -> Callable[[Repository], Reading]:
+    return _on_access(lambda _repo, access: access.get(name) == expected)
 
 
-def _no_variables(repo: Repository) -> bool | None:
+def _no_variables(repo: Repository) -> Reading:
     variables = repo.record.get("variables")
-    return None if variables is None else not variables
+    return (
+        Reading.unavailable("Its Actions variables have not been read")
+        if variables is None
+        else Reading.judged(not variables)
+    )
 
 
-def _rule(name: str) -> Callable[[Repository], bool | None]:
-    def test(repo: Repository) -> bool | None:
+def _rule(name: str) -> Callable[[Repository], Reading]:
+    def test(repo: Repository) -> Reading:
         rules = repo.record.get("rules")
-        return None if rules is None else bool(rules.get(name))
+        return (
+            Reading.unavailable("Its rulesets have not been read")
+            if rules is None
+            else Reading.judged(bool(rules.get(name)))
+        )
 
     return test
 
 
-def _security(name: str) -> Callable[[Repository], bool | None]:
-    def test(repo: Repository) -> bool | None:
+def _security(name: str) -> Callable[[Repository], Reading]:
+    def test(repo: Repository) -> Reading:
         security = (_access(repo) or {}).get("security")
-        return None if not security else security.get(name) == "enabled"
+        if not security:
+            return Reading.unavailable("Its security settings have not been read")
+        return Reading.judged(security.get(name) == "enabled")
 
     return test
 
 
-def _code_scanning(repo: Repository) -> bool | None:
-    return "code_scanning" in (repo.record.get("alerts") or {}) or None
+def _code_scanning(repo: Repository) -> Reading:
+    if "code_scanning" in (repo.record.get("alerts") or {}):
+        return Reading.met()
+    return Reading.unavailable("No code scanning alerts have been read")
 
 
 STANDARD: tuple[Check, ...] = (
@@ -113,7 +129,7 @@ STANDARD: tuple[Check, ...] = (
         "only-you",
         "Only you have access",
         BOTH,
-        _only_you,
+        _on_access(_only_you),
         "Anyone else with access can read private code or push to it.",
         "Remove the collaborator in the repository's access settings.",
         serious=True,
@@ -123,7 +139,7 @@ STANDARD: tuple[Check, ...] = (
         "keys-read-only",
         "Deploy keys can only read",
         BOTH,
-        _keys_read_only,
+        _on_access(_keys_read_only),
         "A deploy key that can write can push to the repository without you.",
         "Replace the key with a read-only one.",
         serious=True,
@@ -133,7 +149,7 @@ STANDARD: tuple[Check, ...] = (
         "keys-in-use",
         "Every deploy key is in use",
         BOTH,
-        _keys_in_use,
+        _on_access(_keys_in_use),
         f"A key unused for {KEY_IDLE_DAYS} days is access nothing needs.",
         "Delete the key, or find what stopped using it.",
         unmet=f"A deploy key has gone unused for {KEY_IDLE_DAYS} days",

@@ -29,7 +29,7 @@ from .github_estate import (
 )
 from .github_posture import COMMANDS, REASONS, STANDARD, calls_workflows, left_out, postures
 from .moments import duration, moment
-from .standards import UNMET, Check
+from .standards import Check, Standing
 from .ui import counted, ended
 lazy from .projects import projects_by_repository, repository_key
 
@@ -237,7 +237,7 @@ def _posture(_estate: FindingEstate) -> tuple[Finding, ...]:
     found = postures()
     raised = []
     for check in STANDARD:
-        unmet = [item.subject for item in found if item.state_of(check.id) == UNMET]
+        unmet = [item.subject for item in found if item.state_of(check.id) == Standing.UNMET]
         if not unmet:
             continue
         missing = [repo.short for repo in unmet]

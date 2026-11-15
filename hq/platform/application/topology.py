@@ -574,8 +574,8 @@ def _derive(principal: Principal) -> Topology:
     )
     ordered_edges = tuple(sorted(edges.values(), key=lambda edge: (edge.kind, edge.source, edge.target)))
     unmet = tuple(
-        (standing.check.id, standing.reading.evidence, standing.reading.read_capabilities)
-        for standing in estate_posture(groups).unmet
+        (result.check.id, result.reading.evidence, result.reading.read_capabilities)
+        for result in estate_posture(groups).unmet
     )
     return Topology(ordered_nodes, ordered_edges, unmet, _kinds_read(), _automation_worker(resources))
 
