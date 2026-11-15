@@ -13,6 +13,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.providers import registry_label
+from hq.platform.application.consent_testing import consented
 from hq.platform.core.models import AuditLog
 
 from ..adoption_testing import managing_everything
@@ -41,7 +42,7 @@ class SwitchedOffRecord(TestCase):
         managing_everything()
         record_sweep(a_sweep(**{KIND: [A_REWRITE]}), principal=cli_principal())
         self.resource = ManagedResource.objects.get(kind=KIND)
-        request_reconcile(OperationCommand(), principal=cli_principal(), current_key=self.resource.key)
+        request_reconcile(OperationCommand(), consented=consented(cli_principal()), current_key=self.resource.key)
 
 
 class QueuedBeforeTheSwitchOffTests(SwitchedOffRecord):
@@ -68,7 +69,7 @@ class QueuedBeforeTheSwitchOffTests(SwitchedOffRecord):
         )
 
     def test_its_removal_is_still_handed_over(self):
-        request_removal(OperationCommand(), principal=cli_principal(), current_key=self.resource.key)
+        request_removal(OperationCommand(), consented=consented(cli_principal()), current_key=self.resource.key)
 
         claim = claim_next_operation("test-controller", capabilities=((KIND, "delete"),))
 

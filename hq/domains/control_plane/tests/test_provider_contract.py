@@ -4,6 +4,7 @@ from django.test import TestCase
 
 from hq.platform.application.adoption_testing import managing_everything
 from hq.platform.application.capabilities import execute_capability
+from hq.platform.application.consent_testing import consented
 from hq.platform.application.infrastructure import (
     ManagedResourceCommand,
     controller_contract,
@@ -198,7 +199,7 @@ class DesiredStateOwnershipTests(TestCase):
                 kind=target.kind,
                 spec={**target.spec, "certificate_directory": "/srv/certs"},
             ),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
             current_key=target.key,
         )
 
@@ -330,7 +331,7 @@ class ProviderContractTests(TestCase):
                     "content": "192.0.2.1",
                 },
             ),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
         )
         self.assertTrue(disabled["ok"])
         with self.assertRaisesRegex(PolicyError, "Public DNS changes are off"):
@@ -345,5 +346,5 @@ class ProviderContractTests(TestCase):
                         "content": "192.0.2.1",
                     },
                 ),
-                principal=cli_principal(),
+                consented=consented(cli_principal()),
             )

@@ -9,6 +9,7 @@ from django.test import TestCase, override_settings
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
+from hq.platform.application.consent_testing import consented
 from hq_sdk.testing import plain
 
 from ..capabilities import execute_capability
@@ -137,7 +138,7 @@ class RemoveEmptyGroupsCapabilityTests(TestCase):
         self.assertIn("group:empty", stored["groups"])
 
     def test_a_signed_in_operator_amends_the_declaration(self):
-        result = request_empty_groups_removal(None, principal=an_operator(), current_key=POLICY_KEY)
+        result = request_empty_groups_removal(None, consented=consented(an_operator()), current_key=POLICY_KEY)
 
         stored = json.loads(ManagedResource.objects.get(key=POLICY_KEY).spec["document"])
         self.assertNotIn("group:empty", stored["groups"])
@@ -145,10 +146,10 @@ class RemoveEmptyGroupsCapabilityTests(TestCase):
 
     def test_a_policy_with_no_empty_group_is_refused(self):
         operator = an_operator()
-        request_empty_groups_removal(None, principal=operator, current_key=POLICY_KEY)
+        request_empty_groups_removal(None, consented=consented(operator), current_key=POLICY_KEY)
 
         with self.assertRaisesRegex(PolicyError, "no empty group"):
-            request_empty_groups_removal(None, principal=operator, current_key=POLICY_KEY)
+            request_empty_groups_removal(None, consented=consented(operator), current_key=POLICY_KEY)
 
     def test_a_drifted_policy_is_refused_so_a_live_change_is_not_overwritten(self):
         """The live policy gained something (a connector's grant); editing HQ's
@@ -160,7 +161,7 @@ class RemoveEmptyGroupsCapabilityTests(TestCase):
         before = policy.spec["document"]
 
         with self.assertRaisesRegex(PolicyError, "Keep the live version"):
-            request_empty_groups_removal(None, principal=an_operator(), current_key=POLICY_KEY)
+            request_empty_groups_removal(None, consented=consented(an_operator()), current_key=POLICY_KEY)
         self.assertEqual(ManagedResource.objects.get(key=POLICY_KEY).spec["document"], before)
 
     def test_an_unknown_or_other_kind_of_key_is_not_found(self):
@@ -171,7 +172,7 @@ class RemoveEmptyGroupsCapabilityTests(TestCase):
         )
         for key in ("missing", "example-rewrite"):
             with self.subTest(key=key), self.assertRaises(RecordNotFound):
-                request_empty_groups_removal(None, principal=cli_principal(), current_key=key)
+                request_empty_groups_removal(None, consented=consented(cli_principal()), current_key=key)
 
 
 class ProductionFindingsTests(TestCase):

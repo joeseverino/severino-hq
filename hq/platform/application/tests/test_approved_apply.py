@@ -8,6 +8,7 @@ since the approval as the copy the change replaced.
 from django.test import TestCase
 
 from hq.domains.control_plane.models import ApprovalRequest, ManagedResource, OperationRequest
+from hq.platform.application.consent_testing import consented
 
 from ..approvals import ApproveCommand, RejectCommand, approve, reject
 from ..capabilities import execute_capability
@@ -141,7 +142,7 @@ class ApprovedChangeAppliesTests(TestCase):
                 kind=UNGATED_KIND,
                 spec={"domain": "example.test", "answer": "192.0.2.11"},
             ),
-            principal=an_operator(),
+            consented=consented(an_operator()),
             current_key="example-rewrite",
         )
 

@@ -16,6 +16,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ApprovalRequest, ManagedResource, OperationRequest
 from hq.domains.control_plane.providers import PROVIDERS
+from hq.platform.application.consent_testing import consented
 from hq.platform.core.models import AuditLog
 
 from ..approval_review import compare, preview
@@ -32,7 +33,7 @@ from ..approvals import (
 )
 from ..capabilities import execute_capability
 from ..controller import claim_next_operation, schedule_automatic_operations
-from ..infrastructure import ManagedResourceCommand, save_managed_resource
+from ..infrastructure import ManagedResourceCommand, save_adopted, save_managed_resource
 from ..plugin_testing import form_keyed
 from ..security import (
     AuthorizationError,
@@ -73,15 +74,15 @@ def declare_policy(document: str = "") -> ManagedResource:
     exactly that reason.
     """
 
-    save_managed_resource(
-        ManagedResourceCommand(
-            key=POLICY_KEY,
-            kind=GATED_KIND,
-            spec={"document": document or policy_document()},
-        ),
-        principal=cli_principal(),
-        copied_from_live=True,
-    )
+    from hq.platform.application.inventory_testing import store
+
+    from ..adoption import found_live
+
+    spec = {"document": document or policy_document()}
+    store(GATED_KIND, {"record": "policy", **spec})
+    live = found_live(GATED_KIND, spec)
+    assert live is not None
+    save_adopted(live, key=POLICY_KEY, principal=cli_principal())
     return ManagedResource.objects.get(key=POLICY_KEY)
 
 
@@ -492,7 +493,7 @@ class DecisionTests(TestCase):
                 kind=GATED_KIND,
                 spec={"document": policy_document("group:changed-underneath")},
             ),
-            principal=an_operator("editor"),
+            consented=consented(an_operator("editor")),
             current_key=POLICY_KEY,
         )
 
@@ -570,45 +571,11 @@ class ControllerTests(TestCase):
         self.assertEqual(operation.state, OperationRequest.State.QUEUED)
 
 
-class FloorTests(TestCase):
-    """The rule again, under the boundary that normally answers it.
-
-    The hold keys on a capability saying it acts on an infrastructure resource,
-    which every capability in the registry does say. What it cannot see is a
-    caller that reaches the use case without going through a capability at all,
-    a surface added later, or an extension. So the use cases refuse it too, and
-    these are the tests that this floor is really there.
-    """
+class AdoptionTests(TestCase):
+    """Writing down what is live asks no consent, since it changes nothing."""
 
     def setUp(self):
         self.resource = declare_policy()
-
-    def test_writing_a_gated_declaration_without_consent_is_refused(self):
-        from ..record_errors import PolicyError
-
-        with self.assertRaisesMessage(PolicyError, "This change needs approval."):
-            save_managed_resource(
-                ManagedResourceCommand(
-                    key=POLICY_KEY,
-                    kind=GATED_KIND,
-                    spec={"document": policy_document("group:elsewhere")},
-                ),
-                principal=Principal("a-token", "mcp", frozenset({Capability.MANAGE_INFRASTRUCTURE})),
-                current_key=POLICY_KEY,
-            )
-
-    def test_queueing_work_on_a_gated_declaration_without_consent_is_refused(self):
-        from ..record_errors import PolicyError
-        from ..resource_operations import OperationCommand, request_reconcile
-
-        with self.assertRaisesMessage(PolicyError, "This change needs approval."):
-            request_reconcile(
-                OperationCommand(reason=""),
-                principal=Principal("a-token", "mcp", frozenset({Capability.MANAGE_INFRASTRUCTURE})),
-                current_key=POLICY_KEY,
-            )
-
-        self.assertFalse(OperationRequest.objects.exists())
 
     def test_adopting_what_the_provider_already_holds_is_not_a_change(self):
         """The one exemption, and it changes nothing by construction.
@@ -618,16 +585,14 @@ class FloorTests(TestCase):
         control it most needs to show as unmanaged.
         """
 
-        save_managed_resource(
-            ManagedResourceCommand(
-                key=POLICY_KEY,
-                kind=GATED_KIND,
-                spec={"document": policy_document("group:live")},
-            ),
-            principal=cli_principal(),
-            current_key=POLICY_KEY,
-            copied_from_live=True,
-        )
+        from hq.platform.application.inventory_testing import store
+
+        from ..adoption import found_live
+
+        store(GATED_KIND, {"record": "policy", "document": policy_document("group:live")})
+        live = found_live(GATED_KIND, self.resource.spec)
+        assert live is not None
+        save_adopted(live, key=POLICY_KEY, principal=mcp_principal(), current_key=POLICY_KEY)
 
         self.assertEqual(
             ManagedResource.objects.get(key=POLICY_KEY).spec["document"],

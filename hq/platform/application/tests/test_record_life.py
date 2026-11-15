@@ -17,6 +17,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest, ProviderInventory
+from hq.platform.application.consent_testing import consented
 
 from ..adoption import AdoptCommand, adopt
 from ..adoption_testing import managing_everything
@@ -113,7 +114,7 @@ if HYPOTHESIS:
             key = self._ask("declared")
             save_managed_resource(
                 ManagedResourceCommand(key=key, kind=KIND, spec={"domain": domain, "answer": answer}),
-                principal=self.principal,
+                consented=consented(self.principal),
             )
             self._forget_removed(domain)
             return key
@@ -121,7 +122,7 @@ if HYPOTHESIS:
         @rule(key=declarations)
         def apply(self, key):
             if ManagedResource.objects.get(key=key).enabled:
-                request_reconcile(OperationCommand(), principal=self.principal, current_key=key)
+                request_reconcile(OperationCommand(), consented=consented(self.principal), current_key=key)
             self._controller("reconcile")
 
         @rule(key=declarations)
@@ -140,7 +141,7 @@ if HYPOTHESIS:
 
         @rule(key=consumes(declarations))
         def remove(self, key):
-            request_removal(OperationCommand(), principal=self.principal, current_key=key)
+            request_removal(OperationCommand(), consented=consented(self.principal), current_key=key)
             self._controller("delete")
             assert not ManagedResource.objects.filter(key=key).exists(), "a confirmed removal kept its declaration"
 
@@ -273,7 +274,7 @@ if HYPOTHESIS:
             resource = ManagedResource.objects.get(key=key)
             save_managed_resource(
                 ManagedResourceCommand(key=key, kind=KIND, spec=resource.spec, enabled=enabled),
-                principal=self.principal,
+                consented=consented(self.principal),
                 current_key=key,
                 sent=frozenset({"enabled"}),
             )

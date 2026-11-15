@@ -20,6 +20,7 @@ from hq.platform.application import cadence
 from hq.platform.application.adoption_testing import managing_everything
 from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.certificates import UploadCertificateCommand, store_certificate
+from hq.platform.application.consent_testing import consented
 from hq.platform.application.controller import schedule_automatic_operations
 from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
 from hq.platform.application.security import cli_principal
@@ -76,7 +77,7 @@ class _Estate(TestCase):
     def proxy(self, key="example-proxy", **spec):
         return save_managed_resource(
             ManagedResourceCommand(key=key, kind="npm.proxy_host", spec={**PROXY, **spec}),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
         )
 
 
@@ -131,7 +132,7 @@ class EveryWriterIsAppliedTests(_Estate):
         declare_targets()
         save_managed_resource(
             ManagedResourceCommand(key="example-wildcard", kind="tls.certificate", spec=certificate_spec()),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
         )
         self.settle()
         target = ManagedResource.objects.get(key="edge-certificate-target")
@@ -141,7 +142,7 @@ class EveryWriterIsAppliedTests(_Estate):
             ManagedResourceCommand(
                 key=target.key, kind=target.kind, spec={**target.spec, "certificate_directory": "/srv/certs"}
             ),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
             current_key=target.key,
         )
         self.unqueue()
@@ -173,7 +174,7 @@ class OnlyWhatNeedsApplyingIsDueTests(_Estate):
         declare_targets()
         save_managed_resource(
             ManagedResourceCommand(key="example-wildcard", kind="tls.certificate", spec=certificate_spec()),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
         )
         self.settle()
         certificate = ManagedResource.objects.get(key="example-wildcard")
@@ -193,7 +194,7 @@ class OnlyWhatNeedsApplyingIsDueTests(_Estate):
     def test_a_record_switched_off_is_no_pass(self):
         save_managed_resource(
             ManagedResourceCommand(key="example-proxy", kind="npm.proxy_host", spec=dict(PROXY), enabled=False),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
         )
 
         self.assertEqual(cadence.pass_due(), "")
@@ -203,7 +204,7 @@ class OnlyWhatNeedsApplyingIsDueTests(_Estate):
             ManagedResourceCommand(
                 key="a-domain", kind="cloudflare.zone", spec={"zone": "example.com", "connection_ref": "cf-example"}
             ),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
         )
 
         self.assertEqual(cadence.pass_due(), "")
@@ -234,7 +235,7 @@ class AWriteStartsAPassAtOnceTests(_Estate):
         declare_targets()
         save_managed_resource(
             ManagedResourceCommand(key="example-wildcard", kind="tls.certificate", spec=certificate_spec()),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
         )
         self.settle()
         target = ManagedResource.objects.get(key="edge-certificate-target")

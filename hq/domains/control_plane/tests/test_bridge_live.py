@@ -32,6 +32,7 @@ from hq.domains.control_plane.models import (
 )
 from hq.platform.application import cadence
 from hq.platform.application.capabilities import execute_capability
+from hq.platform.application.consent_testing import consented
 from hq.platform.application.glance import DASHBOARD_REFRESH
 from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
 from hq.platform.application.resource_operations import OperationCommand, request_reconcile
@@ -68,11 +69,11 @@ class ConcurrentCallTests(LiveBridge):
         declare_targets()
         save_managed_resource(
             ManagedResourceCommand(key="example-wildcard", kind="tls.certificate", spec=certificate_spec()),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
         )
         queued = request_reconcile(
             OperationCommand(),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
             current_key=ManagedResource.objects.get(key="example-wildcard").key,
         )
         return str(queued["operation"]["id"])

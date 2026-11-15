@@ -18,6 +18,7 @@ from referencing.jsonschema import DRAFT202012
 from hq.domains.control_plane.bridge_actions import ACTIONS
 from hq.domains.control_plane.bridge_contract import contract, limit
 from hq.domains.control_plane.models import DashboardConfiguration, ManagedResource, OperationRequest
+from hq.platform.application.consent_testing import consented
 from hq.platform.application.glance import panel_specs
 from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
 from hq.platform.application.resource_operations import (
@@ -69,7 +70,7 @@ class ControllerContractTests(TestCase):
         declare_targets()
         save_managed_resource(
             ManagedResourceCommand(key="example-wildcard", kind="tls.certificate", spec=certificate_spec()),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
         )
         OperationRequest.objects.all().delete()  # applied, so the reconcile its save queued is done
         self.resource = ManagedResource.objects.get(key="example-wildcard")
@@ -123,7 +124,7 @@ class ControllerContractTests(TestCase):
     def test_peek_claim_and_report(self, _policy):
         request_reconcile(
             OperationCommand(),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
             current_key=self.resource.key,
         )
         self.assertIsNotNone(bridge("peek", capability=CERTIFICATE)["operation"])
@@ -156,7 +157,7 @@ class ControllerContractTests(TestCase):
     def test_a_renewal_carries_its_verification_policy(self, _policy):
         request_certificate_renewal(
             OperationCommand(),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
             current_key=self.resource.key,
         )
         expected = {"timeout_seconds": 180, "interval_seconds": 5}
@@ -168,7 +169,7 @@ class ControllerContractTests(TestCase):
     def test_a_certificate_reconcile_verifies_under_the_renewal_policy(self):
         request_reconcile(
             OperationCommand(),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
             current_key=self.resource.key,
         )
         self.assertEqual(

@@ -25,6 +25,7 @@ from hq.domains.control_plane.models import (
     ProviderInventory,
     ReadRequest,
 )
+from hq.platform.application.consent_testing import consented
 from hq.platform.core.models import AuditLog
 
 from .. import cadence, readings
@@ -179,7 +180,7 @@ class DoorbellTests(TestCase):
         with self.captureOnCommitCallbacks(execute=True):
             request_reconcile(
                 OperationCommand(reason=""),
-                principal=cli_principal(),
+                consented=consented(cli_principal()),
                 current_key="a-rewrite",
             )
 
@@ -228,7 +229,7 @@ class DoorbellTests(TestCase):
         with self.captureOnCommitCallbacks(execute=True):
             result = request_reconcile(
                 OperationCommand(reason=""),
-                principal=cli_principal(),
+                consented=consented(cli_principal()),
                 current_key="a-rewrite",
             )
 

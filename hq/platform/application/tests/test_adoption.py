@@ -5,6 +5,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource, NotManaged, ProviderConnection
+from hq.platform.application.consent_testing import consented
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.core.models import AuditLog
 
@@ -155,7 +156,7 @@ class StopManagingSticksTests(TestCase):
         key = ManagedResource.objects.get(kind=ZONE_KIND).key
         request_removal(
             OperationCommand(),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
             current_key=key,
         )
 
@@ -227,7 +228,7 @@ class StopManagingAnyKindTests(TestCase):
 
         request_removal(
             OperationCommand(),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
             current_key=key,
         )
         self.sweep()

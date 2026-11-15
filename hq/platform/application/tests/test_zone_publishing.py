@@ -5,6 +5,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
+from hq.platform.application.consent_testing import consented
 from hq.platform.application.plugin_testing import form_keyed
 
 from ..adoption_testing import managing_everything
@@ -111,7 +112,7 @@ class SelfClosingAdoptionTests(TestCase):
                     spec={key: value for key, value in APEX[0].items() if key != "record_id"},
                     enabled=True,
                 ),
-                principal=cli_principal(),
+                consented=consented(cli_principal()),
             )
 
 
@@ -143,7 +144,7 @@ class StopManagingDomainTests(TestCase):
 
         return request_removal(
             OperationCommand(reason="no longer mine"),
-            principal=self.principal,
+            consented=consented(self.principal),
             current_key="example-com",
         )
 
@@ -179,7 +180,7 @@ class StopManagingDomainTests(TestCase):
         key = ManagedResource.objects.filter(kind=RECORD_KIND).first().key
         request_removal(
             OperationCommand(),
-            principal=self.principal,
+            consented=consented(self.principal),
             current_key=key,
         )
 

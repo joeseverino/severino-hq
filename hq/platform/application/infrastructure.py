@@ -28,10 +28,9 @@ from hq.domains.control_plane.providers import (
 )
 lazy from hq.domains.control_plane.provider_spec import ProviderResolutionContext
 
-from .adoption import require_writable
+from .adoption import Live, require_writable
 from .command_fields import Choices, Describe
 from .conditions import DEGRADED, DRIFTED, READY, holding
-from .default_hold import consent_gap
 from .integration_specs import Kept, keeps
 from .labels import lower_first
 from .projection import keyset_page, read_once
@@ -41,6 +40,7 @@ from .security import Principal
 from .tone import Tone
 lazy from .asks import APPLIES_SHORTLY
 lazy from .cadence import ask, swept
+lazy from .capabilities import Consented
 lazy from .delivery_progress import deploying_label
 lazy from .locate import names_by_connection
 lazy from .resource_capabilities import kind_converges
@@ -414,7 +414,9 @@ def _refuse_withheld(kind: str, held_kind: str) -> None:
 MANAGED_RECORD = Held(missing="That record was not found.", stale="That record changed after it was read.")
 
 
-def _refuse_authored(command: ManagedResourceCommand, validated_spec: dict[str, Any], *, principal: Principal) -> None:
+def _refuse_authored(
+    command: ManagedResourceCommand, held_kind: str, validated_spec: dict[str, Any], *, consented: Consented
+) -> None:
     """Refuse an authored or edited declaration HQ may not act on.
 
     An adopted spec is never asked: it asserts exactly what the provider
@@ -422,13 +424,10 @@ def _refuse_authored(command: ManagedResourceCommand, validated_spec: dict[str, 
     changed.
     """
 
-    # A kind that needs a person's agreement does not get written by a caller
-    # that has not got one. The capability boundary has already held such a
-    # request and answered the caller properly; this is the floor under that, so
-    # a path added later cannot write one of these by not going through it.
-    gap = consent_gap(command.kind, principal=principal)
-    if gap:
-        raise PolicyError(gap)
+    # Asked of the kind to be written and of the record's kind as it is
+    # locked, so a gated record is not rewritten as another kind either.
+    consented.require(command.kind)
+    consented.require(held_kind)
     if not command.enabled:
         return
     if (
@@ -453,25 +452,59 @@ def _stored(key: str) -> dict[str, Any]:
 def save_managed_resource(
     command: ManagedResourceCommand,
     *,
-    principal: Principal,
+    consented: Consented,
     current_key: str | None = None,
     expected_updated_at: str | None = None,
-    copied_from_live: bool = False,
     sent: frozenset[str] | None = None,
 ) -> ResourceSaved:
-    """Write one declaration, for a caller the capability runner or HQ itself authorized.
+    """Write one declaration a run the capability runner consented to authored, and apply it.
 
     An update writes the fields it was ``sent`` over the record as locked, and
     the spec is validated and judged as it will be written. A field not sent
     is the locked row's, never the read made before the lock; a caller that
     must not write over a change since its read sends ``expected_updated_at``,
     which refuses the write instead.
-
-    ``copied_from_live`` says the spec was read from the provider moments ago
-    rather than authored, which exempts it from ``_refuse_authored``: refusing
-    to *write down* a record that is already published would stop nothing and
-    leave every public record unadopted.
     """
+
+    return _save(
+        command,
+        principal=consented.principal,
+        consented=consented,
+        current_key=current_key,
+        expected_updated_at=expected_updated_at,
+        sent=sent,
+    )
+
+
+@transaction.atomic
+def save_adopted(
+    live: Live, *, key: str, principal: Principal, enabled: bool = True, current_key: str | None = None
+) -> ResourceSaved:
+    """Write down, under ``key``, a declaration of what HQ's last read found live.
+
+    Asks no consent and applies nothing: HQ's copy then equals what is live,
+    so nothing anybody would agree to, publish or manage has changed, and
+    refusing to *write down* a record that is already published would stop
+    nothing and leave every public record unadopted. It takes a ``Live``,
+    which only a read of the last sweep makes, so nothing authored reaches
+    it. HQ's own sweep adopts through this, outside any capability run, and
+    so does keeping what is live over HQ's copy (``accept_observed``).
+    """
+
+    command = ManagedResourceCommand(key=key, kind=live.kind, spec=live.spec, enabled=enabled)
+    return _save(command, principal=principal, consented=None, current_key=current_key)
+
+
+def _save(
+    command: ManagedResourceCommand,
+    *,
+    principal: Principal,
+    consented: Consented | None,
+    current_key: str | None = None,
+    expected_updated_at: str | None = None,
+    sent: frozenset[str] | None = None,
+) -> ResourceSaved:
+    """One declaration written, authored under ``consented`` or adopted with none."""
 
     created = current_key is None
     resource = (
@@ -485,8 +518,8 @@ def save_managed_resource(
         command = ManagedResourceCommand(**{**as_sent(resource, ManagedResourceCommand, {}), **written(command, sent)})
     _refuse_withheld(command.kind, resource.kind)
     validated_spec = validate_spec(command.kind, command.spec)
-    if not copied_from_live:
-        _refuse_authored(command, validated_spec, principal=principal)
+    if consented is not None:
+        _refuse_authored(command, resource.kind, validated_spec, consented=consented)
     provider = PROVIDERS[command.kind]
     changed = (
         created
@@ -520,7 +553,7 @@ def save_managed_resource(
     # state is recomputed here rather than waiting for each to be saved.
     if changed and provider.resolution_input:
         advance_dependents(delivery_targets())
-    applying = _apply_saved(resource, replaced, principal=principal) if changed and not copied_from_live else None
+    applying = _apply_saved(resource, replaced, consented=consented) if changed and consented is not None else None
 
     return {
         "ok": True,
@@ -558,7 +591,7 @@ def _call_off_waiting(resource: ManagedResource) -> None:
 SAVED_REASON = "HQ's copy of it changed."
 
 
-def _apply_saved(resource: ManagedResource, replaced: dict[str, Any], *, principal: Principal) -> OperationItem | None:
+def _apply_saved(resource: ManagedResource, replaced: dict[str, Any], *, consented: Consented) -> OperationItem | None:
     """Queue the reconcile that applies a saved declaration, as the save's own act.
 
     Every kind's change is applied by the save that made it, so one consent
@@ -575,9 +608,9 @@ def _apply_saved(resource: ManagedResource, replaced: dict[str, Any], *, princip
     if not resource.enabled or kind_action not in enabled_controller_actions():
         return None
     if kind_action in enabled_controller_actions(automatic_only=True):
-        return queue_reconcile(resource, principal=principal, reason=SAVED_REASON)["operation"]
+        return queue_reconcile(resource, consented=consented, reason=SAVED_REASON)["operation"]
     if not swept(resource.kind):
         # Nothing reads it live, so nothing could show the apply stays within the change.
         return None
     ask(reads=(resource.kind,))
-    return queue_reconcile(resource, principal=principal, reason=SAVED_REASON, replaces=replaced)["operation"]
+    return queue_reconcile(resource, consented=consented, reason=SAVED_REASON, replaces=replaced)["operation"]

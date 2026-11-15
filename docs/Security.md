@@ -619,8 +619,12 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
   held, as is anything destructive an agent asks for (a deletion, or stopping
   a container). Adopting a public record is not held, since it makes HQ's copy
   equal what is live. `needs_approval` in `default_hold.py` is the one answer,
-  read by the hold, by the use cases' own floor (`consent_gap`), by the
-  provider contract and by the policy page's words. A person in the browser,
+  read by the hold, by the consent every declaration write asks
+  (`Consented.admits` in `capabilities.py`), by the provider contract and by
+  the policy page's words. A declaration writer takes that consent in place of
+  a principal, and only the capability runner makes one, so no gated
+  declaration is written without a person's consent, whichever capability's
+  handler writes it. A person in the browser,
   or on their own device, is never held. An agent's "on" over a call the
   default would hold is the person's consent, recorded as such
   (`Decision.overrides_a_hold`).

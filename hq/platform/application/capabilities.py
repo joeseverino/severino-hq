@@ -2,19 +2,21 @@
 
 from collections.abc import Callable
 from dataclasses import replace
-from typing import Annotated, Any, Literal, NamedTuple, TypedDict
+from typing import Annotated, Any, Literal, NamedTuple, TypedDict, final, override
 
 from pydantic import ConfigDict, with_config
 
 from hq.platform.core.audit import audit_connection, audit_operation, record_event, tallied
 from hq.platform.core.models import AuditLog
 from hq.platform.core.tracing import note, span
+lazy from hq.domains.control_plane.providers import PROVIDERS
 
 from .answer_fields import Permitted, Pinned, RequiredPermissions, SchemaVersion
 from .approvals import hold_for_approval
 from .call_envelope import read_call
 from .capability_policy import Rule, decide
 from .contracts import DOTTED_NAME, EFFECT_MEANINGS
+from .default_hold import kind_waits
 from .describe import Describe, listed
 from .held_answer import HeldCall
 from .idempotency import (
@@ -26,6 +28,7 @@ from .idempotency import (
     validate_key,
 )
 from .integration_specs import (
+    CONSENT_KEYWORD,
     IDEMPOTENCY_FIELD,
     SENT_KEYWORD,
     STALE_WRITE_KEYWORD,
@@ -34,12 +37,14 @@ from .integration_specs import (
     capability_schema,
     command_adapter,
     kept_by,
+    takes_consent,
     takes_sent_fields,
     takes_stale_write_token,
 )
 from .integrations import held_graph, integration_graph
 from .labels import human_label
 from .projection import QueryRefusal
+from .record_errors import PolicyError
 from .refusal_status import Refusal, next_call, refusal_of, refuse, refused
 from .security import (
     CLI_INTERFACE,
@@ -48,6 +53,7 @@ from .security import (
     Principal,
     agent_subject,
     could_ever_hold,
+    is_interactive,
 )
 from .ui import ended
 lazy from . import agent_registry, automation_runs
@@ -357,15 +363,15 @@ def _authorized_run(
     command = validate_command(spec, payload, target)
     # A held request has acted on nothing, so it is answered afresh each
     # time: the same key runs the command once a person has agreed.
-    held, acting = _consent(spec, payload, command, target, principal)
-    if held is not None:
-        return Ran({**held})
+    consented = _consent(spec, payload, command, target, principal)
+    if not isinstance(consented, Consented):
+        return Ran({**consented})
 
     def act() -> dict[str, Any]:
         return _run(
             spec,
             command,
-            principal=acting,
+            consented=consented,
             target=target,
             expected_updated_at=expected_updated_at,
             sent=frozenset(payload),
@@ -495,14 +501,86 @@ def validate_command(spec: CapabilitySpec, payload: dict[str, Any], target: str 
     return command_adapter(spec.command_type).validate_python(payload)
 
 
+# Only this module holds it, so only this module's two consent steps make a
+# ``Consented``.
+_ISSUER = object()
+
+
+# What a declaration write the consent does not admit is refused with.
+NEEDS_APPROVAL = "This change needs approval. Ask for it through the API or MCP, then approve it in HQ in the browser."
+
+
+@final
+class Consented:
+    """What the capability runner decided for one run, which every declaration write asks.
+
+    A declaration writer (``save_managed_resource``, the operation queue's
+    ``_queue_operation``, and every handler that reaches one) takes this in
+    place of a principal, and asks it for the kind it writes before writing
+    (``require``). That gives one property: no gated declaration is written
+    without a person's consent, whichever capability's handler writes it.
+
+    - Two places make one, both in this module: the runner's consent step
+      (``_consent``), once operator policy and the default hold have let the
+      run through, and ``execute_approved``, once a person has approved the
+      held request (``approved``). The constructor refuses a caller without
+      this module's private key, so a path that writes a declaration without
+      passing either has no value to hand the writer, and the call fails.
+    - ``admits`` is the one place the rule lives: a kind that waits for a
+      person (``default_hold.kind_waits``) is written only by an interactive
+      principal, under standing policy or a person's approval
+      (``approved_by``), or in an approved run. The hold judges a run by the
+      kind its target or command names; this judges the kind actually
+      written, so a capability of any subject, writing a kind its command
+      never named, is refused at the write all the same.
+    - The runner hands one only to a handler that names ``consented``, never
+      a principal beside it, so who acts and who approved are read from the
+      consent alone and cannot disagree with it.
+    - It is immutable and not a dataclass, so ``dataclasses.replace`` cannot
+      rebind it to another principal or mark it approved.
+    """
+
+    __slots__ = ("approved", "principal")
+    principal: Principal
+    approved: bool
+
+    def __init__(self, principal: Principal, *, approved: bool = False, issuer: object) -> None:
+        if issuer is not _ISSUER:
+            raise TypeError("Only the capability runner's consent step makes a Consented.")
+        object.__setattr__(self, "principal", principal)
+        object.__setattr__(self, "approved", approved)
+
+    @override
+    def __setattr__(self, name: str, value: object) -> None:
+        raise AttributeError("A Consented is immutable.")
+
+    @override
+    def __repr__(self) -> str:
+        return f"Consented({self.principal.actor!r}, {self.principal.interface!r}, approved={self.approved})"
+
+    def admits(self, kind: str) -> bool:
+        """Whether this run may write a declaration of ``kind``."""
+
+        provider = PROVIDERS.get(kind)
+        if provider is None or not kind_waits(provider, self.principal):
+            return True
+        return self.approved or is_interactive(self.principal) or bool(self.principal.approved_by)
+
+    def require(self, kind: str) -> None:
+        """Refuse a write of ``kind`` this run may not make (``admits``)."""
+
+        if not self.admits(kind):
+            raise PolicyError(NEEDS_APPROVAL)
+
+
 def _consent(
     spec: CapabilitySpec,
     payload: dict[str, Any],
     command: Any,
     target: str | int | None,
     principal: Principal,
-) -> tuple[HeldCall | None, Principal]:
-    """``(held, principal)``: a held request's answer, or the principal to run as.
+) -> HeldCall | Consented:
+    """A held request's answer, or the consent to run as.
 
     Asked last, after authority and shape, so only a valid request becomes a
     decision a person has to read. Judged on the validated command, never the
@@ -515,11 +593,13 @@ def _consent(
     if decision.rule == Rule.DENY:
         raise PolicyDenied(f"{spec.name} is refused by {decision.source}.")
     if decision.rule == Rule.APPROVE:
-        return hold_for_approval(spec, payload, command, target, principal=principal), principal
+        held = hold_for_approval(spec, payload, command, target, principal=principal)
+        if held is not None:
+            return held
     if decision.overrides_a_hold:
         # Standing policy is the consent; carried where consent travels.
-        return None, replace(principal, approved_by=decision.source)
-    return None, principal
+        return Consented(replace(principal, approved_by=decision.source), issuer=_ISSUER)
+    return Consented(principal, issuer=_ISSUER)
 
 
 # What the act of a write that recorded no row of its own is filed under.
@@ -530,7 +610,7 @@ def _run(
     spec: CapabilitySpec,
     command: Any,
     *,
-    principal: Principal,
+    consented: Consented,
     target: str | int | None,
     expected_updated_at: str | None,
     sent: frozenset[str],
@@ -543,7 +623,14 @@ def _run(
     to a handler that declares them.
     """
 
+    principal = consented.principal
     arguments = _target_keyword(spec, target)
+    # A handler that writes a declaration takes the consent, and is handed no
+    # principal beside it.
+    if takes_consent(spec.handler):
+        arguments[CONSENT_KEYWORD] = consented
+    else:
+        arguments["principal"] = principal
     if takes_stale_write_token(spec.handler):
         arguments[STALE_WRITE_KEYWORD] = expected_updated_at
     if takes_sent_fields(spec.handler):
@@ -554,7 +641,7 @@ def _run(
         tallied() as written,
         ringing() as asked,
     ):
-        result = spec.handler(command, principal=principal, **arguments)
+        result = spec.handler(command, **arguments)
         if spec.effect != "read" and not written:
             # A write whose handler recorded no row still leaves its act: what
             # ran, under the row's operation, and how it ended.
@@ -595,4 +682,5 @@ def execute_approved(
     shape, so the person's page reports it and the transaction keeps the request.
     """
 
-    return _run(spec, command, principal=principal, target=target, expected_updated_at=None, sent=sent)
+    consented = Consented(principal, approved=True, issuer=_ISSUER)
+    return _run(spec, command, consented=consented, target=target, expected_updated_at=None, sent=sent)

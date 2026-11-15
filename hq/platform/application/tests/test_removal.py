@@ -11,6 +11,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
+from hq.platform.application.consent_testing import consented
 from hq.platform.application.plugin_testing import form_keyed
 
 from ..controller import ControllerReport, claim_next_operation, report_operation
@@ -47,7 +48,7 @@ class RemovalRequestTests(TestCase):
 
         result = request_removal(
             OperationCommand(),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
             current_key=resource.key,
         )
 
@@ -65,7 +66,7 @@ class RemovalRequestTests(TestCase):
 
         result = request_removal(
             OperationCommand(),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
             current_key=resource.key,
         )
 
@@ -95,7 +96,7 @@ class RemovalRequestTests(TestCase):
         with self.assertRaises(PolicyError):
             request_removal(
                 OperationCommand(),
-                principal=cli_principal(),
+                consented=consented(cli_principal()),
                 current_key="a-certificate",
             )
 
@@ -104,7 +105,7 @@ class RemovalRequestTests(TestCase):
         for _ in range(2):
             request_removal(
                 OperationCommand(),
-                principal=cli_principal(),
+                consented=consented(cli_principal()),
                 current_key=resource.key,
             )
 
@@ -124,7 +125,7 @@ class RemovalReportTests(TestCase):
         resource = a_rewrite()
         request_removal(
             OperationCommand(),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
             current_key=resource.key,
         )
         claim = claim_next_operation("test-controller", capabilities=(("adguard.rewrite", "delete"),))
@@ -180,7 +181,7 @@ class RemovalReportTests(TestCase):
 
         request_reconcile(
             OperationCommand(),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
             current_key=resource.key,
         )
         claim = claim_next_operation("test-controller", capabilities=(("adguard.rewrite", "reconcile"),))

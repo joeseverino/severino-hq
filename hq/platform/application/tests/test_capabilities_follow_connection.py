@@ -4,6 +4,7 @@ from django.test import TestCase
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.permissions import Cloudflare
+from hq.platform.application.consent_testing import consented
 
 from ..adoption_testing import connection
 from ..resource_capabilities import resource_capabilities
@@ -74,7 +75,7 @@ class EveryWritePathFollowsTheConnectionTests(TestCase):
         with self.assertRaisesMessage(PolicyError, _gap("adguard.rewrite").refusal):
             request_reconcile(
                 OperationCommand(),
-                principal=self.principal,
+                consented=consented(self.principal),
                 current_key=self.resource.key,
             )
 
@@ -92,7 +93,7 @@ class EveryWritePathFollowsTheConnectionTests(TestCase):
                     spec={"domain": "other.example.com", "answer": "10.0.0.11"},
                     enabled=True,
                 ),
-                principal=self.principal,
+                consented=consented(self.principal),
             )
 
     def test_the_scheduler_leaves_it_alone(self):
@@ -112,7 +113,7 @@ class EveryWritePathFollowsTheConnectionTests(TestCase):
 
         result = request_reconcile(
             OperationCommand(),
-            principal=self.principal,
+            consented=consented(self.principal),
             current_key=self.resource.key,
         )
         self.assertTrue(result["queued"])

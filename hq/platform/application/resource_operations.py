@@ -19,18 +19,18 @@ from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND
 from hq.domains.control_plane.providers import PROVIDERS, controller_action_policy
 
-from .adoption import NOTHING_LIVE_CHANGED, keep_out_declaration, observes_only, require_writable
+from .adoption import NOTHING_LIVE_CHANGED, found_live, keep_out_declaration, observes_only, require_writable
 from .answer_fields import CallMessage
 from .asks import Asked, AskedAnswer, Standing
 from .cadence import ask, swept
 from .command_fields import Describe
 from .conditions import DRIFTED, PROBLEMS, holding
-from .default_hold import consent_gap
 from .doors import NOBODY
 from .expiry import certificate_expiry, days_until, renewal_opens_at, renewal_window
 from .infrastructure import (
     ManagedResourceCommand,
     delivery_targets,
+    save_adopted,
     save_managed_resource,
 )
 from .record_errors import PolicyError, RecordNotFound, Sentence
@@ -52,10 +52,10 @@ from .resource_records import (
 from .security import CONTROLLER_INTERFACE, Principal
 from .ui import counted, ended
 lazy from . import tailnet
+lazy from .capabilities import Consented
 lazy from .containers import Running
 lazy from .history import asked_by
 lazy from .integration_specs import requested
-lazy from .inventory import live_spec
 lazy from .machines import Machine, container_context
 lazy from .moments import when_day
 lazy from .resource_capabilities import public_dns_enabled, verb_words
@@ -356,7 +356,7 @@ def _queue_operation(
     resource: ManagedResource,
     command: OperationCommand,
     *,
-    principal: Principal,
+    consented: Consented,
     action: str,
     require_enabled: bool = True,
     replaces: dict[str, Any] | None = None,
@@ -371,15 +371,15 @@ def _queue_operation(
         # (it queues as itself, converging toward a declaration somebody has
         # already agreed to) so this refuses exactly the case it is about: a
         # credential asking for the world to be changed.
-        gap = consent_gap(resource.kind, principal=principal)
-        if gap:
-            raise PolicyError(gap)
+        consented.require(resource.kind)
         allowed, explanation = controller_action_policy(resource.kind, action)
         if not allowed:
             raise PolicyError(explanation)
         # The copy an apply by hand may only replace (``controller.over_live``).
         replaced = {REPLACES: replaces} if replaces is not None else {}
-        return resource, asked_fields(principal, reason=command.reason, generation=resource.generation, **replaced)
+        return resource, asked_fields(
+            consented.principal, reason=command.reason, generation=resource.generation, **replaced
+        )
 
     operation, queued = enqueue(action, prepare, once=once)
     said = requested(verb_words(action), resource.key, again=not queued)
@@ -393,7 +393,7 @@ def _queue_operation(
 
 
 def queue_reconcile(
-    resource: ManagedResource, *, principal: Principal, reason: str, replaces: dict[str, Any] | None = None
+    resource: ManagedResource, *, consented: Consented, reason: str, replaces: dict[str, Any] | None = None
 ) -> OperationAsked:
     """Queue a reconcile of a declaration just written, as the write's own act.
 
@@ -407,7 +407,7 @@ def queue_reconcile(
     return _queue_operation(
         resource,
         OperationCommand(reason=reason),
-        principal=principal,
+        consented=consented,
         action=OperationRequest.Action.RECONCILE,
         replaces=replaces,
         once=f"reconcile:{resource.pk}:g{resource.generation}",
@@ -418,7 +418,7 @@ def queue_reconcile(
 def request_reconcile(
     command: OperationCommand,
     *,
-    principal: Principal,
+    consented: Consented,
     current_key: str,
 ) -> OperationAsked:
     resource = _resource_for_operation(current_key)
@@ -428,7 +428,7 @@ def request_reconcile(
     return _queue_operation(
         resource,
         command,
-        principal=principal,
+        consented=consented,
         action=OperationRequest.Action.RECONCILE,
     )
 
@@ -498,7 +498,7 @@ def _forget_declaration(
 def _request_lifecycle(
     command: OperationCommand,
     *,
-    principal: Principal,
+    consented: Consented,
     current_key: str,
     action: str,
 ) -> OperationAsked:
@@ -516,7 +516,7 @@ def _request_lifecycle(
     # Which verbs exist is the capability registry's to say, so a verb the
     # controller does not implement is refused here rather than queued for
     # work nothing will claim.
-    result = _queue_operation(resource, command, principal=principal, action=action)
+    result = _queue_operation(resource, command, consented=consented, action=action)
     # The page that asked shows the state the sweep last read, so the run that
     # applies this reads the kind again after it, rather than leaving the old
     # state up until the cadence comes round. Only a kind the sweep reads:
@@ -559,21 +559,21 @@ def unit_gap(resource: ManagedResource) -> Sentence:
     return UNIT_OUT_OF_REACH if found is not None and not found.reachable else ""
 
 
-def request_restart(command: OperationCommand, *, principal: Principal, current_key: str) -> OperationAsked:
+def request_restart(command: OperationCommand, *, consented: Consented, current_key: str) -> OperationAsked:
     return _request_lifecycle(
-        command, principal=principal, current_key=current_key, action=OperationRequest.Action.RESTART
+        command, consented=consented, current_key=current_key, action=OperationRequest.Action.RESTART
     )
 
 
-def request_start(command: OperationCommand, *, principal: Principal, current_key: str) -> OperationAsked:
+def request_start(command: OperationCommand, *, consented: Consented, current_key: str) -> OperationAsked:
     return _request_lifecycle(
-        command, principal=principal, current_key=current_key, action=OperationRequest.Action.START
+        command, consented=consented, current_key=current_key, action=OperationRequest.Action.START
     )
 
 
-def request_stop(command: OperationCommand, *, principal: Principal, current_key: str) -> OperationAsked:
+def request_stop(command: OperationCommand, *, consented: Consented, current_key: str) -> OperationAsked:
     return _request_lifecycle(
-        command, principal=principal, current_key=current_key, action=OperationRequest.Action.STOP
+        command, consented=consented, current_key=current_key, action=OperationRequest.Action.STOP
     )
 
 
@@ -608,18 +608,16 @@ def accept_observed(
     resource = _resource_for_operation(current_key)
     # Copied from the live record, the same way adopting does, so the next
     # sweep finds the two agreeing.
-    found = live_spec(resource.kind, resource.spec)
+    found = found_live(resource.kind, resource.spec)
     if found is None:
         raise RecordNotFound("No live record was last seen for this one, so there is nothing to accept.")
     # A field no sweep can observe (hidden, on demand) stays as it was declared.
-    kept = {
-        field: resource.spec[field] for field in PROVIDERS[resource.kind].unobservable_fields if field in resource.spec
-    }
-    result = save_managed_resource(
-        ManagedResourceCommand(key=resource.key, kind=resource.kind, spec={**found, **kept}, enabled=resource.enabled),
+    result = save_adopted(
+        found.keeping(resource.spec),
+        key=resource.key,
+        enabled=resource.enabled,
         principal=principal,
         current_key=resource.key,
-        copied_from_live=True,
     )
     return {**result, "reason": command.reason}
 
@@ -627,7 +625,7 @@ def accept_observed(
 def request_removal(
     command: OperationCommand,
     *,
-    principal: Principal,
+    consented: Consented,
     current_key: str,
 ) -> OperationAsked | DeclarationForgotten:
     """Queue removal of the thing this declaration describes.
@@ -640,7 +638,7 @@ def request_removal(
     resource = _resource_for_operation(current_key)
     # HQ deletes at the provider only through a connection that manages.
     if PROVIDERS[resource.kind].declaration_only or observes_only(resource.kind, resource.spec):
-        return _forget_declaration(resource, command, principal=principal)
+        return _forget_declaration(resource, command, principal=consented.principal)
     allowed, explanation = controller_action_policy(resource.kind, OperationRequest.Action.DELETE)
     if not allowed:
         raise PolicyError(explanation)
@@ -651,7 +649,7 @@ def request_removal(
     return _queue_operation(
         resource,
         command,
-        principal=principal,
+        consented=consented,
         action=OperationRequest.Action.DELETE,
         require_enabled=False,
     )
@@ -691,7 +689,7 @@ def certificate_renewal_allowed(resource: ManagedResource) -> tuple[bool, Senten
 def request_route_approval(
     command: OperationCommand,
     *,
-    principal: Principal,
+    consented: Consented,
     current_key: str,
 ) -> OperationAsked:
     """Approve the routes a tailnet device is already advertising.
@@ -707,7 +705,7 @@ def request_route_approval(
     return _queue_operation(
         resource,
         command,
-        principal=principal,
+        consented=consented,
         action=OperationRequest.Action.APPROVE_ROUTES,
     )
 
@@ -715,7 +713,7 @@ def request_route_approval(
 def request_reach_allow(
     _command: OperationCommand,
     *,
-    principal: Principal,
+    consented: Consented,
     current_key: str,
 ) -> ResourceSaved:
     """Open the path a reading proved is shut, where the tailnet is what shut it.
@@ -778,7 +776,7 @@ def request_reach_allow(
             spec={**policy.spec, "document": document},
             enabled=policy.enabled,
         ),
-        principal=principal,
+        consented=consented,
         current_key=policy.key,
     )
 
@@ -786,11 +784,11 @@ def request_reach_allow(
 def request_certificate_renewal(
     command: OperationCommand,
     *,
-    principal: Principal,
+    consented: Consented,
     current_key: str,
 ) -> OperationAsked:
     resource = _resource_for_operation(current_key)
     allowed, explanation = certificate_renewal_allowed(resource)
     if not allowed:
         raise PolicyError(explanation)
-    return _queue_operation(resource, command, principal=principal, action=OperationRequest.Action.RENEW)
+    return _queue_operation(resource, command, consented=consented, action=OperationRequest.Action.RENEW)

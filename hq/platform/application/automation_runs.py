@@ -44,7 +44,7 @@ lazy from .approval_review import ChangePreview
 lazy from .approvals import AUDIT_LABELS, ApprovalSubject, every_call, measured_by, waits_for_a_person
 lazy from .automation_sources import PLAYBOOKS, SHORT_REVISION
 lazy from .cadence import ask, automation_standing
-lazy from .capabilities import capability_words
+lazy from .capabilities import Consented, capability_words
 lazy from .controller import release_lapsed
 lazy from .doors import NOBODY
 lazy from .entity_links import entity_link, kind_label
@@ -338,7 +338,7 @@ def run_subject(manifest: OperationManifest, command: RunCommand) -> ApprovalSub
     )
 
 
-def _record(manifest: OperationManifest, *, principal: Principal) -> ManagedResource:
+def _record(manifest: OperationManifest, *, consented: Consented) -> ManagedResource:
     """The procedure's record, written as its manifest now says.
 
     Written here, when a run is asked for, rather than when the registry is
@@ -357,7 +357,7 @@ def _record(manifest: OperationManifest, *, principal: Principal) -> ManagedReso
             ManagedResourceCommand(
                 key=key, kind=OPERATION_KIND, spec=spec, enabled=current.enabled if current else True
             ),
-            principal=principal,
+            consented=consented,
             current_key=key if current else None,
         )
     return ManagedResource.objects.select_for_update().get(key=key)
@@ -444,7 +444,7 @@ def _holder_cancel(holding: dict[str, Any], principal: Principal | None) -> Page
 
 
 @transaction.atomic
-def request_run(manifest: OperationManifest, command: RunCommand, *, principal: Principal) -> OperationAsked:
+def request_run(manifest: OperationManifest, command: RunCommand, *, consented: Consented) -> OperationAsked:
     """Queue one run of ``manifest`` for the automation worker.
 
     A read takes no retry key, so asking twice queues twice, and the
@@ -459,7 +459,7 @@ def request_run(manifest: OperationManifest, command: RunCommand, *, principal: 
         untaken = automation_standing().cannot("run", now=timezone.now())
         if untaken:
             raise PolicyError(untaken)
-        resource = _record(manifest, principal=principal)
+        resource = _record(manifest, consented=consented)
         if not resource.enabled:
             raise PolicyError("This playbook is switched off in HQ.")
         # A claim whose lease ran out is ended or put back first, by the rule
@@ -472,7 +472,9 @@ def request_run(manifest: OperationManifest, command: RunCommand, *, principal: 
                 "Ask again once it ends.",
                 details=_held_by(holder, resource, bound["hosts"]),
             )
-        return resource, asked_fields(principal, reason=command.reason, generation=resource.generation, **bound)
+        return resource, asked_fields(
+            consented.principal, reason=command.reason, generation=resource.generation, **bound
+        )
 
     operation, queued = enqueue(OperationRequest.Action.RUN, prepare)
     if not queued:

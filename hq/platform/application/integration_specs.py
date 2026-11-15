@@ -113,6 +113,18 @@ STALE_WRITE_KEYWORD = "expected_updated_at"
 SENT_KEYWORD = "sent"
 
 
+# The runner's consent (``capabilities.Consented``), handed in place of the
+# principal only to a handler that names it: one that writes a declaration.
+CONSENT_KEYWORD = "consented"
+
+
+def takes_consent(handler: Callable[..., Any]) -> bool:
+    """Whether a capability handler declares ``consented`` by name: it writes a
+    declaration, which only a consented act may."""
+
+    return _declares(handler, CONSENT_KEYWORD)
+
+
 def takes_stale_write_token(handler: Callable[..., Any]) -> bool:
     """Whether a capability handler declares ``expected_updated_at`` by name.
 

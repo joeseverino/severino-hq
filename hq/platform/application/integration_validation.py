@@ -15,6 +15,7 @@ from pydantic import BaseModel, PydanticUndefinedAnnotation, PydanticUserError, 
 from .connection_contracts import GRANT_MODELS, ConnectionAbility, ConnectionSpec
 from .contracts import DJANGO_ROUTE, DOTTED_NAME, EFFECTS, SCOPE_NAME
 from .integration_specs import (
+    CONSENT_KEYWORD,
     PAGE_FIELD,
     RESERVED_QUERY_FIELD,
     SENT_KEYWORD,
@@ -24,6 +25,7 @@ from .integration_specs import (
     CapabilitySpec,
     ResourceSpec,
     command_schema,
+    takes_consent,
     takes_sent_fields,
     takes_stale_write_token,
     typed_keys,
@@ -108,7 +110,8 @@ def _validate_capability_requirements(spec: CapabilitySpec) -> None:
 def _validate_capability_handler(spec: CapabilitySpec) -> None:
     if not callable(spec.handler):
         raise ImproperlyConfigured(f"Capability {spec.name!r} handler is not callable.")
-    kwargs: dict[str, Any] = {"principal": None}
+    # A handler that writes a declaration takes the consent in place of the principal.
+    kwargs: dict[str, Any] = {CONSENT_KEYWORD if takes_consent(spec.handler) else "principal": None}
     if takes_stale_write_token(spec.handler):
         kwargs[STALE_WRITE_KEYWORD] = None
     if takes_sent_fields(spec.handler):

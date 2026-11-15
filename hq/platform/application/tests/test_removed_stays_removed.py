@@ -9,6 +9,7 @@ the list itself.
 from django.test import TestCase
 
 from hq.domains.control_plane.models import ManagedResource
+from hq.platform.application.consent_testing import consented
 
 from ..adoption import AdoptCommand, AdoptServiceCommand, adopt, adopt_service, unmanaged
 from ..adoption_testing import managing_everything
@@ -30,7 +31,7 @@ def removed(kind: str) -> None:
     and reported done by the controller."""
 
     resource = ManagedResource.objects.get(kind=kind)
-    request_removal(OperationCommand(), principal=cli_principal(), current_key=resource.key)
+    request_removal(OperationCommand(), consented=consented(cli_principal()), current_key=resource.key)
     claim = claim_next_operation("test-controller", capabilities=((kind, "delete"),))
     report_operation(
         claim["operation"]["id"],

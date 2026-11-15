@@ -11,8 +11,9 @@ from hq.domains.jobs.runner import run
 from hq.platform.core.audit import audit_operation, operation_context, record_event
 from hq.platform.core.models import AuditLog
 
+from ..adoption_testing import connection
 from ..approvals import APPROVE, ApprovalError, ApproveCommand, RejectCommand, approve, lapse_expired, reject
-from ..capabilities import CapabilitySpec, execute_capability, run_capability
+from ..capabilities import CapabilitySpec, Consented, execute_capability, run_capability
 from ..infrastructure import ManagedResourceCommand, save_managed_resource
 from ..integration_testing import commands_registered
 from ..security import Capability, cli_principal, mcp_principal
@@ -28,7 +29,7 @@ class _Pair:
     prefix: str
 
 
-def _declare_pair(command: _Pair, *, principal) -> dict:
+def _declare_pair(command: _Pair, *, consented: Consented) -> dict:
     """A capability whose service writes several rows, each through a binding of its own."""
 
     for key in (f"{command.prefix}-one", f"{command.prefix}-two"):
@@ -36,8 +37,7 @@ def _declare_pair(command: _Pair, *, principal) -> dict:
             ManagedResourceCommand(
                 key=key, kind=UNGATED_KIND, spec={"domain": f"{key}.example", "answer": "192.0.2.10"}
             ),
-            principal=principal,
-            copied_from_live=True,
+            consented=consented,
         )
     return {"ok": True}
 
@@ -61,6 +61,9 @@ def last_row() -> int:
 
 
 class CapabilityRunTests(TestCase):
+    def setUp(self):
+        connection("adguard")
+
     def run_pair(self, prefix: str) -> list[AuditLog]:
         mark = last_row()
         with commands_registered({NAME: PAIR}):
@@ -205,6 +208,9 @@ class ApprovalLifeTests(TestCase):
 
 
 class JobTests(TestCase):
+    def setUp(self):
+        connection("adguard")
+
     def test_a_capability_run_inside_a_job_writes_under_the_jobs_id(self):
         def work(progress):
             with commands_registered({NAME: PAIR}):

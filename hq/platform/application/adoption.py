@@ -10,7 +10,7 @@ import logging
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from functools import cached_property
-from typing import Annotated, Any, Literal, NoReturn, TypedDict
+from typing import Annotated, Any, Literal, NoReturn, TypedDict, final, override
 
 from django.db import transaction
 from pydantic import Field
@@ -26,7 +26,7 @@ lazy from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS, con
 from .answer_fields import CallMessage
 from .command_fields import Describe, Names
 from .conditions import READY, stamped
-from .inventory import record_identity, record_token, service_hostnames
+from .inventory import live_spec, record_identity, record_token, service_hostnames
 from .record_errors import PolicyError, RecordNotFound, Sentence
 from .security import Principal
 from .tone import Tone
@@ -36,8 +36,7 @@ lazy from .connection_setup import MANAGES_FIELD
 lazy from .connections import connection_rows
 lazy from .facts import every_snapshot
 lazy from .infrastructure import (
-    ManagedResourceCommand,
-    save_managed_resource,
+    save_adopted,
     suggest_key,
 )
 lazy from .page_reads import setup_url
@@ -259,6 +258,64 @@ def let_in(kind: str, token: str) -> None:
         row.delete()
 
 
+# Only this module holds it, so only this module's reads make a ``Live``.
+_READER = object()
+
+
+@final
+class Live:
+    """A record's spec as HQ's last read of its provider found it: the only
+    thing ``infrastructure.save_adopted`` writes down.
+
+    Writing one down asks no consent, since HQ's copy then equals what is
+    live and nothing anybody would agree to has changed. Its security
+    properties:
+
+    - Two reads make one, both in this module and both of the stored sweep:
+      ``unmanaged`` (each record no declaration claims, which adopting and
+      the sweep's own adoption take) and ``found_live`` (the record a
+      declaration names, which keeping the live version takes). The
+      constructor refuses any caller without this module's private key, so
+      a spec a caller wrote cannot be written down as adopted.
+    - The one thing added to a read is ``keeping``: the fields its provider
+      declares no sweep can observe, taken from the declaration it replaces.
+    - It is immutable and not a dataclass, so ``dataclasses.replace`` cannot
+      swap its spec.
+    """
+
+    __slots__ = ("kind", "spec")
+    kind: str
+    spec: dict[str, Any]
+
+    def __init__(self, kind: str, spec: dict[str, Any], *, reader: object) -> None:
+        if reader is not _READER:
+            raise TypeError("Only a read of the last sweep makes a Live.")
+        object.__setattr__(self, "kind", kind)
+        object.__setattr__(self, "spec", dict(spec))
+
+    @override
+    def __setattr__(self, name: str, value: object) -> None:
+        raise AttributeError("A Live is immutable.")
+
+    @override
+    def __repr__(self) -> str:
+        return f"Live({self.kind!r})"
+
+    def keeping(self, declared: dict[str, Any]) -> Live:
+        """This read, with each field no sweep can observe as ``declared`` has it."""
+
+        unobservable = PROVIDERS[self.kind].unobservable_fields
+        kept = {field: declared[field] for field in unobservable if field in declared}
+        return Live(self.kind, {**self.spec, **kept}, reader=_READER)
+
+
+def found_live(kind: str, declared: dict[str, Any]) -> Live | None:
+    """What the last sweep found for the record ``declared`` describes, or None."""
+
+    found = live_spec(kind, declared)
+    return None if found is None else Live(kind, found, reader=_READER)
+
+
 @dataclass(frozen=True, slots=True)
 class Unmanaged:
     """One record a provider holds that no HQ declaration accounts for.
@@ -272,7 +329,7 @@ class Unmanaged:
     kind: str
     identity: tuple[str, ...]
     hostnames: tuple[str, ...]
-    spec: dict[str, Any]
+    live: Live
     observed_at: Any
     # False when the provider will not take this record on unasked: it stays
     # here, and a finding says so, until a person adopts or removes it.
@@ -283,6 +340,10 @@ class Unmanaged:
     # takes found records on. An observed record is shown and never adopted.
     # See ``application.adoption``.
     observed_only: bool = True
+
+    @property
+    def spec(self) -> dict[str, Any]:
+        return self.live.spec
 
     @property
     def label(self) -> str:
@@ -357,7 +418,7 @@ def unmanaged() -> tuple[Unmanaged, ...]:
                     kind=snapshot.kind,
                     identity=identity,
                     hostnames=service_hostnames(snapshot.kind, spec),
-                    spec=spec,
+                    live=Live(snapshot.kind, spec, reader=_READER),
                     observed_at=snapshot.observed_at,
                     adoptable=not provider.adoption_gap and (provider.adopts is None or provider.adopts(record)),
                     connection_ref=connection_ref,
@@ -540,16 +601,7 @@ def adopt(
         )
     # Every other write's capability check, spec validation, fingerprint and
     # audit record, rather than a row created here.
-    result = save_managed_resource(
-        ManagedResourceCommand(
-            key=command.key or suggested_key(found),
-            kind=found.kind,
-            spec=found.spec,
-            enabled=True,
-        ),
-        principal=principal,
-        copied_from_live=True,
-    )
+    result = save_adopted(found.live, key=command.key or suggested_key(found), principal=principal)
     key = result.get("resource", {}).get("key", "")
     _record_as_observed(key, found)
     # Adopting is the operator managing it again.
