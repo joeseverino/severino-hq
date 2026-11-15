@@ -10,7 +10,6 @@ from hq.domains.control_plane.observations.github import FULL_READ_EVERY, REPOSI
 
 from ..github_repositories import due, plan
 from ..inventory import record_inventory
-from ..security import cli_principal
 
 READ_AT = datetime(2030, 1, 2, 12, 0, tzinfo=UTC)
 
@@ -28,7 +27,7 @@ def read(name, *, fingerprint="f1", sha="abc", read_at=READ_AT):
 
 
 def sweep(*records):
-    record_inventory({REPOSITORY_KIND: {"ok": True, "records": list(records)}}, principal=cli_principal())
+    record_inventory({REPOSITORY_KIND: {"ok": True, "records": list(records)}})
     return {record["repository"]: record for record in ProviderInventory.objects.get(kind=REPOSITORY_KIND).records}
 
 

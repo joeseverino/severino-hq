@@ -787,7 +787,10 @@ nothing leaked.
       reaches a bridge action, the socket's directory admits the web account
       alone, and both ends refuse a peer that is another uid. The controller's
       container mounts that directory read-only and holds neither HQ's
-      database nor its application environment.
+      database nor its application environment. A controller report's
+      writer takes the bridge's admission (`Admitted` in
+      `bridge_actions.py`), which only the bridge makes as it runs the
+      report, so no other door has one to hand a writer.
 - [ ] Provider credentials remain outside the web container entirely. The
       controller report guard rejects any status carrying a key named
       `private`, `secret`, `token`, `password`, or `credential`.

@@ -15,8 +15,8 @@ from ..capabilities import execute_capability
 from ..conditions import DRIFTED, holding
 from ..controller import ControllerReport, claim_next_operation, report_operation
 from ..infrastructure import ManagedResourceCommand, save_managed_resource
-from ..security import cli_principal, mcp_principal
-from ..sweep import record_sweep
+from ..report_testing import bridged
+from ..security import mcp_principal
 from .test_approvals import (
     GATED_KIND,
     POLICY_KEY,
@@ -42,10 +42,7 @@ class ApprovedChangeAppliesTests(TestCase):
     def live(self, document):
         """A sweep that reads ``document`` as the tailnet's policy."""
 
-        record_sweep(
-            {GATED_KIND: {"ok": True, "records": [{"record": "policy", "document": document}]}},
-            principal=cli_principal(),
-        )
+        bridged("inventory", {GATED_KIND: {"ok": True, "records": [{"record": "policy", "document": document}]}})
 
     def ask(self, document):
         answer = execute_capability(

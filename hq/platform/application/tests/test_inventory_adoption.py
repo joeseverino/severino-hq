@@ -30,9 +30,8 @@ from ..adoption import (
 from ..adoption_testing import managing_everything
 from ..inventory import record_inventory
 from ..record_errors import RecordNotFound
-from ..report_testing import refused_part
+from ..report_testing import bridged, refused_part
 from ..security import cli_principal
-from ..sweep import record_sweep
 from .inventory_records import A_PROXY, A_REWRITE, ANOTHER, a_sweep
 from .markup import select
 
@@ -40,10 +39,7 @@ from .markup import select
 class AdoptionTests(TestCase):
     def setUp(self):
         managing_everything()
-        record_inventory(
-            a_sweep(**{"npm.proxy_host": [A_PROXY], "adguard.rewrite": [A_REWRITE]}),
-            principal=cli_principal(),
-        )
+        record_inventory(a_sweep(**{"npm.proxy_host": [A_PROXY], "adguard.rewrite": [A_REWRITE]}))
 
     def test_adopting_captures_the_record_exactly_as_it_is(self):
         """The whole safety argument: the first reconcile after this is a no-op.
@@ -116,12 +112,12 @@ class AdoptionWebTests(TestCase):
         # Stored without adopting, because the tests below exercise the manual
         # button, which only has anything to do when nothing took the record
         # first. A real sweep adopts, and the test for that says so itself.
-        record_inventory(a_sweep(**{"adguard.rewrite": [A_REWRITE]}), principal=cli_principal())
+        record_inventory(a_sweep(**{"adguard.rewrite": [A_REWRITE]}))
 
     def test_a_swept_record_is_managed_without_being_opted_in(self):
         """Through a connection that manages, a swept record needs no click."""
 
-        record_sweep(a_sweep(**{"adguard.rewrite": [A_REWRITE]}), principal=cli_principal())
+        bridged("inventory", a_sweep(**{"adguard.rewrite": [A_REWRITE]}))
 
         response = self.client.get(reverse("control_plane:services"))
 
@@ -170,8 +166,7 @@ class AdoptServiceTests(TestCase):
                     "adguard.rewrite": [{"domain": "shop.example.com", "answer": "10.0.0.20"}],
                     "npm.proxy_host": [A_PROXY],
                 }
-            ),
-            principal=cli_principal(),
+            )
         )
 
     def test_one_hostname_groups_its_records(self):
@@ -247,22 +242,20 @@ class NothingWaitsToBeOptedInTests(TestCase):
         managing_everything(("cloudflare_dns", "a-token"), ("portainer", "a-portainer"))
 
     def swept(self, **kinds):
-        record_sweep(a_sweep(**kinds), principal=cli_principal())
+        bridged("inventory", a_sweep(**kinds))
         return set(ManagedResource.objects.values_list("kind", flat=True))
 
     def test_a_rewrite_a_credential_reached_needs_no_click(self):
         self.assertIn("adguard.rewrite", self.swept(**{"adguard.rewrite": [A_REWRITE]}))
 
     def test_nothing_is_left_offering_itself_for_adoption(self):
-        record_sweep(
-            a_sweep(**{"adguard.rewrite": [A_REWRITE, ANOTHER]}),
-            principal=cli_principal(),
-        )
+        bridged("inventory", a_sweep(**{"adguard.rewrite": [A_REWRITE, ANOTHER]}))
 
         self.assertEqual([item.hostname for item in unmanaged()], [])
 
     def test_everything_adoptable_is_adopted_and_only_a_stackless_container_waits(self):
-        record_sweep(
+        bridged(
+            "inventory",
             a_sweep(
                 **{
                     "adguard.rewrite": [A_REWRITE, ANOTHER],
@@ -270,7 +263,6 @@ class NothingWaitsToBeOptedInTests(TestCase):
                     "portainer.container": [A_COMPOSED_CONTAINER, A_STRAY_CONTAINER],
                 }
             ),
-            principal=cli_principal(),
         )
 
         waiting = unmanaged()
@@ -299,7 +291,7 @@ class ASweepConfirmsWhatItFindsTests(TestCase):
 
     def setUp(self):
         managing_everything()
-        record_sweep(a_sweep(**{"adguard.rewrite": [A_REWRITE]}), principal=cli_principal())
+        bridged("inventory", a_sweep(**{"adguard.rewrite": [A_REWRITE]}))
         self.resource = ManagedResource.objects.get(kind="adguard.rewrite")
 
     def test_what_a_sweep_adopted_or_found_unchanged_is_observed_and_healthy(self):
@@ -322,7 +314,7 @@ class ASweepConfirmsWhatItFindsTests(TestCase):
         self.resource.generation += 1
         self.resource.save(update_fields=["spec", "generation"])
 
-        record_sweep(a_sweep(**{"adguard.rewrite": [A_REWRITE]}), principal=cli_principal())
+        bridged("inventory", a_sweep(**{"adguard.rewrite": [A_REWRITE]}))
 
         self.resource.refresh_from_db()
         self.assertNotEqual(self.resource.observed_generation, self.resource.generation)
@@ -330,10 +322,7 @@ class ASweepConfirmsWhatItFindsTests(TestCase):
     def test_a_provider_that_could_not_be_reached_confirms_nothing(self):
         before = ManagedResource.objects.get(kind="adguard.rewrite").last_observed_at
 
-        record_sweep(
-            {"adguard.rewrite": {"ok": False, "records": [], "error": "timed out"}},
-            principal=cli_principal(),
-        )
+        bridged("inventory", {"adguard.rewrite": {"ok": False, "records": [], "error": "timed out"}})
 
         self.assertEqual(ManagedResource.objects.get(kind="adguard.rewrite").last_observed_at, before)
 
@@ -363,10 +352,7 @@ class ASweepAdoptsOnlyWhatAComposeProjectDeclaresTests(TestCase):
 
     def setUp(self):
         managing_everything(("portainer", "a-portainer"))
-        record_sweep(
-            a_sweep(**{"portainer.container": [A_COMPOSED_CONTAINER, A_STRAY_CONTAINER]}),
-            principal=cli_principal(),
-        )
+        bridged("inventory", a_sweep(**{"portainer.container": [A_COMPOSED_CONTAINER, A_STRAY_CONTAINER]}))
 
     def names(self):
         return {resource.spec.get("name") for resource in ManagedResource.objects.filter(kind="portainer.container")}
@@ -386,10 +372,7 @@ class ASweepAdoptsOnlyWhatAComposeProjectDeclaresTests(TestCase):
     def test_a_later_sweep_still_leaves_it_waiting(self):
         """Not a first-pass accident: every sweep declines it the same way."""
 
-        record_sweep(
-            a_sweep(**{"portainer.container": [A_COMPOSED_CONTAINER, A_STRAY_CONTAINER]}),
-            principal=cli_principal(),
-        )
+        bridged("inventory", a_sweep(**{"portainer.container": [A_COMPOSED_CONTAINER, A_STRAY_CONTAINER]}))
 
         self.assertNotIn("a-stray", self.names())
 
@@ -425,19 +408,13 @@ class ADeletedContainerIsForgottenTests(TestCase):
 
     def setUp(self):
         managing_everything(("portainer", "a-portainer"))
-        record_sweep(
-            a_sweep(**{"portainer.container": [A_COMPOSED_CONTAINER, self.ELSEWHERE]}),
-            principal=cli_principal(),
-        )
+        bridged("inventory", a_sweep(**{"portainer.container": [A_COMPOSED_CONTAINER, self.ELSEWHERE]}))
 
     def names(self):
         return {resource.spec.get("name") for resource in ManagedResource.objects.filter(kind="portainer.container")}
 
     def sweep(self, *records, **report):
-        return record_sweep(
-            {"portainer.container": {"ok": True, "records": list(records), **report}},
-            principal=cli_principal(),
-        )
+        return bridged("inventory", {"portainer.container": {"ok": True, "records": list(records), **report}})
 
     def test_one_its_machine_no_longer_lists_is_forgotten_until_it_returns(self):
         kept = {**A_COMPOSED_CONTAINER, "name": "a-db"}
@@ -466,10 +443,7 @@ class ADeletedContainerIsForgottenTests(TestCase):
     def test_a_refused_or_failed_listing_retires_nothing(self):
         self.sweep({**A_COMPOSED_CONTAINER, "name": "a-db"}, refused_parts=[refused_part("")])
         self.assertIn("a-web", self.names())
-        record_sweep(
-            {"portainer.container": {"ok": False, "records": [], "error": "down"}},
-            principal=cli_principal(),
-        )
+        bridged("inventory", {"portainer.container": {"ok": False, "records": [], "error": "down"}})
         self.assertIn("a-web", self.names())
 
     def test_one_on_demand_is_kept(self):

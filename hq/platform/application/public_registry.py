@@ -506,7 +506,7 @@ def _held_findings() -> dict[tuple[str, str, str], Mapping[str, Any]]:
     }
 
 
-def _images(now: datetime, *, force: bool, principal: Principal) -> list[Any]:
+def _images(now: datetime, *, force: bool) -> list[Any]:
     """Every image reading, in the order each depends on the one before:
     tags name the digests, a digest's provenance can name the source, and
     its package list is what OSV is asked about. Each is stored before the
@@ -532,7 +532,7 @@ def _images(now: datetime, *, force: bool, principal: Principal) -> list[Any]:
     for kind, stage in zip((IMAGE_KIND, DIGEST_KIND, UPSTREAM_KIND, VULNERABILITY_KIND), stages, strict=False):
         report = stage()
         if report is not None:
-            recorded.extend(record_inventory({kind: report}, principal=principal).get("recorded") or ())
+            recorded.extend(record_inventory({kind: report}).get("recorded") or ())
     return recorded
 
 
@@ -560,10 +560,10 @@ def refresh(
         payload.update(_registries(addresses, domains, allocations, registrations, now, force))
     else:
         payload.update({kind: {"ok": True, "records": [], "connected": False} for kind in kinds})
-    recorded = _images(now, force=force, principal=principal)
+    recorded = _images(now, force=force)
     if not payload:
         return {"ok": True, "recorded": recorded}
-    result = record_inventory(payload, principal=principal)
+    result = record_inventory(payload)
     return {**result, "recorded": recorded + list(result.get("recorded") or ())}
 
 

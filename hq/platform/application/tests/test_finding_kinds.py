@@ -10,6 +10,7 @@ from hq.platform.application.plugin_testing import form_keyed
 
 from ..findings import derive_findings
 from ..plugin_testing import offering
+from ..report_testing import bridged
 from ..security import Capability, Principal
 from ..topology import derive_topology
 from ..topology_model import Topology, TopologyNode
@@ -467,8 +468,6 @@ class UnrecognizedContainerTests(TestCase):
 
     def setUp(self):
         from ..adoption_testing import connection
-        from ..security import cli_principal
-        from ..sweep import record_sweep
 
         connection("portainer", "a-portainer")
         ManagedResource.objects.create(
@@ -476,14 +475,14 @@ class UnrecognizedContainerTests(TestCase):
             kind="machine",
             spec={"name": "a-docker-host", "addresses": ["10.0.0.9"]},
         )
-        record_sweep(
+        bridged(
+            "inventory",
             {
                 "portainer.container": {
                     "ok": True,
                     "records": [self.COMPOSED, self.STRAY],
                 }
             },
-            principal=cli_principal(),
         )
 
     def projected(self):

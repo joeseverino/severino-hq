@@ -20,7 +20,6 @@ from hq.domains.projects.models import Project
 from hq.platform.application.card_items import Insight, Kpi
 from hq.platform.application.drawings import Dot, Dots
 from hq.platform.application.report_testing import report_connections
-from hq.platform.application.security import cli_principal
 from hq.platform.application.services import CONTAINER_KIND
 from hq.platform.application.ui import ActivityCalendar, CalendarDay, ChartSeries, DomainOverview, stacked_bar_chart
 from hq.platform.core import seeds
@@ -141,7 +140,6 @@ def build_estate(user):
                 "failure": "address",
             },
         ],
-        principal=cli_principal(),
         controller_id="example-controller",
     )
     # A name only an Access application names: an observed row.

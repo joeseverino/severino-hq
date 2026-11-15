@@ -48,7 +48,7 @@ from hq.platform.application.payload_words import changed_words
 from hq.platform.application.pins import SERVICE as PINNED_SERVICE, toggle
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.report_testing import report_connections
-from hq.platform.application.security import Capability, Principal, cli_principal
+from hq.platform.application.security import Capability, Principal
 from hq.platform.application.services import CONTAINER_KIND
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core import seeds
@@ -564,7 +564,6 @@ def build_dense_estate(user):
                 "detail": "4 zones.",
             },
         ],
-        principal=cli_principal(),
         controller_id="example-controller",
     )
     # The last thing a connection did names a resource as long as a real

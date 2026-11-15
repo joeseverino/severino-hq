@@ -12,10 +12,9 @@ from hq.platform.core.models import AuditLog
 from ..adoption import AdoptCommand, adopt, unmanaged
 from ..adoption_testing import connection
 from ..record_errors import PolicyError
-from ..report_testing import report_connections
+from ..report_testing import bridged, report_connections
 from ..resource_operations import OperationCommand, request_removal
 from ..security import cli_principal
-from ..sweep import record_sweep
 from ..zones import find_zone
 
 ZONE_KIND = "cloudflare.zone"
@@ -36,12 +35,12 @@ RECORDS = [
 
 
 def swept(zones=ZONES, records=RECORDS):
-    return record_sweep(
+    return bridged(
+        "inventory",
         {
             ZONE_KIND: {"ok": True, "records": zones},
             RECORD_KIND: {"ok": True, "records": records},
         },
-        principal=cli_principal(),
     )
 
 
@@ -132,8 +131,7 @@ class RecordedConnectionTests(TestCase):
             [
                 {"connection_ref": "example-a", "provider": "cloudflare_dns", "manages": True},
                 {"connection_ref": "example-b", "provider": "cloudflare_dns", "manages": False},
-            ],
-            principal=cli_principal(),
+            ]
         )
 
         self.assertEqual(
@@ -216,10 +214,7 @@ class StopManagingAnyKindTests(TestCase):
     }
 
     def sweep(self):
-        record_sweep(
-            {"portainer.container": {"ok": True, "records": [self.CONTAINER]}},
-            principal=cli_principal(),
-        )
+        bridged("inventory", {"portainer.container": {"ok": True, "records": [self.CONTAINER]}})
 
     def test_a_forgotten_container_stays_unmanaged(self):
         connection("portainer", "example-portainer")
@@ -270,7 +265,7 @@ class OperatorOwnedRouteTests(TestCase):
         connection("ssh", "example-edge")
 
     def sweep(self):
-        return record_sweep({self.KIND: {"ok": True, "records": self.ROUTES}}, principal=cli_principal())
+        return bridged("inventory", {self.KIND: {"ok": True, "records": self.ROUTES}})
 
     def test_a_sweep_through_a_managing_connection_adopts_none_of_them(self):
         result = self.sweep()

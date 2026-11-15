@@ -26,9 +26,9 @@ from ..findings import derive_findings
 from ..infrastructure import ManagedResourceCommand, save_managed_resource
 from ..inventory import record_identity
 from ..record_errors import PolicyError, RecordNotFound
+from ..report_testing import bridged
 from ..resource_operations import OperationCommand, accept_observed, request_reconcile, request_removal
 from ..security import cli_principal
-from ..sweep import record_sweep
 from ..topology import derive_topology
 from .inventory_records import a_sweep
 
@@ -263,7 +263,7 @@ if HYPOTHESIS:
             report = payload.get(KIND, {})
             if report.get("ok") and not report.get("carried"):
                 self.answered_at = timezone.now()
-            adopted = record_sweep(payload, principal=self.principal)["adopted"]
+            adopted = bridged("inventory", payload)["adopted"]
             return multiple(*adopted)
 
         @staticmethod

@@ -7,7 +7,7 @@ import each other, so the composition lives above both.
 """
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from django.db import transaction
 
@@ -29,6 +29,9 @@ lazy from .first_seen import look_due
 lazy from .projects import sync_repositories
 lazy from .public_registry import registry_due
 
+if TYPE_CHECKING:
+    from hq.domains.control_plane.bridge_actions import Admitted
+
 logger = logging.getLogger("severino.sweep")
 # The capability a sweep's adoption is, run by HQ itself.
 ADOPT = "infrastructure.resource.adopt"
@@ -38,10 +41,11 @@ ADOPT = "infrastructure.resource.adopt"
 # adopting takes the stored sweep with it rather than leave declarations
 # describing a world nothing recorded.
 @transaction.atomic
-def record_sweep(payload: dict[str, Any], *, principal, controller_id: str = "") -> dict[str, Any]:
+def record_sweep(payload: dict[str, Any], *, admitted: Admitted) -> dict[str, Any]:
     """Store a controller sweep, then adopt what it revealed."""
 
-    result = record_inventory(payload, principal=principal, controller_id=controller_id)
+    principal = admitted.principal
+    result = record_inventory(payload, controller_id=admitted.controller_id)
     # After the sweep is stored: adoption reads each spec back out of the
     # records just recorded, so every declaration it writes starts equal to
     # what the controller found and the first reconcile is a no-op.

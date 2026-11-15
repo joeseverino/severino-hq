@@ -11,8 +11,7 @@ from hq.domains.control_plane.models import ManagedResource
 
 from ..adoption import unmanaged
 from ..adoption_testing import managing_everything
-from ..security import cli_principal
-from ..sweep import record_sweep
+from ..report_testing import bridged
 from ..zones import find_zone
 from .inventory_records import A_REWRITE, a_sweep
 from .zone_records import DNS_CONNECTIONS, RECORD_KIND, ZONE_KIND, ZONES, record
@@ -31,11 +30,11 @@ class SwitchedOffRewriteTests(TestCase):
     def setUp(self):
         super().setUp()
         managing_everything()
-        record_sweep(a_sweep(**{"adguard.rewrite": [A_REWRITE]}), principal=cli_principal())
+        bridged("inventory", a_sweep(**{"adguard.rewrite": [A_REWRITE]}))
         self.resource = switched_off("adguard.rewrite")
 
     def test_a_sweep_that_lists_it_adopts_no_second_declaration(self):
-        record_sweep(a_sweep(**{"adguard.rewrite": [A_REWRITE]}), principal=cli_principal())
+        bridged("inventory", a_sweep(**{"adguard.rewrite": [A_REWRITE]}))
 
         self.assertEqual(
             list(ManagedResource.objects.filter(kind="adguard.rewrite").values_list("key", "enabled")),
@@ -49,11 +48,11 @@ class SwitchedOffZoneRecordTests(TestCase):
         super().setUp()
         managing_everything(*DNS_CONNECTIONS)
         self.sweep = {ZONE_KIND: {"ok": True, "records": ZONES}, RECORD_KIND: {"ok": True, "records": [A_TXT]}}
-        record_sweep(self.sweep, principal=cli_principal())
+        bridged("inventory", self.sweep)
         self.resource = switched_off(RECORD_KIND)
 
     def test_a_sweep_that_lists_it_adopts_no_second_declaration(self):
-        record_sweep(self.sweep, principal=cli_principal())
+        bridged("inventory", self.sweep)
 
         self.assertEqual(
             list(ManagedResource.objects.filter(kind=RECORD_KIND).values_list("key", "enabled")),
@@ -61,7 +60,7 @@ class SwitchedOffZoneRecordTests(TestCase):
         )
 
     def test_the_domain_still_lists_it_as_declared(self):
-        record_sweep(self.sweep, principal=cli_principal())
+        bridged("inventory", self.sweep)
 
         listed = [entry for entry in find_zone("example.com").records if entry.record_type == "TXT"]
         self.assertEqual([entry.resource_key for entry in listed], [self.resource.key])

@@ -11,7 +11,7 @@ from hq.domains.control_plane.models import ProviderConnection
 from ..credential_mint import address_fields
 from ..findings import findings
 from ..report_testing import report_connections
-from ..security import Capability, Principal, cli_principal
+from ..security import Capability, Principal
 from .markup import select, within
 
 EVERYTHING = Principal("test", "operator", frozenset(Capability))
@@ -31,7 +31,6 @@ def report(**connection):
                 **connection,
             }
         ],
-        principal=cli_principal(),
         controller_id="example-controller",
     )
 

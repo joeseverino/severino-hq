@@ -10,6 +10,7 @@ from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.control_plane.observations.public_registry import DIGEST_KIND as DIGEST
 
 from ..containers import DECLARED, LABEL, PROVENANCE, REGISTRY, VULNERABLE, containers
+from ..report_testing import bridged
 from ..security import cli_principal
 from ..standards import Standing
 from .test_containers import estate, inventory
@@ -259,17 +260,16 @@ class CadenceTests(TestCase):
 
 class RegistryReadTests(TestCase):
     def sweep(self):
-        from ..sweep import record_sweep
 
         with self.captureOnCommitCallbacks(execute=True):
-            record_sweep(
+            bridged(
+                "inventory",
                 {
                     "portainer.container": {
                         "ok": True,
                         "records": list(ProviderInventory.objects.get(kind="portainer.container").records),
                     }
                 },
-                principal=cli_principal(),
             )
 
     def test_a_sweep_that_finds_a_digest_hq_has_not_read_starts_the_read(self):

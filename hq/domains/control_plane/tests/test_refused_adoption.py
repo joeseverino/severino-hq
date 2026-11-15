@@ -19,7 +19,7 @@ TAKEN = {"domain": "tool.example.com", "answer": "192.0.2.11", "enabled": True}
 class RefusedAdoptionTests(TestCase):
     def setUp(self):
         managing_everything()
-        record_inventory({KIND: {"ok": True, "records": [REFUSED, TAKEN]}}, principal=cli_principal())
+        record_inventory({KIND: {"ok": True, "records": [REFUSED, TAKEN]}})
 
     def test_a_record_that_cannot_be_adopted_is_logged_and_the_rest_are_adopted(self):
         take_on = adoption._take_on

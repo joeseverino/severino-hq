@@ -40,6 +40,7 @@ from ..cadence import (
     sweep_due,
     sweep_interval,
 )
+from ..report_testing import bridged
 from ..resource_operations import OperationCommand, request_reconcile
 from ..security import cli_principal
 
@@ -365,7 +366,6 @@ class CarriedConnectionRecordTests(TestCase):
                     "detail": "Not asked again this sweep.",
                 }
             ],
-            principal=cli_principal(),
             controller_id="here",
         )
 
@@ -390,7 +390,6 @@ class CarriedConnectionRecordTests(TestCase):
                     "detail": "Not asked again this sweep.",
                 }
             ],
-            principal=cli_principal(),
             controller_id="here",
         )
 
@@ -507,11 +506,9 @@ class WorkerStandingTests(TestCase):
         """A failed first read stores no moment it was read, and only a
         controller reports one, so it says a controller has run."""
 
-        from ..sweep import record_sweep
-
-        record_sweep(
+        bridged(
+            "inventory",
             {"tailscale.policy": {"ok": False, "records": [], "error": "Tailscale refused the token."}},
-            principal=cli_principal(),
             controller_id="example-controller",
         )
 

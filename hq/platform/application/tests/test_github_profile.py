@@ -169,7 +169,7 @@ class IngestTests(TestCase):
     def record(self, report):
         from ..inventory import record_inventory
 
-        return record_inventory({github_profile.KIND: report}, principal=operator())
+        return record_inventory({github_profile.KIND: report})
 
     def test_a_carried_kind_keeps_its_records_and_its_moment(self):
         before = hold(at=timezone.now() - RETRY_AFTER)

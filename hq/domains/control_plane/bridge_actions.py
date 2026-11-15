@@ -9,7 +9,7 @@ a request itself.
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, override
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_adapters.automation import OPERATION_KIND, SOURCE_KIND
@@ -31,7 +31,7 @@ from hq.platform.application.inventory import record_connections, record_step_fa
 from hq.platform.application.outbound_work import run_for_host
 from hq.platform.application.record_errors import CertificateError
 from hq.platform.application.refused_reports import READINGS_ACTION
-from hq.platform.application.security import internal_principal
+from hq.platform.application.security import Principal, internal_principal
 from hq.platform.application.sweep import record_sweep
 
 Parameters = Mapping[str, Any]
@@ -106,12 +106,55 @@ def _material(parameters: Parameters, payload: Any) -> Any:
         raise ValueError(str(exc)) from exc
 
 
+# The key ``Admitted``'s constructor asks for, held by this module alone.
+_ADMITTER = object()
+
+
+class Admitted:
+    """A controller the bridge admitted, the only thing a controller report's writer takes.
+
+    A report's writer (``record_sweep``, ``record_connections``,
+    ``record_step_failures``, ``record_analytics``,
+    ``record_dashboard_observations``) asks nobody's permission: the bridge
+    decided who may report when it admitted the controller's request, and
+    this is that decision, carried to the writer.
+
+    - One place makes one: ``_recorded``, as the bridge runs a report's
+      action. The constructor refuses a caller without this module's private
+      key, so no other door, an adapter or a capability's handler, has a
+      value to hand a writer, and the call fails.
+    - It names the controller the request came from, which the writer stores
+      each row against, so a writer is never told a controller by its caller.
+    - HQ itself is who records it (``principal``): nobody acts on the
+      controller's behalf.
+    - It is immutable and not a dataclass, so ``dataclasses.replace`` cannot
+      rebind it to another controller.
+    """
+
+    __slots__ = ("controller_id", "principal")
+    controller_id: str
+    principal: Principal
+
+    def __init__(self, controller_id: str, *, admitter: object) -> None:
+        if admitter is not _ADMITTER:
+            raise TypeError("Only the bridge, running a controller's report, makes an Admitted.")
+        object.__setattr__(self, "controller_id", controller_id)
+        object.__setattr__(self, "principal", internal_principal(CONTROLLER))
+
+    @override
+    def __setattr__(self, name: str, value: object) -> None:
+        raise AttributeError("An Admitted is immutable.")
+
+    @override
+    def __repr__(self) -> str:
+        return f"Admitted({self.controller_id!r})"
+
+
 def _recorded(record: Callable[..., Any]) -> Run:
-    """A controller's report, recorded by HQ itself: the bridge has already
-    admitted the controller, and nobody is acting on its behalf."""
+    """A controller's report, handed to its writer with the bridge's admission (``Admitted``)."""
 
     def run(parameters: Parameters, payload: Any) -> Any:
-        return record(payload, principal=internal_principal(CONTROLLER), controller_id=parameters["controller-id"])
+        return record(payload, admitted=Admitted(parameters["controller-id"], admitter=_ADMITTER))
 
     return run
 

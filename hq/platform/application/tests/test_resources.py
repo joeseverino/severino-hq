@@ -12,6 +12,7 @@ from hq.platform.application.contracts import Closed
 from ..command_center import command_center
 from ..integrations import integration_graph
 from ..plugins import plugin_resource_specs
+from ..report_testing import bridged
 from ..resources import (
     EmptyQuery,
     InvalidResourceInput,
@@ -165,11 +166,9 @@ class ResourceExecutionTests(TestCase):
     def test_a_reading_answers_its_age_and_each_records_waiting_and_nothing_else(self):
         import json
 
-        from ..security import cli_principal
-        from ..sweep import record_sweep
-
         bulk = [{"name": f"image-{n}", "digest": "sha256:" + "0" * 64} for n in range(40)]
-        record_sweep(
+        bridged(
+            "inventory",
             {
                 "github.repository": {
                     "ok": True,
@@ -185,7 +184,6 @@ class ResourceExecutionTests(TestCase):
                     ],
                 }
             },
-            principal=cli_principal(),
             controller_id="controller",
         )
 

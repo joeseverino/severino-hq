@@ -12,8 +12,8 @@ from hq.platform.core.tests import audit_rows
 
 from ..adoption import unmanaged
 from ..inventory import inventory_state, record_inventory
+from ..report_testing import bridged
 from ..security import cli_principal
-from ..sweep import record_sweep
 from .inventory_records import A_PROXY, A_REWRITE, ANOTHER, a_sweep
 
 
@@ -24,19 +24,13 @@ class RecordingTests(TestCase):
         A cache that only ever grows reports things that are gone, which is the
         one failure a staleness-aware store must not have.
         """
-        record_sweep(
-            a_sweep(**{"adguard.rewrite": [A_REWRITE, ANOTHER]}),
-            principal=cli_principal(),
-        )
-        record_sweep(a_sweep(**{"adguard.rewrite": [A_REWRITE]}), principal=cli_principal())
+        bridged("inventory", a_sweep(**{"adguard.rewrite": [A_REWRITE, ANOTHER]}))
+        bridged("inventory", a_sweep(**{"adguard.rewrite": [A_REWRITE]}))
 
         self.assertEqual(len(ProviderInventory.objects.get(kind="adguard.rewrite").records), 1)
 
     def test_a_provider_first_seen_unreachable_is_recorded_as_unreachable(self):
-        record_sweep(
-            {"adguard.rewrite": {"ok": False, "records": [], "error": "timed out"}},
-            principal=cli_principal(),
-        )
+        bridged("inventory", {"adguard.rewrite": {"ok": False, "records": [], "error": "timed out"}})
 
         snapshot = ProviderInventory.objects.get(kind="adguard.rewrite")
         self.assertFalse(snapshot.reachable)
@@ -53,16 +47,10 @@ class RecordingTests(TestCase):
         knew about a host that never changed, and every page downstream then
         says its containers are gone.
         """
-        record_sweep(
-            a_sweep(**{"adguard.rewrite": [A_REWRITE, ANOTHER]}),
-            principal=cli_principal(),
-        )
+        bridged("inventory", a_sweep(**{"adguard.rewrite": [A_REWRITE, ANOTHER]}))
         first = ProviderInventory.objects.get(kind="adguard.rewrite").observed_at
 
-        record_sweep(
-            {"adguard.rewrite": {"ok": False, "records": [], "error": "no credential"}},
-            principal=cli_principal(),
-        )
+        bridged("inventory", {"adguard.rewrite": {"ok": False, "records": [], "error": "no credential"}})
 
         snapshot = ProviderInventory.objects.get(kind="adguard.rewrite")
         self.assertEqual(len(snapshot.records), 2)
@@ -72,21 +60,18 @@ class RecordingTests(TestCase):
 
     def test_a_kind_this_hq_does_not_know_is_ignored_not_rejected(self):
         """A controller ahead of this HQ must not take the whole sweep down."""
-        result = record_sweep(
+        result = bridged(
+            "inventory",
             {
                 "invented.kind": {"ok": True, "records": [{}]},
                 "adguard.rewrite": {"ok": True, "records": [A_REWRITE]},
             },
-            principal=cli_principal(),
         )
 
         self.assertEqual(result["recorded"], ["adguard.rewrite"])
 
     def test_state_reports_what_each_provider_last_said(self):
-        record_sweep(
-            a_sweep(**{"adguard.rewrite": [A_REWRITE, ANOTHER]}),
-            principal=cli_principal(),
-        )
+        bridged("inventory", a_sweep(**{"adguard.rewrite": [A_REWRITE, ANOTHER]}))
 
         state = inventory_state()
 
@@ -152,8 +137,7 @@ class UnmanagedTests(TestCase):
                     "adguard.rewrite": [A_REWRITE, ANOTHER],
                     "npm.proxy_host": [A_PROXY],
                 }
-            ),
-            principal=cli_principal(),
+            )
         )
 
     def test_everything_is_unmanaged_until_something_declares_it(self):
@@ -233,7 +217,7 @@ class ObservationIsNotAnEventTests(TestCase):
         self.before = audit_rows.mark()
 
     def sweep(self, record=None):
-        record_sweep(a_sweep(**{"adguard.rewrite": [record or A_REWRITE]}), principal=self.principal)
+        bridged("inventory", a_sweep(**{"adguard.rewrite": [record or A_REWRITE]}))
         self.resource.refresh_from_db()
 
     def updates(self):
@@ -284,10 +268,7 @@ class ObservationKindTests(TestCase):
             "foreign_interface_dropped": True,
         }
 
-        record_inventory(
-            a_sweep(**{"host.firewall": [reading]}),
-            principal=cli_principal(),
-        )
+        record_inventory(a_sweep(**{"host.firewall": [reading]}))
 
         stored = ProviderInventory.objects.get(kind="host.firewall")
         self.assertTrue(stored.reachable)
@@ -297,17 +278,11 @@ class ObservationKindTests(TestCase):
         # Storing the reading must not put a resource on the board. Nothing can
         # create, reconcile or delete a host firewall, so an entry offering to
         # would be an action that cannot be taken.
-        record_inventory(
-            a_sweep(**{"host.firewall": [{"record": "interface-binding"}]}),
-            principal=cli_principal(),
-        )
+        record_inventory(a_sweep(**{"host.firewall": [{"record": "interface-binding"}]}))
 
         self.assertNotIn("host.firewall", {item.kind for item in unmanaged()})
 
     def test_a_kind_this_hq_has_never_heard_of_is_still_dropped(self):
-        record_inventory(
-            a_sweep(**{"host.something-newer": [{"record": "x"}]}),
-            principal=cli_principal(),
-        )
+        record_inventory(a_sweep(**{"host.something-newer": [{"record": "x"}]}))
 
         self.assertFalse(ProviderInventory.objects.filter(kind="host.something-newer").exists())

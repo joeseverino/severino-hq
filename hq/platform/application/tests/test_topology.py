@@ -15,6 +15,7 @@ from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from ..connections import ConnectionInstance, ConnectionLink, ConnectionSpec
 from ..plugin_testing import offering
+from ..report_testing import bridged
 from ..security import Capability
 from ..topology import TOPOLOGY_SCHEMA_VERSION, derive_topology, serialize_topology, topology as serialized_topology
 from .host_only import host_only
@@ -407,15 +408,14 @@ class AnUnrecognizedContainerIsCarriedByItsMachineTests(TestCase):
     """A container the sweep declined has no node, so its machine holds it."""
 
     def setUp(self):
-        from ..security import cli_principal
-        from ..sweep import record_sweep
 
         ManagedResource.objects.create(
             key="a-docker-host",
             kind="machine",
             spec={"name": "a-docker-host", "addresses": ["10.0.0.9"]},
         )
-        record_sweep(
+        bridged(
+            "inventory",
             {
                 "portainer.container": {
                     "ok": True,
@@ -430,7 +430,6 @@ class AnUnrecognizedContainerIsCarriedByItsMachineTests(TestCase):
                     ],
                 }
             },
-            principal=cli_principal(),
         )
         with host_only():
             self.nodes = {node.id: node for node in derive_topology(principal=READ).nodes}

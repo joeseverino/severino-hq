@@ -5,12 +5,12 @@ from django.test import TestCase
 from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 from hq.domains.projects.models import Project
 
-from ..security import cli_principal
-from ..sweep import record_sweep
+from ..report_testing import bridged
 
 
 def sweep(*records: dict) -> dict:
-    return record_sweep(
+    return bridged(
+        "inventory",
         {
             REPOSITORY_KIND: {
                 "ok": True,
@@ -20,7 +20,6 @@ def sweep(*records: dict) -> dict:
                 ],
             }
         },
-        principal=cli_principal(),
         controller_id="controller",
     )
 

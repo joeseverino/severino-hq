@@ -10,7 +10,7 @@ second copy of AdGuard.
 import hashlib
 import json
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from django.db import transaction
 from django.utils import timezone
@@ -33,9 +33,11 @@ lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_
 from .conditions import DEGRADED, DRIFTED, READY, stamped
 from .contracts import endpoint_has_private_parts
 from .credential_mint import parse_expiry, store_references
-from .security import Capability, Principal
 from .ui import counted, ended
 lazy from .credential_sight import standing
+
+if TYPE_CHECKING:
+    from hq.domains.control_plane.bridge_actions import Admitted
 lazy from .facts import inventory_records
 
 
@@ -53,7 +55,7 @@ def record_token(kind: str, identity: tuple[str, ...]) -> str:
 
 
 @transaction.atomic
-def record_inventory(payload: dict[str, Any], *, principal: Principal, controller_id: str = "") -> dict[str, Any]:
+def record_inventory(payload: dict[str, Any], *, controller_id: str = "") -> dict[str, Any]:
     """Store one controller sweep, replacing whatever the last one said.
 
     Replaced rather than merged: merging would keep records since deleted, the
@@ -63,7 +65,6 @@ def record_inventory(payload: dict[str, Any], *, principal: Principal, controlle
     contract's ``Inventory``, which the bridge holds every sweep to first.
     """
 
-    principal.require(Capability.MANAGE_INFRASTRUCTURE)
     observed_at = timezone.now()
     stored = []
     summary: dict[str, dict[str, Any]] = {}
@@ -542,9 +543,7 @@ def _difference_phrase(field: str, asked: str, live: str) -> str:
 
 
 @transaction.atomic
-def record_step_failures(
-    payload: list[dict[str, Any]], *, principal: Principal, controller_id: str = ""
-) -> dict[str, Any]:
+def record_step_failures(payload: list[dict[str, Any]], *, admitted: Admitted) -> dict[str, Any]:
     """Store the work one pass could not finish, against the connection it used.
 
     Reported at the end of a pass and written onto the rows the sweep wrote at
@@ -552,7 +551,7 @@ def record_step_failures(
     the right connection.
     """
 
-    principal.require(Capability.MANAGE_INFRASTRUCTURE)
+    controller_id = admitted.controller_id
     by_ref: dict[str, list[dict[str, str]]] = {}
     for item in payload:
         subject = item["subject"].strip()
@@ -576,9 +575,7 @@ def record_step_failures(
 
 
 @transaction.atomic
-def record_connections(
-    payload: list[dict[str, Any]], *, principal: Principal, controller_id: str = ""
-) -> dict[str, Any]:
+def record_connections(payload: list[dict[str, Any]], *, admitted: Admitted) -> dict[str, Any]:
     """Store what one controller can currently reach, replacing its last answer.
 
     Held as an observation rather than a list, so a credential revoked in
@@ -587,7 +584,7 @@ def record_connections(
     than removing them (``ProviderConnection.unreported_at``).
     """
 
-    principal.require(Capability.MANAGE_INFRASTRUCTURE)
+    controller_id = admitted.controller_id
     observed_at = timezone.now()
     stored = []
     for connection in payload:

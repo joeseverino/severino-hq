@@ -26,7 +26,7 @@ from ..findings import derive_findings
 from ..inventory import record_inventory
 from ..inventory_testing import store
 from ..projection import projection_scope
-from ..security import cli_principal, web_principal
+from ..security import web_principal
 from ..topology import derive_topology
 from .commands import commands_on
 from .test_remedy_links import TRAP, UNOFFERED, _command_links, an_operator
@@ -470,10 +470,7 @@ class UnreadTests(TestCase):
         self.assertEqual([item["value"] for item in finding["evidence"] if item["label"] == "Job"], ["other-apps"])
 
     def test_a_record_the_schema_refused_is_a_finding_not_a_silence(self):
-        record_inventory(
-            {RENDER_STATUS_KIND: {"ok": True, "records": [{"renderer": "hq", "state": "fine"}]}},
-            principal=cli_principal(),
-        )
+        record_inventory({RENDER_STATUS_KIND: {"ok": True, "records": [{"renderer": "hq", "state": "fine"}]}})
         self.assertEqual(ProviderInventory.objects.get(kind=RENDER_STATUS_KIND).records, [])
 
         (finding,) = raised("render-status-unread")

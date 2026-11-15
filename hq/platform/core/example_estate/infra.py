@@ -13,7 +13,6 @@ from hq.domains.control_plane.models import (
 from hq.platform.application import readings
 from hq.platform.application.conditions import READY
 from hq.platform.application.report_testing import report_connections
-from hq.platform.application.security import cli_principal
 
 from . import doors, network, work
 from .names import (
@@ -158,7 +157,6 @@ def connections():
                 ),
                 answering("onepassword", "onepassword", "https://my.1password.com", "1 vault."),
             ],
-            principal=cli_principal(),
             controller_id=CONTROLLER,
         )
 

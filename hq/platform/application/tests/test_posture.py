@@ -16,9 +16,9 @@ from hq.platform.application.tests.markup import text
 from ..connection_catalog import connection_catalog
 from ..inventory_testing import store
 from ..posture import STANDARD, estate_posture
+from ..report_testing import bridged
 from ..security import cli_principal
 from ..standards import CheckResult, Reading, Standing
-from ..sweep import record_sweep
 from .test_tailnet_posture import raised, tailnet_connection
 
 RULE = "posture-unmet"
@@ -44,7 +44,7 @@ LAUNCHER_REFUSED = "the launcher could not ask the tailnet daemon for its lock s
 
 
 def sweep(payload) -> None:
-    record_sweep(payload, principal=cli_principal(), controller_id="example-controller")
+    bridged("inventory", payload, controller_id="example-controller")
 
 
 def policy(*, lock=None, **record) -> None:

@@ -28,7 +28,6 @@ lazy from . import tailnet
 lazy from .inventory import record_inventory
 lazy from .moments import ago, moment
 lazy from .request_channel import channel_for_request, forwarded_chain
-lazy from .security import internal_principal
 lazy from .tailnet_presence import tailnet_presence
 
 logger = logging.getLogger(__name__)
@@ -159,10 +158,7 @@ def _write(due: list[tuple[dict[str, Any], int]]) -> None:
             "count": count + (0 if restart else int(previous.get("count") or 0)),
         }
     newest = sorted(kept.values(), key=lambda item: item["last_seen"], reverse=True)
-    record_inventory(
-        {ARRIVAL_KIND: {"ok": True, "records": newest[:MAX_SOURCES]}},
-        principal=internal_principal("hq.request-path"),
-    )
+    record_inventory({ARRIVAL_KIND: {"ok": True, "records": newest[:MAX_SOURCES]}})
 
 
 def _arrival(request, address: str) -> dict[str, Any]:

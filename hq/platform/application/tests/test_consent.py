@@ -19,6 +19,7 @@ from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from ..approvals import ApproveCommand, approve
 from ..capabilities import execute_capability
 from ..infrastructure import ManagedResourceCommand, save_managed_resource
+from ..report_testing import bridged
 from ..resource_operations import OperationCommand, request_reconcile
 from ..security import Capability, Principal, mcp_principal, web_principal
 from .writers import keyed
@@ -223,15 +224,12 @@ class SweepAdoptionTests(TestCase):
         managing_everything()
 
     def swept(self):
-        from ..security import cli_principal
-        from ..sweep import record_sweep
-
-        record_sweep(
+        bridged(
+            "inventory",
             {
                 GATED_KIND: {"ok": True, "records": [{"record": "policy", "document": policy_document("group:live")}]},
                 "tailscale.device": {"ok": True, "records": [{"name": "a-box", "key_expires": "", "tags": []}]},
             },
-            principal=cli_principal(),
         )
 
     def test_a_kind_that_waits_for_a_person_is_adopted_switched_off(self):
