@@ -7,6 +7,7 @@ from hq.platform.application.markup_testing import actions, hrefs
 
 from ..action_links import ActionLink
 from ..card_items import Insight
+from ..effects import Effect
 from ..workflows import claim_identity, claim_resolution_plan, serialize_workflow
 
 REMEDY = ActionLink(
@@ -17,7 +18,7 @@ REMEDY = ActionLink(
     capability="infrastructure.controller.refresh",
     recommended=True,
 )
-VERIFY = ActionLink("verify", "Recheck", "read", "/recheck/")
+VERIFY = ActionLink("verify", "Recheck", Effect.READ, "/recheck/")
 
 
 def plan_of(remedies=(REMEDY,), verification=VERIFY):

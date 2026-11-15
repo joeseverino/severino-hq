@@ -17,6 +17,7 @@ from django.urls import reverse
 from hq.domains.jobs.models import Job
 from hq.platform.application.action_links import command_action, command_url
 from hq.platform.application.connections import ConnectionAbility, ConnectionInstance, ConnectionSpec
+from hq.platform.application.effects import Effect
 from hq.platform.application.markup_testing import select, within
 from hq.platform.application.plugin_testing import form_keyed, offering
 from hq.platform.application.plugins import clear_plugin_composition_cache
@@ -159,14 +160,18 @@ class TheRendererDrawsARefusalTests(SimpleTestCase):
     def test_a_refused_link_is_neither_a_link_nor_a_form(self):
         for method in ("GET", "POST"):
             with self.subTest(method):
-                html = self.render(ActionLink("run", "Run", "remote_write", "/run/", method=method, refusal="Not now."))
+                html = self.render(
+                    ActionLink("run", "Run", Effect.REMOTE_WRITE, "/run/", method=method, refusal="Not now.")
+                )
 
                 (refused,) = select(html, "aria-disabled", "true")
                 self.assertEqual((refused.words, refused.attrs["title"]), ("Run", "Not now."))
                 self.assertEqual(select(html, "href") + select(html, "formaction"), [])
 
     def test_a_link_that_would_run_is_live(self):
-        html = self.render(ActionLink("run", "Run", "remote_write", "/run/"), ActionLink("go", "Go", "read", "/go/"))
+        html = self.render(
+            ActionLink("run", "Run", Effect.REMOTE_WRITE, "/run/"), ActionLink("go", "Go", Effect.READ, "/go/")
+        )
 
         self.assertEqual(select(html, "aria-disabled"), [])
         self.assertEqual([element.attrs["href"] for element in select(html, "href")], ["/run/", "/go/"])
