@@ -124,12 +124,13 @@
 }
 /* A box a reader presses or tabs to is a target tall, as a link on a line of its own is (figures.css). */
 .data-table > tbody > tr > [data-kind="identifier"] > :is(a[href], [tabindex]) { line-height: var(--target-min); }
-/* Words that open a tip are a box of their own a target tall, no wider than the cell, alone in it or on one of its lines; a chip or a pill keeps its one size. */
-.data-table > tbody > tr > td span[data-tip][tabindex]:not(.pill) { display: inline-block; max-inline-size: 100%; line-height: var(--target-min); vertical-align: top; }
-/* A link alone in its cell or its name (an identifier's, a name set among its controls) stays text of its line, a target tall by its padding as a name's is. */
+/* Words that open a tip are a box of their own a target tall, no wider than the cell, alone in it or on one of its lines; a chip or a pill keeps its one size. On the open line they are words of a sentence, held to the words around them. */
+.data-table > tbody > tr:not(.row-detail) > td span[data-tip][tabindex]:not(.pill) { display: inline-block; max-inline-size: 100%; line-height: var(--target-min); vertical-align: top; }
+/* An identifier's link, or a name's set among its controls, stays text of its line, a target tall by its padding as a name's is. */
 .data-table > tbody > tr > [data-kind="identifier"] > a[href],
-.data-table > tbody > tr > td > a[href]:only-child,
 .data-table > tbody > tr > td .name-line > strong > a[href]:only-child { padding-block: calc((var(--target-min) - 1.25em) / 2); }
+/* A link alone in its cell is a box of its own a target tall, no wider than the cell: alone, it wraps as it would inline. */
+.data-table > tbody > tr > td:not([data-kind="identifier"]) > a[href]:only-child { display: inline-block; max-inline-size: 100%; line-height: var(--target-min); vertical-align: top; }
 /* A fact on one line of its own (`{% cell_line lines=1 %}`). */
 .data-table > tbody > tr > td .cell-line[data-lines="1"] { display: block; }
 .data-table > tbody > tr > td .cell-line[data-lines="1"] :is(.token, .whole, .part) { display: inline; max-inline-size: none; }

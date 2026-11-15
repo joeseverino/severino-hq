@@ -32,10 +32,11 @@
   }
 }
 /* A pill in a status column stays whole (cards.css), its column as narrow as
-   its widest; one among a cell's other words wraps as they do, inline with
-   its paint on each line, so it takes the cell's lines and a clamp holds it
-   at the third. */
-.data-table > tbody > tr > :not([data-kind="status"]) .pill { display: inline; white-space: normal; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+   its widest; one among a cell's other words wraps as they do. In a closed
+   row it is inline with its paint on each line, so it takes the cell's lines
+   and a clamp holds it at the third. */
+.data-table > tbody > tr > :not([data-kind="status"]) .pill { white-space: normal; }
+.data-table > tbody > tr:not(.row-detail) > :not([data-kind="status"]) .pill { display: inline; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 /* A row's name set in one line with its controls (`name-line`): the controls and the name are a grid's columns, never a flex row, since WebKit keeps a flex row's min-content from before a row closes, so its column reopened narrower than the name it holds out for. */
 .name-line { display: grid; grid-auto-flow: column; justify-content: start; align-items: center; gap: var(--space-4); }
 /* Links one to a line in a cell are a target apart (`--target-min`): each line that tall, and the link's box with it. */
