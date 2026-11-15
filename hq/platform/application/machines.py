@@ -27,7 +27,7 @@ from .tailnet_presence import Presence, tailnet_presence
 lazy from . import connections, readings
 lazy from .connections import connection_rows
 lazy from .entity_links import entity_link
-lazy from .facts import snapshots_of
+lazy from .facts import Subject, snapshots_of
 lazy from .infrastructure import declared_machines, enabled_resources
 lazy from .machine_roles import role_context, roles_of
 lazy from .moments import moment, when_day
@@ -116,6 +116,25 @@ class Machine:
 
     # What the tailnet says about it, where the tailnet knows it at all.
     presence: Presence | None = None
+
+    @property
+    def subject(self) -> Subject:
+        """What a reading about this machine names it by: its names, its
+        addresses and the tailnet lock key its device holds."""
+
+        return Subject.of(
+            hostnames=(self.name, *self.aliases),
+            addresses=self.addresses,
+            keys=(self.presence.lock_key,) if self.presence is not None else (),
+        )
+
+    @property
+    def is_server(self) -> bool:
+        """Whether HQ runs here or manages it: HQ itself, a credential that
+        opens a shell or a Docker environment on it, or a declaration that
+        runs on it. A person's own device is none of these."""
+
+        return self.runs_hq or bool(self.opened_by) or bool(self.resources)
 
     @property
     def url(self) -> str:

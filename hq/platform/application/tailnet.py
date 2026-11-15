@@ -16,13 +16,12 @@ from typing import Any
 from hq.config.networks import is_loopback
 from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND, TAILNET_POLICY_KIND
-from hq.platform.application.labels import dotted
 lazy from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 lazy from hq.domains.control_plane.observations.host import TAILNET_LOCK_KIND
 lazy from hq.domains.control_plane.observations.hq import ARRIVAL_KIND
 
 from .projection import projection_scope, read_once
-from .ui import counted, ended
+from .ui import ended
 lazy from . import connections
 lazy from .connections import connection_rows
 lazy from .facts import inventory_records
@@ -37,6 +36,10 @@ RESOLVES_THROUGH = "Resolves through"
 NEW_DEVICES = "New devices"
 # The setting row that says which nodes may publish to the internet.
 FUNNEL = "Funnel"
+# The setting row that says whether tailnet lock is on, and the one after it
+# naming the devices that can sign.
+TAILNET_LOCK = "Tailnet lock"
+SIGNING_DEVICES = "Signing devices"
 
 
 @dataclass(frozen=True, slots=True)
@@ -405,13 +408,7 @@ class Policy:
         # should say nothing here rather than report lock as off, which is a
         # claim about the tailnet rather than about the reading.
         if self.lock:
-            keys = self.lock.get("trusted_keys") or 0
-            rows.append(
-                (
-                    "Tailnet lock",
-                    (dotted("On", counted(keys, "signing key", "signing keys")) if self.lock.get("enabled") else "Off"),
-                )
-            )
+            rows.append((TAILNET_LOCK, "On" if self.lock.get("enabled") else "Off"))
         return tuple(rows)
 
     @property

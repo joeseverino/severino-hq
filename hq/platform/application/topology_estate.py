@@ -6,6 +6,7 @@ index, the service catalog and the zone inventory, never a match on labels
 alone, so what an extension reaches that is none of these stays a target.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from itertools import combinations
@@ -169,7 +170,7 @@ def _machines(nodes, edges) -> _Estate:
             for connection_id in connections.get(ref, ()):
                 relation = edge_between(connection_id, node_id, "reaches")
                 edges[relation.id] = relation
-        subjects[node_id] = Subject.of(hostnames=(machine.name, *machine.aliases), addresses=machine.addresses)
+        subjects[node_id] = machine.subject
     index = index_of(declared=[{"name": item.name, "addresses": item.addresses} for item in catalog])
     estate = _Estate(subjects=subjects, machine_ids=machine_ids, index=index)
     # Its device reading, its telemetry and its containers.
@@ -518,7 +519,7 @@ def _derived_from_readings(nodes, resources, estate: _Estate) -> None:
     by_ref, by_provider = _reader_index(nodes)
     certificate_expiry.add(
         nodes,
-        lambda joined: _readers(joined, by_ref, by_provider, nodes),
+        lambda joined: _readers(joined, by_ref, by_provider, nodes, estate.machine),
         lambda provider, record: _holding(provider, record, by_ref, by_provider, nodes),
     )
 
@@ -531,7 +532,7 @@ def _reading_edges(nodes, edges, estate: _Estate) -> None:
     grouped: dict[tuple[str, str, str], list[Joined]] = {}
     for node_id, subject in estate.subjects.items():
         for joined in index.about(subject):
-            for source in _readers(joined, by_ref, by_provider, nodes):
+            for source in _readers(joined, by_ref, by_provider, nodes, estate.machine):
                 grouped.setdefault((source, node_id, joined.kind), []).append(joined)
     for (source, target, kind), items in grouped.items():
         moments = [item.observed_at for item in items if item.observed_at]
@@ -579,13 +580,15 @@ def _named(joined: Joined, about: str) -> str:
     return f"{name}: {title}" if name and title else ""
 
 
-def _readers(joined: Joined, by_ref, by_provider, nodes) -> tuple[str, ...]:
+def _readers(joined: Joined, by_ref, by_provider, nodes, machine: Callable[[Any], str]) -> tuple[str, ...]:
     """The nodes that took this reading.
 
     A reading HQ takes itself comes from its public registry's node. Otherwise
     the record's ``connection_ref`` where it names one; otherwise the
     connections of the reading's provider, narrowed to the controller that
-    stored it.
+    stored it; otherwise, for a reading no connection takes (the controller's
+    own machine's), the controller that stored it, or the machine it folded
+    into.
     """
 
     if joined.spec.read_by == "hq":
@@ -609,6 +612,11 @@ def _readers(joined: Joined, by_ref, by_provider, nodes) -> tuple[str, ...]:
         found = narrowed or found
     if found:
         return tuple(found)
+    if not joined.connection_ref and joined.controller_id:
+        controller = derived_id("controller", joined.controller_id)
+        own = controller if controller in nodes else machine(joined.controller_id)
+        if own:
+            return (own,)
     return _unreported(nodes, by_ref, joined.connection_ref or joined.spec.provider, joined.spec.provider)
 
 

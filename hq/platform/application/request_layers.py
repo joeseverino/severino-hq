@@ -461,7 +461,7 @@ def _lock_layer(device: tailnet.Device | None) -> Layer | None:
         # nothing has swept should say nothing here rather than render a line
         # about a setting HQ has not looked at.
         return None
-    keys = lock.get("trusted_keys") or 0
+    keys = len(lock.get("signers") or ())
     if not lock.get("enabled"):
         return Layer(
             "tailnet-lock",

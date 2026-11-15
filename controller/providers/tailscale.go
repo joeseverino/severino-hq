@@ -605,7 +605,7 @@ func (r *Registry) tailscaleDeviceInventory(ctx context.Context) ([]any, error) 
 		device.AdvertisedRoutes = sortedCopy(identity.AdvertisedRoutes)
 		device.EnabledRoutes = sortedCopy(identity.EnabledRoutes)
 		device.LockError = identity.TailnetLockError
-		device.LockKey = identity.TailnetLockKey
+		device.LockKey = lockKey(identity.TailnetLockKey)
 		device.UpdateAvailable = identity.UpdateAvailable
 		device.ClientVersion = identity.ClientVersion
 		device.SSHEnabled = identity.SSHEnabled

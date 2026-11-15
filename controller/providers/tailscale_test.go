@@ -518,7 +518,7 @@ const apiDevices = `{"devices": [
 	 "authorized": true, "user": "ops@example.com", "tags": ["tag:server", "tag:edge"],
 	 "advertisedRoutes": ["0.0.0.0/0", "::/0"], "enabledRoutes": ["0.0.0.0/0"],
 	 "clientConnectivity": {"endpoints": ["192.0.2.10:41641"]}, "sshEnabled": true,
-	 "tailnetLockKey": "tlpub:0f4e1c9a2b7d3e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7"},
+	 "tailnetLockKey": "nlpub:0f4e1c9a2b7d3e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7"},
 	{"hostname": "a-laptop", "name": "a-laptop.example.ts.net.", "lastSeen": "2026-09-01T00:00:00Z",
 	 "expires": "2027-01-01T00:00:00Z", "keyExpiryDisabled": true, "authorized": false}]}`
 

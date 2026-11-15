@@ -92,7 +92,7 @@ last done to it is read before its parts.
     {% if machine.presence.blocks_incoming %}{% fact "Shields" value="Up. Blocks all inbound connections." %}{% endif %}
     {% if machine.presence.external %}{% fact "Belongs to" value="Another tailnet (shared in)" %}{% endif %}
     {% if not machine.presence.authorized %}{% fact "Authorized" %}<strong>No</strong>. It cannot connect until you approve it.{% endfact %}{% endif %}
-    {% if machine.presence.lock_error %}{% fact "Tailnet lock" %}<strong>Not signed</strong>: {{ machine.presence.lock_error|breakable }}{% endfact %}{% endif %}
+    {% if machine.presence.lock_error %}{% fact "Tailnet lock" %}<strong>Not signed</strong>: {{ machine.presence.lock_error|breakable }}{% endfact %}{% elif tailnet_signer %}{% fact "Tailnet lock" value="Signing device" %}{% endif %}
     {% comment %}
     Offered and approved, never one of the two. A route is advertised by the
     machine and then has to be approved in the coordination server; until it

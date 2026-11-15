@@ -4853,7 +4853,7 @@
         "type": "object"
       },
       "HostTailnetLockRecord": {
-        "description": "Tailnet lock as the controller's own machine sees it: `tailscale lock status`, counted. It names no key, only how many sign.",
+        "description": "Tailnet lock as the controller's own machine sees it: `tailscale lock status`, with each key it trusts to sign.",
         "properties": {
           "record": {
             "type": "string"
@@ -4866,10 +4866,13 @@
             "default": false,
             "type": "boolean"
           },
-          "trusted_keys": {
-            "default": 0,
-            "minimum": 0,
-            "type": "integer"
+          "signers": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/HostTailnetLockTailnetLockSigner"
+            },
+            "maxItems": 64,
+            "type": "array"
           },
           "locked_out": {
             "default": [],
@@ -4881,6 +4884,37 @@
         },
         "required": [
           "record"
+        ],
+        "type": "object"
+      },
+      "HostTailnetLockTailnetLockSigner": {
+        "description": "One key tailnet lock trusts to sign: the public half a device holds,\nthe kind of key it is, its votes and the labels it was added with.",
+        "properties": {
+          "key": {
+            "pattern": "^tlpub:[0-9a-f]{1,128}$",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "maxLength": 32,
+            "type": "string"
+          },
+          "votes": {
+            "default": 0,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "metadata": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "maxProperties": 16,
+            "type": "object"
+          }
+        },
+        "required": [
+          "key"
         ],
         "type": "object"
       },

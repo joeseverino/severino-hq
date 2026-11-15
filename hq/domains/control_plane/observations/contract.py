@@ -95,11 +95,13 @@ class ObservationSpec:
     # The parts it is read in, each with the subset of ``requires`` it needs,
     # where one part can be refused while the others read.
     parts: tuple[ReadingPart, ...] = ()
-    # Join keys: the hostnames and addresses a record is about, and the
-    # containers it names (``container_key``).
+    # Join keys: the hostnames and addresses a record is about, the
+    # containers it names (``container_key``), and the public keys it names,
+    # each the key of whatever holds its private half.
     hostnames: Callable[[Mapping[str, Any]], Iterable[str]] = _none
     addresses: Callable[[Mapping[str, Any]], Iterable[str]] = _none
     containers: Callable[[Mapping[str, Any]], Iterable[str]] = _none
+    keys: Callable[[Mapping[str, Any]], Iterable[str]] = _none
     # The record's name as a person would say it, and what it is in a few
     # words beside that name ("bridge · 172.21.0.0/16").
     title: Callable[[Mapping[str, Any]], str] = lambda _record: ""
@@ -107,10 +109,12 @@ class ObservationSpec:
     # What a record is to the subject it joins, as a short present-tense
     # phrase shown beside its title: "Served by Pages project".
     relation: str = ""
-    # The phrase when the join was through ``addresses``, or through
-    # ``containers``, as the container says it; ``relation`` if blank.
+    # The phrase when the join was through ``addresses``, through
+    # ``containers``, as the container says it, or through ``keys``, as the
+    # key's holder says it; ``relation`` if blank.
     address_relation: str = ""
     container_relation: str = ""
+    key_relation: str = ""
     # Whether the containers a record names reach each other through it: a
     # network does, unless the runtime made it for every container. Set, the
     # topology draws "talks to" between each pair it names that are declared.
@@ -191,9 +195,15 @@ class ObservationSpec:
     def short(self) -> str:
         return self.short_label or self.label
 
-    def relation_to(self, *, by_address: bool, by_container: bool = False) -> str:
-        """The phrase for a record joined by container, address or hostname."""
+    @property
+    def joins_keys(self) -> bool:
+        return self.keys is not _none
 
+    def relation_to(self, *, by_address: bool, by_container: bool = False, by_key: bool = False) -> str:
+        """The phrase for a record joined by key, container, address or hostname."""
+
+        if by_key and self.key_relation:
+            return self.key_relation
         if by_container and self.container_relation:
             return self.container_relation
         if by_address and self.address_relation:

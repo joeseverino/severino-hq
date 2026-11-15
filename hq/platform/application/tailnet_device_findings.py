@@ -26,6 +26,7 @@ from .topology_model import TopologyNode
 from .ui import counted, ended
 lazy from .tailnet import policy
 lazy from .tailnet_presence import Presence, tailnet_presence
+lazy from .tailnet_signers import signers
 
 # A node key lasts 180 days here, so a warning at 75 would sit in the queue for
 # more of the cycle than not, and a queue that is always non-empty is one nobody
@@ -40,6 +41,8 @@ KEY_EXPIRY_SERIOUS_DAYS = 14
 LOCKED_OUT = "tailnet-locked-out"
 # What the tailnet says of a device, as one JSON fact on its machine.
 DEVICE = "tailnet-device"
+# The tailnet lock key a server signs with, on that server's machine.
+SERVER_SIGNS = "tailnet-lock-server-signs"
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,6 +114,9 @@ def add(nodes: dict[str, TopologyNode], machine: Callable[[Any], str]) -> None:
         onto_machine(nodes, machine, name, (_row(presence, newest).fact,))
     for name in policy().locked_out:
         onto_machine(nodes, machine, name, ((LOCKED_OUT, "true"),))
+    for signer in signers():
+        if signer.server:
+            onto_machine(nodes, machine, signer.machine, ((SERVER_SIGNS, signer.key),))
 
 
 def _devices(estate: FindingEstate) -> Iterator[tuple[TopologyNode, tuple[TailnetDevice, ...]]]:
@@ -247,6 +253,30 @@ def _lock_unsigned(estate: FindingEstate) -> tuple[Finding, ...]:
     )
 
 
+def _server_signs(estate: FindingEstate) -> tuple[Finding, ...]:
+    """A server whose key tailnet lock trusts to sign, so whoever takes it
+    over can add devices to the tailnet."""
+
+    return tuple(
+        Finding(
+            rule="tailnet-lock-server-signs",
+            subject=node.id,
+            severity="serious",
+            title=f"{node.label} can sign devices onto the tailnet",
+            explanation=f"Whoever takes over {node.label} can add devices to the tailnet.",
+            steps=tuple(
+                OperatorStep(
+                    label="On another signing device, remove its key",
+                    command=f"tailscale lock remove {key}",
+                )
+                for key in keys
+            ),
+        )
+        for node in estate.nodes()
+        if (keys := fact_values(node, SERVER_SIGNS))
+    )
+
+
 def _update_said(row: TailnetDevice) -> str:
     if not row.running:
         return "Current version not reported."
@@ -351,6 +381,16 @@ RULES: tuple[FindingRule, ...] = (
         no_help_reason="Only a machine holding a tailnet lock key can sign.",
         card=TAILNET_CARD,
         bars={"serious": "a device has no tailnet lock signature"},
+    ),
+    FindingRule(
+        "tailnet-lock-server-signs",
+        "A server can sign for tailnet lock",
+        "serious",
+        _server_signs,
+        operator_action="On a signing device other than the server, run tailscale lock remove with the server's key.",
+        no_help_reason="Only a device that can sign changes the keys tailnet lock trusts.",
+        card=TAILNET_CARD,
+        bars={"serious": "tailnet lock trusts a server's key to sign"},
     ),
     FindingRule(
         "tailnet-client-update",

@@ -199,9 +199,18 @@ over the last reading (`TestEveryHostReadingIsAHeldSource`).
 `host.firewall` is whether HQ's port must arrive on the tailnet interface, one
 distilled record (`SEVERINO_HOST_FIREWALL`).
 
-`host.tailnet_lock` is tailnet lock as the machine's own daemon states it,
-counted: whether it is on, whether this node is signed, how many keys sign and
-which machines it filters out (`SEVERINO_TAILNET_LOCK`). The launcher names the
+`host.tailnet_lock` is tailnet lock as the machine's own daemon states it:
+whether it is on, whether this node is signed, each key it trusts to sign
+(its key, kind, votes and labels) and which machines it filters out
+(`SEVERINO_TAILNET_LOCK`). A key is written as `tailscale lock remove` takes
+it, `tlpub:<hex>`, as each device's `lock_key` is, so a signer joins the
+machine whose device holds it by its key (`ObservationSpec.keys`).
+`tailnet_signers.signers()` names each signer's machine, or an unknown signer
+where no device holds the key, for the tailnet page's "Signing devices" and the
+machine page's tailnet card. `tailnet-lock-server-signs` is serious for a
+signer that is a server (`Machine.is_server`: HQ runs on it, a credential opens
+it, or a declaration runs on it), since whoever takes it over can add devices
+to the tailnet. The launcher names the
 file whether or not the daemon answered, so a status it could not take is a
 failed read that keeps the last one and says why.
 
@@ -528,8 +537,9 @@ answer as the machine page and the services list.
 Nothing in the topology names a provider to draw its edges. They follow from
 the declarations:
 
-- A reading joins its subject through the `hostnames`, `addresses` and
-  `containers` its spec declares. The edge comes from the connection that read
+- A reading joins its subject through the `hostnames`, `addresses`,
+  `containers` and `keys` its spec declares. A machine's keys are its tailnet
+  device's lock key (`Machine.subject`). The edge comes from the connection that read
   it, labeled with the reading's `relation` and carrying its kind, its age and
   each record as a linked entity; it exists only while the reading does. A
   tailnet device is a subject by its addresses too. A reading HQ takes itself

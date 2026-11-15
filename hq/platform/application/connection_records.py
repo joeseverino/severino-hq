@@ -164,6 +164,12 @@ class UnreadPart(TypedDict):
     requires: Annotated[str | None, Describe("The permissions reading it needs; null for none.")]
 
 
+class SignerPart(TypedDict):
+    key: Annotated[str, Describe("The tailnet lock public key, as `tailscale lock remove` takes it.")]
+    votes: Annotated[int, Describe("The votes tailnet lock gives the key.")]
+    machine: Annotated[str | None, Describe("The machine whose tailnet device holds the key; null when none does.")]
+
+
 class Tailnet(TypedDict):
     """The tailnet's policy and what HQ makes of it."""
 
@@ -188,6 +194,9 @@ class Tailnet(TypedDict):
     ]
     tests: Annotated[list[AsRead], Describe("The policy's tests, as written.")]
     locked_out: Annotated[list[str], Describe("The machines tailnet lock keeps off the tailnet.")]
+    signers: Annotated[
+        list[SignerPart], Describe("Each key tailnet lock trusts to sign; empty while tailnet lock is off.")
+    ]
     findings: Annotated[
         list[findings.SerializedFinding], Describe("The open problems about the tailnet that the reader may see.")
     ]

@@ -36,13 +36,15 @@ class Subject:
     """The join keys of whatever the facts are about, normalized once.
 
     ``zones`` names every hostname under each zone, the zone included;
-    ``containers`` each container it is, by ``container_key``.
+    ``containers`` each container it is, by ``container_key``; ``keys``
+    each public key it holds the private half of.
     """
 
     hostnames: frozenset[str]
     addresses: frozenset[str]
     zones: frozenset[str] = frozenset()
     containers: frozenset[str] = frozenset()
+    keys: frozenset[str] = frozenset()
 
     @classmethod
     def of(
@@ -51,16 +53,18 @@ class Subject:
         addresses: Iterable[str] = (),
         zones: Iterable[str] = (),
         containers: Iterable[str] = (),
+        keys: Iterable[str] = (),
     ) -> Subject:
         return cls(
             containers=frozenset(key for key in containers if key),
+            keys=frozenset(key for key in keys if key),
             hostnames=frozenset(name for name in (normalized_hostname(str(h)) for h in hostnames) if name),
             addresses=frozenset(address for address in (host_of(a) for a in addresses) if address),
             zones=frozenset(zone for zone in (normalized_hostname(str(z)) for z in zones) if zone),
         )
 
     def __bool__(self) -> bool:
-        return bool(self.hostnames or self.addresses or self.zones or self.containers)
+        return bool(self.hostnames or self.addresses or self.zones or self.containers or self.keys)
 
     @property
     def dns_names(self) -> frozenset[str]:
@@ -97,6 +101,7 @@ class Joined:
     hostnames: tuple[str, ...] = ()
     addresses: tuple[str, ...] = ()
     containers: tuple[str, ...] = ()
+    keys: tuple[str, ...] = ()
 
     @property
     def kind(self) -> str:
@@ -119,8 +124,12 @@ class Joined:
         return bool(self.containers) and not self.hostnames and not self.addresses
 
     @property
+    def by_key(self) -> bool:
+        return bool(self.keys) and not self.hostnames and not self.addresses and not self.containers
+
+    @property
     def relation(self) -> str:
-        return self.spec.relation_to(by_address=self.by_address, by_container=self.by_container)
+        return self.spec.relation_to(by_address=self.by_address, by_container=self.by_container, by_key=self.by_key)
 
     @property
     def title(self) -> str:
@@ -177,6 +186,7 @@ class _Entry:
     hostnames: tuple[str, ...]
     addresses: tuple[str, ...]
     containers: tuple[str, ...] = ()
+    keys: tuple[str, ...] = ()
 
 
 class Readings:
@@ -195,6 +205,7 @@ class Readings:
         self._by_name: dict[str, list[int]] = {}
         self._by_address: dict[str, list[int]] = {}
         self._by_container: dict[str, list[int]] = {}
+        self._by_key: dict[str, list[int]] = {}
         for index, entry in enumerate(self._entries):
             for name in entry.hostnames:
                 self._by_name.setdefault(name, []).append(index)
@@ -202,6 +213,8 @@ class Readings:
                 self._by_address.setdefault(address, []).append(index)
             for container in entry.containers:
                 self._by_container.setdefault(container, []).append(index)
+            for key in entry.keys:
+                self._by_key.setdefault(key, []).append(index)
 
     def about(
         self,
@@ -220,7 +233,7 @@ class Readings:
     def _indexes_about(self, subject: Subject) -> set[int]:
         """The entries any of ``subject``'s keys reach through the indexes: a
         hostname or the wildcard over it, a name in one of its zones, an
-        address, a container."""
+        address, a container, a key."""
 
         found: set[int] = set()
         for hostname in subject.hostnames:
@@ -236,6 +249,8 @@ class Readings:
             found.update(self._by_address.get(address, ()))
         for container in subject.containers:
             found.update(self._by_container.get(container, ()))
+        for key in subject.keys:
+            found.update(self._by_key.get(key, ()))
         return found
 
     def _joined(self, entry: _Entry, subject: Subject) -> Joined | None:
@@ -248,7 +263,8 @@ class Readings:
             names = self._fronted_names(entry, names, subject)
         addresses = tuple(address for address in entry.addresses if address in subject.addresses)
         containers = tuple(key for key in entry.containers if key in subject.containers)
-        if not (names or addresses or containers):
+        keys = tuple(key for key in entry.keys if key in subject.keys)
+        if not (names or addresses or containers or keys):
             return None
         return Joined(
             spec=entry.spec,
@@ -259,6 +275,7 @@ class Readings:
             hostnames=names,
             addresses=addresses,
             containers=containers,
+            keys=keys,
         )
 
     def hostnames(self, *, names_services: bool = False) -> tuple[str, ...]:
@@ -357,6 +374,7 @@ def readings() -> Readings:
                             )
                         ),
                         containers=tuple(dict.fromkeys(spec.containers(record))),
+                        keys=tuple(dict.fromkeys(key for key in spec.keys(record) if key)),
                     )
                     for record in snapshot.records
                 )
@@ -398,7 +416,9 @@ def reading_could_join(spec: ObservationSpec, subject: Subject) -> bool:
     """
 
     return bool(
-        (spec.joins_hostnames and (subject.dns_names or subject.zones)) or (spec.joins_addresses and subject.addresses)
+        (spec.joins_hostnames and (subject.dns_names or subject.zones))
+        or (spec.joins_addresses and subject.addresses)
+        or (spec.joins_keys and subject.keys)
     )
 
 

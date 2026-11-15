@@ -269,7 +269,7 @@ def _tailnet_lock(_inputs) -> CheckOutcome:
     if not lock:
         # A read that failed keeps the last reading, so with none it says why.
         return _not_read((TAILNET_LOCK_KIND,))
-    keys = lock.get("trusted_keys") or 0
+    keys = len(lock.get("signers") or ())
     return (
         CheckOutcome(met=True, evidence=counted(keys, "signing key", "signing keys"))
         if lock.get("enabled")

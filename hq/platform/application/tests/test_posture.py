@@ -32,7 +32,13 @@ def standing(check_id: str):
 
 TAILNET_LOCK = "host.tailnet_lock"
 # The record the controller sends for `tailscale lock status --json`.
-A_LOCK = {"record": "lock", "enabled": True, "node_key_signed": True, "trusted_keys": 2, "locked_out": []}
+A_LOCK = {
+    "record": "lock",
+    "enabled": True,
+    "node_key_signed": True,
+    "signers": [{"key": "tlpub:01"}, {"key": "tlpub:02"}],
+    "locked_out": [],
+}
 LAUNCHER_REFUSED = "the launcher could not ask the tailnet daemon for its lock status"
 
 
@@ -209,7 +215,10 @@ class ReadingTests(TestCase):
                     self.assertNotEqual(found.reading.evidence.lower(), "not read yet", found.check.id)
 
     def test_an_unread_check_is_not_counted_as_unmet(self):
-        policy(grants=[{"src": ["group:admins"]}], lock={"enabled": True, "trusted_keys": 2})
+        policy(
+            grants=[{"src": ["group:admins"]}],
+            lock={"enabled": True, "signers": [{"key": "tlpub:01"}, {"key": "tlpub:02"}]},
+        )
 
         found = estate_posture(connection_catalog(principal=cli_principal()))
 
@@ -217,7 +226,7 @@ class ReadingTests(TestCase):
         self.assertTrue(found.count_line.startswith(f"{found.met_count} of {len(STANDARD)} met"))
 
     def test_the_count_names_each_check_that_is_not_met(self):
-        policy(grants=[{"src": ["*"], "dst": ["*"], "ip": ["*"]}], lock={"enabled": False, "trusted_keys": 0})
+        policy(grants=[{"src": ["*"], "dst": ["*"], "ip": ["*"]}], lock={"enabled": False, "signers": []})
 
         found = estate_posture(connection_catalog(principal=cli_principal()))
 

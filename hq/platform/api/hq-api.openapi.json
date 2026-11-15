@@ -348,12 +348,12 @@
             "rule": null,
             "schema_version": 2,
             "summary": {
-              "findings": 15,
-              "returned": 15,
+              "findings": 16,
+              "returned": 16,
               "severities": {
                 "attention": 11,
                 "neutral": 1,
-                "serious": 3
+                "serious": 4
               },
               "truncated": false
             }
@@ -1519,7 +1519,7 @@
       "listActionItemsV2OK": {
         "dataValue": {
           "data": {
-            "count": 13,
+            "count": 14,
             "items": [
               {
                 "action": "Review docs",
@@ -1532,7 +1532,7 @@
               }
             ],
             "next": null,
-            "total": 13,
+            "total": 14,
             "truncated": false
           },
           "ok": true
@@ -2990,14 +2990,9 @@
                 "findings": [
                   {
                     "affected_scopes": [],
-                    "evidence": [
-                      {
-                        "label": "Trusted",
-                        "value": "100.64.0.0/10"
-                      }
-                    ],
-                    "explanation": "HQ accepts requests from every address in the range. You can narrow the trusted networks in HQ's settings to the addresses the tailnet uses.",
-                    "id": "claim:31be84447cd15b63",
+                    "evidence": [],
+                    "explanation": "Whoever takes over docker-host-01 can add devices to the tailnet.",
+                    "id": "claim:311e60215be36cd8",
                     "investigations": [
                       {
                         "capability": "",
@@ -3009,7 +3004,7 @@
                         "recommended": false,
                         "refusal": "",
                         "target": "",
-                        "url": "/infrastructure/topology/?focus=connection%3Ainfrastructure.controllers%3Adocker-host-01%3Atailscale#trace"
+                        "url": "/infrastructure/topology/?focus=machine%3Adocker-host-01#trace"
                       }
                     ],
                     "no_help_reason": null,
@@ -3017,37 +3012,35 @@
                       {
                         "capability": "",
                         "effect": "read",
-                        "label": "Open connections",
+                        "label": "Open",
                         "method": "GET",
                         "name": "open",
                         "reason": "",
                         "recommended": false,
                         "refusal": "",
                         "target": "",
-                        "url": "/infrastructure/connections/"
+                        "url": "/infrastructure/machines/docker-host-01/"
                       }
                     ],
                     "operator_steps": [
                       {
-                        "command": "SEVERINO_TRUSTED_NETWORKS=127.0.0.0/8,::1/128,100.101.102.103/32,100.101.102.104/32,100.101.102.105/32,fd7a:115c:a1e0:1001:2002:3003:4004:5067/128,fd7a:115c:a1e0:1001:2002:3003:4004:5068/128,fd7a:115c:a1e0:1001:2002:3003:4004:5069/128,10.100.200.0/24",
-                        "label": "Set this where HQ is deployed, then restart HQ",
-                        "notes": [
-                          "A device that joins later is refused until it is added."
-                        ]
+                        "command": "tailscale lock remove tlpub:12d02e4ce5fc3a740f0efc5144ccf15d814272a6dd4506d852aa32ac7bb5052e",
+                        "label": "On another signing device, remove its key",
+                        "notes": []
                       }
                     ],
                     "remedies": [],
-                    "rule": "trusted-wider-than-tailnet",
+                    "rule": "tailnet-lock-server-signs",
                     "scope": null,
-                    "severity": "neutral",
+                    "severity": "serious",
                     "since": null,
-                    "subject": "connection:infrastructure.controllers:docker-host-01:tailscale",
-                    "title": "HQ trusts all of 100.64.0.0/10, fd7a:115c:a1e0::/48, and the tailnet uses 6 device addresses and 1 subnet route",
+                    "subject": "machine:docker-host-01",
+                    "title": "docker-host-01 can sign devices onto the tailnet",
                     "workflow": {
-                      "id": "resolve:claim:31be84447cd15b63",
+                      "id": "resolve:claim:311e60215be36cd8",
                       "label": "Next steps",
                       "outcome": {
-                        "claim_id": "claim:31be84447cd15b63",
+                        "claim_id": "claim:311e60215be36cd8",
                         "kind": "claim_absent",
                         "label": ""
                       },
@@ -3064,7 +3057,7 @@
                               "recommended": false,
                               "refusal": "",
                               "target": "",
-                              "url": "/infrastructure/findings/?rule=trusted-wider-than-tailnet"
+                              "url": "/infrastructure/findings/?rule=tailnet-lock-server-signs"
                             }
                           ],
                           "label": "Check again",
@@ -3124,6 +3117,13 @@
                     "label": "MagicDNS",
                     "machines": null,
                     "value": "On"
+                  }
+                ],
+                "signers": [
+                  {
+                    "key": "tlpub:52fcca2c6f26b632eaee45dd9337eb0b3770ac760ea4ba2b075ab400fd603df8",
+                    "machine": "iphone-16-pro",
+                    "votes": 1
                   }
                 ],
                 "ssh_rules": [],
@@ -3673,7 +3673,7 @@
             ],
             "schema_version": 2,
             "summary": {
-              "edges": 307,
+              "edges": 309,
               "kinds": {
                 "ability": 61,
                 "connection": 10,
@@ -17119,6 +17119,31 @@
         },
         "type": "object"
       },
+      "SignerPart": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "description": "The tailnet lock public key, as `tailscale lock remove` takes it.",
+            "type": "string"
+          },
+          "machine": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The machine whose tailnet device holds the key; null when none does."
+          },
+          "votes": {
+            "description": "The votes tailnet lock gives the key.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
       "Since": {
         "description": "When the matter began, an ISO 8601 date-time, where its source knows; empty when it does not.",
         "type": "string"
@@ -17374,6 +17399,13 @@
             "description": "The tailnet's settings.",
             "items": {
               "$ref": "#/components/schemas/SettingPart"
+            },
+            "type": "array"
+          },
+          "signers": {
+            "description": "Each key tailnet lock trusts to sign; empty while tailnet lock is off.",
+            "items": {
+              "$ref": "#/components/schemas/SignerPart"
             },
             "type": "array"
           },
@@ -24214,6 +24246,7 @@
                 "tailnet-device-locked-out",
                 "tailnet-device-unapproved",
                 "tailnet-lock-unsigned",
+                "tailnet-lock-server-signs",
                 "tailnet-client-update",
                 "tailnet-routes-unapproved",
                 "dns-protection-off",

@@ -106,6 +106,7 @@ var admittedMembers = map[string]any{
 	"HostEdgeRebootRecord.ScheduledAction":   "reboot",
 	"HostEdgeRebootRecord.ScheduledAt":       instant,
 	"HostEdgeRebootRecord.ReadAt":            instant,
+	"HostTailnetLockTailnetLockSigner.Key":   "tlpub:0f4e1c9a2b7d3e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7",
 }
 
 // filled is a value of the type with every member it can hold set: each

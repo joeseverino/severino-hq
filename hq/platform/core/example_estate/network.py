@@ -246,8 +246,15 @@ def adguard():
     )
 
 
+def lock_key(name):
+    """A device's tailnet lock public key, as the controller writes one."""
+
+    return f"tlpub:{hexed('lock', name)}"
+
+
 def tailnet():
-    """The host, the laptop the demo is read from, and a phone; the policy and lock."""
+    """The host, the laptop the demo is read from, and a phone; the policy and
+    lock, which the phone and the host can sign for."""
 
     at = now()
 
@@ -263,6 +270,7 @@ def tailnet():
             "os": os,
             "online": True,
             "public_key": hexed("node", name),
+            "lock_key": lock_key(name),
             "client_version": "1.76.6-t3b1a6e2c4-g5e7f9a1b3",
             "last_handshake": (at - timedelta(minutes=1)).isoformat(),
             **extra,
@@ -307,7 +315,15 @@ def tailnet():
             "dns": {"dns": [TAILNET], "magicDNS": True},
         },
     )
-    store("host.tailnet_lock", {"record": "lock", "enabled": True, "node_key_signed": True, "trusted_keys": 2})
+    store(
+        "host.tailnet_lock",
+        {
+            "record": "lock",
+            "enabled": True,
+            "node_key_signed": True,
+            "signers": [{"key": lock_key(name), "kind": "25519", "votes": 1} for name in (PHONE_NAME, MACHINE)],
+        },
+    )
     store(
         "tailscale.settings",
         {

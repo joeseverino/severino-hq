@@ -38,6 +38,7 @@ lazy from .public_registry import public_endpoints
 lazy from .reach import network_of
 lazy from .routes import reverse
 lazy from .tailnet import TAILNET_KIND
+lazy from .tailnet_signers import signer_of
 lazy from .topology_model import RELATIONS
 lazy from .work_runs import runs_on
 
@@ -243,6 +244,7 @@ def machine_links(machine: Machine, relationships) -> dict[str, object]:
         "device_link": None,
         "magic_dns_link": None,
         "opening_links": (),
+        "tailnet_signer": None,
     }
     if presence is None:
         return links
@@ -257,6 +259,7 @@ def machine_links(machine: Machine, relationships) -> dict[str, object]:
     )
     if presence.dns_name:
         links["magic_dns_link"] = entity_link(TAILNET_KIND, presence.dns_name, record=record)
+    links["tailnet_signer"] = signer_of(machine.name)
     names = PolicyNames()
     links["opening_links"] = tuple((port, names.of(who)) for port, who in presence.openings)
     return links

@@ -85,7 +85,10 @@ class DeviceApprovalTests(TestCase):
         """Under lock a new node is filtered out until a signing key vouches
         for it, and Tailscale will not turn device approval on beside it."""
 
-        policy(settings={"devicesApprovalOn": False}, lock={"enabled": True, "trusted_keys": 2})
+        policy(
+            settings={"devicesApprovalOn": False},
+            lock={"enabled": True, "signers": [{"key": "tlpub:01"}, {"key": "tlpub:02"}]},
+        )
         self.assertEqual(raised("devices-join-without-approval"), [])
         policy(settings={"devicesApprovalOn": False}, lock={"enabled": False})
         self.assertEqual(len(raised("devices-join-without-approval")), 1)

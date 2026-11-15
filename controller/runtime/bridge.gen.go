@@ -1971,13 +1971,22 @@ type HostRenderStatusSecretRenderSuccess struct {
 	RenderedAt       string                             `json:"rendered_at,omitempty"`
 }
 
-// HostTailnetLockRecord Tailnet lock as the controller's own machine sees it: `tailscale lock status`, counted. It names no key, only how many sign.
+// HostTailnetLockRecord Tailnet lock as the controller's own machine sees it: `tailscale lock status`, with each key it trusts to sign.
 type HostTailnetLockRecord struct {
-	Enabled       bool     `json:"enabled,omitempty"`
-	LockedOut     []string `json:"locked_out,omitempty"`
-	NodeKeySigned bool     `json:"node_key_signed,omitempty"`
-	Record        string   `json:"record"`
-	TrustedKeys   int      `json:"trusted_keys,omitempty"`
+	Enabled       bool                               `json:"enabled,omitempty"`
+	LockedOut     []string                           `json:"locked_out,omitempty"`
+	NodeKeySigned bool                               `json:"node_key_signed,omitempty"`
+	Record        string                             `json:"record"`
+	Signers       []HostTailnetLockTailnetLockSigner `json:"signers,omitempty"`
+}
+
+// HostTailnetLockTailnetLockSigner One key tailnet lock trusts to sign: the public half a device holds,
+// the kind of key it is, its votes and the labels it was added with.
+type HostTailnetLockTailnetLockSigner struct {
+	Key      string            `json:"key"`
+	Kind     string            `json:"kind,omitempty"`
+	Metadata map[string]string `json:"metadata,omitempty"`
+	Votes    int               `json:"votes,omitempty"`
 }
 
 // HostUnitRecord One systemd unit on the controller's machine, as `systemctl show` states it: the host.unit reading's record. The launcher asks systemd for exactly these properties of the units the repository ships and of each other service systemd has restarted, and the controller reports no other. Each string is a unit name, one of systemd's state words, an instant in UTC or the unit file's own title for a person to read; none is a path, a command line or an environment.
