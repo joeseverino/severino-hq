@@ -2,6 +2,7 @@
 
 import math
 import re
+from collections.abc import Sized
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
@@ -73,8 +74,18 @@ def _one_of(name: str, value: str, allowed: frozenset[str], *, or_empty: bool = 
 
 
 # What a value that is not there looks like, everywhere: in a template through
-# the built-in `or_empty` filter, in a view model through this constant.
+# the built-in `or_empty` filter or `{% present %}` tag, in a view model
+# through this constant.
 MISSING = "–"
+
+
+def no_value(value: object) -> bool:
+    """Whether ``value`` is not there and is drawn as ``MISSING``: None, the
+    empty string or an empty collection. Zero and False are values, and show."""
+
+    if value is None or value == "":
+        return True
+    return isinstance(value, Sized) and not isinstance(value, str) and len(value) == 0
 
 
 def counted(count: int, one: str, many: str | None = None) -> str:
@@ -99,11 +110,11 @@ def measured(value: Decimal | float | str | None, unit: str, places: int | None 
     is not whole. Left out, a number is written as it came. A figure is
     grouped by thousands and signed as ``money.signed_number`` signs one, so a
     figure that rounds to zero is never negative, and ``plus`` signs a change.
-    Zero is a figure; only None and the empty string are the missing mark. A
-    figure already written as words ("1:23") is written as it is.
+    Zero is a figure; a ``no_value`` is the missing mark. A figure already
+    written as words ("1:23") is written as it is.
     """
 
-    if value is None or value == "":
+    if no_value(value):
         return MISSING
     joint = "" if unit in ("%", "°", "") else " "
     number = _figure(value)

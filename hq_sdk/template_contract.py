@@ -26,7 +26,7 @@ lazy from django.template.smartif import TokenBase
 lazy from hq.platform.core.stylesheets import stylesheet
 lazy from hq.platform.core.table_cells import ROLE_CLASSES
 lazy from hq.platform.core.templatetags.part_tags import SectionTakes
-lazy from hq.platform.core.templatetags.value_tags import Takes
+lazy from hq.platform.core.templatetags.value_tags import PresentNode, Takes
 
 lazy from .contract import _parameters
 
@@ -97,6 +97,7 @@ TAGS = (
     "notice",
     "outside_link",
     "button",
+    "present",
     "reference",
     "referenced_by",
     "row_actions",
@@ -315,6 +316,11 @@ class _Reads:
                 names = frozenset(name for name, _ in _expression_names(condition))
                 self.note(condition, bound, guards, guarded=True)
                 self.walk(branch, bound, guards | names)
+        elif isinstance(node, PresentNode):
+            # What its body reads of the value is read only when it is there.
+            names = frozenset(name for name, _ in _expression_names(node.value))
+            self.note(node.value, bound, guards, guarded=True)
+            self.walk(node.nodelist, bound, guards | names)
         elif isinstance(node, WithNode):
             self.note(node.extra_context, bound, guards)
             self.walk(node.nodelist, bound | set(node.extra_context), guards)

@@ -35,7 +35,7 @@ from hq.platform.application.money import money as _money
 from hq.platform.application.page_parts import html_attributes
 from hq.platform.application.printable import admitted
 from hq.platform.application.tone import Tone
-from hq.platform.application.ui import MISSING, counted as _counted, measured as _measured
+from hq.platform.application.ui import MISSING, counted as _counted, measured as _measured, no_value
 from hq.platform.core.templatetags.line_breaks import breakable, button_words, code_spans, held, mark_text
 lazy from hq.domains.control_plane.provider_spec import expiry_phrase
 lazy from hq.platform.application import references, request_identity, security
@@ -76,8 +76,8 @@ def measured(value, unit):
     ``money``) and a word ``counted`` would make plural. ``ui.measured``
     writes it; a missing figure is the missing mark, with no word."""
 
-    if value is None or value == "":
-        return or_empty(value)
+    if no_value(value):
+        return empty_value()
     return held(_measured(value, *measured_unit(unit)))
 
 
@@ -147,8 +147,8 @@ def money(value, form=""):
 
     if form not in ("", "whole"):
         raise template.TemplateSyntaxError(f"money takes 'whole' or nothing; got {form!r}.")
-    if value is None or value == "":
-        return or_empty(value)
+    if no_value(value):
+        return empty_value()
     return _money(value, cents=form != "whole")
 
 
@@ -156,15 +156,50 @@ def money(value, form=""):
 def or_empty(value):
     """The value, or the one muted mark for a value that is not there.
 
-    Built in, so every HQ and extension template has it without a load. Zero is
-    a value and is shown; only None and the empty string are missing. A number
-    passes as it is; anything else is what ``breakable`` makes of it.
+    Built in, so every HQ and extension template has it without a load. What
+    is missing is ``ui.no_value``'s: zero is a value and is shown. A number
+    passes as it is; anything else is what ``breakable`` makes of it. Markup
+    around the value is ``{% present %}``'s.
     """
-    if value is None or value == "":
+    if no_value(value):
         return empty_value()
     if not isinstance(value, bool) and isinstance(value, Number):
         return value
     return breakable(value)
+
+
+def present(content: Callable[[], str], value) -> str:
+    """``{% present repo.release %}{% entity repo.release.link %}{% endpresent %}``:
+    what the tag encloses, drawn only when ``value`` is there, and otherwise
+    the mark ``or_empty`` draws, for a value shown in markup (a ``<code>``, a
+    link, a status, an include) that the filter cannot hold."""
+
+    return empty_value() if no_value(value) else content()
+
+
+class PresentNode(template.Node):
+    child_nodelists = ("nodelist",)
+
+    def __init__(self, value, nodelist: template.NodeList) -> None:
+        self.value = value
+        self.nodelist = nodelist
+
+    def render(self, context) -> str:
+        return present(lambda: self.nodelist.render(context), self.value.resolve(context))
+
+
+@register.tag("present")
+def present_tag(parser, token) -> PresentNode:
+    bits = token.split_contents()
+    if len(bits) != 2:
+        raise template.TemplateSyntaxError("present takes one value: {% present value %}...{% endpresent %}")
+    nodelist = parser.parse(("endpresent",))
+    parser.delete_first_token()
+    return PresentNode(parser.compile_filter(bits[1]), nodelist)
+
+
+# The template contract reads the tag's parameters from what it wraps.
+present_tag.__wrapped__ = present  # type: ignore[attr-defined]  # a function's attribute, which typeshed does not declare
 
 
 def _instant(value) -> date | datetime | None:
@@ -217,8 +252,8 @@ def when(value, form=""):
         raise template.TemplateSyntaxError(
             f"when takes {', '.join(repr(name) for name in _WHEN_FORMS if name)} or nothing; got {form!r}."
         )
-    if value is None or value == "":
-        return or_empty(value)
+    if no_value(value):
+        return empty_value()
     found = _instant(value)
     if found is None:
         return breakable(value)

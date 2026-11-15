@@ -36,7 +36,7 @@ OUTSIDE = {
     "templates/example/_own.html": "{% load example_tags %}{{ value|doubled }}{% lorem 1 w %}",
     "templates/example/tags.html": (
         "{% load nav_tags %}\n{% problems_about %}\n{{ value|readable }}\n{{ count|counted }}\n"
-        '{% table_heading "Go" color="red" %}'
+        '{% table_heading "Go" color="red" %}\n{% present first second %}x{% endpresent %}'
     ),
     "templates/example/markup.html": (
         '<div class="compact invented {% if on %}pill-good{% endif %} pill-{{ tone }}">\n<p data-secret>x</p><svg data-chart></svg></div>\n'
@@ -79,6 +79,7 @@ class TemplateValidationTests(SimpleTestCase):
             "tags.html:3": "readable",
             "tags.html:4": "counted",
             "tags.html:5": "color",
+            "tags.html:6": "present",
             "markup.html:1": "invented",
             "markup.html:2": "data-secret",
             "markup.html:3": "style attribute",
