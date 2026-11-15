@@ -197,7 +197,10 @@ class ClaimTests(LeasedRunTestCase):
             key="example-dns", kind="adguard.rewrite", spec={"domain": "app.example.com", "answer": "192.0.2.10"}
         )
         enqueue(
-            rewrite, OperationRequest.Action.RECONCILE, idempotency_key="example-reconcile", input={"generation": 1}
+            rewrite.key,
+            OperationRequest.Action.RECONCILE,
+            lambda: (rewrite, {"input": {"generation": 1}}),
+            idempotency_key="example-reconcile",
         )
 
         answer = claim_next_operation(WORKER, capabilities=(("adguard.rewrite", "reconcile"),))

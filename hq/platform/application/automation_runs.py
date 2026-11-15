@@ -6,7 +6,6 @@ here. What it binds to, and what its approval is measured against:
 docs/Architecture.md, "Running a playbook".
 """
 
-import secrets
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, make_dataclass, replace
 from functools import lru_cache, partial
@@ -50,14 +49,13 @@ lazy from .doors import NOBODY
 lazy from .entity_links import entity_link, kind_label
 lazy from .finding_model import FindingRemedy
 lazy from .findings import rule_for
-lazy from .idempotency import IdempotencyConflict
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
 lazy from .json_schemas import fields as whole_fields, json_schema
 lazy from .labels import effect_label, lower_first
 lazy from .machines import machine_catalog
 lazy from .moments import ago, moment, when
 lazy from .payload_words import ChangeRow, field_words, value_words
-lazy from .resource_operations import OperationQueued, enqueue, serialize_operation
+lazy from .resource_operations import OperationQueued, Prepared, asked_fields, enqueue, serialize_operation
 lazy from .routes import reverse
 lazy from .run_reads import RUNS
 lazy from .service_context import Cell, ServiceSection, machines_cell, recent_work
@@ -440,57 +438,46 @@ def _holder_cancel(holding: dict[str, Any], principal: Principal | None) -> Page
 
 
 @transaction.atomic
-def request_run(
-    manifest: OperationManifest, command: RunCommand, *, principal: Principal, idempotency_key: str
-) -> OperationQueued:
-    """Queue one run of ``manifest`` for the automation worker, once per retry key."""
+def request_run(manifest: OperationManifest, command: RunCommand, *, principal: Principal) -> OperationQueued:
+    """Queue one run of ``manifest`` for the automation worker, once per retry key.
+
+    A read takes no retry key, so its run is keyed afresh (``enqueue``):
+    asking twice queues twice, and the procedure's one active run refuses the
+    second.
+    """
 
     bound = _bound(manifest, command)
-    asked = {
-        **bound,
-        **({"approved_by": principal.approved_by} if principal.approved_by else {}),
-    }
-    existing = OperationRequest.objects.filter(idempotency_key=idempotency_key).select_related("resource").first()
-    if existing is not None:
-        kept = {name: existing.input.get(name) for name in bound}
-        if (
-            existing.resource.key != resource_key(manifest.id)
-            or existing.action != OperationRequest.Action.RUN
-            or (kept != bound)
-        ):
-            raise IdempotencyConflict("That retry key was already used for a different request.")
-        return {"ok": True, "queued": False, "operation": serialize_operation(existing)}
-    # A run no worker will take would wait for nothing: the finding that says
-    # so (``automation_findings``) carries how to set one up.
-    untaken = automation_standing().cannot("run", now=timezone.now())
-    if untaken:
-        raise PolicyError(untaken)
-    resource = _record(manifest, principal=principal)
-    if not resource.enabled:
-        raise PolicyError("This playbook is switched off in HQ.")
-    # A claim whose lease ran out is ended or put back first, by the rule
-    # a claim applies too, so a worker that went quiet holds nothing.
-    release_lapsed(timezone.now())
-    holder = _holding(resource, bound["hosts"])
-    if holder is not None:
-        raise PolicyError(
-            "Another run holds this playbook or one of these machines; details.holding is that run. "
-            "Ask again once it ends.",
-            details=_held_by(holder, resource, bound["hosts"]),
-        )
-    # No run of this procedure is active and the key is new, so this
-    # queues one.
-    operation, _ = enqueue(
-        resource,
+
+    def prepare() -> Prepared:
+        # A run no worker will take would wait for nothing: the finding that
+        # says so (``automation_findings``) carries how to set one up.
+        untaken = automation_standing().cannot("run", now=timezone.now())
+        if untaken:
+            raise PolicyError(untaken)
+        resource = _record(manifest, principal=principal)
+        if not resource.enabled:
+            raise PolicyError("This playbook is switched off in HQ.")
+        # A claim whose lease ran out is ended or put back first, by the rule
+        # a claim applies too, so a worker that went quiet holds nothing.
+        release_lapsed(timezone.now())
+        holder = _holding(resource, bound["hosts"])
+        if holder is not None:
+            raise PolicyError(
+                "Another run holds this playbook or one of these machines; details.holding is that run. "
+                "Ask again once it ends.",
+                details=_held_by(holder, resource, bound["hosts"]),
+            )
+        return resource, asked_fields(principal, reason=command.reason, generation=resource.generation, **bound)
+
+    operation, queued = enqueue(
+        resource_key(manifest.id),
         OperationRequest.Action.RUN,
-        idempotency_key=idempotency_key,
-        requested_actor=principal.actor,
-        requested_interface=principal.interface,
-        requested_device=principal.device,
-        requested_person_key=principal.person_key,
-        reason=command.reason,
-        input={"generation": resource.generation, **asked},
+        prepare,
+        idempotency_key=getattr(command, IDEMPOTENCY_FIELD, ""),
+        same=bound,
     )
+    if not queued:
+        return {"ok": True, "queued": False, "operation": serialize_operation(operation)}
     OperationHost.objects.bulk_create(OperationHost(operation=operation, host=host) for host in bound["hosts"])
     # The worker pulls the run over the bridge; the ring only says one waits,
     # and only once it is stored for the claim to find.
@@ -665,13 +652,6 @@ def listed_with_actions(runs: Iterable[WorkRun], principal: Principal) -> list[W
     return [replace(run, actions=(action,)) if (action := cancel_action(run, principal)) else run for run in runs]
 
 
-def _run(manifest: OperationManifest, command: RunCommand, *, principal: Principal) -> OperationQueued:
-    # A read takes no retry key, so its run is keyed afresh: asking twice
-    # queues twice, and the procedure's one active run refuses the second.
-    key = getattr(command, IDEMPOTENCY_FIELD, "") or f"run:{secrets.token_urlsafe(18)}"
-    return request_run(manifest, command, principal=principal, idempotency_key=key)
-
-
 # What a manifest's ``retry`` lets a run that stopped without a known
 # outcome do, in every page's words.
 RETRY_WORDS = {
@@ -824,8 +804,10 @@ def _capability(manifest: OperationManifest, titles: Mapping[str, str]) -> Capab
 
     # The playbook by its title in quotes, or by its id where it has none.
     named = f"“{titles[manifest.id]}”" if titles.get(manifest.id) else manifest.id
-    run = measured_by(partial(run_subject, manifest), shown=partial(run_preview, manifest))(partial(_run, manifest))
-    # A read is keyed afresh at each ask (``_run``), so asking again finds the first run in the way.
+    run = measured_by(partial(run_subject, manifest), shown=partial(run_preview, manifest))(
+        partial(request_run, manifest)
+    )
+    # A read is keyed afresh at each ask (``request_run``), so asking again finds the first run in the way.
     asked_again = (
         "A read takes no `idempotency_key`. Asked again after `call_timed_out`, it is refused while the first "
         "run waits or works, and `details.holding` is that run."

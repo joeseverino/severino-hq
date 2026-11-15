@@ -1,10 +1,14 @@
 id: operation-written-by-enqueue
 valid:
   - 'OperationRequest.objects.filter(state="queued")'
-  - 'resource_operations.enqueue(resource, "restart")'
+  - 'resource_operations.enqueue(resource.key, "restart", prepare, idempotency_key=key)'
   - 'OperationRequest.objects.bulk_create(rows)'
   - 'Other.objects.create()'
+  - 'Other.objects.filter(idempotency_key=key)'
 invalid:
   - 'OperationRequest.objects.create(key="k")'
   - 'OperationRequest.objects.get_or_create(key="k")'
   - 'OperationRequest.objects.update_or_create(key="k", defaults={})'
+  - 'OperationRequest.objects.filter(idempotency_key=key).first()'
+  - 'OperationRequest.objects.get(action="run", idempotency_key=key)'
+  - 'models.OperationRequest.objects.filter(idempotency_key=key).select_related("resource").first()'

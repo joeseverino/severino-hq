@@ -5,7 +5,8 @@ each is checked against the provider's policy, queued atomically and audited
 before the controller runs it.
 """
 
-from collections.abc import Iterable
+import secrets
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal, NotRequired, TypedDict, cast
@@ -54,6 +55,7 @@ from .ui import counted, ended
 lazy from . import tailnet
 lazy from .containers import Running
 lazy from .history import Acts, who_did_each
+lazy from .idempotency import IdempotencyConflict
 lazy from .integration_specs import requested
 lazy from .inventory import live_spec
 lazy from .machines import Machine, container_context
@@ -308,16 +310,37 @@ def _resource_for_operation(key: str) -> ManagedResource:
 REPLACES = "replaces"
 
 
-def enqueue(
-    resource: ManagedResource, action: str, *, idempotency_key: str, **fields: Any
-) -> tuple[OperationRequest, bool]:
-    """Queue an operation once per key, and once per resource and action while one waits.
+type Prepared = tuple[ManagedResource, dict[str, Any]]
 
-    Returns the operation and whether this call created it. The key's unique
-    column decides between two writers on one key: ``get_or_create`` catches
-    the second one's ``IntegrityError`` and hands it the first one's row.
+
+def enqueue(
+    resource_key: str,
+    action: str,
+    prepare: Callable[[], Prepared],
+    *,
+    idempotency_key: str = "",
+    same: Mapping[str, Any] | None = None,
+) -> tuple[OperationRequest, bool]:
+    """The one way an operation enters the queue: once per retry key, and once
+    per record and action while one waits. Returns it and whether this call
+    queued it.
+
+    A key already used answers its operation before ``prepare`` checks
+    anything, so a retry answers what the first call did, however things
+    stand now; the same key asking for another record, action or input
+    (``same``, the fields of its input a retry repeats) is a conflict.
+    Otherwise ``prepare`` checks the request and returns the record and the
+    row's fields. A caller with no key (a read's run, which takes none) gets
+    a fresh one, so asking twice queues twice. The key's unique column decides
+    between two writers on one key: ``get_or_create`` hands the second one
+    the first one's row.
     """
 
+    key = idempotency_key or f"{action}:{secrets.token_urlsafe(18)}"
+    found = OperationRequest.objects.filter(idempotency_key=key).select_related("resource").first()
+    if found is not None:
+        return _keyed(found, resource_key, action, same), False
+    resource, fields = prepare()
     active = OperationRequest.objects.filter(
         resource=resource,
         action=action,
@@ -325,9 +348,44 @@ def enqueue(
     ).first()
     if active is not None:
         return active, False
-    return OperationRequest.objects.get_or_create(
-        idempotency_key=idempotency_key, defaults={"resource": resource, "action": action, **fields}
+    operation, created = OperationRequest.objects.get_or_create(
+        idempotency_key=key, defaults={"resource": resource, "action": action, **fields}
     )
+    return (operation, True) if created else (_keyed(operation, resource_key, action, same), False)
+
+
+def _keyed(
+    operation: OperationRequest, resource_key: str, action: str, same: Mapping[str, Any] | None
+) -> OperationRequest:
+    """``operation``, the one a retry key already names, else a conflict."""
+
+    asked = operation.input or {}
+    if (
+        operation.resource.key != resource_key
+        or operation.action != action
+        or any(asked.get(name) != value for name, value in (same or {}).items())
+    ):
+        raise IdempotencyConflict("That retry key was already used for a different request.")
+    return operation
+
+
+def asked_fields(principal: Principal, *, reason: str, **asked: Any) -> dict[str, Any]:
+    """A queued operation's fields: who asked, why, and its ``input``.
+
+    Who asked stays who asked. Where a person had to agree before it could be
+    queued, that is recorded beside the request rather than in place of it:
+    an operation applied on somebody's say-so and one a credential queued
+    alone must not read the same afterwards.
+    """
+
+    return {
+        "requested_actor": principal.actor,
+        "requested_interface": principal.interface,
+        "requested_device": principal.device,
+        "requested_person_key": principal.person_key,
+        "reason": reason,
+        "input": {**asked, **({"approved_by": principal.approved_by} if principal.approved_by else {})},
+    }
 
 
 def _queue_operation(
@@ -339,42 +397,26 @@ def _queue_operation(
     require_enabled: bool = True,
     replaces: dict[str, Any] | None = None,
 ) -> OperationQueued:
-    if require_enabled and not resource.enabled:
-        raise PolicyError("This record is switched off in HQ.")
-    require_writable(resource.kind, resource.spec)
-    # Nothing enters the queue for a gated kind without a person behind it. The
-    # controller's own automatic work does not pass through here (it writes its
-    # rows directly, as itself, converging toward a declaration somebody has
-    # already agreed to) so this refuses exactly the case it is about: a
-    # credential asking for the world to be changed.
-    gap = consent_gap(resource.kind, principal=principal)
-    if gap:
-        raise PolicyError(gap)
-    allowed, explanation = controller_action_policy(resource.kind, action)
-    if not allowed:
-        raise PolicyError(explanation)
-    operation, queued = enqueue(
-        resource,
-        action,
-        idempotency_key=command.idempotency_key,
-        requested_actor=principal.actor,
-        requested_interface=principal.interface,
-        requested_device=principal.device,
-        requested_person_key=principal.person_key,
-        reason=command.reason,
-        # Who asked stays who asked. Where a person had to agree before this
-        # could be queued, that is recorded beside the request rather than in
-        # place of it: an operation applied on somebody's say-so and one a
-        # credential queued alone must not read the same afterwards.
-        input={
-            "generation": resource.generation,
-            **({"approved_by": principal.approved_by} if principal.approved_by else {}),
-            # The copy an apply by hand may only replace (``controller.over_live``).
-            **({REPLACES: replaces} if replaces is not None else {}),
-        },
-    )
-    if operation.resource_id != resource.id or operation.action != action:
-        raise PolicyError("Idempotency key is already used by another operation.")
+    def prepare() -> Prepared:
+        if require_enabled and not resource.enabled:
+            raise PolicyError("This record is switched off in HQ.")
+        require_writable(resource.kind, resource.spec)
+        # Nothing enters the queue for a gated kind without a person behind
+        # it. The controller's own automatic work does not pass through here
+        # (it queues as itself, converging toward a declaration somebody has
+        # already agreed to) so this refuses exactly the case it is about: a
+        # credential asking for the world to be changed.
+        gap = consent_gap(resource.kind, principal=principal)
+        if gap:
+            raise PolicyError(gap)
+        allowed, explanation = controller_action_policy(resource.kind, action)
+        if not allowed:
+            raise PolicyError(explanation)
+        # The copy an apply by hand may only replace (``controller.over_live``).
+        replaced = {REPLACES: replaces} if replaces is not None else {}
+        return resource, asked_fields(principal, reason=command.reason, generation=resource.generation, **replaced)
+
+    operation, queued = enqueue(resource.key, action, prepare, idempotency_key=command.idempotency_key)
     said = requested(verb_words(action), resource.key, again=not queued)
     if not queued:
         return {"ok": True, "queued": False, "operation": serialize_operation(operation), "message": said}

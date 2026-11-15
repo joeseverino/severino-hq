@@ -4,6 +4,7 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from datetime import timedelta
+from functools import partial
 from typing import Any
 
 from django.core.exceptions import ValidationError
@@ -34,7 +35,7 @@ from .conditions import DRIFTED, PROBLEMS, holding, stamped
 from .infrastructure import controller_contract, resolved_spec, serialize_resource
 from .inventory import read_as, read_since, strike_removed
 from .plugin_admission import admitted_sources
-from .resource_operations import REPLACES, enqueue, serialize_operation
+from .resource_operations import REPLACES, Prepared, enqueue, serialize_operation
 lazy from .automation_sources import propose
 lazy from .cadence import ask, swept
 lazy from .dependency_updates import plan as dependency_updates
@@ -302,6 +303,17 @@ def _automatic_action(
     return False, "", ""
 
 
+def _automatic(resource: ManagedResource, controller_id: str, reason: str) -> Prepared:
+    """What the controller queues of its own accord on ``resource``: as itself, toward its declaration."""
+
+    return resource, {
+        "requested_actor": controller_id,
+        "requested_interface": CONTROLLER_INTERFACE,
+        "reason": reason,
+        "input": {"generation": resource.generation},
+    }
+
+
 @transaction.atomic
 def _finding_repairs(controller_id: str, now) -> list[str]:
     """Queue repairs for findings the controller contract already runs itself.
@@ -324,13 +336,10 @@ def _finding_repairs(controller_id: str, now) -> list[str]:
         # Keyed on the evidence, not the attempt.
         idempotency_key = (f"finding:{repair.rule}:{resource.pk}:g{resource.generation}:{now.date().isoformat()}")[:200]
         _, created = enqueue(
-            resource,
+            resource.key,
             OperationRequest.Action.RECONCILE,
+            partial(_automatic, resource, controller_id, repair.reason),
             idempotency_key=idempotency_key,
-            requested_actor=controller_id,
-            requested_interface=CONTROLLER_INTERFACE,
-            reason=repair.reason,
-            input={"generation": resource.generation},
         )
         if created:
             queued.append(resource.key)
@@ -368,13 +377,7 @@ def schedule_automatic_operations(controller_id: str) -> dict[str, Any]:
             f"controller:{action}:{resource.pk}:g{resource.generation}:{identity}:{now.date().isoformat()}"
         )[:200]
         operation, created = enqueue(
-            resource,
-            action,
-            idempotency_key=idempotency_key,
-            requested_actor=controller_id,
-            requested_interface=CONTROLLER_INTERFACE,
-            reason=reason,
-            input={"generation": resource.generation},
+            resource.key, action, partial(_automatic, resource, controller_id, reason), idempotency_key=idempotency_key
         )
         if created:
             scheduled.append(str(operation.id))

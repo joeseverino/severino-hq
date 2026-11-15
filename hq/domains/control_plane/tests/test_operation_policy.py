@@ -217,12 +217,35 @@ class OperationPolicyTests(TestCase):
             principal=cli_principal(),
         )
         OperationRequest.objects.filter(resource__key="other-wildcard").delete()  # applied, as above
-        with self.assertRaisesMessage(PolicyError, "already used by another operation"):
+        from hq.platform.application.idempotency import IdempotencyConflict
+
+        with self.assertRaises(IdempotencyConflict):
             request_reconcile(
                 OperationCommand(idempotency_key="finished-once"),
                 principal=cli_principal(),
                 current_key="other-wildcard",
             )
+        self.assertEqual(OperationRequest.objects.count(), 1)
+
+    @patch(
+        "hq.platform.application.resource_operations.controller_action_policy",
+        return_value=(True, "active"),
+    )
+    def test_a_retry_answers_what_its_first_call_queued_however_the_record_stands_now(self, _policy):
+        """A client that lost the first answer learns what it did, and nothing is asked twice."""
+
+        first = request_reconcile(
+            OperationCommand(idempotency_key="asked-once"), principal=cli_principal(), current_key=self.resource.key
+        )
+        ManagedResource.objects.filter(pk=self.resource.pk).update(enabled=False)
+
+        again = request_reconcile(
+            OperationCommand(idempotency_key="asked-once"), principal=cli_principal(), current_key=self.resource.key
+        )
+
+        self.assertTrue(first["queued"])
+        self.assertFalse(again["queued"])
+        self.assertEqual(again["operation"]["id"], first["operation"]["id"])
         self.assertEqual(OperationRequest.objects.count(), 1)
 
     def test_an_agent_not_granted_infrastructure_is_refused_a_renewal(self):
