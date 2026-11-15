@@ -11,13 +11,15 @@ import json
 from typing import Any
 
 
-def canonical(value: Any) -> str:
-    """``value`` as the one JSON text every equal value shares."""
+def canonical(value: Any, *, ensure_ascii: bool = True) -> str:
+    """``value`` as the one JSON text every equal value shares; with
+    ``ensure_ascii`` false, text past ASCII as itself rather than escaped,
+    for a fingerprint first stored that way."""
 
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str, ensure_ascii=ensure_ascii)
 
 
-def digest(value: Any) -> str:
+def digest(value: Any, *, ensure_ascii: bool = True) -> str:
     """The SHA-256 of ``value``'s canonical text, in hex."""
 
-    return hashlib.sha256(canonical(value).encode()).hexdigest()
+    return hashlib.sha256(canonical(value, ensure_ascii=ensure_ascii).encode()).hexdigest()
