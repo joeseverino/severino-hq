@@ -668,6 +668,14 @@ a list of them, each in its series color (`partials/_calendar_sources.html`,
 the form part, and `test_form_page.py`, which holds every routed create and edit view to the
 frame and the card to it alone.
 
+A field is the view's Django form field, drawn by the field template, so its
+label, help, errors and required mark come with it; one posted with a button
+outside the form names that form in its widget's `form` attribute. A row of
+buttons that stands on its own (a confirmation's, a card's decisions, a page's
+way on) is `{% button_row %}`, which the closing row draws through too.
+*Gate:* `lint:ast-grep` (`hand-drawn-field.yml`), which refuses a `field` or
+`form-actions` class written in a template.
+
 A form that asks one question is one visible field of a line (words, a number,
 a date, one choice) closed by its verb alone. It draws its button on the
 field's line where the field keeps 18rem beside it, and under it where it

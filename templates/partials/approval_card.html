@@ -22,9 +22,9 @@ carries stands above it. Its buttons are the decisions its reader may take
 
   {% if entry.offer.actions %}
     {% remedies entry.offer.actions as shown %}
-    <p class="form-actions">
+    {% button_row %}
       {% for action in shown %}{% include "partials/_page_action.html" with action=action only %}{% endfor %}
-    </p>
+    {% endbutton_row %}
   {% endif %}
 {% aside %}
   Asked {% if entry.who.door %}{{ entry.who.door|breakable }} {% endif %}{{ entry.held.created_at|when_text:"ago" }}{% if entry.held.state == 'pending' %}{% dot %}expires {{ entry.held.expires_at|when:"ahead" }}

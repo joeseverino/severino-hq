@@ -1,6 +1,6 @@
 {% extends "page.html" %}
 {% block page %}
-<div class="form-actions">
+{% button_row %}
   {% if gap %}{% muted element="p" %}{{ gap.reason|breakable }} {% include "partials/_write_gap.html" %}{% endmuted %}{% else %}
   {% url 'contacts:set_status' submission.id as status_url %}
   {% if submission.status != "read" %}{% words "contact.submission.review" "read" as said %}{% button said status_url post=True name="status" value="read" %}{% endif %}
@@ -9,7 +9,7 @@
   {% if submission.status != "spam" %}{% words "contact.submission.review" "spam" as said %}{% button said status_url post=True name="status" value="spam" %}{% endif %}
   {% url 'contacts:delete' submission.id as delete_url %}{% words "contact.submission.delete" as said %}{% button said delete_url look="danger" %}
   {% endif %}
-</div>
+{% endbutton_row %}
 
 <div class="section-flow">
 {% section "Message" %}

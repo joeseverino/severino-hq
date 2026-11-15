@@ -13,6 +13,7 @@ from hq.platform.application.approvals import ApproveCommand, approve
 from hq.platform.application.capabilities import capability_registry, execute_capability
 from hq.platform.application.capability_policy import Rule
 from hq.platform.application.contracts import Effect
+from hq.platform.application.markup_testing import select
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.resource_operations import ACTION_CAPABILITY
 from hq.platform.application.security import Capability, Principal, web_principal
@@ -104,6 +105,16 @@ class RemovalVerbTests(TestCase):
         self.assertTrue(
             AuditLog.objects.filter(object_id=str(operation.pk), metadata__actor="operator").exists(),
         )
+
+    def test_the_reason_is_a_field_posted_with_the_confirmation_and_described_by_its_help(self):
+        page = self.client.get(reverse("control_plane:remove", kwargs={"key": "example-dns"}))
+
+        (reason,) = select(page, "name", "reason")
+        self.assertEqual(reason.attrs["form"], "hq-post")
+        (label,) = select(page, "for", reason.attrs["id"])
+        self.assertIn("Why", label.text)
+        (help_,) = select(page, "id", reason.attrs["aria-describedby"])
+        self.assertIn("audit log", help_.text)
 
 
 class AgentStopTests(TestCase):

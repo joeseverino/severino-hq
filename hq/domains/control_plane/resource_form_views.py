@@ -31,6 +31,7 @@ from hq.platform.application.tone import Tone
 from hq.platform.application.web_writes import execute_posted, refused
 from hq.platform.core import secrets
 
+from .forms import MachineIdentityForm
 from .models import ManagedResource, OperationRequest
 from .names import normalized_hostname
 from .provider_adapters.declarations import MACHINE_KIND
@@ -123,7 +124,7 @@ class ResourceFormView(View):
                 # Only when editing. Creating something asks what HQ cannot
                 # know and nothing else: a name it can derive, and a pause
                 # switch for a thing that does not exist yet, are not questions.
-                "identity": (ResourceIdentityForm(initial={"enabled": resource.enabled}) if resource else None),
+                "identity": _identity(kind, resource),
                 # The form is built knowing which name it is about, so its
                 # menus can offer what suits that name rather than everything
                 # that exists. A certificate menu with one entry is right by
@@ -139,9 +140,6 @@ class ResourceFormView(View):
                 # nothing about the names it covers or where it is installed,
                 # which is the whole of what a person comes to check.
                 "facts": _form_facts(resource, spec) if resource else (),
-                "show_on_dashboard": bool(
-                    resource and kind == MACHINE_KIND and dashboard_machine_selected(resource.key)
-                ),
                 **_form_page(request, kind, resource),
             },
         )
@@ -151,7 +149,7 @@ class ResourceFormView(View):
         kind = self._kind(request, resource)
         if kind not in PROVIDERS:
             raise Http404("Unknown type of record.")
-        identity = ResourceIdentityForm(request.POST) if resource else None
+        identity = _identity(kind, resource, request.POST)
         spec = spec_form_class(
             kind,
             lock_identity=bool(resource),
@@ -176,9 +174,6 @@ class ResourceFormView(View):
                 "identity": identity,
                 "spec": spec,
                 "material": material,
-                "show_on_dashboard": bool(
-                    resource and kind == MACHINE_KIND and dashboard_machine_selected(resource.key)
-                ),
                 **_form_page(request, kind, resource),
             },
         )
@@ -205,7 +200,7 @@ class ResourceFormView(View):
         saved = result["resource"]["key"]
         if resource and kind == MACHINE_KIND:
             shown = execute_posted(
-                request, DASHBOARD_MACHINE, {"selected": "show_on_dashboard" in request.POST}, target=saved
+                request, DASHBOARD_MACHINE, {"selected": identity.cleaned_data["show_on_dashboard"]}, target=saved
             )
             refused(request, shown)
         if material is not None:
@@ -221,6 +216,20 @@ class ResourceFormView(View):
         # own page after saving would make the next step a navigation
         # problem: the service page is the thing being built.
         return redirect(_after_save(request, kind, resource, saved))
+
+
+def _identity(kind: str, resource, data=None) -> ResourceIdentityForm | None:
+    """What HQ calls an existing resource and whether it reconciles, with a
+    machine's place on the dashboard; None while creating one."""
+
+    if not resource:
+        return None
+    if kind == MACHINE_KIND:
+        return MachineIdentityForm(
+            data,
+            initial={"enabled": resource.enabled, "show_on_dashboard": dashboard_machine_selected(resource.key)},
+        )
+    return ResourceIdentityForm(data, initial={"enabled": resource.enabled})
 
 
 def _form_page(request, kind: str, resource) -> dict:

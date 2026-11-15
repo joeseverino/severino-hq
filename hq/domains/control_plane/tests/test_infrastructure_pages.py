@@ -77,6 +77,11 @@ class InfrastructureWebTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(DashboardMachine.objects.get().machine, machine)
 
+        (shown,) = select(self.client.get(edit_url), "name", "show_on_dashboard")
+        self.assertIn("checked", shown.attrs)
+        (help_,) = select(page, "id", shown.attrs["aria-describedby"])
+        self.assertIn("dashboard header", help_.text)
+
     def test_detail_shows_active_observation_and_policy_gated_renewal(self):
         managing_everything()
         self.resource.status = {

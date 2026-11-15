@@ -12,9 +12,9 @@ primary. A form answered in place (`live`) says how it went in the line its
 fragment fills, and its Cancel closes it there, the region it stands in
 answering it when it is `in_place`; any other says Working… while
 it is sent (`data-submit-busy` on the form, app.js). `bar` pins the row to
-the bottom of the screen once the form has changed (pages.css).
+the bottom of the screen once the form has changed.
 {% endcomment %}
-<div class="form-actions{% if bar %} save-bar{% endif %}">
+{% button_row bar=bar|default:False %}
   {% if choices %}
     {% for value, words in choices %}{% if forloop.length == 1 %}{% button words submit=True name=choice_field value=value look="primary" %}{% else %}{% button words submit=True name=choice_field value=value %}{% endif %}{% endfor %}
   {% else %}
@@ -28,4 +28,4 @@ the bottom of the screen once the form has changed (pages.css).
   {% else %}
     {% muted css="form-actions-note" data_submit_status=True hidden=True role="status" %}Working…{% endmuted %}
   {% endif %}
-</div>
+{% endbutton_row %}

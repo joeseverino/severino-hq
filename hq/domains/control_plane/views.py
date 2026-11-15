@@ -59,6 +59,7 @@ from hq.platform.application.whereabouts import whereabouts
 from hq.platform.application.work_runs import run_rows
 lazy from hq.platform.application.page_relations import for_container
 
+from .forms import RemovalReasonForm
 from .models import ApprovalRequest, ManagedResource, OperationRequest
 from .provider_adapters.portainer import CONTAINER_KIND
 from .provider_adapters.tls import CERTIFICATE_KIND
@@ -195,6 +196,7 @@ class ResourceRemoveView(View):
                 "spec_rows": _spec_rows(resource),
                 "forget": forget,
                 "holds_records": bool(PROVIDERS[resource.kind].contains),
+                "removal_reason": RemovalReasonForm(),
                 "confirm": {
                     "url": request.path,
                     "label": capabilities.removal_words,

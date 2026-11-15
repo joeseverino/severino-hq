@@ -2979,10 +2979,8 @@
       "domain-charts",
       "errors",
       "eyebrow",
-      "field",
       "finding",
       "form",
-      "form-actions",
       "ghost",
       "help",
       "icon-link",
@@ -3478,6 +3476,14 @@
           "count=",
           "arrow=",
           "**attributes"
+        ],
+        "parts": []
+      },
+      "button_row": {
+        "classes": [],
+        "parameters": [
+          "*",
+          "bar="
         ],
         "parts": []
       },

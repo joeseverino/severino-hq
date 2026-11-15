@@ -86,6 +86,7 @@ PARTIALS: dict[str, str] = {
 # too; they are recorded from Django itself.
 TAGS = (
     "arrow",
+    "button_row",
     "card",
     "dot",
     "empty_value",
@@ -151,10 +152,8 @@ CLASSES = (
     "domain-charts",
     "errors",
     "eyebrow",
-    "field",
     "finding",
     "form",
-    "form-actions",
     "ghost",
     "help",
     "icon-link",
