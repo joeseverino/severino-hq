@@ -222,9 +222,7 @@ def operation_summary(run: WorkRun, operation: OperationRequest) -> OperationSum
         "attempt_count": operation.attempt_count,
         "reason": operation.reason,
         # A condition the controller reported is the part's shape.
-        "condition": cast(
-            "ConditionPart | None", next(iter(holding((operation.result or {}).get("conditions"))), None)
-        ),
+        "condition": cast(ConditionPart | None, next(iter(holding((operation.result or {}).get("conditions"))), None)),
         "affected": list(run.evidence.affected),
         "evidence": list(run.evidence.consumers),
         "matched": run.evidence.matched,
