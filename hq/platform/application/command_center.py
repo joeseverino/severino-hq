@@ -16,7 +16,7 @@ from .entity_links import entity_link
 from .facts import in_zone
 from .findings import finding_rules
 from .integrations import integration_graph
-from .labels import dotted, effect_label
+from .labels import dotted
 from .resources import ResourceSpec
 from .security import Capability, Principal
 from .topology_lenses import topology_lenses
@@ -173,7 +173,7 @@ def _command_item(spec: CapabilitySpec, relation: CommandRelation) -> DiscoveryI
         url=url,
         destination_label=destination,
         badges=(
-            effect_label(spec.effect),
+            spec.effect.label,
             *(f"via {label}" for label in relation.labels),
         ),
     )

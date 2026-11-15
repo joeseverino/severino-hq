@@ -47,6 +47,7 @@ from hq.platform.application.capabilities import (
     run_capability,
 )
 from hq.platform.application.connections import ConnectionCatalog, describe_connections
+from hq.platform.application.contracts import Effect
 from hq.platform.application.describe import Describe
 from hq.platform.application.findings import Findings, FindingsQuery, findings as application_findings
 from hq.platform.application.held_answer import AwaitingApproval
@@ -498,7 +499,7 @@ def capabilities(request: APIRequest) -> HttpResponse:
         "capabilities": [
             {
                 **spec,
-                "idempotency_key_required": key_required(spec["effect"], request.principal),
+                "idempotency_key_required": key_required(Effect(spec["effect"]), request.principal),
                 "request_schema": request_schema(spec),
             }
             for spec in specs
@@ -801,7 +802,7 @@ def capability_held(spec: CapabilitySpec) -> Any | None:
     HELD_STATUS; None for a read, which is never held
     (``capability_policy.set_rule``)."""
 
-    return None if spec.effect == "read" else AwaitingApproval
+    return AwaitingApproval if spec.effect.changes else None
 
 
 def _without_outcome(kind: Any) -> Any:

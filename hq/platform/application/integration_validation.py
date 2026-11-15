@@ -13,7 +13,7 @@ from django.core.exceptions import ImproperlyConfigured
 from pydantic import BaseModel, PydanticUndefinedAnnotation, PydanticUserError, ValidationError
 
 from .connection_contracts import GRANT_MODELS, ConnectionAbility, ConnectionSpec
-from .contracts import DJANGO_ROUTE, DOTTED_NAME, EFFECTS, SCOPE_NAME
+from .contracts import DJANGO_ROUTE, DOTTED_NAME, SCOPE_NAME
 from .integration_specs import (
     CONSENT_KEYWORD,
     PAGE_FIELD,
@@ -60,8 +60,6 @@ def _validate_capability_identity(spec: CapabilitySpec) -> None:
     names = [name for name, _text in spec.variants]
     if any(not name or not text for name, text in spec.variants) or len(names) != len(set(names)):
         raise ImproperlyConfigured(f"Capability {spec.name!r} names each variant once, with its words.")
-    if spec.effect not in EFFECTS:
-        raise ImproperlyConfigured(f"Capability {spec.name!r} has invalid effect {spec.effect!r}.")
 
 
 def _validate_capability_target(spec: CapabilitySpec) -> None:
@@ -240,8 +238,6 @@ def _validate_ability(spec: ConnectionSpec, ability: ConnectionAbility) -> None:
         raise ImproperlyConfigured(f"Connection {spec.name!r} has invalid ability {ability.name!r}.")
     if not ability.label.strip() or not ability.summary.strip():
         raise ImproperlyConfigured(f"Connection ability {ability.name!r} needs a label and summary.")
-    if ability.effect not in EFFECTS:
-        raise ImproperlyConfigured(f"Connection ability {ability.name!r} has invalid effect {ability.effect!r}.")
     if len(ability.required_scopes) != len(set(ability.required_scopes)) or any(
         not SCOPE_NAME.fullmatch(scope) for scope in ability.required_scopes
     ):

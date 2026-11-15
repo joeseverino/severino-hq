@@ -557,10 +557,16 @@ is wrong and holds what fixes it"):
 | `Insight.clears` | what clears an item a threshold raises, worded from that same threshold as a clause after "Clears once" ("a balance newer than 3 days arrives"); the panel says it after the why. The plugin check's `threshold-says-what-clears-it` fails a why that names a constant without it |
 
 **Capabilities.** HQ validates every `CapabilitySpec` before describing or
-invoking the registry: name, effect, required permissions, target kind and
-label, command JSON Schema, duplicates and the handler's signature. MCP grants
+invoking the registry: name, required permissions, target kind and label,
+command JSON Schema, duplicates and the handler's signature. MCP grants
 must be a subset of the extension's operator grants. A typo fails the composition's
 checks instead of becoming a production-only failure or an authority gap.
+
+What running a command does is a `hq_sdk.capabilities.Effect` member
+(`Effect.READ`, `REMOTE_WRITE`, `INFRASTRUCTURE_CHANGE`, `DESTRUCTIVE`), which
+`CapabilitySpec`, `ConnectionAbility` and `OutboundWork` take as `effect`. A
+spec given the value's string holds the member, and a value no member has is
+refused where the spec is written.
 
 A handler is called as `handler(command, *, principal, <target keyword>)`,
 the keyword being the one its `target_kind` binds (`current_slug`,

@@ -20,6 +20,7 @@ from hq.platform.application.capability_policy import (
     split_by_default,
     submitted_rules,
 )
+from hq.platform.application.contracts import Effect
 from hq.platform.application.tests.markup import all_elements, elements, hrefs, select, text, within
 from hq.platform.core.models import AgentIdentity, AuditLog
 
@@ -40,7 +41,7 @@ def _row(name: str, rule: str | None) -> Row:
         rule=rule,
         options=(("", "Default"), ("deny", "Refuse")),
     )
-    return Row(name, f"Do {name}", "write", "Write", "Allow", (cell,))
+    return Row(name, f"Do {name}", Effect.REMOTE_WRITE, "Allow", (cell,))
 
 
 GROUPS = (

@@ -25,6 +25,7 @@ from hq.platform.application.calendar import CalendarEvent, CalendarSource, Sour
 from hq.platform.application.capability_policy import RULE_LABELS, Column, Group, PolicyCell, Row
 from hq.platform.application.card_items import Insight, Kpi, ListRow, Timeline, TimelineItem
 from hq.platform.application.command_center import DiscoveryItem
+from hq.platform.application.contracts import Effect
 from hq.platform.application.credential_mint import CredentialFix
 from hq.platform.application.drawings import AllocationBar, Dot, Dots, Share, StripTile, Trend
 from hq.platform.application.entity_links import EntityLink
@@ -216,7 +217,7 @@ def _policy():
     options = (("", "Default"), *((rule, words) for rule, words in RULE_LABELS.items()))
     column = Column("example-agent", "example-agent", "MCP", AgentIdentity(client_id="example-agent"))
 
-    def row(name, label, effect, effect_label, default, rule, unavailable=""):
+    def row(name, label, effect, default, rule, unavailable=""):
         cell = PolicyCell(
             f"example-agent-{name}",
             column.label,
@@ -225,7 +226,7 @@ def _policy():
             unavailable=unavailable,
             label=f"{label}, for {column.label}",
         )
-        return Row(name, label, effect, effect_label, default, (cell,))
+        return Row(name, label, effect, default, (cell,))
 
     return {
         "columns": (column,),
@@ -234,21 +235,19 @@ def _policy():
             Group(
                 "Example records",
                 (
-                    row("example.edit", "Edit an example record", "write", "Changes HQ", "On", "allow"),
-                    row("example.move", "Move an example record", "write", "Changes HQ", "On", None),
+                    row("example.edit", "Edit an example record", Effect.REMOTE_WRITE, "On", "allow"),
+                    row("example.move", "Move an example record", Effect.REMOTE_WRITE, "On", None),
                     row(
                         "example.stop",
                         "Stop an example container",
-                        "destructive",
-                        "Stops or deletes",
+                        Effect.DESTRUCTIVE,
                         "Ask me first",
                         "approve",
                     ),
                     row(
                         "example.delete",
                         "Delete an example record",
-                        "destructive",
-                        "Stops or deletes",
+                        Effect.DESTRUCTIVE,
                         "Ask me first",
                         "deny",
                     ),
@@ -256,7 +255,7 @@ def _policy():
             ),
             Group(
                 "Example hosts",
-                (row("example.read", "Read an example host", "read", "", "On", None, "Not granted"),),
+                (row("example.read", "Read an example host", Effect.READ, "On", None, "Not granted"),),
             ),
         ),
     }

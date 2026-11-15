@@ -187,7 +187,7 @@ class CommandKeyTests(TestCase):
                 CapabilitySpec(
                     name="example.keyed",
                     summary="Example.",
-                    effect="write",
+                    effect="remote_write",
                     required_capability=Capability.READ,
                     command_type=command,
                     handler=lambda command, *, principal: {"ok": True},

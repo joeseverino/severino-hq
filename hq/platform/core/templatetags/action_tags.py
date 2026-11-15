@@ -16,6 +16,7 @@ from django.urls import reverse
 from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
 
+from hq.platform.application.contracts import Effect
 from hq.platform.application.tone import Tone
 lazy from hq.platform.application import action_items, asks, decisions
 lazy from hq.platform.application.asks import Ask
@@ -110,7 +111,7 @@ def workflow_action(action):
         values["url"],
         method=values["method"].lower(),
         primary=values.get("recommended", False),
-        danger=values.get("effect") == "destructive",
+        danger=values.get("effect") == Effect.DESTRUCTIVE,
         title=refusal or values.get("reason", ""),
         disabled=bool(refusal),
     )

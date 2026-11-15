@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..capabilities import Consented, execute_approved
+from ..contracts import Effect
 from ..integration_specs import CapabilitySpec
 from ..integration_testing import commands_registered
 from ..security import Capability, Principal
@@ -28,7 +29,7 @@ def _handed(_command: _Nothing, *, consented: Consented) -> dict[str, Any]:
 _HANDS_BACK = CapabilitySpec(
     "example.consent",
     "Hand a test the consent the runner gives a run.",
-    "read",
+    Effect.READ,
     Capability.READ,
     _Nothing,
     _handed,
@@ -64,7 +65,7 @@ def another_command_writing(write: Callable[[Consented], object]) -> Iterator[st
     spec = CapabilitySpec(
         ANOTHER_COMMAND,
         "Tidy example things.",
-        "remote_write",
+        Effect.REMOTE_WRITE,
         Capability.MANAGE_INFRASTRUCTURE,
         _Nothing,
         handler,

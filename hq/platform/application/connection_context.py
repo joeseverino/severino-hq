@@ -123,7 +123,7 @@ class ConnectionRow:
             *(
                 Read(state.ability.label, ability=state)
                 for state in self.connection.abilities
-                if state.ability.effect == "read" and state.ability.name not in swept
+                if not state.ability.effect.changes and state.ability.name not in swept
             ),
         )
         return tuple(sorted(reads, key=lambda read: read.label))
@@ -132,7 +132,7 @@ class ConnectionRow:
     def changes(self) -> tuple[ConnectionAbilityState, ...]:
         """What the connection's credential lets HQ change."""
 
-        return tuple(state for state in self.connection.abilities if state.ability.effect != "read")
+        return tuple(state for state in self.connection.abilities if state.ability.effect.changes)
 
     @property
     def changes_only(self) -> bool:

@@ -331,6 +331,18 @@ def declared_words(spec: capabilities.CapabilitySpec) -> None:
     )
     assert_type(timed.offered, bool)
     outbound.OutboundWork("example.sweep", "Sweep", "", "", looking_up, offered="no")  # type: ignore[arg-type]
+    # What running it does is a member, and a spec holds one.
+    assert_type(spec.effect, capabilities.Effect)
+    assert_type(spec.effect.changes, bool)
+    assert_type(spec.effect.label, str)
+    capabilities.CapabilitySpec(
+        "example.keep",
+        "Keep a note.",
+        "remote_write",  # type: ignore[arg-type]
+        "example.write",
+        Noting,
+        noting,
+    )
     assert_type(spec.words(), str)
     assert_type(spec.words("all"), str)
     assert_type(spec.requested("example"), str)
@@ -338,7 +350,7 @@ def declared_words(spec: capabilities.CapabilitySpec) -> None:
     capabilities.CapabilitySpec(
         "example.keep",
         "Keep a note.",
-        "local_write",
+        capabilities.Effect.REMOTE_WRITE,
         "example.write",
         Noting,
         noting,
@@ -380,31 +392,55 @@ def noting(command: Noting, *, principal: capabilities.Principal) -> dict[str, A
 def a_command_that_starts_somewhere() -> None:
     # Where a person starts a command is its page's route, or the page of what it acts on.
     started = capabilities.CapabilitySpec(
-        "example.note", "Write a note.", "local_write", "example.write", Noting, noting, reached_from="example:notes"
+        "example.note",
+        "Write a note.",
+        capabilities.Effect.REMOTE_WRITE,
+        "example.write",
+        Noting,
+        noting,
+        reached_from="example:notes",
     )
     assert_type(started.reached_from, str)
     # A command whose records are no resource of its own names the page it belongs to.
     homed = capabilities.CapabilitySpec(
-        "example.sweep", "Sweep notes.", "local_write", "example.write", Noting, noting, home="example:notes"
+        "example.sweep",
+        "Sweep notes.",
+        capabilities.Effect.REMOTE_WRITE,
+        "example.write",
+        Noting,
+        noting,
+        home="example:notes",
     )
     assert_type(homed.home, str)
     assert_type(capabilities.ON_ITS_PAGE, str)
     # A switch whose state no record holds declares where it stands.
     capabilities.CapabilitySpec(
-        "example.quiet", "Quiet notes.", "local_write", "example.write", Noting, noting, state=lambda: False
+        "example.quiet",
+        "Quiet notes.",
+        capabilities.Effect.REMOTE_WRITE,
+        "example.write",
+        Noting,
+        noting,
+        state=lambda: False,
     )
     # What its page says of it beside its form, read as the page is drawn,
     # given its reader.
     about = capabilities.CommandAbout("Notes", (capabilities.CommandFact("Kept for", "A year", ("Then archived.",)),))
     described = capabilities.CapabilitySpec(
-        "example.tidy", "Tidy notes.", "local_write", "example.write", Noting, noting, about=lambda _principal: about
+        "example.tidy",
+        "Tidy notes.",
+        capabilities.Effect.REMOTE_WRITE,
+        "example.write",
+        Noting,
+        noting,
+        about=lambda _principal: about,
     )
     assert_type(described.about, Callable[[capabilities.Principal], capabilities.CommandAbout] | None)
     assert_type(about.facts[0].detail, tuple[str, ...])
     capabilities.CapabilitySpec(
         "example.tidy",
         "Tidy notes.",
-        "local_write",
+        capabilities.Effect.REMOTE_WRITE,
         "example.write",
         Noting,
         noting,
@@ -413,7 +449,7 @@ def a_command_that_starts_somewhere() -> None:
     capabilities.CapabilitySpec(
         "example.pin",
         "Pin a note.",
-        "local_write",
+        capabilities.Effect.REMOTE_WRITE,
         "example.write",
         Noting,
         noting,
@@ -433,7 +469,7 @@ def a_command_that_starts_somewhere() -> None:
     capabilities.CapabilitySpec(
         "example.pin",
         "Pin.",
-        "local_write",
+        capabilities.Effect.REMOTE_WRITE,
         "example.write",
         Noting,
         noting,

@@ -39,6 +39,7 @@ from hq.domains.jobs import runner
 from hq.domains.jobs.models import HEARTBEAT_GRACE, Job
 from hq.platform.application import host_work, outbound_work
 from hq.platform.application.capabilities import capability_registry, execute_capability
+from hq.platform.application.contracts import Effect
 from hq.platform.application.integration_specs import requested
 from hq.platform.application.outbound_work import OutboundWork, capability_for, due, validate
 from hq.platform.application.plugin_testing import form_keyed
@@ -600,10 +601,10 @@ class HostWorkTests(TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertFalse(Job.objects.exists())
 
-    def test_it_needs_no_effect_or_capability_of_its_own(self):
-        self.assertFalse(validate(replace(own(), effect="")).offered)
+    def test_it_needs_no_capability_of_its_own(self):
+        self.assertFalse(validate(replace(own(), effect=Effect.READ)).offered)
         with self.assertRaises(ImproperlyConfigured):
-            validate(replace(own(), effect="", offered=True))
+            validate(replace(own(), effect=Effect.READ, offered=True))
 
 
 class StartForHostTests(TransactionTestCase):

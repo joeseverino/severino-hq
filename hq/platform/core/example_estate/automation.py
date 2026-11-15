@@ -453,7 +453,7 @@ def runs(
     _asked(first, server, person, timedelta(minutes=3), _working)
     if len(others) > 1:
         _asked(others[1], waiting_on, agent, timedelta(minutes=1), lambda _run: None)
-    changes = [manifest for manifest in supplied if manifest.effect != "read"]
+    changes = [manifest for manifest in supplied if manifest.effect.changes]
     if changes:
         _held(changes[-1], server, agent, owner)
     # Each procedure's record was written when it was first asked for.

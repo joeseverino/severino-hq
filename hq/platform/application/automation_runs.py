@@ -34,6 +34,7 @@ lazy from hq.platform.core.templatetags.value_tags import seconds
 
 from .automation_manifest import OperationManifest, OperationRegistry, sorted_unique
 from .command_fields import Among, AmongNow, Describe, ForAgents, Names
+from .contracts import Effect
 from .integration_specs import CapabilitySpec, CommandAbout, CommandFact, command_adapter
 from .record_errors import PolicyError, RecordNotFound
 from .security import Capability, Principal
@@ -53,7 +54,7 @@ lazy from .findings import rule_for
 lazy from .history import asked_by
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
 lazy from .json_schemas import fields as whole_fields, json_schema
-lazy from .labels import effect_label, lower_first
+lazy from .labels import lower_first
 lazy from .machines import machine_catalog
 lazy from .moments import ago, moment, when
 lazy from .payload_words import ChangeRow, field_words, value_words
@@ -494,7 +495,7 @@ CANCELLED_REASON = "Cancelled"
 def run_authority(effect: str) -> Capability:
     """What asking for a run of a procedure of ``effect`` takes, and so what cancelling one does."""
 
-    return Capability.READ if effect == "read" else Capability.MANAGE_INFRASTRUCTURE
+    return Capability.READ if effect == Effect.READ else Capability.MANAGE_INFRASTRUCTURE
 
 
 @dataclass(frozen=True, slots=True)
@@ -729,7 +730,7 @@ def about(manifest: OperationManifest, principal: Principal) -> CommandAbout:
 
     facts = (
         _runs_on(manifest),
-        CommandFact("Effect", effect_label(manifest.effect)),
+        CommandFact("Effect", manifest.effect.label),
         CommandFact("Access", access_words(manifest.privilege)),
         CommandFact("Timeout", timeout_words(manifest.timeout_seconds)),
         CommandFact("Preconditions", _statements(manifest.preconditions)),
@@ -764,7 +765,7 @@ def run_preview(manifest: OperationManifest, held: ApprovalRequest) -> ChangePre
             (field_words(name, inputs.get(name)), value_words(value, inputs.get(name)))
             for name, value in dict(held.baseline.get("parameters") or {}).items()
         ),
-        ("Effect", effect_label(str(pinned.get("effect", "")))),
+        ("Effect", Effect(pinned["effect"]).label if pinned.get("effect") in Effect else ""),
         ("Access", access_words(str(pinned.get("privilege", "")))),
         ("Adopted commit", str(pinned.get("revision", ""))[:SHORT_REVISION]),
         (field_words("correlation"), str(held.payload.get("correlation") or "")),
@@ -813,7 +814,7 @@ def _capability(manifest: OperationManifest, titles: Mapping[str, str]) -> Capab
         "A read takes no `idempotency_key`. Asked again after `call_timed_out`, it is refused while the first "
         "run waits or works, and `details.holding` is that run."
     )
-    if manifest.effect != "read":
+    if manifest.effect.changes:
         # A procedure that changes a machine is a person's to approve each time
         # an agent asks; a person's own click is their consent.
         run = waits_for_a_person(every_call)(run)
@@ -829,7 +830,7 @@ def _capability(manifest: OperationManifest, titles: Mapping[str, str]) -> Capab
             "Refuse while another run waits or works on this playbook or on one of those machines.",
             "Queue it once, and HQ runs it with Ansible outside this request.",
             # What ``waits_for_a_person`` above holds, for an agent to read before it asks.
-            *((asked_again,) if manifest.effect == "read" else (WAITS_FOR_APPROVAL,)),
+            *((WAITS_FOR_APPROVAL,) if manifest.effect.changes else (asked_again,)),
             f"Read how it went from `{RUNS}`, by the `operation.id` this answers.",
             *_reviewed_notes(manifest),
         ),
@@ -848,7 +849,7 @@ def _cancel_spec() -> CapabilitySpec:
         CANCEL,
         "Cancel a playbook's run that has not started, so it holds its playbook and machines no more. "
         "Send the run's `operation.id`. An agent may cancel only a run it asked for.",
-        "remote_write",
+        Effect.REMOTE_WRITE,
         # Held to the run's own authority by the handler, which reads the run.
         Capability.READ,
         CancelRunCommand,

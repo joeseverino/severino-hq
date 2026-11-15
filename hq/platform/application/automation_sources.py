@@ -37,6 +37,7 @@ lazy from hq.platform.core.models import AuditLog
 
 from .automation_manifest import DottedName, ProcedureTerms
 from .command_fields import Describe
+from .contracts import Effect
 from .integration_specs import CapabilitySpec
 from .resource_operations import OperationAsked
 from .security import Capability, Principal
@@ -49,7 +50,6 @@ lazy from .cadence import ask, automation_standing
 lazy from .capabilities import Consented, capability_words
 lazy from .findings import rule_for
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
-lazy from .labels import effect_label
 lazy from .record_errors import PolicyError, RecordNotFound
 lazy from .resource_operations import Prepared, asked_fields, enqueue, operation_asked
 lazy from .routes import reverse
@@ -521,7 +521,7 @@ def _row(
     return PlaybookTableRow(
         procedure.title,
         command_url(capability_name(procedure.id)) if adopted else "",
-        effect_label(procedure.effect),
+        procedure.effect.label,
         tuple(procedure.hosts),
         anywhere(procedure.target_kinds),
         access_words(procedure.privilege),
@@ -535,7 +535,7 @@ def capability_specs() -> tuple[CapabilitySpec, ...]:
         CapabilitySpec(
             REFRESH,
             "Scan your repository for playbooks and keep the scan result. Nothing in it runs until an operator adopts it.",
-            "remote_write",
+            Effect.REMOTE_WRITE,
             Capability.MANAGE_INFRASTRUCTURE,
             RefreshCommand,
             refresh,

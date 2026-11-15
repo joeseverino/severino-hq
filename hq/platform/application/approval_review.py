@@ -12,7 +12,8 @@ from typing import Any
 from hq.domains.control_plane.models import ApprovalRequest, ManagedResource, OperationRequest
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
-from .approvals import AUDIT_LABELS, COMPARED, DECLARATIONS, DESTRUCTIVE_EFFECT, NO_OFFER, WARNINGS, offers, shown_by
+from .approvals import AUDIT_LABELS, COMPARED, DECLARATIONS, NO_OFFER, WARNINGS, offers, shown_by
+from .contracts import Effect
 from .doors import NOBODY
 from .payload_words import STEP, ChangeRow, changed_words, document, field_words, value_words
 from .security import Principal
@@ -271,7 +272,7 @@ def _record_preview(spec, held: ApprovalRequest) -> ChangePreview:
         if key not in _CONTROL_FIELDS and value not in ("", None, [], {})
     }
     schemas = capability_fields(spec)
-    if spec.effect == DESTRUCTIVE_EFFECT:
+    if spec.effect is Effect.DESTRUCTIVE:
         return _field_rows(held.baseline, {}, schemas, label="Would be deleted")
     if not held.target:
         # The sentence says what it wants; these are the values it sends.

@@ -10,7 +10,7 @@ from typing import Any
 from hq.domains.control_plane.models import ManagedResource
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
-from .approvals import DECLARATIONS, READ_EFFECT
+from .approvals import DECLARATIONS
 from .security import Principal, is_agent
 lazy from .adoption import ADOPT, ADOPT_SERVICE
 lazy from .zones import ADOPT_ZONE
@@ -19,7 +19,7 @@ lazy from .zones import ADOPT_ZONE
 def may_be_held_by_default(spec) -> bool:
     """The capability-level half of held_by_default, for describing a default without a target."""
 
-    return spec.effect != READ_EFFECT and spec.subject_resource == DECLARATIONS
+    return spec.effect.changes and spec.subject_resource == DECLARATIONS
 
 
 def held_by_default(spec, command: Any, target: Any, *, principal: Principal) -> bool:

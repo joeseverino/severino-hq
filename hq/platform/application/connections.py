@@ -33,7 +33,7 @@ from .connection_contracts import (
 )
 from .connection_lifecycle import Lifecycle, probed, standing
 from .connection_setup import guide_url
-from .contracts import EFFECT_MEANINGS
+from .contracts import Effect
 from .describe import Describe, listed
 from .entity_links import entity_link
 from .integration_validation import required_capability_names
@@ -308,7 +308,7 @@ def _controller_contract() -> tuple[tuple[ConnectionAbility, ...], dict[str, tup
                 name=kind,
                 label=registry_label(kind),
                 summary=spec.summary,
-                effect="destructive" if spec.destructive else "infrastructure_change",
+                effect=Effect.DESTRUCTIVE if spec.destructive else Effect.INFRASTRUCTURE_CHANGE,
                 governs_kinds=(kind,),
                 subject_resource="infrastructure",
             )
@@ -325,7 +325,7 @@ def _controller_contract() -> tuple[tuple[ConnectionAbility, ...], dict[str, tup
                 name=observer.name,
                 label=observer.label,
                 summary=observer.summary,
-                effect="read",
+                effect=Effect.READ,
                 subject_resource=observer.subject_resource,
             )
         )
@@ -343,7 +343,7 @@ def _controller_contract() -> tuple[tuple[ConnectionAbility, ...], dict[str, tup
                         *((ended(f"Needs {', '.join(reading.requires)}"),) if reading.requires else ()),
                     )
                 ),
-                effect="read",
+                effect=Effect.READ,
             )
         )
         by_provider.setdefault(reading.provider, []).append(kind)
@@ -430,7 +430,7 @@ class AbilityDescription(TypedDict):
     name: Annotated[str, Describe("The name of what it lets HQ do, unique within its type of connection.")]
     label: Annotated[str, Describe("What it lets HQ do, in a few words.")]
     summary: Annotated[str, Describe("What it lets HQ do, in a sentence.")]
-    effect: Annotated[str, Describe(ended(f"What using it does: {listed(EFFECT_MEANINGS)}"))]
+    effect: Effect
     required_scopes: Annotated[
         list[str], Describe("The permissions the credential must carry for it, in the service's own names.")
     ]

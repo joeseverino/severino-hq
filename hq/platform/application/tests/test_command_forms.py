@@ -60,7 +60,7 @@ class CapabilityCommandFormTests(SimpleTestCase):
             plain: Annotated[str, Describe("Anything else.")] = ""
 
         spec = CapabilitySpec(
-            "example.check", "Check it.", "local_write", "example.write", ExampleCommand, lambda command, **_: {}
+            "example.check", "Check it.", "remote_write", "example.write", ExampleCommand, lambda command, **_: {}
         )
         form = command_form_class(spec).base_fields
         said = {name: field.get("description") for name, field in fields(command_schema(ExampleCommand)).items()}
@@ -180,7 +180,7 @@ class CapabilityCommandFormTests(SimpleTestCase):
             ttl: Annotated[int, Field(title="TTL in seconds"), Describe("How long it lasts.")] = 60
 
         spec = CapabilitySpec(
-            "example.check", "Check it.", "local_write", "example.write", ExampleCommand, lambda command, **_: {}
+            "example.check", "Check it.", "remote_write", "example.write", ExampleCommand, lambda command, **_: {}
         )
         form = command_form_class(spec).base_fields
 
@@ -203,7 +203,7 @@ class CapabilityCommandFormTests(SimpleTestCase):
             trace: Annotated[str, ForAgents()]
 
         def spec(command):
-            return CapabilitySpec("example.check", "Check it.", "local_write", "example.write", command, dict)
+            return CapabilitySpec("example.check", "Check it.", "remote_write", "example.write", command, dict)
 
         self.assertEqual(set(command_form_class(spec(ExampleCommand)).payload_names), {"note"})
         with self.assertRaises(ValueError):

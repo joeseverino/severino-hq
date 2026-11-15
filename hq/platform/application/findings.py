@@ -60,7 +60,7 @@ from .action_links import (
     topology_investigation_links,
 )
 from .answer_fields import Pinned, SchemaVersion
-from .contracts import route_url
+from .contracts import Effect, route_url
 from .derivations import derivation, present
 from .derived_inputs import FINDINGS_READS, estate_variant
 from .describe import Describe, listed
@@ -297,7 +297,7 @@ def _declared_at(detect: Callable[..., Any]) -> tuple[Path, int]:
     )
 
 
-def _permitted(capability: str, principal: Principal, graph: IntegrationGraph) -> tuple[bool, str]:
+def _permitted(capability: str, principal: Principal, graph: IntegrationGraph) -> tuple[bool, Effect | None]:
     """Whether this principal may run it, and what the registry says it does."""
 
     spec = graph.capabilities.get(capability)
@@ -305,7 +305,7 @@ def _permitted(capability: str, principal: Principal, graph: IntegrationGraph) -
         return spec.permitted_to(principal), spec.effect
     # A rule naming a capability the registry does not hold is a contract error
     # the suite catches; at runtime the honest answer is to offer nothing.
-    return False, ""
+    return False, None
 
 
 def _playbooks(finding: Finding, subject: TopologyNode | None) -> tuple[FindingRemedy, ...]:
@@ -329,7 +329,7 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
     kept = []
     for remedy in (*finding.remedies, *_playbooks(finding, subject)):
         allowed, effect = _permitted(remedy.capability, principal, graph)
-        if not allowed or effect == "destructive":
+        if not allowed or effect is None or effect is Effect.DESTRUCTIVE:
             continue
         action = next(
             (
@@ -353,7 +353,9 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
         )
     resolved_remedies = tuple(kept)
     offers = finding.offers + tuple(
-        action for action in (subject.actions if subject else ()) if action.effect == "read" and action.method == "GET"
+        action
+        for action in (subject.actions if subject else ())
+        if action.effect == Effect.READ and action.method == "GET"
     )
     investigations = topology_investigation_links(subject.id) if subject else ()
     remedy_actions = tuple(

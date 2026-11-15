@@ -25,6 +25,7 @@ from .asks import FAILED, QUEUED, REFRESHING, RUNNING, Ask, Asked, AskedAnswer, 
 from .cadence import ask
 from .command_fields import Describe
 from .connections import ConnectionAbility, ConnectionInstance, ConnectionLink, ConnectionSpec, machines_once
+from .contracts import Effect
 from .drawings import StripTile
 from .freshness import DASHBOARD_GLANCE, freshness
 from .labels import dotted, human_bytes
@@ -78,14 +79,14 @@ def connection_specs():
                     "nws.hourly_forecast",
                     "Hourly forecast",
                     "Current conditions and the hourly forecast for the point.",
-                    effect="read",
+                    effect=Effect.READ,
                     grant="none",
                 ),
                 ConnectionAbility(
                     "nws.active_alerts",
                     "Active weather alerts",
                     "Active National Weather Service alerts for the point.",
-                    effect="read",
+                    effect=Effect.READ,
                     grant="none",
                 ),
             ),

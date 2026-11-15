@@ -26,6 +26,7 @@ lazy from hq.platform.core.models import AuditLog
 
 from . import derivations
 from .command_fields import Describe
+from .contracts import Effect
 from .derivations import holds_until
 from .held_answer import HELD, ApprovalApplied, ApprovalRejected, HeldCall, serialize_approval
 from .record_errors import PolicyError, RecordNotFound
@@ -58,12 +59,6 @@ lazy from .ui import counted
 # the page it is read on.
 MAX_PENDING_PER_ACTOR = 10
 
-# Reads never wait for anybody. Stated as the exemption rather than listing the
-# effects that are gated, so an effect introduced later is considered rather
-# than exempted by omission.
-READ_EFFECT = "read"
-# What takes something away from whoever is using it: a deletion, or a stop.
-DESTRUCTIVE_EFFECT = "destructive"
 # Payload fields that turn a write into deleting whatever it does not name: an
 # orphan prune removes every record the manifest leaves out, restricted ones
 # included. Such a call is held like a destructive capability, whatever the
@@ -74,7 +69,7 @@ DELETING_FLAGS = ("prune_orphans",)
 def is_destructive(spec, command: Any) -> bool:
     """Whether this call takes something away: by its effect, or by what it asks for."""
 
-    if spec.effect == DESTRUCTIVE_EFFECT:
+    if spec.effect is Effect.DESTRUCTIVE:
         return True
     return any(getattr(command, flag, False) is True for flag in DELETING_FLAGS)
 
@@ -261,7 +256,8 @@ def approval_subject(spec, command: Any, target: Any) -> ApprovalSubject | None:
     whose fingerprints must match. None for a read or a missing target.
     """
 
-    if spec.effect == READ_EFFECT:
+    # Reads never wait for anybody: an effect added later is held unless it says it changes nothing.
+    if not spec.effect.changes:
         return None
     if (measured := getattr(spec.handler, _MEASURED, None)) is not None:
         return measured(command)
@@ -301,7 +297,7 @@ def _record_subject(spec, target: Any) -> ApprovalSubject | None:
     except UnsupportedResourceOperation, InvalidResourceInput:
         # No canonical read: still holdable, but staleness cannot be detected.
         baseline = {}
-    if baseline and spec.effect != DESTRUCTIVE_EFFECT:
+    if baseline and spec.effect is not Effect.DESTRUCTIVE:
         # A change shows the fields it sends, as they are now, and the record's
         # name; the rest of a read (a last push, open pulls) moves with sweeps.
         read = baseline.get("resource", baseline)

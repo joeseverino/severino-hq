@@ -5472,8 +5472,7 @@
             "description": "The command that uses it, by name; null for none."
           },
           "effect": {
-            "description": "What using it does: `read`, `remote_write`, `infrastructure_change` or `destructive`.",
-            "type": "string"
+            "$ref": "#/components/schemas/Effect"
           },
           "governs_kinds": {
             "description": "The types of record it lets HQ manage; empty for none.",
@@ -7377,8 +7376,7 @@
         "description": "One command as the index lists it: what it does and whether you may run it, without its schema.",
         "properties": {
           "effect": {
-            "description": "What running it does: `read`, `remote_write`, `infrastructure_change` or `destructive`.",
-            "type": "string"
+            "$ref": "#/components/schemas/Effect"
           },
           "label": {
             "description": "The command's name, as HQ's pages show it.",
@@ -10113,6 +10111,16 @@
           }
         },
         "type": "object"
+      },
+      "Effect": {
+        "description": "What running a command does, least consequential first.",
+        "enum": [
+          "read",
+          "remote_write",
+          "infrastructure_change",
+          "destructive"
+        ],
+        "type": "string"
       },
       "EmptyGroupsRemoved": {
         "additionalProperties": false,
@@ -14216,7 +14224,12 @@
             "type": "string"
           },
           "effect": {
-            "description": "What it does to a machine: `read`, `infrastructure_change` or `destructive`. Anything but a read waits for an operator's approval when an agent asks.",
+            "description": "What it does to a machine. Anything but a read waits for an operator's approval when an agent asks.",
+            "enum": [
+              "read",
+              "infrastructure_change",
+              "destructive"
+            ],
             "type": "string"
           },
           "playbook": {

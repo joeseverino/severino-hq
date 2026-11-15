@@ -15,7 +15,7 @@ from .answer_fields import Permitted, Pinned, RequiredPermissions, SchemaVersion
 from .approvals import hold_for_approval
 from .call_envelope import read_call
 from .capability_policy import Rule, decide
-from .contracts import DOTTED_NAME, EFFECT_MEANINGS
+from .contracts import DOTTED_NAME, Effect
 from .default_hold import kind_waits
 from .describe import Describe, listed
 from .held_answer import HeldCall
@@ -55,7 +55,6 @@ from .security import (
     could_ever_hold,
     is_interactive,
 )
-from .ui import ended
 lazy from . import agent_registry, automation_runs
 lazy from .cadence import ringing
 
@@ -104,7 +103,7 @@ class CapabilitySummary(TypedDict):
     name: Annotated[str, Describe("The command's dotted name, which you run it by.")]
     label: Annotated[str, Describe("The command's name, as HQ's pages show it.")]
     summary: Annotated[str, Describe("What the command does, in a sentence.")]
-    effect: Annotated[str, Describe(ended(f"What running it does: {listed(EFFECT_MEANINGS)}"))]
+    effect: Effect
     resource: Annotated[
         str | None,
         Describe("The list its targets are read from, by the name `describe_resources` gives it; null for none."),
@@ -391,7 +390,7 @@ def _authorized_run(
         return Ran(refuse("idempotency_conflict", exc.reason))
 
 
-def key_required(effect: str, principal: Principal) -> bool:
+def key_required(effect: Effect, principal: Principal) -> bool:
     """Whether ``principal`` must send a retry key to run a capability of ``effect``: a change, from any door but the shell's.
 
     A token's client retries what a lost connection left unanswered, and a
@@ -400,7 +399,7 @@ def key_required(effect: str, principal: Principal) -> bool:
     built the safe way round.
     """
 
-    return effect != "read" and principal.interface not in KEYLESS_INTERFACES
+    return effect.changes and principal.interface not in KEYLESS_INTERFACES
 
 
 # Not asked for a key: the host's shell, where a person runs a command once, by hand.
@@ -415,7 +414,7 @@ def _retry_key(spec: CapabilitySpec, payload: dict[str, Any], sent: str | None) 
     field. No command sees the key: a retry is this runner's to answer.
     """
 
-    if spec.effect == "read" or not isinstance(payload, dict):
+    if not spec.effect.changes or not isinstance(payload, dict):
         return "", payload
     keys = {_valid_key(given) for given in (sent, payload.get(IDEMPOTENCY_FIELD))} - {""}
     if len(keys) > 1:
@@ -642,7 +641,7 @@ def _run(
         ringing() as asked,
     ):
         result = spec.handler(command, **arguments)
-        if spec.effect != "read" and not written:
+        if spec.effect.changes and not written:
             # A write whose handler recorded no row still leaves its act: what
             # ran, under the row's operation, and how it ended.
             record_event(
@@ -651,7 +650,7 @@ def _run(
                 message=str(result.get("message") or ""),
                 required=True,
             )
-        if spec.effect != "read":
+        if spec.effect.changes:
             # Every write a person or credential makes passes here, so this is
             # the one place that starts the controller at once rather than at
             # the next minute's ask; whether a pass is due is still

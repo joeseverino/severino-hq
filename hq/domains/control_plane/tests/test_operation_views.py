@@ -9,9 +9,10 @@ from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule, Man
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.platform.application.adoption_testing import managing_everything
 from hq.platform.application.approval_review import asked, preview
-from hq.platform.application.approvals import DESTRUCTIVE_EFFECT, ApproveCommand, approve
+from hq.platform.application.approvals import ApproveCommand, approve
 from hq.platform.application.capabilities import capability_registry, execute_capability
 from hq.platform.application.capability_policy import Rule
+from hq.platform.application.contracts import Effect
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.resource_operations import ACTION_CAPABILITY
 from hq.platform.application.security import Capability, Principal, web_principal
@@ -176,7 +177,7 @@ class ConfirmedVerbTests(TestCase):
                 self.assertIn(response.status_code, (200, 405))
             if response.status_code == 200:
                 confirmed.add(action)
-        destructive = {action for action in pages if registry[ACTION_CAPABILITY[action]].effect == DESTRUCTIVE_EFFECT}
+        destructive = {action for action in pages if registry[ACTION_CAPABILITY[action]].effect is Effect.DESTRUCTIVE}
 
         self.assertIn(OperationRequest.Action.STOP, confirmed)
         self.assertEqual(confirmed, destructive)

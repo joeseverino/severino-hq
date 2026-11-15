@@ -12,6 +12,7 @@ from django.utils.datastructures import MultiValueDict
 from .capabilities import CapabilitySpec
 from .command_fields import among_now, for_agents, is_upload, named_records, referred
 from .command_targets import CommandTargetOption
+from .contracts import Effect
 from .describe import meanings
 from .forms import LinesField, UploadField
 from .integration_specs import IDEMPOTENCY_FIELD, capability_schema, command_schema
@@ -429,11 +430,11 @@ def command_form_class(
         # made against a record that changed since is refused.
         fields["__expected_updated_at"] = forms.CharField(required=False, widget=forms.HiddenInput())
     fields["next"] = forms.CharField(required=False, widget=forms.HiddenInput())
-    if spec.effect in {"infrastructure_change", "destructive"}:
+    if spec.effect.rank >= Effect.INFRASTRUCTURE_CHANGE.rank:
         fields["__confirm_effect"] = forms.BooleanField(
             label=(
                 "I understand this changes a live system."
-                if spec.effect == "infrastructure_change"
+                if spec.effect is Effect.INFRASTRUCTURE_CHANGE
                 else "I understand this stops or deletes something."
             )
         )

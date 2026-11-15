@@ -378,6 +378,15 @@
         "kind": "dataclass",
         "members": {}
       },
+      "Effect": {
+        "kind": "enum",
+        "members": [
+          "READ",
+          "REMOTE_WRITE",
+          "INFRASTRUCTURE_CHANGE",
+          "DESTRUCTIVE"
+        ]
+      },
       "InputError": {
         "bases": [
           "HostRefusal",

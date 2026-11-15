@@ -12,6 +12,7 @@ from hq.platform.application.contact_submissions import (
     execute_contact_delete,
     execute_contact_review,
 )
+from hq.platform.application.contracts import Effect
 from hq.platform.application.describe import Describe
 from hq.platform.application.integration_specs import CapabilitySpec, ResourceSpec
 from hq.platform.application.resources import STATUS_FILTER, TEXT_FILTER, BoundedQuery
@@ -75,7 +76,7 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
             # Its last sentence is records.KEPT, which test_record_updates_told holds it to.
             "Mark one message read, replied, archived or spam, and keep a note on it. "
             "A field left out keeps its value.",
-            "remote_write",
+            Effect.REMOTE_WRITE,
             Capability.MANAGE_CONTACTS,
             ContactReviewCommand,
             execute_contact_review,
@@ -93,7 +94,7 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
         CapabilitySpec(
             contact_submissions.DELETE,
             "Delete one message sent through the contact form.",
-            "destructive",
+            Effect.DESTRUCTIVE,
             Capability.MANAGE_CONTACTS,
             ContactDeleteCommand,
             execute_contact_delete,
