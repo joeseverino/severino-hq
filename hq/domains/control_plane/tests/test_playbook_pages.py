@@ -8,7 +8,9 @@ import json
 from urllib.parse import urlsplit
 
 from django.contrib.auth import get_user_model
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from hq.domains.control_plane.models import AdoptedCatalog, ApprovalRequest, OperationRequest, SourceProposal
@@ -135,6 +137,16 @@ class PlaybooksPageTests(TestCase):
         headings = [heading for heading in elements(html, "h2") if not heading.attrs.get("id", "").startswith("modal-")]
         self.assertFalse(headings, "no section heads the table, and no scan result has a box")
         self.assertFalse(select(html, "data-approval"), "no request waits on this page")
+
+    def test_the_page_reads_the_adopted_catalog_once_within_its_query_budget(self):
+        self.page()
+        with CaptureQueriesContext(connection) as queries:
+            self.page()
+
+        # The catalog's digest alone is how the request catches up (``served``).
+        whole = [query for query in queries if f'"{AdoptedCatalog._meta.db_table}"."procedures"' in query["sql"]]
+        self.assertEqual(len(whole), 1, "every part of the page names the one catalog it read")
+        self.assertLessEqual(len(queries), 18)
 
     def test_the_title_line_names_the_commit_adopted_in_the_place_of_when_the_repository_was_read(self):
         adopted = AdoptedCatalog.objects.order_by("-pk").first()

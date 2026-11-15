@@ -65,6 +65,7 @@ from .automation_sources import InputBound, ProcedureDeclaration
 from .command_fields import Describe
 from .contracts import Closed
 from .integration_specs import CapabilitySpec
+from .projection import read_once
 from .record_errors import PolicyError, RecordNotFound
 from .security import Capability, Principal
 lazy from . import agent_registry
@@ -231,9 +232,10 @@ def _newest_digest() -> str:
 
 
 def adopted() -> AdoptedCatalog | None:
-    """The catalog HQ runs from now, or None before any adoption."""
+    """The catalog HQ runs from now, or None before any adoption: read once
+    for every part of a page that names it."""
 
-    return AdoptedCatalog.objects.first()
+    return read_once("automation.adopted", AdoptedCatalog.objects.first)
 
 
 def manifests(digest: str) -> tuple[OperationManifest, ...]:
