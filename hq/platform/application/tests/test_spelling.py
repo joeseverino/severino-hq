@@ -73,9 +73,13 @@ NOT_OURS = ("static/vendor/", "controller/api/vendor/")
 def generated(root: Path) -> set[str]:
     """What `mise run fix` writes, as .gitattributes marks it; its source carries the words."""
 
-    listed = subprocess.run(
-        ["git", "ls-files", "-z", "--", ":(attr:linguist-generated)"], cwd=root, capture_output=True, check=False
-    )
+    try:
+        listed = subprocess.run(
+            ["git", "ls-files", "-z", "--", ":(attr:linguist-generated)"], cwd=root, capture_output=True, check=False
+        )
+    except FileNotFoundError:
+        # An installed extension is read where no git exists (the image), and marks nothing.
+        return set()
     return {name.decode() for name in listed.stdout.split(b"\0") if name} if listed.returncode == 0 else set()
 
 
@@ -140,7 +144,7 @@ class AmericanSpellingTests(SimpleTestCase):
 
 @tag("source", "tree")
 # An installed extension is read where it lies: outside the checkout, or an example of this one.
-@reads("examples/**", lists=("examples/**",))
+@reads("examples/**", ".gitattributes", "**/.gitattributes", lists=("examples/**",))
 class ExtensionSpellingTests(SimpleTestCase):
     """An extension's words are held as the host's are, by the extension check
     (tools/pipeline/check-plugin.sh) and wherever one is installed."""
