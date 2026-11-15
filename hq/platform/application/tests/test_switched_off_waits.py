@@ -90,4 +90,9 @@ class ClaimedBeforeTheSwitchOffTests(SwitchedOffRecord):
         OperationRequest.objects.update(lease_expires_at=timezone.now() - timedelta(seconds=1))
 
         self.assertIsNone(claim_next_operation("test-controller", capabilities=RECONCILES)["operation"])
-        self.assertEqual(OperationRequest.objects.get().state, OperationRequest.State.CANCELLED)
+        ended = OperationRequest.objects.get()
+        self.assertEqual(ended.state, OperationRequest.State.CANCELLED)
+        # The ending names what was switched off, as the switch's own refusal does.
+        self.assertEqual(
+            ended.result["message"], "The internal DNS record was switched off in HQ before its controller finished."
+        )

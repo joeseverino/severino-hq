@@ -21,6 +21,7 @@ from hq.domains.control_plane.providers import (
     PROVIDERS,
     controller_capability_registry,
     enabled_controller_actions,
+    registry_label,
 )
 from hq.platform.core.attribution import own_operation
 from hq.platform.core.audit import Outcome, work_ended
@@ -34,6 +35,7 @@ from .adoption import manages_through, observes_only
 from .conditions import DRIFTED, PROBLEMS, holding, stamped
 from .infrastructure import controller_contract, resolved_spec, serialize_resource
 from .inventory import read_as, read_since, strike_removed
+from .labels import lower_first
 from .plugin_admission import admitted_sources
 from .resource_operations import REPLACES, Prepared, enqueue, serialize_operation
 lazy from .automation_sources import propose
@@ -155,34 +157,43 @@ def release_lapsed(now) -> None:
     """
 
     _fail_lapsed_runs(now)
-    switched_off = Q(
-        resource__in=ManagedResource.objects.filter(enabled=False).values("pk"),
-    ) & ~Q(action=OperationRequest.Action.DELETE)
-    OperationRequest.objects.filter(OPERATION_LAPSE.q(now)).update(
-        state=Case(
-            When(switched_off, then=Value(OperationRequest.State.CANCELLED)),
-            default=Value(OperationRequest.State.QUEUED),
-        ),
-        completed_at=Case(When(switched_off, then=Value(now)), default=None),
-        result=Case(
-            When(
-                switched_off,
-                then=Value(
-                    {
-                        "ok": False,
-                        "message": "The record was switched off in HQ before its controller finished.",
-                        "reason": "SwitchedOff",
-                    },
-                    output_field=JSONField(),
-                ),
+
+    def off(**kind: str) -> Q:
+        return Q(resource__in=ManagedResource.objects.filter(enabled=False, **kind).values("pk")) & ~Q(
+            action=OperationRequest.Action.DELETE
+        )
+
+    lapsed = OperationRequest.objects.filter(OPERATION_LAPSE.q(now))
+    switched_off = off()
+    # The ending names its record's kind, so one statement words each kind it ends.
+    with transaction.atomic():
+        kinds = set(lapsed.filter(switched_off).values_list("resource__kind", flat=True))
+        lapsed.update(
+            state=Case(
+                When(switched_off, then=Value(OperationRequest.State.CANCELLED)),
+                default=Value(OperationRequest.State.QUEUED),
             ),
-            default=F("result"),
-        ),
-        claimed_by="",
-        claimed_at=None,
-        lease_expires_at=None,
-        claim_attempt="",
-    )
+            completed_at=Case(When(switched_off, then=Value(now)), default=None),
+            result=Case(
+                *(
+                    When(off(kind=kind), then=Value(_called_off(kind), output_field=JSONField()))
+                    for kind in sorted(kinds)
+                ),
+                default=F("result"),
+            ),
+            claimed_by="",
+            claimed_at=None,
+            lease_expires_at=None,
+            claim_attempt="",
+        )
+
+
+def _called_off(kind: str) -> dict[str, Any]:
+    return {
+        "ok": False,
+        "message": f"The {lower_first(registry_label(kind))} was switched off in HQ before its controller finished.",
+        "reason": "SwitchedOff",
+    }
 
 
 def _compatible_operations(operations, capabilities: tuple[tuple[str, str], ...]):
