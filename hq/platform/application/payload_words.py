@@ -14,6 +14,8 @@ from datetime import date
 from difflib import SequenceMatcher
 from typing import Any
 
+from hq.platform.core.digests import canonical
+
 from .labels import field_label, lower_first
 from .moments import moment
 from .printable import admitted
@@ -308,7 +310,7 @@ def _canonical(value: Any) -> str:
     """An entry as text that two equal entries share, to match it by."""
 
     try:
-        return json.dumps(document(value), sort_keys=True, default=str)
+        return canonical(document(value))
     except TypeError:
         return repr(value)
 
