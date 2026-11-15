@@ -313,13 +313,6 @@ A `dev:look --rule survey` without `--css` is kept so too, per engine, in
 `var/gate/look-survey-<engine>.txt`, the pages and widths it judged beneath;
 one that found anything or judged nothing fails. A `--base` look is a survey
 too, so its verdict replaces the record and names only the pages it was asked.
-Landing a change to
-`templates/`, `static/css` or `static/js` reads both engines' records for the
-tip's tree. A host survey's record also names its `inputs:`, the git pathspecs
-of every path it can read (`SURVEY_INPUTS` in
-`hq/platform/core/tests/look.py`), so a passing survey holds for a tip that
-differs from the tree it judged only outside them, such as a commit to a shell
-test or a doc; landing names each input the tip changed when it does not.
 
 The suite runs one worker per core (per performance core on Apple silicon);
 `DJANGO_TEST_PROCESSES` overrides it. `mise run fast --parallel 1` rules
@@ -1292,7 +1285,8 @@ finds is written in the run's folder (`<page>-<width>.txt`) as the run goes, so 
 once the run ends; a run that fails prints each page's first finding, its
 check named first. Console errors, uncaught script errors and policy refusals
 are judged as findings are: without a base any fails the run, against one only
-a new one does. A file a page can read (one of `SURVEY_INPUTS`) that changes
+a new one does. A file a page or the look can read (`SURVEY_INPUTS` in
+`hq/platform/core/tests/look.py`, with the look's own code) that changes
 while the run draws is named in its last line with the tree it began on: what
 it found stands, and the gate keeps no pass of a tree that moved (`tree -`).
 

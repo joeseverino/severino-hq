@@ -127,26 +127,35 @@ REPORT = "report.txt"
 # mise-tasks/dev/look runs a survey so, kept as `look-survey-<engine>`.
 GATE_DETAIL = "HQ_GATE_DETAIL"
 GATE_RERUN = "HQ_GATE_RERUN"
-# The checkout the gate judges when it is not this one, as an extension's
-# survey names its own (tools/gate/verdict.py's JUDGED_FOLDER).
-GATE_TREE = "HQ_GATE_TREE"
-# What a survey's verdict can read, as the git pathspecs of its record's
-# `inputs:` line: landing keeps a passing survey for a tree that differs from
-# the one it judged only outside them. It is the whole tree less what no page,
-# seed, probe or this look reads, since a path missed by an exclusion costs a
-# rerun while a path missed by an inclusion keeps a survey that should run
-# again. The Go controller is a separate program; its JSON contracts, which
-# pages read, stay in.
+# What a page or this look can read, as git pathspecs, so a run names a change
+# to one while it draws (`changed_since`): the whole tree less what neither
+# reads, with the look's own Python and shell added back (`look_reads`). It
+# excludes rather than lists, since pages read files all over the tree (the
+# controller's JSON contracts, a systemd timer, bridge_base.json): a path an
+# exclusion misses costs a needless line, while one a list misses hides a
+# change to what was drawn. Out are the tests and the tools, lint and type
+# config (pyproject.toml, since uv.lock holds what a request imports), the
+# committed OpenAPI document, which only its drift gate reads (the served one
+# is built from the routes and openapi-examples.json), and the Go controller,
+# a separate program.
 SURVEY_INPUTS = (
     ".",
     ":(exclude)docs",
-    ":(exclude)tests/shell",
-    ":(exclude)tests/fuzz",
+    ":(exclude,glob)**/tests/**",
+    ":(exclude)tools",
+    ":(exclude)mise-tasks",
+    ":(exclude)mise.fast.toml",
+    ":(exclude)pyproject.toml",
+    ":(exclude)hq/platform/api/hq-api.openapi.json",
     ":(exclude).github",
     ":(exclude,glob)controller/**/*.go",
-    ":(exclude,glob)*.md",
+    ":(exclude,glob)**/*.md",
     ":(exclude)LICENSE",
 )
+# The task a look runs in, whose sourced shell files it reads too.
+LOOK_TASK = "mise-tasks/dev/look"
+_LOOK = Path(__file__).resolve().relative_to(Path(settings.BASE_DIR).resolve()).as_posix()
+_SOURCED = re.compile(r"^\s*\.\s+\./(\S+)", re.MULTILINE)
 # A rule's verdict when it judged no page at any width: none matched, or none drew.
 JUDGED_NOTHING = "{} judged no page: none matched, or none drew"
 # How many processes looked, each with a browser of its own (look_shares).
@@ -527,17 +536,63 @@ def _snapshot_env(root: Path, store: Path) -> dict[str, str]:
     }
 
 
+def look_reads(root: Path) -> list[str]:
+    """The files `SURVEY_INPUTS` leaves out that a page or this look still
+    runs: the Python this look and every kept module import, with each
+    package's ``__init__.py`` above them, as Ruff's import graph reads them,
+    and the shell files the look's task sources."""
+
+    listed = subprocess.run(
+        ["git", "-C", str(root), "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", *SURVEY_INPUTS],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split("\0")
+    graph = json.loads(
+        subprocess.run(
+            [sys.executable, "-m", "ruff", "analyze", "graph", "--quiet", "."],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+    )
+    reached: set[str] = set()
+    todo = [_LOOK, *(p for p in listed if p.endswith(".py"))]
+    while todo:
+        if (path := todo.pop()) in reached:
+            continue
+        reached.add(path)
+        packages = [f"{parent.as_posix()}/__init__.py" for parent in Path(path).parents if parent != Path()]
+        todo += [p for p in (*graph.get(path, ()), *packages) if (root / p).is_file()]
+    shell, task = set(), [LOOK_TASK]
+    while task:
+        if (path := task.pop()) not in shell and (root / path).is_file():
+            shell.add(path)
+            task += _SOURCED.findall((root / path).read_text(encoding="utf-8"))
+    return sorted((reached | shell) - set(listed))
+
+
 def tree_of(root: Path, store: Path | None = None) -> str:
-    """The files a look can read in the checkout at ``root`` (`SURVEY_INPUTS`)
-    as one git tree id, untracked ones too and none git ignores, so two
-    checkouts that differ in any of them name different trees. It is written
-    into ``store``, kept for `changed_since` to read, or a folder of its own."""
+    """The files a look can read in the checkout at ``root`` (`SURVEY_INPUTS`
+    and `look_reads`) as one git tree id, untracked ones too and none git
+    ignores, so two checkouts that differ in any of them name different trees.
+    It is written into ``store``, kept for `changed_since` to read, or a
+    folder of its own."""
 
     with ExitStack() as stack:
         folder = store or Path(stack.enter_context(tempfile.TemporaryDirectory()))
         env = _snapshot_env(root, folder)
         git = ["git", "-C", str(root)]
         subprocess.run([*git, "add", "--all", "--", *SURVEY_INPUTS], env=env, capture_output=True, check=True)
+        own = Path(folder, "look-reads")
+        own.write_text("".join(f":(literal){path}\0" for path in look_reads(root)), encoding="utf-8")
+        subprocess.run(
+            [*git, "add", "--all", f"--pathspec-from-file={own}", "--pathspec-file-nul"],
+            env=env,
+            capture_output=True,
+            check=True,
+        )
         return subprocess.run([*git, "write-tree"], env=env, capture_output=True, text=True, check=True).stdout.strip()
 
 
@@ -1599,11 +1654,6 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             f"at: {', '.join(dict.fromkeys(str(width) for _, width in self.judged_at)) or 'none'}",
             f"with: {' '.join(drawn) or 'the defaults'}",
         ]
-        # The inputs name this checkout's paths, so another checkout's record
-        # holds only for the tree it judged.
-        judged = os.environ.get(GATE_TREE)
-        if not judged or Path(judged).resolve() == Path(settings.BASE_DIR).resolve():
-            lines.append(f"inputs: {' '.join(SURVEY_INPUTS)}")
         Path(into).write_text("\n".join(lines) + "\n", encoding="utf-8")
         pages = list(dict.fromkeys(blamed)) or list(asked.repeated(_ASKED))
         engine = asked.text("engine") or "webkit"
