@@ -142,7 +142,7 @@ class DecisionOfferTests(TestCase):
 
 
 @tag("source", "tree")
-@reads("hq/**/*.py", "templates/**/*.html", lists=("hq/**", "templates/**"))
+@reads("hq/**/*.py", "demo/**/*.py", "templates/**/*.html", lists=("hq/**", "demo/**", "templates/**"))
 class DecisionLinkSourceTests(SimpleTestCase):
     def test_only_the_rule_makes_a_decision_s_address(self):
         """A decision's button is made only by ``approvals.offers``, which
@@ -158,7 +158,7 @@ class DecisionLinkSourceTests(SimpleTestCase):
         named = re.compile("|".join(rf"[\"':]{re.escape(name)}[\"']" for name in names))
         sources = [
             path
-            for path in (*ROOT.glob("hq/**/*.py"), *ROOT.glob("templates/**/*.html"))
+            for path in (*ROOT.glob("hq/**/*.py"), *ROOT.glob("demo/**/*.py"), *ROOT.glob("templates/**/*.html"))
             if "tests" not in path.relative_to(ROOT).parts
         ]
         naming = sorted(
