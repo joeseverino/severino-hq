@@ -10,6 +10,8 @@ their own tags are written, so ``1.31.3-alpine`` is compared only with other
 import re
 from dataclasses import dataclass
 
+from .lists import split_list
+
 # Docker's rule: the first path component is a registry when it looks like a
 # host, and Docker Hub's official images live under ``library/``.
 DOCKER_HUB = "docker.io"
@@ -166,7 +168,7 @@ def _holds(running: tuple[int, ...], text: str) -> bool | None:
     if below:
         text = f">= {below.group(1)}, < {below.group(2)}"
     parsed = []
-    for part in (part for part in text.split(",") if part.strip()):
+    for part in split_list(text):
         match = _COMPARATOR.match(_clean_comparator(part))
         bound = version(match.group(2)) if match else ()
         if not bound:

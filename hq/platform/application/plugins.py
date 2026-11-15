@@ -25,6 +25,7 @@ from hq.platform.application.routes import reverse
 from .card_items import Insight
 from .demo import showing_demo
 from .derivations import derivation, forget, holds_until, present
+from .lists import split_list
 from .tone import Tone
 from .ui import DomainOverview
 lazy from . import freshness
@@ -316,7 +317,7 @@ def _load_manifest(reference: str) -> PluginManifest:
 
 def _references() -> tuple[str, ...]:
     raw = os.environ.get("SEVERINO_HQ_PLUGINS", "")
-    return tuple(part.strip() for part in raw.split(",") if part.strip())
+    return tuple(split_list(raw))
 
 
 def _claims_no_host_capability(manifest: PluginManifest) -> None:

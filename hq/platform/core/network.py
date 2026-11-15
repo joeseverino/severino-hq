@@ -14,6 +14,8 @@ from django.conf import settings
 from django.http import HttpResponseForbidden
 lazy from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
+from hq.platform.application.lists import split_list
+
 from .write_bounds import NOTHING, writes
 
 logger = logging.getLogger("severino.network")
@@ -136,7 +138,7 @@ def forwarded_hops(request) -> tuple[tuple[str, str], ...]:
     """
 
     peer = socket_peer(request)
-    forwarded = [hop.strip() for hop in str(request.META.get("HTTP_X_FORWARDED_FOR", "")).split(",") if hop.strip()]
+    forwarded = split_list(str(request.META.get("HTTP_X_FORWARDED_FOR", "")))
     if not forwarded:
         return ((peer, JUDGED),)
     chain = [*forwarded, peer]

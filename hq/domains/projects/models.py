@@ -5,6 +5,7 @@ from typing import override
 from django.db import models
 from django.urls import reverse
 
+from hq.platform.application.lists import split_list
 from hq.platform.application.references import Referable
 from hq.platform.application.tone import Tone, TonedChoices
 from hq.platform.core.models import TimestampedModel, free_slug
@@ -119,4 +120,4 @@ class Project(TimestampedModel):
 
     @property
     def tech_list(self) -> list[str]:
-        return [t.strip() for t in self.technologies_used.split(",") if t.strip()]
+        return split_list(self.technologies_used)

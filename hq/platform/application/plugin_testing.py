@@ -30,6 +30,7 @@ lazy from hq.platform.core.stylesheets import stylesheet
 lazy from hq.platform.core.templatetags import table_tags
 
 from .card_items import Insight
+from .lists import split_list
 from .plugins import (
     DERIVED_PROVIDERS,
     PLUGIN_API_VERSION,
@@ -59,10 +60,9 @@ def stylesheet_selectors(css: str) -> list[str]:
 
     rules = re.findall(r"([^{};]+)\{", re.sub(r"/\*.*?\*/", "", css, flags=re.DOTALL))
     return [
-        selector.strip()
+        selector
         for rule in rules
-        for selector in re.sub(r"\[[^\]]*\]|url\([^)]*\)|\"[^\"]*\"|'[^']*'", "", rule).split(",")
-        if selector.strip()
+        for selector in split_list(re.sub(r"\[[^\]]*\]|url\([^)]*\)|\"[^\"]*\"|'[^']*'", "", rule))
     ]
 
 

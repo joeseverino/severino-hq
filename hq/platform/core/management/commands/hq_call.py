@@ -37,6 +37,7 @@ lazy from mcp.shared.exceptions import MCPError
 
 from hq.config.networks import is_loopback
 from hq.platform.application.capabilities import adapter_refusal
+from hq.platform.application.lists import split_list
 from hq.platform.application.refusal_status import refusal_of, refuse
 from hq.platform.application.security import Principal, cli_principal
 from hq.platform.core import strict_json
@@ -104,7 +105,7 @@ def agent_door(client: str, grant: Iterable[str]) -> Principal:
     client = client.strip()
     if not client:
         raise CommandError("--agent needs the agent's client id.")
-    names = frozenset(name.strip() for each in grant for name in each.split(",") if name.strip())
+    names = frozenset(name for each in grant for name in split_list(each))
     if not names:
         raise CommandError("--agent needs --grant, the permissions its token would carry.")
     unknown = names - agent_grantable()

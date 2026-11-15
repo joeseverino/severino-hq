@@ -59,6 +59,7 @@ from hq.platform.application.integration_specs import (
     answer_type,
 )
 from hq.platform.application.json_schemas import json_schema
+from hq.platform.application.lists import split_list
 from hq.platform.application.pages import page_refusal
 from hq.platform.application.projection import QueryRefusal
 from hq.platform.application.refusal_status import (
@@ -698,7 +699,7 @@ def _selection(raw: str | None) -> list[str] | None:
 
     if raw is None:
         return None
-    return [part for part in (piece.strip() for piece in raw.split(",")) if part]
+    return split_list(raw)
 
 
 @_endpoint(("GET",), title="List a resource", requires=READS_A_LIST, data=ResourceCollection, codes=RESOURCE_CODES)
