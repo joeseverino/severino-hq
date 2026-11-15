@@ -157,8 +157,18 @@ cell stands under its column's heading and a column is one width down the
 table. No width is computed in Python. A column whose values keep their line
 (a status, a figure, a row's controls, a date) is as wide as its widest
 (`inline-size: 1px` on its heading), and the columns that wrap share the rest
-as the browser shares it. A long value wraps and is held to its third line
-(below); a heading's words wrap as a cell's do.
+as the browser shares it. Each column's share is its region's width over one
+more than the table's count of headings (`--share`, tables.css), the one more
+kept for what a column asks past its share, and no column asks more than its
+share to hold a value whole, so the columns together never ask more than the
+region. A value longer than a line of words (`data-long` on its cell and
+heading, `table_cells`), whatever its kind, wraps at its words in a line of
+`--row-words`, or its share where that is less, so no column of words is set
+a word to a line while its neighbor sits empty. A status or a figure that
+long shares the room as words do; a row's controls stay as narrow as their
+line. A long value is held to its third line (below); a heading's words wrap
+as a cell's do. *Gate:* the survey's `room unshared`, which fails a cell
+squeezed below what it needs while another column holds the room it lacks.
 
 Each column that may leave has a rank, 1 first
 (`{% table_heading ... drop=N %}`). A list's ranks are derived by `ranked`:
@@ -227,8 +237,15 @@ kind `control`. Each is a `PageAction` drawn as a compact control with its
 middle on the first line's. A page never draws a button in a cell (*Gate:* the
 `hand-drawn-row-actions` rule). A row's controls stand side by side on one
 line, which their column asks for, and the words beside them wrap first.
-In a wide table (64rem of region) the sentence a write gap links in a
-control cell keeps a measure of `--row-words`.
+A sentence in a control cell (what a write gap links) is long, so it keeps a
+measure of `--row-words` as any long value does.
+
+Every row is ruled from the next, a row group's heading included; only the
+table's last row and a row whose open line follows it draw no rule, since the
+card's edge or the open line ends them. A row's open line holds what left the
+row: its list of columns (`.row-columns`) is drawn only while one of its
+entries is, so a row with nothing gone opens to its controls alone and no
+empty box. *Gates:* the survey's `rows unruled` and `empty panels`.
 
 **A table stacks in a narrow box.** Below 36rem of its region (the
 `table-region` container query in tables.css) each row is a wrapping line of
@@ -257,7 +274,8 @@ drawn quiet. *Gates:* the survey's `row actions beside squeezed words` and
 `row actions behind the toggle`, and `test_row_controls.py`.
 
 A pill is as wide as its words wherever it stands, in a cell alone or beside
-words. *Gates:*
+words, and is one box: a pill longer than its column wraps inside its own
+paint, never into two pills. *Gates:* the survey's `pills in pieces`,
 `a_table_fits_its_box_at_every_width`,
 `test_a_blank_column_is_not_drawn_and_a_short_word_is_not_split`,
 `only_a_table_scrolls_sideways`, and the page crawl, which fails any
@@ -388,13 +406,16 @@ A long value in a cell (a line past `table_cells.LONG`) wraps and is held to
 its third line by a clamp with its mark (`.cell-clamp`, cuts.css), its whole
 value in its cell's title (written by the server). Only words are held: each
 part of words in it (`data-cell`) is clamped on its own, so a pill or a
-toggle beside them stays whole. A name of 32 characters at most (an address
-and its port, a host, a mailbox) holds its line while the region is at least
-64rem, where every column stands (`data-short`, `line_breaks`), and breaks at
-its seams once columns leave; a longer identifier and a row's own name break anywhere their
-column lacks room; a pill and prose break only inside a word wider than their
-column, a pill among words drawn inline with its paint on each of its lines. A status, a figure, a date or a control is never cut: its column is as
-wide as it is.
+toggle beside them stays whole. A value of 32 characters at most
+(`table_cells.SHORT`: an address and its port, a host, a project's name) is
+marked `data-short`, and one box of it (a link alone in its cell, a chip) is
+as wide as the value up to its column's share, so its column holds it whole
+while the table is laid out as one, and past its share it breaks at its seams
+inside its box; a longer identifier and a row's own name break
+anywhere their column lacks room; a pill and prose break only inside a word
+wider than their column, a pill longer than its column wrapping inside its
+one box. A status, a figure, a date or a control is never cut: its column is
+as wide as it is.
 
 An identifier the row is read by, in a row of many columns (a container's
 image), is `code.cell-whole`, and what a row's buttons decide (a queue row's

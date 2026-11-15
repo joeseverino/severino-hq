@@ -319,6 +319,20 @@ WRAPPED = (
 )
 
 
+# A pill is one box: drawn in pieces, one a line, a sentence it holds reads
+# as two pills, each a state of its own.
+PILLS_IN_PIECES = (
+    "() => {"
+    + DESCRIBE
+    + """
+  return [...document.querySelectorAll('main .pill')]
+    .map((pill) => [pill, [...pill.getClientRects()].filter((r) => r.width >= 1 && r.height >= 1)])
+    .filter(([pill, pieces]) => pieces.length > 1 && pill.checkVisibility())
+    .map(([pill, pieces]) => `${describe(pill)} "${pill.textContent.trim().replace(/\\s+/g, ' ').slice(0, 32)}" is drawn as ${pieces.length} pills`);
+}"""
+)
+
+
 EVIDENCE_READ = (STRANDED_EVIDENCE, [SELECTORS["check_statement"], SELECTORS["check_evidence"]])
 
 SUMMARIES_READ = (HIDDEN_IN_SUMMARIES, SELECTORS["summary_value"])
@@ -345,6 +359,9 @@ CHECKS = {
         (_READINGS_OF, SELECTORS["readings"]),
         findings=reading_problems,
         reader_sees="a reading's line cut short or pushed under its mark",
+    ),
+    "pills in pieces": Check(
+        PILLS_IN_PIECES, table=True, reader_sees="one pill's words drawn as two pills, a line each"
     ),
     "headings parted": Check(HEADINGS_PARTED, reader_sees="a heading at a column's foot, what it heads in the next"),
     "asks outside their rows": Check(

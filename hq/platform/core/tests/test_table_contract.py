@@ -431,6 +431,46 @@ class TableTagTests(SimpleTestCase):
         self.assertFalse([each for each in found if each.tag == "dl"])
         self.assertFalse(any("data-below" in each.attrs for each in found if each.tag == "tr"))
 
+    def test_a_long_value_and_its_heading_are_marked_long_whatever_its_kind(self):
+        """A value with a line longer than a line of words wraps and its column
+        shares the room (tables.css), a state's or a control's too; a short
+        one, lines of short ones, or a blank cell is not long."""
+
+        long = "Ask me first for container stack, domain, public DNS record and tailnet policy"
+        lines = "Two lines, each of them short<br>and the second one as short"
+        source = (
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
+            '{% table_heading "State" "status" %}{% table_heading "Note" %}{% table_heading "Act" "control" %}'
+            "</tr></thead><tbody>"
+            f'<tr><td data-col="name">a</td><td data-col="status">{long}</td><td data-col="lines">{lines}</td>'
+            f'<td data-col="control"><a href="/x/">{long}</a></td></tr>'
+            f'<tr><td>b</td><td>Up</td><td><span class="empty-value">{"–" * 60}</span></td><td>Go</td></tr>'
+            "</tbody></table>{% endtable_region %}"
+        )
+        found = all_elements(_render(source))
+        self.assertEqual(
+            [each.attrs.get("data-col") or each.text.strip() for each in found if "data-long" in each.attrs],
+            ["State", "Act", "status", "control"],
+        )
+
+    def test_a_value_no_longer_than_a_name_is_marked_short(self):
+        """A body cell whose longest line is a short name (an address and its
+        port) holds it whole up to its share (tables.css); a longer value, a
+        heading or a blank cell is not short."""
+
+        source = (
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
+            '{% table_heading "Proxy" %}</tr></thead><tbody>'
+            '<tr><td data-col="name">a</td><td data-col="proxy"><code>192.0.2.10:9000</code></td></tr>'
+            f'<tr><td data-col="longer">{"example-primary-host-" * 2}</td>'
+            '<td data-col="blank"><span class="empty-value">–</span></td></tr>'
+            "</tbody></table>{% endtable_region %}"
+        )
+        found = all_elements(_render(source))
+        self.assertEqual(
+            [each.attrs.get("data-col") for each in found if "data-short" in each.attrs], ["name", "proxy"]
+        )
+
     def test_a_row_that_holds_something_back_has_its_line_beneath(self):
         """After a row is the line its toggle opens: its controls, the blocks
         it keeps beneath itself, then each labeled block under its label and a

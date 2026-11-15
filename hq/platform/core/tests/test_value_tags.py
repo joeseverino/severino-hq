@@ -255,15 +255,6 @@ class BreakableTests(SimpleTestCase):
         self.assertIn("data-sole", breakable("example-docker-host-01"))
         self.assertNotIn("data-sole", breakable("Receipt for example-docker-host-01"))
 
-    def test_only_a_name_that_fits_a_column_holds_its_line(self):
-        """A name of at most 32 characters is ``data-short``, which a table
-        holds on one line (tables.css); a longer one breaks anywhere."""
-
-        self.assertIn("data-short", breakable("192.0.2.10:9000"))
-        self.assertIn("data-short", breakable("x" * 31 + "-"))
-        self.assertNotIn("data-short", breakable("an-example-name-" * 3))
-        self.assertNotIn("data-short", breakable("Receipt for example-docker-host-01"))
-
     def test_a_name_has_its_box_in_its_token(self):
         """A name is drawn in a box of its own in its token; a word of a
         sentence has none, and a line of words is cut by the line's own box."""

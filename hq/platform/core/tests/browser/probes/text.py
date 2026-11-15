@@ -64,7 +64,7 @@ BROKEN_WORDS = (
           const rects = across(node, at, at + match[0].length);
           if (new Set(rects.map((r) => Math.round(r.top))).size < 2) continue;
           // A closed row's run wider than its line breaks wherever its column
-          // is, and a name's or a pill's lone word too, as an identifier's. An open row shows a value whole, breaking it at its seams,
+          // is, and a name's lone word too, as an identifier's. An open row shows a value whole, breaking it at its seams,
           // spaces and hyphens: a word breaks there only when what it stands
           // in between two of them is wider than all the room the row has.
           const part = [...run[0].matchAll(/[^-]*-?/g)].find((p) => p.index <= match.index && match.index < p.index + p[0].length);
@@ -551,9 +551,10 @@ CUT_DECISIONS = (
 # (tables.css) rather than break the name. A table in a narrow box has none
 # left, a line past a clamp is not drawn, and what wraps by design (`wraps`,
 # figures.css: a row's own name, free text, a context line) and an opened row
-# are not counted. A short name (`data-short`) holds its line only where its
-# table is wide enough to say so (`nowrap`, tables.css), and breaks at its
-# seams elsewhere.
+# are not counted. A name is held to its line where its table says so: by
+# `nowrap`, or as a short value's chip (`data-short` on its cell), one box as
+# wide as the name up to its share (`max-inline-size`, tables.css), which
+# breaks at its seams only once it is that wide.
 BROKEN_TOKENS = (
     "([tokens, wraps]) => {"
     + DESCRIBE
@@ -566,7 +567,9 @@ BROKEN_TOKENS = (
     const narrow = narrowBox(table);
     if (narrow || token.closest(wraps) || token.closest('tr:has(> * > [aria-expanded="true"])')) continue;
     const style = getComputedStyle(token);
-    if (!style.whiteSpace.startsWith('nowrap') && style.textWrapMode !== 'nowrap') continue;
+    const chip = token.closest('td[data-short] code');
+    const held = chip && chip.getBoundingClientRect().width < parseFloat(getComputedStyle(chip).maxInlineSize) - 1;
+    if (!held && !style.whiteSpace.startsWith('nowrap') && style.textWrapMode !== 'nowrap') continue;
     const lines = [];
     const walker = document.createTreeWalker(token, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {

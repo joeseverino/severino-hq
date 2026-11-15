@@ -19,9 +19,13 @@ EVENT = (
     '<td>Nov 1</td><td>example-actor</td><td class="cell-data">Changed</td></tr>'
     "</tbody></table>{% endtable_region %}"
 )
-# What the event's columns that left say, as a reader sees it.
-SAID = """(id) => [...document.getElementById(id).querySelectorAll(':scope > [data-drop]')]
-  .filter((part) => part.checkVisibility()).map((part) => part.textContent.trim())"""
+# What the event's columns that left say on its open line, as a reader sees it.
+SAID = """(id) => {
+  const line = document.getElementById(id).nextElementSibling;
+  if (!line?.matches('[data-row-detail]')) return [];
+  return [...line.querySelectorAll('.row-columns > [data-drop] > dd')]
+    .filter((part) => part.checkVisibility()).map((part) => part.textContent.trim());
+}"""
 PRESS_FOLD = "(id) => document.getElementById(id).querySelector('[data-fold-toggle]').click()"
 # A value cut in a row with no toggle to open it, in a table inside a folded
 # section inside another, as a hop's evidence lies inside its hop.
