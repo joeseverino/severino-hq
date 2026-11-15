@@ -16,7 +16,7 @@ from hq.platform.application.payload_words import STEP, ChangeRow, path_words, v
 from hq.platform.application.ui import counted
 lazy from hq.domains.control_plane.bridge_actions import ACTIONS
 lazy from hq.platform.application.capabilities import capability_spec
-lazy from hq.platform.application.scheduled_work import job_names
+lazy from hq.platform.application.outbound_work import job_names
 
 lazy from .models import AuditLog
 

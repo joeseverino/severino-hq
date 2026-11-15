@@ -19,7 +19,7 @@ from django.core.exceptions import ImproperlyConfigured
 lazy from django.utils import timezone
 
 lazy from hq.domains.jobs.models import Job
-lazy from hq.domains.jobs.runner import ALREADY_RUNNING, JobConflict, Progress, due as is_due, run, start
+lazy from hq.domains.jobs.runner import ALREADY_RUNNING, SCHEDULER, JobConflict, Progress, due as is_due, run, start
 
 from .asks import FAILED, Ask, Asked, AskedAnswer, Standing
 from .contracts import DOTTED_NAME
@@ -28,7 +28,7 @@ from .integration_specs import CapabilitySpec, requested
 from .projection import read_once
 from .record_errors import RecordNotFound
 from .refusal_status import RefusalEnvelope, refuse
-from .security import WAITING_INTERFACES, Principal, person_of
+from .security import WAITING_INTERFACES, Principal, internal_principal, person_of
 from .ui import ended
 lazy from .domains import host_specs
 lazy from .plugins import plugin_outbound_work
@@ -52,7 +52,7 @@ class OutboundWork:
 
     Every control and answer for the work reads its words from here. Work about
     one record names it in ``subject_label``; work about none may declare
-    ``every`` so the host's ``due`` timer keeps an extension's data current.
+    ``every`` so the host's ``due`` timer keeps its data current.
     """
 
     # The job's kind, the capability's name and the last segment of the route.
@@ -80,6 +80,10 @@ class OutboundWork:
     every: timedelta | None = None
     # What its button says where that is shorter than the label ("Refresh").
     verb: str = ""
+    # False for work only a timer or HQ itself asks for: no capability, control
+    # or route offers it, so it needs no effect or required capability. The
+    # host's own (``host_work``) is also what its units ask for by name.
+    offered: bool = True
 
     @property
     def takes_subject(self) -> bool:
@@ -106,7 +110,7 @@ def validate(work: object) -> OutboundWork:
         raise ImproperlyConfigured(f"Invalid outbound work name {work.name!r}.")
     if not work.label or any(text != text.strip() or len(text) > LABEL_LIMIT for text in (work.label, work.verb)):
         raise ImproperlyConfigured(f"Outbound work {work.name!r} needs a short label.")
-    if work.effect not in EFFECTS:
+    if work.offered and work.effect not in EFFECTS:
         raise ImproperlyConfigured(f"Outbound work {work.name!r} has invalid effect {work.effect!r}.")
     if work.refuse is not None and not callable(work.refuse):
         raise ImproperlyConfigured(f"Outbound work {work.name!r} refuse is not callable.")
@@ -143,26 +147,47 @@ def _declared() -> dict[str, OutboundWork]:
     return declared
 
 
+@cache
+def _host() -> frozenset[str]:
+    return frozenset(work.name for work in host_specs("outbound") if not work.offered)
+
+
 def declared_work() -> dict[str, OutboundWork]:
     """Every piece of outbound work the composition declares, by name."""
 
     return _declared()
 
 
-def capability_specs() -> tuple[CapabilitySpec, ...]:
-    """The capability each piece of declared work is asked for through."""
+def host_work() -> tuple[OutboundWork, ...]:
+    """The host's own work, which nobody is offered: what its timer and units
+    ask for by name."""
 
-    return tuple(capability_for(work) for work in declared_work().values())
+    return tuple(work for name, work in declared_work().items() if name in _host())
+
+
+def job_names() -> dict[str, str]:
+    """Each declared job's name in words, by its kind."""
+
+    return {name: work.label for name, work in declared_work().items()}
+
+
+def capability_specs() -> tuple[CapabilitySpec, ...]:
+    """The capability each piece of offered work is asked for through."""
+
+    return tuple(capability_for(work) for work in declared_work().values() if work.offered)
 
 
 def clear_outbound_work_cache() -> None:
     _declared.cache_clear()
+    _host.cache_clear()
 
 
 def capability_for(work: OutboundWork) -> CapabilitySpec:
     """The capability an adapter asks for the work through."""
 
     validate(work)
+    if not work.offered:
+        raise ImproperlyConfigured(f"Outbound work {work.name!r} is offered to nobody, so no capability asks for it.")
 
     def about(_command: Any, *, principal: Principal, current_key: str = "") -> WorkRequested | RefusalEnvelope:
         return request_work(work, current_key, principal=principal)
@@ -250,16 +275,12 @@ def request_work(work: OutboundWork, subject: str, *, principal: Principal) -> W
     reason = _refusal(work, subject)
     if reason:
         return cast(RefusalEnvelope, refuse("precondition", reason))
-
-    def job_work(progress: Progress) -> dict[str, Any]:
-        return work.run(progress, subject=subject, principal=principal) or {}
-
     waited = principal.interface in WAITING_INTERFACES
     try:
         job = (run if waited else start)(
             work.name,
             work.label,
-            job_work,
+            _job_work(work, subject, principal),
             actor=principal.actor,
             requested_by=person_of(principal),
             request={SUBJECT_FIELD: subject},
@@ -286,21 +307,25 @@ def run_now(name: str, subject: str = "", *, principal: Principal) -> Job:
     """
 
     work = _named(name)
-    principal.require(work.required_capability)
+    if work.offered:
+        principal.require(work.required_capability)
     reason = _refusal(work, subject)
     if reason:
         raise ValueError(reason)
-
-    def job_work(progress: Any) -> dict[str, Any]:
-        return work.run(progress, subject=subject, principal=principal) or {}
-
     return run(
         work.name,
         work.label,
-        job_work,
+        _job_work(work, subject, principal),
         actor=principal.actor,
         request={SUBJECT_FIELD: subject},
     )
+
+
+def _job_work(work: OutboundWork, subject: str, principal: Principal) -> Callable[[Progress], dict[str, Any]]:
+    def job_work(progress: Progress) -> dict[str, Any]:
+        return work.run(progress, subject=subject, principal=principal) or {}
+
+    return job_work
 
 
 def _named(name: str) -> OutboundWork:
@@ -308,6 +333,54 @@ def _named(name: str) -> OutboundWork:
     if work is None:
         raise LookupError(f"No outbound work named {name!r} is declared.")
     return work
+
+
+def _host_named(name: str) -> OutboundWork:
+    """The host's own work by name. Nothing else is done for a unit or for HQ's
+    own start, so a caller naming work cannot reach an extension's or an
+    offered capability's."""
+
+    if name not in _host():
+        raise ValueError(f"No host work named {name!r} is declared.")
+    return _named(name)
+
+
+def _scheduler() -> Principal:
+    return internal_principal(SCHEDULER)
+
+
+def run_for_host(name: str) -> dict[str, Any]:
+    """Do the host's own work a unit asked for to its end, and say how it ended.
+
+    A live job of the same kind is the answer, not a failure: the work is
+    being done.
+    """
+
+    work = _host_named(name)
+    try:
+        job = run_now(work.name, principal=_scheduler())
+    except JobConflict:
+        return {"name": name, "state": "running", "note": ALREADY_RUNNING}
+    return {"name": name, "state": job.state, "note": job_run(job).note, "job": str(job.pk)}
+
+
+def start_for_host(name: str) -> bool:
+    """Start the host's own work on a thread of its own, for HQ that learned it
+    is due sooner than the timer would find it; False when it is already running."""
+
+    work = _host_named(name)
+    principal = _scheduler()
+    try:
+        start(
+            work.name,
+            work.label,
+            _job_work(work, "", principal),
+            actor=principal.actor,
+            request={SUBJECT_FIELD: ""},
+        )
+    except JobConflict:
+        return False
+    return True
 
 
 def due(now: datetime | None = None) -> tuple[OutboundWork, ...]:
@@ -345,6 +418,8 @@ def ask(
     """
 
     work = _named(name)
+    if not work.offered:
+        raise LookupError(f"Outbound work {name!r} is offered to nobody.")
     job = last_job(name, subject)
     standing = standing_of(job_run(job)) if job is not None else Standing()
     if job is not None and not standing.live and standing.state != FAILED:

@@ -24,7 +24,7 @@ from .inventory import (
     retire_departed,
 )
 from .zones import RECORD_KIND, adopt_discovered_records
-lazy from . import problems, scheduled_work
+lazy from . import outbound_work, problems
 lazy from .first_seen import look_due
 lazy from .projects import sync_repositories
 lazy from .public_registry import registry_due
@@ -93,7 +93,7 @@ def _ring_for_new_images(payload: dict[str, Any]) -> None:
     image or a digest HQ has not read, so it is read in minutes, not tomorrow."""
 
     if (CONTAINER_KIND in payload or IMAGE_KIND in payload) and registry_due():
-        transaction.on_commit(lambda: scheduled_work.start("registry.refresh"))
+        transaction.on_commit(lambda: outbound_work.start_for_host("registry.refresh"))
 
 
 def _adoptable_kinds() -> tuple[str, ...]:

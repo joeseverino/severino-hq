@@ -51,7 +51,7 @@ AGENT_DAYS = 300
 MIRRORED = {doc_id: written for doc_id, *_rest, written, _reviewed in RUNBOOKS}
 SYNC = {"interface": MCP_INTERFACE, "actor": AGENT, "operation": DOCUMENTATION_SYNC}
 # HQ's own scheduled work, which nobody asked for in the moment.
-SCHEDULED = {"interface": JOB_INTERFACE, "actor": "system"}
+OWN = {"interface": JOB_INTERFACE, "actor": "system"}
 
 
 def _on(day, *key) -> datetime:
@@ -105,7 +105,7 @@ def _mirrored(_record, _action):
 # Each kind the estate writes: its model, the door its rows came through
 # (``None``: the one the step that writes it binds), and when a record of it
 # was made and last changed. A record kept by hand with no operator to keep it
-# is HQ's own (``SCHEDULED``).
+# is HQ's own (``OWN``).
 KINDS = (
     (
         Project,
@@ -196,7 +196,7 @@ def _by(door, owner, record, action):
     if door is _mirrored:
         return door(record, action)
     if owner is None:
-        return {"metadata": SCHEDULED}
+        return {"metadata": OWN}
     return {"user": owner, **door(record, action)}
 
 

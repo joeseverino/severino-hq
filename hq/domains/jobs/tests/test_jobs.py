@@ -433,13 +433,13 @@ class JobNameTests(TestCase):
         self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.test", "pw"))
 
     def test_a_declared_job_reads_by_its_declared_name_whatever_its_run_stored(self):
-        from hq.platform.application.scheduled_work import named
+        from hq.platform.application.outbound_work import declared_work
 
         Job.objects.create(kind="sessions.clear", label="sessions.clear", state=Job.State.SUCCEEDED, actor="timer")
 
         page = text(self.client.get(reverse("jobs:list")))
 
-        self.assertIn(named("sessions.clear").label, page)
+        self.assertIn(declared_work()["sessions.clear"].label, page)
         self.assertNotIn("sessions.clear", page)
 
     def test_work_no_longer_declared_keeps_the_name_its_run_stored(self):

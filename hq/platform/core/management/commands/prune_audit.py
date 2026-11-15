@@ -2,7 +2,7 @@
 
 Only the (action, object type) pairs in ``core.audit.ROUTINE_EVENTS`` are
 eligible. Prints counts only. The daily run is the ``audit.prune`` job
-(``application.scheduled_work``); this is the same work by hand, and the way
+(``application.host_work``); this is the same work by hand, and the way
 to count what it would delete.
 """
 
@@ -11,7 +11,7 @@ from typing import override
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
-from hq.platform.application.scheduled_work import prune_audit
+from hq.platform.application.host_work import prune_audit
 from hq.platform.application.ui import counted
 from hq.platform.core.audit import prune_routine
 

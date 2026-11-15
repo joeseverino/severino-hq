@@ -309,6 +309,12 @@ def declared_words(spec: capabilities.CapabilitySpec) -> None:
         "example.lookup", "Look up a note", "Ask.", "example.write", looking_up, verb="Look up"
     )
     assert_type(lookup.words, str)
+    # Work only the timer does is offered to nobody.
+    timed = outbound.OutboundWork(
+        "example.sweep", "Sweep the notes", "", "", looking_up, every=timedelta(days=1), offered=False
+    )
+    assert_type(timed.offered, bool)
+    outbound.OutboundWork("example.sweep", "Sweep", "", "", looking_up, offered="no")  # type: ignore[arg-type]
     assert_type(spec.words(), str)
     assert_type(spec.words("all"), str)
     assert_type(spec.requested("example"), str)

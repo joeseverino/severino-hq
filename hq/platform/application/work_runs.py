@@ -36,7 +36,7 @@ lazy from .automation_adoption import playbook_titles
 lazy from .automation_sources import REFRESH, SOURCE_KEY, capability_specs
 lazy from .cadence import automation_standing
 lazy from .history import Acts, who_did_each
-lazy from .scheduled_work import job_names
+lazy from .outbound_work import job_names
 
 type Source = Literal["job", "run"]
 JOB: Source = "job"

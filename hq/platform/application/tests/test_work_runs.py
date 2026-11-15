@@ -360,14 +360,16 @@ class OrderTests(WorkRunsTestCase):
         self.assertEqual([row.id for row in self.listed(order=BY_TITLE)], [str(alpha.pk), str(run.pk), str(zebra.pk)])
 
     def test_a_declared_job_is_called_by_its_declaration_and_other_work_by_what_it_stored(self):
-        from ..scheduled_work import named
+        from ..outbound_work import declared_work
 
         declared = self.job(kind="sessions.clear", label="sessions.clear")
         gone = self.job(kind="example.gone", label="")
 
         titles = {row.id: row.title for row in self.listed()}
 
-        self.assertEqual(titles, {str(declared.pk): named("sessions.clear").label, str(gone.pk): "example.gone"})
+        self.assertEqual(
+            titles, {str(declared.pk): declared_work()["sessions.clear"].label, str(gone.pk): "example.gone"}
+        )
 
     def test_a_run_is_called_by_its_playbook_s_title_and_found_by_it(self):
         """The title the playbook was adopted with, on every list of work; a

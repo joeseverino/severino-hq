@@ -674,6 +674,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         integration=PluginIntegration(
             capabilities=_provider("hq.platform.application.automation_adoption:capability_specs"),
             resources=_provider("hq.platform.application.run_reads:resources"),
+            outbound=_provider("hq.platform.application.host_work:outbound"),
         ),
         apps=("hq.domains.jobs",),
         mounts=(Mount("jobs/", "hq.domains.jobs.urls"),),

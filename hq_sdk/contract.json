@@ -823,7 +823,8 @@
           "effect=",
           "execution_notes=",
           "every=",
-          "verb="
+          "verb=",
+          "offered="
         ],
         "fields": [],
         "kind": "dataclass",

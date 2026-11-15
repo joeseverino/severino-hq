@@ -272,7 +272,7 @@ class RegistryReadTests(TestCase):
 
     def test_a_sweep_that_finds_a_digest_hq_has_not_read_starts_the_read(self):
         estate()
-        with mock.patch("hq.platform.application.scheduled_work.start") as start:
+        with mock.patch("hq.platform.application.outbound_work.start_for_host") as start:
             self.sweep()
         start.assert_called_once_with("registry.refresh")
 
@@ -282,7 +282,7 @@ class RegistryReadTests(TestCase):
         estate()
         inventory("registry.digest", [attested(APP), attested("docker.io/example/kuma@sha256:bbb")])
         self.assertFalse(registry_due())
-        with mock.patch("hq.platform.application.scheduled_work.start") as start:
+        with mock.patch("hq.platform.application.outbound_work.start_for_host") as start:
             self.sweep()
         start.assert_not_called()
 

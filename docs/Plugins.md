@@ -1178,6 +1178,11 @@ since it last succeeded. The hourly `due` timer asks for each piece whose
 cadence has come round, as its own job, recorded against the timer. A failed
 attempt is not a success, so it is asked again on the next hour.
 
+Work only the timer does is declared with `offered=False`: no capability,
+control or route offers it, so its `effect` and `required_capability` go
+unread. The host declares its own background work this way, and only that
+work is what a host unit may ask for by name.
+
 An extension ships no systemd unit for this, and the host removes any
 `severino-hq-*` unit it did not ship.
 

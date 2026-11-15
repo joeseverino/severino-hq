@@ -16,7 +16,7 @@ from ..moments import moment
 from ..projection import read_once
 from ..ui import counted
 from .tones import ATTENTION, GOOD, NEUTRAL, SERIOUS, iso
-lazy from .. import outbound_work, scheduled_work
+lazy from .. import outbound_work
 lazy from ..facts import stored_snapshots
 lazy from ..render_status_findings import FAILURE_CLASSES, UNKNOWN_FAILURE, UNREAD_REASONS, rendering
 lazy from ..routes import reverse
@@ -111,7 +111,7 @@ def _work() -> Work:
         read_at=units.observed_at if units is not None and units.connected else None,
         unread=unread,
         renderers_unread=renderers_unread,
-        scheduled=_scheduled_work(),
+        scheduled=_on_a_cadence(),
     )
 
 
@@ -152,10 +152,10 @@ def _jobs(snapshot: Any) -> tuple[tuple[WorkUnit, ...], str]:
 
 
 def _scheduled_label(unit: str) -> str:
-    """The scheduled work an instance of the job template runs, or ""."""
+    """The host's work an instance of the job template runs, or ""."""
 
     instance = unit.partition("@")[2].rpartition(".")[0]
-    return next((work.label for work in scheduled_work.SCHEDULED if instance and work.name == instance), "")
+    return next((work.label for work in outbound_work.host_work() if instance and work.name == instance), "")
 
 
 def _runs(unit: str, title: str = "", shown: str = "") -> tuple[str, bool]:
@@ -279,12 +279,11 @@ def _run_dot(job: Any) -> Dot:
     )
 
 
-def _scheduled_work() -> tuple[Scheduled, ...]:
+def _on_a_cadence() -> tuple[Scheduled, ...]:
     """Every piece of work done on a cadence, with its recent runs and when it
     is next due. Three queries, however many jobs there are."""
 
-    declared = [(work.name, work.label, work.every) for work in scheduled_work.SCHEDULED if work.every is not None]
-    declared += [
+    declared = [
         (work.name, work.label, work.every) for work in outbound_work.declared_work().values() if work.every is not None
     ]
     if not declared:

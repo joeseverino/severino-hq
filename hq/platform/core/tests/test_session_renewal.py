@@ -94,13 +94,13 @@ class ExpiredSessionPurgeTests(TestCase):
         from django.contrib.sessions.models import Session
         from django.utils import timezone
 
-        from hq.platform.application import scheduled_work
+        from hq.platform.application.outbound_work import run_for_host
 
         now = timezone.now()
         Session.objects.create(session_key="expired", session_data="", expire_date=now - timedelta(hours=1))
         Session.objects.create(session_key="current", session_data="", expire_date=now + timedelta(hours=1))
 
-        answer = scheduled_work.run("sessions.clear")
+        answer = run_for_host("sessions.clear")
 
         self.assertEqual(answer["state"], "succeeded")
         self.assertEqual(list(Session.objects.values_list("session_key", flat=True)), ["current"])

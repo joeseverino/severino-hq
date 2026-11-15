@@ -1194,10 +1194,12 @@ each fails if a call comes to cost a process again.
   or nothing listening. The pass fails with that reason and the next one runs;
   nothing weaker is tried.
 - **Scheduled work is one more action.** What the host asks HQ for by name is
-  declared once, in `hq/platform/application/scheduled_work.py`. That is
-  pruning routine audit events, deleting expired sessions, reading the contact
-  inbox, pulling the content index, reading the public registries, and reading
-  unit state after a failure.
+  declared once, as outbound work offered to nobody, in
+  `hq/platform/application/host_work.py`. That is pruning routine audit
+  events, deleting expired sessions, pulling the content index, reading the
+  public registries, doing the work that is due, and reading unit state after
+  a failure. The bridge does only that work by name, never an extension's or
+  a capability's.
 - **A unit runs it as a job.** A unit runs `hq-controller job NAME` inside the
   web container. The running process does the work as a job and answers how it
   ended, so a failed job is a failed unit and every run has a row. No unit

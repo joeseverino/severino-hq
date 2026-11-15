@@ -1,35 +1,50 @@
-"""Outbound work an extension declares, and what HQ derives from it.
+"""Outbound work an extension or the host declares, and what HQ derives from it.
 
 Driven through the example plugin, composed as an extension is: its one
 ``OutboundWork`` declaration, its page, and the host's route, job, control,
 capability and audit entries for it. The registry double does what a network
 call does as far as the rule can tell (``hq_sdk.testing.reaches_out``), so a
-request that reached it would be refused.
+request that reached it would be refused. The host's own work, offered to
+nobody, is driven through what its units and timer ask for.
 """
 
 import importlib
 import os
+import re
+from contextlib import contextmanager
 from dataclasses import replace
 from datetime import timedelta
+from pathlib import Path
 from unittest import mock
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpResponse
-from django.test import RequestFactory, SimpleTestCase, TestCase, modify_settings, override_settings
+from django.test import (
+    RequestFactory,
+    SimpleTestCase,
+    TestCase,
+    TransactionTestCase,
+    modify_settings,
+    override_settings,
+    tag,
+)
 from django.urls import include, path, reverse
 from django.utils import timezone
 
 from hq.config.urls import urlpatterns as root_urlpatterns
+from hq.domains.control_plane.bridge_actions import ACTIONS
 from hq.domains.jobs import runner
-from hq.domains.jobs.models import Job
-from hq.platform.application import outbound_work, scheduled_work
+from hq.domains.jobs.models import HEARTBEAT_GRACE, Job
+from hq.platform.application import host_work, outbound_work
 from hq.platform.application.capabilities import capability_registry, execute_capability
 from hq.platform.application.integration_specs import requested
 from hq.platform.application.outbound_work import OutboundWork, capability_for, due, validate
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.plugins import PluginIntegration, clear_plugin_composition_cache
 from hq.platform.application.security import Principal, cli_principal, internal_principal
+from hq.platform.application.tests.reads import reads
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog
 from hq.platform.core.outbound import serving
@@ -378,7 +393,9 @@ class DeclaredWorkRunsOnItsCadenceTests(ComposedExample):
         super().setUp()
         # Only the example's declarations, whatever else the composition installs:
         # an installed extension's cadence is its own suite's to test.
+        # The host's due work is here only as what the timer asks for.
         own = {work.name: work for work in example.work()}
+        own["due"] = next(work for work in host_work.outbound() if work.name == "due")
         only = mock.patch("hq.platform.application.outbound_work.declared_work", return_value=own)
         only.start()
         self.addCleanup(only.stop)
@@ -417,18 +434,15 @@ class DeclaredWorkRunsOnItsCadenceTests(ComposedExample):
         self.assertEqual(due(), ())
 
     def test_the_timer_does_the_due_work_as_a_job_of_its_own(self):
-        # The host's own scheduled work is its suite's to test; here, only the example's.
-        only_due = tuple(work for work in scheduled_work.SCHEDULED if work.every is None)
-        self.enterContext(mock.patch.object(scheduled_work, "SCHEDULED", only_due))
-        ended = scheduled_work.run("due")
+        ended = outbound_work.run_for_host("due")
 
         job = Job.objects.get(kind=example.REFRESH)
-        self.assertEqual((job.state, job.actor, job.result), ("succeeded", scheduled_work.ACTOR, {"seen": 4}))
+        self.assertEqual((job.state, job.actor, job.result), ("succeeded", runner.SCHEDULER, {"seen": 4}))
         self.assertEqual(self.registry.asked, list(example.NOTES))
         self.assertEqual(Job.objects.get(kind="due").result["ended"], {example.REFRESH: "succeeded"})
         self.assertEqual(ended["state"], "succeeded")
 
-        scheduled_work.run("due")
+        outbound_work.run_for_host("due")
 
         self.assertEqual(Job.objects.filter(kind=example.REFRESH).count(), 1)
 
@@ -467,7 +481,7 @@ class JobWordingTests(ComposedExample):
 
     def test_an_ask_is_answered_in_the_works_own_words(self):
         principal = internal_principal("test")
-        for each in self.declared():
+        for each in (work for work in self.declared() if work.offered):
             # Asked for as it is when nothing refuses it.
             work = replace(each, refuse=None)
             with self.subTest(work.name), held_jobs():
@@ -481,19 +495,300 @@ class JobWordingTests(ComposedExample):
             self.assertTrue(started["started"])
             self.assertFalse(again["started"] or other["started"])
 
-    def test_scheduled_work_already_running_is_answered_without_its_label(self):
-        for work in scheduled_work.SCHEDULED:
+    def test_the_hosts_own_work_already_running_is_answered_without_its_label(self):
+        for work in outbound_work.host_work():
             with self.subTest(work.name):
                 Job.objects.create(kind=work.name, label=work.label, state=Job.State.RUNNING)
-                answer = scheduled_work.run(work.name)
+                answer = outbound_work.run_for_host(work.name)
                 Job.objects.all().delete()
                 self.assertEqual(answer["state"], "running")
                 self.assertNotIn(work.label, answer["note"])
 
     def test_the_audit_log_titles_an_ending_with_the_label(self):
-        labels = [work.label for work in (*self.declared(), *scheduled_work.SCHEDULED)]
+        labels = [work.label for work in self.declared()]
         for label in labels:
             with self.subTest(label):
                 job = runner.run("example.wording", label, lambda progress: {})
                 ended = AuditLog.objects.get(operation_id=str(job.pk), action=AuditLog.Action.DONE)
                 self.assertEqual(ended.object_repr, label)
+
+
+UNITS = Path(settings.BASE_DIR) / "deploy" / "systemd"
+INSTANCE = re.compile(r"^(?:Unit|OnFailure)=severino-hq-job@(?P<name>.+)\.service$", re.MULTILINE)
+
+
+@contextmanager
+def host_declares(*works: OutboundWork):
+    """The host's own work as ``works``, beside whatever the composition installs."""
+
+    outbound_work.clear_outbound_work_cache()
+    try:
+        with mock.patch.object(host_work, "outbound", return_value=works):
+            yield
+    finally:
+        outbound_work.clear_outbound_work_cache()
+
+
+def own(name="example.work", run=lambda progress, *, subject, principal: {}, every=None) -> OutboundWork:
+    return OutboundWork(name, "Example work", "", "", run, every=every, offered=False)
+
+
+class HostWorkTests(TestCase):
+    """The host's own work: done as a job for a unit that names it, and
+    offered to nobody else."""
+
+    def test_work_is_done_as_a_job_and_answered_as_it_ended(self):
+        with host_declares(own(run=lambda progress, *, subject, principal: {"read": 3})):
+            answer = outbound_work.run_for_host("example.work")
+        job = Job.objects.get(pk=answer["job"])
+        self.assertEqual((answer["name"], answer["state"]), ("example.work", "succeeded"))
+        self.assertEqual((job.kind, job.actor, job.result), ("example.work", runner.SCHEDULER, {"read": 3}))
+
+    def test_work_that_says_why_it_failed_is_answered_with_the_sentence(self):
+        def work(progress, *, subject, principal):
+            raise Failed("The index did not answer.")
+
+        with host_declares(own(run=work)):
+            answer = outbound_work.run_for_host("example.work")
+        self.assertEqual((answer["state"], answer["note"]), ("failed", "The index did not answer."))
+
+    def test_work_already_under_way_is_not_done_twice(self):
+        Job.objects.create(kind="example.work", label="Example work", state=Job.State.RUNNING)
+        work = mock.Mock()
+        with host_declares(own(run=lambda progress, *, subject, principal: work())):
+            answer = outbound_work.run_for_host("example.work")
+        work.assert_not_called()
+        self.assertEqual(answer["state"], "running")
+        self.assertNotIn("job", answer)
+
+    def test_a_unit_can_name_only_the_hosts_own_work(self):
+        """The controller cannot have HQ run work by name that the host did not
+        declare for it: an unknown name, an extension's, or work offered as a
+        capability, which its own authorization guards."""
+
+        from hq.platform.application.projects import REFRESH
+
+        extension = PluginIntegration(outbound=lambda: (own("example.theirs"),))
+        with (
+            host_declares(own()),
+            mock.patch("hq.platform.application.plugins.installed_integrations", return_value=((None, extension),)),
+        ):
+            self.assertIn("example.theirs", outbound_work.declared_work())
+            for name in ("example.other", "example.theirs", REFRESH):
+                with self.subTest(name), self.assertRaisesMessage(ValueError, f"No host work named {name!r}"):
+                    outbound_work.run_for_host(name)
+                with self.subTest(name), self.assertRaisesMessage(ValueError, f"No host work named {name!r}"):
+                    outbound_work.start_for_host(name)
+        self.assertFalse(Job.objects.exists())
+
+    def test_the_bridge_answers_for_it(self):
+        action = next(action for action in ACTIONS if action.name == "job")
+        with host_declares(own()):
+            answer = action.run({"name": "example.work"}, None)
+        self.assertEqual(answer["state"], "succeeded")
+
+    def test_it_is_offered_to_nobody(self):
+        with host_declares(own()):
+            self.assertNotIn("example.work", {spec.name for spec in outbound_work.capability_specs()})
+            self.assertNotIn("example.work", capability_registry())
+            with self.assertRaises(LookupError):
+                ask("example.work")
+            with self.assertRaises(ImproperlyConfigured):
+                capability_for(own())
+            self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.test", "pw"))
+            response = self.client.post(reverse("jobs:ask", args=["example.work"]), form_keyed({}))
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(Job.objects.exists())
+
+    def test_it_needs_no_effect_or_capability_of_its_own(self):
+        self.assertFalse(validate(replace(own(), effect="")).offered)
+        with self.assertRaises(ImproperlyConfigured):
+            validate(replace(own(), effect="", offered=True))
+
+
+class StartForHostTests(TransactionTestCase):
+    def test_hq_starts_work_on_a_thread_of_its_own(self):
+        with host_declares(own()), mock.patch("hq.domains.jobs.runner.threading.Thread") as thread:
+            self.assertTrue(outbound_work.start_for_host("example.work"))
+        thread.return_value.start.assert_called_once_with()
+        self.assertEqual(Job.objects.get().state, Job.State.QUEUED)
+
+    def test_starting_what_is_already_live_is_no(self):
+        Job.objects.create(kind="example.work", label="Example work", state=Job.State.QUEUED)
+        with host_declares(own()):
+            self.assertFalse(outbound_work.start_for_host("example.work"))
+
+
+@tag("source", "tree")
+@reads("deploy/systemd/**")
+class ShippedUnitTests(TestCase):
+    """The shipped units and the declarations name the same work: a timer
+    starts it on a schedule, or a failed unit starts it through OnFailure."""
+
+    def asked_for(self) -> set[str]:
+        return {
+            match["name"]
+            for unit in UNITS.rglob("*")
+            if unit.is_file() and not unit.name.endswith(".example")
+            for match in INSTANCE.finditer(unit.read_text())
+        }
+
+    def test_the_units_ask_for_exactly_the_hosts_work_without_a_cadence(self):
+        self.assertEqual(self.asked_for(), {work.name for work in outbound_work.host_work() if work.every is None})
+
+    def test_work_with_a_cadence_is_asked_for_by_no_unit_of_its_own(self):
+        clocked = {work.name for work in outbound_work.host_work() if work.every is not None}
+        self.assertTrue(clocked)
+        self.assertFalse(self.asked_for() & clocked)
+
+    def test_each_timer_starts_work_of_its_own(self):
+        started = [match["name"] for timer in UNITS.glob("*.timer") for match in INSTANCE.finditer(timer.read_text())]
+        self.assertEqual(len(started), len(set(started)))
+
+    def test_nothing_shipped_starts_a_process_in_the_web_container_for_it(self):
+        for unit in UNITS.glob("*.service"):
+            with self.subTest(unit=unit.name):
+                self.assertNotIn("manage.py", unit.read_text())
+
+
+class UnitFailureTests(TestCase):
+    """A failed unit asks for the machine's units to be read, and for nothing else."""
+
+    def test_the_read_is_asked_for_and_the_doorbell_rung(self):
+        from hq.domains.control_plane.models import ReadRequest
+        from hq.domains.control_plane.observations.host import UNIT_KIND
+
+        from .. import cadence
+
+        with (
+            mock.patch.object(cadence, "_ring", return_value=True) as doorbell,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            answer = outbound_work.run_for_host("units.read")
+
+        self.assertEqual(answer["state"], "succeeded")
+        doorbell.assert_called_once_with("controller")
+        self.assertEqual(list(ReadRequest.objects.values_list("connection_ref", "kind")), [("", UNIT_KIND)])
+        self.assertEqual(Job.objects.get(pk=answer["job"]).result, {"asked": UNIT_KIND})
+        # The sweep it causes reads that kind alone, whatever the cadence says.
+        with mock.patch.object(cadence, "sweep_interval", return_value=cadence.slowest_sweep_interval()):
+            from hq.platform.application.inventory_testing import store
+
+            store("host.firewall", {"record": "interface-binding"})
+            verdict = cadence.sweep_due("example-controller")
+        self.assertEqual((verdict["due"], verdict["only_kinds"]), (True, [UNIT_KIND]))
+
+    def test_a_doorbell_that_cannot_be_rung_leaves_the_request_for_the_timer(self):
+        from hq.domains.control_plane.models import ReadRequest
+
+        from .. import cadence
+
+        with mock.patch.object(cadence, "_ring", return_value=False), self.captureOnCommitCallbacks(execute=True):
+            answer = outbound_work.run_for_host("units.read")
+
+        self.assertEqual(answer["state"], "succeeded")
+        self.assertEqual(ReadRequest.objects.count(), 1)
+
+
+class HostDueTests(TestCase):
+    """The ``due`` timer does the host's work whose cadence has come round, in
+    the one loop that does the extensions'."""
+
+    def setUp(self):
+        self.run = mock.Mock(return_value={"read": 1})
+        due_work = next(work for work in host_work.outbound() if work.name == "due")
+        self.enterContext(
+            host_declares(
+                due_work,
+                own(run=lambda progress, *, subject, principal: self.run(), every=timedelta(days=1)),
+                own("example.asked", run=lambda progress, *, subject, principal: self.run()),
+            )
+        )
+        # Only these come due: an installed extension's cadence is its own
+        # suite's, and its capabilities stay declared.
+        mine = {work.name for work in outbound_work.host_work()}
+        every_due = outbound_work.due
+        self.enterContext(
+            mock.patch.object(
+                outbound_work,
+                "due",
+                side_effect=lambda now=None: tuple(work for work in every_due(now) if work.name in mine),
+            )
+        )
+
+    def test_work_never_done_is_done_and_work_a_unit_asks_for_is_not(self):
+        answer = outbound_work.run_for_host("due")
+
+        self.run.assert_called_once()
+        self.assertEqual(
+            Job.objects.get(kind="due").result,
+            {"due": 1, "ended": {"example.work": "succeeded"}, "lost": 0, "lapsed": 0},
+        )
+        self.assertEqual(answer["state"], "succeeded")
+
+    def test_a_job_whose_process_stopped_is_marked_lost(self):
+        stale = timezone.now() - HEARTBEAT_GRACE - timedelta(minutes=1)
+        gone = Job.objects.create(
+            kind="example.gone", label="Gone", state=Job.State.RUNNING, started_at=stale, heartbeat_at=stale
+        )
+        outbound_work.run_for_host("due")
+
+        gone.refresh_from_db()
+        self.assertEqual(gone.state, Job.State.LOST)
+        self.assertEqual(Job.objects.get(kind="due").result["lost"], 1)
+
+    def test_work_done_within_its_cadence_is_left_alone(self):
+        Job.objects.create(
+            kind="example.work",
+            label="Example work",
+            state=Job.State.SUCCEEDED,
+            request={"subject": ""},
+            finished_at=timezone.now() - timedelta(hours=3),
+        )
+        outbound_work.run_for_host("due")
+
+        self.run.assert_not_called()
+
+
+class HostCadenceTests(TestCase):
+    def test_the_hosts_own_work_declares_how_often_it_is_done(self):
+        every = {work.name: work.every for work in outbound_work.host_work()}
+
+        self.assertEqual(
+            {every[name] for name in ("audit.prune", "content.sync", "registry.refresh", "sessions.clear")},
+            {timedelta(days=1)},
+        )
+        self.assertIsNone(every["units.read"])
+
+
+class CadenceDueTests(TestCase):
+    """When work is due: one check, shared by the host's and the extensions' work."""
+
+    def done(self, ago, state=Job.State.SUCCEEDED, request=None):
+        Job.objects.create(
+            kind="example.work", label="Example", state=state, request=request or {}, finished_at=timezone.now() - ago
+        )
+
+    def due(self, every=timedelta(hours=1), **kwargs):
+        return runner.due("example.work", every, now=timezone.now(), **kwargs)
+
+    def test_a_timer_a_few_minutes_early_still_finds_hourly_work_due(self):
+        self.done(timedelta(minutes=55))
+
+        self.assertTrue(self.due())
+
+    def test_work_done_well_within_its_cadence_is_not_due(self):
+        self.done(timedelta(minutes=30))
+
+        self.assertFalse(self.due())
+
+    def test_a_failure_is_not_the_work_done(self):
+        self.done(timedelta(minutes=5), state=Job.State.FAILED)
+
+        self.assertTrue(self.due())
+
+    def test_a_subject_narrows_to_the_work_about_it(self):
+        self.done(timedelta(minutes=5), request={"subject": "other"})
+
+        self.assertTrue(self.due(subject=""))
+        self.assertFalse(self.due(subject="other"))

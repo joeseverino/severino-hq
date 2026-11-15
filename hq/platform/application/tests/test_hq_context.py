@@ -526,7 +526,7 @@ class ResourceTests(TestCase):
             list_resource("hq", {"limit": 1}, principal=cli_principal())
 
 
-class ScheduledWorkTests(TestCase):
+class CadencedWorkTests(TestCase):
     """The page's scheduled work: derived from the declarations and their jobs."""
 
     def setUp(self):
@@ -539,7 +539,7 @@ class ScheduledWorkTests(TestCase):
         return job
 
     def rows(self):
-        return {item.name: item for item in work_module._scheduled_work()}
+        return {item.name: item for item in work_module._on_a_cadence()}
 
     def test_a_piece_of_work_shows_its_recent_runs_oldest_first_and_when_it_is_due(self):
         oldest = self.ran("audit.prune", timedelta(days=2))

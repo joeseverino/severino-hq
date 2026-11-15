@@ -175,7 +175,7 @@ class WorkAskView(AskMixin, View):
     @cached_property
     def work(self):
         work = outbound_work.declared_work().get(self.capability)
-        if work is None:
+        if work is None or not work.offered:
             raise Http404("No such work is declared.")
         return work
 

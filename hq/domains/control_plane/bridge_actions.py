@@ -28,9 +28,9 @@ from hq.platform.application.controller import (
 from hq.platform.application.glance import dashboard_refresh_plan, record_dashboard_observations
 from hq.platform.application.infrastructure import controller_contract
 from hq.platform.application.inventory import record_connections, record_step_failures
+from hq.platform.application.outbound_work import run_for_host
 from hq.platform.application.record_errors import CertificateError
 from hq.platform.application.refused_reports import READINGS_ACTION
-from hq.platform.application.scheduled_work import run as run_scheduled
 from hq.platform.application.security import internal_principal
 from hq.platform.application.sweep import record_sweep
 
@@ -138,7 +138,7 @@ def _registry(parameters: Parameters, payload: Any) -> Any:
 
 def _job(parameters: Parameters, payload: Any) -> Any:
     del payload
-    return run_scheduled(parameters["name"])
+    return run_for_host(parameters["name"])
 
 
 def _schedule(parameters: Parameters, payload: Any) -> Any:
