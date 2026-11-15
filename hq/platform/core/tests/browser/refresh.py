@@ -148,10 +148,13 @@ class RefreshLandingBrowserTests(BrowserGate):
                 self.page.set_viewport_size(viewport(width))
                 self.page.goto(f"{ORIGIN}/", wait_until="load")
                 self.page.evaluate(FONTS_READY)
+                self.page.evaluate(LAID_OUT_AFRESH)
                 self.page.evaluate(SETTLE)
                 drawn = self.page.evaluate(BOXES, BOXES_ARGS)
                 self.assertTrue(self.page.evaluate(LAND), "the refresh placed nothing")
                 self.settle()
+                self.page.evaluate(LAID_OUT_AFRESH)
+                self.page.evaluate(SETTLE)
 
                 self.assertEqual(self.page.evaluate(BOXES, BOXES_ARGS), drawn)
 

@@ -745,8 +745,9 @@ changed type. Each line it prints is oasdiff's account of one break. A
 deliberate break is admitted by copying that line into
 `hq/platform/api/hq-api.breaking-exemptions.md`, oasdiff's own `--err-ignore`
 file, followed by `Reason:` and why clients can take it; an entry with no
-reason fails the gate. Once the change is on main the entry matches nothing and
-is deleted. The controller's two documents are left out, since both of their
+reason fails the gate. The gate hands oasdiff only the lines the change adds
+since its base, so an entry already on main admits nothing, and any change may
+delete it. The controller's two documents are left out, since both of their
 ends ship in one image.
 
 ### The document

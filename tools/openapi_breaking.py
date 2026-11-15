@@ -1,9 +1,11 @@
 """lint:openapi-breaking: a change to the machine API's document that breaks a client fails, unless
 the exemption file admits that change with a reason.
 
-oasdiff compares the document with the base's copy and judges each change by its own checks; the
-exemption file is its ``--err-ignore`` file, which it reads line by line. This module holds every
-line oasdiff could read as an entry to carry its reason before oasdiff runs.
+oasdiff compares the document with the base's copy and judges each change by its own checks,
+ignoring the entries this change adds to the exemption file (its ``--err-ignore`` list, read line
+by line). An entry the base already holds admitted a break the base already made, so it admits
+nothing here. This module holds every line oasdiff could read as an entry to carry its reason
+before oasdiff runs.
 
     python -m tools.openapi_breaking [base]
 
@@ -13,6 +15,7 @@ The base is fast's: the merge base with the ref named, or else with the branch H
 import json
 import subprocess
 import sys
+import tempfile
 from collections import Counter
 from collections.abc import Iterable
 from pathlib import Path
@@ -52,17 +55,28 @@ def main(argv: list[str]) -> int:
         return 1
     base = merge_base(argv[0] if argv and argv[0] else None)
     print(f"lint:openapi-breaking: {DOCUMENT} against {base[:9]}", flush=True)
-    return judge(f"{base}:{DOCUMENT}", DOCUMENT, ROOT)
+    with tempfile.NamedTemporaryFile("w", suffix=".md") as ignored:
+        ignored.write("".join(f"{line}\n" for line in added(lines, base, ROOT)))
+        ignored.flush()
+        return judge(f"{base}:{DOCUMENT}", DOCUMENT, ROOT, ignored.name)
 
 
-def judge(base: str, revision: str, cwd: Path) -> int:
-    """Fail on each change from ``base`` to ``revision`` that breaks a client and no exemption admits.
+def added(lines: list[str], base: str, cwd: Path) -> list[str]:
+    """The lines of the exemption file the base does not hold: the breaks this change admits."""
+
+    held = subprocess.run(["git", "show", f"{base}:{EXEMPTIONS}"], cwd=cwd, capture_output=True, text=True, check=False)
+    before = set(held.stdout.splitlines()) if held.returncode == 0 else set()
+    return [line for line in lines if line not in before]
+
+
+def judge(base: str, revision: str, cwd: Path, exemptions: str) -> int:
+    """Fail on each change from ``base`` to ``revision`` that breaks a client and no line of ``exemptions`` admits.
 
     The errors print last, with their count, and the warnings only as a count, so a run cut to its
     tail still shows what it failed on. ``changelog --level ERR`` prints the errors alone, in the
     line an exemption copies; oasdiff's JSON gives each change's level to count."""
 
-    ignore = ["--err-ignore", EXEMPTIONS]
+    ignore = ["--err-ignore", exemptions]
     found = subprocess.run(
         ["oasdiff", "breaking", "--format", "json", *ignore, base, revision],
         cwd=cwd,
@@ -75,7 +89,7 @@ def judge(base: str, revision: str, cwd: Path) -> int:
         return found.returncode
     levels = Counter(change["level"] for change in json.loads(found.stdout or "[]"))
     if levels[WARN]:
-        listing = f"oasdiff breaking --format singleline {' '.join(ignore)} {base} {revision}"
+        listing = f"oasdiff breaking --format singleline {base} {revision}"
         print(f"lint:openapi-breaking: {levels[WARN]} warnings, which fail nothing; `{listing}` lists them", flush=True)
     errors = subprocess.run(
         [
