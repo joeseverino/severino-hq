@@ -2,6 +2,7 @@
 #MISE description="The working tree's lines per language and per area (host code, Python and Go tests, templates, CSS, scripts, Go controller, tools) as scc counts them, generated and vendored files (.gitattributes) and what git ignores left out; with --base, each row that moved from that ref to the working tree, and the total; reach for it to state a landing's net lines added or removed; read-only"
 #MISE hide=true
 #MISE extends="audit"
+#MISE depends=["setup:sandbox aqua:boyter/scc"]
 #USAGE flag "--base <ref>" help="Print each row's change from this ref (735ee6d36, origin/main), read through git archive"
 
 # scc does the counting. Which files count is git's word on both sides: the

@@ -122,9 +122,11 @@ osv-scanner = { version = "2.7.1", lazy = true }
 ripgrep = { version = "15.2.0", lazy = true }
 
 # Counts lines per language and per area (audit:loc). Not in mise's registry,
-# so named by its aqua package. Never lazy: a lazy tool installs on its first
-# use, which the audit sandbox refuses.
-"aqua:boyter/scc" = "4.1.0"
+# so named by its aqua package. Lazy, as age is.
+[tools."aqua:boyter/scc"]
+version = "4.1.0"
+lazy = true
+lazy_bins = ["scc"]
 
 # The trace viewer spans are sent to while developing (docs/Development.md,
 # "Tracing"), in a terminal on this machine. Not in mise's registry. Lazy, as

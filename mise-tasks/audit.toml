@@ -3,8 +3,11 @@
 # mise's OS sandbox refuses every write but to temporary and cache paths,
 # whatever words the task is handed; audit:memory also keeps its run in the
 # gitignored var/perf/. audit:image and audit:mcp write as they measure and run
-# outside it, each read by what it runs. One whose body is more than a line is
-# a file under mise-tasks/audit/. test_audit_tasks.py holds every audit: task to that.
+# outside it, each read by what it runs. The sandbox refuses a lazy tool's
+# install on first use, so a task names each lazy tool it runs to setup:sandbox
+# (depends = ["setup:sandbox ripgrep"]), which installs it first. One whose
+# body is more than a line is a file under mise-tasks/audit/.
+# test_audit_tasks.py holds every audit: task to that.
 
 ["audit:imports"]
 extends = "audit"

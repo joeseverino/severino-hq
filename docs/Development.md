@@ -11,7 +11,10 @@ Install [mise](https://mise.jdx.dev) and a `python3`; `mise install` brings uv
 with the other tools `fast` and `check` run.
 
 A tool only a heavier gate needs (CodeQL, age) is `lazy` in `mise.toml`: its
-first use installs it, checked against `mise.lock` like the rest.
+first use installs it, checked against `mise.lock` like the rest. The audit
+sandbox refuses that install, so an `audit:` task names each lazy tool it runs
+to `setup:sandbox` (`depends = ["setup:sandbox ripgrep"]`), which installs it
+before the sandbox opens.
 
 Go is the one tool `mise.toml` does not pin itself. It reads the release from
 `controller/go.mod`'s `toolchain` line, which Renovate moves, so mise loads

@@ -1,6 +1,8 @@
 """The audit: tasks stay reads, since a read-only auditor may run any of them."""
 
+import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -10,7 +12,7 @@ from typing import Any
 
 from django.test import SimpleTestCase, tag
 
-from tests.mise_tasks import ROOT, body, mise_tasks
+from tests.mise_tasks import ROOT, body, mise_tasks, named
 
 # mise's task sandbox holds each read: the audit template denies writes but to
 # its temporary and cache paths. These run outside it, each for its reason.
@@ -37,6 +39,58 @@ def audits() -> dict[str, dict[str, Any]]:
     return {name: task for name, task in mise_tasks().items() if name.startswith("audit:")}
 
 
+def dependency_name(dependency: str | list[str]) -> str:
+    """A dependency's task name: mise lists one given arguments as its name and then them."""
+
+    return dependency if isinstance(dependency, str) else dependency[0]
+
+
+def sandbox_tools(task: dict[str, Any]) -> list[str]:
+    """The lazy tools a task hands setup:sandbox to install."""
+
+    return [
+        tool for each in task["depends"] if isinstance(each, list) and each[0] == "setup:sandbox" for tool in each[1:]
+    ]
+
+
+def lazy_commands() -> dict[str, str]:
+    """Each lazy tool's commands, by command, as mise's bootstrap shims name
+    them: the tool's lazy_bins, else the commands mise's registry lists for it."""
+
+    tools = tomllib.loads((ROOT / "mise.toml").read_text())["tools"]
+    lazy = {name: spec for name, spec in tools.items() if isinstance(spec, dict) and spec.get("lazy")}
+    listed = subprocess.run(["mise", "registry", "--json"], cwd=ROOT, check=True, capture_output=True, text=True)
+    registry = {entry["short"]: entry.get("bins", []) for entry in json.loads(listed.stdout)}
+    return {command: name for name, spec in lazy.items() for command in spec.get("lazy_bins") or registry[name]}
+
+
+def texts_run(task: dict[str, Any]) -> list[tuple[Path, str]]:
+    """What a task runs: its own script, each file that names, and each
+    script those name in turn. A Python module's imports are not followed,
+    since a module imports far more than the task runs."""
+
+    found: list[tuple[Path, str]] = [(Path(task["file"] or task["source"]), body(task))]
+    seen: set[Path] = set()
+    for path, text in found:
+        if path.suffix == ".py":
+            continue
+        for script in named(text):
+            if script not in seen:
+                seen.add(script)
+                found.append((script, script.read_text()))
+    return found
+
+
+def invoked(command: str, text: str, *, python: bool) -> bool:
+    """Whether a script runs the command: in Python as a string of its own (an
+    argv's first word), in shell at the start of a command."""
+
+    word = re.escape(command)
+    if python:
+        return re.search(rf"[\"']{word}[\"']", text) is not None
+    return re.search(rf"(?m)(?:^|[|;&(`]|\b(?:exec|then|do|else))[ \t]*{word}(?![\w-])", text) is not None
+
+
 @tag("source")
 class AuditTaskTests(SimpleTestCase):
     def test_every_audit_task_runs_in_the_write_sandbox(self) -> None:
@@ -48,9 +102,8 @@ class AuditTaskTests(SimpleTestCase):
                 if name not in UNSANDBOXED:
                     self.assertEqual(own.get("extends"), "audit")
                 self.assertEqual(own.get("allow_write", []), ALSO_WRITES.get(name, []))
-                # mise runs a dependency outside the task's sandbox. One given
-                # arguments is listed as its name and then them.
-                names = [each if isinstance(each, str) else each[0] for each in task["depends"]]
+                # mise runs a dependency outside the task's sandbox.
+                names = [dependency_name(each) for each in task["depends"]]
                 self.assertEqual([name for name in names if not name.startswith("setup:")], [])
                 self.assertTrue(task["hide"], "an audit task is left out of `mise tasks`")
 
@@ -66,7 +119,24 @@ class AuditTaskTests(SimpleTestCase):
         for name, task in audits().items():
             if name not in UNSANDBOXED:
                 with self.subTest(task=name):
-                    self.assertIn("setup:sandbox", task["depends"])
+                    self.assertIn("setup:sandbox", [dependency_name(each) for each in task["depends"]])
+
+    def test_every_lazy_tool_a_sandboxed_audit_runs_is_installed_before_it_opens(self) -> None:
+        """The sandbox refuses a lazy tool's install on its first use, so the
+        task names each one it runs to setup:sandbox, which installs it outside."""
+
+        commands = lazy_commands()
+        for name, task in audits().items():
+            if name in UNSANDBOXED:
+                continue
+            with self.subTest(task=name):
+                runs = {
+                    tool
+                    for path, text in texts_run(task)
+                    for command, tool in commands.items()
+                    if invoked(command, text, python=path.suffix == ".py")
+                }
+                self.assertEqual(sorted(sandbox_tools(task)), sorted(runs))
 
     def test_an_audit_task_runs_before_the_environment_exists(self) -> None:
         """A fresh worktree has no .venv, which the sandbox refuses uv's write

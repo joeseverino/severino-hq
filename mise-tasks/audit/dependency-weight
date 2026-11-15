@@ -2,6 +2,7 @@
 #MISE description="What each dependency weighs: each locked Python distribution's installed size, the runtime set apart from the dev groups, and each package's and module's bytes in every Go binary the image ships, as go-size-analyzer reads them, sorted, with the totals; read-only"
 #MISE hide=true
 #MISE extends="audit"
+#MISE depends=["setup:sandbox aqua:Zxilly/go-size-analyzer"]
 
 # The Python half is tools/audit_weight.py. Each Go binary is built as the
 # Dockerfile builds it, stripped, and go-size-analyzer (gsa) attributes its

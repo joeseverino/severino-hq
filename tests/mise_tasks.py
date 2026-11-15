@@ -53,7 +53,12 @@ def runs(task: dict[str, Any]) -> list[Path]:
 
     if task["file"]:
         return []
-    run = body(task)
+    return named(body(task))
+
+
+def named(run: str) -> list[Path]:
+    """The files of this checkout a script names, as ``runs`` reads a task's run."""
+
     scripts = [ROOT / path for path in re.findall(r"[\w/.-]+\.(?:sh|py)\b", run) if (ROOT / path).is_file()]
     for dotted in re.findall(r"\b[a-z_]+(?:\.\w+)+", run):
         parts = dotted.split(".")

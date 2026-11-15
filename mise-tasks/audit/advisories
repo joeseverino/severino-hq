@@ -2,6 +2,7 @@
 #MISE description="The advisories against each package of every lockfile git tracks, and each adverse status, as lint:audit's uv audit and osv-scanner report them; read-only, and it needs the network"
 #MISE hide=true
 #MISE extends="audit"
+#MISE depends=["setup:sandbox osv-scanner"]
 
 # lint:audit's own run, as a read, so an auditor that may run only audit:
 # tasks reads the report the gate does: uv audit lists each package's
