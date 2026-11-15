@@ -10,6 +10,7 @@ lazy from django.contrib.auth.base_user import AbstractBaseUser
 lazy from django.contrib.auth.models import AnonymousUser
 lazy from django.http import HttpRequest
 
+from .titled import Titled
 lazy from . import roles
 lazy from .domains import host_records
 lazy from .linked_accounts import SIGN_IN
@@ -87,7 +88,7 @@ API_INTERFACE = "api"
 # request through that door from one through the web.
 API_NAMESPACE = "hq_api"
 # What the MCP mount names each request, until a tool binds an operation of its own.
-MCP_OPERATION = "mcp"
+MCP_OPERATION = Titled("mcp", "An agent connected over MCP")
 # Work HQ runs from its job queue, attributed to whoever started it.
 JOB_INTERFACE = "job"
 # The controller, reporting what it saw or applied on its own schedule.

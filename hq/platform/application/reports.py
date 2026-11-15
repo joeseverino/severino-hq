@@ -8,6 +8,10 @@ from hq.platform.core.models import AuditLog
 
 from .security import Principal
 from .sensitivity import safe_records
+from .titled import Titled
+
+# Taking an export away is a read the web and MCP serve outside the runner.
+EXPORT = Titled("report.export", "Exported a report")
 
 # What a year summary is exported as: Markdown or JSON, by the file's own extension.
 ExportFormat = Literal["md", "json"]
@@ -33,7 +37,7 @@ def exported(filename: str, body: str, *, principal: Principal) -> None:
     """Record that ``principal`` took ``filename`` away: the one record of an
     export, whichever door handed it over."""
 
-    with audit_operation(operation="report.export", principal=principal):
+    with audit_operation(operation=EXPORT, principal=principal):
         record_event(
             action=AuditLog.Action.EXPORTED,
             type_label="Export",

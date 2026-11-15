@@ -31,7 +31,6 @@ from hq.platform.application.resource_capabilities import (
     Allowed,
     channels_inside,
     resource_capabilities,
-    verb_words,
 )
 from hq.platform.application.resource_context import (
     controller_summary,
@@ -372,7 +371,7 @@ class InfrastructureDetailView(PageMixin, DetailView):
                 label=(
                     capability_words(READ_NOW_CAPABILITY)
                     if verb == "reconcile" and provider.reported_fields
-                    else verb_words(verb)
+                    else capability_words(ACTION_CAPABILITY[verb])
                 ),
                 title="" if allowed.enabled else allowed.reason,
                 origin=self.request.get_full_path(),
@@ -435,7 +434,9 @@ class InfrastructureDetailView(PageMixin, DetailView):
         capabilities = self.capabilities
         context["capabilities"] = capabilities
         context["page_visit"] = page_visit("resource", self.object.key)
-        context["controller"] = controller_summary(capabilities.actions, verb_words)
+        context["controller"] = controller_summary(
+            capabilities.actions, lambda verb: capability_words(ACTION_CAPABILITY[verb])
+        )
         derived = self.derived
         context["status"] = record_status(self.object, health=derived.health, newest=newest_reading(self.object.kind))
         # A running container is summarized by what it runs, in its own band.
@@ -523,7 +524,7 @@ class OperationView(View):
             return HttpResponseNotAllowed(["POST"])
         resource = get_object_or_404(ManagedResource, key=key)
         name = record_name(resource.kind, resource.spec, resource.key)
-        label = f"{verb_words(self.action)} {name}"
+        label = f"{capability_words(ACTION_CAPABILITY[self.action])} {name}"
         return render(
             request,
             "control_plane/resource_confirm_verb.html",

@@ -52,13 +52,13 @@ from .resource_records import (
 from .security import CONTROLLER_INTERFACE, Principal
 from .ui import counted, ended
 lazy from . import tailnet
-lazy from .capabilities import Consented
+lazy from .capabilities import Consented, capability_words
 lazy from .containers import Running
 lazy from .history import asked_by
 lazy from .integration_specs import requested
 lazy from .machines import Machine, container_context
 lazy from .moments import when_day
-lazy from .resource_capabilities import public_dns_enabled, verb_words
+lazy from .resource_capabilities import public_dns_enabled
 lazy from .tailnet import POLICY_KIND, device_at, may_reach, observer, policy_allowing
 lazy from .work_runs import WorkRun, run_rows, seen_as_runs, shown_result, standing_of
 
@@ -382,7 +382,7 @@ def _queue_operation(
         )
 
     operation, queued = enqueue(action, prepare, once=once)
-    said = requested(verb_words(action), resource.key, again=not queued)
+    said = requested(capability_words(ACTION_CAPABILITY[action]), resource.key, again=not queued)
     if not queued:
         return operation_asked(operation, queued=False, message=said)
     # Every operation a person or credential asks for is created here, a

@@ -36,12 +36,6 @@ REMOVAL_CAPABILITY = "infrastructure.resource.remove"
 UPDATE_CAPABILITY = "infrastructure.resource.update"
 
 
-def verb_words(verb: str) -> str:
-    """What a resource's verb is called: the words its operation declares."""
-
-    return OperationRequest.Action(verb).label
-
-
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Allowed:
     enabled: bool

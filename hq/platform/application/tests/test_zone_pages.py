@@ -385,7 +385,8 @@ class NewVerbReadinessTests(TestCase):
 
         from django.contrib.messages import get_messages
 
-        from ..resource_capabilities import verb_words
+        from ..capabilities import capability_words
+        from ..resource_operations import ACTION_CAPABILITY
 
         managing_everything()
         user = get_user_model().objects.create_user("op", password="x" * 20)
@@ -404,7 +405,7 @@ class NewVerbReadinessTests(TestCase):
         self.assertTrue(OperationRequest.objects.filter(action=OperationRequest.Action.RECONCILE).exists())
         said = [str(message) for message in get_messages(response.wsgi_request)]
         self.assertEqual(len(said), 1)
-        self.assertIn(verb_words(OperationRequest.Action.RECONCILE), said[0])
+        self.assertIn(capability_words(ACTION_CAPABILITY[OperationRequest.Action.RECONCILE]), said[0])
         self.assertIn("a-rewrite", said[0])
 
 

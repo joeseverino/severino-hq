@@ -41,6 +41,7 @@ from .security import (
     internal_principal,
     is_interactive,
 )
+from .titled import Titled
 from .workflow_contracts import ActionLink
 lazy from . import agent_access, capabilities, resources, roles
 lazy from .approval_review import asked
@@ -615,11 +616,11 @@ def _decidable(approval_id: str, principal: Principal) -> ApprovalRequest:
     return held
 
 
-REQUEST = "approval.request"
+REQUEST = Titled("approval.request", "Asked for a change a person approves")
 APPROVE = "approval.approve"
 REJECT = "approval.reject"
 WITHDRAW = "approval.withdraw"
-LAPSE = "approval.lapse"
+LAPSE = Titled("approval.lapse", "A held change lapsed")
 _LAPSED_NOTE = "It expired without an answer."
 # Each decision a person takes on a held request: its path in the decide
 # route, and its button's words.
