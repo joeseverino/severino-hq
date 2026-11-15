@@ -36,6 +36,7 @@ from hq.domains.control_plane.models import (
 )
 lazy from hq.domains.control_plane.bridge_contract import declared_names
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
+lazy from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 lazy from hq.domains.control_plane.provider_adapters.github import KIND as GITHUB_KIND
 lazy from hq.domains.control_plane.providers import PROVIDERS, enabled_controller_actions, registry_label
 lazy from hq.platform.core.doorbell import ask_soon
@@ -770,8 +771,10 @@ def request_boot_reads() -> tuple[str, ...]:
 
     Delivery, wherever it is read: a deploy is when production changes which
     commit of each extension it runs, so each commit's check run and a comment
-    on its merged pull request have something to report. And each kind HQ
-    holds readings of whose fingerprint moved since the last boot: those
+    on its merged pull request have something to report. The repositories,
+    where they are read: their deployments say which commit production runs,
+    and the deploy that booted this image has just moved them. And each kind
+    HQ holds readings of whose fingerprint moved since the last boot: those
     records were let through under another contract, so serving them would
     pass the old shape off as current. A boot with no fingerprints stored
     knows nothing of what its records were held to, and asks every kind once.
@@ -787,7 +790,8 @@ def request_boot_reads() -> tuple[str, ...]:
     held = set(ProviderInventory.objects.values_list("kind", flat=True))
     delivery = GITHUB_KIND in held or ManagedResource.objects.filter(kind=GITHUB_KIND).exists()
     moved = sorted(kind for kind in held if kind in current and stored.get(kind) != current[kind] and swept(kind))
-    asked = ((GITHUB_KIND,) if delivery else ()) + tuple(moved)
+    deployed = (REPOSITORY_KIND,) if REPOSITORY_KIND in held else ()
+    asked = tuple(dict.fromkeys(((GITHUB_KIND,) if delivery else ()) + deployed + tuple(moved)))
     if asked:
         ask(reads=asked)
     readings.record(RECORD_CONTRACTS, current)

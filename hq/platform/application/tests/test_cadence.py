@@ -398,8 +398,9 @@ class CarriedConnectionRecordTests(TestCase):
 
 
 class BootTests(TestCase):
-    """A new image asks for delivery, and for each kind whose stored records
-    were let through under another contract; nothing polls for either."""
+    """A new image asks for delivery, for the repositories whose deployments
+    it moved, and for each kind whose stored records were let through under
+    another contract; nothing polls for any of them."""
 
     def setUp(self):
         self.settings_override, self.directory = markers()
@@ -437,18 +438,30 @@ class BootTests(TestCase):
         self.assertFalse((self.directory / "doorbell").exists())
 
     def test_a_kind_whose_contract_moved_is_read_and_no_other(self):
+        self.hold("host.unit", "host.firewall")
+        self.booted(moved=["host.unit"])
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self.assertEqual(request_boot_reads(), ("host.unit",))
+        self.assertEqual(list(ReadRequest.objects.values_list("connection_ref", "kind")), [("", "host.unit")])
+        self.assertTrue((self.directory / "doorbell").exists())
+        self.assertFalse(recently_used())
+
+    def test_a_boot_where_repositories_are_read_asks_for_their_deployments(self):
+        """The deploy that booted the image moved what production runs, and
+        the repositories' reading says which commit that is."""
+
         self.hold("github.repository", "host.firewall")
-        self.booted(moved=["github.repository"])
+        self.booted()
 
         with self.captureOnCommitCallbacks(execute=True):
             self.assertEqual(request_boot_reads(), ("github.repository",))
-        self.assertEqual(list(ReadRequest.objects.values_list("connection_ref", "kind")), [("", "github.repository")])
         self.assertTrue((self.directory / "doorbell").exists())
         self.assertFalse(recently_used())
 
     def test_a_boot_stores_the_contracts_it_asked_on(self):
-        self.hold("github.repository")
-        self.booted(moved=["github.repository"])
+        self.hold("host.firewall")
+        self.booted(moved=["host.firewall"])
         request_boot_reads()
         ReadRequest.objects.all().delete()
 
@@ -457,9 +470,9 @@ class BootTests(TestCase):
 
     def test_a_first_boot_reads_every_kind_it_holds_once(self):
         # Nothing says what the records it holds were let through as.
-        self.hold("github.repository", "host.firewall")
+        self.hold("host.unit", "host.firewall")
 
-        self.assertEqual(set(request_boot_reads()), {"github.repository", "host.firewall"})
+        self.assertEqual(set(request_boot_reads()), {"host.unit", "host.firewall"})
         self.assertEqual(request_boot_reads(), ())
 
     def test_a_kind_no_sweep_reads_is_never_asked(self):
