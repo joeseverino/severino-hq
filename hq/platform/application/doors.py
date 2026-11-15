@@ -2,6 +2,10 @@
 and who did something said whole (``Attribution``)."""
 
 from dataclasses import dataclass
+from functools import cache
+
+lazy from hq.domains.control_plane.bridge_actions import CONTROLLER
+lazy from hq.domains.jobs.runner import SCHEDULER
 
 from .labels import dotted
 from .security import (
@@ -38,6 +42,14 @@ DOORS = {
     CONTROLLER_INTERFACE: "through the controller",
     INTERNAL_INTERFACE: "inside HQ",
 }
+
+
+@cache
+def _machinery() -> dict[tuple[str, str], str]:
+    """HQ's own machinery, by the name it acts under and its door, as it reads
+    in place of both: its door would only name it again."""
+
+    return {(CONTROLLER, CONTROLLER_INTERFACE): "HQ's controller", (SCHEDULER, JOB_INTERFACE): "HQ's schedule"}
 
 
 def interface_label(interface: str) -> str:
@@ -95,10 +107,13 @@ class Attribution:
     @property
     def asker(self) -> str:
         """Who acted and how: "example-agent, over MCP", or a person first and
-        then the agent that acted for them, "joe, through example-agent"."""
+        then the agent that acted for them, "joe, through example-agent", or
+        HQ's own machinery by itself, "HQ's schedule"."""
 
         if self.through:
             return f"{self.actor}, through {self.through}"
+        if own := _machinery().get((self.actor, self.interface)):
+            return own
         return f"{self.actor}, {self.door}" if self.door else self.actor
 
     @property
