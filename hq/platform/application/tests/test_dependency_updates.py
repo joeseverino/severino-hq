@@ -14,7 +14,7 @@ from hq.domains.projects.models import Project
 from .. import dependency_updates
 from ..capabilities import execute_capability
 from ..domains import records_of
-from ..freshness import cadence
+from ..freshness import RETRY_AFTER, cadence
 from ..projection import projection_scope
 from ..security import Capability, Principal, cli_principal
 
@@ -94,7 +94,7 @@ class PlanTests(TestCase):
         ran(started=now - timedelta(days=2), reachable=False, updated=now)
 
         self.assertFalse(dependency_updates.plan()["due"])
-        self.assertTrue(dependency_updates.plan(now + dependency_updates.RETRY_AFTER)["due"])
+        self.assertTrue(dependency_updates.plan(now + RETRY_AFTER)["due"])
 
     def test_asking_makes_it_due_whatever_its_age(self):
         opted_in("app", "https://github.com/example/app")

@@ -214,7 +214,8 @@ class UpgradeTests(TestCase):
 
 class CadenceTests(TestCase):
     def test_a_digest_is_read_once_and_a_failure_is_retried_later(self):
-        from ..public_registry import RETRY_AFTER, _due
+        from ..freshness import RETRY_AFTER
+        from ..public_registry import _due
 
         now = timezone.now()
         read = {"digest": "x", "read_at": (now - timedelta(days=400)).isoformat()}

@@ -16,7 +16,7 @@ from ..asks import REFRESHING
 from ..cadence import asked_at
 from ..cadence_testing import controller_arrived
 from ..capabilities import capability_registry, execute_capability
-from ..freshness import cadence
+from ..freshness import RETRY_AFTER, cadence
 from ..security import Capability, Principal
 from .markup import hrefs, select, text
 from .sentinel import SENTINEL
@@ -119,13 +119,13 @@ class PlanTests(TestCase):
         hold(at=old, updated_at=timezone.now(), reachable=False, error="GitHub API returned HTTP 502.")
 
         self.assertFalse(github_profile.plan()["due"])
-        self.assertTrue(github_profile.plan(timezone.now() + github_profile.RETRY_AFTER)["due"])
+        self.assertTrue(github_profile.plan(timezone.now() + RETRY_AFTER)["due"])
 
     def test_a_first_read_that_failed_is_retried_on_its_own_clock(self):
         hold(None, observed_at=None, reachable=False, error="GitHub API returned HTTP 502.")
 
         self.assertFalse(github_profile.plan()["due"])
-        self.assertTrue(github_profile.plan(timezone.now() + github_profile.RETRY_AFTER)["due"])
+        self.assertTrue(github_profile.plan(timezone.now() + RETRY_AFTER)["due"])
 
     def test_asking_makes_it_due_whatever_its_age(self):
         hold()
@@ -172,17 +172,17 @@ class IngestTests(TestCase):
         return record_inventory({github_profile.KIND: report}, principal=operator())
 
     def test_a_carried_kind_keeps_its_records_and_its_moment(self):
-        before = hold(at=timezone.now() - github_profile.RETRY_AFTER)
+        before = hold(at=timezone.now() - RETRY_AFTER)
 
         result = self.record({"ok": True, "records": [], "carried": True})
 
         before.refresh_from_db()
         self.assertEqual(result["recorded"], [])
         self.assertEqual(before.records, [PROFILE])
-        self.assertLess(before.updated_at, timezone.now() - github_profile.RETRY_AFTER / 2)
+        self.assertLess(before.updated_at, timezone.now() - RETRY_AFTER / 2)
 
     def test_a_read_the_allowance_refused_is_an_attempt_that_keeps_the_reading(self):
-        before = hold(at=timezone.now() - github_profile.RETRY_AFTER)
+        before = hold(at=timezone.now() - RETRY_AFTER)
         refusal = {
             "part": "",
             "refusal": "",

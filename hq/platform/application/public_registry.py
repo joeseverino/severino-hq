@@ -8,7 +8,7 @@ scheduled ``registry.refresh`` job; pages read what it stores through
 """
 
 from collections.abc import Callable, Iterable, Mapping
-from datetime import datetime, timedelta
+from datetime import datetime
 from ipaddress import ip_address
 from typing import Any
 from urllib.parse import urlsplit
@@ -35,7 +35,7 @@ lazy from hq.domains.control_plane.observations.portainer import IMAGE_KIND as P
 lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
 from .facts import Subject, inventory_records, readings, record_read_at
-from .freshness import freshness
+from .freshness import RETRY_AFTER, freshness
 from .locate import host_of
 from .lookup import HOSTNAME, allocation_of, entity_name
 from .moments import moment
@@ -53,8 +53,6 @@ lazy from .oci_registry import RegistryPrivate, RegistryReadError, attestations,
 lazy from .osv import OSVReadError, finding
 lazy from .tailnet_presence import tailnet_presence
 
-# A subject that could not be read is asked again after this, not on every run.
-RETRY_AFTER = timedelta(hours=1)
 # What a digest carries never changes, so a record of one is never read again.
 _UNCHANGING = frozenset({DIGEST_KIND})
 LOOKUPS_PER_REFRESH = 16

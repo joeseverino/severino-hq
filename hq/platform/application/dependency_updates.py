@@ -9,7 +9,7 @@ the reading each run comes back as are docs/Derived-Facts.md#dependency-updates.
 
 import re
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 from django.utils import timezone
@@ -20,7 +20,7 @@ from hq.domains.jobs.models import JobState
 from hq.domains.projects.models import Project
 
 from .asks import AskedAnswer, asked_read
-from .freshness import freshness
+from .freshness import RETRY_AFTER, freshness
 from .projection import iso, read_once
 from .refusal_status import RefusalEnvelope, refuse
 from .security import Principal
@@ -33,8 +33,6 @@ lazy from .work_runs import TONES
 RUN_NOW = "project.dependency_updates.run"
 # Each outcome a run reports, as the job state every page words and tones.
 SEEN = {"ok": JobState.SUCCEEDED, "handed_off": JobState.RUNNING, "timeout": JobState.LOST}
-# A hand-off that failed is tried again after this, not on every sweep.
-RETRY_AFTER = timedelta(hours=1)
 _REPOSITORY = re.compile(REPOSITORY)
 
 
