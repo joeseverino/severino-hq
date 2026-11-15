@@ -124,11 +124,6 @@
 .bar-track::-moz-meter-bar { min-inline-size: 2px; border-radius: 2px; background: var(--accent-2); }
 .bar-value { font-feature-settings: "tnum"; font-weight: 650; }
 
-.policy-effect { margin-left: var(--space-3); font-size: var(--text-3xs); font-weight: 600; color: var(--muted-2); }
-.policy-effect.effect-destructive { color: var(--danger); }
-.policy-effect.effect-infrastructure_change { color: var(--warn); }
-.policy-default { color: var(--muted); }
-.policy-unavailable { font-size: var(--text-xs); white-space: nowrap; }
 /* A long form's closing row: drawn in its place from the first draw, so
    nothing moves when the form changes and its frame ends with a row that
    holds the verb rather than with room kept for one. Once the form has

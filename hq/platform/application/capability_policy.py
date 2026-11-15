@@ -190,6 +190,9 @@ EFFECTS = {
     "infrastructure_change": effect_label("infrastructure_change"),
 }
 _EFFECT_ORDER = tuple(EFFECTS)
+# The tone each effect is said in beside its action: one that removes
+# serious, one that changes infrastructure attention, any other neutral.
+_EFFECT_TONES = {"destructive": "serious", "infrastructure_change": "attention"}
 
 
 def field_name(subject: str, capability: str) -> str:
@@ -248,6 +251,10 @@ class Row:
     effect_label: str
     default: str
     cells: tuple[PolicyCell, ...]
+
+    @property
+    def effect_tone(self) -> str:
+        return _EFFECT_TONES.get(self.effect, "neutral")
 
     @property
     def overrides(self) -> tuple[PolicyCell, ...]:

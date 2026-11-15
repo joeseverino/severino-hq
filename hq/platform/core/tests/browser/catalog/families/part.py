@@ -1267,14 +1267,14 @@ ENTRIES = {
     # A month with days gone by, each kind of entry on them: their words are
     # still links a reader follows, so they read as text in play does.
     "part/month-gone-by": Entry(
-        '{% section "Example month" %}{% include "calendars/_month_grid.html" %}{% endsection %}',
+        '{% section "Example month" %}{% include "partials/_month_grid.html" %}{% endsection %}',
         {"calendar": _month_gone_by()},
     ),
     # A month compact, as the dashboard draws it beside its recent projects:
     # where things are, each a dot or a sliver, the day opening the rest.
     "part/month-compact": Entry(
         '<div class="section-flow">{% section "Example month 2" %}'
-        '{% include "calendars/_month_grid.html" with compact=True %}{% endsection %}'
+        '{% include "partials/_month_grid.html" with compact=True %}{% endsection %}'
         '{% section "Example projects" %}{% include "partials/_record_list.html" %}{% endsection %}</div>',
         {
             "calendar": _month_gone_by(date(2026, 5, 1)),
@@ -1293,7 +1293,7 @@ ENTRIES = {
     # flow of sections: the month takes the room, the sections keep their
     # basis beside it and pair up once they wrap under it.
     "part/month-split": Entry(
-        '<div class="split">{% section "Example month 3" %}{% include "calendars/_month_grid.html" %}'
+        '<div class="split">{% section "Example month 3" %}{% include "partials/_month_grid.html" %}'
         '{% endsection %}<aside class="section-flow">{% section "Example identity 6" %}' + _NARROW + "{% endsection %}"
         '{% section "Example link 6" %}' + _NARROW + "{% endsection %}</aside></div>",
         {"calendar": _month_gone_by(date(2026, 9, 1))},
@@ -2025,7 +2025,7 @@ ENTRIES = {
         },
     ),
     # The connection dialog before its panel arrives.
-    "part/connection-loading": Entry('{% include "core/_connection_loading.html" %}'),
+    "part/connection-loading": Entry('{% include "partials/_connection_loading.html" %}'),
     # You, the link and HQ: over the tailnet with every check confirmed and
     # both ends leading to their machines, under Advanced HQ Posture.
     "part/connection-peering": Entry(
@@ -2314,7 +2314,7 @@ ENTRIES = {
     # read, with a certificate, with facts under its name, and a name long
     # enough to break.
     "part/path-hops": Entry(
-        '{% section "Example path 5" %}{% include "control_plane/_path_hops.html" with route=route '
+        '{% section "Example path 5" %}{% include "partials/_path_hops.html" with route=route '
         'label="Path via example record" %}{% endsection %}',
         {"route": _route()},
     ),

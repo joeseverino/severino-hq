@@ -41,7 +41,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
       {% comment %}A row is drawn only when it has a value: the strip above already says why there is no device.{% endcomment %}
       {% if connection.identity.tailnet_user %}{% fact "Tailnet account" %}<code>{{ connection.identity.tailnet_user|breakable }}</code>{% endfact %}{% endif %}
       {% if connection.caller_device %}
-        {% fact "Device" %}<strong>{{ connection.caller_device.label|breakable }}</strong>{% if connection.caller_device.os %} <span class="conn-row-note">{{ connection.caller_device.os|breakable }}</span>{% endif %}{% if connection.untrusted_forwarding and connection.reported_device %} <span class="conn-row-note">From the proxy's header</span>{% endif %}{% endfact %}
+        {% fact "Device" %}<strong>{{ connection.caller_device.label|breakable }}</strong>{% if connection.caller_device.os %} <span class="muted">{{ connection.caller_device.os|breakable }}</span>{% endif %}{% if connection.untrusted_forwarding and connection.reported_device %} <span class="muted">From the proxy's header</span>{% endif %}{% endfact %}
       {% endif %}
       {% if connection.caller_device.dns_name %}{% fact "MagicDNS" %}<code>{{ connection.caller_device.dns_name|breakable }}</code>{% endfact %}{% endif %}
       {% if connection.caller_device.tags %}
@@ -116,9 +116,9 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
         {% body %}
           {% if hop.check or hop.source %}<p class="muted">{% if hop.check %}{{ hop.check.label|breakable:"." }} {{ hop.check.detail|breakable }}{% endif %}{% if hop.source %} Read from {% with mark=hop.source.observed_at|then:",|." %}{{ hop.source.phrase|breakable:mark }}{% endwith %}{% if hop.source.observed_at %} {{ hop.source.observed_at|when }}.{% endif %}{% endif %}</p>{% endif %}
           {% if hop.check.step %}{% notice tone="warning" %}{{ hop.check.step|breakable }}{% endnotice %}{% endif %}
-          {% if hop.certificate %}<p class="conn-row-note">{{ hop.certificate.statement|breakable }}</p>{% endif %}
-          {% if hop.unread %}<p class="conn-row-note">{{ hop.unread|capfirst|breakable }}</p>{% endif %}
-          {% for relation, link in hop.overlays %}<p class="conn-row-note">{{ relation|breakable }} {% entity link %}</p>{% endfor %}
+          {% if hop.certificate %}<p class="muted">{{ hop.certificate.statement|breakable }}</p>{% endif %}
+          {% if hop.unread %}<p class="muted">{{ hop.unread|capfirst|breakable }}</p>{% endif %}
+          {% for relation, link in hop.overlays %}<p class="muted">{{ relation|breakable }} {% entity link %}</p>{% endfor %}
           {% if hop.evidence %}
             {% table_region "Evidence" %}
               <table class="data-table">

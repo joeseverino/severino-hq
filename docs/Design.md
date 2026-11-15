@@ -561,7 +561,7 @@ addresses) are `{% title_meta %}`, written by the template its view names as
 wraps whole, so no line opens on a dot.
 
 **A route reads in one direction.** A path from one thing to another
-(`control_plane/_path_hops.html`) is one surface, each hop a stop on one
+(`partials/_path_hops.html`) is one surface, each hop a stop on one
 line with its icon on the line. It runs across its box when every hop has
 room for its kind and an address with its port, and down it otherwise, as
 the connection panel draws its route; it never wraps onto a second row.
@@ -1510,7 +1510,7 @@ the link in its network's color and the verdict's. It stacks the three in one
 column when its own box is too narrow for them, wherever it is drawn. Its
 `#carriage` is a fact's value: which network the link rides over, with a lookup
 of the address a link across the internet comes from. The dialog's shell before
-the panel arrives (`core/_connection_loading.html`) is the panel's own box.
+the panel arrives (`partials/_connection_loading.html`) is the panel's own box.
 *Catalog:* `part/connection-peering`, `part/connection-peering-network`,
 `part/connection-peering-relayed`, `part/connection-carriage`,
 `part/connection-loading`.
@@ -1830,7 +1830,11 @@ Decoration:
 1. Find the primitive. Most pages are a head, a band or card of facts, and a
    table or list.
 2. If one almost fits, extend it in its sheet and its partial, with a comment
-   saying what it covers and why.
+   saying what it covers and why. A page writes no class of its own: only
+   CLASSES and the classes of a shared part, one under `templates/partials/`
+   that code or two pages draw. A widget drawn once in the product is drawn
+   from those, or named with its reason in `hand_rolled.ONE_OF_A_KIND`, a
+   list that only shrinks.
 3. A new container of content is a surface: add its selector to the surface
    list, write only its layout.
 4. A new state of a page (empty, failing, waiting, crowded) gets a fixture in

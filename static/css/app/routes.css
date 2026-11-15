@@ -3,7 +3,7 @@
 
 @layer components {
 
-/* A route (control_plane/_path_hops.html): one surface, each hop a stop on
+/* A route (partials/_path_hops.html): one surface, each hop a stop on
    one line, its icon on the line. Down the box, as the connection panel draws
    its route, unless every hop fits across it whole: then across, one row,
    never wrapped onto a second where the line would run off the page's edge.

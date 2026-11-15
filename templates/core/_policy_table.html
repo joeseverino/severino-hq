@@ -19,8 +19,8 @@ agent's rule stands beneath the action it sets.
         {% row_group group.label %}
         {% for row in group.rows %}
           <tr>
-            <th scope="row">{{ row.label|breakable }}{% if row.effect_label %} <span class="policy-effect effect-{{ row.effect }}">{{ row.effect_label|breakable }}</span>{% endif %}</th>
-            <td class="policy-default">{{ row.default|breakable }}</td>
+            <th scope="row">{{ row.label|breakable }}{% if row.effect_label %} {% status row.effect_label tone=row.effect_tone pill=False %}{% endif %}</th>
+            <td class="muted">{{ row.default|breakable }}</td>
             {% for cell in row.cells %}<td>{% include "core/_policy_setting.html" %}</td>{% endfor %}
           </tr>
         {% endfor %}

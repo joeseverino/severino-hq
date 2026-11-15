@@ -10,7 +10,7 @@ from hq.platform.application.tests.reads import reads
 from hq.platform.core.stylesheets import STATIC, sheet_paths, stylesheet
 from hq.platform.core.table_cells import ROLE_CLASSES
 
-from .hand_rolled import hand_rolled_classes, literal_classes
+from .hand_rolled import ONE_OF_A_KIND, hand_rolled_classes, literal_classes, needless_exemptions
 from .source import template_files
 
 
@@ -605,18 +605,6 @@ class TemplateClassStyleTests(SimpleTestCase):
             "name a size the dialog offers (partials/_modal.html), or add it beside .modal-wide in forms.css",
         )
 
-    def test_host_templates_draw_only_the_shared_parts_classes(self):
-        """A host page is drawn from the shared parts, so a class of its own is
-        a hand-rolled part the survey never sees and an extension cannot draw."""
-
-        self.assertEqual(
-            sorted(f"templates/{name}: .{word}" for name, word in hand_rolled_classes()),
-            [],
-            "draw it with a shared part or one of its options (hq_sdk.template_contract.CLASSES, or a template "
-            "the component catalog draws); a widget with no part becomes one, with its own entry in "
-            "hq/platform/core/tests/browser/catalog/families/",
-        )
-
     def test_literal_classes_reads_attributes_and_tag_options(self):
 
         self.assertEqual(
@@ -637,3 +625,29 @@ class TemplateClassStyleTests(SimpleTestCase):
             ),
             {"tab", "tab-current", "band", "list", "table", "is-dense", "is-start"},
         )
+
+
+@tag("source", "tree")
+@reads("**/templates/**", "hq/**/*.py", "hq_sdk/**/*.py")
+class HandRolledClassTests(SimpleTestCase):
+    """A host page writes only the classes the shared parts declare, and a
+    part is one that code or two pages draw (hand_rolled.parts), so the
+    Python that draws a part is read beside the templates."""
+
+    def test_host_templates_draw_only_the_shared_parts_classes(self):
+        """A host page is drawn from the shared parts, so a class of its own is
+        a hand-rolled part the survey never sees and an extension cannot draw."""
+
+        self.assertEqual(
+            sorted(f"templates/{name}: .{word}" for name, word in hand_rolled_classes()),
+            [],
+            "draw it with a shared part or one of its options (hq_sdk.template_contract.CLASSES, or a part "
+            "under templates/partials/ that two pages or a tag draw); a widget with no part becomes one",
+        )
+
+    def test_a_one_of_a_kind_widget_is_listed_only_while_it_draws_its_own_classes(self):
+        """The list of one-of-a-kind widgets only shrinks: an entry whose
+        widget became a shared part, or is drawn from them, leaves it."""
+
+        self.assertTrue(ONE_OF_A_KIND)
+        self.assertEqual(sorted(needless_exemptions()), [], "remove it from hand_rolled.ONE_OF_A_KIND")

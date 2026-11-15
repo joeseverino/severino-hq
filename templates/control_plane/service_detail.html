@@ -39,9 +39,9 @@ is open.
   {% if routes|length > 1 %}
     {% comment %}Two answers of one kind (an A and an AAAA record) are two routes via the same DNS, so each is named by its answer too.{% endcomment %}
     {% firstof "Via "|add:route.via_phrase as heading %}{% if route.hops.0.name %}{% firstof heading|add:" to "|add:route.hops.0.name as heading %}{% endif %}
-    {% section heading %}{% include "control_plane/_path_hops.html" with route=route label="Path via "|add:route.via %}{% endsection %}
+    {% section heading %}{% include "partials/_path_hops.html" with route=route label="Path via "|add:route.via %}{% endsection %}
   {% else %}
-    {% include "control_plane/_path_hops.html" with route=route label="Path via "|add:route.via %}
+    {% include "partials/_path_hops.html" with route=route label="Path via "|add:route.via %}
   {% endif %}
   {% include "control_plane/_service_parts.html" %}
 {% empty %}

@@ -24,7 +24,7 @@ from hq.platform.application.capability_policy import RULE_LABELS
 from hq.platform.application.findings import findings
 from hq.platform.application.linked_accounts import GITHUB, linked_login
 from hq.platform.application.security import WEB_INTERFACE, cli_principal, web_principal
-from hq.platform.application.tests.markup import all_elements, elements, select, with_class, within
+from hq.platform.application.tests.markup import all_elements, elements, select, within
 from hq.platform.application.topology import derive_topology
 from hq.platform.core import seeds
 from hq.platform.core.audit import ANONYMOUS, audited_labels
@@ -172,7 +172,7 @@ class ExampleEstateTests(TestCase):
         for option in chosen:
             (setting,) = [element for element in option.ancestors if element.tag == "select"]
             self.assertIn(f"toned-{RULE_TONES.get(option.attrs['value'], 'neutral')}", setting.classes)
-        self.assertTrue(with_class(page, "policy-unavailable"), "a cell past an agent's grant")
+        self.assertTrue(select(page, "data-unavailable"), "a cell past an agent's grant")
         # An agent a viewer signed in: what of its grant is in force, and what is beyond their role.
         row = " ".join(element.words for element in within(page, "data-client", "example-reader"))
         self.assertTrue(within(page, "data-role", "viewer"))

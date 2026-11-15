@@ -80,7 +80,7 @@ docstring is the rule.
 | Rule | What it holds |
 | --- | --- |
 | `lint:css` | Stylelint under `tools/lint/stylelint.config.mjs`: tokens, spacing, color |
-| `StyleContractTests`, `TemplateClassStyleTests` | CSS, layers |
+| `StyleContractTests`, `TemplateClassStyleTests`, `HandRolledClassTests` | CSS, layers |
 | `TemplateCommentTests` | what a `{# #}` comment left open is |
 | `FileSizeTests` | no source or test file past `SEVERINO_FILE_LINE_LIMIT` |
 | `PageReadCapabilityTests` | every routed page reads under one capability (`required_capability`, else `read`), refused before its view; a route that answers without a session authorizes itself |

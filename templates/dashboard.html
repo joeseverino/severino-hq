@@ -76,7 +76,7 @@ is said here, over the ones most recently changed, and nowhere else on the page.
   {% partialdef calendar inline %}
   {% if not calendar.empty %}
   {% section moment=calendar.month when="month" id="dashboard-calendar" data_fragment=True data_fragment_name="calendar" data_fragment_links=True data_fragment_history="replace" %}
-    {% include "calendars/_month_grid.html" with compact=True %}
+    {% include "partials/_month_grid.html" with compact=True %}
   {% aside %}
       <nav class="calendar-nav" aria-label="Change month">
         <a href="{{ calendar_paging.previous }}" rel="prev" aria-label="Previous month">&lsaquo;</a>

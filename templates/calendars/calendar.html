@@ -8,7 +8,7 @@ opening a day ask this page for the `calendar` part and take it in place.
 {% partialdef calendar inline %}
 <div class="split" id="calendar" data-fragment data-fragment-name="calendar" data-fragment-links data-fragment-history="replace">
   {% section moment=calendar.month when="month" id="calendar-month" %}
-    {% include "calendars/_month_grid.html" %}
+    {% include "partials/_month_grid.html" %}
   {% aside %}
     <nav class="calendar-nav" aria-label="Change month">
       <a href="{{ previous_url }}" rel="prev" aria-label="Previous month" data-hotkey="ArrowLeft k p">&lsaquo;</a>

@@ -285,24 +285,6 @@ details[open] > summary .ladder-more::after { transform: rotate(90deg); }
   .check-ladder.is-route > .ladder-rung > details > summary > .ladder-mark { grid-row: span 3; }
 }
 
-/* ----- Favorites (control_plane/_service_pin.html) ---------------------- */
-
-/* The star keeps a full touch target but hangs into the cell's padding, so
-   the name starts on the line every other cell in the row starts on. */
-.name-line > .pin-toggle { margin-block: -7px; }
-.pin-toggle, .pin-step {
-  display: inline-flex; align-items: center; min-height: var(--control-size); padding: 0 var(--space-1);
-  font-weight: 500; line-height: 1;
-}
-.pin-toggle { font-size: var(--text-lg); color: var(--muted); }
-.pin-toggle:hover { color: var(--ink-2); }
-.pin-toggle.pinned { color: var(--warn); }
-/* Each arrow hangs its hit area beside it (page.css), so a pair sits far
-   enough apart that the two areas never share a pixel, at either pointer. */
-.pin-move { display: inline-flex; gap: var(--space-6); margin-left: auto; }
-.pin-step { font-size: var(--text-xs); color: var(--muted-2); }
-.pin-step:hover { color: var(--ink); }
-
 /* An empty table has nothing to head: the headings wait until there is. */
 .data-table:not(:has(tbody td:not([colspan]))) thead { display: none; }
 
