@@ -32,13 +32,12 @@ from .standards import CheckResult, Standing
 from .tone import Tone
 from .ui import ended
 lazy from . import connections
-lazy from .card_items import Insight
 lazy from .connection_security import request_readings
-lazy from .dashboard import queue_item
+lazy from .dashboard import finding_rows
 lazy from .derived_reads import serialize_hop
 lazy from .facts import Subject, readings
+lazy from .finding_model import Finding, OperatorStep
 lazy from .hq_self import own_addresses, served_at, served_port, site_label
-lazy from .item_help import instructions
 lazy from .locate import index_of
 lazy from .projection import complete, iso
 
@@ -628,26 +627,26 @@ class RequestPath:
     @property
     def finding_rows(self) -> tuple[dict[str, Any], ...]:
         """Each step this request contradicts, as the queue's row: the step, what
-        disagrees, and the step that resolves it as what to do."""
+        disagrees, and the step that resolves it as what to do.
 
-        return tuple(
-            queue_item(
-                "request-path",
-                "Request path",
-                Insight(
-                    status=Tone.ATTENTION,
-                    eyebrow="",
+        A finding of this request alone, never an estate rule's: a rule reads
+        the estate (``FindingEstate``), and a request is not part of it."""
+
+        return finding_rows(
+            "request-path",
+            "Request path",
+            (
+                Finding(
+                    rule="request-path",
+                    subject="",
+                    part=hop.step,
+                    severity=Tone.ATTENTION,
                     title=hop.label,
-                    value="",
-                    body=hop.check.detail,
-                    why="This request disagrees with what HQ declares for this step, so the step is not doing what HQ expects.",
-                    workflow=instructions(f"request-path:{hop.step}", hop.check.step),
-                    key=f"request-path:{hop.step}",
-                    # A hop is judged from this request beside several readings, none of whose age is the finding's.
-                    observed_at=None,
-                ),
-            )
-            for hop in self.findings
+                    explanation=hop.check.detail,
+                    steps=(OperatorStep(label=hop.check.step),),
+                )
+                for hop in self.findings
+            ),
         )
 
     @property

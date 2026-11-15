@@ -10,23 +10,25 @@ from django.test import RequestFactory, SimpleTestCase
 
 from hq.platform.application.action_items import by_source
 from hq.platform.application.card_items import Insight
-from hq.platform.application.dashboard import queue_item
+from hq.platform.application.dashboard import queue_entry
 from hq.platform.application.markup_testing import Element, all_elements
 
 
 def _item(title: str, *, family: str = "", status: str = "attention") -> dict:
-    return queue_item(
-        "example",
-        "Example",
-        Insight(
-            status=status,
-            eyebrow="",
-            title=title,
-            value="",
-            body=f"What {title} means.",
-            key=f"example:{title}",
-            family=family,
-        ),
+    return queue_entry(
+        {
+            "source_id": "example",
+            "source": "Example",
+            "item": Insight(
+                status=status,
+                eyebrow="",
+                title=title,
+                value="",
+                body=f"What {title} means.",
+                key=f"example:{title}",
+                family=family,
+            ),
+        }
     )
 
 

@@ -157,7 +157,7 @@ class ComposedQueueTests(TestCase):
         from hq.domains.expenses.models import Expense
         from hq.domains.receipts.models import Receipt
 
-        from ..dashboard import queue_item
+        from ..dashboard import queue_entry
         from ..decisions import decision
         from ..domains import all_domains, domain_attention_items
         from .test_github_estate import store
@@ -194,7 +194,7 @@ class ComposedQueueTests(TestCase):
             with self.subTest(item=entry["item"].key):
                 self.assertTrue(item_help(entry["item"]))
                 # The panel behind its urgency leads with why, in words.
-                shown = decision(queue_item(entry["source_id"], entry["source"], entry["item"]))
+                shown = decision(queue_entry(entry))
                 self.assertTrue(shown["origin"]["why"].strip())
 
     def test_every_finding_the_example_estate_raises_says_what_was_read_and_the_bar_it_crossed(self):

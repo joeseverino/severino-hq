@@ -52,7 +52,7 @@ from hq.platform.core.models import AgentIdentity
 from hq.platform.core.templatetags.action_tags import MOST_BESIDE
 from hq.platform.core.tests.browser.catalog.common import DRAWN_AT, HEAD, Entry
 from hq.platform.core.tests.browser.selectors import SELECTORS
-lazy from hq.platform.application.dashboard import queue_item
+lazy from hq.platform.application.dashboard import queue_entry
 lazy from hq.platform.application.github_estate import Repository
 lazy from hq.platform.application.github_posture import posture_of
 lazy from hq.platform.application.path_model import Certificate, Hop, Route
@@ -191,18 +191,20 @@ def _problems(*titles, family="", status="attention"):
     """The queue's items about a thing, each with its meaning and the check that reads again."""
 
     return [
-        queue_item(
-            "example",
-            "Example",
-            Insight(
-                status=status,
-                eyebrow="",
-                title=title,
-                value="",
-                body="What it means for the thing this page is about, in one sentence.",
-                key=f"example:{title}",
-                family=family,
-            ),
+        queue_entry(
+            {
+                "source_id": "example",
+                "source": "Example",
+                "item": Insight(
+                    status=status,
+                    eyebrow="",
+                    title=title,
+                    value="",
+                    body="What it means for the thing this page is about, in one sentence.",
+                    key=f"example:{title}",
+                    family=family,
+                ),
+            }
         )
         for title in titles
     ]

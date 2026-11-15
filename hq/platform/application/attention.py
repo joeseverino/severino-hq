@@ -138,7 +138,8 @@ def finding_insight(finding: Any, findings_url: str) -> Insight:
         awaiting_fix=finding.awaiting_fix,
         body=finding.explanation,
         action=finding.primary.label if finding.primary else "",
-        url=finding.primary.url if finding.primary else f"{findings_url}?rule={finding.rule}",
+        # A finding of a page's own (an unmet check, a step a request contradicts) has no rule the findings page lists.
+        url=finding.primary.url if finding.primary else f"{findings_url}?rule={finding.rule}" if rule else "",
         subject=finding.subject_link,
         since=finding.since,
         observed_at=finding.observed_at,

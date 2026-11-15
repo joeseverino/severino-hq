@@ -465,3 +465,20 @@ class ServicePageLinkTests(SimpleTestCase):
             Service(hostname="www.example.com", facets=()).url,
             entity_link("service", "www.example.com").url,
         )
+
+
+class ServiceFaultRowTests(SimpleTestCase):
+    """A service's faults on its own page are the finding they raise on the queue."""
+
+    def test_its_faults_are_one_row_in_the_findings_words(self):
+        from ..services import Service
+
+        faults = ("No certificate covers it.", "The proxy points at a host HQ does not know.")
+
+        rows = Service(hostname="www.example.com", facets=(), faults=faults).fault_rows
+
+        # As the queue's finding of them is titled (``contradiction_findings``).
+        self.assertEqual(
+            [row["label"] for row in rows], ["www.example.com: No certificate covers it, and 1 more problem"]
+        )
+        self.assertEqual(rows[0]["detail"], " ".join(faults))

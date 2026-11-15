@@ -13,8 +13,8 @@ from typing import Any, Self
 
 from .labels import dotted
 from .tone import Tone
-lazy from .card_items import Insight
-lazy from .dashboard import queue_item
+lazy from . import dashboard
+lazy from .finding_model import Finding, OperatorStep
 lazy from .workflow_contracts import ActionLink
 
 
@@ -214,21 +214,27 @@ class Measurement:
         return "\n".join(result.check.unmet for result in self.unmet if result.check.serious)
 
     @property
-    def gaps(self) -> tuple[dict[str, Any], ...]:
-        """What it does not meet, as the queue's rows: serious first, then the
-        rest, then each it fails by design with why."""
+    def findings(self) -> tuple[Finding, ...]:
+        """What it does not meet, serious first, then the rest, then each it
+        fails by design with why."""
 
         unmet = sorted(self.unmet, key=lambda result: not result.check.serious)
-        return tuple(gap(result.check) for result in unmet) + tuple(
-            _row(
-                f"{result.check.unmet} by design",
-                result.reason,
-                status=Tone.GOOD,
-                key=result.check.id,
-                why="It fails this check on purpose, for the reason given, so nothing needs doing.",
+        return tuple(unmet_finding(result.check) for result in unmet) + tuple(
+            Finding(
+                rule=_rule(result.check),
+                subject="",
+                title=f"{result.check.unmet} by design",
+                severity=Tone.GOOD,
+                explanation=result.reason,
             )
             for result in self.intended
         )
+
+    @property
+    def finding_rows(self) -> tuple[dict[str, Any], ...]:
+        """Its findings as the queue's rows, for the page about its subject."""
+
+        return dashboard.finding_rows("standards", "Standards", self.findings)
 
     def state_of(self, check_id: str) -> str:
         """``met``, ``unmet``, ``intended``, ``unavailable``, or blank for a check that does not apply."""
@@ -259,23 +265,24 @@ def measure(
     return Measurement(subject, tuple(results), enforced)
 
 
-def gap(check: Check, *, facts: tuple[tuple[str, str], ...] = (), links: tuple[ActionLink, ...] = ()) -> dict[str, Any]:
-    """A check not met, as the queue's row: what is wrong, why it matters, and
-    the fix as what to do; ``facts`` and ``links`` say where it fails."""
+def unmet_finding(
+    check: Check, *, evidence: tuple[tuple[str, str], ...] = (), offers: tuple[ActionLink, ...] = ()
+) -> Finding:
+    """A check not met: what is wrong, why it matters, and its fix as the step
+    to take; ``evidence`` and ``offers`` say where it fails."""
 
-    return _row(
-        check.unmet,
-        check.why,
-        status=Tone.SERIOUS if check.serious else Tone.ATTENTION,
-        key=check.id,
-        why=check.why,
-        action=check.fix,
-        facts=facts,
-        links=links,
+    return Finding(
+        rule=_rule(check),
+        subject="",
+        title=check.unmet,
+        severity=Tone.SERIOUS if check.serious else Tone.ATTENTION,
+        explanation=check.why,
+        evidence=evidence,
+        offers=offers,
+        steps=(OperatorStep(label=check.fix),),
     )
 
 
-def _row(title: str, body: str, *, status: str, key: str, **more: Any) -> dict[str, Any]:
-    return queue_item(
-        "standards", "Standards", Insight(status=status, eyebrow="", title=title, value="", body=body, key=key, **more)
-    )
+def _rule(check: Check) -> str:
+    # Its own name, apart from every estate rule's: a check's finding is drawn on its subject's page alone.
+    return f"standard.{check.id}"

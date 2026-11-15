@@ -5,6 +5,7 @@ answer, asked once and named here for transport: this module imports no
 model and decides no number.
 """
 
+from collections.abc import Iterable, Mapping
 from dataclasses import asdict
 from functools import partial
 from typing import Any, TypedDict
@@ -12,7 +13,7 @@ from typing import Any, TypedDict
 from django.utils import timezone
 
 from . import sections
-from .attention import readable_by
+from .attention import finding_insight, readable_by
 from .derivations import derivation
 from .derived_inputs import DASHBOARD_READS, QUEUE_READS, READER_QUEUE_READS, composed_variant
 from .domains import (
@@ -23,6 +24,7 @@ from .domains import (
     provided,
     reader_variant,
 )
+from .finding_model import Finding
 from .plugins import source_overview
 from .projection import projection_scope
 from .read_models import ActivityEvent, recent_activity
@@ -31,6 +33,7 @@ from .security import Capability, Principal
 from .workflows import WrittenAction, WrittenWorkflow, serialize_workflow
 lazy from .action_items import item_key, item_revision, waiting_count
 lazy from .card_items import Insight
+lazy from .routes import reverse
 lazy from .ui import DomainOverview
 
 
@@ -85,7 +88,7 @@ def work_queue() -> list[QueueItem]:
     a change to one composes the rest from what is stored.
     """
 
-    return [queue_item(entry["source_id"], entry["source"], entry["item"]) for entry in domain_attention_items()]
+    return [queue_entry(entry) for entry in domain_attention_items()]
 
 
 def _reader(principal: Principal) -> tuple[Any, ...]:
@@ -148,8 +151,23 @@ class QueueItem(TypedDict):
     read_capabilities: list[str]
 
 
-def queue_item(source_id: str, source: str, item: Insight) -> QueueItem:
-    """One action item in the shape the queue partial and the API carry."""
+def queue_entry(entry: Mapping[str, Any]) -> QueueItem:
+    """An entry the queue gathered (``domains.domain_attention_items``), as
+    the queue partial and the API carry it."""
+
+    return _queue_item(entry["source_id"], entry["source"], entry["item"])
+
+
+def finding_rows(source_id: str, source: str, findings: Iterable[Finding]) -> tuple[QueueItem, ...]:
+    """``findings`` as the queue's rows, each worded by ``attention.finding_insight``:
+    how a page draws what is wrong with the thing it is about."""
+
+    url = reverse("control_plane:findings")
+    return tuple(_queue_item(source_id, source, finding_insight(finding, url)) for finding in findings)
+
+
+def _queue_item(source_id: str, source: str, item: Insight) -> QueueItem:
+    # Private, so a row reaches a page only from a gathered entry or a finding.
 
     return {
         "key": item_key(source_id, item),

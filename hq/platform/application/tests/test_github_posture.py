@@ -223,7 +223,7 @@ class PostureViewTests(TestCase):
         response = self.client.get(reverse("posture"))
 
         self.assertIn(project.get_absolute_url(), hrefs(response))
-        self.assertEqual(response.context["unmet"], [])
+        self.assertFalse(response.context["unmet"])
 
     def test_nothing_read_says_so(self):
         response = self.client.get(reverse("posture"))

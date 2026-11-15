@@ -516,7 +516,7 @@ def _urgent_dashboard():
     from uuid import UUID
 
     from hq.platform.application.approvals import DECISIONS, _decision_link
-    from hq.platform.application.dashboard import queue_item
+    from hq.platform.application.dashboard import queue_entry
     from hq.platform.application.workflow_contracts import ActionLink
 
     held = UUID(int=1)
@@ -542,7 +542,10 @@ def _urgent_dashboard():
         "certificate that lapses takes every name it covers down with it.",
         actions=(ActionLink("renew", "Renew certificate", "remote_write", "/example/renew/", method="POST"),),
     )
-    queue = [{**queue_item("example.urgent", "Example", item), "aside": False} for item in (approval, finding)]
+    queue = [
+        {**queue_entry({"source_id": "example.urgent", "source": "Example", "item": item}), "aside": False}
+        for item in (approval, finding)
+    ]
     with (
         _dashboard(populated=False),
         mock.patch("hq.platform.application.action_items.with_aside_state", return_value=queue),
@@ -557,7 +560,7 @@ def _rechecks(*, populated):
     quoted unit name long enough to wrap. No row holds a third button, so a
     table of them is as narrow as two buttons leave it."""
 
-    from hq.platform.application.dashboard import queue_item
+    from hq.platform.application.dashboard import queue_entry
     from hq.platform.application.finding_model import CHECK_AGAIN
     from hq.platform.application.workflow_contracts import ActionLink
 
@@ -570,20 +573,22 @@ def _rechecks(*, populated):
     )
     queue = [
         {
-            **queue_item(
-                "example.rechecks",
-                "Example",
-                Insight(
-                    "serious",
-                    "Example",
-                    title,
-                    "1",
-                    detail,
-                    key=f"example:recheck-{place}",
-                    actions=(
-                        ActionLink("verify", CHECK_AGAIN, Effect.READ, f"/example/check/{place}/", method="POST"),
+            **queue_entry(
+                {
+                    "source_id": "example.rechecks",
+                    "source": "Example",
+                    "item": Insight(
+                        "serious",
+                        "Example",
+                        title,
+                        "1",
+                        detail,
+                        key=f"example:recheck-{place}",
+                        actions=(
+                            ActionLink("verify", CHECK_AGAIN, Effect.READ, f"/example/check/{place}/", method="POST"),
+                        ),
                     ),
-                ),
+                }
             ),
             "aside": False,
         }

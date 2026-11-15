@@ -20,7 +20,7 @@ from hq.platform.application.tone import Tone
 lazy from hq.platform.application import action_items, asks, decisions
 lazy from hq.platform.application.asks import Ask
 lazy from hq.platform.application.capabilities import capability_words
-lazy from hq.platform.application.dashboard import queue_item
+lazy from hq.platform.application.dashboard import queue_entry
 lazy from hq.platform.application.page_parts import html_attributes
 lazy from hq.platform.application.pages import PageAction, offered_now
 lazy from hq.platform.application.ui import button_classes
@@ -93,7 +93,7 @@ def workflow_parts(plan):
 def queue_entries(entries):
     """Keep the SDK attention include on the queue's single projection."""
 
-    return [queue_item(entry.get("source_id", ""), entry["source"], entry["item"]) for entry in entries]
+    return [queue_entry({"source_id": "", **entry}) for entry in entries]
 
 
 @register.filter

@@ -69,7 +69,7 @@ class GapTests(SimpleTestCase):
             ),
         )
 
-        rows = measurement.gaps
+        rows = measurement.finding_rows
 
         self.assertEqual(
             [(row["label"], row["status"]) for row in rows],
@@ -80,3 +80,21 @@ class GapTests(SimpleTestCase):
             ],
         )
         self.assertEqual(rows[2]["detail"], "It answers DNS.")
+
+
+class UnmetCheckRowTests(SimpleTestCase):
+    """A check a subject does not meet reaches its page as a finding, so its
+    row is worded and helped as every finding's is."""
+
+    def test_its_fix_is_the_rows_step_and_it_links_to_no_findings_page(self):
+        from dataclasses import replace
+
+        check = replace(_check("Alerts on", "Alerts are off"), fix="Turn the alerts on.")
+        measurement = Measurement(subject=None, results=(CheckResult(check, Reading.unmet()),))
+
+        (row,) = measurement.finding_rows
+
+        self.assertIn("Turn the alerts on.", str(row["workflow"]))
+        self.assertEqual(row["action"], "")
+        # No rule the findings page lists raised it.
+        self.assertEqual(row["url"], "")

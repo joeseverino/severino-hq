@@ -71,7 +71,7 @@ and many more checks than Source, so beside it Source would stretch empty.
 {% endcomment %}
 {% with chain=item.supply_chain standing=item.standing %}
 {% section "Source" id="supply-chain" %}
-  {% if chain.gaps %}{% include "partials/_work_queue.html" with items=chain.gaps grouped=True here=True dense=True only %}{% endif %}
+  {% if chain.findings %}{% include "partials/_work_queue.html" with items=chain.finding_rows grouped=True here=True dense=True only %}{% endif %}
   {% facts %}
     {% fact "Built from" %}<span class="prose">{% if standing.source|web_url %}{% entity standing.source|outside label=standing.upstream %} {% muted %}{{ standing.source_known_by|breakable }}{% endmuted %}{% elif edit_url %}<a href="{{ edit_url }}">Name the source</a>{% muted %}{% dot %}the image does not say{% endmuted %}{% else %}{% muted %}The image does not say.{% endmuted %}{% endif %}</span>{% endfact %}
     {% if standing.commit_url or standing.provenance.builder or standing.built_on %}{% fact "Built" %}<span class="prose">{% if standing.commit_url|web_url %}{% muted %}at{% endmuted %} {% entity standing.commit_url|outside code=True label=standing.provenance.revision|slice:":7" %} {% endif %}{% if standing.provenance.builder|web_url %}{% muted %}by{% endmuted %} {% entity standing.provenance.builder|outside label="a workflow run" %} {% endif %}{% if standing.built_on %}{% muted %}on{% endmuted %} {% for base in standing.built_on %}<code>{{ base|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endif %}</span>{% endfact %}{% endif %}
@@ -84,7 +84,7 @@ and many more checks than Source, so beside it Source would stretch empty.
 
 {% with posture=item.posture %}
 {% section "Runtime" id="how-it-runs" %}
-  {% if posture.gaps %}{% include "partials/_work_queue.html" with items=posture.gaps grouped=True here=True dense=True only %}{% endif %}
+  {% if posture.findings %}{% include "partials/_work_queue.html" with items=posture.finding_rows grouped=True here=True dense=True only %}{% endif %}
   {% with patch=item.hardening %}{% if patch.any %}
   {% patch id="hardening" %}{% if patch.yaml %}{{ patch.yaml|breakable }}{% endif %}
   {% title %}Add to {% if patch.compose_file %}<code>{{ patch.compose_file|breakable }}</code>{% else %}its compose file{% endif %}

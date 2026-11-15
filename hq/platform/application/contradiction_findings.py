@@ -409,16 +409,23 @@ def _wiring_incomplete(estate: FindingEstate) -> tuple[Finding, ...]:
     resource reconciled is its own rule's, so one problem is never raised twice."""
 
     return tuple(
-        Finding(
-            rule="service-wiring-incomplete",
-            subject=node.id,
-            severity=Tone.ATTENTION,
-            title=_fault_title(node.label, faults),
-            explanation=" ".join(faults),
-            primary=opens("Open service", node.url) if node.url else None,
-        )
+        wiring_incomplete(node.label, faults, url=node.url)
         for node in estate.nodes()
         if node.kind == "service" and (faults := fact_values(node, SERVICE_FAULT))
+    )
+
+
+def wiring_incomplete(hostname: str, faults: tuple[str, ...], *, url: str = "") -> Finding:
+    """What is not set up right for ``hostname``, as its finding says it
+    wherever it is drawn: the queue, and the service's own page."""
+
+    return Finding(
+        rule="service-wiring-incomplete",
+        subject=_subject(hostname),
+        severity=Tone.ATTENTION,
+        title=_fault_title(hostname, faults),
+        explanation=" ".join(faults),
+        primary=opens("Open service", url) if url else None,
     )
 
 

@@ -18,14 +18,11 @@ readings. The path is the next section, drawn once.
   {% endif %}
 {% endfacts %}
 {% comment %}
-What is wrong with this name, as the queue says it. The card about its setup
-carries the faults as its sentence, so they are listed here only when no card
-is open.
+What is wrong with this name, as the queue says it. Its setup's finding
+carries the faults, so they are drawn as that finding when the queue has
+none open about it.
 {% endcomment %}
-{% problems_about as problems %}{% include "partials/_problems.html" %}
-{% if service.faults and not problems %}
-  {% include "partials/_record_list.html" with rows=service.fault_rows label="Setup problems" %}
-{% endif %}
+{% problems_about as problems %}{% if problems or not service.faults %}{% include "partials/_problems.html" %}{% else %}{% include "partials/_problems.html" with problems=service.fault_rows %}{% endif %}
 </div>
 
 {% section "Path" id="path" %}

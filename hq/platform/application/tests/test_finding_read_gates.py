@@ -8,7 +8,6 @@ from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
-from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource
@@ -16,10 +15,10 @@ from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.providers import PROVIDERS
 
 from .. import findings, roles
-from ..attention import finding_insight, readable_by
+from ..attention import readable_by
 from ..connection_setup import setups
 from ..connections import ConnectionAbility, ConnectionInstance, ConnectionLink, ConnectionSpec
-from ..dashboard import queue_item
+from ..dashboard import finding_rows
 from ..derivation_testing import uncached
 from ..finding_model import Finding
 from ..inventory_testing import store
@@ -89,8 +88,7 @@ class TheSeededEstateTests(TestCase):
         """Every finding the operator's estate raises, as a queue item, after the one reader filter."""
 
         _topology, raised = self.raised(credential_model)
-        url = reverse("control_plane:findings")
-        items = [queue_item("hq.findings", "Findings", finding_insight(finding, url)) for finding in raised]
+        items = list(finding_rows("hq.findings", "Findings", raised))
         return readable_by(principal, items)
 
     def test_every_finding_has_a_gate_derived_from_what_it_is_about(self):

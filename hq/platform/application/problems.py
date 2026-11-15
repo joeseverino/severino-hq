@@ -17,7 +17,7 @@ from .derived_inputs import QUEUE_READS, estate_variant
 from .first_seen import about, look_due, note_open
 lazy from . import domains
 lazy from .attention import readable_by
-lazy from .dashboard import queue_item
+lazy from .dashboard import queue_entry
 lazy from .projection import projection_scope
 lazy from .security import Principal
 
@@ -34,7 +34,7 @@ def _by_subject() -> dict[str, tuple[dict[str, Any], ...]]:
 
     found: dict[str, list[dict[str, Any]]] = {}
     for entry in _host_entries():
-        item = queue_item(entry["source_id"], entry["source"], entry["item"])
+        item = queue_entry(entry)
         if item["notice"] or not (item["subject"] or {}).get("url"):
             continue
         found.setdefault(item["subject"]["url"], []).append(item)
@@ -106,11 +106,7 @@ def problems_by_part(parts: Mapping[str, About], principal: Principal) -> tuple[
 
     tests = [_Part.of(name, about) for name, about in parts.items()]
     # A held request is about no part of a page: it is decided on its own.
-    entries = [
-        (entry, queue_item(entry["source_id"], entry["source"], entry["item"]))
-        for entry in _host_entries()
-        if not entry["item"].held
-    ]
+    entries = [(entry, queue_entry(entry)) for entry in _host_entries() if not entry["item"].held]
     told = {id(item) for item in readable_by(principal, [item for _, item in entries])}
     found = []
     for entry, item in entries:

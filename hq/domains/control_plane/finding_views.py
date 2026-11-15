@@ -5,8 +5,7 @@ from typing import override
 
 from django.views.generic import TemplateView
 
-from hq.platform.application.attention import finding_insight
-from hq.platform.application.dashboard import queue_item, waiting
+from hq.platform.application.dashboard import finding_rows, waiting
 from hq.platform.application.findings import coverage, estate_findings, finding_rules, rule_for
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.routes import reverse
@@ -39,14 +38,13 @@ class FindingsView(PageMixin, TemplateView):
         # and offers each rule that raised one, whichever is viewed.
         every = estate_findings(principal=principal)
         raised = tuple(finding for finding in every if not active_rule or finding.rule == active_rule.name)
-        url = reverse("control_plane:findings")
         # The queue's own cards: one renderer for a problem wherever it is drawn.
-        entries = [queue_item(SOURCE_ID, SOURCE, finding_insight(finding, url)) for finding in raised]
+        entries = finding_rows(SOURCE_ID, SOURCE, raised)
 
         counts = Counter(finding.severity for finding in raised)
         context.update(
             {
-                "finding_entries": tuple(entries),
+                "finding_entries": entries,
                 "finding_total": len(every),
                 # Only rules that raised something, or the one being viewed. A
                 # chip for every rule HQ knows is a list of what is fine.
