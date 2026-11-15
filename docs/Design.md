@@ -1147,8 +1147,10 @@ A figure and the word it counts or measures share one line, held by the
 no-break space `breakable` puts between them, so the word never opens a line
 alone below its number. A template never writes the word after the figure
 itself. It uses `{{ n|counted:"check" }}` for a count, and `{{
-miles|floatformat:2|measured:"mi" }}` for a unit or a word the count leaves
-alone (`measured:"more"`). The value tags that say a figure in words (`bytes`,
+miles|measured:"mi,2" }}` for a unit or a word the count leaves alone
+(`measured:"more"`), never `floatformat` before it: the count after the comma
+rounds the figure as `floatformat` would, and `ui.measured` writes the same
+in Python. A measured zero is 0; the missing mark is for no value. The value tags that say a figure in words (`bytes`,
 `seconds`, `when`) join theirs. *Gate:* the `hand-drawn-split-figure` rule,
 over the host's templates and every extension's.
 

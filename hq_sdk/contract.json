@@ -2543,6 +2543,16 @@
           "maximum="
         ]
       },
+      "measured": {
+        "kind": "function",
+        "parameters": [
+          "value",
+          "unit",
+          "places=",
+          "*",
+          "plus="
+        ]
+      },
       "span": {
         "kind": "function",
         "parameters": [

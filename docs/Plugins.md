@@ -1037,8 +1037,8 @@ or markup into an extension is a contract failure. The rules the classes follow 
 in [Design](Design.md).
 
 What the host writes for a value is pinned by example in
-`hq_sdk/text_examples.json`: `span`, `when`, `when_day`, `counted`, `money`,
-`signed_number`, `ended` and `ago`, regenerated and reviewed like the
+`hq_sdk/text_examples.json`: `span`, `when`, `when_day`, `counted`,
+`measured`, `money`, `signed_number`, `ended` and `ago`, regenerated and reviewed like the
 contract.
 
 An extension's test asserts what it composed from them
@@ -1059,11 +1059,19 @@ An amount is written by `{{ amount|money }}` in a template and
 A debt is a negative value. No extension writes a sign of its own, since the
 host holds the sign to its figure so a line never ends between them.
 
-Any other figure takes its sign through
-`hq_sdk.money.signed_number(value, figure, plus=...)`. `figure` writes the
-magnitude in its own units (`lambda drop: f"{drop} bpm"`), and the host puts
-the sign before it by the rule an amount follows. So a value that writes as
-zero is never negative.
+A figure with its unit is written by `{{ miles|measured:"mi,2" }}` in a
+template and `hq_sdk.ui.measured(miles, "mi", 2)` in Python: "4.25 mi",
+"1,250 ft", "12%". The count after the comma is how many decimals, rounded
+half away from zero; a negative count gives them only to a figure that is not
+whole. Left out, the figure is written as it came. Zero is a figure, and only
+None and the empty string are the missing mark. The sign is the host's, so
+`plus=True` signs a change and a figure that rounds to zero is never negative.
+
+A figure whose magnitude is not a number and a unit (a pace, "1:15/mi") takes
+its sign through `hq_sdk.money.signed_number(value, figure, plus=...)`.
+`figure` writes the magnitude in its own units, and the host puts the sign
+before it by the rule an amount follows. So a value that writes as zero is
+never negative.
 
 An overview says what it is built from by putting
 `hq_sdk.pages.built_from(plugin.id)`, a link to the project that names the

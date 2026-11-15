@@ -37,6 +37,32 @@
       "output": "Renews through Example, Inc."
     }
   ],
+  "measured": [
+    {
+      "input": "4.256, 'mi', 2",
+      "output": "4.26 mi"
+    },
+    {
+      "input": "1234.5, 'ft', 0",
+      "output": "1,235 ft"
+    },
+    {
+      "input": "12.5, '%', -1",
+      "output": "12.5%"
+    },
+    {
+      "input": "-0.04, 'min', 1",
+      "output": "0.0 min"
+    },
+    {
+      "input": "0, 'more'",
+      "output": "0 more"
+    },
+    {
+      "input": "None, 'mi'",
+      "output": "\u2013"
+    }
+  ],
   "money": [
     {
       "input": "1234.5",

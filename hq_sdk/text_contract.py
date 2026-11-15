@@ -18,7 +18,7 @@ lazy from django.utils import timezone
 
 lazy from hq.platform.application.derivation_testing import frozen
 lazy from hq_sdk.money import money, signed_number
-lazy from hq_sdk.ui import ago, counted, ended, span, when, when_day
+lazy from hq_sdk.ui import ago, counted, ended, measured, span, when, when_day
 
 EXAMPLES_PATH = Path(__file__).with_name("text_examples.json")
 
@@ -68,6 +68,14 @@ def _examples() -> dict[str, list[tuple[str, Callable[[], str]]]]:
             ("-29, '{} bpm'", lambda: signed_number(-29, "{} bpm".format)),
             ("1.25, '{:.1f} min', plus=True", lambda: signed_number(1.25, "{:.1f} min".format, plus=True)),
             ("-0.04, '{:.1f} min'", lambda: signed_number(-0.04, "{:.1f} min".format)),
+        ],
+        "measured": [
+            ("4.256, 'mi', 2", lambda: measured(4.256, "mi", 2)),
+            ("1234.5, 'ft', 0", lambda: measured(1234.5, "ft", 0)),
+            ("12.5, '%', -1", lambda: measured(12.5, "%", -1)),
+            ("-0.04, 'min', 1", lambda: measured(-0.04, "min", 1)),
+            ("0, 'more'", lambda: measured(0, "more")),
+            ("None, 'mi'", lambda: measured(None, "mi")),
         ],
         "ended": [
             ("'Renews through Example'", lambda: ended("Renews through Example")),

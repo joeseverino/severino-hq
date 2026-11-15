@@ -131,6 +131,18 @@ def signs(pace: float, beats: int, unread: float | None) -> None:
     money.signed_number(pace, str, True)  # type: ignore[call-arg]
 
 
+def measures(pace: float, beats: int, unread: float | None) -> None:
+    # A figure and its unit in one call, rounded and signed where it is written.
+    assert_type(ui.measured(pace, "mi", 2), str)
+    assert_type(ui.measured(-beats, "bpm", plus=True), str)
+    assert_type(ui.measured(unread, "%", -1), str)
+    assert_type(ui.measured("1:23", "measured"), str)
+
+    ui.measured(pace, "mi", "2")  # type: ignore[arg-type]
+    ui.measured(pace, "mi", 2, True)  # type: ignore[call-arg]
+    ui.measured([pace], "mi")  # type: ignore[arg-type]
+
+
 def sentences(registrar: str) -> None:
     assert_type(ui.ended(f"Renews through {registrar}"), str)
 

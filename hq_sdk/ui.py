@@ -36,6 +36,7 @@ from hq.platform.application.ui import (
     counted,
     ended,
     line_chart,
+    measured,
     stacked_bar_chart,
 )
 from hq.platform.core.templatetags.status_tags import status_pill
@@ -75,6 +76,7 @@ __all__ = [
     "dotted",
     "ended",
     "line_chart",
+    "measured",
     "span",
     "stacked_bar_chart",
     "status_pill",

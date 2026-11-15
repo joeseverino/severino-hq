@@ -35,7 +35,7 @@ from hq.platform.application.money import money as _money
 from hq.platform.application.page_parts import html_attributes
 from hq.platform.application.printable import admitted
 from hq.platform.application.tone import Tone
-from hq.platform.application.ui import MISSING, counted as _counted
+from hq.platform.application.ui import MISSING, counted as _counted, measured as _measured
 from hq.platform.core.templatetags.line_breaks import breakable, button_words, code_spans, held, mark_text
 lazy from hq.domains.control_plane.provider_spec import expiry_phrase
 lazy from hq.platform.application import references, request_identity, security
@@ -68,15 +68,31 @@ def counted(count, phrases):
 
 @register.filter
 def measured(value, unit):
-    """``{{ miles|floatformat:2|measured:"mi" }}``: a figure and its unit, or a
-    word the count leaves alone (``measured:"more"``), as one value, so the
-    word never opens a line alone below its number. For a measure no other
-    value tag says (``bytes``, ``seconds``, ``money``) and a word ``counted``
-    would make plural; a missing figure is the missing mark, with no word."""
+    """``{{ miles|measured:"mi,2" }}``: a figure and its unit, or a word the
+    count leaves alone (``measured:"more"``), as one value, so the word never
+    opens a line alone below its number. A count of decimals after a comma
+    rounds the figure as ``floatformat`` would (``"%,-1"``, only when not
+    whole). For a measure no other value tag says (``bytes``, ``seconds``,
+    ``money``) and a word ``counted`` would make plural. ``ui.measured``
+    writes it; a missing figure is the missing mark, with no word."""
 
     if value is None or value == "":
         return or_empty(value)
-    return held(f"{value} {unit}")
+    return held(_measured(value, *measured_unit(unit)))
+
+
+def measured_unit(argument) -> tuple[str, int | None]:
+    """The filter argument as ``(unit, places)``; ``places`` is None when it is left out."""
+
+    unit, comma, places = str(argument).rpartition(",")
+    if not comma:
+        return places, None
+    try:
+        return unit, int(places)
+    except ValueError:
+        raise template.TemplateSyntaxError(
+            f"measured takes a unit and a count of decimals; got {argument!r}."
+        ) from None
 
 
 def counted_phrases(phrases) -> tuple[str, str | None]:
