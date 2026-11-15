@@ -234,3 +234,24 @@ class RunHereTests(TestCase):
         runs = next(at for at, words in enumerate(headings) if words.startswith("Recent runs"))
         containers = next(at for at, words in enumerate(headings) if words.startswith("Containers"))
         self.assertLess(runs, containers)
+
+    def test_the_audit_log_titles_a_run_and_a_scan_as_jobs_does(self):
+        """Each run of a playbook still adopted, whose title is the same now as when it was asked."""
+
+        from hq.platform.application.automation_adoption import playbook_titles
+        from hq.platform.application.work_runs import RUN as LISTED_RUN, hydrated, scan_title, work_rows
+        from hq.platform.core.models import AuditLog
+
+        titled = {*playbook_titles().values(), scan_title()}
+        listed = {
+            row.id: row.title for row in hydrated(work_rows()) if row.source == LISTED_RUN and row.title in titled
+        }
+        asked = dict(
+            AuditLog.objects.filter(object_id__in=listed, action=AuditLog.Action.CREATED).values_list(
+                "object_id", "object_repr"
+            )
+        )
+
+        self.assertTrue(asked)
+        for pk, title in asked.items():
+            self.assertEqual(title, listed[pk])

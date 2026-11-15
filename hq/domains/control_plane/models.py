@@ -17,8 +17,11 @@ from hq.platform.core.models import TimestampedModel
 from hq.platform.core.rules import Rule, one_of, singleton
 lazy from hq.domains.control_plane.provider_adapters.contracts import FAILURES, REFUSALS
 lazy from hq.platform.application.approval_review import title as approval_title
+lazy from hq.platform.application.automation_adoption import playbook_titles
+lazy from hq.platform.application.automation_runs import run_title
 lazy from hq.platform.application.capabilities import capability_title
 lazy from hq.platform.application.security import subject_parts
+lazy from hq.platform.application.work_runs import scan_title
 
 lazy from .providers import readout_rows, registry_label, resource_home
 
@@ -559,6 +562,11 @@ class OperationRequest(TimestampedModel):
 
     @override
     def __str__(self) -> str:
+        # A run and a scan by the title Jobs and their own pages give them.
+        if self.action == self.Action.RUN:
+            return run_title(str((self.input or {}).get("operation") or ""), playbook_titles())
+        if self.action == self.Action.SCAN:
+            return scan_title()
         return f"{self.get_action_display()}: {self.resource.key}"
 
 
