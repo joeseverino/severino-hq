@@ -11,11 +11,10 @@ from dataclasses import dataclass, field, replace
 from functools import cached_property
 from typing import Any
 
-from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.control_plane.names import certificate_covers, in_zone, normalized_hostname
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
-from hq.domains.control_plane.providers import PROVIDERS, registry_label, resource_home, service_facets
+from hq.domains.control_plane.providers import PROVIDERS, operator_label, registry_label, resource_home, service_facets
 
 from .card_items import ListRow
 from .containers import Running, container_watchers
@@ -120,12 +119,7 @@ class Service:
         dns = next((facet for facet in self.facets if facet.id == DNS_FACET), None)
         if dns is None or not _served_by_the_provider(dns):
             return ""
-        for claim in dns.claims:
-            provider = PROVIDERS.get(claim.kind)
-            for name in provider.connection_providers if provider else ():
-                if name in CONNECTION_LABELS:
-                    return CONNECTION_LABELS[name]
-        return ""
+        return next((label for claim in dns.claims if (label := operator_label(claim.kind))), "")
 
     @property
     def project_link(self) -> EntityLink | None:

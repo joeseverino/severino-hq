@@ -11,12 +11,11 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 from hq.domains.control_plane.names import is_hostname, normalized_hostname
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND
 from hq.domains.control_plane.provider_spec import expiry_phrase
-from hq.domains.control_plane.providers import PROVIDERS, read_spec, record_spec
+from hq.domains.control_plane.providers import PROVIDERS, operator_label, read_spec, record_spec
 lazy from hq.platform.core.network import split_host_port
 
 from .entity_links import EntityLink, entity_link, kind_label, web_url
@@ -372,10 +371,7 @@ def _redirect_kinds(*, at_ingress: bool = False) -> tuple[str, ...]:
 def _edge_operator(kind: str) -> str:
     """Who answers in front of the name: the fronting kind's connection provider."""
 
-    return next(
-        (CONNECTION_LABELS[name] for name in PROVIDERS[kind].connection_providers if name in CONNECTION_LABELS),
-        kind_label(kind),
-    )
+    return operator_label(kind) or kind_label(kind)
 
 
 def _edge_certificate(name: str, fronting_kind: str) -> Certificate:

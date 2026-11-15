@@ -16,8 +16,7 @@ from django.utils.text import capfirst
 from hq.domains.control_plane.names import is_hostname
 from hq.platform.application.labels import dotted
 from hq.platform.core.network import split_host_port
-lazy from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
-lazy from hq.domains.control_plane.providers import PROVIDERS
+lazy from hq.domains.control_plane.providers import PROVIDERS, operator_label
 
 from . import tailnet
 from .doors import approved_words
@@ -370,10 +369,7 @@ def _proxy_headers(facts: RequestFacts) -> Reading:
 
     declared = _forwarding_spec()
     client_header, scheme_header = declared.forwarding_headers
-    proxy = next(
-        (CONNECTION_LABELS[name] for name in declared.connection_providers if name in CONNECTION_LABELS),
-        declared.label,
-    )
+    proxy = operator_label(declared.kind)
 
     def header(name: str) -> str:
         return str(facts.request.META.get(f"HTTP_{name.upper().replace('-', '_')}", "") or "").strip()

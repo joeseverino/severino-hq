@@ -13,10 +13,9 @@ from typing import Any
 
 from django.utils.text import capfirst
 
-from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 from hq.domains.control_plane.names import is_hostname, normalized_hostname
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND
-from hq.domains.control_plane.providers import PROVIDERS
+from hq.domains.control_plane.providers import PROVIDERS, operator_label
 from hq.platform.application.labels import dotted
 from hq.platform.core.network import client_ip, is_trusted_proxy, socket_peer, split_host_port
 
@@ -496,14 +495,7 @@ def _forwarder_check(hop: Hop, context: _Context, peer: str, proxy: str) -> HopC
 
 
 def _proxy_name(hop: Hop) -> str:
-    kind = hop.source.kind if hop.source is not None else ""
-    spec = PROVIDERS.get(kind)
-    if spec is None:
-        return hop.label
-    return next(
-        (CONNECTION_LABELS[name] for name in spec.connection_providers if name in CONNECTION_LABELS),
-        spec.label or hop.label,
-    )
+    return operator_label(hop.source.kind if hop.source is not None else "") or hop.label
 
 
 def _declared_headers(hop: Hop) -> tuple[str, ...]:
