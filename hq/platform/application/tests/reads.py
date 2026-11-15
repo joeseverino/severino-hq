@@ -4,10 +4,14 @@ and held to the declaration while it runs.
 ``mise run fast`` runs a declared tree test only on a change its globs
 match, and an undeclared one on every change. As in Bazel, where a test's
 declared inputs are all its sandbox holds, a read outside the declaration
-fails the test: every open of a file under the checkout, every name a
+fails the test: every open of a file under the checkout (``open``,
+``os.open``, an object's source through ``inspect``), every name a
 listing yields there (``rglob``, ``os.walk``, ``os.scandir``, ``glob``),
-every path it stats (``exists``, ``is_file``), and every program it starts. So a declaration that misses a read fails in
-CI's whole run, never by a skipped test going quiet.
+every path it stats (``exists``, ``is_file``), and every program it starts
+(``subprocess``, ``os.system``, ``os.posix_spawn``). So a declaration that misses a read fails in
+CI's whole run, never by a skipped test going quiet. A module's import is the
+process's, which fast selects a test by, so a module imported by a name
+computed as it runs is no read the watch sees: such a test declares nothing.
 
 A file whose content the test reads is in ``*opened``. One it only lists by
 name, or asks whether it is there, is in ``lists``, which a change selects the test by when it adds or
@@ -27,6 +31,7 @@ ignores is no change fast can see, so it is never checked.
 import builtins
 import functools
 import glob
+import inspect
 import io
 import json
 import os
@@ -464,6 +469,78 @@ def _opener(original: Callable[..., Any]) -> Callable[..., Any]:
     return watched
 
 
+def _code_opener(original: Callable[[str], Any]) -> Callable[[str], Any]:
+    @functools.wraps(original)
+    def watched(path: str) -> Any:
+        if (watch := _active()) is not None:
+            watch.opened(path)
+        with _unwatched():
+            return original(path)
+
+    return watched
+
+
+def _descriptor(original: Callable[..., Any]) -> Callable[..., Any]:
+    """``os.open``, below Python's own open: a file opened for reading, never a directory, which the listing
+    that follows names."""
+
+    @functools.wraps(original)
+    def watched(path: Any, flags: int, *args: Any, **kwargs: Any) -> Any:
+        watch = _active()
+        with _unwatched():
+            descriptor = original(path, flags, *args, **kwargs)
+            directory = stat.S_ISDIR(os.fstat(descriptor).st_mode)
+        if watch is not None and kwargs.get("dir_fd") is None and flags & os.O_ACCMODE == os.O_RDONLY and not directory:
+            watch.opened(path)
+        return descriptor
+
+    return watched
+
+
+def _source(original: Callable[..., Any]) -> Callable[..., Any]:
+    """``inspect.findsource``, which every read of an object's source goes through (``getsource``,
+    ``getsourcelines``), by linecache rather than an open."""
+
+    @functools.wraps(original)
+    def watched(found: Any) -> Any:
+        watch = _active()
+        if watch is not None:
+            with _unwatched():
+                try:
+                    path = inspect.getsourcefile(found) or inspect.getfile(found)
+                except TypeError:
+                    path = None
+            watch.opened(path)
+        with _unwatched():
+            return original(found)
+
+    return watched
+
+
+def _shell(original: Callable[..., Any]) -> Callable[..., Any]:
+    @functools.wraps(original)
+    def watched(command: Any) -> Any:
+        if (watch := _active()) is not None:
+            watch.started(["sh", "-c", os.fsdecode(command)], None)
+        with _unwatched():
+            return original(command)
+
+    return watched
+
+
+def _spawner(original: Callable[..., Any]) -> Callable[..., Any]:
+    """A program started past subprocess (``os.posix_spawn``), held as one Popen starts is."""
+
+    @functools.wraps(original)
+    def watched(path: Any, argv: Any, *args: Any, **kwargs: Any) -> Any:
+        if (watch := _active()) is not None:
+            watch.started([os.fsdecode(word) for word in argv] or [os.fsdecode(path)], None)
+        with _unwatched():
+            return original(path, argv, *args, **kwargs)
+
+    return watched
+
+
 def _stat(original: Callable[..., Any]) -> Callable[..., Any]:
     """A stat (``exists``, ``is_file``) tells whether a path is there, which only an add or delete moves, so
     it counts as a listing of that path. Not of a directory that is there: git holds files, so it goes only
@@ -512,4 +589,10 @@ def _install() -> None:
     opener = _opener(builtins.open)
     builtins.open = opener
     io.open = opener  # type: ignore[assignment]
+    io.open_code = _code_opener(io.open_code)
+    os.open = _descriptor(os.open)
+    inspect.findsource = _source(inspect.findsource)
+    os.system = _shell(os.system)
+    os.posix_spawn = _spawner(os.posix_spawn)
+    os.posix_spawnp = _spawner(os.posix_spawnp)
     subprocess.Popen.__init__ = _starter(subprocess.Popen.__init__)  # type: ignore[method-assign]

@@ -33,6 +33,8 @@ def _templates() -> list[str]:
     "mise.lock",
     "tools/pipeline/toolchain.env",
     "controller/go.mod",
+    # A finding's rule is placed by its detector's source line (findings.py), and the detectors live here.
+    "hq/platform/application/*.py",
     lists=("**/*.py", "**/locale/**"),
 )
 class EveryTemplateTests(TestCase):
