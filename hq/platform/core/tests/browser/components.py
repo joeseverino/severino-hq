@@ -684,9 +684,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 '<td>{% include "partials/_ask.html" with ask=ask %}</td></tr></tbody></table>{% endtable_region %}'
                 "<div data-example-region><p>An example line.</p></div>"
                 '<form id="hq-post" method="post" hidden></form>'
-                '<script defer src="{{ static }}js/fragment.js" nonce="{{ nonce }}"></script>'
-                '{% include "partials/_notice_frames.html" %}'
-                '<script defer src="{{ static }}js/ask.js" nonce="{{ nonce }}"></script>',
+                '{% include "scripts/fragment.html" %}{% include "scripts/ask.html" %}',
                 ask=failed,
             ),
             "example/ask": json.dumps(Standing(asks.DONE).as_json()),
@@ -714,9 +712,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 '<a class="btn ghost compact" href="/example/remove/">Remove</a></td></tr></tbody></table>'
                 "{% endtable_region %}"
                 '<form id="hq-post" method="post" hidden></form>'
-                '<script defer src="{{ static }}js/fragment.js" nonce="{{ nonce }}"></script>'
-                '{% include "partials/_notice_frames.html" %}'
-                '<script defer src="{{ static }}js/ask.js" nonce="{{ nonce }}"></script>',
+                '{% include "scripts/fragment.html" %}{% include "scripts/ask.html" %}',
                 ask=Ask("Refresh", "/example/ask/", title="Read the example again.", compact=True),
             ),
             "example/ask": json.dumps(Standing(asks.FAILED, "The example could not be read.").as_json()),
