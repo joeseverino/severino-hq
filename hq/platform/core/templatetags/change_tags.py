@@ -2,8 +2,8 @@
 
 ``{% change_table preview %}`` draws ``partials/_change_table.html`` from an
 ``approval_review.ChangePreview``: a section named by its label, the rows
-under Field, Before and After (Field and Value where nothing stood before)
-in the change's own order, each row's kind of change under Status, each
+under Field, Before and After in the change's own order, each row's kind of
+change under Status (Field and Value alone where nothing stood before), each
 changed record of many one row with its fields folded under it, the records
 that stay named on one line under it, and the line diff of what would not
 parse. An empty preview draws nothing.

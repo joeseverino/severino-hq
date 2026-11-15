@@ -43,7 +43,7 @@ class ChangeTableTests(SimpleTestCase):
     def test_what_is_written_where_nothing_stood_is_one_column(self):
         html = _drawn(compare({}, {"example_name": "after"}, label="Would be applied"))
 
-        self.assertNotIn("Before", _headings(html))
+        self.assertEqual(_headings(html), ["Field", "Value"], "every row would say New")
         self.assertEqual([cell.words for cell in select(html, "data-side")], ["after"])
 
     def test_a_redacted_value_is_said_to_have_changed_and_never_shown(self):
