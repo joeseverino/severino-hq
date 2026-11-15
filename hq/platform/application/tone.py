@@ -7,7 +7,7 @@ a field by it; ``ui`` and ``hq_sdk.ui`` export it.
 from collections.abc import Iterable
 from enum import StrEnum
 
-from django.db.models.enums import TextChoices
+from django.db.models.enums import ChoicesType, TextChoices
 
 
 class Tone(StrEnum):
@@ -74,7 +74,10 @@ class Toned(StrEnum):
         return self.value
 
 
-class TonedChoices(TextChoices, Toned):
+# The metaclass Python derives from the bases anyway, written out because
+# CodeQL cannot derive it through two enum bases and reads the class as a
+# plain ``type``, so every loop over a member set would be reported.
+class TonedChoices(TextChoices, Toned, metaclass=ChoicesType):
     """A model field's stored states, each declared with its tone between its
     value and its label, ``ARCHIVED = "archived", Tone.NEUTRAL, "Archived"``,
     so the column's choices and the color its pill takes are one declaration.
