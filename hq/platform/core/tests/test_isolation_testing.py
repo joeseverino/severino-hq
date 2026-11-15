@@ -22,14 +22,15 @@ from hq.platform.core.example_estate import automation
 from hq.platform.core.test_runner import SeverinoTestRunner
 
 
-def _run(*tests: unittest.TestCase) -> unittest.TestResult:
+def _run(*tests: unittest.TestCase, **options: bool) -> unittest.TestResult:
     """``tests`` in one process, in order, as the runner runs a worker's share.
 
     Each is a plain ``unittest.TestCase``, so it runs inside this test's
-    transaction and its rows are this test's.
+    transaction and its rows are this test's. ``options`` are the runner's
+    (``debug_sql``), each of which may choose a result of Django's own.
     """
 
-    runner = SeverinoTestRunner(verbosity=0)
+    runner = SeverinoTestRunner(verbosity=0, **options)
     suite = runner.test_suite(tests)
     return unittest.TextTestRunner(stream=io.StringIO(), resultclass=runner.get_resultclass(), verbosity=0).run(suite)
 
@@ -92,6 +93,25 @@ class ClassSetupStartsFreshTests(TestCase):
 
         self.assertEqual([said for _, said in result.failures + result.errors], [])
         self.assertEqual(seen, {"heartbeat": False})
+
+    def test_a_test_reads_none_of_what_the_test_before_it_wrote_whichever_result_the_runner_chose(self):
+        seen: dict[str, bool] = {}
+
+        class Hears(unittest.TestCase):
+            def test_1_hears_the_controller(self):
+                cadence.note_controller()
+
+            def test_2_reads(self):
+                seen["heartbeat"] = cadence.controller_standing().here
+
+        for options in ({}, {"debug_sql": True}):
+            with self.subTest(**options):
+                seen.clear()
+
+                result = _run(Hears("test_1_hears_the_controller"), Hears("test_2_reads"), **options)
+
+                self.assertEqual([said for _, said in result.failures + result.errors], [])
+                self.assertEqual(seen, {"heartbeat": False})
 
     def test_a_class_sets_up_on_the_composition_as_it_is_not_as_a_patch_before_it_left_it_cached(self):
         seen: dict[str, set[str]] = {}

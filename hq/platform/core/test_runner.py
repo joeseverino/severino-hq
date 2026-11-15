@@ -420,7 +420,9 @@ class SeverinoTestRunner(DiscoverRunner):
         return suite
 
     def get_resultclass(self):
-        return super().get_resultclass() or CompositionTextResult
+        # --debug-sql and --pdb name a result of Django's own, which keeps ours beside it.
+        named = super().get_resultclass()
+        return CompositionTextResult if named is None else type(named.__name__, (named, CompositionTextResult), {})
 
     @override
     def run_suite(self, suite, **kwargs):
