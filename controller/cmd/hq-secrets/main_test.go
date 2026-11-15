@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -109,5 +110,16 @@ func TestEveryFailureClassHasItsOwnExitCode(t *testing.T) {
 			t.Fatalf("%s and %s share exit code %d", class, other, code)
 		}
 		seen[code] = class
+	}
+}
+
+// A dry run reads the port floor with no configuration at all, and fails when
+// the floor cannot be read, as a render would.
+func TestADryRunFailsOnAnUnreadablePortFloor(t *testing.T) {
+	var stderr bytes.Buffer
+	read := false
+	floor := func() (int, error) { read = true; return 0, errors.New("hidden") }
+	if code := run(context.Background(), []string{"dry-run"}, environment(nil), 0, floor, &stderr); code == 0 || !read {
+		t.Fatalf("a dry run that could not read the port floor exited %d, having read it: %t: %s", code, read, &stderr)
 	}
 }

@@ -16,6 +16,7 @@
 //	hq-host upgrade ARGS     move one compose service to a pinned image (package upgrade)
 //	hq-host unit --serve     stop, start or restart the unit a container names (package unit)
 //	hq-host check            the deploy host's half of a preflight, as any account
+//	hq-host dry-run          read what a unit's run reads of the host, and nothing else
 package main
 
 import (
@@ -44,7 +45,7 @@ import (
 	"github.com/joeseverino/severino-hq/controller/secrets/install"
 )
 
-const usage = "usage: hq-host run-web | controller [--apply | --glance] | renovate | automation | install | deploy IMAGE | release [--stage DIR] IMAGE | sync IMAGE | verify | bootstrap | backup | upgrade ARGS | unit --serve | check --release DIR --main DIR"
+const usage = "usage: hq-host run-web | controller [--apply | --glance] | renovate | automation | install | deploy IMAGE | release [--stage DIR] IMAGE | sync IMAGE | verify | bootstrap | backup | upgrade ARGS | unit --serve | check --release DIR --main DIR | dry-run"
 
 // passes are the controller passes `hq-host controller` launches, by flag.
 var passes = map[string]host.Pass{"": host.Plan, "--apply": host.Apply, "--glance": host.Glance}
@@ -86,6 +87,12 @@ func run(ctx context.Context, args []string, getenv func(string) string, euid in
 	}
 	var err error
 	switch args[0] {
+	case hostcore.DryRun:
+		if len(args) != 1 {
+			fmt.Fprintln(stderr, usage)
+			return 2
+		}
+		err = dryRun()
 	case "run-web":
 		err = runWeb(ctx, args[1:], getenv, stdout, stderr, log)
 	case "controller":
@@ -328,6 +335,16 @@ func renovator(stdout io.Writer) *host.Renovator {
 		OwnerBound: host.RenovateOwnerBound,
 		Now:        time.Now,
 	}
+}
+
+// dryRun reads what a pass reads of the host itself: the mount table, and
+// the renderer's directory's mount. The rehearsal runs it in each unit's
+// sandbox, so a path one hides fails the release before it is installed.
+func dryRun() error {
+	if _, err := os.ReadFile(hostcore.MountTable); err != nil {
+		return err
+	}
+	return install.SystemMounts(hostcore.SecretDir)
 }
 
 func requireConnections() error {

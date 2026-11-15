@@ -18,7 +18,9 @@ import (
 // Rehearsal is where a release rehearses itself before anything live is
 // touched: the image's web process boots on a copy of production's
 // database, and the image's controller plans on copies of the host's
-// connections, identities and certificate state.
+// connections, identities and certificate state. Each program a unit runs
+// from the image's tree starts once in the sandbox the image gives that unit,
+// as a dry run (hostcore.DryRun).
 //
 // Its security properties:
 //   - It runs inside `hq-host release`, so as root only through the runner's
@@ -34,7 +36,10 @@ import (
 //     HQ's account, so nothing it makes beside the live database is root's.
 //   - The controller runs in plan mode, which reads providers and writes to
 //     none, and reaches only the rehearsal's own bridge, never live HQ's.
-//   - It never renders secrets: the renderer restarts the live web unit.
+//   - It never renders secrets: the renderer restarts the live web unit. A
+//     dry run reads the host and writes nothing, under the unit's own
+//     sandbox, as a transient unit of a name no shipped drop-in reaches, so
+//     the live tree's drop-ins do not widen it.
 //   - It is lent no sealing key (SealDir), and its web no public key, so
 //     nothing in it seals a secret or opens one.
 //   - Only the verdict line reaches the public log; each step's output is
@@ -80,10 +85,10 @@ print(sqlite3.connect("file:/data/` + Database + `?mode=ro", uri=True).execute("
 )
 
 // verdict is the rehearsal's one line: each check, "-" for one not reached.
-type verdict struct{ ready, socket, integrity, jobs, memory, plan, live string }
+type verdict struct{ sandbox, ready, socket, integrity, jobs, memory, plan, live string }
 
 func (v verdict) passed() bool {
-	for _, value := range []string{v.ready, v.socket, v.integrity, v.jobs, v.memory, v.plan} {
+	for _, value := range []string{v.sandbox, v.ready, v.socket, v.integrity, v.jobs, v.memory, v.plan} {
 		if value != "yes" && value != "ok" {
 			return false
 		}
@@ -96,8 +101,8 @@ func (v verdict) String() string {
 	if v.passed() {
 		result = "pass"
 	}
-	return fmt.Sprintf("result=%s ready=%s socket=%s integrity=%s jobs=%s memory=%s plan=%s live=%s",
-		result, v.ready, v.socket, v.integrity, v.jobs, v.memory, v.plan, v.live)
+	return fmt.Sprintf("result=%s sandbox=%s ready=%s socket=%s integrity=%s jobs=%s memory=%s plan=%s live=%s",
+		result, v.sandbox, v.ready, v.socket, v.integrity, v.jobs, v.memory, v.plan, v.live)
 }
 
 // rehearse refuses image unless it passes its rehearsal.
@@ -142,7 +147,7 @@ type rehearsing struct {
 }
 
 func (r *rehearsing) run(ctx context.Context) (said verdict) {
-	said = verdict{ready: "no", socket: "-", integrity: "-", jobs: "-", memory: "-", plan: "-", live: "-"}
+	said = verdict{sandbox: "-", ready: "no", socket: "-", integrity: "-", jobs: "-", memory: "-", plan: "-", live: "-"}
 	ctx, cancel := context.WithTimeout(ctx, rehearsalBound)
 	defer cancel()
 	r.clear()
@@ -157,6 +162,7 @@ func (r *rehearsing) run(ctx context.Context) (said verdict) {
 		}
 	}()
 
+	said.sandbox = r.sandboxes(ctx)
 	if !r.copyDatabase(ctx) {
 		return said
 	}
@@ -190,6 +196,67 @@ func (r *rehearsing) run(ctx context.Context) (said verdict) {
 	}
 	said.plan = r.plan(ctx)
 	return said
+}
+
+// sandboxes starts each program a shipped service runs from the image's tree
+// once, as a dry run, in the sandbox the image's units and drop-ins give that
+// service, and waits for it to end. It is "ok" when every one exits 0, else
+// "refused-" and the first service whose dry run failed.
+func (r *rehearsing) sandboxes(ctx context.Context) string {
+	tree := filepath.Join(r.scratch, "tree")
+	if err := os.MkdirAll(r.scratch, 0o700); err != nil {
+		fmt.Fprintln(r.log, err)
+		return "unread"
+	}
+	if err := r.extract(ctx, r.image, tree); err != nil {
+		fmt.Fprintln(r.log, err)
+		return "unread"
+	}
+	units := filepath.Join(tree, "deploy", "systemd")
+	shipped, err := Shipped(units)
+	if err != nil {
+		fmt.Fprintln(r.log, err)
+		return "unread"
+	}
+	for _, unit := range shipped {
+		if strings.Contains(unit, "/") || !strings.HasSuffix(unit, ".service") {
+			continue
+		}
+		assignments, err := serviceAssignments(filepath.Join(units, unit))
+		if err != nil {
+			fmt.Fprintln(r.log, err)
+			return "unread"
+		}
+		program := ""
+		for _, assignment := range assignments {
+			if line, ok := strings.CutPrefix(assignment, "ExecStart="); ok && unitProgram(line) != "" {
+				program = unitProgram(line)
+			}
+		}
+		if program == "" {
+			continue
+		}
+		properties, err := sandboxProperties(units, unit, shipped)
+		if err != nil {
+			fmt.Fprintln(r.log, err)
+			return "unread"
+		}
+		args := append([]string{"--wait", "--pipe", "--quiet", "--collect", "--service-type=exec",
+			"--unit=" + dryRunUnit(unit), "--property=RuntimeMaxSec=1min"}, properties...)
+		args = append(args, "--", filepath.Join(tree, "deploy", "bin", program), hostcore.DryRun)
+		if _, err := r.exec(ctx, "systemd-run", args...); err != nil {
+			return "refused-" + strings.TrimSuffix(unit, ".service")
+		}
+	}
+	return "ok"
+}
+
+// dryRunUnit names the transient unit a dry run of unit runs as. No shipped
+// drop-in directory's name is a prefix of it (systemd.unit(5)), so the live
+// tree's sandbox never adds to the one the release ships.
+func dryRunUnit(unit string) string {
+	name := strings.TrimPrefix(strings.TrimSuffix(unit, ".service"), "severino-hq-")
+	return "hq-rehearsal-" + strings.ReplaceAll(name, "@", "") + ".service"
 }
 
 // copyDatabase copies production's database into the rehearsal's volume,

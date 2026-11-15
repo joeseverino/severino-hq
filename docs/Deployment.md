@@ -418,6 +418,13 @@ nothing. `hq-host deploy`:
 5. Rehearses the release on a copy of production's data, touching nothing
    live (`Rehearsal` in `controller/host/rehearse.go`, which states its
    security properties). It renders no secrets.
+   - Each service that runs a program of the image's tree (`hq-host`,
+     `hq-secrets`) starts that program once with `dry-run`, through
+     `systemd-run --wait`, in the sandbox the image's own unit and drop-ins
+     give it. A dry run makes the program's reads of the host (the mount
+     table, the renderer's tmpfs, the port floor under `/proc/sys`) and
+     nothing else, so a path the sandbox hides, a system call it filters or a
+     setting this systemd refuses fails the release here.
    - The database is copied read-only, as HQ's account, into a scratch volume.
    - The image's web process boots on the copy with no network. It is checked
      for readiness, its bridge socket, the copy's integrity, scheduled work
@@ -427,7 +434,7 @@ nothing. `hq-host deploy`:
    - The live web unit and container must not have restarted meanwhile.
 
    The public log gets one verdict line,
-   `Rehearsal: result=pass ready=yes socket=ok ...`, and
+   `Rehearsal: result=pass sandbox=ok ready=yes ...`, and
    `/var/log/severino-hq/rehearsal.log` each step's output. A failed check, or
    too little free space for the copy, refuses the release as not deployed,
    before anything below runs.

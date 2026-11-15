@@ -24,4 +24,10 @@ const (
 	AppEnvName = "severino_hq_env"
 	// RunDir is the doorbell directory HQ and the controller share.
 	RunDir = "/run/severino-hq"
+
+	// DryRun is the one argument on which each program a unit runs from the
+	// tree makes its reads of the host and nothing else. A deploy's
+	// rehearsal starts each so in its unit's sandbox, where a path the
+	// sandbox hides fails the release before it is installed.
+	DryRun = "dry-run"
 )

@@ -256,3 +256,105 @@ func TestARehearsalNeedsRoomForItsCopy(t *testing.T) {
 		t.Error("a release with no room to rehearse went on")
 	}
 }
+
+// imageRunsFromTheTree gives the image being deployed a service that runs a
+// program of its tree under the shared sandbox and a widening of its own.
+func (f *fakeHost) imageRunsFromTheTree(t *testing.T) {
+	t.Helper()
+	for name, body := range map[string]string{
+		"severino-hq-example.service":                   "[Unit]\nDescription=Example\n\n[Service]\nType=oneshot\nExecStartPre=/bin/rm -f /run/example\nExecStart=" + Lib + "/deploy/bin/hq-secrets\nTimeoutStartSec=4min\nRuntimeDirectory=example\nReadWritePaths=/run/example\n",
+		"severino-hq-.service.d/20-sandbox.conf":        "[Service]\nProcSubset=pid\nCapabilityBoundingSet=\nSystemCallFilter=~@privileged @resources\n",
+		"severino-hq-example.service.d/30-sandbox.conf": "[Service]\nProcSubset=all\nCapabilityBoundingSet=CAP_CHOWN\n",
+		"severino-hq-other.service":                     "[Service]\nExecStart=/usr/bin/docker exec example true\n",
+		"../bin/hq-secrets":                             "#!/bin/sh\n",
+	} {
+		path := filepath.Join(f.image, "deploy", "systemd", name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// Each program a shipped service runs from the image's tree starts once
+// before anything live is held, in a transient unit no live drop-in reaches,
+// under the sandbox the image's own files give that service, in the order
+// systemd reads them, and with nothing of what the service runs or owns.
+func TestARehearsalStartsEachProgramInItsUnitsSandbox(t *testing.T) {
+	f := newFakeHost(t)
+	f.active = []string{"severino-hq-secrets.timer"}
+	if err := f.machine.Record(running); err != nil {
+		t.Fatal(err)
+	}
+	f.imageRunsFromTheTree(t)
+	d, _ := newDeployer(f)
+	f.rehearses(&rehearsal{})
+
+	if err := d.Release(context.Background(), next); err != nil {
+		t.Fatalf("%v\n%s", err, f.out.String())
+	}
+
+	var runs []string
+	for _, call := range f.calls() {
+		if strings.HasPrefix(call, "systemd-run ") {
+			runs = append(runs, call)
+		}
+	}
+	if len(runs) != 1 {
+		t.Fatalf("want one dry run, of the one service that runs a program of the tree:\n%s", strings.Join(runs, "\n"))
+	}
+	run := runs[0]
+	f.before(t, "systemd-run ", "systemctl stop severino-hq-secrets.timer")
+	if !strings.Contains(run, "--wait") || !strings.Contains(run, "--unit=hq-rehearsal-example.service") {
+		t.Errorf("the dry run is not waited on as a unit of its own: %s", run)
+	}
+	program := filepath.Join(f.machine.Runtime, rehearsed, "tree", "deploy", "bin", "hq-secrets")
+	if !strings.HasSuffix(run, " -- "+program+" dry-run") {
+		t.Errorf("the dry run is not the image's program in its dry run: %s", run)
+	}
+	order := []string{"--property=ReadWritePaths=/run/example", "--property=ProcSubset=pid", "--property=CapabilityBoundingSet=",
+		"--property=SystemCallFilter=~@privileged @resources", "--property=ProcSubset=all", "--property=CapabilityBoundingSet=CAP_CHOWN"}
+	at := 0
+	for _, property := range order {
+		i := strings.Index(run[at:], property)
+		if i < 0 {
+			t.Fatalf("the dry run's sandbox lacks %s, or not after what systemd reads before it: %s", property, run)
+		}
+		at += i + len(property)
+	}
+	for _, left := range []string{"ExecStart", "Type=", "TimeoutStartSec", "RuntimeDirectory", "Description"} {
+		if strings.Contains(run, "--property="+left) {
+			t.Errorf("the dry run was given %s: %s", left, run)
+		}
+	}
+	f.rehearsalLeftNothing(t)
+}
+
+// A program its sandbox refuses fails the rehearsal, naming the service, and
+// nothing live is touched.
+func TestARefusedDryRunFailsTheRehearsal(t *testing.T) {
+	f := newFakeHost(t)
+	f.active = []string{"severino-hq-secrets.timer"}
+	if err := f.machine.Record(running); err != nil {
+		t.Fatal(err)
+	}
+	f.imageRunsFromTheTree(t)
+	d, _ := newDeployer(f)
+	f.rehearses(&rehearsal{})
+	f.fail = []string{"systemd-run "}
+
+	err := d.Release(context.Background(), next)
+
+	if err == nil || OutcomeOf(err) != DeployNotDeployed {
+		t.Fatalf("a release its sandbox refused ended %v:\n%s", err, f.out.String())
+	}
+	if !strings.Contains(f.out.String(), "result=fail sandbox=refused-severino-hq-example ") {
+		t.Errorf("the verdict does not name the refused service:\n%s", f.out.String())
+	}
+	if f.called("systemctl stop") {
+		t.Error("a release its sandbox refused held the live units")
+	}
+	f.rehearsalLeftNothing(t)
+}

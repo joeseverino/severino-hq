@@ -215,37 +215,6 @@ func sudoUnitBreaks(t *testing.T, dir string) []string {
 	return breaks
 }
 
-// dropInsOf is every shipped drop-in systemd reads for unit, in the order it
-// reads them (systemd.unit(5)): from the directory of each name made by
-// truncating unit's after a dash, a template's, and unit's own, a file in a
-// later one replacing one of the same name in an earlier, all sorted by name.
-func dropInsOf(unit string, shipped []string) []string {
-	base, suffix := unit[:strings.LastIndex(unit, ".")], unit[strings.LastIndex(unit, "."):]
-	var dirs []string
-	for i := range len(base) {
-		if base[i] == '-' {
-			dirs = append(dirs, base[:i+1]+suffix+".d")
-		}
-	}
-	if template, _, instance := strings.Cut(base, "@"); instance {
-		dirs = append(dirs, template+"@"+suffix+".d")
-	}
-	dirs = append(dirs, unit+".d")
-	byName := map[string]string{}
-	for _, dir := range dirs {
-		for _, name := range shipped {
-			if file, ok := strings.CutPrefix(name, dir+"/"); ok {
-				byName[file] = name
-			}
-		}
-	}
-	files := slices.Sorted(maps.Keys(byName))
-	for i, file := range files {
-		files[i] = byName[file]
-	}
-	return files
-}
-
 // effective is what systemd ends with for key of a shipped unit in dir, read
 // across its file and every drop-in that reaches it: the last value, and the
 // words of every value since the last empty one, which is what a list setting
