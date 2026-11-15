@@ -14,6 +14,7 @@ BROKEN_WORDS = (
     "(identifier) => {"
     + DESCRIBE
     + TEXT_SHOWN
+    + f"const anywhere = '{SELECTORS['breaks_anywhere']}';"
     + """
   const found = [];
   const range = document.createRange();
@@ -53,6 +54,7 @@ BROKEN_WORDS = (
       const beneath = open && node.parentElement.closest('tr[data-row-detail] > td > *');
       const room = beneath && 2 * line < inside(beneath) ? inside(beneath) : line;
       const token = node.parentElement.closest(identifier);
+      const loose = !!node.parentElement.closest(anywhere);
       for (const run of node.textContent.matchAll(/\\S+/g)) {
         const [wide, length] = token
           ? [tokenWidth(token) > line, token.textContent.trim().length]
@@ -62,13 +64,13 @@ BROKEN_WORDS = (
           const rects = across(node, at, at + match[0].length);
           if (new Set(rects.map((r) => Math.round(r.top))).size < 2) continue;
           // A closed row's run wider than its line breaks wherever its column
-          // is. An open row shows a value whole, breaking it at its seams,
+          // is, and a name's or a pill's lone word too, as an identifier's. An open row shows a value whole, breaking it at its seams,
           // spaces and hyphens: a word breaks there only when what it stands
           // in between two of them is wider than all the room the row has.
           const part = [...run[0].matchAll(/[^-]*-?/g)].find((p) => p.index <= match.index && match.index < p.index + p[0].length);
           const must = open
             ? widthOf(node, run.index + part.index, run.index + part.index + part[0].length) > room
-            : wide && match[0].length < length;
+            : wide && (loose || match[0].length < length);
           if (!must) found.push(`${describe(cell)} breaks "${match[0]}"`);
         }
       }

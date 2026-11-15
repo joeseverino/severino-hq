@@ -270,7 +270,7 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
   .data-table > tbody { --row-pad: var(--space-6); }
   .data-table [data-kind] .narrow-more, .data-table .wide-only, .data-table > * > tr > [data-narrow] { display: none; }
   .data-table .narrow-only { display: inline; }
-  :is(.row-columns > [data-narrow], .data-table > tbody > tr:has(+ .row-detail [data-narrow]) .row-expand) { display: grid; }
+  :is(.row-columns > [data-narrow], .data-table > tbody > tr:has(+ .row-detail [data-narrow], .cell-clamp) .row-expand) { display: grid; }
   .row-detail .row-controls { display: flex; --control-compact: var(--target-min); }
   .data-table[data-marks] > * > tr > * { padding: var(--space-3) var(--space-1); }
 }
@@ -284,7 +284,7 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 .data-table [data-kind] :is(.row-more, .line-rest), .row-detail .row-less { display: none; }
 /* The gutter the toggle stands in is kept in every row and the heading of a table where any row can open, so names share one edge. */
 .data-table > tbody > tr > .row-gutter { position: relative; }
-.data-table:has(> tbody > tr.row-detail, .row-fold) > * > tr > .row-gutter { padding-inline-start: var(--row-gutter); }
+.data-table:has(> tbody > tr.row-detail, .row-fold, .cell-clamp) > * > tr > .row-gutter { padding-inline-start: var(--row-gutter); }
 .data-table .row-gutter > [data-row-toggle] { position: absolute; inset-inline-start: var(--space-3); inset-block-start: calc(var(--row-pad) - var(--space-1)); }
 /* A column of a row's controls (`actions-col`, a public class) holds them on one line. */
 .actions-col { white-space: nowrap; }
@@ -300,9 +300,9 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 /* A row's buttons moved or copied there stand side by side, wrapping as the line asks. */
 .row-detail .row-later { display: flex; }
 .row-detail :is(.row-later, .row-controls) { flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-4); }
-/* An entry: its label in a column as wide as the labels, what it shows beside it in the rest of the row, on a panel. */
+/* An entry: its label in a column as wide as the labels, its labels wrapping past two fifths of the line, what it shows beside it in the rest of the row, on a panel. */
 .row-columns {
-  display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: baseline; gap: var(--space-5) var(--space-6); margin: 0;
+  display: grid; grid-template-columns: fit-content(40%) minmax(0, 1fr); align-items: baseline; gap: var(--space-5) var(--space-6); margin: 0;
   padding: var(--space-5) var(--space-6); border-radius: var(--radius); background: var(--bg-tint); container: row-columns / inline-size;
 }
 .row-columns > * { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; align-items: inherit; }

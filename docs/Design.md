@@ -275,15 +275,15 @@ class of the page's:
   `tr` with `{% row_state emphasized=True %}`: its cells are tinted and its
   links weigh more.
 
-**Opening a row moves nothing.** An open row keeps its cells as they were,
-a clamp included. What it holds back stands on the line the server draws
-after it (`tr.row-detail`, `table_tags._detail_row`), whose content asks its
-columns for no width: its controls where they left it, the blocks it moves
-there, then an entry for each cell that holds something back, a copy under
-its column's name. A copy says when it shows: where its column has left
-(`data-drop`), in a narrow box (`data-narrow`: a `narrow-more` part, a clamped
-value), or always (a part the row never shows). So every column keeps its
-edges and every other row its height. *Gate:*
+**Opening a row moves no column.** An open row keeps its cells as they were,
+but for a clamp in a narrow box, which it releases in place. What it holds
+back stands on the line the server draws after it (`tr.row-detail`,
+`table_tags._detail_row`), whose content asks its columns for no width: its
+controls where they left it, the blocks it moves there, then an entry for
+each cell that holds something back, a copy under its column's name. A copy
+says when it shows: where its column has left (`data-drop`), in a narrow box
+(`data-narrow`: a `narrow-more` part), or always (a part the row never
+shows). So every column keeps its edges and every other row its height. *Gate:*
 `test_opening_a_row_moves_no_column_and_no_other_row`.
 
 - A `row-below` block, which the row's line never shows, and the row's editor
@@ -311,9 +311,9 @@ a toggle written by hand there is refused. Only a table with no headings to
 name its gutter draws its own (`{% row_toggle %}`), last in its cell, outside
 the cell's clamp and its copy. It shows only where opening the row shows
 something now: an entry whose column has left or whose narrow box holds, a
-`row-later` or `row-below` part, a part the row never shows, or a fold. A
-value held by its clamp on a wide line is whole in its cell's title there,
-so it opens no row on a wide line.
+`row-later` or `row-below` part, a part the row never shows, a clamp in a
+narrow box, or a fold. A value held by its clamp on a wide line is whole in
+its cell's title there, so it opens no row on a wide line.
 
 A run of short parts in a cell (a project's technologies, what a connection
 reads or reaches) is `{% line_list values as value %}…{% endline_list %}`, with
@@ -374,7 +374,9 @@ A long value in a cell (a line past `table_cells.LONG`) wraps and is held to
 its third line by a clamp with its mark (`.cell-clamp`, cuts.css), its whole
 value in its cell's title (written by the server). Only words are held: each
 part of words in it (`data-cell`) is clamped on its own, so a pill or a
-toggle beside them stays whole. A
+toggle beside them stays whole. An identifier, a name or a pill breaks
+anywhere its column lacks room; prose breaks only inside a word wider than
+its column. A
 status, a figure, a date or a control is never cut: its column is as wide
 as it is. `room=` on a region is accepted, since an extension passes it, and
 asks for nothing.
@@ -1008,8 +1010,8 @@ state says it in ink, as `.figure` with its tone class
 (`<span class="figure tone-attention">`).
 
 An address, a path or a command breaks only where `|breakable` lets it (after
-a dot or a slash, before a port). It never breaks inside a hyphenated name, or
-so that one or two characters of it stand alone on a line. A length of time
+a dot or a slash, before a port); in a table's cell it breaks elsewhere only
+where its column lacks room for it. A length of time
 keeps each count with its unit.
 
 So every value a template prints as text, in a sentence too, ends in

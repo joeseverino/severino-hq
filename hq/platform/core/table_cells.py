@@ -20,7 +20,7 @@ _SECTIONS = ("thead", "tbody", "tfoot")
 _OFF_LINE = frozenset({"visually-hidden", "row-below", "row-more", "narrow-only", "row-editor", "row-later"})
 # The characters of a line of a value past which it may run longer than the
 # few lines its cell holds it to: such a cell is clamped (`cell-clamp`,
-# cuts.css), and its row's open line shows it whole.
+# cuts.css), and its row, opened in a narrow box, shows it whole.
 LONG = 48
 # The kinds whose values wrap and may be clamped, each saying its whole value
 # in its title; the others (a status, a figure, a control) keep their line,
@@ -99,10 +99,8 @@ class _Cell:
     text: list[str] = field(default_factory=list)
     controls: bool = False
     parts: list[_Part] = field(default_factory=list)
-    # What it holds that its row shows only on its open line (``_HELD``), and
-    # whether its value is held to a few lines (`cell-clamp`).
+    # What it holds that its row shows only on its open line (``_HELD``).
     holds: set[str] = field(default_factory=set)
-    clamped: bool = False
     # Where each element that names the row starts: a leading `<strong>`, or
     # the `<strong>` in a leading link.
     names: list[tuple[int, int]] = field(default_factory=list)
@@ -495,7 +493,6 @@ class Cells(HTMLParser):
             if said and "title" not in cell.attrs:
                 marks.append(f' title="{html.escape(said)}"')
             if cell.longest > LONG and cell.closed:
-                cell.clamped = True
                 self.clamps.append((cell.opened, cell.value_end))
         return marks
 
@@ -514,9 +511,10 @@ class Cells(HTMLParser):
         then each block it keeps beneath itself and its buttons past the
         first few), then an entry for each cell that holds something back,
         under its column's name. A cell's entry is a copy of what it says:
-        shown at every width for a value clamped on the row or a part the
-        row never shows, and otherwise only where its column has left
-        (`data-drop`) or a narrow box has let its part go (`data-narrow`)."""
+        shown at every width for a part the row never shows, and otherwise
+        only where its column has left (`data-drop`) or a narrow box has let
+        its part go (`data-narrow`). A clamped value is never copied: an open
+        row releases its clamp in place (cuts.css)."""
 
         blocks: list[Span] = []
         entries: list[LineEntry] = []
@@ -535,11 +533,8 @@ class Cells(HTMLParser):
             self.cuts += [((start, 0), (end, None)) for start, end in [*editors, *(span for _, span in moved)]]
             blocks += [span for label, span in moved if not label]
             always = always or bool(moved)
-            # A clamped value is whole in its title on a wide line, where words
-            # mostly fit; a narrow box, where its clamp holds, shows it whole
-            # here, so a row offers its toggle only where opening shows more.
             shown = bool(cell.holds & {"row-more", "line-rest"})
-            narrow = cell.clamped or "narrow-more" in cell.holds
+            narrow = "narrow-more" in cell.holds
             if not cell.says_nothing and (shown or at in levels or narrow):
                 when = "" if shown else f' data-drop="{levels[at]}"' if at in levels else ""
                 when += " data-narrow" if narrow and not shown else ""

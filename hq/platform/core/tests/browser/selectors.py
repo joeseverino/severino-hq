@@ -206,6 +206,9 @@ SELECTORS = {
     "cell_token": "main .data-table > tbody > tr > td .token",
     # An identifier as `breakable` draws it, one run however its seams split it.
     "identifier": ".token",
+    # What in a table's cell breaks anywhere its column lacks room, as an
+    # identifier does (cuts.css): a name and a pill.
+    "breaks_anywhere": '[data-kind="name"], .pill',
     "wraps_in_a_cell": (
         "tr.row-detail, .row-gutter, [data-cell], .table-clamp, code.cell-whole, .btn,"
         " .token:not([data-sole]), [popover]"

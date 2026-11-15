@@ -88,12 +88,13 @@
 .menu-item-note { color: var(--muted); font-size: var(--text-2xs); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* A long value in a table's cell (`cell-clamp`, table_cells) wraps and is
-   held to its third line, with its mark; its cell's title and its row's open
-   line show it whole. Only words are held: each part of words in it
+   held to its third line, with its mark; its cell's title shows it whole,
+   and in a narrow box, where the title is out of reach, opening its row
+   releases the clamp in place. Only words are held: each part of words in it
    (`data-cell`) is clamped on its own, so a mark or a toggle beside them
    stays whole, and a cell of no such part is clamped whole. WebKit lays a
-   value's boxes out past the clamp, so the box holds three lines too. The
-   open line shows the value whole, so nothing there is clamped. */
+   value's boxes out past the clamp, so the box holds three lines too. A
+   column's copy on the open line is whole, so nothing there is clamped. */
 .cell-clamp:not(:has([data-cell]), .row-detail *) { display: -webkit-box; }
 .cell-clamp:not(.row-detail *) [data-cell]:not([data-cell] *) { display: -webkit-inline-box; vertical-align: top; }
 .cell-clamp:not(:has([data-cell]), .row-detail *), .cell-clamp:not(.row-detail *) [data-cell]:not([data-cell] *) {
@@ -102,13 +103,15 @@
      fill the box; one that holds something to press has lines a target tall. */
   &:has(a[href], [tabindex]) { line-height: var(--target-min); }
   & * { line-height: inherit; }
+  @container table-region (width < 36rem) { &:is(.is-expanded *) { -webkit-line-clamp: none; line-clamp: none; max-block-size: none; } }
 }
-/* An identifier (a hash, a key, a host) may break anywhere, so one with no
-   break in it asks its column for no more than a letter: the table still
-   gives each column its whole line when the box holds it. Words break only
-   where one alone is wider than its column (tables.css). */
-.data-table > tbody > tr > [data-kind="identifier"],
-.data-table td :is(code:not(.cell-whole), .token) { overflow-wrap: anywhere; }
+/* An identifier (a hash, a key, a host), a name or a pill may break
+   anywhere, so one with no break in it asks its column for no more than a
+   letter: the table still gives each column its whole line when the box
+   holds it. Prose breaks only where one word alone is wider than its column
+   (tables.css). */
+.data-table > tbody > tr > :is([data-kind="identifier"], [data-kind="name"]),
+.data-table td :is(code:not(.cell-whole), .token, .pill) { overflow-wrap: anywhere; }
 /* A part of a run (`line_list`) is whole on its line while the line holds it (the run wraps between its parts); one longer than the line takes the line and wraps at its words. */
 .data-table > tbody > tr > td .line-list > :not(.line-rest) { min-inline-size: 0; }
 .data-table > tbody > tr > td .line-list > :not(.line-rest) > .cell-part { white-space: normal; }
