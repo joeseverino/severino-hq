@@ -1,6 +1,7 @@
 from typing import override
 
 from django.db import models
+from django.urls import reverse
 
 
 class Note(models.Model):
@@ -16,3 +17,6 @@ class Note(models.Model):
     @override
     def __str__(self) -> str:
         return self.title
+
+    def get_absolute_url(self) -> str:
+        return reverse("example_extension:note", args=[self.slug])

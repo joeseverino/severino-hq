@@ -3164,6 +3164,9 @@
       "readout": {
         "argument": "none"
       },
+      "record": {
+        "argument": "optional"
+      },
       "span": {
         "argument": "none"
       },

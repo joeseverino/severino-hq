@@ -219,6 +219,39 @@ class OutsideLinkTests(SimpleTestCase):
                 self.assertIn("abc", html)
 
 
+class RecordLinkTests(SimpleTestCase):
+    """A record is linked by the page its model declares."""
+
+    def setUp(self):
+        from hq.domains.projects.models import Project
+
+        self.project = Project(name="Example app", slug="example-app")
+
+    def test_a_record_is_named_by_its_own_page(self):
+        html = _render("{% entity row|record label=row.name %}", row=self.project)
+
+        (link,) = elements(html, "a")
+        self.assertEqual(link.attrs["href"], self.project.get_absolute_url())
+        self.assertEqual(link.attrs["data-entity"], "Project")
+        self.assertEqual(link.words, "Example app")
+
+    def test_a_section_of_the_page_is_its_anchor(self):
+        html = _render('{% entity row|record:"updates" label="2 open updates" %}', row=self.project)
+
+        (link,) = elements(html, "a")
+        self.assertEqual(link.attrs["href"], f"{self.project.get_absolute_url()}#updates")
+
+    def test_no_record_draws_the_missing_mark(self):
+        html = _render("{% entity row|record %}", row=None)
+
+        self.assertEqual(elements(html, "a"), [])
+        self.assertEqual(html, _render("{% empty_value %}"))
+
+    def test_a_thing_with_no_page_of_its_own_is_refused(self):
+        with self.assertRaises(AttributeError):
+            _render("{% entity row|record %}", row={"name": "example"})
+
+
 class ReadingTests(SimpleTestCase):
     PARTIALS = ("partials/_reading.html", "partials/_readings.html")
 

@@ -8,11 +8,11 @@ built only from ids a record stores.
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Annotated, Any
+from typing import Annotated, Any, Protocol
 from urllib.parse import urlsplit
 
 from pydantic import ConfigDict, with_config
-lazy from django.utils.text import slugify
+lazy from django.utils.text import capfirst, slugify
 
 from hq.domains.control_plane.names import LEADS_TO, names_a_host, normalized_hostname
 from hq.domains.control_plane.observations import OBSERVATIONS
@@ -331,6 +331,28 @@ def declared_link(label: str, url: str = "", kind: str = "target") -> EntityLink
         external=bool(web_url(url)),
         kind=kind,
         kind_label=kind_label(kind),
+    )
+
+
+class Addressed(Protocol):
+    """A record with a page of its own, as Django declares one."""
+
+    def get_absolute_url(self) -> str: ...
+
+
+def record_link(row: Addressed, section: str = "") -> EntityLink:
+    """A record by its own page, the address its model declares, so no page
+    spells the record's route and key. ``section`` is the part of the page
+    the link opens at (``updates`` for ``#updates``)."""
+
+    url = row.get_absolute_url()
+    meta = getattr(row, "_meta", None)
+    return EntityLink(
+        label=str(row),
+        url=f"{url}#{section}" if section else url,
+        kind=meta.label_lower if meta else "",
+        kind_label=capfirst(meta.verbose_name) if meta else "",
+        identity=str(getattr(row, "pk", "") or ""),
     )
 
 

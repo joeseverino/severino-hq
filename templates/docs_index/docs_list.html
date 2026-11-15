@@ -1,6 +1,6 @@
 {% extends "list_page.html" %}
 {% block row %}
-  <td><a href="{{ row.get_absolute_url }}"><strong>{{ row.title|breakable }}</strong></a></td>
+  <td><strong>{% entity row|record label=row.title %}</strong></td>
   <td><code>{{ row.doc_id|breakable }}</code></td>
   <td>{{ row.get_doc_type_display|breakable }}</td>
   <td>{{ row.get_environment_display|breakable }}</td>

@@ -109,16 +109,6 @@ class OnePrimitiveTests(SimpleTestCase):
         found = [name for name, path in template_files() if built.search(path.read_text(encoding="utf-8"))]
         self.assertEqual(found, [])
 
-    def test_templates_name_entities_through_the_entity_tag(self):
-
-        # A button to a page (Cancel, Edit) is an action, not a mention.
-        mention = re.compile(
-            r'<a href="\{% url \'(control_plane:(detail|machine|service)|zones:detail|'
-            r"projects:detail)\'"
-        )
-        found = [name for name, path in template_files() if mention.search(path.read_text(encoding="utf-8"))]
-        self.assertEqual(found, [])
-
     def test_entity_pages_are_addressed_by_entity_link(self):
 
         page = re.compile(

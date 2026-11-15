@@ -61,7 +61,7 @@ would be a page about anybody.
     {% fact "HQ's GitHub App" %}
       {% if app_repositories %}
         Installed, reading {{ app_repositories|length }} of your repositories
-        <ul class="dot-list">{% for item in app_repositories %}<li{% if item.repo.private %} class="prose"{% endif %}>{% if item.project %}<a href="{{ item.project.get_absolute_url }}">{{ item.repo.short|breakable }}</a>{% else %}{% entity item.repo.url|outside label=item.repo.short %}{% endif %}{% if item.repo.private %} {% muted %}(private){% endmuted %}{% endif %}</li>{% endfor %}<li>{% entity "https://github.com/settings/installations"|outside label="Manage on GitHub" %}</li></ul>
+        <ul class="dot-list">{% for item in app_repositories %}<li{% if item.repo.private %} class="prose"{% endif %}>{% if item.project %}{% entity item.project|record label=item.repo.short %}{% else %}{% entity item.repo.url|outside label=item.repo.short %}{% endif %}{% if item.repo.private %} {% muted %}(private){% endmuted %}{% endif %}</li>{% endfor %}<li>{% entity "https://github.com/settings/installations"|outside label="Manage on GitHub" %}</li></ul>
       {% else %}
         {% muted %}Not reading any repository this account owns.{% endmuted %}
       {% endif %}

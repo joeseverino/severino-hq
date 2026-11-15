@@ -119,6 +119,7 @@ FILTERS = (
     "or_empty",
     "outside",
     "readout",
+    "record",
     "span",
     "when",
     "when_text",

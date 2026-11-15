@@ -1,7 +1,7 @@
 {% extends "list_page.html" %}
 {% block summary %}{% include "expenses/_cost_totals.html" %}{% endblock %}
 {% block row %}
-  <td><a href="{{ row.get_absolute_url }}"><strong>{{ row.item_name|breakable }}</strong></a></td>
+  <td><strong>{% entity row|record label=row.item_name %}</strong></td>
   <td>{{ row.vendor|or_empty }}</td>
   <td>{{ row.get_category_display|breakable }}</td>
   <td>{% muted %}{{ row.purchase_date|when }}{% endmuted %}</td>

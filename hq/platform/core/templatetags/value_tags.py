@@ -21,6 +21,7 @@ from hq.platform.application.entity_links import (
     declared_link as declared,
     entity_link,
     kind_label as label,
+    record_link,
     web_url as _web_url,
 )
 from hq.platform.application.labels import DOT_MARKUP, human_bytes
@@ -525,6 +526,16 @@ def outside(url):
     no href from data HQ did not write (``web_url``)."""
 
     return declared("", _web_url(url), kind="dependency")
+
+
+@register.filter
+def record(row, section=""):
+    """``{% entity row|record label=row.name %}``: a record named by its own
+    page, which its model declares (``get_absolute_url``), never a route and
+    key a template spells; ``row|record:"updates"`` opens it at ``#updates``.
+    No record names nothing, drawn as the missing mark."""
+
+    return None if row is None else record_link(row, str(section or ""))
 
 
 @register.filter

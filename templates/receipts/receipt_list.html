@@ -1,6 +1,6 @@
 {% extends "list_page.html" %}
 {% block row %}
-  <td><a href="{{ row.get_absolute_url }}"><strong>{{ row.label|breakable }}</strong></a></td>
+  <td><strong>{% entity row|record label=row.label %}</strong></td>
   <td>{{ row.date|when }}</td>
   <td>{{ row.amount|money }}</td>
   <td>{% present row.related_expense|default:row.related_asset %}{% include "receipts/_linked_to.html" with receipt=row expense_label=row.related_expense.item listed=True %}{% endpresent %}</td>
