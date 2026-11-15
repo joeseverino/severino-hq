@@ -595,13 +595,15 @@ document.addEventListener("input", (event) => {
 // listener for the page, so a block drawn later (a fragment, an opened row)
 // copies the same way. The button (`data-copy`) copies the <pre> of the
 // nearest box around it that holds one, which is plain selectable text too.
+// A no-break space `|breakable` holds two words with is copied as the space
+// it stands for, as a selection copies it: a shell or a parser reads only that.
 document.addEventListener("click", async (event) => {
   const button = event.target.closest("[data-copy]");
   if (!button) return;
   const source = button.closest(":has(> pre)")?.querySelector(":scope > pre");
   if (!source) return;
   try {
-    await navigator.clipboard.writeText(source.textContent.trim());
+    await navigator.clipboard.writeText(source.textContent.trim().replaceAll("\u00a0", " "));
     button.textContent = "Copied";
   } catch {
     button.textContent = "Select it to copy";

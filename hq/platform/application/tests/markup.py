@@ -224,6 +224,13 @@ def actions(html) -> list[str]:
     return [element.attrs.get("action", "") for element in _shown(html) if element.tag == "form"]
 
 
+def copied(block: Element) -> str:
+    """What a Copy button puts on the clipboard from ``block``, a <pre>: its
+    text as app.js reads it, a no-break space as the space it stands for."""
+
+    return block.text.strip().replace("\xa0", " ")
+
+
 def text(html) -> str:
     """The words a reader sees, whitespace collapsed."""
 

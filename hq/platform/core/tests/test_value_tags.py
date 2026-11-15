@@ -1,4 +1,5 @@
 import re
+from html import unescape
 
 from django import forms
 from django.test import SimpleTestCase
@@ -230,6 +231,14 @@ class BreakableTests(SimpleTestCase):
         self.assertIn("Due in ", drawn)
         self.assertEqual(str(breakable("12 of example.com")).count("\xa0"), 1)
         self.assertNotIn("\xa0", str(breakable("80 example.com")))
+
+    def test_a_line_the_text_breaks_stays_broken(self):
+        """A block of code keeps each of its lines, whatever the word that
+        opens the next one."""
+
+        for block in ('user: "1000:1000"\n    ports:', "Due in 80\ndays"):
+            with self.subTest(block=block):
+                self.assertEqual(unescape(re.sub(r"<[^>]*>", "", str(breakable(block)))), block)
 
     def test_it_is_marked_a_token_and_nothing_is_one(self):
         self.assertIn('class="token"', breakable("example.com"))

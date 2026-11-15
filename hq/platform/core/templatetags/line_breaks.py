@@ -329,9 +329,10 @@ def _held_back(words: list[str], at: int) -> bool:
 
 def _held_places(words: list[str]) -> list[int]:
     """Where in ``words`` (split by ``_WORDS``, so every second piece is the
-    whitespace between two) a word stays on the line of the one before it."""
+    whitespace between two) a word stays on the line of the one before it.
+    A line the text itself breaks (a block of code) is never joined back."""
 
-    return [at for at in range(2, len(words), 2) if _held_back(words, at)]
+    return [at for at in range(2, len(words), 2) if "\n" not in words[at - 1] and _held_back(words, at)]
 
 
 def held(text: str) -> str:
