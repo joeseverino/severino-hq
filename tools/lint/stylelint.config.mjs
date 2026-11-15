@@ -232,11 +232,17 @@ export default {
     // anywhere else stays a light-mode value on a dark page.
     "color-no-hex": true,
     "color-named": "never",
-    // A palette is a `light-dark()` token picked by `color-scheme`. A rule
-    // under the system's preference skips an operator's chosen theme, and the
-    // browser gate paints each palette through `color-scheme`, so it would
-    // never read that rule either.
+    // A palette is a `light-dark()` token picked by `color-scheme`, so the
+    // system's preference and an operator's chosen theme paint one page. A
+    // rule under the system's preference skips the chosen theme, and one keyed
+    // on the choice (`data-theme`, which only the tokens read) skips the
+    // system's; the browser gate paints each palette through `color-scheme`,
+    // so it would read neither.
     "media-feature-name-disallowed-list": mediaFeatures(["prefers-color-scheme", "prefers-reduced-motion"]),
+    "selector-attribute-name-disallowed-list": [
+      ["data-theme"],
+      { message: "A rule keyed on data-theme paints a chosen theme apart from the system's: write the color as a light-dark() token in tokens.css" },
+    ],
     "function-disallowed-list": [`/^(${colorFunctions})$/i`],
     "declaration-property-value-disallowed-list": disallowedValues({
       ...literalFontSize,
@@ -281,6 +287,8 @@ export default {
         "color-no-hex": null,
         "color-named": null,
         "function-disallowed-list": null,
+        // The tokens set `color-scheme` from the operator's choice.
+        "selector-attribute-name-disallowed-list": null,
         "declaration-property-value-disallowed-list": disallowedValues({ ...literalFontSize, ...spacingLiteral, ...unspokenContent, ...cutText, ...readingMeasure }),
       },
     },

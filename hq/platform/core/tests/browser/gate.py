@@ -227,22 +227,6 @@ class SentFile(bytes):
     headers: dict[str, str]
 
 
-# A nonce as a policy names it, and a script tag as a browser serializes it
-# once parsed: emptied, so a page cannot read its nonce back out of the markup.
-_NONCE_SOURCE = re.compile(r"'nonce-([^']+)'")
-_HIDDEN_NONCE = re.compile(r'(<script\b[^>]*\snonce=)""')
-
-
-def answered_as(page, body):
-    """``body``, the page as the browser holds it, answered with the headers
-    ``page`` was and its script tags carrying the nonce those headers name."""
-
-    if not isinstance(page, Sent):
-        return _HIDDEN_NONCE.sub(rf'\1"{NONCE}"', body)
-    named = _NONCE_SOURCE.search(page.headers.get(CSP.HEADER_ENFORCE, ""))
-    return sent(_HIDDEN_NONCE.sub(rf'\1"{named[1]}"', body) if named else body, page.headers)
-
-
 def answered(response):
     """A test client's answer as the browser is to receive it: its body and
     every header but its length, which Playwright counts from the body."""
@@ -1067,11 +1051,6 @@ class BrowserGate(SimpleTestCase):
         self.page.set_viewport_size(loaded)
         self.page.evaluate(SETTLE)
         return {check: list(said.values()) for check, said in found.items() if said}
-
-    def scheme(self):
-        """The palette the system asks the page for."""
-
-        return "dark" if self.page.evaluate("() => matchMedia('(prefers-color-scheme: dark)').matches") else "light"
 
     def lost_fills(self):
         """The fills one palette shows and the other loses, read in each on

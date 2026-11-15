@@ -330,29 +330,6 @@ PAINT_IN = (
 )
 
 
-# Every color each element is painted in, and the element, in document order:
-# what a theme decides. A theme reaches a page two ways, the system's
-# preference and the operator's choice (`data-theme`), and the two must paint
-# the same page. Autofocus lands in the first frame after a load, which one load
-# reaches before it is read and another does not, and a page without script
-# runs no frame callback to wait on. So each reading puts focus where autofocus
-# would, and a focused page takes no autofocus after it: both loads read the
-# same focus, and the focus ring stays among the colors compared.
-PAINT = (
-    "() => {"
-    + DESCRIBE
-    + """
-  if (document.activeElement === document.body) document.querySelector('[autofocus]')?.focus();
-  document.getAnimations().forEach((a) => { try { a.finish(); } catch { a.cancel(); } });
-  return [...document.querySelectorAll('body, body *')].map((el) => {
-    const s = getComputedStyle(el);
-    return [describe(el), [s.color, s.backgroundColor, s.borderTopColor, s.borderBottomColor,
-      s.outlineColor, s.fill, s.stroke, s.boxShadow].join(' ')];
-  });
-}"""
-)
-
-
 # The survey checks these probes answer (`probes/__init__.py`).
 CHECKS = {
     "fields": Check(

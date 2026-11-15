@@ -1,14 +1,10 @@
 """The layout rules held over the stress estate, which the sweeps run."""
 
 import json
-import re
 from time import perf_counter
 from typing import override
 
-lazy from playwright.sync_api import TimeoutError as LoadTimeout
-
-from hq.platform.core.tests.browser.gate import RULE_COSTS, SET_ASIDE, BrowserGate, answered_as, signature
-from hq.platform.core.tests.browser.probes.palette import PAINT
+from hq.platform.core.tests.browser.gate import RULE_COSTS, SET_ASIDE, BrowserGate, signature
 from hq.platform.core.tests.browser.probes.settle import FINISH_TRANSITIONS, SETTLE
 from hq.platform.core.tests.browser.probes.tables import CELLS, TABLES_THAT_DO_NOT_FIT
 from hq.platform.core.tests.browser.selectors import SELECTORS
@@ -196,60 +192,6 @@ class LayoutBrowserTests(BrowserGate):
 
         if found := {check: said for check, said in self.palette().items() if said}:
             self.fail(json.dumps(found, indent=1))
-
-    def a_chosen_theme_paints_as_the_systems(self, name):
-        """The operator's choice of theme paints what the system's preference
-        does: each palette chosen against the other system palette paints
-        every element as that palette does when the system asks for it. A
-        rule written under `prefers-color-scheme` rather than through the
-        tokens' `light-dark()` reaches only one of the two. The server writes
-        the choice into the page it renders, so the page is loaded with it,
-        and left as it was found."""
-
-        was, differ, html = self.scheme(), [], self.page.content()
-        try:
-            for theme, other in (("dark", "light"), ("light", "dark")):
-                self.page.emulate_media(color_scheme=theme)
-                self.load_as(name, html, None)
-                system = self.page.evaluate(PAINT)
-                self.page.emulate_media(color_scheme=other)
-                self.load_as(name, html, theme)
-                chosen = self.page.evaluate(PAINT)
-                differ += [
-                    f"{theme} chosen paints {el} {mine}, the system's {its}"
-                    for (el, mine), (_, its) in zip(chosen, system, strict=True)
-                    if mine != its
-                ]
-        finally:
-            self.page.emulate_media(color_scheme=was)
-            self.load_as(name, html, None)
-        self.assertEqual(differ[:10], [])
-
-    # How long, in milliseconds, a page loaded again from its own HTML may
-    # take: every part of it is answered from memory.
-    reload_within = 5_000
-
-    def load_as(self, name, html, theme):
-        """Page ``name`` loaded again from ``html``, as the server renders it
-        for an operator who chose ``theme`` (none: the system's), or a failure
-        naming it once the load outlasts ``reload_within``."""
-
-        if theme:
-            html = re.sub(r"<html\b", f'<html data-theme="{theme}"', html, count=1)
-        address = self.page.url.split("#")[0]
-
-        def answer(route):
-            self.fulfill(route, answered_as(self.pages[name], html))
-
-        self.page.route(address, answer)
-        try:
-            self.page.reload(wait_until="load", timeout=self.reload_within)
-        except LoadTimeout:
-            chosen = f"{theme} chosen" if theme else "no theme chosen"
-            self.fail(f"{name} did not load again with {chosen} within {self.reload_within} ms")
-        finally:
-            self.page.unroute(address, answer)
-        self.page.evaluate(FINISH_TRANSITIONS)
 
     def every_layout_check_holds(self, name):
         """Every check the layout rules make, on the page as a reader has it:

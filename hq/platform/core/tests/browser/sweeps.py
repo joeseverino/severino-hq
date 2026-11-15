@@ -13,7 +13,6 @@ from hq.platform.core.tests.browser.shards import sweep
 from hq.platform.core.tests.browser.widths import (
     NARROWEST,
     PALETTE_AT,
-    WIDE,
     WIDE_TABLES,
     WIDTHS,
     viewport,
@@ -48,8 +47,6 @@ class UnscriptedLayoutTests(LayoutBrowserTests):
                     was = self.in_scheme("dark")
                     self.hold(name, width, [self.every_palette_check_holds], scheme="dark")
                     self.in_scheme(was)
-                if width == WIDE:
-                    self.hold(name, width, [self.a_chosen_theme_paints_as_the_systems])
                 # Each popover shown is a survey of its own, so they are read
                 # at the phone, where one has the least room.
                 self.hold_opened(name, width, popovers=width == WIDTHS[0])

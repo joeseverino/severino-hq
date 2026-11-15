@@ -21,7 +21,7 @@ from hq.platform.application.money import money
 from hq.platform.application.ui import ActivityCalendar, CalendarDay, ChartSeries, line_chart
 from hq.platform.core.stylesheets import DIRECTORY, stylesheet
 from hq.platform.core.test_runner import browser_engine
-from hq.platform.core.tests.browser.gate import add_css, served_sheet, tab_key, unfold, with_script
+from hq.platform.core.tests.browser.gate import add_css, tab_key, unfold, with_script
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
 from hq.platform.core.tests.browser.probes.boxes import MAP, SIDEWAYS, SMALL_TARGETS
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE
@@ -1897,40 +1897,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 self.assertIsNotNone(found)
                 self.assertFalse(found["scrolls"])
                 self.assertEqual(found["empty"], [])
-
-    def test_a_palette_only_the_systems_preference_reaches_is_caught(self):
-        """A rule written under `prefers-color-scheme` paints a page whose
-        operator chose the other palette as the system's, which the rule on
-        chosen themes names; without it the same page passes."""
-
-        name = next(iter(PAGES))
-        self.open(name, WIDE)
-        was = self.scheme()
-        self.a_chosen_theme_paints_as_the_systems(name)
-        # Linked, so the page loaded again from its own HTML keeps it.
-        self.page.evaluate(
-            "(href) => document.head.append(Object.assign(document.createElement('link'), { rel: 'stylesheet', href }))",
-            served_sheet("@media (prefers-color-scheme: dark) { body { background: rgb(1, 2, 3) } }"),
-        )
-        with self.assertRaises(AssertionError) as caught:
-            self.a_chosen_theme_paints_as_the_systems(name)
-        for chosen in ("dark", "light"):
-            self.assertIn(f"{chosen} chosen paints body", str(caught.exception))
-        self.assertEqual(self.scheme(), was)
-
-    @with_script
-    def test_a_page_that_never_loads_again_fails_the_chosen_theme_naming_it(self):
-        """A reload that never reaches its load event fails the rule within
-        its bound, naming the page, rather than holding the gate."""
-
-        name = next(iter(PAGES))
-        self.open(name, WIDE)
-        # Every script asked for from here on waits unanswered, and the load
-        # event waits for them.
-        self.held, self.reload_within = [], 500
-        with self.assertRaises(AssertionError) as caught:
-            self.a_chosen_theme_paints_as_the_systems(name)
-        self.assertIn(f"{name} did not load again", str(caught.exception))
 
     @with_script
     def test_a_blank_column_is_not_drawn_and_a_short_word_is_not_split(self):
