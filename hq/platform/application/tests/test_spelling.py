@@ -2,6 +2,7 @@
 
 import importlib.util
 import re
+import subprocess
 from pathlib import Path
 
 from django.test import SimpleTestCase, tag
@@ -67,22 +68,30 @@ TEXT = {
     ".cfg",
 }
 NOT_OURS = ("static/vendor/", "controller/api/vendor/")
-# What `mise run fix` writes; its source carries the words.
-GENERATED = {"docs/Connections.md", "hq_sdk/contract.json"}
+
+
+def generated(root: Path) -> set[str]:
+    """What `mise run fix` writes, as .gitattributes marks it; its source carries the words."""
+
+    listed = subprocess.run(
+        ["git", "ls-files", "-z", "--", ":(attr:linguist-generated)"], cwd=root, capture_output=True, check=False
+    )
+    return {name.decode() for name in listed.stdout.split(b"\0") if name} if listed.returncode == 0 else set()
 
 
 def checked_files(root: Path = ROOT) -> list[Path]:
     found = []
+    left_out = generated(root)
     for path in source_files(root, "*"):
         relative = path.relative_to(root).as_posix()
         if (
             not path.is_file()
             or path.suffix not in TEXT
             or path == Path(__file__).resolve()
-            or relative in GENERATED
+            or relative in left_out
             or relative.startswith(NOT_OURS)
             or "/migrations/" in relative
-            or relative.endswith((".gen.go", ".openapi.json", ".lock"))
+            or relative.endswith(".lock")
         ):
             continue
         found.append(path)

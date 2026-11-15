@@ -1,20 +1,16 @@
-# Vendored bytes stay byte-for-byte upstream (see each UPSTREAM file).
-static/vendor/** -whitespace linguist-vendored
-# A test sealing seed is 32 raw bytes, so a diff names it and never prints it.
-controller/runtime/testdata/seal/*.seed binary
-# Each file `mise run fix` writes from its source, which a lint:drift-* gate
-# or lint:controller holds to it: GitHub folds them in a diff, and audit:churn
-# leaves them out (tools/tests/test_generated_files.py holds this list to the
-# writers).
-hq_sdk/contract.json linguist-generated
-hq_sdk/text_examples.json linguist-generated
-hq/platform/api/hq-api.openapi.json linguist-generated
-hq/platform/api/openapi-examples.json linguist-generated
-controller/api/hq-controller.openapi.json linguist-generated
-controller/api/hq-connections.openapi.json linguist-generated
-hq/config/controller-connections.json linguist-generated
-controller/**/*.gen.go linguist-generated
-docs/Connections.md linguist-generated
-docs/Posture.md linguist-generated
-hq/platform/application/hq-procedure.schema.json linguist-generated
-static/fonts/inter/inter-variable-latin.woff2 linguist-generated
+# Written by `mise run fix` from each task's vars.writes in mise-tasks/*.toml,
+# the one declaration of a derived file (docs/Development.md, Derived files).
+# An attribute of hand-written files goes in a .gitattributes beside them.
+/.gitattributes linguist-generated
+/controller/**/*.gen.go linguist-generated
+/controller/api/hq-connections.openapi.json linguist-generated
+/controller/api/hq-controller.openapi.json linguist-generated
+/docs/Connections.md linguist-generated
+/docs/Posture.md linguist-generated
+/hq/config/controller-connections.json linguist-generated
+/hq/platform/api/hq-api.openapi.json linguist-generated
+/hq/platform/api/openapi-examples.json linguist-generated
+/hq/platform/application/hq-procedure.schema.json linguist-generated
+/hq_sdk/contract.json linguist-generated
+/hq_sdk/text_examples.json linguist-generated
+/static/fonts/inter/inter-variable-latin.woff2 linguist-generated

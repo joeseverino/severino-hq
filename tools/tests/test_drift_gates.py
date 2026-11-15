@@ -1,43 +1,46 @@
-"""Each lint:drift-* gate's failure names the command that rewrites its own file,
-and that command, run as named, brings the gate back to passing: one file in
+"""Each lint:drift-* gate's failure names the command that rewrites its own files,
+and that command, run as named, brings the gate back to passing: one gate in
 seconds, where `mise run fix` rewrites every derived file. The gate's own fix
-mode, which fast runs first, writes the same file."""
+mode, which fast runs first and fix:derived runs for every gate tagged derived,
+writes the same files, and exactly the files its declaration names."""
 
 import os
 import re
 import shlex
 import subprocess
 from pathlib import Path
+from typing import Any
 
 from django.test import SimpleTestCase, tag
 
-from hq.platform.core.tests.task import changed_paths, overlay, trusted_mise, worktree
-from tests.mise_tasks import ROOT, body, mise_tasks
+from hq.platform.core.tests.task import changed_paths, names, overlay, trusted_mise, worktree
+from tests.mise_tasks import ROOT, body, mise_tasks, writes, writes_part_of
 
 DRIFT = "lint:drift-"
-# A file each gate holds against its source, which the test deletes to drive
-# the gate into failure.
-HELD = {
-    "lint:drift-sdk-contract": "hq_sdk/contract.json",
-    "lint:drift-api-document": "hq/platform/api/hq-api.openapi.json",
-    "lint:drift-bridge-contract": "controller/api/hq-controller.openapi.json",
-    "lint:drift-connections-reference": "docs/Connections.md",
-    "lint:drift-posture-reference": "docs/Posture.md",
-    "lint:drift-procedure-schema": "hq/platform/application/hq-procedure.schema.json",
-    "lint:drift-font": "static/fonts/inter/inter-variable-latin.woff2",
-}
+# The tag that makes a gate its files' declaration, the one fix:derived runs.
+DERIVED = "derived"
 # How a failure names its rewrite: "...; run `<command>` and ...".
 NAMED = re.compile(r"\brun `([^`]+)`")
 # A task a gate's run starts, and the message it echoes when it fails.
 RUNS_TASK = re.compile(r"\bmise run ([\w:-]+)")
 ECHOED = re.compile(r"""\becho (["'])(.*?)\1""")
 EVERY_FILE = "mise run fix"
+DECLARE = (
+    "Tag it derived and name each file its fix writes whole in its vars.writes, and each hand-written file it "
+    "writes a section of in vars.writes_part_of (docs/Development.md, Derived files)."
+)
 
 
 def drift_gates() -> dict[str, str]:
     """Each drift gate by name, with what it runs."""
 
     return {name: body(task) for name, task in mise_tasks().items() if name.startswith(DRIFT)}
+
+
+def derived() -> dict[str, dict[str, Any]]:
+    """Each gate tagged derived, by name."""
+
+    return {name: task for name, task in mise_tasks().items() if DERIVED in task["tags"]}
 
 
 def records_itself(run: str) -> bool:
@@ -49,18 +52,19 @@ def records_itself(run: str) -> bool:
 
 @tag("source", "tree")
 class DriftGateTests(SimpleTestCase):
-    def test_every_drift_gate_is_driven_into_failure_here(self):
-        driven = {name for name, run in drift_gates().items() if not records_itself(run)}
-        self.assertTrue(driven)
-        self.assertEqual(
-            driven - HELD.keys(),
-            set(),
-            "Name a file each of these holds in HELD, so this test drives it into failure and runs what it names.",
-        )
-        self.assertEqual(HELD.keys() - driven, set(), "HELD names a gate that is gone or records itself")
-        for name, path in HELD.items():
+    def test_every_drift_gate_is_a_declaration_or_records_itself(self):
+        gates = drift_gates()
+        declarations = derived()
+        self.assertTrue(declarations)
+        for name, run in gates.items():
             with self.subTest(name):
-                self.assertTrue((ROOT / path).is_file(), f"{name} holds {path}, which is not here")
+                self.assertNotEqual(name in declarations, records_itself(run), f"{name}: {DECLARE}")
+                self.assertTrue(writes(mise_tasks()[name]), f"{name} declares no file it writes. {DECLARE}")
+        self.assertLessEqual(declarations.keys(), gates.keys(), f"a gate tagged {DERIVED} is named {DRIFT}*")
+        for name, task in declarations.items():
+            for path in writes(task) + writes_part_of(task):
+                with self.subTest(name, path=path):
+                    self.assertTrue((ROOT / path).is_file(), f"{name} declares it writes {path}, which is not here")
 
     def test_a_gate_that_records_itself_names_the_task_it_records_with(self):
         for name, run in drift_gates().items():
@@ -73,37 +77,98 @@ class DriftGateTests(SimpleTestCase):
                 self.assertLessEqual(named, ran)
                 self.assertNotIn("fix", named)
 
-    def test_each_failure_names_a_command_that_rewrites_its_file_alone(self):
-        gates = {name: run for name, run in drift_gates().items() if name in HELD}
+    def test_a_new_declaration_is_written_and_marked_with_nothing_else_edited(self):
+        """A gate tagged derived, added alone, is a file `mise run fix` writes and .gitattributes marks."""
+
+        declared = "docs/Example-derived.md"
+        gate = "\n".join(
+            (
+                "",
+                '["lint:drift-example"]',
+                'description = "An example derived file"',
+                "hide = true",
+                'tags = ["derived"]',
+                f'sources = ["{declared}"]',
+                "outputs = []",
+                """usage = 'flag "--fix" help="Rewrite the file"'""",
+                f'vars = {{ writes = "{declared}" }}',
+                f"""run = 'if [ "${{usage_fix:-}}" = true ]; then echo example >{declared}; else test -f {declared}; fi'""",
+                "",
+            )
+        )
         present, deleted = changed_paths("HEAD", ROOT)
         env = {key: value for key, value in os.environ.items() if key != "VIRTUAL_ENV"}
         with worktree("HEAD", ROOT) as tree:
             overlay(tree, present, deleted, ROOT)
             env |= trusted_mise(tree, tree.parent / "mise-state")
+            with (tree / "mise-tasks" / "lint.toml").open("a") as tasks:
+                tasks.write(gate)
+
+            def run(*command: str) -> subprocess.CompletedProcess[str]:
+                return subprocess.run(command, cwd=tree, env=env, capture_output=True, text=True, check=False)
+
+            behind = run("mise", "run", "lint:drift-gitattributes")
+            self.assertNotEqual(behind.returncode, 0, "the attributes did not see the new declaration")
+            self.assertIn("mise run lint:drift-gitattributes --fix", behind.stderr)
+
+            fixed = run("mise", "run", "fix:derived")
+            self.assertEqual(fixed.returncode, 0, fixed.stdout + fixed.stderr)
+            self.assertTrue((tree / declared).is_file(), "fix:derived did not run the new gate's fix")
+            marked = run("git", "check-attr", "linguist-generated", "--", declared)
+            self.assertEqual(marked.stdout.strip(), f"{declared}: linguist-generated: set")
+            current = run("mise", "run", "lint:drift-gitattributes")
+            self.assertEqual(current.returncode, 0, current.stdout + current.stderr)
+
+    def test_each_failure_names_a_command_that_rewrites_its_files_alone(self):
+        declarations = derived()
+        present, deleted = changed_paths("HEAD", ROOT)
+        env = {key: value for key, value in os.environ.items() if key != "VIRTUAL_ENV"}
+        with worktree("HEAD", ROOT) as tree:
+            overlay(tree, present, deleted, ROOT)
+            env |= trusted_mise(tree, tree.parent / "mise-state")
+            files = [tree / path for path in names("ls-files", "--cached", "--others", "--exclude-standard", root=tree)]
 
             def run(command: list[str]) -> subprocess.CompletedProcess[str]:
                 return subprocess.run(command, cwd=tree, env=env, capture_output=True, text=True, check=False)
 
-            for name in gates:
+            def written(step: list[str]) -> set[str]:
+                """The checkout's files the step writes, read from their change times."""
+
+                before = {path: path.stat().st_mtime_ns for path in files if path.exists()}
+                done = run(step)
+                self.assertEqual(done.returncode, 0, f"{shlex.join(step)}:\n{done.stdout}{done.stderr}")
+                return {
+                    str(path.relative_to(tree))
+                    for path in files
+                    if path.exists() and before.get(path) != path.stat().st_mtime_ns
+                }
+
+            for name, task in declarations.items():
                 with self.subTest(name):
-                    held = tree / HELD[name]
-                    held.unlink()
+                    held = writes(task)
+                    for path in held:
+                        (tree / path).unlink()
                     failed = run(["mise", "run", name])
                     said = failed.stdout + failed.stderr
-                    self.assertNotEqual(failed.returncode, 0, f"{name} passed with {HELD[name]} gone:\n{said}")
+                    self.assertNotEqual(failed.returncode, 0, f"{name} passed with {', '.join(held)} gone:\n{said}")
                     commands = NAMED.findall(said)
                     self.assertTrue(commands, f"{name}'s failure names no command:\n{said}")
                     command = commands[-1]
                     self.assertNotEqual(command, EVERY_FILE, f"{name} names the command that rewrites every file")
 
-                    rewrote = run(shlex.split(command))
-                    self.assertEqual(rewrote.returncode, 0, f"{command}:\n{rewrote.stdout}{rewrote.stderr}")
-                    self.assertEqual(held.read_bytes(), Path(ROOT, HELD[name]).read_bytes(), command)
+                    written(shlex.split(command))
+                    for path in held:
+                        self.assertEqual((tree / path).read_bytes(), Path(ROOT, path).read_bytes(), command)
                     passed = run(["mise", "run", name])
                     self.assertEqual(passed.returncode, 0, f"{name} after {command}:\n{passed.stdout}{passed.stderr}")
 
-                    # Its fix mode, which fast runs before it judges, writes the same file.
-                    held.unlink()
-                    fixed = run(["mise", "run", name, "--fix"])
-                    self.assertEqual(fixed.returncode, 0, f"{name} --fix:\n{fixed.stdout}{fixed.stderr}")
-                    self.assertEqual(held.read_bytes(), Path(ROOT, HELD[name]).read_bytes(), f"{name} --fix")
+                    # Its fix mode writes the same files, and none its declaration leaves out.
+                    for path in held:
+                        (tree / path).unlink()
+                    self.assertEqual(
+                        written(["mise", "run", name, "--fix"]),
+                        set(held + writes_part_of(task)),
+                        f"{name} --fix writes these. {DECLARE}",
+                    )
+                    for path in held:
+                        self.assertEqual((tree / path).read_bytes(), Path(ROOT, path).read_bytes(), f"{name} --fix")

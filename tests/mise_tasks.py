@@ -41,8 +41,37 @@ def body(task: dict[str, Any]) -> str:
     scripts = "\n".join(each for each in task["run"] if isinstance(each, str))
     if not _VAR.search(scripts):
         return scripts
-    declared = tomllib.loads(Path(task["source"]).read_text())[task["name"]].get("vars", {})
+    declared = task_vars(task)
     return _VAR.sub(lambda var: declared[var[1]], scripts)
+
+
+@functools.cache
+def _config(source: str) -> dict[str, Any]:
+    return tomllib.loads(Path(source).read_text())
+
+
+def task_vars(task: dict[str, Any]) -> dict[str, str]:
+    """The vars a TOML task declares, which mise's listing leaves out: a file
+    under mise-tasks/ holds its tasks at the top, mise.toml under ``tasks``."""
+
+    if task["file"]:
+        return {}
+    config = _config(task["source"])
+    return config.get(task["name"], config.get("tasks", {}).get(task["name"], {})).get("vars", {})
+
+
+def writes(task: dict[str, Any]) -> list[str]:
+    """Each file, or git glob of files, the task writes whole from a source:
+    its ``vars.writes``, the one declaration of a derived file
+    (docs/Development.md, Derived files)."""
+
+    return task_vars(task).get("writes", "").split()
+
+
+def writes_part_of(task: dict[str, Any]) -> list[str]:
+    """Each hand-written file the task writes a section of: its ``vars.writes_part_of``."""
+
+    return task_vars(task).get("writes_part_of", "").split()
 
 
 def runs(task: dict[str, Any]) -> list[Path]:

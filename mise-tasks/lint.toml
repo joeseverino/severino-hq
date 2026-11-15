@@ -344,6 +344,8 @@ outputs = []
 usage = 'flag "--fix" help="Format, modernize and regenerate the controller instead of checking: fast runs it first"'
 # The bridge contract's fix writes the specs go generate reads.
 wait_for = ["lint:drift-bridge-contract"]
+# go generate's outputs, which fix:derived writes after every derived file.
+vars = { writes = "controller/**/*.gen.go" }
 run = "controller/scripts/check.sh"
 
 # Every advisory whose vulnerable function the controller can reach, through
@@ -357,12 +359,17 @@ hide = true
 dir = "controller"
 run = "go tool govulncheck -test ./..."
 
-# Each derived file against its source, in the order fix:derived writes them.
+# Each derived file against its source. A gate tagged derived is its file's
+# one declaration (docs/Development.md, Derived files): vars.writes names each
+# file it writes whole, and vars.writes_part_of each hand-written file it writes
+# a section of. fix:derived runs every one's fix mode, .gitattributes marks what
+# they write, and tools/tests/test_drift_gates.py holds each to what its fix
+# writes.
 
 ["lint:drift-sdk-contract"]
 description = "hq_sdk's committed shape, text examples and docs/Plugins.md table are what the SDK offers"
 hide = true
-tags = ["fast"]
+tags = ["fast", "derived"]
 sources = [
   "**/*.py",
   "hq_sdk/**",
@@ -383,12 +390,13 @@ sources = [
 outputs = []
 extends = "django"
 usage = 'flag "--fix" help="Rewrite the file instead of checking: fast runs it first"'
+vars = { writes = "hq_sdk/contract.json hq_sdk/text_examples.json", writes_part_of = "docs/Plugins.md" }
 run = 'if [ "${usage_fix:-}" = true ]; then uv run python manage.py sdk_contract; else uv run python manage.py sdk_contract --check; fi'
 
 ["lint:drift-api-document"]
 description = "The machine API's OpenAPI document is current"
 hide = true
-tags = ["fast"]
+tags = ["fast", "derived"]
 sources = [
   "**/*.py",
   "hq/platform/api/hq-api.openapi.json",
@@ -405,6 +413,7 @@ sources = [
 outputs = []
 extends = "django"
 usage = 'flag "--fix" help="Rewrite the file instead of checking: fast runs it first"'
+vars = { writes = "hq/platform/api/hq-api.openapi.json" }
 run = 'if [ "${usage_fix:-}" = true ]; then uv run python manage.py api_openapi; else uv run python manage.py api_openapi --check; fi'
 
 # A recording the examples file must equal, written to a temporary file of its
@@ -436,12 +445,13 @@ extends = "django"
 # (tools/gate/fast.py, RECORDING).
 tags = ["fast", "recording", "heavy"]
 usage = 'flag "--fix" help="Record the examples into the file and rewrite the document instead of checking: fast runs it once the check fails"'
+vars = { writes = "hq/platform/api/openapi-examples.json" }
 run = 'if [ "${usage_fix:-}" = true ]; then mise run fix:api-examples; exit; fi; recorded="$(mktemp)"; trap "rm -f \"$recorded\"" EXIT; HQ_API_RECORD_EXAMPLES_TO="$recorded" mise run fix:api-examples && diff -u hq/platform/api/openapi-examples.json "$recorded" || { echo "lint:drift-api-examples: the recording differs from hq/platform/api/openapi-examples.json, or did not finish; mise run fix:api-examples records it again" >&2; exit 1; }'
 
 ["lint:drift-bridge-contract"]
 description = "The controller's contracts are the ones the registry derives"
 hide = true
-tags = ["fast"]
+tags = ["fast", "derived"]
 sources = [
   "**/*.py",
   "hq/domains/control_plane/bridge_base.json",
@@ -458,12 +468,13 @@ sources = [
 outputs = []
 extends = "django"
 usage = 'flag "--fix" help="Rewrite the file instead of checking: fast runs it first"'
+vars = { writes = "controller/api/hq-controller.openapi.json controller/api/hq-connections.openapi.json hq/config/controller-connections.json" }
 run = 'if [ "${usage_fix:-}" = true ]; then uv run python manage.py bridge_contract; else uv run python manage.py bridge_contract --check; fi'
 
 ["lint:drift-connections-reference"]
 description = "docs/Connections.md is what the providers declare"
 hide = true
-tags = ["fast"]
+tags = ["fast", "derived"]
 sources = [
   "**/*.py",
   "docs/Connections.md",
@@ -479,12 +490,13 @@ sources = [
 outputs = []
 extends = "django"
 usage = 'flag "--fix" help="Rewrite the file instead of checking: fast runs it first"'
+vars = { writes = "docs/Connections.md" }
 run = 'if [ "${usage_fix:-}" = true ]; then uv run python manage.py connections_reference; else uv run python manage.py connections_reference --check; fi'
 
 ["lint:drift-posture-reference"]
 description = "docs/Posture.md's tables are what the checks declare"
 hide = true
-tags = ["fast"]
+tags = ["fast", "derived"]
 sources = [
   "**/*.py",
   "docs/Posture.md",
@@ -500,12 +512,13 @@ sources = [
 outputs = []
 extends = "django"
 usage = 'flag "--fix" help="Rewrite the file instead of checking: fast runs it first"'
+vars = { writes = "docs/Posture.md" }
 run = 'if [ "${usage_fix:-}" = true ]; then uv run python manage.py posture_reference; else uv run python manage.py posture_reference --check; fi'
 
 ["lint:drift-procedure-schema"]
 description = "The published JSON Schema of a procedure's sidecar is what ProcedureDeclaration validates"
 hide = true
-tags = ["fast"]
+tags = ["fast", "derived"]
 sources = [
   "**/*.py",
   "hq/platform/application/hq-procedure.schema.json",
@@ -521,12 +534,13 @@ sources = [
 outputs = []
 extends = "django"
 usage = 'flag "--fix" help="Rewrite the file instead of checking: fast runs it first"'
+vars = { writes = "hq/platform/application/hq-procedure.schema.json" }
 run = 'if [ "${usage_fix:-}" = true ]; then uv run python manage.py procedure_schema; else uv run python manage.py procedure_schema --check; fi'
 
 ["lint:drift-font"]
 description = "The served font is its source cut to the characters HQ prints and the features its stylesheets use"
 hide = true
-tags = ["fast"]
+tags = ["fast", "derived"]
 sources = [
   "tools/fonts/**",
   "static/fonts/**",
@@ -541,8 +555,32 @@ sources = [
 ]
 outputs = []
 usage = 'flag "--fix" help="Rewrite the file instead of checking: fast runs it first"'
+vars = { writes = "static/fonts/inter/inter-variable-latin.woff2" }
 # The subsetter reads the fix flag itself.
 run = "uv run python -m tools.fonts.subset"
+
+["lint:drift-gitattributes"]
+description = ".gitattributes marks linguist-generated each file a task declares it writes"
+hide = true
+tags = ["fast", "derived"]
+sources = [
+  ".gitattributes",
+  "tools/gitattributes.py",
+  "tools/__init__.py",
+  "tests/__init__.py",
+  "tests/mise_tasks.py",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
+usage = 'flag "--fix" help="Rewrite the file instead of checking: fast runs it first"'
+vars = { writes = ".gitattributes" }
+# The writer reads the fix flag itself.
+run = "uv run python -m tools.gitattributes"
 
 ["lint:shell:suite"]
 description = "One shell suite under the shell named, or as its first line says for -: a run lint:shell makes of every suite"
