@@ -214,11 +214,10 @@ class PageDialogTests(SimpleTestCase):
         self.assertIn('data-modal-open="connection"', html)
         self.assertNotIn('id="modal-connection"', html)
 
-    def test_a_dialog_needs_a_usable_id_and_a_get(self):
+    def test_a_dialog_needs_a_usable_id(self):
+        # Only a link opens one: a command's control takes no dialog.
         with self.assertRaises(ValueError):
             PageDialog("Import Records", "Import", "example/_form.html")
-        with self.assertRaises(ValueError):
-            PageAction("Go", "/", method="post", modal=PageDialog("go", "Go", "example/_form.html"))
 
 
 class TextHelperTests(SimpleTestCase):

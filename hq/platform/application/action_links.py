@@ -16,7 +16,7 @@ from django.urls import NoReverseMatch
 
 from hq.platform.application.routes import reverse
 
-from .contracts import route_url
+from .contracts import Effect, route_url
 from .security import Principal
 from .ui import counted
 from .workflow_contracts import ActionLink
@@ -49,10 +49,14 @@ def connection_action_links(spec: ConnectionLinkSpec) -> tuple[ActionLink, ...]:
         if not url or url in seen:
             continue
         seen.add(url)
-        actions.append(ActionLink(name, label, "read", url))
+        actions.append(ActionLink(name, label, Effect.READ, url))
     if spec.documentation_url:
-        actions.append(ActionLink("documentation", "Documentation", "read", spec.documentation_url))
+        actions.append(ActionLink("documentation", "Documentation", Effect.READ, spec.documentation_url))
     return tuple(actions)
+
+
+# The route of every command's own page, by its name.
+COMMAND_ROUTE = "command"
 
 
 def command_url(name: str, target: str = "", *, kinds: Iterable[str] = (), **query: str | tuple[str, ...]) -> str:
@@ -67,7 +71,7 @@ def command_url(name: str, target: str = "", *, kinds: Iterable[str] = (), **que
     """
 
     try:
-        url = reverse("command", kwargs={"name": name})
+        url = reverse(COMMAND_ROUTE, kwargs={"name": name})
     except NoReverseMatch:
         return ""
     params = [("target", target)] if target else []
@@ -260,7 +264,7 @@ def topology_investigation_links(node_id: str) -> tuple[ActionLink, ...]:
         ActionLink(
             investigation.name,
             investigation.label,
-            "read",
+            Effect.READ,
             topology_url(node_id, direction=investigation.direction, depth=investigation.depth),
             reason=investigation.reason,
         )
@@ -294,7 +298,7 @@ def connection_relationship_link(spec_name: str, instance_id: str) -> ActionLink
     return ActionLink(
         "relationships",
         "Show links",
-        "read",
+        Effect.READ,
         url,
         reason="What it reads, reaches and changes.",
     )

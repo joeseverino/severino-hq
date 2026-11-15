@@ -1,73 +1,17 @@
 """Small shared validators and resolvers for HQ's declarative registries."""
 
 import re
-from enum import StrEnum
-from typing import Self
 from urllib.parse import urlsplit
 
 from django.urls import NoReverseMatch
 from pydantic import BaseModel, ConfigDict
 
+from hq.platform.application.effects import Effect
 from hq.platform.application.routes import reverse
-from hq.platform.application.tone import Tone
 
 DOTTED_NAME = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$")
 DJANGO_ROUTE = re.compile(r"(?:[A-Za-z_][\w-]*:)*[A-Za-z_][\w-]*\Z")
 SCOPE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$")
-
-
-# A spec's field typed by it takes the value's string and holds the member, so
-# an effect nothing declares fails where it is written.
-class Effect(StrEnum):
-    """What running a command does, least consequential first."""
-
-    # The words a page says it in, the words every reference of the machine
-    # contract reads beside the name (the API document, MCP's capability
-    # catalog), and the tone a page says it in beside a command.
-    label: str
-    meaning: str
-    tone: Tone
-
-    READ = "read", "Reads only", "Reads and answers; changes nothing.", Tone.NEUTRAL
-    REMOTE_WRITE = (
-        "remote_write",
-        "Changes HQ",
-        "Changes a record, in HQ or through a connection HQ holds.",
-        Tone.NEUTRAL,
-    )
-    INFRASTRUCTURE_CHANGE = (
-        "infrastructure_change",
-        "Changes a live system",
-        "Changes a live system HQ manages, such as a DNS record, a proxy route or a container.",
-        Tone.ATTENTION,
-    )
-    DESTRUCTIVE = (
-        "destructive",
-        "Stops or deletes",
-        "Stops or deletes something; running it again does not bring it back.",
-        Tone.SERIOUS,
-    )
-
-    # Defaulted so ``Effect("read")``, a lookup by value, reads as one to a type checker.
-    def __new__(cls, value: str, label: str = "", meaning: str = "", tone: Tone = Tone.NEUTRAL) -> Self:
-        member = str.__new__(cls, value)
-        member._value_ = value
-        member.label = label
-        member.meaning = meaning
-        member.tone = tone
-        return member
-
-    @property
-    def rank(self) -> int:
-        """Its place in the order, a read 0: a higher rank does more."""
-
-        return list(Effect).index(self)
-
-    @property
-    def changes(self) -> bool:
-        """Whether running it changes anything."""
-
-        return self is not Effect.READ
 
 
 class Closed(BaseModel):

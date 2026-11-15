@@ -138,6 +138,10 @@ class ProposalDecisionView(View):
     http_method_names: ClassVar[list[str]] = ["post"]
     capability: ClassVar[str]
 
+    @property
+    def runs(self) -> tuple[str, ...]:
+        return (self.capability,)
+
     def post(self, request, pk: int):
         # One playbook's row sends its key, and the page it was pressed on to return to.
         playbook = str(request.POST.get("playbook", ""))

@@ -13,7 +13,7 @@ from hq.platform.application.tables import Projected, TableColumn, TableFilter, 
 from hq.platform.application.tone import Tone
 lazy from hq.platform.application import outbound_work, work_runs
 lazy from hq.platform.application.asks import AskMixin
-lazy from hq.platform.application.automation_runs import cancel_action, listed_with_actions, run_here_url
+lazy from hq.platform.application.automation_runs import AGAIN, cancel_action, capability_name, listed_with_actions
 lazy from hq.platform.application.capabilities import capability_spec
 lazy from hq.platform.application.labels import lower_first
 lazy from hq.platform.application.outbound_work import SUBJECT_FIELD
@@ -138,11 +138,13 @@ class RunView(PageMixin, TemplateView):
         # Its playbook again on the same machines, once it has ended, while that playbook is adopted.
         ended = self.run.state not in {JobState.QUEUED, JobState.RUNNING}
         again = (
-            (PageAction("Run again", run_here_url(playbook, self.run.evidence.hosts)),)
+            PageAction.command(
+                capability_name(playbook), variant=AGAIN, query={"hosts": tuple(self.run.evidence.hosts)}
+            )
             if ended and playbook and capability_spec(self.run.kind)
-            else ()
+            else None
         )
-        return (*again, *((cancel,) if cancel is not None else ()))
+        return tuple(action for action in (again, cancel) if action is not None)
 
     @override
     def get_context_data(self, **kwargs):

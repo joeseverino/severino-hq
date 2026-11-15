@@ -12,7 +12,6 @@ from hq.platform.application.routes import reverse
 from hq.platform.application.web_writes import execute_posted, refused
 lazy from hq.domains.control_plane.forms import LOOKUP_FORMS
 lazy from hq.platform.application import security
-lazy from hq.platform.application.capabilities import capability_words
 lazy from hq.platform.application.lookup import LOOK_UP_ADDRESS
 lazy from hq.platform.application.toolkit import tab_named, tabs_for
 
@@ -29,6 +28,8 @@ class ToolsView(PageMixin, TemplateView):
     template_name = "control_plane/tools.html"
     page_title = "Tools"
     page_lede = "Answers from the public internet, not AdGuard."
+    # A stored answer is read again by a post of its address here.
+    runs = (LOOK_UP_ADDRESS,)
 
     @override
     def get_context_data(self, **kwargs):
@@ -64,11 +65,8 @@ class ToolsView(PageMixin, TemplateView):
         # A stored answer is read again by a POST of its own, beside the moment it was read.
         address = context["results"].get(LOOK_UP_ADDRESS)
         if isinstance(address, dict) and address.get("observed_at"):
-            context["reread"] = PageAction(
-                capability_words(LOOK_UP_ADDRESS),
-                reverse("control_plane:tools"),
-                method="post",
-                fields={"tab": current.id, "address": asked[LOOK_UP_ADDRESS]},
+            context["reread"] = PageAction.command(
+                LOOK_UP_ADDRESS, fields={"tab": current.id, "address": asked[LOOK_UP_ADDRESS]}
             )
         return context
 

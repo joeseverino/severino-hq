@@ -110,8 +110,12 @@ source_modules = ["hq.platform.application.workflow_contracts"]
 forbidden_modules = ["hq.**"]
 # The field description marker, a leaf held to importing nothing of HQ below.
 # The shared answer fields are one too, and join this list when a field here
-# takes one.
-ignore_imports = ["hq.platform.application.workflow_contracts -> hq.platform.application.describe"]
+# takes one. A link's effect is the one Effect, a leaf beside its tone.
+ignore_imports = [
+  "hq.platform.application.workflow_contracts -> hq.platform.application.describe",
+  "hq.platform.application.workflow_contracts -> hq.platform.application.effects",
+  "hq.platform.application.effects -> hq.platform.application.tone",
+]
 
 [[tool.importlinter.contracts]]
 name = "The field description marker is a leaf: it imports nothing of HQ"

@@ -21,6 +21,7 @@ from hq.platform.application.routes import reverse
 
 from .action_links import command_action, command_url
 from .containers import VULNERABLE, Container, ImageStanding, containers
+from .contracts import Effect
 from .exposure import LEVELS, OPEN, UNKNOWN, exposure_of_container, status_at
 from .finding_model import (
     CANNOT_EDIT_COMPOSE,
@@ -365,7 +366,7 @@ def _posture_help(check_id: str, item: Container) -> dict[str, Any]:
             ActionLink(
                 "compose-change",
                 f"Compose change for {name}",
-                "read",
+                Effect.READ,
                 f"{item.url}#hardening",
                 reason="The lines to add to its compose file, and what each can break.",
             ),

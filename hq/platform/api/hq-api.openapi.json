@@ -5741,8 +5741,7 @@
             "type": "string"
           },
           "effect": {
-            "description": "What following it does: `read` for a link that only opens a page, else its command's effect, `remote_write`, `infrastructure_change` or `destructive`.",
-            "type": "string"
+            "$ref": "#/components/schemas/Effect"
           },
           "label": {
             "description": "The words on the link or button: its command's own, where it runs one.",

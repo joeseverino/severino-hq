@@ -2,14 +2,14 @@ import json
 from functools import cached_property
 from typing import Any, override
 
-from django.http import HttpResponse, HttpResponseNotAllowed, JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
 from django.views.generic import DetailView, ListView
 
-from hq.platform.application.action_links import READ_NOW_CAPABILITY, command_url
 from hq.platform.application.approvals import AUDIT_LABELS
 from hq.platform.application.capabilities import capability_words, command_spec
+from hq.platform.application.certificates import UPLOAD as CERTIFICATE_UPLOAD
 from hq.platform.application.conditions import DRIFTED, holding
 from hq.platform.application.contracts import Effect
 from hq.platform.application.doors import NOBODY
@@ -28,6 +28,7 @@ from hq.platform.application.payload_words import value_words
 from hq.platform.application.refusal_status import refuse
 from hq.platform.application.relationships import relationships_for
 from hq.platform.application.resource_capabilities import (
+    REMOVAL_CAPABILITY,
     Allowed,
     channels_inside,
     resource_capabilities,
@@ -41,7 +42,13 @@ from hq.platform.application.resource_context import (
     record_summary,
     resource_context,
 )
-from hq.platform.application.resource_operations import ACTION_CAPABILITY, HISTORY_ROWS, changes, supervision
+from hq.platform.application.resource_operations import (
+    ACTION_CAPABILITY,
+    HISTORY_ROWS,
+    READS_AGAIN,
+    changes,
+    supervision,
+)
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.service_context import operation_history
@@ -50,7 +57,6 @@ from hq.platform.application.visit_refresh import page_visit
 from hq.platform.application.web_writes import execute_posted, refusal_response, refused
 from hq.platform.application.whereabouts import whereabouts
 from hq.platform.application.work_runs import run_rows
-from hq.platform.core.templatetags.nav_tags import returning_to
 lazy from hq.platform.application.page_relations import for_container
 
 from .models import ApprovalRequest, ManagedResource, OperationRequest
@@ -167,6 +173,7 @@ class ResourceRemoveView(View):
     """
 
     template_name = "control_plane/resource_confirm_remove.html"
+    runs = (REMOVAL_CAPABILITY,)
 
     def get(self, request, key):
         resource = get_object_or_404(ManagedResource, key=key)
@@ -219,9 +226,7 @@ class InfrastructureListView(PageMixin, ListView):
     @override
     def get_page_actions(self):
         return (
-            PageAction(
-                capability_words("infrastructure.resource.create"), reverse("control_plane:create"), primary=True
-            ),
+            PageAction.command("infrastructure.resource.create", primary=True),
             PageAction("Services", reverse("control_plane:services")),
             PageAction("Setting reference", reverse("control_plane:providers")),
         )
@@ -367,15 +372,10 @@ class InfrastructureDetailView(PageMixin, DetailView):
                 verb,
                 key,
                 allowed,
-                # Applying a record that only reports on itself reads it again.
-                label=(
-                    capability_words(READ_NOW_CAPABILITY)
-                    if verb == "reconcile" and provider.reported_fields
-                    else capability_words(ACTION_CAPABILITY[verb])
-                ),
-                title="" if allowed.enabled else allowed.reason,
                 origin=self.request.get_full_path(),
                 primary=verb == "renew",
+                # Applying a record that only reports on itself reads it again.
+                variant=READS_AGAIN if verb == "reconcile" and provider.reported_fields else "",
             )
             for verb, allowed in capabilities.page_actions
         ]
@@ -384,13 +384,11 @@ class InfrastructureDetailView(PageMixin, DetailView):
             # restoring HQ's copy is the button beside it rather than the only one.
             actions.insert(
                 0,
-                PageAction(
-                    capability_words("infrastructure.resource.accept_observed"),
-                    returning_to(
-                        command_url("infrastructure.resource.accept_observed", key),
-                        self.request.get_full_path(),
-                    ),
+                PageAction.command(
+                    "infrastructure.resource.accept_observed",
+                    key,
                     primary=True,
+                    query={"next": self.request.get_full_path()},
                 ),
             )
         console = (
@@ -405,27 +403,13 @@ class InfrastructureDetailView(PageMixin, DetailView):
             actions.append(PageAction(gap.needs, gap.setup_url, title=gap.reason))
         if capabilities.offered.edit_url:
             actions.append(
-                PageAction(
-                    capability_words("infrastructure.resource.update"),
-                    returning_to(capabilities.offered.edit_url, self.request.get_full_path()),
-                )
+                PageAction.command("infrastructure.resource.update", key, query={"next": self.request.get_full_path()})
             )
         if PROVIDERS[self.object.kind].material_form:
-            actions.append(
-                PageAction(
-                    "Replace certificate" if getattr(self.object, "material", None) else "Upload certificate",
-                    reverse("control_plane:upload_certificate", args=[key]),
-                    primary=True,
-                )
-            )
+            replaces = "replace" if getattr(self.object, "material", None) else ""
+            actions.append(PageAction.command(CERTIFICATE_UPLOAD, key, variant=replaces, primary=True))
         if capabilities.offered.remove_url:
-            actions.append(
-                PageAction(
-                    capabilities.removal_words,
-                    capabilities.offered.remove_url,
-                    danger=True,
-                )
-            )
+            actions.append(PageAction.command(REMOVAL_CAPABILITY, key, variant=capabilities.removal_variant))
         return tuple(actions)
 
     @override
@@ -496,15 +480,17 @@ def is_destructive(verb: str) -> bool:
 
 
 def verb_action(
-    verb: str, key: str, allowed: Allowed, *, label: str, title: str, origin: str, primary: bool = False
-) -> PageAction:
-    """One of a resource's verbs as a head control. A destructive one opens its
-    confirmation, named, and comes back to ``origin``; the rest post at once."""
+    verb: str, key: str, allowed: Allowed, *, origin: str, primary: bool = False, variant: str = ""
+) -> PageAction | None:
+    """One of a resource's verbs as a head control, unusable with the reason
+    it is not ``allowed``. A destructive one opens its confirmation, named,
+    which comes back to ``origin``; the rest post at once."""
 
-    url = reverse(f"control_plane:{verb}", args=[key])
-    if is_destructive(verb):
-        return PageAction(label, returning_to(url, origin), danger=True, disabled=not allowed.enabled, title=title)
-    return PageAction(label, url, method="post", primary=primary, disabled=not allowed.enabled, title=title)
+    refusal = "" if allowed.enabled else allowed.reason
+    back = {"next": origin} if is_destructive(verb) else None
+    return PageAction.command(
+        ACTION_CAPABILITY[verb], key, variant=variant, primary=primary, query=back, refused=refusal
+    )
 
 
 class OperationView(View):
@@ -517,11 +503,18 @@ class OperationView(View):
 
     action = OperationRequest.Action.RECONCILE
 
-    def get(self, request, key):
-        """A destructive verb's confirmation, naming what stops; any other verb only posts."""
+    @property
+    def runs(self) -> tuple[str, ...]:
+        return (ACTION_CAPABILITY[self.action],)
 
-        if not is_destructive(self.action):
-            return HttpResponseNotAllowed(["POST"])
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        # A destructive verb's confirmation is a page of its own; any other verb only posts.
+        self.http_method_names = ["get", "post", "options"] if is_destructive(self.action) else ["post", "options"]
+
+    def get(self, request, key):
+        """A destructive verb's confirmation, naming what stops."""
+
         resource = get_object_or_404(ManagedResource, key=key)
         name = record_name(resource.kind, resource.spec, resource.key)
         label = f"{capability_words(ACTION_CAPABILITY[self.action])} {name}"

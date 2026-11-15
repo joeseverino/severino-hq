@@ -47,7 +47,7 @@ lazy from .action_links import capability_action_link, command_url
 lazy from .approval_review import grouped, marked
 lazy from .automation_runs import access_words, anywhere, capability_name
 lazy from .cadence import ask, automation_standing
-lazy from .capabilities import Consented, capability_words, consent
+lazy from .capabilities import Consented, consent
 lazy from .findings import rule_for
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
 lazy from .record_errors import PolicyError, RecordNotFound
@@ -437,16 +437,14 @@ def decisions(pending: Reviewed | None, principal: Principal, *, diff: bool) -> 
         return ()
     proposal = pending.proposal
     adopts, rejects = _deciding(principal)
-    shown: list[PageAction] = []
+    shown: list[PageAction | None] = []
     if diff and principal.permits(Capability.READ_AUDIT_LOG):
         shown.append(pages.PageAction("View diff", entry_url(proposal)))
     if not pending.refused and adopts:
-        adopt = reverse("control_plane:playbooks_adopt", kwargs={"pk": proposal.pk})
-        shown.append(pages.PageAction("Adopt all", adopt, method="post"))
+        shown.append(pages.PageAction.command(automation_adoption.ADOPT, proposal.pk, variant="all"))
     if rejects:
-        reject = reverse("control_plane:playbooks_reject", kwargs={"pk": proposal.pk})
-        shown.append(pages.PageAction("Reject all", reject, method="post"))
-    return tuple(shown)
+        shown.append(pages.PageAction.command(automation_adoption.REJECT, proposal.pk, variant="all"))
+    return tuple(action for action in shown if action is not None)
 
 
 @dataclass(frozen=True, slots=True)
@@ -504,22 +502,16 @@ def _row(
     """One playbook's row: ``procedure`` as adopted (``adopted``) or as the
     scan brings it, None for one HQ can't adopt, which is its ``title`` alone."""
 
-    actions: list[PageAction] = []
+    actions: list[PageAction | None] = []
     if change is not None and review is not None:
         sent = {"playbook": change.key}
         if adopts and not change.problems and not review.unplaced:
-            adopt = reverse("control_plane:playbooks_adopt", kwargs={"pk": review.proposal.pk})
-            actions.append(
-                pages.PageAction(capability_words(automation_adoption.ADOPT), adopt, method="post", fields=sent)
-            )
+            actions.append(pages.PageAction.command(automation_adoption.ADOPT, review.proposal.pk, fields=sent))
         if rejects:
-            reject = reverse("control_plane:playbooks_reject", kwargs={"pk": review.proposal.pk})
-            actions.append(
-                pages.PageAction(capability_words(automation_adoption.REJECT), reject, method="post", fields=sent)
-            )
+            actions.append(pages.PageAction.command(automation_adoption.REJECT, review.proposal.pk, fields=sent))
     kind = change.change if change is not None else ""
     if procedure is None:
-        return PlaybookTableRow(title, "", "", (), "", "", kind, tuple(actions))
+        return PlaybookTableRow(title, "", "", (), "", "", kind, tuple(filter(None, actions)))
     return PlaybookTableRow(
         procedure.title,
         command_url(capability_name(procedure.id)) if adopted else "",
@@ -528,7 +520,7 @@ def _row(
         anywhere(procedure.target_kinds),
         access_words(procedure.privilege),
         kind,
-        tuple(actions),
+        tuple(filter(None, actions)),
     )
 
 

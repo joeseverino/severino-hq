@@ -589,5 +589,5 @@ class CommandTitleTests(TestCase):
             operator,
         )
 
-        self.assertEqual(state.action.label, spec("contact.submission.delete").title)
+        self.assertEqual(state.action.label, spec("contact.submission.delete").words())
         self.assertEqual(state.action.effect, "destructive")

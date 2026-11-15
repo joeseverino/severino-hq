@@ -32,6 +32,9 @@ lazy from .whereabouts import locate, whereabouts
 # Actions a person starts from a resource's page, in the order they lead.
 PAGE_VERBS = ("start", "stop", "restart", "reconcile", "renew")
 LIFECYCLE_VERBS = frozenset({"start", "stop", "restart"})
+CREATE_CAPABILITY = "infrastructure.resource.create"
+# The create's mode on a machine the tailnet's device declaration already names.
+MACHINE_DETAILS = "machine_details"
 REMOVAL_CAPABILITY = "infrastructure.resource.remove"
 UPDATE_CAPABILITY = "infrastructure.resource.update"
 
@@ -70,11 +73,15 @@ class ResourceCapabilities:
     write_gap: WriteGap | None = None
 
     @property
-    def removal_words(self) -> str:
-        """What the removal button says: forgetting a record HQ only watches
-        is the removal command's own "forget" words."""
+    def removal_variant(self) -> str:
+        """Which of the removal command's words its button says: forgetting a
+        record HQ only watches is its "forget" variant."""
 
-        return capability_words(REMOVAL_CAPABILITY, "forget" if self.removal == "forget" else "")
+        return "forget" if self.removal == "forget" else ""
+
+    @property
+    def removal_words(self) -> str:
+        return capability_words(REMOVAL_CAPABILITY, self.removal_variant)
 
     @property
     def page_actions(self) -> tuple[tuple[str, Allowed], ...]:

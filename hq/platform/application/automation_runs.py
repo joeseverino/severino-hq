@@ -9,7 +9,7 @@ docs/Architecture.md, "Running a playbook".
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, make_dataclass, replace
 from functools import lru_cache, partial
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, NamedTuple
 from urllib.parse import urlencode
 
 from django.core.exceptions import ImproperlyConfigured, ValidationError as DjangoValidationError
@@ -45,7 +45,7 @@ lazy from .approval_review import ChangePreview
 lazy from .approvals import AUDIT_LABELS, ApprovalSubject, every_call, measured_by, waits_for_a_person
 lazy from .automation_sources import PLAYBOOKS, SHORT_REVISION
 lazy from .cadence import ask, automation_standing
-lazy from .capabilities import Consented, capability_words, consent
+lazy from .capabilities import Consented, consent
 lazy from .controller import release_lapsed
 lazy from .doors import NOBODY
 lazy from .entity_links import entity_link, kind_label
@@ -95,6 +95,12 @@ def operation_registry(generation: str | None = None) -> OperationRegistry:
 
 def clear_operation_registry_cache() -> None:
     _registry.cache_clear()
+
+
+# The variant of a playbook's run command that runs it again as it ran.
+AGAIN = "again"
+HERE = "here"
+RUN_HERE = "Run a playbook here"
 
 
 def capability_name(operation_id: str) -> str:
@@ -587,12 +593,10 @@ def _offers_cancel(state: str, effect: str, principal: Principal) -> bool:
     )
 
 
-def _cancel_button(operation_id: str) -> PageAction:
+def _cancel_button(operation_id: str) -> PageAction | None:
     """The press that posts the run's id to its cancel command's own form."""
 
-    return pages.PageAction(
-        capability_words(CANCEL), command_url(CANCEL), method="post", field="operation_id", value=operation_id
-    )
+    return pages.PageAction.command(CANCEL, field="operation_id", value=operation_id)
 
 
 def cancel_action(run: WorkRun, principal: Principal) -> PageAction | None:
@@ -609,18 +613,28 @@ def run_here_url(operation_id: str, hosts: tuple[str, ...]) -> str:
     return command_url(capability_name(operation_id), hosts=hosts)
 
 
-def playbooks_on(machine: str, principal: Principal) -> tuple[tuple[str, str], ...]:
+class PlaybookHere(NamedTuple):
+    """A playbook that may run on one machine: its title, its command, and its
+    Run page with the machine chosen."""
+
+    title: str
+    capability: str
+    url: str
+
+
+def playbooks_on(machine: str, principal: Principal) -> tuple[PlaybookHere, ...]:
     """Each adopted playbook that may run on the machine ``machine`` and that
-    ``principal`` may run, as its title and its Run page with the machine
-    chosen, A to Z."""
+    ``principal`` may run, A to Z."""
 
     titles = automation_adoption.playbook_titles()
     found = (
-        (run_title(manifest.id, titles), run_here_url(manifest.id, (machine,)))
+        PlaybookHere(
+            run_title(manifest.id, titles), capability_name(manifest.id), run_here_url(manifest.id, (machine,))
+        )
         for manifest in operation_registry().values()
         if manifest.admits(MACHINE_KIND, machine) and principal.permits(run_authority(manifest.effect))
     )
-    return tuple(sorted(found, key=lambda each: each[0].casefold()))
+    return tuple(sorted(found, key=lambda each: each.title.casefold()))
 
 
 def playbook_remedies(rule: str, machine: str) -> tuple[FindingRemedy, ...]:
@@ -836,6 +850,9 @@ def _capability(manifest: OperationManifest, titles: Mapping[str, str]) -> Capab
         ),
         label=run_title(manifest.id, titles),
         verb=OperationRequest.Action.RUN.label,
+        # On a run's page once it has ended: the same playbook on the same machines.
+        # A machine's page, which offers each playbook that runs there by this one name.
+        variants=((AGAIN, f"{OperationRequest.Action.RUN.label} again"), (HERE, RUN_HERE)),
         # Read on a held run's card, where the procedure is what was asked for.
         wants=f"carry out the playbook {named}",
         # A run belongs to Playbooks, where its playbook is listed.

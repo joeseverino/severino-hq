@@ -30,6 +30,8 @@ _TARGET_NAMES = {"slug": "slug", "integer": "ID", "doc_id": "ID", "key": "key"}
 KEPT = "A field left out keeps its value."
 # What opens every record's form, and so what its update is called: "Edit an asset".
 EDIT = "Edit"
+# What opens its deletion's confirmation, and what confirms it.
+DELETE = "Delete"
 
 
 def deleter(resource: str) -> Callable[..., RecordDeleted]:
@@ -208,7 +210,8 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
             target_label=target_label if targeted else "",
             target_help=ended(f"The {title} to {verb}") if targeted else "",
             label=wording.get(verb, ("", ""))[1] or label,
-            verb=EDIT if verb == "update" else "",
+            verb={"update": EDIT, "delete": DELETE}.get(verb, ""),
+            variants=tuple((variant, words) for of, variant, words in records.variants if of == verb),
         )
         for verb, declared, effect, permission, command_type, handler, summary, label, targeted in verbs
         if declared

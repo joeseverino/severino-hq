@@ -59,17 +59,13 @@ def _row_actions(submission: dict) -> tuple[PageAction, ...]:
     """What a message's row offers: the reviews it is not already in, and its
     deletion, which asks first on a page of its own."""
 
-    status_url = reverse("contacts:set_status", args=[submission["id"]])
-    status = submission.get("status")
-    return (
-        *(
-            [PageAction("Mark read", status_url, method="post", value="read", field="status")]
-            if status == "unread"
-            else []
-        ),
-        *([PageAction("Spam", status_url, method="post", value="spam", field="status")] if status != "spam" else []),
-        PageAction("Delete", reverse("contacts:delete", args=[submission["id"]]), danger=True),
+    pk, status = submission["id"], submission.get("status")
+    marks = [mark for mark, shown in (("read", status == "unread"), ("spam", status != "spam")) if shown]
+    offered = (
+        *(PageAction.command(REVIEW, pk, variant=mark, field="status", value=mark) for mark in marks),
+        PageAction.command(DELETE, pk),
     )
+    return tuple(action for action in offered if action is not None)
 
 
 def contact_list(request):
@@ -196,6 +192,9 @@ def contact_set_status(request, pk: int):
     return redirect(_safe_next(request))
 
 
+contact_set_status.runs = (REVIEW,)  # type: ignore[attr-defined]
+
+
 def contact_delete(request, pk: int):
     submission = find_submission(pk)
     if not submission:
@@ -236,3 +235,6 @@ def _sent(submission) -> str:
 
     at = moment(submission.get("created_at"))
     return when(at) if at is not None else ""
+
+
+contact_delete.runs = (DELETE,)  # type: ignore[attr-defined]

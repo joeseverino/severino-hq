@@ -112,6 +112,10 @@ class ActionItemAsideView(View):
 
     aside = False
 
+    @property
+    def runs(self) -> tuple[str, ...]:
+        return (queue_state.SET_ASIDE if self.aside else queue_state.RESTORE,)
+
     def post(self, request):
         rows = queue_state.named_rows(request.POST.getlist("key"))
         if rows and self.aside:

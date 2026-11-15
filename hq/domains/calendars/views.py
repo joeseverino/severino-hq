@@ -11,7 +11,7 @@ from django.utils import timezone
 from django.views import View
 from django.views.generic import CreateView, DeleteView, RedirectView, TemplateView, UpdateView
 
-from hq.platform.application.calendar import calendar_day, calendar_month, month_of, month_url, new_entry_url
+from hq.platform.application.calendar import calendar_day, calendar_month, month_of, month_url
 from hq.platform.application.calendar_entries import (
     CHOOSE_SOURCE,
     calendar_choices,
@@ -19,7 +19,7 @@ from hq.platform.application.calendar_entries import (
     upcoming,
     when_label,
 )
-from hq.platform.application.capabilities import capability_title, capability_words
+from hq.platform.application.capabilities import capability_title
 from hq.platform.application.card_items import ListRow
 from hq.platform.application.entity_links import web_url
 from hq.platform.application.moments import stamp_day, when_day
@@ -52,13 +52,7 @@ class CalendarView(PageMixin, TemplateView):
     @override
     def get_page_actions(self):
         day = self._selected() or timezone.localdate()
-        return (
-            PageAction(
-                capability_words(CREATE),
-                new_entry_url(day),
-                primary=True,
-            ),
-        )
+        return (PageAction.command(CREATE, primary=True, query={"on": day.isoformat()}),)
 
     @override
     def get_context_data(self, **kwargs):
@@ -103,8 +97,8 @@ class CalendarView(PageMixin, TemplateView):
             if entry.repeat
             else (),
             "actions": (
-                PageAction(capability_words("calendar.entry.update"), reverse("calendar:entry_edit", args=[entry.uid])),
-                PageAction("Delete", reverse("calendar:entry_delete", args=[entry.uid]), danger=True),
+                PageAction.command("calendar.entry.update", entry.uid),
+                PageAction.command("calendar.entry.delete", entry.uid),
             ),
         }
 

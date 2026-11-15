@@ -15,6 +15,7 @@ from hq.platform.application.contact_submissions import (
 from hq.platform.application.contracts import Effect
 from hq.platform.application.describe import Describe
 from hq.platform.application.integration_specs import CapabilitySpec, ResourceSpec
+from hq.platform.application.records import DELETE
 from hq.platform.application.resources import STATUS_FILTER, TEXT_FILTER, BoundedQuery
 from hq.platform.application.security import Capability
 
@@ -90,6 +91,8 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
                 "Record the attributed change in HQ's audit log.",
             ),
             label="Review a message",
+            # A message's page and row mark it as one review state in one press.
+            variants=(("read", "Mark read"), ("replied", "Mark replied"), ("archived", "Archive"), ("spam", "Spam")),
         ),
         CapabilitySpec(
             contact_submissions.DELETE,
@@ -108,6 +111,7 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
                 "Treat an already-absent or already-queued record as a successful retry and audit the change.",
             ),
             label="Delete a message",
+            verb=DELETE,
         ),
     )
 

@@ -1,13 +1,13 @@
-"""Dependency-free contracts shared by workflow and presentation projections."""
+"""Contracts shared by workflow and presentation projections."""
 
 from dataclasses import dataclass
 from typing import Annotated
 
 from .describe import Describe
+from .effects import Effect
 
-# What `pydantic.with_config` sets, written here since this leaf loads no
-# pydantic: each class carries its own config, so it is written one way under
-# every answer that holds it.
+# What `pydantic.with_config` sets, written out: each class carries its own
+# config, so it is written one way under every answer that holds it.
 _OWN_CONFIG = {"extra": "forbid"}
 
 
@@ -49,13 +49,8 @@ class ActionLink:
         Describe("What the link is for, such as `remedy` or `verify`, which a page places it by."),
     ]
     label: Annotated[str, Describe("The words on the link or button: its command's own, where it runs one.")]
-    effect: Annotated[
-        str,
-        Describe(
-            "What following it does: `read` for a link that only opens a page, else its command's effect, "
-            "`remote_write`, `infrastructure_change` or `destructive`."
-        ),
-    ]
+    # What following it does, said once by Effect: `read` for a link that only opens a page.
+    effect: Effect
     url: Annotated[str, Describe("Where it goes, a page or the command it submits to, requested with `method`.")]
     method: Annotated[str, Describe("`GET` to open `url`, `POST` to submit to it.")] = "GET"
     capability: Annotated[

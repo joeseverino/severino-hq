@@ -9,8 +9,7 @@ from django.urls import reverse_lazy
 from django.views import View
 from django.views.generic import TemplateView
 
-from hq.platform.application.adoption import ADOPT_SERVICE, unmanaged_services
-from hq.platform.application.capabilities import capability_words
+from hq.platform.application.adoption import ADOPT, ADOPT_SERVICE, unmanaged_services
 from hq.platform.application.connections import machines_once
 from hq.platform.application.entity_links import entity_link
 from hq.platform.application.exposure import OPEN
@@ -23,7 +22,6 @@ from hq.platform.application.resource_capabilities import (
     LIFECYCLE_VERBS,
     resource_capabilities,
 )
-from hq.platform.application.resource_operations import ACTION_CAPABILITY
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.service_context import (
@@ -108,13 +106,7 @@ class ServiceListView(PageMixin, TemplateView):
                 service,
                 ()
                 if service.observed_only
-                else (
-                    PageAction(
-                        capability_words(ADOPT_SERVICE),
-                        reverse("control_plane:adopt", args=[service.hostname]),
-                        method="post",
-                    ),
-                ),
+                else tuple(filter(None, (PageAction.command(ADOPT_SERVICE, service.hostname),))),
             )
             for service in unmanaged
         ]
@@ -215,28 +207,13 @@ class ServiceDetailView(PageMixin, TemplateView):
         if watcher is not None:
             capabilities = resource_capabilities(watcher, running=container.verbs)
             actions.extend(
-                verb_action(
-                    verb,
-                    watcher.key,
-                    allowed,
-                    label=capability_words(ACTION_CAPABILITY[verb]),
-                    title=allowed.reason or f"{capability_words(ACTION_CAPABILITY[verb])} {container.name}",
-                    origin=self.request.get_full_path(),
-                )
+                verb_action(verb, watcher.key, allowed, origin=self.request.get_full_path())
                 for verb, allowed in capabilities.page_actions
                 if verb in LIFECYCLE_VERBS
             )
         elif container:
             actions.append(
-                PageAction(
-                    "Watch container",
-                    reverse(
-                        "control_plane:adopt_record",
-                        kwargs={"kind": CONTAINER_KIND, "token": container.token},
-                    ),
-                    method="post",
-                    title=f"Let HQ start, stop and restart {container.name}",
-                )
+                PageAction.command(ADOPT, {"kind": CONTAINER_KIND, "token": container.token}, variant=CONTAINER_KIND)
             )
         if self.service.zone_key:
             actions.append(PageAction("Domain", reverse("zones:detail", args=[self.service.zone_key])))

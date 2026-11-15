@@ -193,7 +193,7 @@ class RunHereTests(TestCase):
 
         response = self.client.get(reverse("control_plane:machine", kwargs={"name": MACHINE}))
 
-        offered = dict(response.context["playbooks_here"])
+        offered = {each.title: each.url for each in response.context["playbooks_here"]}
         self.assertTrue(offered)
         runnable = [manifest for manifest in operation_registry().values() if manifest.admits("machine", MACHINE)]
         self.assertEqual(len(offered), len(runnable))
@@ -218,7 +218,7 @@ class RunHereTests(TestCase):
             for manifest in operation_registry().values()
             if manifest.effect == "read" and manifest.admits("machine", MACHINE)
         }
-        offered = {url.split("/")[2] for _, url in response.context["playbooks_here"]}
+        offered = {each.capability for each in response.context["playbooks_here"]}
         self.assertTrue(reads)
         self.assertEqual(offered, reads)
 

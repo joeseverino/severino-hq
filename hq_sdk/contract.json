@@ -946,19 +946,35 @@
         "constructor": [
           "label",
           "url",
-          "method=",
           "primary=",
-          "danger=",
           "modal=",
-          "value=",
           "title=",
-          "disabled=",
-          "field=",
-          "fields="
+          "disabled="
         ],
-        "fields": [],
+        "fields": [
+          "danger",
+          "field",
+          "fields",
+          "method",
+          "value"
+        ],
         "kind": "dataclass",
         "members": {
+          "command": {
+            "kind": "classmethod",
+            "parameters": [
+              "name",
+              "target=",
+              "*",
+              "variant=",
+              "primary=",
+              "query=",
+              "refused=",
+              "field=",
+              "value=",
+              "fields="
+            ]
+          },
           "css": {
             "kind": "property"
           },
@@ -970,6 +986,12 @@
           },
           "modal_id": {
             "kind": "property"
+          },
+          "of": {
+            "kind": "classmethod",
+            "parameters": [
+              "link"
+            ]
           }
         }
       },
@@ -2937,6 +2959,9 @@
               "self",
               "result"
             ]
+          },
+          "runs": {
+            "kind": "property"
           },
           "write_principal": {
             "kind": "method",

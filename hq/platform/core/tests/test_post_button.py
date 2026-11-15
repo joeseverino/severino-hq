@@ -23,8 +23,13 @@ class PostButtonFieldsTests(SimpleTestCase):
 
     def test_it_posts_its_fields_its_button_and_a_token_and_returns_to_the_page(self):
         html = self.draw(
-            PageAction(
-                "Block", "/example/block/", method="post", field="blocked", value="1", fields={"client_id": "a b"}
+            PageAction._built(
+                label="Block",
+                url="/example/block/",
+                method="post",
+                field="blocked",
+                value="1",
+                fields={"client_id": "a b"},
             )
         )
 
@@ -40,20 +45,16 @@ class PostButtonFieldsTests(SimpleTestCase):
 
     def test_a_next_among_its_fields_is_where_it_returns(self):
         html = self.draw(
-            PageAction("Block", "/example/block/", method="post", fields={"id": "1", "next": "/example/#row-1"})
+            PageAction._built(
+                label="Block", url="/example/block/", method="post", fields={"id": "1", "next": "/example/#row-1"}
+            )
         )
 
         self.assertEqual(self.sent(html)["next"], "/example/#row-1")
 
     def test_a_post_without_fields_is_still_the_shared_form_s_button(self):
-        html = self.draw(PageAction("Read", "/example/read/", method="post", value="read"))
+        html = self.draw(PageAction._built(label="Read", url="/example/read/", method="post", value="read"))
 
         self.assertEqual(elements(html, "form"), [])
         (button,) = elements(html, "button")
         self.assertEqual(button.attrs["formaction"], "/example/read/")
-
-    def test_only_a_post_sends_fields_and_never_its_button_s_own(self):
-        with self.assertRaises(ValueError):
-            PageAction("Open", "/example/", fields={"id": "1"})
-        with self.assertRaises(ValueError):
-            PageAction("Block", "/example/", method="post", field="blocked", fields={"blocked": "1"})

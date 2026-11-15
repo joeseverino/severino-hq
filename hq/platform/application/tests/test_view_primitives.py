@@ -155,8 +155,10 @@ class ListRowTests(SimpleTestCase):
         row = ListRow(
             title="Example group",
             actions=(
-                PageAction("↑", "/example/group/", method="post", value="up", title="Move up", disabled=True),
-                PageAction("↓", "/example/group/", method="post", value="down", title="Move down"),
+                PageAction._built(
+                    label="↑", url="/example/group/", method="post", value="up", title="Move up", disabled=True
+                ),
+                PageAction._built(label="↓", url="/example/group/", method="post", value="down", title="Move down"),
                 PageAction("Open", "/example/group/open/"),
             ),
         )

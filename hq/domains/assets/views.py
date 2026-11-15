@@ -1,7 +1,7 @@
 from typing import override
 
 from django.db.models import Q, Sum
-from django.urls import reverse, reverse_lazy
+from django.urls import reverse_lazy
 from django.views.generic import (
     CreateView,
     DeleteView,
@@ -12,7 +12,6 @@ from django.views.generic import (
 
 from hq.platform.application import related
 from hq.platform.application.assets import managed_domain
-from hq.platform.application.capabilities import capability_words
 from hq.platform.application.documentation import related_documents
 from hq.platform.application.expenses import cost_totals
 from hq.platform.application.labels import dotted_html
@@ -57,7 +56,7 @@ class AssetListView(PageMixin, TableListMixin, ListView):
 
     @override
     def get_page_actions(self):
-        return (PageAction(capability_words("asset.create"), reverse("assets:create"), primary=True),)
+        return (PageAction.command("asset.create", primary=True),)
 
     @override
     def get_queryset(self):
@@ -133,8 +132,8 @@ class AssetDetailView(PageMixin, DetailView):
     def get_page_actions(self):
         slug = self.object.slug
         return (
-            PageAction(capability_words("asset.update"), reverse("assets:edit", args=[slug])),
-            PageAction("Delete", reverse("assets:delete", args=[slug]), danger=True),
+            PageAction.command("asset.update", slug),
+            PageAction.command("asset.delete", slug),
         )
 
 

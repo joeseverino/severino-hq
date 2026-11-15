@@ -3,7 +3,7 @@ from typing import override
 
 from django.contrib import messages
 from django.shortcuts import redirect, render
-from django.urls import reverse, reverse_lazy
+from django.urls import reverse_lazy
 from django.utils.html import format_html
 from django.views.generic import (
     CreateView,
@@ -15,7 +15,6 @@ from django.views.generic import (
 )
 
 from hq.platform.application import related
-from hq.platform.application.capabilities import capability_words
 from hq.platform.application.documentation import SYNC
 from hq.platform.application.labels import dotted_html
 from hq.platform.application.pages import PageAction, PageMixin, page_context
@@ -94,8 +93,8 @@ class DocsListView(PageMixin, TableListMixin, ListView):
     @override
     def get_page_actions(self):
         return (
-            PageAction("Import manifest", reverse("docs_index:import")),
-            PageAction(capability_words("documentation.create"), reverse("docs_index:create"), primary=True),
+            PageAction.command(SYNC),
+            PageAction.command("documentation.create", primary=True),
         )
 
     @override
@@ -167,8 +166,8 @@ class DocsDetailView(PageMixin, DetailView):
     def get_page_actions(self):
         doc_id = self.object.doc_id
         return (
-            PageAction(capability_words("documentation.update"), reverse("docs_index:edit", args=[doc_id])),
-            PageAction("Delete", reverse("docs_index:delete", args=[doc_id]), danger=True),
+            PageAction.command("documentation.update", doc_id),
+            PageAction.command("documentation.delete", doc_id),
         )
 
 
@@ -196,6 +195,7 @@ class DocsDeleteView(DocsPage, RecordDeleteMixin, DeleteView):
 
 
 class ManifestImportView(View):
+    runs = (SYNC,)
     template_name = "docs_index/import.html"
 
     def render_form(self, request, form):

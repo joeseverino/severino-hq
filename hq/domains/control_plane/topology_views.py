@@ -11,7 +11,6 @@ from django.views.generic import TemplateView
 
 from hq.platform.application.action_links import topology_url
 from hq.platform.application.analytics import HOST_TRAFFIC_DAYS
-from hq.platform.application.capabilities import capability_words
 from hq.platform.application.entity_links import NODE_KINDS, node_link
 from hq.platform.application.moments import moment
 from hq.platform.application.pages import PageAction, PageMixin
@@ -134,9 +133,7 @@ class TopologyView(PageMixin, TemplateView):
     @override
     def get_page_actions(self):
         return (
-            PageAction(
-                capability_words("infrastructure.resource.create"), reverse("control_plane:create"), primary=True
-            ),
+            PageAction.command("infrastructure.resource.create", primary=True),
             PageAction("All records", reverse("control_plane:list")),
             PageAction("Connections", reverse("control_plane:connections")),
         )

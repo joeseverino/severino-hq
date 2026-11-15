@@ -8,6 +8,7 @@ from django.test import TestCase
 
 from hq.platform.application import cadence
 from hq.platform.application.card_items import Insight
+from hq.platform.application.contracts import Effect
 from hq.platform.application.dashboard import work_queue
 from hq.platform.application.derivation_testing import uncached
 from hq.platform.application.markup_testing import hrefs, select, with_class, within
@@ -28,8 +29,15 @@ class DashboardQueueTests(TestCase):
         self.client.force_login(self.user)
         plan = claim_resolution_plan(
             identity=claim_identity("example.utility", "changed:account:one"),
-            remedies=(ActionLink("remedy", "Inspect evidence", "read", "/example/evidence/", recommended=True),),
-            verification=ActionLink("verify", "Recheck facts", "write", "/dashboard/glance/", method="POST"),
+            remedies=(ActionLink("remedy", "Inspect evidence", Effect.READ, "/example/evidence/", recommended=True),),
+            verification=ActionLink(
+                "verify",
+                "Recheck facts",
+                Effect.REMOTE_WRITE,
+                "/dashboard/glance/",
+                method="POST",
+                capability="dashboard.panels.refresh",
+            ),
         )
         insights = (
             Insight(

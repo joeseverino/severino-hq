@@ -427,7 +427,10 @@ class LeadActionTests(SimpleTestCase):
         from hq.platform.application.pages import PageAction
 
         self.assertEqual(
-            self.lead(PageAction("Stop", "/stop/", danger=True), PageAction("Restart", "/restart/", method="post")),
+            self.lead(
+                PageAction._built(label="Stop", url="/stop/", danger=True),
+                PageAction._built(label="Restart", url="/restart/", method="post"),
+            ),
             "Restart",
         )
 
@@ -446,7 +449,7 @@ class LeadActionTests(SimpleTestCase):
     def test_with_only_a_destructive_control_it_leads(self):
         from hq.platform.application.pages import PageAction
 
-        self.assertEqual(self.lead(PageAction("Remove", "/r/", danger=True)), "Remove")
+        self.assertEqual(self.lead(PageAction._built(label="Remove", url="/r/", danger=True)), "Remove")
 
 
 class HeadActionsTests(SimpleTestCase):
@@ -463,10 +466,10 @@ class HeadActionsTests(SimpleTestCase):
 
         self.assertEqual(
             self.split(
-                PageAction("Restart", "/restart/", method="post"),
-                PageAction("Stop", "/stop/", danger=True),
+                PageAction._built(label="Restart", url="/restart/", method="post"),
+                PageAction._built(label="Stop", url="/stop/", danger=True),
                 PageAction("Edit", "/edit/"),
-                PageAction("Remove", "/remove/", danger=True),
+                PageAction._built(label="Remove", url="/remove/", danger=True),
             ),
             (["Restart", "Edit"], ["Edit", "Stop", "Remove"]),
         )

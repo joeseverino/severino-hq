@@ -584,6 +584,9 @@ def request_stop(command: OperationCommand, *, consented: Consented, current_key
     )
 
 
+# The variant of reconcile that a record only reporting on itself offers: reading it again.
+READS_AGAIN = "reads_again"
+
 # The capability that asks for each verb, so a page asks for one by its verb
 # and runs it through the capability runner like every other caller. A run is
 # asked through its procedure's own command (``automation_runs.capability_name``).

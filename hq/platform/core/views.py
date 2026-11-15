@@ -20,7 +20,6 @@ from hq.platform.application.agent_access import REMOVE_AGENT, SET_AGENT_ACCESS,
 from hq.platform.application.agent_devices import APPROVE_AGENT_DEVICE, BLOCK_AGENT_DEVICE
 from hq.platform.application.appearance import SET_THEME
 from hq.platform.application.avatars import avatar_of
-from hq.platform.application.capabilities import capability_words
 from hq.platform.application.card_items import ListRow
 from hq.platform.application.command_center import command_center
 from hq.platform.application.demo import DEMO_SESSION_KEY, SET_DEMO
@@ -161,6 +160,8 @@ class AgentAccessView(View):
 class AgentBlockView(View):
     """Block, allow or remove one agent's client. The form sends a state, never a toggle."""
 
+    runs = (SET_AGENT_BLOCK, REMOVE_AGENT)
+
     def post(self, request):
         client_id = request.POST.get("client_id", "")
         if "removed" in request.POST:
@@ -180,6 +181,8 @@ class AgentBlockView(View):
 class AgentDeviceView(View):
     """Approve or block one device an agent called from. The form sends a state, never a toggle."""
 
+    runs = (APPROVE_AGENT_DEVICE, BLOCK_AGENT_DEVICE)
+
     # Each control's field, and the command that sets it.
     SETS: ClassVar[dict[str, str]] = {"approved": APPROVE_AGENT_DEVICE, "blocked": BLOCK_AGENT_DEVICE}
 
@@ -198,6 +201,8 @@ class AgentDeviceView(View):
 class OwnDeviceView(View):
     """Register or remove one of the signed-in person's own devices. The form sends a state."""
 
+    runs = (SET_OWN_DEVICE,)
+
     def post(self, request):
         requested = request.POST.get("registered")
         client_id = request.POST.get("client_id", "")
@@ -209,25 +214,29 @@ class OwnDeviceView(View):
         return redirect(safe_next(request, fallback=reverse("agent_policy")))
 
 
-def _set(command: str, state: str, url: str, target: dict[str, str], field: str, value: str, **style) -> PageAction:
+def _set(
+    command: str, state: str, target: dict[str, str], field: str, value: str, *, primary: bool = False
+) -> PageAction | None:
     """A row's control that sets one ``field`` of the record ``target``
     names, which travels in the body since its identifier may be any string."""
 
-    words = capability_words(command, state)
-    return PageAction(words, url, method="post", field=field, value=value, fields=target, **style)
+    return PageAction.command(command, variant=state, field=field, value=value, fields=target, primary=primary)
+
+
+def _offered(*actions: PageAction | None) -> tuple[PageAction, ...]:
+    return tuple(action for action in actions if action is not None)
 
 
 def agent_actions(standing: agent_activity.AgentStanding, here: str) -> tuple[PageAction, ...]:
     """What may be done to one agent from its row: let it back in, or block or
     remove it. Removal never lifts a block, so a blocked agent offers only that."""
 
-    url = reverse("agent_block")
     target = {"client_id": standing.subject, "next": here}
     if standing.identity.blocked_at:
-        return (_set(SET_AGENT_BLOCK, "off", url, target, "blocked", "0", primary=True),)
-    return (
-        _set(SET_AGENT_BLOCK, "on", url, target, "blocked", "1"),
-        _set(REMOVE_AGENT, "", url, target, "removed", "1", danger=True),
+        return _offered(_set(SET_AGENT_BLOCK, "off", target, "blocked", "0", primary=True))
+    return _offered(
+        _set(SET_AGENT_BLOCK, "on", target, "blocked", "1"),
+        _set(REMOVE_AGENT, "", target, "removed", "1"),
     )
 
 
@@ -241,25 +250,24 @@ def device_actions(device: agent_activity.DeviceRow, here: str) -> tuple[PageAct
     record = device.record
     if record is None:
         return ()
-    url = reverse("agent_device")
     target = {"device": str(record.pk), "next": f"{here}#{device.anchor}"}
     if record.blocked_at:
-        return (_set(BLOCK_AGENT_DEVICE, "off", url, target, "blocked", "0", primary=True),)
+        return _offered(_set(BLOCK_AGENT_DEVICE, "off", target, "blocked", "0", primary=True))
     actions = []
     if device.yours:
         if record.approved_at:
-            actions.append(_set(APPROVE_AGENT_DEVICE, "off", url, target, "approved", "0"))
+            actions.append(_set(APPROVE_AGENT_DEVICE, "off", target, "approved", "0"))
         else:
-            actions.append(_set(APPROVE_AGENT_DEVICE, "on", url, target, "approved", "1", primary=True))
-    actions.append(_set(BLOCK_AGENT_DEVICE, "on", url, target, "blocked", "1"))
-    return tuple(actions)
+            actions.append(_set(APPROVE_AGENT_DEVICE, "on", target, "approved", "1", primary=True))
+    actions.append(_set(BLOCK_AGENT_DEVICE, "on", target, "blocked", "1"))
+    return _offered(*actions)
 
 
 def own_device_actions(device, here: str) -> tuple[PageAction, ...]:
     """Removing one of the signed-in person's own devices, from its row."""
 
     target = {"client_id": device.client_id, "next": here}
-    return (_set(SET_OWN_DEVICE, "off", reverse("own_device"), target, "registered", "0", danger=True),)
+    return _offered(_set(SET_OWN_DEVICE, "off", target, "registered", "0"))
 
 
 class ThemeView(View):

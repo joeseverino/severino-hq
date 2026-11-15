@@ -1,5 +1,7 @@
 from django.urls import path
 
+from hq.platform.application.resource_capabilities import CREATE_CAPABILITY, UPDATE_CAPABILITY
+
 from . import (
     approval_views,
     connection_views,
@@ -63,7 +65,7 @@ urlpatterns = [
     ),
     # Before <str:hostname>, which would otherwise swallow "new" as a name.
     path("services/new/", service_views.ServiceStartView.as_view(), name="service_start"),
-    path("new/", resource_form_views.ResourceFormView.as_view(), name="create"),
+    path("new/", resource_form_views.ResourceFormView.as_view(runs=(CREATE_CAPABILITY,)), name="create"),
     path("services/<str:hostname>/", service_views.ServiceDetailView.as_view(), name="service"),
     path("adopt/<str:hostname>/", resource_form_views.AdoptView.as_view(), name="adopt"),
     # One specific record rather than everything a hostname answers with. A
@@ -82,7 +84,7 @@ urlpatterns = [
     path("playbooks/proposals/<int:pk>/adopt/", playbook_views.ProposalAdoptView.as_view(), name="playbooks_adopt"),
     path("playbooks/proposals/<int:pk>/reject/", playbook_views.ProposalRejectView.as_view(), name="playbooks_reject"),
     path("<slug:key>/", views.InfrastructureDetailView.as_view(), name="detail"),
-    path("<slug:key>/edit/", resource_form_views.ResourceFormView.as_view(), name="edit"),
+    path("<slug:key>/edit/", resource_form_views.ResourceFormView.as_view(runs=(UPDATE_CAPABILITY,)), name="edit"),
     path("<slug:key>/remove/", views.ResourceRemoveView.as_view(), name="remove"),
     path(
         "<slug:key>/certificate/",

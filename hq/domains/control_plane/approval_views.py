@@ -19,7 +19,7 @@ class ApprovalDecisionView(View):
     """
 
     def post(self, request, approval_id, decision):
-        capability = next((name for name, (path, _) in DECISIONS.items() if path == decision), None)
+        capability = next((name for name, path in DECISIONS.items() if path == decision), None)
         if capability is None:
             messages.error(request, "Choose whether to approve or reject.")
             return self._back(request)

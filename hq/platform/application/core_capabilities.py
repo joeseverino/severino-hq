@@ -104,8 +104,10 @@ from .receipts import (
 )
 from .records import EDIT, KEPT
 from .registry_import import REQUIRED_CAPABILITIES as IMPORT_CAPABILITIES, HQImportCommand, execute_hq_import
+from .resource_capabilities import MACHINE_DETAILS
 from .resource_operations import (
     ACTION_CAPABILITY,
+    READS_AGAIN,
     OperationCommand,
     accept_observed,
     request_certificate_renewal,
@@ -225,6 +227,7 @@ CORE_CAPABILITY_SPECS = (
         execute_documentation_sync,
         subject_resource="documentation",
         label="Update docs from an export",
+        verb="Update docs",
     ),
     CapabilitySpec(
         "infrastructure.resource.create",
@@ -235,6 +238,9 @@ CORE_CAPABILITY_SPECS = (
         save_managed_resource,
         subject_resource="infrastructure",
         label=adding("record"),
+        # A machine page's own create: details for a machine the tailnet's
+        # declaration names, or a machine declared from nothing.
+        variants=((MACHINE_DETAILS, "Add machine details"), (MACHINE_KIND, "Add this machine to HQ")),
     ),
     CapabilitySpec(
         "infrastructure.resource.update",
@@ -266,6 +272,7 @@ CORE_CAPABILITY_SPECS = (
         ),
         label="Manage a record in HQ",
         verb="Manage in HQ",
+        variants=((CONTAINER_KIND, "Watch container"),),
         wants="manage a record HQ found live",
         reached_from="control_plane:services",
     ),
@@ -325,6 +332,8 @@ CORE_CAPABILITY_SPECS = (
         target_label="Record",
         target_help="The record to apply.",
         label=OperationRequest.Action.RECONCILE.label,
+        # Applying a record that only reports on itself reads it again.
+        variants=((READS_AGAIN, CONTROLLER_REFRESH.words()),),
         wants="apply HQ's config to {target}",
     ),
     CapabilitySpec(
@@ -509,6 +518,7 @@ CORE_CAPABILITY_SPECS = (
             "Record the names it covers and move the record on, so it is installed.",
         ),
         label="Upload a certificate",
+        variants=(("replace", "Replace certificate"),),
     ),
     # A receipt's file arrives only through an operator in the browser or at
     # the host (security.HELD_ONLY_AT), though a token may read the schema.
@@ -573,6 +583,7 @@ CORE_CAPABILITY_SPECS = (
             "Run the held call once, recorded under both the asker and the approver.",
         ),
         label="Approve a held change",
+        verb="Approve",
         reached_from="action_items",
     ),
     CapabilitySpec(
@@ -584,6 +595,7 @@ CORE_CAPABILITY_SPECS = (
         answered(reject),
         execution_notes=("Record the refusal, who made it and the note, and apply nothing.",),
         label="Reject a held change",
+        verb="Reject",
         reached_from="action_items",
     ),
     # The asker's own way out of a request it no longer wants. Its own
@@ -752,6 +764,8 @@ def dashboard() -> tuple[CapabilitySpec, ...]:
             execution_notes=("Pin it last among your pins of its type, or unpin it.",),
             label="Pin or unpin an item",
             verb="Pin",
+            # A domain's own head, where a pin is a favorite.
+            variants=(("on", f"☆ Add to {pins.FAVORITES}"), ("off", f"★ {pins.FAVORITE}")),
             reached_from=ON_ITS_PAGE,
         ),
         CapabilitySpec(
@@ -788,7 +802,7 @@ def dashboard() -> tuple[CapabilitySpec, ...]:
                 "Set each named item aside as the queue holds it now.",
             ),
             label="Set aside action items",
-            verb="Set aside",
+            verb="Dismiss",
             reached_from="action_items",
         ),
         CapabilitySpec(
@@ -799,7 +813,7 @@ def dashboard() -> tuple[CapabilitySpec, ...]:
             action_items.RestoreCommand,
             action_items.restore,
             label="Bring back action items",
-            verb="Bring back",
+            verb="Restore",
             reached_from="action_items",
         ),
         CapabilitySpec(

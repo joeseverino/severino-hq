@@ -86,6 +86,8 @@ class Records:
     # (verb, summary, label) where the derived wording would say less than it
     # should; an empty one keeps the derived.
     wording: tuple[tuple[str, str, str], ...] = ()
+    # (verb, variant, words): a mode a page offers its command in (``CapabilitySpec.variants``).
+    variants: tuple[tuple[str, str, str], ...] = ()
 
     @property
     def called(self) -> str:
@@ -323,9 +325,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         label="Docs",
         description="Pointers to the documentation of each system and project, kept by sensitivity.",
         navigation=(NavigationItem("Docs", "docs_index:list", "docs_index", 101, "Projects"),),
-        integration=PluginIntegration(
-            resources=_provider("hq.domains.docs_index.specs:resources"),
-        ),
+        integration=PluginIntegration(resources=_provider("hq.domains.docs_index.specs:resources")),
         apps=("hq.domains.docs_index",),
         mounts=(Mount("docs/", "hq.domains.docs_index.urls"),),
         records=Records(
@@ -367,6 +367,11 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
             command="hq.platform.application.content:ContentCommand",
             save="hq.platform.application.content:save_content",
             title="content item",
+            variants=(
+                ("create", "writeup_or_page", "Add a writeup or page"),
+                ("create", "writeup", "Add a writeup"),
+                ("create", "page", "Add a page"),
+            ),
         ),
     ),
     DomainDescriptor(
@@ -408,9 +413,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         # Last in Web, because it is the section that reports on the others.
         # Reading it is what you do after publishing, not before.
         navigation=(NavigationItem("Analytics", "analytics:overview", "analytics", 114, "Web"),),
-        integration=PluginIntegration(
-            resources=_provider("hq.domains.analytics.specs:resources"),
-        ),
+        integration=PluginIntegration(resources=_provider("hq.domains.analytics.specs:resources")),
         apps=("hq.domains.analytics",),
         mounts=(Mount("analytics/", "hq.domains.analytics.urls"),),
     ),
@@ -440,9 +443,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         label="Receipts",
         description="Receipts, matched to the expense or asset each paid for.",
         navigation=(NavigationItem("Receipts", "receipts:list", "receipts", 121, "Business"),),
-        integration=PluginIntegration(
-            resources=_provider("hq.domains.receipts.specs:resources"),
-        ),
+        integration=PluginIntegration(resources=_provider("hq.domains.receipts.specs:resources")),
         apps=("hq.domains.receipts",),
         mounts=(Mount("receipts/", "hq.domains.receipts.urls"),),
         # Receipts arrive as uploads, so there is no create command.
@@ -460,6 +461,8 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
                 ("update", "Change a receipt's details. The file itself does not change.", ""),
                 ("delete", "Delete one receipt and its file.", ""),
             ),
+            # Its match page links it to one of the expenses it may be for.
+            variants=(("update", "expense", "Link to expense"), ("update", "link", "Link")),
         ),
     ),
     DomainDescriptor(
@@ -467,9 +470,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         label="Assets",
         description="What the business owns, what it cost and what it serves.",
         navigation=(NavigationItem("Assets", "assets:list", "assets", 122, "Business"),),
-        integration=PluginIntegration(
-            resources=_provider("hq.domains.assets.specs:resources"),
-        ),
+        integration=PluginIntegration(resources=_provider("hq.domains.assets.specs:resources")),
         apps=("hq.domains.assets",),
         mounts=(Mount("assets/", "hq.domains.assets.urls"),),
         records=Records(

@@ -25,7 +25,6 @@ from django.views.generic import (
 )
 
 from hq.domains.expenses.models import Expense
-from hq.platform.application.capabilities import capability_words
 from hq.platform.application.labels import dotted, dotted_html, human_bytes
 from hq.platform.application.moments import when
 from hq.platform.application.money import money
@@ -72,7 +71,7 @@ class ReceiptListView(PageMixin, TableListMixin, ListView):
 
     @override
     def get_page_actions(self):
-        return (PageAction(capability_words(UPLOAD), reverse("receipts:create"), primary=True),)
+        return (PageAction.command(UPLOAD, primary=True),)
 
     @override
     def get_queryset(self):
@@ -115,17 +114,11 @@ class ReceiptDetailView(PageMixin, DetailView):
         receipt = self.object
         actions = []
         if not receipt.related_expense and not receipt.related_asset:
-            actions.append(
-                PageAction(
-                    "Link to expense",
-                    reverse("receipts:match", args=[receipt.pk]),
-                    primary=True,
-                )
-            )
+            actions.append(PageAction.command(UPDATE, receipt.pk, variant="expense", primary=True))
         actions += [
             *([PageAction("Download file", reverse("receipts:file", args=[receipt.pk]))] if self.stored else []),
-            PageAction(capability_words("receipt.update"), reverse("receipts:edit", args=[receipt.pk])),
-            PageAction("Delete", reverse("receipts:delete", args=[receipt.pk]), danger=True),
+            PageAction.command("receipt.update", receipt.pk),
+            PageAction.command("receipt.delete", receipt.pk),
         ]
         return tuple(actions)
 
@@ -147,6 +140,7 @@ class ReceiptMatchView(ReceiptPage, TemplateView):
 
     template_name = "receipts/receipt_match.html"
     page_title = "Link receipt"
+    runs = ((UPDATE, "expense"), (UPDATE, "link"))
 
     @cached_property
     def receipt(self):
@@ -200,13 +194,8 @@ class ReceiptMatchView(ReceiptPage, TemplateView):
                 (
                     expense,
                     (
-                        PageAction(
-                            "Link",
-                            self.request.path,
-                            method="post",
-                            primary=True,
-                            field="expense_id",
-                            value=str(expense.pk),
+                        PageAction.command(
+                            UPDATE, receipt.pk, variant="link", primary=True, field="expense_id", value=str(expense.pk)
                         ),
                     ),
                 )

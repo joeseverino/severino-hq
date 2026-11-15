@@ -18,6 +18,7 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.projects.models import Project
 from hq.platform.application.card_items import Insight, Kpi
+from hq.platform.application.contracts import Effect
 from hq.platform.application.drawings import Dot, Dots
 from hq.platform.application.report_testing import report_connections
 from hq.platform.application.services import CONTAINER_KIND
@@ -579,7 +580,9 @@ def _rechecks(*, populated):
                     "1",
                     detail,
                     key=f"example:recheck-{place}",
-                    actions=(ActionLink("verify", CHECK_AGAIN, "read", f"/example/check/{place}/", method="POST"),),
+                    actions=(
+                        ActionLink("verify", CHECK_AGAIN, Effect.READ, f"/example/check/{place}/", method="POST"),
+                    ),
                 ),
             ),
             "aside": False,

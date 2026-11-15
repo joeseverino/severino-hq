@@ -9,6 +9,7 @@ from django.template.loader import render_to_string
 from django.test import SimpleTestCase
 from django.utils import timezone
 
+from hq.platform.application.contracts import Effect
 from hq.platform.application.decisions import decision, workflow_parts
 from hq.platform.application.item_help import cannot_step, commands, do_step, run_step
 from hq.platform.application.markup_testing import all_elements, elements, hrefs, select, text, texts, with_class
@@ -54,7 +55,7 @@ class DecisionTests(SimpleTestCase):
         }
 
     def test_the_first_available_step_leads_without_mutating_or_repeating_it(self):
-        action = ActionLink("fix", "Review change", "read", "/example/review/", recommended=True)
+        action = ActionLink("fix", "Review change", Effect.READ, "/example/review/", recommended=True)
         verify = ActionLink("verify", "Recheck", "write", "/example/check/", method="POST")
         item = self.item(
             steps=(
@@ -75,7 +76,7 @@ class DecisionTests(SimpleTestCase):
 
     def test_what_is_wrong_and_its_buttons_are_on_the_face_of_the_card(self):
         fix = ActionLink("fix", "Restore the example", "remote_write", "/example/fix/", recommended=True)
-        check = ActionLink("verify", "Check again", "read", "/example/check/", method="POST")
+        check = ActionLink("verify", "Check again", Effect.READ, "/example/check/", method="POST")
         html = card(
             self.item(
                 steps=(
@@ -90,7 +91,7 @@ class DecisionTests(SimpleTestCase):
             self.assertIn(words, text(html))
 
     def test_a_lone_check_is_a_button_and_never_a_step(self):
-        check = ActionLink("verify", "Check again", "read", "/example/check/", method="POST")
+        check = ActionLink("verify", "Check again", Effect.READ, "/example/check/", method="POST")
         shown = decision(self.item(steps=(WorkflowStep("verify", "Check again", "", "available", (check,)),)))
 
         self.assertEqual(shown["actions"], [asdict(check)])
@@ -98,8 +99,8 @@ class DecisionTests(SimpleTestCase):
         self.assertIsNone(shown["workflow"])
 
     def test_a_check_stands_beside_the_owners_own_action(self):
-        own = ActionLink("open", "Open", "read", "/example/")
-        check = ActionLink("verify", "Check again", "read", "/example/check/", method="POST")
+        own = ActionLink("open", "Open", Effect.READ, "/example/")
+        check = ActionLink("verify", "Check again", Effect.READ, "/example/check/", method="POST")
         shown = decision(
             self.item(actions=(own,), steps=(WorkflowStep("verify", "Check again", "", "available", (check,)),))
         )
@@ -108,7 +109,7 @@ class DecisionTests(SimpleTestCase):
 
     def test_the_fix_and_the_named_page_stand_on_the_row_before_a_check(self):
         fix = ActionLink("remedy", "Renew certificate", "remote_write", "/commands/renew/", recommended=True)
-        check = ActionLink("verify", "Check again", "read", "/example/check/")
+        check = ActionLink("verify", "Check again", Effect.READ, "/example/check/")
         shown = decision(
             self.item(
                 url="/certificates/example/",
@@ -143,7 +144,7 @@ class DecisionTests(SimpleTestCase):
         self.assertFalse(select(unknown, "data-reading-age"))
 
     def test_the_named_page_leads_when_nothing_else_is_recommended(self):
-        check = ActionLink("verify", "Check again", "read", "/example/check/")
+        check = ActionLink("verify", "Check again", Effect.READ, "/example/check/")
         shown = decision(
             self.item(
                 url="/example/plan/",
@@ -197,7 +198,7 @@ class DecisionTests(SimpleTestCase):
             self.assertIn("example", below.words)
 
     def test_a_row_reads_its_meaning_in_full_and_keeps_its_buttons_together(self):
-        links = tuple(ActionLink(f"open-{n}", f"Open page {n}", "read", f"/example/{n}/") for n in range(3))
+        links = tuple(ActionLink(f"open-{n}", f"Open page {n}", Effect.READ, f"/example/{n}/") for n in range(3))
         html = card(self.item(actions=links))
 
         # The meaning is the row's own, under its title; nothing beneath repeats it.
@@ -215,7 +216,7 @@ class DecisionTests(SimpleTestCase):
         self.assertEqual(sorted(link.attrs["href"] for link in shown + later), [f"/example/{n}/" for n in range(3)])
 
     def test_the_title_goes_to_the_thing_and_the_named_next_step_is_a_link(self):
-        subject = asdict(ActionLink("subject", "example-host", "read", "/machines/example-host/"))
+        subject = asdict(ActionLink("subject", "example-host", Effect.READ, "/machines/example-host/"))
         about = decision(self.item(url="/findings/?rule=example", subject=subject))
         backlog = decision(self.item(url="/assets/?missing=1", action="Fill in details"))
         advice = decision(self.item(url="/runs/", action="Count this run as a hard session."))
@@ -248,7 +249,7 @@ class DecisionTests(SimpleTestCase):
             self.assertEqual(pill.words, said)
 
     def test_owner_actions_win_and_only_identical_method_and_url_are_removed(self):
-        get = ActionLink("open", "Open", "read", "/example/")
+        get = ActionLink("open", "Open", Effect.READ, "/example/")
         post = ActionLink("run", "Run", "write", "/example/", method="POST")
         shown = decision(
             self.item(
@@ -269,7 +270,7 @@ class DecisionTests(SimpleTestCase):
                 self.assertEqual(len(decision(item)["steps"][0]["actions"]), 1)
 
     def test_a_fully_promoted_plan_does_not_leave_an_empty_disclosure(self):
-        action = ActionLink("open", "Review", "read", "/example/")
+        action = ActionLink("open", "Review", Effect.READ, "/example/")
         shown = decision(self.item(steps=(WorkflowStep("act", "Act", "", "available", (action,)),)))
         self.assertIsNone(shown["workflow"])
 

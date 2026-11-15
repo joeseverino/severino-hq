@@ -129,7 +129,7 @@ class DecisionOfferTests(TestCase):
     def test_every_door_offers_what_the_rule_allows_each_reader(self):
         from hq.platform.application.approvals import DECISIONS, refusals
 
-        paths = {name: path for name, (path, _) in DECISIONS.items()}
+        paths = dict(DECISIONS)
         for name, user in (("operator", self.operator), ("viewer", self.viewer)):
             for paused in (False, True):
                 with self.subTest(reader=name, paused=paused):

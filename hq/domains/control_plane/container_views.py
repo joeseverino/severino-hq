@@ -10,8 +10,7 @@ lazy from hq.platform.application.containers import BEHIND, VULNERABLE, containe
 lazy from hq.platform.application.machines import container_context
 lazy from hq.platform.application.resource_capabilities import offered_changes
 lazy from hq.platform.application.upgrades import plan_for, readiness_of
-
-lazy from .views import returning_to
+lazy from hq.platform.core.templatetags.nav_tags import returning_to
 
 
 def container_detail(resource: Any, request: Any) -> dict[str, Any]:

@@ -7,16 +7,15 @@ inside another form without belonging to it: HTML has no nested forms, and a
 form written inside another silently detaches every control after it.
 """
 
+from urllib.parse import parse_qsl, urlsplit
 lazy from dataclasses import asdict, is_dataclass
 
 from django import template
 from django.middleware.csrf import get_token
 from django.template.loader import render_to_string
-from django.urls import reverse
 from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
 
-from hq.platform.application.contracts import Effect
 from hq.platform.application.tone import Tone
 lazy from hq.platform.application import action_items, asks, decisions
 lazy from hq.platform.application.asks import Ask
@@ -57,11 +56,11 @@ def triage(item=None, *, sorts=True, family="", url=""):
     if not sorts or (item is not None and not action_items.sortable(item)):
         return None
     if family:
-        return PageAction("Dismiss", f"{url}&family={family}", method="post")
-    restore = bool(item.get("aside"))
-    route = "action_items_bring_back" if restore else "action_items_set_aside"
-    label = "Restore" if restore else "Dismiss"
-    return PageAction(label, reverse(route), method="post", field="key", value=action_items.row_value(item))
+        # ``url`` is the part's own, whose query says which rows it shows.
+        shown = dict(parse_qsl(urlsplit(url).query))
+        return PageAction.command(action_items.SET_ASIDE, query={**shown, "family": family})
+    command = action_items.RESTORE if item.get("aside") else action_items.SET_ASIDE
+    return PageAction.command(command, field="key", value=action_items.row_value(item))
 
 
 @register.filter
@@ -102,19 +101,7 @@ def workflow_action(action):
     """An emitted ActionLink uses the same renderer as a page action, so one
     the command would refuse now is drawn unusable, saying why."""
 
-    if isinstance(action, PageAction):
-        return action
-    values = asdict(action) if is_dataclass(action) else action
-    refusal = values.get("refusal", "")
-    return PageAction(
-        values["label"],
-        values["url"],
-        method=values["method"].lower(),
-        primary=values.get("recommended", False),
-        danger=values.get("effect") == Effect.DESTRUCTIVE,
-        title=refusal or values.get("reason", ""),
-        disabled=bool(refusal),
-    )
+    return PageAction.of(action)
 
 
 @register.simple_tag(takes_context=True)

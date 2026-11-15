@@ -17,8 +17,9 @@ lazy from django.template.loader import render_to_string
 
 from hq.domains.projects.github import github_repository
 from hq.platform.application import related
-from hq.platform.application.action_links import capability_action_link, command_url
+from hq.platform.application.action_links import capability_action_link
 from hq.platform.application.capabilities import capability_words
+from hq.platform.application.contracts import Effect
 from hq.platform.application.documentation import related_documents
 from hq.platform.application.entity_links import web_url
 from hq.platform.application.moments import moment
@@ -108,7 +109,7 @@ class ProjectListView(PageMixin, TableListMixin, ListView):
 
     @override
     def get_page_actions(self):
-        return (PageAction(capability_words("project.create"), reverse("projects:create"), primary=True),)
+        return (PageAction.command("project.create", primary=True),)
 
     @override
     def get_queryset(self):
@@ -134,9 +135,7 @@ class ProjectListView(PageMixin, TableListMixin, ListView):
             repository = repository_for(project.repository_url)
             project.repository = repository
             project.pushed_at = moment(str(repository.pushed_at or "")) if repository is not None else None
-            project.row_actions = (
-                PageAction(capability_words("project.update"), reverse("projects:edit", args=[project.slug])),
-            )
+            project.row_actions = (PageAction.command("project.update", project.slug),)
         return context
 
 
@@ -263,15 +262,15 @@ class ProjectDetailView(PageMixin, DetailView):
         actions = []
         if github_repository(project.repository_url):
             actions.append(ask(REFRESH, project.slug))
-        if project.repository_url and (updates := command_url(DEPENDENCY_UPDATES, project.slug)):
+        if project.repository_url:
             switch = "off" if project.dependency_updates else "on"
-            actions.append(PageAction(capability_words(DEPENDENCY_UPDATES, switch), updates))
+            actions.append(PageAction.command(DEPENDENCY_UPDATES, project.slug, variant=switch))
         if project.dependency_updates and self.repository is not None:
             run_now = run_now_ask(project, web_principal(self.request.user), self.run_asked)
             actions += [run_now] if run_now is not None else []
         actions += [
-            PageAction(capability_words("project.update"), reverse("projects:edit", args=[project.slug])),
-            PageAction("Delete", reverse("projects:delete", args=[project.slug]), danger=True),
+            PageAction.command("project.update", project.slug),
+            PageAction.command("project.delete", project.slug),
         ]
         return tuple(actions)
 
@@ -432,7 +431,7 @@ class PostureView(PageMixin, TemplateView):
                 check,
                 facts=(("Repositories", f"{len(failing)} of {held} {'repository' if held == 1 else 'repositories'}"),),
                 links=tuple(
-                    ActionLink(name="open", label=repo.short, effect="read", url=f"{repo.url}/settings")
+                    ActionLink(name="open", label=repo.short, effect=Effect.READ, url=f"{repo.url}/settings")
                     for repo in failing
                 ),
             )

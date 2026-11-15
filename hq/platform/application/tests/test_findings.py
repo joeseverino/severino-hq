@@ -7,6 +7,7 @@ from django.utils import timezone
 from pydantic import ValidationError
 
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
+from hq.platform.application.contracts import Effect
 
 from ..action_links import ActionLink
 from ..cadence import ControllerSweepCommand
@@ -275,7 +276,7 @@ class FindingsTests(SentinelMixin, TestCase):
                     "HQ dev",
                     "Controller",
                     actions=(
-                        ActionLink("open", "Open connections", "read", "/connections/"),
+                        ActionLink("open", "Open connections", Effect.READ, "/connections/"),
                         ActionLink(
                             "command",
                             "Request fresh sweep",

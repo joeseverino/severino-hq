@@ -387,7 +387,9 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
         workflow=workflow,
         steps=finding_steps(finding),
         no_help_reason=_no_help_reason(finding),
-        subject_link=ActionLink("subject", subject.label, "read", subject.url) if subject and subject.url else None,
+        subject_link=ActionLink("subject", subject.label, Effect.READ, subject.url)
+        if subject and subject.url
+        else None,
         read_capabilities=_held_to(finding, subject, principal),
         read_now=read_now,
         # Where no one reading dates it, its subject's last read does.
@@ -502,7 +504,7 @@ def _verification(
     verify = ActionLink(
         "verify",
         CHECK_AGAIN,
-        "read",
+        Effect.READ,
         again,
         reason="Runs this check against current data.",
     )

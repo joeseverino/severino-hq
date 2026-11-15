@@ -494,12 +494,18 @@ def a_page() -> None:
     assert_type(pages.PageAction("Open", "/example/", primary=True).css, str)
 
     pages.PageAction("Open")  # type: ignore[call-arg]
-    # A POST action names the field its value is sent as, for a row's actions.
-    assert_type(pages.PageAction("Mark read", "/example/1/", method="post", value="read", field="status").field, str)
-    pages.PageAction("Mark read", "/example/1/", field=1)  # type: ignore[arg-type]
-    # A POST action may send more than its button's field: what it acts on.
-    pages.PageAction("Block", "/example/block/", method="post", field="blocked", value="1", fields={"client_id": "a"})
-    pages.PageAction("Block", "/example/block/", method="post", fields=["client_id"])  # type: ignore[arg-type]
+    # A hand-built action is a link: only a command's control posts, sends or looks destructive.
+    pages.PageAction("Mark read", "/example/1/", method="post")  # type: ignore[call-arg]
+    pages.PageAction("Remove", "/example/1/", danger=True)  # type: ignore[call-arg]
+    # A command's control reads its words, address and method from the
+    # command, and is None for a reader who may not run it.
+    assert_type(
+        pages.PageAction.command("example.review", 1, variant="read", field="status", value="read"),
+        pages.PageAction | None,
+    )
+    pages.PageAction.command("example.block", fields={"client_id": "a"}, query={"next": "/example/"})
+    pages.PageAction.command("example.review", label="Mark read")  # type: ignore[call-arg]
+    pages.PageAction.command("example.block", fields=["client_id"])  # type: ignore[arg-type]
     pages.page_context("Example", actions=["Open"])  # type: ignore[list-item]
     assert_type(pages.page_context("Example", reads=("example.things",)), dict[str, pages.Page])
     pages.page_context("Example", reads=1)  # type: ignore[arg-type]
@@ -507,7 +513,7 @@ def a_page() -> None:
 
 def a_refused_action() -> None:
     # A link the command would refuse now says why, and is drawn unusable.
-    link = workflows.ActionLink("run", "Run", "remote_write", "/run/", refusal="Not now.")
+    link = workflows.ActionLink("run", "Run", capabilities.Effect.REMOTE_WRITE, "/run/", refusal="Not now.")
     assert_type(link.refusal, str)
 
     workflows.ActionLink("run", "Run", "remote_write", "/run/", refusal=True)  # type: ignore[arg-type]

@@ -26,6 +26,7 @@ from typing import Any, override
 from django.core.exceptions import ImproperlyConfigured
 from django.http import Http404
 from django.shortcuts import redirect
+from django.views.generic.edit import BaseCreateView
 lazy from django.forms import BaseForm
 lazy from django.http import HttpResponse
 
@@ -37,7 +38,7 @@ from .domains import load
 from .integration_specs import command_adapter
 from .labels import SAVE_CHANGES
 from .record_errors import RecordConflict, RecordNotFound
-from .records import described, records_for
+from .records import DELETE, described, records_for
 from .security import web_principal
 from .web_writes import form_payload, posted_answer, refused, run_posted, said, write_once
 lazy from .capabilities import Ran, capability_registry, capability_words, command_spec
@@ -182,6 +183,13 @@ class CapabilityFormMixin(_RecordWrite):
     def adding(self) -> bool:
         return getattr(self, "object", None) is None
 
+    @property
+    def runs(self) -> tuple[str, ...]:
+        """The command a control for it opens this form to run (``pages.command_route``):
+        a create view's create, an update view's update."""
+
+        return (self.creates if isinstance(self, BaseCreateView) else self.updates,)
+
     def form_valid(self, form: BaseForm) -> HttpResponse:
         name = self.capability(form)
         payload = form_payload(form, command_spec(name).command_type)
@@ -199,6 +207,10 @@ class CapabilityDeleteMixin(_RecordWrite):
     """
 
     deletes = ""
+
+    @property
+    def runs(self) -> tuple[str, ...]:
+        return (self.deletes,)
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         return _confirmed(self, super().get_context_data(**kwargs))
@@ -225,7 +237,7 @@ def _confirmed(view: Any, context: dict[str, Any]) -> dict[str, Any]:
     back = getattr(view.object, "get_absolute_url", None)
     context["confirm"] = {
         "url": view.request.path,
-        "label": "Delete",
+        "label": capability_words(view.runs[0]) if view.runs else DELETE,
         "cancel_url": back() if back else view.success_url,
     }
     return context
@@ -406,6 +418,10 @@ class ServiceWriteMixin(PostedOnce):
         """The capability the view's service is, or "" for one that is none, which runs ``outside_the_runner``."""
 
         return _registered(cls.service, targeted=cls._targeted)
+
+    @property
+    def runs(self) -> tuple[str, ...]:
+        return tuple(name for name in (self._capability(),) if name)
 
     def _served(self, command: Any, identity: dict[str, Any] | None = None) -> dict[str, Any]:
         """The service's answer to ``command``: its capability's, or its own run ``outside_the_runner``."""

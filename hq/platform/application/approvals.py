@@ -45,6 +45,7 @@ from .security import (
 from .titled import Titled
 from .workflow_contracts import ActionLink
 lazy from . import agent_access, capabilities, resources, roles
+lazy from .action_links import command_action
 lazy from .approval_review import asked
 lazy from .capabilities import execute_approved, validate_command
 lazy from .command_targets import item_name
@@ -626,9 +627,9 @@ REJECT = "approval.reject"
 WITHDRAW = "approval.withdraw"
 LAPSE = Titled("approval.lapse", "A held change lapsed")
 _LAPSED_NOTE = "It expired without an answer."
-# Each decision a person takes on a held request: its path in the decide
-# route, and its button's words.
-DECISIONS: Final = {APPROVE: ("approve", "Approve"), REJECT: ("reject", "Reject")}
+# Each decision a person takes on a held request, by its command: its path
+# in the decide route.
+DECISIONS: Final = {APPROVE: "approve", REJECT: "reject"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -695,12 +696,10 @@ def offers(principal: Principal, rows: Iterable[ApprovalRequest]) -> dict[Any, O
 
 
 def _decision_link(approval_id: Any, decision: str) -> ActionLink:
-    path, label = DECISIONS[decision]
-    return ActionLink(
-        name=decision,
-        label=label,
-        effect="remote_write",
-        url=reverse("control_plane:approval_decide", kwargs={"approval_id": approval_id, "decision": path}),
+    return command_action(
+        decision,
+        decision,
+        reverse("control_plane:approval_decide", kwargs={"approval_id": approval_id, "decision": DECISIONS[decision]}),
         method="POST",
         recommended=decision == APPROVE,
     )

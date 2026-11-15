@@ -939,6 +939,7 @@ def capability_specs() -> tuple[CapabilitySpec, ...]:
             ),
             label="Adopt the playbooks",
             verb="Adopt",
+            variants=(("all", "Adopt all"),),
             home=automation_sources.PLAYBOOKS,
         ),
         CapabilitySpec(
@@ -956,6 +957,7 @@ def capability_specs() -> tuple[CapabilitySpec, ...]:
             ),
             label="Reject a scanned commit",
             verb="Reject",
+            variants=(("all", "Reject all"),),
             home=automation_sources.PLAYBOOKS,
         ),
     )

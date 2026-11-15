@@ -1067,9 +1067,15 @@ ENTRIES = {
                     "Example savings",
                     detail="3 example accounts",
                     actions=(
-                        PageAction("↑", "/example/group/", method="post", value="up", title="Move up", disabled=True),
-                        PageAction("↓", "/example/group/", method="post", value="down", title="Move down"),
-                        PageAction("Remove", "/example/group/", method="post", value="delete", danger=True),
+                        PageAction._built(
+                            label="↑", url="/example/group/", method="post", value="up", title="Move up", disabled=True
+                        ),
+                        PageAction._built(
+                            label="↓", url="/example/group/", method="post", value="down", title="Move down"
+                        ),
+                        PageAction._built(
+                            label="Remove", url="/example/group/", method="post", value="delete", danger=True
+                        ),
                     ),
                 ),
                 ListRow(
@@ -1862,8 +1868,8 @@ ENTRIES = {
                 actions=(
                     Ask("Refresh", "/example/refresh/", title="Reads the example repository again."),
                     PageAction("View diff", "/example/scan/"),
-                    PageAction("Adopt all", "/example/adopt/", method="post"),
-                    PageAction("Reject all", "/example/reject/", method="post"),
+                    PageAction._built(label="Adopt all", url="/example/adopt/", method="post"),
+                    PageAction._built(label="Reject all", url="/example/reject/", method="post"),
                 ),
             ),
             "page_beside": MOST_BESIDE,

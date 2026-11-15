@@ -18,6 +18,7 @@ from hq.domains.control_plane.providers import PROVIDERS
 
 from .action_links import ActionLink
 from .command_fields import Describe
+from .contracts import Effect
 from .core_capabilities import CONTROLLER_REFRESH
 from .display_words import as_members
 from .moments import moment
@@ -365,7 +366,7 @@ def _decoded(value: str) -> Finding:
             OperatorStep(label=label, command=command, notes=tuple(notes)) for label, command, notes in item["steps"]
         ),
         offers=tuple(
-            ActionLink(name, label, "read", url, reason=reason) for name, label, url, reason in item["offers"]
+            ActionLink(name, label, Effect.READ, url, reason=reason) for name, label, url, reason in item["offers"]
         ),
         observed_at=moment(item["observed_at"]),
         reads=item["reads"],
@@ -376,7 +377,7 @@ def _decoded(value: str) -> Finding:
 def opens(label: str, url: str) -> ActionLink:
     """The page a finding's card leads with, under ``label``."""
 
-    return ActionLink("open", label, "read", url)
+    return ActionLink("open", label, Effect.READ, url)
 
 
 def carried(rule: str) -> Callable[[FindingEstate], tuple[Finding, ...]]:

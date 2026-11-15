@@ -59,7 +59,7 @@ class RowControlsTests(SimpleTestCase):
             '<tr><td><div class="row-line">Example title</div></td>{% row_actions actions first=1 put_away=away %}</tr>'
         )
         actions = [PageAction("Open", "/example/open/"), PageAction("Later", "/example/later/")]
-        away = PageAction("Dismiss", "/example/aside/", method="post", field="key", value="example")
+        away = PageAction._built(label="Dismiss", url="/example/aside/", method="post", field="key", value="example")
         for given in (actions, []):
             with self.subTest(actions=len(given)):
                 html = _table(row, actions=given, away=away)

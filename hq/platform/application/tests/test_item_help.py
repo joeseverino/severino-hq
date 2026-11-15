@@ -9,6 +9,8 @@ from decimal import Decimal
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
+from hq.platform.application.contracts import Effect
+
 from ..card_items import Insight
 from ..finding_model import Finding, FindingRemedy, FindingRule, OperatorStep
 from ..findings import RULES, _no_help_reason
@@ -138,7 +140,7 @@ class ItemHelpTests(SimpleTestCase):
         self.assertEqual(item_help(_item(action="Fill in details", url="/assets/")), PLACE)
 
     def test_a_link_to_look_at_or_an_empty_reason_is_not_help(self):
-        look = ActionLink("subject", "Open", "read", "/thing/")
+        look = ActionLink("subject", "Open", Effect.READ, "/thing/")
 
         self.assertEqual(item_help(_item(actions=(look,))), "")
         self.assertEqual(item_help(_item(workflow=cannot_help("k", " "))), "")

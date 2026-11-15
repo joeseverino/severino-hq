@@ -24,6 +24,7 @@ from hq.platform.application.provider_forms import (
     ResourceIdentityForm,
     spec_form_class,
 )
+from hq.platform.application.resource_capabilities import CREATE_CAPABILITY
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import safe_next
 from hq.platform.application.tone import Tone
@@ -55,6 +56,9 @@ class ResourceFormView(View):
     """
 
     template_name = "control_plane/resource_form.html"
+    # The one its route runs (``urls``): the create on a new record's, the
+    # update on an existing one's.
+    runs: tuple[str] = (CREATE_CAPABILITY,)
 
     def _existing(self, key):
         resource = get_object_or_404(ManagedResource, key=key) if key else None
@@ -184,7 +188,7 @@ class ResourceFormView(View):
 
         result = execute_posted(
             request,
-            "infrastructure.resource.update" if resource else "infrastructure.resource.create",
+            self.runs[0],
             {
                 # The identifier is never asked for again once a resource
                 # exists, so an edit keeps the one it has.
@@ -413,6 +417,8 @@ class AdoptView(View):
     the operator to confirm every field first.
     """
 
+    runs = (ADOPT_SERVICE,)
+
     def post(self, request, hostname):
         result = execute_posted(request, ADOPT_SERVICE, {"hostname": hostname})
         if refused(request, result):
@@ -424,6 +430,7 @@ class CertificateUploadView(View):
     """Take a certificate generated elsewhere and hold it for installation."""
 
     template_name = "control_plane/certificate_upload.html"
+    runs = (UPLOAD,)
 
     @staticmethod
     def _page(resource) -> dict:
@@ -474,6 +481,8 @@ class AdoptRecordView(View):
     have none: a container answers wherever its ports are pointed. The spec is read
     back out of the sweep, not posted, so the first reconciliation changes nothing.
     """
+
+    runs = (ADOPT,)
 
     def post(self, request, kind, token):
         refused(request, execute_posted(request, ADOPT, {"kind": kind, "token": token}))
