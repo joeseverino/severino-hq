@@ -1940,11 +1940,12 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             return f"not a page ({str(refused).splitlines()[0]})"
         # A named POST's page is its refusal, so it answers that refusal's
         # status; so does a page the viewer is refused.
-        said = self.answered.get(_address(self.page.url), (None, ""))
+        # Only a served page has an answer recorded: a part draws without one.
+        served = is_estate(name) or is_post(name)
+        said = self.answered.get(_address(self.page.url), (None, "")) if served else (None, "")
         expected = posted(name).status if is_post(name) else 200
         if _asked().text("as") == VIEWER and said == (HTTPStatus.FORBIDDEN, ""):
             expected = HTTPStatus.FORBIDDEN
-        served = is_estate(name) or is_post(name)
         if served and said != (expected, ""):
             status, refusal = said
             if status != expected:
