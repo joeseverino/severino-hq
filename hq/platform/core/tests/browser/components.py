@@ -73,6 +73,7 @@ from hq.platform.core.tests.browser.probes.text import (
     BROKEN_WORDS_IN_TEXT,
     CHIPS_PAST_THEIR_PAINT,
     IDENTIFIER,
+    LINES_SHORT_OF_THEIR_ROOM,
     OVERLAPPING_TEXT,
     TOUCHING_TEXT,
 )
@@ -889,6 +890,51 @@ class ComponentLayoutTests(LayoutBrowserTests):
         ]
         self.assertEqual(len(found), 1)
         self.assertIn("example", found[0])
+
+    def test_a_line_ending_in_a_links_mark_is_full_and_one_broken_short_is_found(self):
+        """A link's mark drawn after its words (``::after``) takes its line's
+        room, as a wrapping list's gap does between its items, so the word
+        that would not fit beside either starts the next line rightly; a line
+        a balanced rag ends short of its room is found."""
+
+        self.open(next(iter(PAGES)), WIDE)
+        add_css(self.page, '.example-marked::after { content: "____"; }')
+        self.page.evaluate("""() => {
+          const table = document.createElement('table');
+          table.className = 'data-table';
+          const row = table.createTBody().insertRow();
+          const link = document.createElement('a');
+          link.className = 'example-marked';
+          link.href = '#';
+          link.textContent = 'aaaa';
+          const list = document.createElement('ul');
+          list.style.cssText = 'display: flex; flex-wrap: wrap; gap: 0 4ch; margin: 0; padding: 0; list-style: none';
+          for (const word of ['cccc', 'dddd']) {
+            const item = document.createElement('li');
+            item.textContent = word;
+            list.append(item);
+          }
+          const held = document.createElement('span');
+          held.style.setProperty('white-space', 'nowrap');
+          held.textContent = 'ff gggg';
+          for (const [words, css] of [
+            [[link, ' bb'], 'inline-size: 10ch'],
+            [[list], 'inline-size: 10ch'],
+            [['eeee ', held], 'inline-size: 10ch'],
+            [['example aaaa bbbb cccc dddd'], 'inline-size: 24ch; text-wrap: balance'],
+          ]) {
+            const dd = document.createElement('dd');
+            dd.append(...words);
+            dd.style.cssText = `margin: 0; padding: 0; font: 16px/1.5 monospace; ${css}`;
+            row.insertCell().append(dd);
+          }
+          document.querySelector('main').append(table);
+        }""")
+        found = [
+            line for line in self.page.evaluate(LINES_SHORT_OF_THEIR_ROOM, SELECTORS["unseen"]) if " short " in line
+        ]
+        planted = [line.split(" breaks before ")[1][:5] for line in found]
+        self.assertEqual([start for start in planted if start in {'"aaaa', '"cccc', '"eeee', '"exam'}], ['"exam'])
 
     def test_an_identifier_split_at_its_seams_is_one_run_and_a_plain_word_is_not(self):
         """An identifier wider than its line breaks at its seam and then

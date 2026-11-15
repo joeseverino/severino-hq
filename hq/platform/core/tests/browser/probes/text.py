@@ -591,9 +591,13 @@ IDENTIFIER = "code, kbd, samp, time, .token, [data-entity]"
 # so the room a later column leaves beside one row's words is not theirs
 # (WebKit's `pretty`, a balanced rag, breaks inside the box). A run with no space in it (a name, a path) is one word,
 # however its pieces are drawn, as is a run joined by a no-break space (a
-# count and its noun), and its width holds the edges of the inline
-# boxes it opens or closes (a `code`'s padding and border), which take the
-# line's room as its letters do; an inline block moves whole, one word. A line
+# count and its noun) or held whole by its box (`nowrap`), and its width
+# holds the edges of the inline
+# boxes it opens or closes (a `code`'s padding and border, and what a box
+# draws after its words, a link's mark), which take the line's room as its
+# letters do; an inline block moves whole, one word, and an item of a
+# wrapping flex line (a dot list's part) stands its line's gap from the one
+# before. A line
 # the markup ends (`<br>`) is no break.
 LINES_SHORT_OF_THEIR_ROOM = (
     "(unseen) => {"
@@ -619,6 +623,7 @@ LINES_SHORT_OF_THEIR_ROOM = (
       let before = 0;
       let after = 0;
       let closes = 0;
+      let outer = null;
       for (let el = node.parentElement; el && el !== block; el = el.parentElement) {
         const css = getComputedStyle(el);
         if (css.display === 'contents') continue;
@@ -629,10 +634,19 @@ LINES_SHORT_OF_THEIR_ROOM = (
         if (!bare.toString().trim()) before += parseFloat(css.marginLeft) + parseFloat(css.borderLeftWidth) + parseFloat(css.paddingLeft);
         bare.setStart(node, end);
         bare.setEnd(el, el.childNodes.length);
-        if (!bare.toString().trim()) after += parseFloat(css.marginRight) + right;
-        else if ((css.boxDecorationBreak || css.webkitBoxDecorationBreak) === 'clone') closes += right;
+        if (!bare.toString().trim()) {
+          after += parseFloat(css.marginRight) + right;
+          outer = el;
+        } else if ((css.boxDecorationBreak || css.webkitBoxDecorationBreak) === 'clone') closes += right;
       }
-      return [before, after, closes];
+      return [before, after, closes, outer];
+    };
+    // A word that closes a box ends where the box is drawn to, past anything
+    // the box draws after its words (`::after`), and its margin.
+    const reach = (outer, rect, after) => {
+      if (!outer) return after;
+      const drawn = [...outer.getClientRects()].at(-1);
+      return drawn ? Math.max(after, drawn.right + parseFloat(getComputedStyle(outer).marginRight) - rect.right) : after;
     };
     // An inline block (a chip an open row sets whole), or an item of a
     // wrapping flex line (a dot list's part), moves to the next line as one
@@ -649,6 +663,13 @@ LINES_SHORT_OF_THEIR_ROOM = (
       const line = el !== block && css.display !== 'contents' ? boxAround(el) : null;
       return !!line && /flex$/.test(getComputedStyle(line).display) && getComputedStyle(line).flexWrap === 'wrap';
     };
+    // What stands between an item of a wrapping flex line and the one before
+    // it is the line's gap, never a word's space.
+    const gap = (el) => {
+      const line = boxAround(el);
+      if (!line || !/flex$/.test(getComputedStyle(line).display)) return null;
+      return parseFloat(getComputedStyle(line).columnGap) || 0;
+    };
     // The block a word's line is laid in: a word in another block (a value
     // that opens with a host on a line of its own) starts a line the markup
     // ended, as a `<br>` ends one.
@@ -656,6 +677,15 @@ LINES_SHORT_OF_THEIR_ROOM = (
       let el = node.parentElement;
       while (el !== block && /^(inline|contents)$/.test(getComputedStyle(el).display)) el = el.parentElement;
       return el;
+    };
+    // The box that holds a word's line whole (`white-space: nowrap`, a count
+    // and its noun), inside the block: its words move as one.
+    const held = (node) => {
+      for (let el = node.parentElement; el && el !== block; el = el.parentElement) {
+        const css = getComputedStyle(el);
+        if (css.whiteSpace.startsWith('nowrap') || css.textWrapMode === 'nowrap') return el;
+      }
+      return null;
     };
     // Each word's pieces, a word running on across the pieces it is drawn in.
     const words = [];
@@ -671,7 +701,7 @@ LINES_SHORT_OF_THEIR_ROOM = (
         const rect = node.getBoundingClientRect();
         if (atomic(node) && node.checkVisibility() && rect.width > 0) {
           const css = getComputedStyle(node);
-          words.push(Object.assign([{ rect, before: parseFloat(css.marginLeft), after: parseFloat(css.marginRight) }], { home: home(node) }));
+          words.push(Object.assign([{ rect, before: parseFloat(css.marginLeft), after: parseFloat(css.marginRight) }], { home: home(node), gap: gap(node) }));
           inside = node;
           open = false;
         }
@@ -689,15 +719,16 @@ LINES_SHORT_OF_THEIR_ROOM = (
         range.setEnd(node, end);
         const rects = [...range.getClientRects()].filter((rect) => rect.width > 0);
         if (!rects.length) continue;
-        const [before, after, closes] = edges(node, match.index, end);
+        const [before, after, closes, outer] = edges(node, match.index, end);
         const pieces = rects.map((rect, index) => ({
           rect,
           before: index ? 0 : before,
-          after: index === rects.length - 1 ? after : 0,
+          after: index === rects.length - 1 ? reach(outer, rect, after) : 0,
           closes: index === rects.length - 1 ? closes : 0,
         }));
-        if (open && match.index === 0 && words.length) words.at(-1).push(...pieces);
-        else words.push(Object.assign(pieces, { home: home(node) }));
+        const whole = held(node);
+        if ((open && match.index === 0 && words.length) || (whole && words.at(-1)?.held === whole)) words.at(-1).push(...pieces);
+        else words.push(Object.assign(pieces, { home: home(node), held: whole }));
         open = end === text.length;
       }
       if (/[ \\t\\n\\r\\f]$/.test(text) || text === '') open = false;
@@ -711,7 +742,7 @@ LINES_SHORT_OF_THEIR_ROOM = (
       if (next[0].rect.top < last.bottom - 1) continue;
       const width = next.reduce((sum, piece) => sum + piece.before + piece.rect.width + piece.after, 0) + (next.at(-1).closes ?? 0);
       const right = last.right + lastPiece.after;
-      if (right + space + width < edge - 1) {
+      if (right + (next.gap ?? space) + width < edge - 1) {
         found.push(`${describe(block)} breaks before "${block.textContent.trim().slice(0, 24)}…" ${Math.round(edge - right)}px short of its row's room`);
         break;
       }
