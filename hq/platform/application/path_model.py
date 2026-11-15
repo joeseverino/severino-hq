@@ -6,7 +6,7 @@ and where each fact came from.
 
 from dataclasses import dataclass, field, replace
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from django.utils.text import capfirst
 
@@ -15,8 +15,13 @@ from hq.domains.control_plane.providers import PROVIDERS
 
 from .entity_links import EntityLink, entity_link, kind_label
 from .labels import dotted, lower_first
+lazy from .derived_reads import serialize_layer
 lazy from .freshness import Freshness, freshness as reading_freshness
 lazy from .moments import ago
+lazy from .resource_records import LayerPart
+
+if TYPE_CHECKING:
+    from .standards import CheckResult
 
 
 @dataclass(frozen=True, slots=True)
@@ -152,15 +157,22 @@ class Hop:
     overlays: tuple[tuple[str, EntityLink], ...] = ()
     # On a path walked for a request (``hq_path(request)``): what the request
     # itself carried here, whether it agrees with the readings, and the
-    # admission layers decided at this hop. See ``application.request_path``.
+    # checks of the request standard decided at this hop (each its
+    # ``Check.hop``). See ``application.request_path``.
     evidence: tuple[Any, ...] = ()
     check: Any = None
-    layers: tuple[Any, ...] = ()
+    checks: tuple[CheckResult, ...] = ()
     # ``(text, url)`` lines under the name: what a container is running.
     facts: tuple[tuple[str, str], ...] = ()
     # On a proxy's hop: the network its access list admits requests from
     # (``reach.admitted_network``), "" when it narrows nothing HQ read.
     admits: str = ""
+
+    @property
+    def layers(self) -> tuple[LayerPart, ...]:
+        """Its checks as the connection panel's rungs read them, in the API's words."""
+
+        return tuple(serialize_layer(result) for result in self.checks)
 
     @property
     def icon(self) -> str:

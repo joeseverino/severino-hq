@@ -8,7 +8,7 @@ lazy from urllib.parse import urlsplit
 
 from django.conf import settings
 
-lazy from hq.platform.core.oidc import TAILSCALE_PRINCIPAL_SESSION_KEY, sso_only
+lazy from hq.platform.core.oidc import TAILSCALE_PRINCIPAL_SESSION_KEY
 
 from . import tailnet
 lazy from . import agent_devices
@@ -26,7 +26,6 @@ class Identity:
     username: str = ""
     email: str = ""
     full_name: str = ""
-    sso_only: bool = False
     backends: tuple[str, ...] = ()
     session_expires: datetime | None = None
     tailnet_user: str = ""
@@ -140,7 +139,6 @@ def identity_of(request, device: tailnet.Device | None, principal: Principal | N
     signed_in_by = str((session or {}).get("_auth_user_backend", "") if session is not None else "")
     return Identity(
         **_person(user),
-        sso_only=sso_only(),
         backends=backends,
         session_expires=expiry,
         tailnet_user=device.user if device else "",

@@ -125,7 +125,7 @@ class EveryCallerTests(TestCase):
         self.assertSays(read)
 
     def test_a_requests_device_layer(self):
-        from ..request_layers import _expiry_phrase
+        from ..request_standard import _expiry_phrase
 
         self.assertSays(lambda when: _expiry_phrase(when.isoformat()))
 

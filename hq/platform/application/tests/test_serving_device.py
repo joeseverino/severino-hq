@@ -9,6 +9,7 @@ from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.platform.core.tests.forwarding import arrived
 
 from ..request_connection import connection
+from ..standards import Standing
 from .connection_requests import A_LAN_ADDRESS, A_TAILNET_ADDRESS, a_device, a_request, a_tailnet
 from .people import someone
 
@@ -137,8 +138,8 @@ class ServingDeviceTests(TestCase):
 
         self.assertIsNone(found.serves)
         self.assertEqual(found.observer.name, "example-controller")
-        policy = next(layer for layer in found.layers if layer.id == "policy")
-        self.assertFalse(policy.conclusive)
+        policy = next(layer for layer in found.checks.results if layer.check.id == "policy")
+        self.assertEqual(policy.state, Standing.UNAVAILABLE)
 
     def test_an_unrecognized_address_never_guesses_a_node(self):
         found = self.serving({"198.51.100.7"})
@@ -286,7 +287,7 @@ class LocalProxyPolicyTests(TestCase):
         return connection(request)
 
     def policy_layers(self):
-        return [layer for layer in self.found().layers if layer.boundary == "Zero trust policy"]
+        return [layer for layer in self.found().checks.results if layer.check.boundary == "Zero trust policy"]
 
     def test_the_boundary_does_not_disappear_behind_a_local_proxy(self):
         self.assertTrue(self.policy_layers())
@@ -294,9 +295,8 @@ class LocalProxyPolicyTests(TestCase):
     def test_it_asks_about_the_hop_the_caller_actually_dialled(self):
         layer = self.policy_layers()[0]
 
-        self.assertEqual(layer.id, "policy")
-        self.assertTrue(layer.holds)
-        self.assertTrue(layer.conclusive)
+        self.assertEqual(layer.check.id, "policy")
+        self.assertTrue(layer.met)
 
     def test_it_does_not_invent_a_second_hop_for_a_loopback_socket(self):
         self.assertEqual(len(self.policy_layers()), 1)
@@ -325,7 +325,7 @@ class TailnetLockTests(TestCase):
         )
 
     def layer(self, found):
-        return next((item for item in found.layers if item.id == "tailnet-lock"), None)
+        return next((item for item in found.checks.results if item.check.id == "tailnet-lock"), None)
 
     def test_an_unswept_tailnet_says_nothing_rather_than_off(self):
         # No reading is not a reading of "off". Rendering one would be HQ
@@ -335,8 +335,7 @@ class TailnetLockTests(TestCase):
     def test_lock_off_is_shown_and_never_counts_as_proof(self):
         a_tailnet_lock(enabled=False, signers=[])
         found = self.layer(connection(a_request()))
-        self.assertFalse(found.holds)
-        self.assertFalse(found.conclusive)
+        self.assertEqual(found.state, Standing.UNAVAILABLE)
 
     def test_an_unsigned_node_fails_the_layer(self):
         a_tailnet_lock(enabled=True, signers=[{"key": "tlpub:01"}, {"key": "tlpub:02"}])
@@ -350,20 +349,18 @@ class TailnetLockTests(TestCase):
             a_device("hq-host", "100.64.0.9", observer=True),
         )
         found = self.layer(connection(a_request()))
-        self.assertFalse(found.holds)
-        self.assertTrue(found.conclusive)
-        self.assertIn("No signature chains", found.detail)
+        self.assertEqual(found.state, Standing.UNMET)
+        self.assertIn("No signature chains", found.reading.detail)
 
     def test_a_signed_node_under_lock_holds_and_counts_its_signers(self):
         a_tailnet_lock(enabled=True, signers=[{"key": "tlpub:01"}, {"key": "tlpub:02"}])
         found = self.layer(connection(a_request()))
-        self.assertTrue(found.holds)
-        self.assertTrue(found.conclusive)
-        self.assertIn("2 signing keys", found.evidence)
+        self.assertTrue(found.met)
+        self.assertIn("2 signing keys", found.reading.evidence)
 
     def test_one_signing_key_is_not_pluralized(self):
         a_tailnet_lock(enabled=True, signers=[{"key": "tlpub:01"}])
-        self.assertTrue(self.layer(connection(a_request())).evidence.endswith("1 signing key"))
+        self.assertTrue(self.layer(connection(a_request())).reading.evidence.endswith("1 signing key"))
 
     def test_no_device_means_no_signature_line(self):
         # The device layer above has already said no node answers here. A line

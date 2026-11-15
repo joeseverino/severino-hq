@@ -323,9 +323,9 @@ class ProxyThatDropsTheCallerTests(TestCase):
         self.assertEqual(self.found().channel.id, "opaque")
 
     def test_the_gate_does_not_claim_to_hold_while_judging_a_proxy(self):
-        gate = next(layer for layer in self.found().layers if layer.id == "gate")
+        gate = next(result for result in self.found().checks.results if result.check.id == "gate")
 
-        self.assertFalse(gate.holds)
+        self.assertFalse(gate.met)
 
 
 @override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])

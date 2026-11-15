@@ -98,8 +98,24 @@ def _setup_url() -> str:
     return reverse("control_plane:connections") + "#connection-setup-heading"
 
 
-def _sign_in(_inputs) -> Reading:
-    return Reading.met() if sso_only() else Reading.unmet("Password sign-in installed")
+def _sign_in(_subject) -> Reading:
+    if sso_only():
+        return Reading.met(detail="No password sign-in is installed.")
+    return Reading.unmet("Password sign-in installed", detail="Password sign-in is installed.")
+
+
+# Of HQ's standard, and measured on every request too (``request_standard``).
+SIGN_IN = Check(
+    "sign-in",
+    "Sign-in is single sign-on only",
+    _sign_in,
+    "a guessed or reused password",
+    "Turn password sign-in off in HQ's settings once single sign-on works.",
+    unmet="Password sign-in is installed",
+    holds="Every session starts with single sign-on.",
+    boundary="Human identity",
+    mechanism="HQ's sign-in settings",
+)
 
 
 def _edge(inputs) -> Reading:
@@ -241,15 +257,7 @@ STANDARD: tuple[Check, ...] = (
         unmet="Tailnet lock is off",
         holds="A device added to your tailnet without your key is refused by tailnet lock.",
     ),
-    Check(
-        "sign-in",
-        "Sign-in is single sign-on only",
-        _sign_in,
-        "a guessed or reused password",
-        "Turn password sign-in off in HQ's settings once single sign-on works.",
-        unmet="Password sign-in is installed",
-        holds="Every session starts with single sign-on.",
-    ),
+    SIGN_IN,
     Check(
         "scope",
         "Each token is scoped where its service allows it",

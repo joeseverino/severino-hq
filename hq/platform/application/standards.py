@@ -45,24 +45,38 @@ class Reading:
     # What a reader must hold to be told the evidence: the read gates of the
     # connection families whose instances it names.
     read_capabilities: tuple[str, ...] = ()
+    # Why it stands so, in a sentence, kept apart from the evidence so the
+    # reasoning and the reading are never confused for each other.
+    detail: str = ""
+    # The rules behind it, where what decided it had rules.
+    rules: tuple[str, ...] = ()
 
     @classmethod
-    def met(cls, evidence: str = "", *, limited: bool = False) -> Self:
-        return cls(standing=Standing.MET, evidence=evidence, limited=limited)
+    def met(cls, evidence: str = "", *, limited: bool = False, detail: str = "", rules: tuple[str, ...] = ()) -> Self:
+        return cls(standing=Standing.MET, evidence=evidence, limited=limited, detail=detail, rules=rules)
 
     @classmethod
-    def unmet(cls, evidence: str = "", *, read_capabilities: tuple[str, ...] = ()) -> Self:
-        return cls(standing=Standing.UNMET, evidence=evidence, read_capabilities=read_capabilities)
+    def unmet(
+        cls,
+        evidence: str = "",
+        *,
+        read_capabilities: tuple[str, ...] = (),
+        detail: str = "",
+        rules: tuple[str, ...] = (),
+    ) -> Self:
+        return cls(
+            standing=Standing.UNMET, evidence=evidence, read_capabilities=read_capabilities, detail=detail, rules=rules
+        )
 
     @classmethod
-    def unavailable(cls, cause: str, *, fix: str = "", fix_url: str = "") -> Self:
-        return cls(standing=Standing.UNAVAILABLE, evidence=cause, fix=fix, fix_url=fix_url)
+    def unavailable(cls, cause: str, *, fix: str = "", fix_url: str = "", detail: str = "") -> Self:
+        return cls(standing=Standing.UNAVAILABLE, evidence=cause, fix=fix, fix_url=fix_url, detail=detail)
 
     @classmethod
-    def judged(cls, holds: bool) -> Self:
-        """Met or not, for a check whose answer is the whole of what it found."""
+    def judged(cls, holds: bool, evidence: str = "", *, detail: str = "", rules: tuple[str, ...] = ()) -> Self:
+        """Met or not, from the one judgment that decides it."""
 
-        return cls.met() if holds else cls.unmet()
+        return (cls.met if holds else cls.unmet)(evidence, detail=detail, rules=rules)
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,6 +97,13 @@ class Check:
     unmet: str = field(kw_only=True)
     # What is true when it is met, as a sentence: a met check's tooltip.
     holds: str = field(default="", kw_only=True)
+    # The step of a request's path it is decided at (``path_model.Hop.step``),
+    # for a check a request is measured against; HQ's own hop when the path
+    # has no such step.
+    hop: str = field(default="hq", kw_only=True)
+    # The security boundary it belongs to, and what enforces it.
+    boundary: str = field(default="", kw_only=True)
+    mechanism: str = field(default="", kw_only=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -208,11 +229,17 @@ class Measurement:
 
 
 def measure(
-    subject: Any, standard: tuple[Check, ...], intended: Mapping[str, str] | None = None, *, enforced: bool = True
+    subject: Any,
+    standard: tuple[Check, ...],
+    intended: Mapping[str, str] | None = None,
+    *,
+    enforced: bool = True,
+    quiet: tuple[Check, ...] = (),
 ) -> Measurement:
     """``subject`` against every check in ``standard`` that applies to it.
     ``intended`` maps a check it fails on purpose to why; with ``enforced``
-    false an unmet check is an open item rather than a fault."""
+    false an unmet check is an open item rather than a fault, as it is for
+    each check in ``quiet``."""
 
     results = []
     for check in standard:
@@ -220,7 +247,7 @@ def measure(
             continue
         reading = check.test(subject)
         reason = (intended or {}).get(check.id, "") if reading.standing is Standing.UNMET else ""
-        results.append(CheckResult(check, reading, reason, enforced))
+        results.append(CheckResult(check, reading, reason, enforced and not any(check is held for held in quiet)))
     return Measurement(subject, tuple(results), enforced)
 
 

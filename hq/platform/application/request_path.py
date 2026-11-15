@@ -28,7 +28,8 @@ from .request_addresses import Address, addresses_of, addresses_of_hq
 from .request_channel import UNTRUSTED_FORWARDER, forwarded_chain
 from .request_connection import Connection, connection
 from .request_headers import HEADERS_READ, RESPONSE_CHECKS, Header, ResponseCheck, headers_of, redacted
-from .request_layers import ADDRESS_HOST, owned_by
+from .request_standard import ADDRESS_HOST, PROXY_HEADERS, owned_by
+from .standards import CheckResult, Standing
 from .ui import ended
 lazy from . import connections
 lazy from .card_items import Insight
@@ -52,30 +53,6 @@ _CHECK_LABELS = {
 }
 # The layer class each check state is drawn with.
 _CHECK_STATES = {PROVEN: "holds", CONTRADICTED: "does-not", UNPROVEN: "unknown"}
-
-# The hop each admission layer is decided at. A layer whose hop is not on the
-# path is shown at HQ, the hop every path ends at.
-LAYER_STEPS = {
-    "name": "dns",
-    "edge": "ingress",
-    "channel": "network",
-    "arrival": "machine",
-    "policy": "network",
-    "edge-policy": "network",
-    "service-policy": "ingress",
-    "device": "device",
-    "tailnet-lock": "device",
-    "identity-agreement": "device",
-    "forwarder": "ingress",
-    "proxy-evidence": "ingress",
-    "tailnet-observer": "network",
-    "transport": "network",
-    "gate": "hq",
-    "sign-in": "hq",
-    "session": "hq",
-    "canonical": "hq",
-    "browser": "hq",
-}
 
 # How each role in the forwarded chain was decided.
 _CHAIN_DETAIL = {
@@ -271,12 +248,19 @@ def joined(walked: ServicePath | None, request, found: Connection | None = None)
         proxy = _proxy_hop(found)
         hops = (proxy, *hops) if proxy is not None else hops
     context = _Context(request, found, host, hops)
+    walk = (caller_hop(found), *hops)
+    # Each check on the first hop of its step, or on HQ's, where every path ends.
+    steps = [hop.step for hop in walk]
+    placed: dict[int, list[CheckResult]] = {}
+    for result in found.checks.results:
+        placed.setdefault(steps.index(result.check.hop) if result.check.hop in steps else len(walk) - 1, []).append(
+            result
+        )
     route = Route(
         primary.via if primary is not None else "HQ",
-        tuple(_joined_hop(hop, context) for hop in (caller_hop(found), *hops)),
+        tuple(_joined_hop(hop, context, tuple(placed.get(index, ()))) for index, hop in enumerate(walk)),
         port=primary.port if primary is not None else None,
     )
-    route = _with_layers(route, found.layers)
     if walked is None:
         return ServicePath(normalized_hostname(host) if is_hostname(host) else host, (route,))
     return ServicePath(walked.hostname, (route, *walked.routes[1:]), walked.unread, walked.observed)
@@ -312,7 +296,11 @@ class _Context:
         return str(self.request.META.get(f"HTTP_{name.upper().replace('-', '_')}", "") or "").strip()
 
 
-def _joined_hop(hop: Hop, context: _Context) -> Hop:
+def _joined_hop(hop: Hop, context: _Context, checks: tuple[CheckResult, ...]) -> Hop:
+    """``hop`` with what the request showed there, and ``checks``, the request
+    standard's checks decided at it."""
+
+    hop = replace(hop, checks=checks) if checks else hop
     judge = _JUDGES.get(hop.step)
     if judge is None:
         return hop
@@ -334,24 +322,6 @@ def _with_leg(hop: Hop, found: Connection) -> Hop:
         name=found.leg_label,
         detail=dotted(hop.detail, f"handshake {found.handshake}"),
         source=HopSource(TAILNET_KIND, presence.connection_ref, presence.observed_at),
-    )
-
-
-def _with_layers(route: Route, layers) -> Route:
-    """Each layer on the first hop of its step, or on HQ's hop."""
-
-    steps = [hop.step for hop in route.hops]
-    placed: dict[int, list] = {}
-    for layer in layers:
-        step = LAYER_STEPS.get(layer.id, "hq")
-        index = steps.index(step) if step in steps else len(steps) - 1
-        placed.setdefault(index, []).append(layer)
-    return replace(
-        route,
-        hops=tuple(
-            replace(hop, layers=tuple(placed.get(index, ()))) if index in placed else hop
-            for index, hop in enumerate(route.hops)
-        ),
     )
 
 
@@ -513,13 +483,13 @@ def _forwarder_check(hop: Hop, context: _Context, peer: str, proxy: str) -> HopC
     headers = _declared_headers(hop)
     if not headers:
         return HopCheck(PROVEN, f"A trusted proxy at {peer} forwarded this request.")
-    agrees = next((layer for layer in context.found.layers if layer.id == "proxy-evidence"), None)
-    if agrees is None or not agrees.conclusive:
+    agrees = next((result for result in context.found.checks.results if result.check is PROXY_HEADERS), None)
+    if agrees is None or agrees.state == Standing.UNAVAILABLE:
         return HopCheck(
             UNPROVEN,
             f"A trusted proxy at {peer} forwarded this request without {proxy}'s {' and '.join(headers)} headers.",
         )
-    if not agrees.holds:
+    if not agrees.met:
         return HopCheck(
             CONTRADICTED,
             f"{proxy}'s own headers differ from the address HQ used.",

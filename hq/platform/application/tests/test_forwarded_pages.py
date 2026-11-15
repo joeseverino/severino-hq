@@ -56,9 +56,9 @@ class ForwardedByATrustedProxyTests(TestCase):
         self.assertEqual(found.address, CALLER)
         self.assertTrue(found.forwarded)
         self.assertFalse(found.untrusted_forwarding)
-        forwarder = next(layer for layer in found.layers if layer.id == "forwarder")
-        self.assertTrue(forwarder.holds)
-        self.assertEqual(forwarder.evidence, PROXY)
+        forwarder = next(layer for layer in found.checks.results if layer.check.id == "forwarder")
+        self.assertTrue(forwarder.met)
+        self.assertEqual(forwarder.reading.evidence, PROXY)
 
     def test_the_path_page_shows_the_proxy_hop_and_judges_the_caller(self):
         chain = address_chain(through_the_proxy())

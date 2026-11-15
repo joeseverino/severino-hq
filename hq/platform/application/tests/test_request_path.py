@@ -20,7 +20,6 @@ from ..paths import hq_path
 from ..projection import projection_scope
 from ..request_path import (
     CONTRADICTED,
-    LAYER_STEPS,
     PROVEN,
     UNPROVEN,
     _Context,
@@ -206,27 +205,16 @@ class RequestPathTests(TestCase):
             found = self.walk(a_request(**NPM_HEADERS))
         self.assertNotIn(PROVEN, [hop.check.state for hop in found.hops if hop.step == "machine"])
 
-    def test_every_layer_is_on_exactly_one_hop_and_the_hop_of_its_step(self):
+    def test_every_check_is_on_exactly_one_hop_and_the_hop_of_its_step(self):
         found = self.walk(a_request(**NPM_HEADERS))
-        placed = [layer.id for hop in found.route.hops for layer in hop.layers]
+        placed = [result for hop in found.route.hops for result in hop.checks]
 
-        self.assertEqual(sorted(placed), sorted(layer.id for layer in found.connection.layers))
-        steps = {hop.step for hop in found.route.hops}
-        for hop in found.route.hops:
-            for layer in hop.layers:
-                wanted = LAYER_STEPS[layer.id]
-                self.assertEqual(hop.step, wanted if wanted in steps else "hq", layer.id)
-
-    def test_every_layer_the_request_can_produce_has_a_step(self):
-        from ..connection_security import SecurityControl
-
-        control = SecurityControl("edge", "Ingress policy", "good", "", "")
-        firewall = SecurityControl("host-firewall", "Arrival", "good", "", "")
-        from ..request_connection import connection
-
-        found = connection(a_request(**NPM_HEADERS), edge=control, firewall=firewall)
-
-        self.assertLessEqual({layer.id for layer in found.layers}, set(LAYER_STEPS))
+        self.assertCountEqual(placed, found.connection.checks.results)
+        steps = [hop.step for hop in found.route.hops]
+        for index, hop in enumerate(found.route.hops):
+            for result in hop.checks:
+                wanted = result.check.hop
+                self.assertEqual(index, steps.index(wanted) if wanted in steps else len(steps) - 1, result.check.id)
 
     def test_the_forwarded_chain_is_attached_where_each_address_belongs(self):
         found = self.walk(a_request(**NPM_HEADERS))
@@ -337,7 +325,7 @@ class ReadParityTests(TestCase):
         from ..hq_self import serving
 
         with projection_scope(seed=serving(request)):
-            decided = [layer.id for layer in request_path(request).connection.layers]
+            decided = [result.check.id for result in request_path(request).connection.checks.results]
         sent = [layer["id"] for hop in served["items"] for layer in hop.get("layers", ())]
 
         self.assertTrue(decided)
@@ -381,7 +369,7 @@ class ReadParityTests(TestCase):
 
         found = response.context["request_path"]
         self.assertContains(response, "data-connection-hop=", count=len(found.hops))
-        self.assertContains(response, "data-connection-layer=", count=len(found.connection.layers))
+        self.assertContains(response, "data-connection-layer=", count=len(found.connection.checks.results))
         self.assertContains(response, "Path to HQ")
         self.assertIn(found.proof, plain(response.content))
         # The link's facts come from the caller's presence, and still show.
@@ -455,14 +443,19 @@ class TokenIdentityTests(TestCase):
 
     def test_every_standing_a_device_can_be_in_is_explained(self):
         from ..agent_devices import DeviceStanding
+        from ..request_channel import TAILNET_CHANNEL
         from ..request_identity import Identity
-        from ..request_layers import _identity_agreement_layer
+        from ..request_standard import RequestFacts, _agent_device
+        from ..standards import Standing
 
         for standing in DeviceStanding:
             with self.subTest(standing=standing):
-                layer = _identity_agreement_layer(Identity(agent="example-agent", device_standing=standing.value))
-                self.assertIn("example-agent", layer.detail)
-                self.assertEqual(layer.holds, standing is DeviceStanding.APPROVED)
+                identity = Identity(agent="example-agent", device_standing=standing.value)
+                reading = _agent_device(
+                    RequestFacts(request=None, address="", channel=TAILNET_CHANNEL, identity=identity)
+                )
+                self.assertIn("example-agent", reading.detail)
+                self.assertEqual(reading.standing is Standing.MET, standing is DeviceStanding.APPROVED)
 
 
 class ContainerHopTests(TestCase):

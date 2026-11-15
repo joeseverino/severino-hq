@@ -36,7 +36,7 @@ from hq.platform.application.relationships import RelationGroup, Relationship, R
 from hq.platform.application.request_channel import NETWORK_CHANNEL, TAILNET_CHANNEL
 from hq.platform.application.request_connection import Connection, Peering
 from hq.platform.application.request_identity import Identity
-from hq.platform.application.request_layers import Layer
+from hq.platform.application.request_standard import RequestFacts, ServingDeviceResolution
 from hq.platform.application.security import MCP_INTERFACE
 from hq.platform.application.standards import Check, Reading, measure
 from hq.platform.application.tables import TableSort
@@ -396,27 +396,31 @@ def _connection(channel=TAILNET_CHANNEL, *, path="direct", held=True, linked=Tru
         else None
     )
     tailnet = channel is TAILNET_CHANNEL
-    return Connection(
+    facts = RequestFacts(
+        request=None,
         address="192.0.2.10",
         channel=channel,
         device=laptop if tailnet else None,
-        serves=hq if tailnet else None,
-        observer=None,
+        serving=ServingDeviceResolution(hq if tailnet else None, verified=tailnet, basis="example"),
         identity=Identity(username="example", tailnet_user=laptop.user if tailnet else ""),
-        layers=(
-            Layer(
-                "example-check",
-                "Example check",
-                holds=not failing,
-                detail="An example check.",
-                conclusive=held or failing,
-            ),
-        ),
-        secure_transport=True,
+        secure=True,
         host="hq.example.com",
+        presence=presence,
+    )
+    detail = "An example check."
+    reading = (
+        Reading.unmet(detail=detail)
+        if failing
+        else Reading.met(detail=detail)
+        if held
+        else Reading.unavailable("", detail=detail)
+    )
+    check = Check("example-check", "Example check", lambda _facts: reading, "", "", unmet="")
+    return Connection(
+        facts,
+        measure(facts, (check,)),
         machine_url="/example/machines/example-laptop/" if linked else "",
         serves_url="/example/machines/example-hq/" if linked else "",
-        presence=presence,
     )
 
 
