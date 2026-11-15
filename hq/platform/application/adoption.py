@@ -8,6 +8,7 @@ operator stops managing leaves, are docs/Derived-Facts.md#adoption.
 
 import logging
 from collections.abc import Callable, Iterable
+from copy import deepcopy
 from dataclasses import dataclass
 from functools import cached_property
 from typing import Annotated, Any, Literal, NoReturn, TypedDict, final, override
@@ -280,18 +281,25 @@ class Live:
     - The one thing added to a read is ``keeping``: the fields its provider
       declares no sweep can observe, taken from the declaration it replaces.
     - It is immutable and not a dataclass, so ``dataclasses.replace`` cannot
-      swap its spec.
+      swap its spec, and ``spec`` is a copy, so changing what a caller is
+      handed changes nothing it writes down.
     """
 
-    __slots__ = ("kind", "spec")
+    __slots__ = ("_found", "kind")
     kind: str
-    spec: dict[str, Any]
+    _found: dict[str, Any]
 
     def __init__(self, kind: str, spec: dict[str, Any], *, reader: object) -> None:
         if reader is not _READER:
             raise TypeError("Only a read of the last sweep makes a Live.")
         object.__setattr__(self, "kind", kind)
-        object.__setattr__(self, "spec", dict(spec))
+        object.__setattr__(self, "_found", deepcopy(spec))
+
+    @property
+    def spec(self) -> dict[str, Any]:
+        """What the read found."""
+
+        return deepcopy(self._found)
 
     @override
     def __setattr__(self, name: str, value: object) -> None:

@@ -6,7 +6,9 @@ and the consent judges the kind actually written, so a command that never
 says it acts on a declaration cannot write a gated one past the hold.
 """
 
+import copy
 import json
+import pickle
 from dataclasses import replace
 
 from django.contrib.auth import get_user_model
@@ -151,3 +153,61 @@ class AdoptedTests(TestCase):
         save_adopted(live, key=POLICY_KEY, principal=TOKEN)
 
         self.assertEqual(ManagedResource.objects.get(key=POLICY_KEY).spec["document"], spec["document"])
+
+    def test_what_a_caller_does_to_the_spec_it_is_handed_is_not_written_down(self):
+        from hq.platform.application.inventory_testing import store
+
+        from ..adoption import found_live
+        from ..infrastructure import save_adopted
+
+        spec = {"document": policy_document("group:live")}
+        store(GATED_KIND, {"record": "policy", **spec})
+        live = found_live(GATED_KIND, spec)
+        assert live is not None
+
+        live.spec["document"] = policy_document("group:else")
+        save_adopted(live, key=POLICY_KEY, principal=TOKEN)
+
+        self.assertEqual(ManagedResource.objects.get(key=POLICY_KEY).spec["document"], spec["document"])
+
+
+class TokenTests(TestCase):
+    """A consent and a read of the sweep are made only by their modules: no copy,
+    pickle or bare instance gives a caller one it can use."""
+
+    def made_again(self):
+        return {
+            "copy": copy.copy,
+            "deepcopy": copy.deepcopy,
+            "pickle": lambda token: pickle.loads(pickle.dumps(token)),  # noqa: S301 - the test's own token
+        }
+
+    def test_a_consent_is_not_copied_pickled_or_made_bare(self):
+        from hq.platform.application.tests.consent import consented
+
+        from ..capabilities import Consented
+
+        given = consented(TOKEN)
+        for way, again in self.made_again().items():
+            with self.subTest(way=way), self.assertRaises((TypeError, AttributeError)):
+                again(given)
+        with self.assertRaises(AttributeError):
+            object.__new__(Consented).require(GATED_KIND)
+
+    def test_a_read_of_the_sweep_is_not_copied_pickled_or_made_bare(self):
+        from hq.platform.application.inventory_testing import store
+
+        from ..adoption import Live, found_live
+        from ..infrastructure import save_adopted
+
+        spec = {"document": policy_document("group:live")}
+        store(GATED_KIND, {"record": "policy", **spec})
+        live = found_live(GATED_KIND, spec)
+        assert live is not None
+        for way, again in self.made_again().items():
+            with self.subTest(way=way), self.assertRaises((TypeError, AttributeError)):
+                again(live)
+        with self.assertRaises(AttributeError):
+            save_adopted(object.__new__(Live), key=POLICY_KEY, principal=TOKEN)
+
+        self.assertFalse(ManagedResource.objects.exists())
