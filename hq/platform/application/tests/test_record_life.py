@@ -129,7 +129,7 @@ if HYPOTHESIS:
         def keep_what_is_live(self, key):
             # Refused when no sweep has listed it: there is nothing live to keep.
             with suppress(RecordNotFound):
-                accept_observed(OperationCommand(), principal=self.principal, current_key=key)
+                accept_observed(OperationCommand(), consented=consented(self.principal), current_key=key)
 
         @rule(key=declarations)
         def switch_off(self, key):

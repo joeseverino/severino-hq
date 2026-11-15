@@ -352,12 +352,13 @@ class AcceptObservedTests(TestCase):
         # The provider says the key never expires: it was changed there.
         store("tailscale.device", {"name": "a-box", "key_expires": "", "tags": []})
 
-    def accept(self, principal=None):
+    def accept(self):
         from ..resource_operations import OperationCommand, accept_observed
+        from .consent import consented
 
         return accept_observed(
             OperationCommand(reason="changed on purpose"),
-            principal=principal or cli_principal(),
+            consented=consented(cli_principal()),
             current_key="a-device",
         )
 

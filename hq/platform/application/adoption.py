@@ -596,6 +596,12 @@ def adopt(
     the resource is born in sync and its first reconciliation is a no-op.
     """
 
+    return _take_on(command, principal=principal, enabled=True)
+
+
+def _take_on(command: AdoptCommand, *, principal: Principal, enabled: bool) -> ResourceSaved:
+    """Write down the record ``command`` names as found live, switched on or off."""
+
     found = find_unmanaged(command.kind, command.hostname, token=command.token)
     if found is None:
         raise RecordNotFound("HQ found no new record of that type to manage. It may be managed already, or gone.")
@@ -609,7 +615,7 @@ def adopt(
         )
     # Every other write's capability check, spec validation, fingerprint and
     # audit record, rather than a row created here.
-    result = save_adopted(found.live, key=command.key or suggested_key(found), principal=principal)
+    result = save_adopted(found.live, key=command.key or suggested_key(found), enabled=enabled, principal=principal)
     key = result.get("resource", {}).get("key", "")
     _record_as_observed(key, found)
     # Adopting is the operator managing it again.
@@ -665,7 +671,10 @@ def adopt_discovered(kind: str, *, principal) -> dict[str, Any]:
 
     Only records read through a connection that manages, and none an operator
     said HQ does not manage. The connection's ``manages`` is the decision; a
-    connection that only observes adopts nothing.
+    connection that only observes adopts nothing. A kind that stands behind
+    access (``requires_approval``) is taken on switched off: the controller's
+    report says what exists, never that anybody agreed to HQ acting on it, so
+    it stays inert until a person switches it on.
     """
 
     excluded = kept_out()
@@ -676,7 +685,11 @@ def adopt_discovered(kind: str, *, principal) -> dict[str, Any]:
         if (item.kind, item.token) in excluded:
             continue
         try:
-            result = adopt(AdoptCommand(kind=item.kind, token=item.token), principal=principal)
+            result = _take_on(
+                AdoptCommand(kind=item.kind, token=item.token),
+                principal=principal,
+                enabled=not PROVIDERS[item.kind].requires_approval,
+            )
         except (RecordNotFound, PolicyError, ValidationError, ValueError) as error:
             # One record that cannot be adopted must not stop the rest, and the
             # next sweep tries again. A record that never can is said each time.

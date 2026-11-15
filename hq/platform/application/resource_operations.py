@@ -595,17 +595,20 @@ ACTION_CAPABILITY = {
 def accept_observed(
     command: OperationCommand,
     *,
-    principal: Principal,
+    consented: Consented,
     current_key: str,
 ) -> ObservedAccepted:
     """Make the declaration say what the provider holds.
 
     For a change made at the provider on purpose (a policy a connector edited,
     a setting changed in its own console), which reconciling would undo.
-    Nothing is written to the provider.
+    Nothing is written to the provider. The controller's report is evidence
+    of what exists, never consent to keep it, so a kind that waits for a
+    person is accepted only under one's consent.
     """
 
     resource = _resource_for_operation(current_key)
+    consented.require(resource.kind)
     # Copied from the live record, the same way adopting does, so the next
     # sweep finds the two agreeing.
     found = found_live(resource.kind, resource.spec)
@@ -616,7 +619,7 @@ def accept_observed(
         found.keeping(resource.spec),
         key=resource.key,
         enabled=resource.enabled,
-        principal=principal,
+        principal=consented.principal,
         current_key=resource.key,
     )
     return {**result, "reason": command.reason}

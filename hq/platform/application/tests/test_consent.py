@@ -179,7 +179,7 @@ class TokenTests(TestCase):
         return {
             "copy": copy.copy,
             "deepcopy": copy.deepcopy,
-            "pickle": lambda token: pickle.loads(pickle.dumps(token)),  # noqa: S301 - the test's own token
+            "pickle": lambda token: pickle.loads(pickle.dumps(token)),
         }
 
     def test_a_consent_is_not_copied_pickled_or_made_bare(self):
@@ -211,3 +211,65 @@ class TokenTests(TestCase):
             save_adopted(object.__new__(Live), key=POLICY_KEY, principal=TOKEN)
 
         self.assertFalse(ManagedResource.objects.exists())
+
+
+class SweepAdoptionTests(TestCase):
+    """The controller's report is evidence of what exists, never consent to act on
+    it: a kind that waits for a person is taken on switched off, until one switches it on."""
+
+    def setUp(self):
+        from hq.platform.application.adoption_testing import managing_everything
+
+        managing_everything()
+
+    def swept(self):
+        from ..security import cli_principal
+        from ..sweep import record_sweep
+
+        record_sweep(
+            {
+                GATED_KIND: {"ok": True, "records": [{"record": "policy", "document": policy_document("group:live")}]},
+                "tailscale.device": {"ok": True, "records": [{"name": "a-box", "key_expires": "", "tags": []}]},
+            },
+            principal=cli_principal(),
+        )
+
+    def test_a_kind_that_waits_for_a_person_is_adopted_switched_off(self):
+        self.swept()
+
+        self.assertEqual(
+            dict(ManagedResource.objects.values_list("kind", "enabled")), {GATED_KIND: False, "tailscale.device": True}
+        )
+
+    def test_a_person_switching_it_on_is_the_consent_and_an_agent_waits(self):
+        self.swept()
+        key = ManagedResource.objects.get(kind=GATED_KIND).key
+        switched_on = keyed({"enabled": True})
+
+        asked = execute_capability("infrastructure.resource.update", switched_on, principal=mcp_principal(), target=key)
+        self.assertEqual(asked["status"], "awaiting_approval", asked)
+        self.assertFalse(ManagedResource.objects.get(key=key).enabled)
+
+        done = execute_capability(
+            "infrastructure.resource.update", keyed({"enabled": True}), principal=an_operator(), target=key
+        )
+        self.assertTrue(done["ok"], done)
+        self.assertTrue(ManagedResource.objects.get(key=key).enabled)
+
+    def test_keeping_what_is_live_over_a_gated_kind_takes_a_persons_consent(self):
+        from hq.platform.application.tests.consent import another_command_writing
+
+        from ..capabilities import NEEDS_APPROVAL
+        from ..resource_operations import OperationCommand, accept_observed
+
+        self.swept()
+        key = ManagedResource.objects.get(kind=GATED_KIND).key
+
+        def write(consented):
+            accept_observed(OperationCommand(reason=""), consented=consented, current_key=key)
+
+        with another_command_writing(write) as name:
+            answer = execute_capability(name, {"idempotency_key": "keep-once"}, principal=mcp_principal())
+
+        self.assertFalse(answer["ok"], answer)
+        self.assertEqual(answer["error"]["message"], NEEDS_APPROVAL)

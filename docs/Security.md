@@ -624,9 +624,16 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
   the policy page's words. A declaration writer takes that consent in place of
   a principal, and only the capability runner makes one, so no gated
   declaration is written without a person's consent, whichever capability's
-  handler writes it. A person in the browser,
-  or on their own device, is never held. An agent's "on" over a call the
-  default would hold is the person's consent, recorded as such
+  handler writes it. The controller's report is evidence of what exists,
+  never consent to act on it: the sweep writes down what it found with no
+  consent (`save_adopted`, which takes only a read of the stored sweep), so
+  it takes a `requires_approval` kind on switched off, inert until a person
+  switches it on, and keeping what is live over HQ's copy
+  (`accept_observed`) asks the consent of the kind it writes. A fabricated
+  report therefore never yields an enabled declaration of such a kind. A
+  person in the browser, or on their own device, is never held. An agent's
+  "on" over a call the default would hold is the person's consent, recorded
+  as such
   (`Decision.overrides_a_hold`).
 - A held request writes and queues nothing. It is decided on its audit entry
   (`/audit/?awaiting=1`), or from its action item, against a fingerprinted
