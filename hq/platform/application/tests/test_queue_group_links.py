@@ -7,8 +7,9 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
+from hq.platform.application.markup_testing import elements, links
+
 from ..action_items import by_source
-from .markup import elements, links
 
 HELD = {
     "key": "hq.approvals:approval:example",

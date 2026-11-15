@@ -7,8 +7,6 @@ from django.db.models import Count
 from hq.domains.assets.models import Asset
 from hq.domains.projects.models import Project
 
-from .security import Capability, Principal
-
 
 class RegistryAudit(TypedDict):
     """The Project and Asset records no documentation points to, by slug, beside how many there are."""
@@ -19,10 +17,8 @@ class RegistryAudit(TypedDict):
     orphan_assets: list[str]
 
 
-def audit_registry(*, principal: Principal) -> RegistryAudit:
+def audit_registry() -> RegistryAudit:
     """Return registry rows that no documentation record references."""
-
-    principal.require(Capability.READ)
 
     orphan_projects = sorted(
         Project.objects.annotate(_docs=Count("documentation_records")).filter(_docs=0).values_list("slug", flat=True)

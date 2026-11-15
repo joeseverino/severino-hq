@@ -13,6 +13,7 @@ from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
 from hq.platform.application.derivation_testing import uncached
+from hq.platform.application.markup_testing import all_elements, elements, links, select, text, with_class
 from hq.platform.application.security import cli_principal
 from hq.platform.application.tests.host_only import host_only
 from hq.platform.core.attribution import operation_context
@@ -38,7 +39,6 @@ from ..ui import (
     line_chart,
     stacked_bar_chart,
 )
-from .markup import all_elements, elements, links, select, text, with_class
 
 
 class UiProjectionTests(TestCase):

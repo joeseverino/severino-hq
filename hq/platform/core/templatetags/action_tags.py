@@ -16,6 +16,8 @@ from django.urls import reverse
 from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
 
+from hq.platform.application.contracts import Effect
+from hq.platform.application.tone import Tone
 lazy from hq.platform.application import action_items, asks, decisions
 lazy from hq.platform.application.asks import Ask
 lazy from hq.platform.application.capabilities import capability_words
@@ -78,7 +80,7 @@ def decision(item):
 def urgency(status):
     """``{{ item.status|urgency }}``: how urgent, in the words every pill says."""
 
-    return decisions.urgency(status)
+    return Tone(status).urgency
 
 
 @register.filter
@@ -109,7 +111,7 @@ def workflow_action(action):
         values["url"],
         method=values["method"].lower(),
         primary=values.get("recommended", False),
-        danger=values.get("effect") == "destructive",
+        danger=values.get("effect") == Effect.DESTRUCTIVE,
         title=refusal or values.get("reason", ""),
         disabled=bool(refusal),
     )
@@ -385,7 +387,7 @@ def ask_button(ask, extra=""):
         '<button type="submit" form="{}" formaction="{}" class="{}" data-ask-button{}{}>{}</button>',
         POST_FORM_ID,
         ask.url,
-        " ".join(part for part in (ask.css, extra) if part),
+        button_classes(f"{ask.look} {extra}"),
         format_html_join("", ' {}="{}"', ((key, val) for key, val in attributes.items() if val)),
         mark_safe(" disabled") if ask.disabled else "",
         button_words(ask.label),

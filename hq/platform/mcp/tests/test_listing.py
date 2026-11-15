@@ -9,7 +9,7 @@ from django.urls import reverse
 from mcp import types
 from mcp.server.lowlevel import Server
 
-from hq.platform.application.tests.markup import elements, texts
+from hq.platform.application.markup_testing import elements, texts
 
 from .. import listing
 from ..server import mcp

@@ -1,20 +1,22 @@
 """Deterministic JSON capability registry for every HQ adapter."""
 
 from collections.abc import Callable
-from dataclasses import replace
-from typing import Annotated, Any, Literal, NamedTuple, TypedDict
+from dataclasses import dataclass, replace
+from typing import Annotated, Any, Literal, NamedTuple, TypedDict, final
 
 from pydantic import ConfigDict, with_config
 
 from hq.platform.core.audit import audit_connection, audit_operation, record_event, tallied
 from hq.platform.core.models import AuditLog
 from hq.platform.core.tracing import note, span
+lazy from hq.domains.control_plane.providers import PROVIDERS
 
 from .answer_fields import Permitted, Pinned, RequiredPermissions, SchemaVersion
-from .approvals import hold_for_approval
+from .approvals import Approved, approval, hold_for_approval
 from .call_envelope import read_call
 from .capability_policy import Rule, decide
-from .contracts import DOTTED_NAME, EFFECT_MEANINGS
+from .contracts import DOTTED_NAME, Effect
+from .default_hold import kind_waits
 from .describe import Describe, listed
 from .held_answer import HeldCall
 from .idempotency import (
@@ -26,6 +28,7 @@ from .idempotency import (
     validate_key,
 )
 from .integration_specs import (
+    CONSENT_KEYWORD,
     IDEMPOTENCY_FIELD,
     SENT_KEYWORD,
     STALE_WRITE_KEYWORD,
@@ -34,13 +37,16 @@ from .integration_specs import (
     capability_schema,
     command_adapter,
     kept_by,
+    takes_consent,
     takes_sent_fields,
     takes_stale_write_token,
 )
 from .integrations import held_graph, integration_graph
 from .labels import human_label
 from .projection import QueryRefusal
+from .record_errors import PolicyError
 from .refusal_status import Refusal, next_call, refusal_of, refuse, refused
+from .sealing import Sealed, sealer
 from .security import (
     CLI_INTERFACE,
     Capability,
@@ -48,9 +54,8 @@ from .security import (
     Principal,
     agent_subject,
     could_ever_hold,
-    require_all,
+    is_interactive,
 )
-from .ui import ended
 lazy from . import agent_registry, automation_runs
 lazy from .cadence import ringing
 
@@ -93,19 +98,13 @@ def capability_registry() -> dict[str, CapabilitySpec]:
     return dict(integration_graph().capabilities)
 
 
-def authorize_capability(spec: CapabilitySpec, principal: Principal) -> None:
-    """Apply the registry's one authorization rule for every adapter."""
-
-    require_all(principal, spec.required_capabilities)
-
-
 class CapabilitySummary(TypedDict):
     """One command as the index lists it: what it does and whether you may run it, without its schema."""
 
     name: Annotated[str, Describe("The command's dotted name, which you run it by.")]
     label: Annotated[str, Describe("The command's name, as HQ's pages show it.")]
     summary: Annotated[str, Describe("What the command does, in a sentence.")]
-    effect: Annotated[str, Describe(ended(f"What running it does: {listed(EFFECT_MEANINGS)}"))]
+    effect: Effect
     resource: Annotated[
         str | None,
         Describe("The list its targets are read from, by the name `describe_resources` gives it; null for none."),
@@ -206,7 +205,7 @@ def describe_capabilities(*, principal: Principal, name: str = "", resource: str
             "target_initial_fields": list(spec.target_initial_fields),
             "resource": spec.subject_resource,
             "input_schema": capability_schema(spec),
-            "permitted": principal.permits(*spec.required_capabilities),
+            "permitted": spec.permitted_to(principal),
         }
         for spec in _narrowed(name.strip(), resource.strip())
         if could_ever_hold(principal, spec.required_capabilities)
@@ -346,7 +345,7 @@ def _authorized_run(
     # Authority first, then the target, the key and the payload. A caller who
     # may not run this at all is told exactly that, and learns nothing about
     # what target it would have taken.
-    authorize_capability(spec, principal)
+    spec.authorize(principal)
     refused = _target_refusal(spec, target, expected_updated_at)
     if refused is not None:
         return Ran(refused)
@@ -364,15 +363,15 @@ def _authorized_run(
     command = validate_command(spec, payload, target)
     # A held request has acted on nothing, so it is answered afresh each
     # time: the same key runs the command once a person has agreed.
-    held, acting = _consent(spec, payload, command, target, principal)
-    if held is not None:
-        return Ran({**held})
+    consented = _consent(spec, payload, command, target, principal)
+    if not isinstance(consented, Consented):
+        return Ran({**consented})
 
     def act() -> dict[str, Any]:
         return _run(
             spec,
             command,
-            principal=acting,
+            consented=consented,
             target=target,
             expected_updated_at=expected_updated_at,
             sent=frozenset(payload),
@@ -392,7 +391,7 @@ def _authorized_run(
         return Ran(refuse("idempotency_conflict", exc.reason))
 
 
-def key_required(effect: str, principal: Principal) -> bool:
+def key_required(effect: Effect, principal: Principal) -> bool:
     """Whether ``principal`` must send a retry key to run a capability of ``effect``: a change, from any door but the shell's.
 
     A token's client retries what a lost connection left unanswered, and a
@@ -401,7 +400,7 @@ def key_required(effect: str, principal: Principal) -> bool:
     built the safe way round.
     """
 
-    return effect != "read" and principal.interface not in KEYLESS_INTERFACES
+    return effect.changes and principal.interface not in KEYLESS_INTERFACES
 
 
 # Not asked for a key: the host's shell, where a person runs a command once, by hand.
@@ -416,7 +415,7 @@ def _retry_key(spec: CapabilitySpec, payload: dict[str, Any], sent: str | None) 
     field. No command sees the key: a retry is this runner's to answer.
     """
 
-    if spec.effect == "read" or not isinstance(payload, dict):
+    if not spec.effect.changes or not isinstance(payload, dict):
         return "", payload
     keys = {_valid_key(given) for given in (sent, payload.get(IDEMPOTENCY_FIELD))} - {""}
     if len(keys) > 1:
@@ -502,14 +501,77 @@ def validate_command(spec: CapabilitySpec, payload: dict[str, Any], target: str 
     return command_adapter(spec.command_type).validate_python(payload)
 
 
+# What a declaration write the consent does not admit is refused with.
+NEEDS_APPROVAL = "This change needs approval. Ask for it through the API or MCP, then approve it in HQ in the browser."
+
+
+@final
+class Consented(Sealed):
+    """What the capability runner decided for one run, which every declaration write asks (``sealing``).
+
+    A declaration writer (``save_managed_resource``, the operation queue's
+    ``_queue_operation``, and every handler that reaches one) takes this in
+    place of a principal, reads it through ``consent``, and asks that for the
+    kind it writes before writing (``Consent.require``). That gives one
+    property: no gated declaration is written without a person's consent,
+    whichever capability's handler writes it.
+
+    - Two places make one, both in this module: the runner's consent step
+      (``_consent``), once operator policy and the default hold have let the
+      run through, and ``execute_approved``, handed the ``approvals.Approved``
+      only a person's approval makes (``approved``). Only this module holds its seal, so a path
+      that writes a declaration without passing either has no value to hand
+      the writer, and ``consent`` refuses anything else.
+    - The runner hands one only to a handler that names ``consented``, never
+      a principal beside it, so who acts and who approved are read from the
+      consent alone and cannot disagree with it.
+    """
+
+    __slots__ = ()
+
+
+@dataclass(frozen=True, slots=True)
+class Consent:
+    """What a ``Consented`` carries: who acts, and whether a person approved the run."""
+
+    principal: Principal
+    approved: bool = False
+
+    def admits(self, kind: str) -> bool:
+        """Whether this run may write a declaration of ``kind``.
+
+        The one place the rule lives: a kind that waits for a person
+        (``default_hold.kind_waits``) is written only by an interactive
+        principal, under standing policy or a person's approval
+        (``approved_by``), or in an approved run. The hold judges a run by the
+        kind its target or command names; this judges the kind actually
+        written, so a capability of any subject, writing a kind its command
+        never named, is refused at the write all the same.
+        """
+
+        provider = PROVIDERS.get(kind)
+        if provider is None or not kind_waits(provider, self.principal):
+            return True
+        return self.approved or is_interactive(self.principal) or bool(self.principal.approved_by)
+
+    def require(self, kind: str) -> None:
+        """Refuse a write of ``kind`` this run may not make (``admits``)."""
+
+        if not self.admits(kind):
+            raise PolicyError(NEEDS_APPROVAL)
+
+
+_seal, consent = sealer(Consented, Consent)
+
+
 def _consent(
     spec: CapabilitySpec,
     payload: dict[str, Any],
     command: Any,
     target: str | int | None,
     principal: Principal,
-) -> tuple[HeldCall | None, Principal]:
-    """``(held, principal)``: a held request's answer, or the principal to run as.
+) -> HeldCall | Consented:
+    """A held request's answer, or the consent to run as.
 
     Asked last, after authority and shape, so only a valid request becomes a
     decision a person has to read. Judged on the validated command, never the
@@ -522,11 +584,13 @@ def _consent(
     if decision.rule == Rule.DENY:
         raise PolicyDenied(f"{spec.name} is refused by {decision.source}.")
     if decision.rule == Rule.APPROVE:
-        return hold_for_approval(spec, payload, command, target, principal=principal), principal
+        held = hold_for_approval(spec, payload, command, target, principal=principal)
+        if held is not None:
+            return held
     if decision.overrides_a_hold:
         # Standing policy is the consent; carried where consent travels.
-        return None, replace(principal, approved_by=decision.source)
-    return None, principal
+        return _seal(Consent(replace(principal, approved_by=decision.source)))
+    return _seal(Consent(principal))
 
 
 # What the act of a write that recorded no row of its own is filed under.
@@ -537,7 +601,7 @@ def _run(
     spec: CapabilitySpec,
     command: Any,
     *,
-    principal: Principal,
+    consented: Consented,
     target: str | int | None,
     expected_updated_at: str | None,
     sent: frozenset[str],
@@ -550,7 +614,14 @@ def _run(
     to a handler that declares them.
     """
 
+    principal = consent(consented).principal
     arguments = _target_keyword(spec, target)
+    # A handler that writes a declaration takes the consent, and is handed no
+    # principal beside it.
+    if takes_consent(spec.handler):
+        arguments[CONSENT_KEYWORD] = consented
+    else:
+        arguments["principal"] = principal
     if takes_stale_write_token(spec.handler):
         arguments[STALE_WRITE_KEYWORD] = expected_updated_at
     if takes_sent_fields(spec.handler):
@@ -561,8 +632,8 @@ def _run(
         tallied() as written,
         ringing() as asked,
     ):
-        result = spec.handler(command, principal=principal, **arguments)
-        if spec.effect != "read" and not written:
+        result = spec.handler(command, **arguments)
+        if spec.effect.changes and not written:
             # A write whose handler recorded no row still leaves its act: what
             # ran, under the row's operation, and how it ended.
             record_event(
@@ -571,7 +642,7 @@ def _run(
                 message=str(result.get("message") or ""),
                 required=True,
             )
-        if spec.effect != "read":
+        if spec.effect.changes:
             # Every write a person or credential makes passes here, so this is
             # the one place that starts the controller at once rather than at
             # the next minute's ask; whether a pass is due is still
@@ -586,20 +657,22 @@ def _run(
     return dict(result)
 
 
-def execute_approved(
-    spec: CapabilitySpec,
-    command: Any,
-    target: str | int | None,
-    *,
-    principal: Principal,
-    sent: frozenset[str],
-) -> dict[str, Any]:
-    """Run a capability a person has just agreed to, held payload and all.
+def execute_approved(approved: Approved) -> dict[str, Any]:
+    """Run the change a person has just approved, held payload and all.
 
-    The approval gate is not consulted again: the decision that calls this
-    satisfied it. Takes a spec rather than a name, so nothing can route here by
-    sending a string, and raises rather than answering in an adapter's error
-    shape, so the person's page reports it and the transaction keeps the request.
+    The approval gate is not consulted again: the ``Approved`` only a
+    person's approval makes is its proof, and ``approval`` refuses anything
+    else. Raises rather than answering in an adapter's error shape, so the
+    person's page reports it and the transaction keeps the request.
     """
 
-    return _run(spec, command, principal=principal, target=target, expected_updated_at=None, sent=sent)
+    change = approval(approved)
+    consented = _seal(Consent(change.acting, approved=True))
+    return _run(
+        change.spec,
+        change.command,
+        consented=consented,
+        target=change.target,
+        expected_updated_at=None,
+        sent=change.sent,
+    )

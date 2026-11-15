@@ -13,7 +13,7 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import Decimal
-from typing import Annotated, Any, assert_type, override
+from typing import Annotated, Any, Literal, assert_type, override
 
 from django import forms
 from django.db import models
@@ -131,6 +131,18 @@ def signs(pace: float, beats: int, unread: float | None) -> None:
     money.signed_number(pace, str, True)  # type: ignore[call-arg]
 
 
+def measures(pace: float, beats: int, unread: float | None) -> None:
+    # A figure and its unit in one call, rounded and signed where it is written.
+    assert_type(ui.measured(pace, "mi", 2), str)
+    assert_type(ui.measured(-beats, "bpm", plus=True), str)
+    assert_type(ui.measured(unread, "%", -1), str)
+    assert_type(ui.measured("1:23", "measured"), str)
+
+    ui.measured(pace, "mi", "2")  # type: ignore[arg-type]
+    ui.measured(pace, "mi", 2, True)  # type: ignore[call-arg]
+    ui.measured([pace], "mi")  # type: ignore[arg-type]
+
+
 def sentences(registrar: str) -> None:
     assert_type(ui.ended(f"Renews through {registrar}"), str)
 
@@ -152,7 +164,11 @@ def sentences(registrar: str) -> None:
     ui.status_pill("1 serious", pill=False, icon=True)  # type: ignore[arg-type]
     assert_type(ui.status_pill("django", chip=True), SafeString)
     ui.status_pill("django", chip="yes")  # type: ignore[arg-type]
-    assert_type(ui.Kpi("Net worth", "$1.00", "+$1.00", tone="good", detail_url="/x/").holds_links, bool)
+    assert_type(ui.Kpi("Net worth", "$1.00", "+$1.00", tone=ui.Tone.GOOD, detail_url="/x/").holds_links, bool)
+    # A tone is a member of ui.Tone, the one vocabulary of how a thing stands.
+    assert_type(ui.Tone.worst((ui.Tone.GOOD, ui.Tone.SERIOUS)), ui.Tone)
+    assert_type(ui.Tone.SERIOUS.urgency, str)
+    ui.Kpi("Net worth", "$1.00", tone="goood")  # type: ignore[arg-type]
     ui.ListRow("Group", actions=("Up",))  # type: ignore[arg-type]
     # A search hit's snippet is runs of the record's text, each with whether it matched.
     ui.ListRow("Backup host", snippet=(("nightly ", False), ("backup", True)))
@@ -233,6 +249,16 @@ def as_someone(principal: capabilities.Principal) -> None:
     capabilities.execute_capability("example.do", ["x"], principal=principal)  # type: ignore[arg-type]
 
 
+def may_use(spec: capabilities.CapabilitySpec, principal: capabilities.Principal) -> None:
+    # Whether a principal may use a spec is asked of the spec, one way.
+    assert_type(spec.permitted_to(principal), bool)
+    assert_type(spec.authorize(principal), None)
+    assert_type(principal.require(capabilities.Capability.READ, "example.write"), None)
+
+    spec.authorize()  # type: ignore[call-arg]
+    spec.permitted_to("example.write")  # type: ignore[arg-type]
+
+
 def from_a_form(request: HttpRequest) -> None:
     # A view's write runs as the signed-in person, under the key their form posted.
     assert_type(capabilities.execute_posted(request, "example.do", {"name": "x"}), dict[str, Any])
@@ -292,11 +318,13 @@ def catalogs(principal: capabilities.Principal) -> None:
 
 def a_connection() -> None:
     # A connection says what kind of credential it holds, a keyless one included.
-    keyless = connections.ConnectionInstance("example", "Example", "example", "good", "Read", credential_model="none")
+    keyless = connections.ConnectionInstance(
+        "example", "Example", "example", ui.Tone.GOOD, "Read", credential_model="none"
+    )
     assert_type(keyless.credential_model, str)
     assert_type(keyless.keyless, bool)
 
-    connections.ConnectionInstance("example", "Example", "example", "good", "Read")  # type: ignore[call-arg]
+    connections.ConnectionInstance("example", "Example", "example", ui.Tone.GOOD, "Read")  # type: ignore[call-arg]
 
 
 def looking_up(progress: jobs.Progress, *, subject: str, principal: capabilities.Principal) -> dict[str, Any]:
@@ -315,6 +343,18 @@ def declared_words(spec: capabilities.CapabilitySpec) -> None:
     )
     assert_type(timed.offered, bool)
     outbound.OutboundWork("example.sweep", "Sweep", "", "", looking_up, offered="no")  # type: ignore[arg-type]
+    # What running it does is a member, and a spec holds one.
+    assert_type(spec.effect, capabilities.Effect)
+    assert_type(spec.effect.changes, bool)
+    assert_type(spec.effect.label, str)
+    capabilities.CapabilitySpec(
+        "example.keep",
+        "Keep a note.",
+        "remote_write",  # type: ignore[arg-type]
+        "example.write",
+        Noting,
+        noting,
+    )
     assert_type(spec.words(), str)
     assert_type(spec.words("all"), str)
     assert_type(spec.requested("example"), str)
@@ -322,7 +362,7 @@ def declared_words(spec: capabilities.CapabilitySpec) -> None:
     capabilities.CapabilitySpec(
         "example.keep",
         "Keep a note.",
-        "local_write",
+        capabilities.Effect.REMOTE_WRITE,
         "example.write",
         Noting,
         noting,
@@ -364,31 +404,55 @@ def noting(command: Noting, *, principal: capabilities.Principal) -> dict[str, A
 def a_command_that_starts_somewhere() -> None:
     # Where a person starts a command is its page's route, or the page of what it acts on.
     started = capabilities.CapabilitySpec(
-        "example.note", "Write a note.", "local_write", "example.write", Noting, noting, reached_from="example:notes"
+        "example.note",
+        "Write a note.",
+        capabilities.Effect.REMOTE_WRITE,
+        "example.write",
+        Noting,
+        noting,
+        reached_from="example:notes",
     )
     assert_type(started.reached_from, str)
     # A command whose records are no resource of its own names the page it belongs to.
     homed = capabilities.CapabilitySpec(
-        "example.sweep", "Sweep notes.", "local_write", "example.write", Noting, noting, home="example:notes"
+        "example.sweep",
+        "Sweep notes.",
+        capabilities.Effect.REMOTE_WRITE,
+        "example.write",
+        Noting,
+        noting,
+        home="example:notes",
     )
     assert_type(homed.home, str)
     assert_type(capabilities.ON_ITS_PAGE, str)
     # A switch whose state no record holds declares where it stands.
     capabilities.CapabilitySpec(
-        "example.quiet", "Quiet notes.", "local_write", "example.write", Noting, noting, state=lambda: False
+        "example.quiet",
+        "Quiet notes.",
+        capabilities.Effect.REMOTE_WRITE,
+        "example.write",
+        Noting,
+        noting,
+        state=lambda: False,
     )
     # What its page says of it beside its form, read as the page is drawn,
     # given its reader.
     about = capabilities.CommandAbout("Notes", (capabilities.CommandFact("Kept for", "A year", ("Then archived.",)),))
     described = capabilities.CapabilitySpec(
-        "example.tidy", "Tidy notes.", "local_write", "example.write", Noting, noting, about=lambda _principal: about
+        "example.tidy",
+        "Tidy notes.",
+        capabilities.Effect.REMOTE_WRITE,
+        "example.write",
+        Noting,
+        noting,
+        about=lambda _principal: about,
     )
     assert_type(described.about, Callable[[capabilities.Principal], capabilities.CommandAbout] | None)
     assert_type(about.facts[0].detail, tuple[str, ...])
     capabilities.CapabilitySpec(
         "example.tidy",
         "Tidy notes.",
-        "local_write",
+        capabilities.Effect.REMOTE_WRITE,
         "example.write",
         Noting,
         noting,
@@ -397,7 +461,7 @@ def a_command_that_starts_somewhere() -> None:
     capabilities.CapabilitySpec(
         "example.pin",
         "Pin a note.",
-        "local_write",
+        capabilities.Effect.REMOTE_WRITE,
         "example.write",
         Noting,
         noting,
@@ -417,7 +481,7 @@ def a_command_that_starts_somewhere() -> None:
     capabilities.CapabilitySpec(
         "example.pin",
         "Pin.",
-        "local_write",
+        capabilities.Effect.REMOTE_WRITE,
         "example.write",
         Noting,
         noting,
@@ -564,6 +628,31 @@ def the_deployment() -> None:
     testing.plain(2)  # type: ignore[arg-type]
 
 
+def reading_a_page(response: HttpResponse) -> None:
+    # An extension's test reads what a page says through the host's reader,
+    # from a response or the markup a template rendered.
+    assert_type(testing.text(response), str)
+    assert_type(testing.text("<p>Due</p>"), str)
+    assert_type(testing.texts(response, "h2"), list[str])
+    assert_type(testing.links(response), list[tuple[str, str]])
+    assert_type(testing.hrefs(response), list[str])
+    found = testing.elements(response, "a")
+    assert_type(found, list[testing.Element])
+    assert_type(testing.select(response, "data-row-key", "example"), list[testing.Element])
+    assert_type(testing.within(response, "data-fragment"), list[testing.Element])
+    assert_type(testing.all_elements(response), list[testing.Element])
+    assert_type(testing.with_class("<span class=band></span>", "band"), list[testing.Element])
+    assert_type(found[0].attrs, dict[str, str])
+    assert_type(found[0].words, str)
+
+    assert_type(testing.text(response.content), str)
+    testing.text(3)  # type: ignore[arg-type]
+    testing.select(response, "data-row-key", 3)  # type: ignore[arg-type]
+    testing.elements(response)  # type: ignore[call-arg]
+    testing.all_elements(response, "a")  # type: ignore[call-arg]
+    testing.with_class(response)  # type: ignore[call-arg]
+
+
 def saving(command: Any, *, principal: Any) -> dict[str, Any]:
     return {"ok": True, "message": "Saved."}
 
@@ -634,27 +723,29 @@ def a_demo() -> None:
 def a_gated_insight() -> None:
     # An item about what only some capabilities may read names them; left
     # out, every reader of the queue is shown it.
-    gated = ui.Insight("attention", "Finding", "Example is not answering", "", "", read_capabilities=("example.read",))
+    gated = ui.Insight(
+        ui.Tone.ATTENTION, "Finding", "Example is not answering", "", "", read_capabilities=("example.read",)
+    )
     assert_type(gated.read_capabilities, tuple[str, ...])
-    ui.Insight("attention", "Finding", "Example", "", "", read_capabilities="example.read")  # type: ignore[arg-type]
+    ui.Insight(ui.Tone.ATTENTION, "Finding", "Example", "", "", read_capabilities="example.read")  # type: ignore[arg-type]
 
 
 def an_insight_about_one_part() -> None:
     # An item about one of its subject's many things names that thing, so a
     # page about it alone leaves out its neighbors' items.
-    about = ui.Insight("attention", "Finding", "Example is restarting", "", "", part="example-web")
+    about = ui.Insight(ui.Tone.ATTENTION, "Finding", "Example is restarting", "", "", part="example-web")
     assert_type(about.part, str)
-    ui.Insight("attention", "Finding", "Example", "", "", part=("example-web",))  # type: ignore[arg-type]
+    ui.Insight(ui.Tone.ATTENTION, "Finding", "Example", "", "", part=("example-web",))  # type: ignore[arg-type]
 
 
 def an_insight_that_says_why() -> None:
     # An item says why it is as urgent as it is, which the panel behind its
     # urgency leads with.
-    said = ui.Insight("serious", "Renewals", "Passport expires", "", "", why="It expires in 20 days.")
+    said = ui.Insight(ui.Tone.SERIOUS, "Renewals", "Passport expires", "", "", why="It expires in 20 days.")
     assert_type(said.why, str)
-    ui.Insight("serious", "Renewals", "Passport", "", "", why=("It expires.",))  # type: ignore[arg-type]
+    ui.Insight(ui.Tone.SERIOUS, "Renewals", "Passport", "", "", why=("It expires.",))  # type: ignore[arg-type]
     # One a threshold raises says what clears it.
-    held = ui.Insight("attention", "Renewals", "Passport", "", "", why="Under 90 days.", clears="it is renewed")
+    held = ui.Insight(ui.Tone.ATTENTION, "Renewals", "Passport", "", "", why="Under 90 days.", clears="it is renewed")
     assert_type(held.clears, str)
 
 
@@ -692,10 +783,10 @@ def an_allocation(cash: Decimal, owed: Decimal) -> None:
     ui.AllocationBar("Assets by kind", [ui.Share("Cash", 1.0, 1)])  # type: ignore[arg-type]
     ui.Share("Cash", 1.0, "one")  # type: ignore[arg-type]
     # A part its legend links onward, with its amount as the page says it.
-    owing = ui.Share("Owed", float(owed), 2, url="/example/?type=owed", detail=f"-${owed}", tone="attention")
+    owing = ui.Share("Owed", float(owed), 2, url="/example/?type=owed", detail=f"-${owed}", tone=ui.Tone.ATTENTION)
     assert_type(owing.url, str)
     assert_type(owing.detail, str)
-    assert_type(owing.tone, str)
+    assert_type(owing.tone, ui.Tone | Literal[""])
     assert_type(bar.legend, tuple[tuple[ui.Share, str], ...])
     ui.Share("Cash", 1.0, 1, url=None)  # type: ignore[arg-type]
 

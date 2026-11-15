@@ -13,7 +13,7 @@ from hq.domains.projects.models import Project
 from hq.platform.core.models import AuditLog
 
 from ..capabilities import capability_registry, execute_capability
-from ..registry_import import MAX_IMPORT_RECORDS, HQImportCommand, import_registry
+from ..registry_import import MAX_IMPORT_RECORDS
 from ..security import Capability, Principal, cli_principal
 
 DOCUMENT = {
@@ -234,13 +234,6 @@ class CapabilityGateTests(TestCase):
             self.assertFalse(result["ok"])
             self.assertEqual(result["error"]["code"], "forbidden")
             self.assertFalse(Project.objects.exists())
-
-    def test_the_use_case_refuses_without_the_capability_too(self):
-        from ..security import AuthorizationError
-
-        principal = Principal("example-agent", "mcp", frozenset({"write_projects"}))
-        with self.assertRaises(AuthorizationError):
-            import_registry(HQImportCommand(**DOCUMENT), principal=principal)
 
 
 class ManagementCommandTests(TestCase):

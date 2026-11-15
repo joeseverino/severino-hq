@@ -44,12 +44,11 @@ from hq.platform.application import readings
 from hq.platform.application.approvals import entry_event, is_held
 from hq.platform.application.asks import REFRESHING
 from hq.platform.application.capabilities import execute_capability
-from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
 from hq.platform.application.payload_words import changed_words
 from hq.platform.application.pins import SERVICE as PINNED_SERVICE, toggle
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.report_testing import report_connections
-from hq.platform.application.security import Capability, Principal, cli_principal
+from hq.platform.application.security import Capability, Principal
 from hq.platform.application.services import CONTAINER_KIND
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core import seeds
@@ -565,7 +564,6 @@ def build_dense_estate(user):
                 "detail": "4 zones.",
             },
         ],
-        principal=cli_principal(),
         controller_id="example-controller",
     )
     # The last thing a connection did names a resource as long as a real
@@ -759,10 +757,8 @@ def _held_policy_insert(agent: Principal) -> None:
 
     tests = [{"src": f"user-{index}@example.com", "accept": ["tag:server:443"]} for index in range(3)]
     declared = {"grants": [_policy_grant(index) for index in range(8)], "tests": tests}
-    save_managed_resource(
-        ManagedResourceCommand(key=POLICY, kind="tailscale.policy", spec={"document": json.dumps(declared, indent=2)}),
-        principal=cli_principal(),
-        copied_from_live=True,
+    ManagedResource.objects.create(
+        key=POLICY, kind="tailscale.policy", spec={"document": json.dumps(declared, indent=2)}
     )
     grants = declared["grants"]
     inserted = {"src": ["group:an-example-group-of-administrators"], "dst": ["tag:server"], "ip": ["*"]}

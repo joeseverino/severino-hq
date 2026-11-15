@@ -12,12 +12,11 @@ from .command_targets import starting_page
 from .connection_catalog import connection_catalog
 from .connections import ConnectionAbility, ConnectionSpec
 from .contracts import route_url
-from .decisions import urgency
 from .entity_links import entity_link
 from .facts import in_zone
 from .findings import finding_rules
 from .integrations import integration_graph
-from .labels import dotted, effect_label
+from .labels import dotted
 from .resources import ResourceSpec
 from .security import Capability, Principal
 from .topology_lenses import topology_lenses
@@ -174,7 +173,7 @@ def _command_item(spec: CapabilitySpec, relation: CommandRelation) -> DiscoveryI
         url=url,
         destination_label=destination,
         badges=(
-            effect_label(spec.effect),
+            spec.effect.label,
             *(f"via {label}" for label in relation.labels),
         ),
     )
@@ -314,7 +313,7 @@ def _estate_items() -> tuple[DiscoveryItem, ...]:
             ),
             url=machine.url,
             destination_label="Machine",
-            badges=(machine.state[0],),
+            badges=(machine.state,),
             search_terms=tuple(
                 term
                 for term in (
@@ -402,9 +401,7 @@ def command_center(query: str, *, principal: Principal, include_live_connections
 def _command_center(query: str, *, principal: Principal, include_live_connections: bool) -> dict:
 
     graph = integration_graph()
-    permitted_connections = tuple(
-        spec for spec in graph.connections.values() if principal.permits(*spec.required_capabilities)
-    )
+    permitted_connections = tuple(spec for spec in graph.connections.values() if spec.permitted_to(principal))
     # Registry discovery is a zero-query application primitive used by CLI,
     # MCP and contract checks. The web palette explicitly opts into cached live
     # instances because operator-entered names and current reachability are the
@@ -446,7 +443,7 @@ def _resource_items(registered: tuple[ResourceSpec, ...], principal: Principal) 
             badges=(),
         )
         for spec in registered
-        if principal.permits(*spec.required_capabilities)
+        if spec.permitted_to(principal)
     )
 
 
@@ -463,7 +460,7 @@ def _command_items(
     return tuple(
         item
         for spec in registered
-        if principal.permits(*spec.required_capabilities)
+        if spec.permitted_to(principal)
         for item in (
             _command_item(
                 spec,
@@ -527,7 +524,7 @@ def _questions(principal: Principal) -> tuple[tuple[DiscoveryItem, ...], tuple[D
             summary="",
             url=_finding_url(rule.name),
             destination_label="",
-            badges=(urgency(rule.severity),),
+            badges=(rule.severity.urgency,),
         )
         for rule in finding_rules()
     )

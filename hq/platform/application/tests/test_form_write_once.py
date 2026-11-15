@@ -25,6 +25,7 @@ from hq.domains.calendars.models import Entry
 from hq.domains.calendars.views import EntryCreateView
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
+from hq.platform.application.markup_testing import text
 from hq.platform.core.models import AuditLog
 
 from .. import writes
@@ -32,7 +33,6 @@ from ..expenses import ExpenseCommand, save_expense
 from ..plugin_testing import form_keyed
 from ..security import OPERATOR_CAPABILITIES, Principal
 from ..web_writes import RETRY_KEY_FIELD, run_posted
-from .markup import text
 from .writers import drawn_key
 
 # The delete page's one button posts the page's shared form.

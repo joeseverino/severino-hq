@@ -37,9 +37,10 @@ def grants(role: str) -> frozenset[Capability | str]:
 
 
 def viewer_capabilities() -> frozenset[Capability | str]:
-    """The read base: HQ's own reads and every extension's, what a viewer holds."""
+    """The read base: HQ's own reads and every extension's, what a viewer holds,
+    and showing stand-ins for what they read."""
 
-    return frozenset({Capability.READ, *plugin_capabilities("mcp_read")})
+    return frozenset({Capability.READ, Capability.SHOW_DEMO, *plugin_capabilities("mcp_read")})
 
 
 def highest(roles: Iterable[str]) -> str:

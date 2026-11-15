@@ -9,14 +9,15 @@ the list itself.
 from django.test import TestCase
 
 from hq.domains.control_plane.models import ManagedResource
+from hq.platform.application.tests.consent import consented
 
 from ..adoption import AdoptCommand, AdoptServiceCommand, adopt, adopt_service, unmanaged
 from ..adoption_testing import managing_everything
 from ..controller import ControllerReport, claim_next_operation, report_operation
 from ..record_errors import RecordNotFound
+from ..report_testing import bridged
 from ..resource_operations import OperationCommand, request_removal
 from ..security import cli_principal
-from ..sweep import record_sweep
 from ..zones import adopt_zone_records
 from .inventory_records import A_REWRITE, a_sweep
 from .zone_records import DNS_CONNECTIONS, RECORD_KIND, ZONE_KIND, ZONES, record
@@ -30,7 +31,7 @@ def removed(kind: str) -> None:
     and reported done by the controller."""
 
     resource = ManagedResource.objects.get(kind=kind)
-    request_removal(OperationCommand(), principal=cli_principal(), current_key=resource.key)
+    request_removal(OperationCommand(), consented=consented(cli_principal()), current_key=resource.key)
     claim = claim_next_operation("test-controller", capabilities=((kind, "delete"),))
     report_operation(
         claim["operation"]["id"],
@@ -50,17 +51,17 @@ class RemovedRewriteTests(TestCase):
     def setUp(self):
         super().setUp()
         managing_everything()
-        record_sweep(a_sweep(**{"adguard.rewrite": [A_REWRITE]}), principal=cli_principal())
+        bridged("inventory", a_sweep(**{"adguard.rewrite": [A_REWRITE]}))
         removed("adguard.rewrite")
 
     def test_a_sweep_that_carries_the_kind_adopts_nothing_back(self):
-        record_sweep({"adguard.rewrite": CARRIED}, principal=cli_principal())
+        bridged("inventory", {"adguard.rewrite": CARRIED})
 
         self.assertFalse(ManagedResource.objects.filter(kind="adguard.rewrite").exists())
         self.assertEqual([item for item in unmanaged() if item.kind == "adguard.rewrite"], [])
 
     def test_a_sweep_of_other_kinds_adopts_nothing_back(self):
-        record_sweep(a_sweep(**{"npm.proxy_host": []}), principal=cli_principal())
+        bridged("inventory", a_sweep(**{"npm.proxy_host": []}))
 
         self.assertFalse(ManagedResource.objects.filter(kind="adguard.rewrite").exists())
 
@@ -73,7 +74,7 @@ class RemovedRewriteTests(TestCase):
     def test_a_read_that_lists_it_again_adopts_it(self):
         """Only HQ's own removal is struck: a later read is the provider's word."""
 
-        record_sweep(a_sweep(**{"adguard.rewrite": [A_REWRITE]}), principal=cli_principal())
+        bridged("inventory", a_sweep(**{"adguard.rewrite": [A_REWRITE]}))
 
         self.assertTrue(ManagedResource.objects.filter(kind="adguard.rewrite").exists())
 
@@ -82,14 +83,11 @@ class RemovedZoneRecordTests(TestCase):
     def setUp(self):
         super().setUp()
         managing_everything(*DNS_CONNECTIONS)
-        record_sweep(
-            {ZONE_KIND: {"ok": True, "records": ZONES}, RECORD_KIND: {"ok": True, "records": [A_TXT]}},
-            principal=cli_principal(),
-        )
+        bridged("inventory", {ZONE_KIND: {"ok": True, "records": ZONES}, RECORD_KIND: {"ok": True, "records": [A_TXT]}})
         removed(RECORD_KIND)
 
     def test_a_sweep_that_carries_the_records_adopts_nothing_back(self):
-        record_sweep({ZONE_KIND: {"ok": True, "records": ZONES}, RECORD_KIND: CARRIED}, principal=cli_principal())
+        bridged("inventory", {ZONE_KIND: {"ok": True, "records": ZONES}, RECORD_KIND: CARRIED})
 
         self.assertFalse(ManagedResource.objects.filter(kind=RECORD_KIND).exists())
         self.assertEqual([item for item in unmanaged() if item.kind == RECORD_KIND], [])

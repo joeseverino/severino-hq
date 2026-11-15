@@ -17,6 +17,7 @@ from hq.domains.control_plane.models import ProviderConnection, ProviderInventor
 from hq.domains.jobs.models import HEARTBEAT_GRACE, Job
 from hq.domains.jobs.testing import held_jobs
 from hq.domains.projects.models import Project
+from hq.platform.application.markup_testing import select, within
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog
@@ -25,7 +26,6 @@ from ..capabilities import execute_capability
 from ..outbound_work import ANOTHER_RUNNING
 from ..projects import REFRESH, refresh_project
 from ..security import OPERATOR_CAPABILITIES, Capability, Principal
-from .markup import select, within
 
 REF = "example-github"
 PUSHED = "2026-09-27T12:00:00Z"

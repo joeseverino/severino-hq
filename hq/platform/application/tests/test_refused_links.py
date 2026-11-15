@@ -17,6 +17,7 @@ from django.urls import reverse
 from hq.domains.jobs.models import Job
 from hq.platform.application.action_links import command_action, command_url
 from hq.platform.application.connections import ConnectionAbility, ConnectionInstance, ConnectionSpec
+from hq.platform.application.markup_testing import select, within
 from hq.platform.application.plugin_testing import form_keyed, offering
 from hq.platform.application.plugins import clear_plugin_composition_cache
 from hq.platform.application.workflow_contracts import ActionLink
@@ -25,7 +26,6 @@ from hq_sdk.testing import held_jobs
 from tests.fixtures.example_hq_plugin import outbound as example
 
 from ..entity_links import connection_anchor
-from .markup import select, within
 from .test_outbound_work import SCRIPT, ComposedExample
 
 CLOSED = "The registry is closed for the night."

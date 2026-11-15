@@ -6,9 +6,8 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
+from hq.platform.application.markup_testing import within
 from hq.platform.application.read_models import recent_activity
-from hq.platform.application.security import cli_principal
-from hq.platform.application.tests.markup import within
 from hq.platform.core import append_only
 from hq.platform.core.audit import record_event
 from hq.platform.core.middleware import request_operation
@@ -44,7 +43,7 @@ class RequestWordsTests(TestCase):
         self.assertNoRouteWords(line.title)
 
     def test_a_model_reads_a_request_by_what_it_changed(self):
-        (item,) = recent_activity(principal=cli_principal())["items"]
+        (item,) = recent_activity()["items"]
 
         self.assertIn("example-b", item["title"])
         self.assertNoRouteWords(item["title"])

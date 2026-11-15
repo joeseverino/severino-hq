@@ -27,6 +27,7 @@ from .calendar_entries import (
     choose_source,
     save_entry,
 )
+from .contracts import Effect
 from .deletion import DeleteCommand, delete_calendar_entry
 from .describe import Describe, listed
 from .integration_specs import CapabilitySpec, ResourceSpec
@@ -104,7 +105,7 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
         CapabilitySpec(
             "calendar.entry.create",
             "Put an event on the calendar.",
-            "remote_write",
+            Effect.REMOTE_WRITE,
             Capability.WRITE_CALENDAR,
             EntryCommand,
             save_entry,
@@ -114,7 +115,7 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
         CapabilitySpec(
             "calendar.entry.update",
             f"Change one of your events on the calendar. {KEPT}",
-            "remote_write",
+            Effect.REMOTE_WRITE,
             Capability.WRITE_CALENDAR,
             EntryCommand,
             save_entry,
@@ -128,7 +129,7 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
         CapabilitySpec(
             "calendar.entry.delete",
             "Delete one of your events from the calendar.",
-            "destructive",
+            Effect.DESTRUCTIVE,
             Capability.DELETE_CALENDAR,
             DeleteCommand,
             delete_calendar_entry,
@@ -141,7 +142,7 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
         CapabilitySpec(
             CHOOSE_SOURCE,
             "Show or hide one calendar source on the signed-in person's month.",
-            "remote_write",
+            Effect.REMOTE_WRITE,
             Capability.SET_PREFERENCES,
             SourceChoiceCommand,
             choose_source,

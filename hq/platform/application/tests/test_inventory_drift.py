@@ -9,8 +9,8 @@ from hq.platform.core.models import AuditLog
 
 from ..inventory import confirm_observed
 from ..record_errors import RecordNotFound
+from ..report_testing import bridged
 from ..security import cli_principal
-from ..sweep import record_sweep
 from .inventory_records import A_PROXY, a_sweep
 
 
@@ -112,7 +112,7 @@ class UnobservableFieldTests(TestCase):
         )
 
     def sweep(self, record=None):
-        record_sweep(a_sweep(**{"npm.proxy_host": [record or A_PROXY]}), principal=self.principal)
+        bridged("inventory", a_sweep(**{"npm.proxy_host": [record or A_PROXY]}))
         self.resource.refresh_from_db()
 
     def test_a_host_naming_a_certificate_is_confirmed_by_a_sweep_that_cannot_see_it(self):
@@ -198,10 +198,7 @@ class UnobservableFieldTests(TestCase):
                         kind=kind,
                         spec=spec,
                     )
-                    record_sweep(
-                        a_sweep(**{kind: [provider.sample_record]}),
-                        principal=cli_principal(),
-                    )
+                    bridged("inventory", a_sweep(**{kind: [provider.sample_record]}))
                     resource.refresh_from_db()
                     self.assertEqual(
                         _unconfirmed(resource, provider),
@@ -221,7 +218,7 @@ class UnobservableFieldTests(TestCase):
             with self.subTest(kind=kind):
                 spec = provider.from_record(provider.sample_record)
                 resource = ManagedResource.objects.create(key=f"sample-{kind.replace('.', '-')}", kind=kind, spec=spec)
-                record_sweep(a_sweep(**{kind: [provider.sample_record]}), principal=cli_principal())
+                bridged("inventory", a_sweep(**{kind: [provider.sample_record]}))
                 resource.refresh_from_db()
                 self.assertIsNotNone(
                     resource.last_observed_at,
@@ -352,12 +349,13 @@ class AcceptObservedTests(TestCase):
         # The provider says the key never expires: it was changed there.
         store("tailscale.device", {"name": "a-box", "key_expires": "", "tags": []})
 
-    def accept(self, principal=None):
+    def accept(self):
         from ..resource_operations import OperationCommand, accept_observed
+        from .consent import consented
 
         return accept_observed(
             OperationCommand(reason="changed on purpose"),
-            principal=principal or cli_principal(),
+            consented=consented(cli_principal()),
             current_key="a-device",
         )
 

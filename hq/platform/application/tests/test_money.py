@@ -5,11 +5,11 @@ from decimal import Decimal
 from django.template import Context, Template, TemplateSyntaxError
 from django.test import SimpleTestCase
 
+from hq.platform.application.markup_testing import text, with_class
 from hq_sdk import money as sdk
 
 from ..money import MINUS, WORD_JOINER, money, signed_number
 from ..ui import MISSING
-from .markup import text, with_class
 
 
 class MoneyTests(SimpleTestCase):

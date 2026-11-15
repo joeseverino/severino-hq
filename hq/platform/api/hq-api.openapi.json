@@ -281,6 +281,19 @@
         },
         "summary": "Recorded by HQ's test suite."
       },
+      "findingsV2Forbidden": {
+        "dataValue": {
+          "error": {
+            "code": "insufficient_scope",
+            "details": {
+              "scope": "read"
+            },
+            "message": "api principal 'example-automation' lacks 'read': its token does not carry it. Grant 'read' to the client 'example-automation' in Pocket ID, then sign in again."
+          },
+          "ok": false
+        },
+        "summary": "Recorded by HQ's test suite."
+      },
       "findingsV2OK": {
         "dataValue": {
           "data": {
@@ -1298,8 +1311,8 @@
       "getRunsV2OK": {
         "dataValue": {
           "data": {
-            "approved_by": "",
-            "by": "example-agent, over MCP",
+            "approved_by": "joe",
+            "by": "example-agent, over MCP\u00a0\u00b7 approved by joe",
             "capability": "automation.example.package_upgrade.run",
             "correlation": "",
             "created_at": "2026-01-15T09:29:00+00:00",
@@ -1765,13 +1778,16 @@
             ],
             "posture": {
               "abilities": 50,
-              "controls": [
+              "checks": [
                 {
-                  "detail": "HQ has no reading of an access list for this name.",
-                  "evidence": "Not read",
-                  "id": "edge",
-                  "label": "The proxy lets in tailnet addresses only",
-                  "state": "neutral"
+                  "boundary": "",
+                  "detail": "This page shows the last reading of each connection.",
+                  "evidence": "Oldest reading just now",
+                  "id": "freshness",
+                  "label": "Connections have been read",
+                  "mechanism": "",
+                  "rules": [],
+                  "state": "met"
                 }
               ],
               "dependencies": 33,
@@ -1796,8 +1812,8 @@
                   "stops": "a device added to your tailnet without your key"
                 }
               ],
-              "met": 4,
-              "unread": 2
+              "met": 3,
+              "unread": 3
             },
             "summary": {
               "all_custodied": false,
@@ -2773,7 +2789,7 @@
                 "check": {
                   "detail": "No reading names the device at 127.0.0.1.",
                   "label": "Not confirmed",
-                  "state": "unproven",
+                  "state": "unavailable",
                   "step": ""
                 },
                 "detail": "127.0.0.1",
@@ -2795,7 +2811,7 @@
                     "label": "The tailnet knows this device",
                     "mechanism": "The tailnet device list",
                     "rules": [],
-                    "state": "does-not"
+                    "state": "unmet"
                   }
                 ],
                 "link": null,
@@ -2823,21 +2839,21 @@
             "items": [
               {
                 "approved_by": "",
-                "by": "example-agent, over MCP",
-                "capability": "automation.example.package_upgrade.run",
+                "by": "joe, on the web",
+                "capability": "automation.example.cache_flush.run",
                 "correlation": "",
-                "created_at": "2026-01-15T09:29:00+00:00",
+                "created_at": "2026-01-15T09:27:00+00:00",
                 "duration_seconds": null,
                 "finished_at": null,
                 "headline": "",
                 "hosts": [
-                  "macbook-pro-16"
+                  "docker-host-01"
                 ],
-                "operation_id": "330b177e-3075-5811-9fba-835493beb091",
-                "playbook": "example.package_upgrade",
-                "started_at": null,
-                "state": "queued",
-                "state_label": "Waiting",
+                "operation_id": "69f54f70-cd66-5001-b486-bb8dbb36e914",
+                "playbook": "example.cache_flush",
+                "started_at": "2026-01-15T09:27:20+00:00",
+                "state": "running",
+                "state_label": "Running",
                 "stated": []
               }
             ],
@@ -3255,14 +3271,14 @@
               "capability": "project.create",
               "content_fingerprint": "6c9ba16f74000dd99ad2ac8841847ddd5d8537ac700937d8cae8327f35afbcfd",
               "expires_at": "2026-01-16T09:30:00+00:00",
-              "id": "69f54f70-cd66-5001-b486-bb8dbb36e914",
+              "id": "7b4ba536-2791-576a-bd31-b1b2e598a61c",
               "reason": "",
               "requested_actor": "example-automation",
               "requested_at": "2026-01-15T09:30:00+00:00",
               "requested_interface": "api",
               "resource_key": "",
               "resource_kind": "projects",
-              "review_url": "https://hq.example.com/audit/approval/69f54f70-cd66-5001-b486-bb8dbb36e914/",
+              "review_url": "https://hq.example.com/audit/approval/7b4ba536-2791-576a-bd31-b1b2e598a61c/",
               "state": "pending",
               "target": ""
             },
@@ -5459,8 +5475,7 @@
             "description": "The command that uses it, by name; null for none."
           },
           "effect": {
-            "description": "What using it does: `read`, `remote_write`, `infrastructure_change` or `destructive`.",
-            "type": "string"
+            "$ref": "#/components/schemas/Effect"
           },
           "governs_kinds": {
             "description": "The types of record it lets HQ manage; empty for none.",
@@ -7364,8 +7379,7 @@
         "description": "One command as the index lists it: what it does and whether you may run it, without its schema.",
         "properties": {
           "effect": {
-            "description": "What running it does: `read`, `remote_write`, `infrastructure_change` or `destructive`.",
-            "type": "string"
+            "$ref": "#/components/schemas/Effect"
           },
           "label": {
             "description": "The command's name, as HQ's pages show it.",
@@ -7636,6 +7650,47 @@
         ],
         "type": "object"
       },
+      "CheckPart": {
+        "additionalProperties": false,
+        "properties": {
+          "boundary": {
+            "description": "The security boundary it belongs to; empty for none.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "Why it was decided so, in a sentence.",
+            "type": "string"
+          },
+          "evidence": {
+            "description": "The value it was decided from; empty for none.",
+            "type": "string"
+          },
+          "id": {
+            "description": "The check's stable id, such as `edge` or `identity`.",
+            "type": "string"
+          },
+          "label": {
+            "description": "The check, in words.",
+            "type": "string"
+          },
+          "mechanism": {
+            "description": "What enforces it; empty for none.",
+            "type": "string"
+          },
+          "rules": {
+            "description": "The rules behind it, where what decides it has rules.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "state": {
+            "description": "Where it stands: `met`, `unmet` or `unavailable`, the last when what decides it did not answer.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "CommandAnswer": {
         "description": "What the command answers, in the shape its capability's own route in this document gives.",
         "type": "object"
@@ -7681,6 +7736,10 @@
           }
         },
         "type": "object"
+      },
+      "Confirm": {
+        "description": "The identifier of what it deletes, again, to confirm the delete.",
+        "type": "string"
       },
       "ConfirmPrune": {
         "description": "Confirms the delete that prune_orphans asks for.",
@@ -8188,21 +8247,7 @@
             "$ref": "#/components/schemas/ExpectedUpdatedAt"
           },
           "payload": {
-            "additionalProperties": false,
-            "description": "The command: the fields its input schema names.",
-            "properties": {
-              "confirm": {
-                "description": "The submission's ID again, to confirm the delete.",
-                "type": "string"
-              },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              }
-            },
-            "required": [
-              "confirm"
-            ],
-            "type": "object"
+            "$ref": "#/components/schemas/DeleteCommand"
           },
           "target": {
             "description": "The message to delete: its id.",
@@ -9280,8 +9325,7 @@
         "description": "The command: the fields its input schema names.",
         "properties": {
           "confirm": {
-            "description": "The record's identifier again, to confirm the delete.",
-            "type": "string"
+            "$ref": "#/components/schemas/Confirm"
           },
           "idempotency_key": {
             "$ref": "#/components/schemas/IdempotencyKey"
@@ -10059,6 +10103,16 @@
           }
         },
         "type": "object"
+      },
+      "Effect": {
+        "description": "What running a command does, least consequential first.",
+        "enum": [
+          "read",
+          "remote_write",
+          "infrastructure_change",
+          "destructive"
+        ],
+        "type": "string"
       },
       "EmptyGroupsRemoved": {
         "additionalProperties": false,
@@ -11381,7 +11435,7 @@
             "type": "string"
           },
           "state": {
-            "description": "Whether the request agrees with the readings at the hop, in one word.",
+            "description": "Whether the request agrees with the readings at the hop: `met`, `unmet` or `unavailable`, the last when the request does not show it.",
             "type": "string"
           },
           "step": {
@@ -11427,9 +11481,9 @@
             "type": "string"
           },
           "layers": {
-            "description": "The admission layers decided at the hop. Present only on a hop the calling request walked.",
+            "description": "The checks of the request standard decided at the hop. Present only on a hop the calling request walked.",
             "items": {
-              "$ref": "#/components/schemas/LayerPart"
+              "$ref": "#/components/schemas/CheckPart"
             },
             "type": "array"
           },
@@ -12373,47 +12427,6 @@
         ],
         "description": "When the doc last changed in the vault. Null for unknown.",
         "title": "Last reviewed"
-      },
-      "LayerPart": {
-        "additionalProperties": false,
-        "properties": {
-          "boundary": {
-            "description": "The security boundary it belongs to; empty for none.",
-            "type": "string"
-          },
-          "detail": {
-            "description": "Why it was decided so, in a sentence.",
-            "type": "string"
-          },
-          "evidence": {
-            "description": "The value it was decided from; empty for none.",
-            "type": "string"
-          },
-          "id": {
-            "description": "The layer's stable id, such as `edge` or `identity`.",
-            "type": "string"
-          },
-          "label": {
-            "description": "The layer, in words.",
-            "type": "string"
-          },
-          "mechanism": {
-            "description": "What enforces it; empty for none.",
-            "type": "string"
-          },
-          "rules": {
-            "description": "The rules behind it, where what decides it has rules.",
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "state": {
-            "description": "`holds`, `does-not`, or `unknown` when what decides it did not answer.",
-            "type": "string"
-          }
-        },
-        "type": "object"
       },
       "LensEntry": {
         "additionalProperties": false,
@@ -14203,7 +14216,12 @@
             "type": "string"
           },
           "effect": {
-            "description": "What it does to a machine: `read`, `infrastructure_change` or `destructive`. Anything but a read waits for an operator's approval when an agent asks.",
+            "description": "What it does to a machine. Anything but a read waits for an operator's approval when an agent asks.",
+            "enum": [
+              "read",
+              "infrastructure_change",
+              "destructive"
+            ],
             "type": "string"
           },
           "playbook": {
@@ -24366,7 +24384,24 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "content": {
+              "application/json": {
+                "examples": {
+                  "recorded": {
+                    "$ref": "#/components/examples/findingsV2Forbidden"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenRefusal"
+                }
+              }
+            },
+            "description": "Forbidden.",
+            "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/InsufficientScopeWWWAuthenticate"
+              }
+            }
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
@@ -28024,7 +28059,7 @@
     },
     "/api/v2/resources/request.path/": {
       "get": {
-        "description": "How the calling request reached HQ, hop by hop, each checked against the request, with the admission layers decided there.",
+        "description": "How the calling request reached HQ, hop by hop, and the request standard's checks decided at each.",
         "operationId": "listRequestPathV2",
         "parameters": [
           {

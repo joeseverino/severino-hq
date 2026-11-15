@@ -26,6 +26,7 @@ from hq.platform.application.resource_operations import (
     request_reconcile,
 )
 from hq.platform.application.security import cli_principal
+from hq.platform.application.tests.consent import consented
 
 from . import bridge_client
 from .certificate_cases import certificate_spec, declare_targets
@@ -69,7 +70,7 @@ class ControllerContractTests(TestCase):
         declare_targets()
         save_managed_resource(
             ManagedResourceCommand(key="example-wildcard", kind="tls.certificate", spec=certificate_spec()),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
         )
         OperationRequest.objects.all().delete()  # applied, so the reconcile its save queued is done
         self.resource = ManagedResource.objects.get(key="example-wildcard")
@@ -123,7 +124,7 @@ class ControllerContractTests(TestCase):
     def test_peek_claim_and_report(self, _policy):
         request_reconcile(
             OperationCommand(),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
             current_key=self.resource.key,
         )
         self.assertIsNotNone(bridge("peek", capability=CERTIFICATE)["operation"])
@@ -156,7 +157,7 @@ class ControllerContractTests(TestCase):
     def test_a_renewal_carries_its_verification_policy(self, _policy):
         request_certificate_renewal(
             OperationCommand(),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
             current_key=self.resource.key,
         )
         expected = {"timeout_seconds": 180, "interval_seconds": 5}
@@ -168,7 +169,7 @@ class ControllerContractTests(TestCase):
     def test_a_certificate_reconcile_verifies_under_the_renewal_policy(self):
         request_reconcile(
             OperationCommand(),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
             current_key=self.resource.key,
         )
         self.assertEqual(

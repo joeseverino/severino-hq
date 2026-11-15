@@ -14,7 +14,9 @@ from .finding_model import (
     reconcile_remedy,
 )
 from .moments import elapsed
+from .tone import Tone
 from .ui import ended
+lazy from .topology_facts import PATH_DENIED, UNREACHABLE
 
 
 def _connection_not_answering(estate: FindingEstate) -> tuple[Finding, ...]:
@@ -27,7 +29,7 @@ def _connection_not_answering(estate: FindingEstate) -> tuple[Finding, ...]:
             continue
         refusal = next((value for key, value in node.facts if key == "credential-refused"), None)
         refused = refusal is not None
-        if node.status != "serious" and not refused:
+        if node.status != Tone.SERIOUS and not refused:
             continue
         reason = refusal or node.detail
         failure = credential_findings.failure_of_node(node)
@@ -42,7 +44,7 @@ def _connection_not_answering(estate: FindingEstate) -> tuple[Finding, ...]:
                     if failure == ADDRESS_FAILURE
                     else f"{node.label} is not answering"
                 ),
-                severity="attention",
+                severity=Tone.ATTENTION,
                 explanation=(
                     (f"{ended(reason)} " if reason else "")
                     + "HQ cannot read anything through it, so what it shows from "
@@ -78,14 +80,14 @@ def _unreachable_consumer(estate: FindingEstate) -> tuple[Finding, ...]:
     for node in estate.nodes():
         # Every entry shares one key, so a dictionary of the node's facts would
         # report one unreachable name however many there were.
-        names = fact_values(node, "unreachable")
+        names = fact_values(node, UNREACHABLE)
         if not names:
             continue
         # The tailnet refusing the path is a different claim from the consumer
         # being down, and only one of them has a fix worth offering. Present,
         # the policy was asked and said no; absent, it said yes or was never
         # swept, and neither is a reason to send anybody at an access policy.
-        refused = fact_values(node, "path-denied")
+        refused = fact_values(node, PATH_DENIED)
         found.append(
             Finding(
                 rule="unreachable-consumer",
@@ -95,7 +97,7 @@ def _unreachable_consumer(estate: FindingEstate) -> tuple[Finding, ...]:
                     if len(names) == 1
                     else f"Could not check {node.label} on {len(names)} of the places it is installed"
                 ),
-                severity="serious",
+                severity=Tone.SERIOUS,
                 explanation=(
                     "The other places answered. "
                     + (
@@ -120,22 +122,22 @@ RULES: tuple[FindingRule, ...] = (
     FindingRule(
         "connection-not-answering",
         "A connection is not answering",
-        "attention",
+        Tone.ATTENTION,
         _connection_not_answering,
         operator_action=(f"Open the connection and fix what its error says. {THEN_CHECK_AGAIN}"),
         no_help_reason=("HQ cannot change 1Password or your network."),
-        bars={"attention": "a connection fails its check"},
+        bars={Tone.ATTENTION: "a connection fails its check"},
     ),
     FindingRule(
         "unreachable-consumer",
         "Could not check a certificate where it is installed",
-        "serious",
+        Tone.SERIOUS,
         _unreachable_consumer,
         operator_action=(f"Make it reachable from the controller's machine. {THEN_CHECK_AGAIN}"),
         no_help_reason=("HQ cannot reach it any other way."),
         # Says the same thing with the name of the consumer in it. The generic
         # rule would otherwise put this in front of an operator twice.
         subsumes=("reporting-a-fault",),
-        bars={"serious": "HQ cannot reach where a certificate is installed to check it"},
+        bars={Tone.SERIOUS: "HQ cannot reach where a certificate is installed to check it"},
     ),
 )

@@ -10,8 +10,8 @@ from django.template import Context, Template, TemplateSyntaxError, engines
 from django.test import SimpleTestCase, tag
 from django.utils.functional import SimpleLazyObject
 
+from hq.platform.application.markup_testing import all_elements, elements, select, with_class
 from hq.platform.application.page_parts import SectionPart
-from hq.platform.application.tests.markup import all_elements, elements, select, with_class
 from hq.platform.core.templatetags.facts_tags import LAYOUTS
 lazy from hq.platform.core.tests.browser.catalog import CATALOG
 

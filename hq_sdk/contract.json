@@ -274,7 +274,8 @@
           "SET_PREFERENCES",
           "PIN_FAVORITES",
           "SET_ASIDE_ACTION_ITEMS",
-          "END_SESSIONS"
+          "END_SESSIONS",
+          "SHOW_DEMO"
         ]
       },
       "CapabilitySpec": {
@@ -377,6 +378,15 @@
         "kind": "dataclass",
         "members": {}
       },
+      "Effect": {
+        "kind": "enum",
+        "members": [
+          "READ",
+          "REMOTE_WRITE",
+          "INFRASTRUCTURE_CHANGE",
+          "DESTRUCTIVE"
+        ]
+      },
       "InputError": {
         "bases": [
           "HostRefusal",
@@ -435,7 +445,7 @@
             "kind": "method",
             "parameters": [
               "self",
-              "capability"
+              "*capabilities"
             ]
           }
         }
@@ -889,6 +899,9 @@
           "is_ask": {
             "kind": "attribute",
             "type": "bool"
+          },
+          "look": {
+            "kind": "property"
           },
           "method": {
             "kind": "attribute",
@@ -1866,6 +1879,37 @@
           }
         }
       },
+      "Element": {
+        "bases": [],
+        "constructor": [
+          "tag",
+          "attrs",
+          "text=",
+          "ancestors=",
+          "chunks=",
+          "beneath=",
+          "inert=",
+          "shadowed=",
+          "opens="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {
+          "classes": {
+            "kind": "property"
+          },
+          "inside": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "row"
+            ]
+          },
+          "words": {
+            "kind": "property"
+          }
+        }
+      },
       "OutboundInRequest": {
         "bases": [
           "RuntimeError"
@@ -1873,6 +1917,12 @@
         "constructor": null,
         "kind": "class",
         "members": {}
+      },
+      "all_elements": {
+        "kind": "function",
+        "parameters": [
+          "html"
+        ]
       },
       "audit_writer": {
         "kind": "function",
@@ -1882,6 +1932,13 @@
         "kind": "function",
         "parameters": [
           "showing"
+        ]
+      },
+      "elements": {
+        "kind": "function",
+        "parameters": [
+          "html",
+          "tag"
         ]
       },
       "form_keyed": {
@@ -1906,6 +1963,18 @@
           "*capabilities"
         ]
       },
+      "hrefs": {
+        "kind": "function",
+        "parameters": [
+          "html"
+        ]
+      },
+      "links": {
+        "kind": "function",
+        "parameters": [
+          "html"
+        ]
+      },
       "plain": {
         "kind": "function",
         "parameters": [
@@ -1924,6 +1993,14 @@
         "kind": "function",
         "parameters": []
       },
+      "select": {
+        "kind": "function",
+        "parameters": [
+          "html",
+          "attribute",
+          "value="
+        ]
+      },
       "sibling": {
         "kind": "function",
         "parameters": [
@@ -1936,6 +2013,19 @@
           "**manifest_fields"
         ]
       },
+      "text": {
+        "kind": "function",
+        "parameters": [
+          "html"
+        ]
+      },
+      "texts": {
+        "kind": "function",
+        "parameters": [
+          "html",
+          "tag"
+        ]
+      },
       "unclosed_template_comments": {
         "kind": "function",
         "parameters": [
@@ -1946,6 +2036,21 @@
         "kind": "function",
         "parameters": [
           "template_root"
+        ]
+      },
+      "with_class": {
+        "kind": "function",
+        "parameters": [
+          "html",
+          "name"
+        ]
+      },
+      "within": {
+        "kind": "function",
+        "parameters": [
+          "html",
+          "attribute",
+          "value="
         ]
       }
     },
@@ -2431,6 +2536,15 @@
         "kind": "dataclass",
         "members": {}
       },
+      "Tone": {
+        "kind": "enum",
+        "members": [
+          "SERIOUS",
+          "ATTENTION",
+          "NEUTRAL",
+          "GOOD"
+        ]
+      },
       "Trend": {
         "bases": [],
         "constructor": [
@@ -2519,6 +2633,16 @@
           "trend=",
           "minimum=",
           "maximum="
+        ]
+      },
+      "measured": {
+        "kind": "function",
+        "parameters": [
+          "value",
+          "unit",
+          "places=",
+          "*",
+          "plus="
         ]
       },
       "span": {
@@ -3434,6 +3558,20 @@
           "choices",
           "summary"
         ]
+      },
+      "muted": {
+        "classes": [
+          "css"
+        ],
+        "parameters": [
+          "*",
+          "css=",
+          "element=",
+          "id=",
+          "title=",
+          "**data"
+        ],
+        "parts": []
       },
       "notice": {
         "classes": [

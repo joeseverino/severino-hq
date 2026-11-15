@@ -453,10 +453,21 @@ class OperationState(models.TextChoices):
 
     @property
     def as_job(self) -> JobState:
-        """The job state this one reads as on Jobs, found by the word both say,
-        so the label above is the one declaration of the mapping."""
+        """The job state this one reads as on Jobs."""
 
-        return next(state for state in JobState if state.label == self.label)
+        return READS_AS_JOB[self]
+
+
+# Each operation state and the job state it reads as on Jobs, declared as data
+# so that rewording a label changes words alone; each label above is the words
+# of the state it maps to here.
+READS_AS_JOB: dict[OperationState, JobState] = {
+    OperationState.QUEUED: JobState.QUEUED,
+    OperationState.CLAIMED: JobState.RUNNING,
+    OperationState.SUCCEEDED: JobState.SUCCEEDED,
+    OperationState.FAILED: JobState.FAILED,
+    OperationState.CANCELLED: JobState.LOST,
+}
 
 
 # A claimed operation whose lease has run out is nobody's: the next claim

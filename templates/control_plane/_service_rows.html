@@ -83,7 +83,7 @@ alphabetical is the order and there is nothing to move.
             {% endif %}
           </td>
           {% if show_service_projects %}<td>{% if service.project %}{% entity "project"|entity_of:service.project.slug label=service.project.name %}{% else %}{% empty_value %}{% endif %}</td>{% endif %}
-          <td>{% status service.status_label tone=service.status title=service.health.detail %}</td>
+          <td>{% status service.status_label tone=service.tone title=service.health.detail %}</td>
         </tr>
       {% endfor %}
     </tbody>

@@ -10,6 +10,8 @@ refused is refused whatever a probe found. ``standing`` holds that order.
 from dataclasses import dataclass
 from enum import StrEnum
 
+from .tone import Tone
+
 
 class Lifecycle(StrEnum):
     CONFIGURED = "configured"
@@ -49,19 +51,19 @@ class _Said:
     attention: bool = False
     # Working is good, out of date is to be noticed, a failure is serious,
     # and a connection never tested is neither.
-    tone: str = "neutral"
+    tone: str = Tone.NEUTRAL
 
 
 _SAID = {
     Lifecycle.CONFIGURED: _Said("Added"),
     Lifecycle.UNPROBED: _Said("Not tested"),
-    Lifecycle.REACHABLE: _Said("Working", tone="good"),
-    Lifecycle.READY: _Said("Working", tone="good"),
-    Lifecycle.UNREACHABLE: _Said("Not answering", attention=True, tone="serious"),
-    Lifecycle.UNAUTHORIZED: _Said("Permission missing", attention=True, tone="serious"),
-    Lifecycle.STALE: _Said("Out of date", attention=True, tone="attention"),
-    Lifecycle.REVOKED: _Said("Credential refused", attention=True, tone="serious"),
-    Lifecycle.UNREPORTED: _Said("No longer reported", attention=True, tone="serious"),
+    Lifecycle.REACHABLE: _Said("Working", tone=Tone.GOOD),
+    Lifecycle.READY: _Said("Working", tone=Tone.GOOD),
+    Lifecycle.UNREACHABLE: _Said("Not answering", attention=True, tone=Tone.SERIOUS),
+    Lifecycle.UNAUTHORIZED: _Said("Permission missing", attention=True, tone=Tone.SERIOUS),
+    Lifecycle.STALE: _Said("Out of date", attention=True, tone=Tone.ATTENTION),
+    Lifecycle.REVOKED: _Said("Credential refused", attention=True, tone=Tone.SERIOUS),
+    Lifecycle.UNREPORTED: _Said("No longer reported", attention=True, tone=Tone.SERIOUS),
 }
 
 # The states in which the connection works.

@@ -5,63 +5,49 @@
 @layer components {
 
 /* ── Tone assignment ─────────────────────────────────────────────────
-   The one place a status name maps to a tone, for every component that has
-   statuses. Grouped by tone rather than by component, so `published`,
-   `reachable` and `success` cannot become three different greens.
+   The one place a tone maps to its colors, for every component that draws
+   one. A pill takes one of the four tones (`Tone`), never a word of its
+   own: a subject's states declare theirs (`Toned`), so `published`, `done`
+   and `success` cannot become three different greens.
 
    A component decides which fill level it reads (`--tone-bg` for a chip,
    `--tone-wash` for a banner);
-   this section decides only what the tone *is*. Adding a status means adding
-   its class to one of these lists. Adding a component means reading the
-   contract, not restating the colors. */
+   this section decides only what the tone *is*. A notice keeps the four
+   levels Django's messages carry. */
 
-.pill-active, .pill-published, .pill-created, .pill-uploaded, .pill-public, .pill-done,
-.pill-replied, .pill-reachable, .pill-good, .notice-success, .tone-good {
+.pill-good, .notice-success, .tone-good {
   --tone-bg: var(--tone-positive-bg);
   --tone-wash: var(--tone-positive-wash);
   --tone-ink: var(--tone-positive-ink);
   --tone-line: var(--tone-positive-line);
 }
-.pill-paused, .pill-internal, .pill-attention, .notice-warning, .tone-attention {
+.pill-attention, .notice-warning, .tone-attention {
   --tone-bg: var(--tone-caution-bg);
   --tone-wash: var(--tone-caution-wash);
   --tone-ink: var(--tone-caution-ink);
   --tone-line: var(--tone-caution-line);
 }
-.pill-archived, .pill-deprecated, .pill-retired, .pill-sold, .pill-returned,
-.pill-replaced, .pill-deleted, .pill-login_failed, .pill-denied, .pill-spam,
-.pill-unreachable, .notice-error {
+.notice-error {
   --tone-bg: var(--tone-critical-bg);
   --tone-wash: var(--tone-critical-wash);
   --tone-ink: var(--tone-critical-ink);
   --tone-line: var(--tone-critical-line);
 }
-.pill-idea, .pill-draft, .pill-viewed, .notice-info {
+.notice-info {
   --tone-bg: var(--tone-info-bg);
   --tone-wash: var(--tone-info-wash);
   --tone-ink: var(--tone-info-ink);
   --tone-line: var(--tone-info-line);
 }
-.pill-completed, .pill-unread {
-  --tone-bg: var(--tone-notable-bg);
-  --tone-ink: var(--tone-notable-ink);
-  --tone-line: var(--tone-notable-line);
-}
-.pill-sensitive, .pill-restricted, .pill-serious, .tone-serious {
+.pill-serious, .tone-serious {
   --tone-bg: var(--tone-severe-bg);
   --tone-ink: var(--tone-severe-ink);
   --tone-line: var(--tone-severe-line);
 }
-.pill-imported, .pill-exported {
-  --tone-bg: var(--tone-special-bg);
-  --tone-ink: var(--tone-special-ink);
-  --tone-line: var(--tone-special-line);
-}
-/* Neutral is already every component's fallback, so these assign nothing.
-   They are still named: a status with no rule and a status deliberately
-   neutral look identical and are not the same claim, and the class has to
-   exist for the template check to find it. */
-.pill-read, .pill-unprobed, .pill-neutral {
+/* Neutral is already every component's fallback, so this assigns nothing.
+   It is still named: a pill with no tone and a pill deliberately neutral
+   look identical and are not the same claim. */
+.pill-neutral {
   --tone-bg: var(--tone-neutral-bg);
   --tone-ink: var(--tone-neutral-ink);
   --tone-line: var(--tone-neutral-line);
@@ -263,9 +249,6 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
    the target size (`--target-min`) is each one's box. */
 .reading-panel-foot { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-3) var(--space-6); padding-top: var(--space-4); border-top: 1px solid var(--line-2); font-size: var(--text-xs); line-height: var(--target-min); }
 .reading-panel-foot > span { display: flex; gap: var(--space-5); margin-left: auto; }
-/* A button in the foot is a link in look: the panel's one action besides going somewhere. */
-.reading-panel-foot button { min-height: 0; padding: 0; border: 0; background: none; box-shadow: none; color: var(--accent); font: inherit; cursor: pointer; }
-.reading-panel-foot button:hover { border: 0; background: none; text-decoration: underline; }
 @media (max-width: 640px) {
   .reading-head { column-gap: var(--space-3); }
 }
@@ -362,14 +345,6 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
    margin on the next. */
 .page-head > .btn, .page-head > form { margin-left: auto; }
 .page-head > .btn + .btn, .page-head > form + form { margin-left: 0; }
-/* A head's control in its overflow menu (connection.css draws the panel): a
-   row like the others, whatever kind of button it was beside the title.
-   Destructive keeps only its color. */
-.overflow-menu-panel :is(a, button, span).btn {
-  display: flex; width: 100%; justify-content: flex-start; min-height: 0;
-  border: 0; background: none; box-shadow: none;
-}
-.overflow-menu-panel .btn.danger { color: var(--danger); }
 
 /* ── Sections menu ──────────────────────────────────────────────── */
 /* The button belongs to the narrow layout only; a wide screen sets the
@@ -427,6 +402,15 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
 /* A control in a row or a head among words, a line's height rather than a
    form's. */
 .btn.compact { min-height: var(--control-compact); padding: var(--space-2) var(--space-4); font-size: var(--text-xs); }
+/* A control among words, drawn as a link: the words alone, in their type. */
+.btn.link { min-height: 0; padding: 0; border: 0; background: none; box-shadow: none; color: var(--accent); font: inherit; }
+.btn.link:hover { text-decoration: underline; }
+/* A row of a menu (connection.css draws the panel and its rows' type): a row
+   like the others, whichever look it has beside the title. Written after
+   every look, so it is the one that holds. Destructive keeps only its color. */
+.btn.menu { display: flex; width: 100%; justify-content: flex-start; min-height: 0; border: 0; background: none; box-shadow: none; color: var(--muted); }
+@media (hover: hover) { .btn.menu:hover { color: var(--ink); background: var(--bg-tint); } }
+.btn.menu.danger { color: var(--danger); }
 /* A control that would be refused stands as a span, focusable for its reason
    (partials/_page_action.html), and looks as a disabled button does. */
 .btn:disabled, button:disabled, span.btn[aria-disabled="true"] { cursor: not-allowed; opacity: .52; }

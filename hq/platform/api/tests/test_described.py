@@ -4,7 +4,7 @@ import re
 
 from django.test import SimpleTestCase
 
-from hq.platform.application.contracts import EFFECTS
+from hq.platform.application.contracts import Effect
 from hq.platform.application.plugin_testing import installed, sibling
 from hq.platform.application.plugins import NavigationGroup, NavigationItem
 
@@ -49,7 +49,7 @@ class DescribedTests(SimpleTestCase):
 
     def test_the_document_says_what_each_effect_means(self):
         said = self.document["info"]["description"]
-        for effect in EFFECTS:
+        for effect in Effect:
             with self.subTest(effect):
                 self.assertIn(f"`{effect}`", said)
 

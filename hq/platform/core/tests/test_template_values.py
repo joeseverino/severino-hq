@@ -22,8 +22,8 @@ from django.test import SimpleTestCase, tag
 from django.utils.html import format_html
 
 from hq.platform.application.entity_links import EntityLink
+from hq.platform.application.markup_testing import elements, select
 from hq.platform.application.tests.facts import scan
-from hq.platform.application.tests.markup import elements, select
 from hq.platform.application.tests.reads import reads
 from hq.platform.application.tests.source import template_files
 from hq.platform.core.templatetags.value_tags import breakable, entity, readable, when

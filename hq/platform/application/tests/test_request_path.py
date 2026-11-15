@@ -12,6 +12,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
+from hq.platform.application.markup_testing import elements
 from hq.platform.core.tests.forwarding import arrived
 from hq_sdk.testing import plain
 
@@ -19,15 +20,12 @@ from ..path_model import Hop
 from ..paths import hq_path
 from ..projection import projection_scope
 from ..request_path import (
-    CONTRADICTED,
-    PROVEN,
-    UNPROVEN,
     _Context,
     _edge,
     request_path,
     serialize_request_path,
 )
-from .markup import elements
+from ..standards import Standing
 from .people import someone
 
 HQ = "hq.example.test"
@@ -125,7 +123,7 @@ class RequestPathTests(TestCase):
         )
         states = {hop.step: hop.check.state for hop in found.hops if hop.check}
         for step in ("device", "dns", "network", "ingress", "hq"):
-            self.assertEqual(states[step], PROVEN, step)
+            self.assertEqual(states[step], Standing.MET, step)
         self.assertEqual(found.findings, ())
 
     def test_the_device_hop_names_the_device_and_whose_it_is(self):
@@ -149,14 +147,14 @@ class RequestPathTests(TestCase):
 
         network = next(hop for hop in self.walk(a_request(**NPM_HEADERS)).hops if hop.step == "network")
 
-        self.assertEqual(network.check.state, PROVEN)
+        self.assertEqual(network.check.state, Standing.MET)
         self.assertEqual(network.name, "Connected")
 
     def test_a_request_that_skipped_the_proxy_is_a_finding(self):
         found = self.walk(a_request(peer=LAPTOP, forwarded=""))
 
         ingress = next(hop for hop in found.hops if hop.step == "ingress")
-        self.assertEqual(ingress.check.state, CONTRADICTED)
+        self.assertEqual(ingress.check.state, Standing.UNMET)
         self.assertIn("reached HQ straight from", ingress.check.detail)
         self.assertTrue(ingress.check.step)
         self.assertIn(ingress, found.findings)
@@ -175,35 +173,35 @@ class RequestPathTests(TestCase):
     def test_a_tailnet_address_no_device_holds_is_a_finding(self):
         states = self.checks(a_request(forwarded="100.64.0.99"))
 
-        self.assertEqual(states["device"], CONTRADICTED)
+        self.assertEqual(states["device"], Standing.UNMET)
 
     def test_a_request_from_the_lan_for_a_tailnet_name_is_a_finding(self):
         states = self.checks(a_request(forwarded="10.0.0.50"))
 
-        self.assertEqual(states["network"], CONTRADICTED)
+        self.assertEqual(states["network"], Standing.UNMET)
 
     def test_an_untrusted_forwarder_contradicts_the_device_and_the_proxy(self):
         states = self.checks(a_request(peer="10.9.9.9"))
 
-        self.assertEqual(states["device"], CONTRADICTED)
-        self.assertEqual(states["ingress"], CONTRADICTED)
+        self.assertEqual(states["device"], Standing.UNMET)
+        self.assertEqual(states["ingress"], Standing.UNMET)
 
     def test_disagreeing_proxy_headers_contradict_the_proxy(self):
         states = self.checks(a_request(HTTP_X_REAL_IP="100.64.0.77", HTTP_X_FORWARDED_SCHEME="https"))
 
-        self.assertEqual(states["ingress"], CONTRADICTED)
+        self.assertEqual(states["ingress"], Standing.UNMET)
 
     def test_a_trusted_proxy_without_its_own_headers_is_not_proof_of_which_proxy(self):
-        self.assertEqual(self.checks(a_request())["ingress"], UNPROVEN)
+        self.assertEqual(self.checks(a_request())["ingress"], Standing.UNAVAILABLE)
 
     def test_the_machine_is_proven_only_by_where_hq_answered(self):
         found = self.walk(a_request(**NPM_HEADERS))
         machines = [hop.check.state for hop in found.hops if hop.step == "machine"]
-        self.assertIn(PROVEN, machines)
+        self.assertIn(Standing.MET, machines)
 
         with mock.patch("hq.platform.application.hq_self.host_addresses", return_value=frozenset()):
             found = self.walk(a_request(**NPM_HEADERS))
-        self.assertNotIn(PROVEN, [hop.check.state for hop in found.hops if hop.step == "machine"])
+        self.assertNotIn(Standing.MET, [hop.check.state for hop in found.hops if hop.step == "machine"])
 
     def test_every_check_is_on_exactly_one_hop_and_the_hop_of_its_step(self):
         found = self.walk(a_request(**NPM_HEADERS))
@@ -275,13 +273,13 @@ class AccessTests(TestCase):
     def test_a_request_without_the_assertion_did_not_pass_access(self):
         _evidence, check = self.judged()
 
-        self.assertEqual(check.state, CONTRADICTED)
+        self.assertEqual(check.state, Standing.UNMET)
         self.assertTrue(check.step)
 
     def test_an_assertion_is_shown_as_present_and_never_as_its_value(self):
         evidence, check = self.judged(HTTP_CF_ACCESS_JWT_ASSERTION="planted.jwt.value")
 
-        self.assertEqual(check.state, UNPROVEN)
+        self.assertEqual(check.state, Standing.UNAVAILABLE)
         self.assertNotIn("planted", str(evidence))
         self.assertIn("present", evidence[0].value)
 
@@ -421,7 +419,7 @@ class TokenIdentityTests(TestCase):
         said, layer = self.served()
 
         self.assertTrue(said["identity_agrees"])
-        self.assertEqual(layer["state"], "holds")
+        self.assertEqual(layer["state"], "met")
         self.assertIn("example-operator", layer["detail"])
 
     def test_a_device_awaiting_approval_does_not_agree(self):
@@ -430,7 +428,7 @@ class TokenIdentityTests(TestCase):
         said, layer = self.served()
 
         self.assertFalse(said["identity_agrees"])
-        self.assertEqual(layer["state"], "does-not")
+        self.assertEqual(layer["state"], "unmet")
 
     def test_a_blocked_device_does_not_agree_though_it_was_approved(self):
         now = timezone.now()
@@ -439,7 +437,7 @@ class TokenIdentityTests(TestCase):
         said, layer = self.served()
 
         self.assertFalse(said["identity_agrees"])
-        self.assertEqual(layer["state"], "does-not")
+        self.assertEqual(layer["state"], "unmet")
 
     def test_every_standing_a_device_can_be_in_is_explained(self):
         from ..agent_devices import DeviceStanding
@@ -482,13 +480,13 @@ class ContainerHopTests(TestCase):
 
         self.assertIn("inside example-hq", check.detail)
 
-        self.assertEqual(check.state, PROVEN)
+        self.assertEqual(check.state, Standing.MET)
         self.assertEqual(evidence[0].value, "0123456789ab")
 
     def test_a_container_the_sweep_has_not_seen_yet_is_unproven_not_wrong(self):
         _, check = self.check(here="ffffffffffff", listed="0123456789ab")
 
-        self.assertEqual(check.state, UNPROVEN)
+        self.assertEqual(check.state, Standing.UNAVAILABLE)
 
     def test_its_own_container_is_read_from_its_mounts_on_any_network(self):
         from .. import request_path as module
@@ -503,5 +501,5 @@ class ContainerHopTests(TestCase):
     def test_a_sweep_that_read_no_id_says_it_cannot_show(self):
         _, check = self.check(here="0123456789ab", listed="")
 
-        self.assertEqual(check.state, UNPROVEN)
+        self.assertEqual(check.state, Standing.UNAVAILABLE)
         self.assertIn("container ID", check.detail)

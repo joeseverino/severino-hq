@@ -10,6 +10,7 @@ from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.control_plane.observations.public_registry import DIGEST_KIND as DIGEST
 
 from ..containers import DECLARED, LABEL, PROVENANCE, REGISTRY, VULNERABLE, containers
+from ..report_testing import bridged
 from ..security import cli_principal
 from ..standards import Standing
 from .test_containers import estate, inventory
@@ -214,7 +215,8 @@ class UpgradeTests(TestCase):
 
 class CadenceTests(TestCase):
     def test_a_digest_is_read_once_and_a_failure_is_retried_later(self):
-        from ..public_registry import RETRY_AFTER, _due
+        from ..freshness import RETRY_AFTER
+        from ..public_registry import _due
 
         now = timezone.now()
         read = {"digest": "x", "read_at": (now - timedelta(days=400)).isoformat()}
@@ -258,17 +260,16 @@ class CadenceTests(TestCase):
 
 class RegistryReadTests(TestCase):
     def sweep(self):
-        from ..sweep import record_sweep
 
         with self.captureOnCommitCallbacks(execute=True):
-            record_sweep(
+            bridged(
+                "inventory",
                 {
                     "portainer.container": {
                         "ok": True,
                         "records": list(ProviderInventory.objects.get(kind="portainer.container").records),
                     }
                 },
-                principal=cli_principal(),
             )
 
     def test_a_sweep_that_finds_a_digest_hq_has_not_read_starts_the_read(self):

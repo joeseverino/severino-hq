@@ -26,8 +26,6 @@ from .security import Principal, person
 lazy from . import dashboard
 lazy from .decisions import decision
 lazy from .domains import attention_urls
-lazy from .findings import rule_of
-lazy from .routes import reverse
 
 # How long a set-aside mark outlives its item before it is deleted. A mark
 # never hides an item raised again after it (``with_aside_state``).
@@ -215,29 +213,12 @@ def _entry(entry: dict[str, Any]) -> dict[str, Any]:
 
 def _offered(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """What a family's row offers: the recommended action every item shares,
-    else, for the findings of one rule, the list of them."""
+    which acts on them all, or nothing beside the fold that opens them."""
 
     decided = [decision(item)["actions"] for item in items]
     common = set.intersection(*({(action["method"], action["url"]) for action in actions} for actions in decided))
-    shared = [action for action in decided[0] if action["recommended"] and (action["method"], action["url"]) in common]
-    if shared:
-        return shared[:1]
-    rules = {rule_of(str(item.get("key", ""))) for item in items}
-    if len(rules) != 1 or "" in rules:
-        return []
-    url = f"{reverse('control_plane:findings')}?rule={rules.pop()}"
-    return [
-        {
-            "name": "open",
-            "label": f"Open all {len(items)}",
-            "effect": "read",
-            "url": url,
-            "method": "GET",
-            "capability": "",
-            "target": "",
-            "reason": "",
-            "recommended": True,
-        }
+    return [action for action in decided[0] if action["recommended"] and (action["method"], action["url"]) in common][
+        :1
     ]
 
 

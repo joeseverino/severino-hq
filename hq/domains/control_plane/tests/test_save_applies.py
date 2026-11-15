@@ -8,6 +8,7 @@ from hq.platform.application.adoption_testing import managing_everything
 from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
 from hq.platform.application.security import MCP_INTERFACE, agent_principal, cli_principal
+from hq.platform.application.tests.consent import consented
 
 from ..models import ManagedResource, OperationRequest
 
@@ -26,7 +27,7 @@ class SavingADeclarationAppliesItTests(TestCase):
         managing_everything()
         save_managed_resource(
             ManagedResourceCommand(key="example-proxy", kind="npm.proxy_host", spec=dict(PROXY)),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
         )
         OperationRequest.objects.all().delete()
         ManagedResource.objects.filter(key="example-proxy").update(observed_generation=1)
@@ -64,7 +65,7 @@ class SavingADeclarationAppliesItTests(TestCase):
     def test_a_record_switched_off_is_not_applied(self):
         save_managed_resource(
             ManagedResourceCommand(key="example-proxy", kind="npm.proxy_host", spec=dict(PROXY), enabled=False),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
             current_key="example-proxy",
         )
 
@@ -75,19 +76,25 @@ class SavingADeclarationAppliesItTests(TestCase):
             ManagedResourceCommand(
                 key="a-domain", kind="cloudflare.zone", spec={"zone": "example.com", "connection_ref": "cf-example"}
             ),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
         )
 
         self.assertFalse(OperationRequest.objects.exists())
 
     def test_a_copy_of_what_is_live_has_nothing_to_apply(self):
-        save_managed_resource(
-            ManagedResourceCommand(key="example-proxy", kind="npm.proxy_host", spec={**PROXY, "forward_port": 8080}),
+        from hq.platform.application.inventory_testing import store
+
+        store("npm.proxy_host", {**PROXY, "forward_port": 8080})
+
+        result = execute_capability(
+            "infrastructure.resource.accept_observed",
+            {"reason": "Kept the live port."},
             principal=cli_principal(),
-            current_key="example-proxy",
-            copied_from_live=True,
+            target="example-proxy",
         )
 
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(ManagedResource.objects.get(key="example-proxy").spec["forward_port"], 8080)
         self.assertFalse(OperationRequest.objects.exists())
 
     def test_a_caller_without_infrastructure_authority_changes_and_queues_nothing(self):

@@ -27,7 +27,7 @@ from .describe import Describe, listed
 from .moments import duration
 from .record_errors import Sentence
 from .routes import reverse
-from .ui import ended
+from .ui import button_classes, ended
 lazy from . import cadence
 lazy from .cadence import every_sweep, read_request_lifetime
 lazy from .moments import moment
@@ -170,8 +170,14 @@ class Ask:
     modal = ""
 
     @property
+    def look(self) -> str:
+        """How its button looks (``ui.BUTTON_LOOKS``)."""
+
+        return " ".join((*(("primary",) if self.primary else ()), *(("compact",) if self.compact else ())))
+
+    @property
     def css(self) -> str:
-        return " ".join(("btn", *(("primary",) if self.primary else ()), *(("compact",) if self.compact else ())))
+        return button_classes(self.look)
 
 
 # Each ask's answer extends AskedAnswer, so each field is described once here.

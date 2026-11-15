@@ -25,6 +25,7 @@ from hq.domains.control_plane.models import (
     ProviderInventory,
     ReadRequest,
 )
+from hq.platform.application.tests.consent import consented
 from hq.platform.core.models import AuditLog
 
 from .. import cadence, readings
@@ -39,6 +40,7 @@ from ..cadence import (
     sweep_due,
     sweep_interval,
 )
+from ..report_testing import bridged
 from ..resource_operations import OperationCommand, request_reconcile
 from ..security import cli_principal
 
@@ -179,7 +181,7 @@ class DoorbellTests(TestCase):
         with self.captureOnCommitCallbacks(execute=True):
             request_reconcile(
                 OperationCommand(reason=""),
-                principal=cli_principal(),
+                consented=consented(cli_principal()),
                 current_key="a-rewrite",
             )
 
@@ -228,7 +230,7 @@ class DoorbellTests(TestCase):
         with self.captureOnCommitCallbacks(execute=True):
             result = request_reconcile(
                 OperationCommand(reason=""),
-                principal=cli_principal(),
+                consented=consented(cli_principal()),
                 current_key="a-rewrite",
             )
 
@@ -364,7 +366,6 @@ class CarriedConnectionRecordTests(TestCase):
                     "detail": "Not asked again this sweep.",
                 }
             ],
-            principal=cli_principal(),
             controller_id="here",
         )
 
@@ -389,7 +390,6 @@ class CarriedConnectionRecordTests(TestCase):
                     "detail": "Not asked again this sweep.",
                 }
             ],
-            principal=cli_principal(),
             controller_id="here",
         )
 
@@ -506,11 +506,9 @@ class WorkerStandingTests(TestCase):
         """A failed first read stores no moment it was read, and only a
         controller reports one, so it says a controller has run."""
 
-        from ..sweep import record_sweep
-
-        record_sweep(
+        bridged(
+            "inventory",
             {"tailscale.policy": {"ok": False, "records": [], "error": "Tailscale refused the token."}},
-            principal=cli_principal(),
             controller_id="example-controller",
         )
 

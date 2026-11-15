@@ -34,7 +34,8 @@ from hq.platform.application.moments import (
 from hq.platform.application.money import money as _money
 from hq.platform.application.page_parts import html_attributes
 from hq.platform.application.printable import admitted
-from hq.platform.application.ui import MISSING, STATUS_VALUES, counted as _counted
+from hq.platform.application.tone import Tone
+from hq.platform.application.ui import MISSING, counted as _counted, measured as _measured
 from hq.platform.core.templatetags.line_breaks import breakable, button_words, code_spans, held, mark_text
 lazy from hq.domains.control_plane.provider_spec import expiry_phrase
 lazy from hq.platform.application import references, request_identity, security
@@ -67,15 +68,31 @@ def counted(count, phrases):
 
 @register.filter
 def measured(value, unit):
-    """``{{ miles|floatformat:2|measured:"mi" }}``: a figure and its unit, or a
-    word the count leaves alone (``measured:"more"``), as one value, so the
-    word never opens a line alone below its number. For a measure no other
-    value tag says (``bytes``, ``seconds``, ``money``) and a word ``counted``
-    would make plural; a missing figure is the missing mark, with no word."""
+    """``{{ miles|measured:"mi,2" }}``: a figure and its unit, or a word the
+    count leaves alone (``measured:"more"``), as one value, so the word never
+    opens a line alone below its number. A count of decimals after a comma
+    rounds the figure as ``floatformat`` would (``"%,-1"``, only when not
+    whole). For a measure no other value tag says (``bytes``, ``seconds``,
+    ``money``) and a word ``counted`` would make plural. ``ui.measured``
+    writes it; a missing figure is the missing mark, with no word."""
 
     if value is None or value == "":
         return or_empty(value)
-    return held(f"{value} {unit}")
+    return held(_measured(value, *measured_unit(unit)))
+
+
+def measured_unit(argument) -> tuple[str, int | None]:
+    """The filter argument as ``(unit, places)``; ``places`` is None when it is left out."""
+
+    unit, comma, places = str(argument).rpartition(",")
+    if not comma:
+        return places, None
+    try:
+        return unit, int(places)
+    except ValueError:
+        raise template.TemplateSyntaxError(
+            f"measured takes a unit and a count of decimals; got {argument!r}."
+        ) from None
 
 
 def counted_phrases(phrases) -> tuple[str, str | None]:
@@ -664,16 +681,30 @@ def slotted(
 CARD_ELEMENTS = frozenset(("section", "article", "figure", "details", "div"))
 
 
-def card_frame(name: str, given: dict) -> dict:
-    """A card's opening and closing tags. Built here rather than in its
-    partial, since the element is a choice and every attribute but the class
-    is drawn only when it has a value, as ``html_attributes`` draws one."""
+def framed(name: str, given: dict, elements: frozenset[str], default: str, own: str, named: dict) -> dict:
+    """A part's opening and closing tags, its element one of ``elements``, its
+    class ``own`` before the page's ``css``, and each ``data_*`` option an
+    attribute. Built here rather than in its partial, since the element is a
+    choice and every attribute but the class is drawn only when it has a
+    value, as ``html_attributes`` draws one."""
 
-    element = given.get("element", "section")
-    if element not in CARD_ELEMENTS:
-        raise template.TemplateSyntaxError(f"{name} element= is one of {', '.join(sorted(CARD_ELEMENTS))}")
+    element = given.get("element", default)
+    if element not in elements:
+        raise template.TemplateSyntaxError(f"{name} element= is one of {', '.join(sorted(elements))}")
+    named = {"class": " ".join((own, given.get("css") or "")).strip(), **named}
+    named |= {option.replace("_", "-"): value for option, value in given.items() if option.startswith("data_")}
+    # The element is one of ``elements``, a tag name and never text, and
+    # html_attributes escapes the attributes.
+    return {
+        "opening": mark_safe(f"<{element}{html_attributes(named)}>"),  # noqa: S308 - see above
+        "closing": mark_safe(f"</{element}>"),  # noqa: S308 - see above
+    }
+
+
+def card_frame(name: str, given: dict) -> dict:
+    """A card's opening and closing tags."""
+
     named = {
-        "class": " ".join(("card", given.get("css") or "")).strip(),
         "id": given.get("id"),
         "aria-labelledby": given.get("heading"),
         "aria-label": given.get("label"),
@@ -681,13 +712,28 @@ def card_frame(name: str, given: dict) -> dict:
         "open": True if given.get("open") else None,
         "data-alone": True if given.get("alone") else None,
     }
-    named |= {option.replace("_", "-"): value for option, value in given.items() if option.startswith("data_")}
-    # The element is one of CARD_ELEMENTS, a tag name and never text, and
-    # html_attributes escapes the attributes.
-    return {
-        "opening": mark_safe(f"<{element}{html_attributes(named)}>"),  # noqa: S308 - see above
-        "closing": mark_safe(f"</{element}>"),  # noqa: S308 - see above
-    }
+    return framed(name, given, CARD_ELEMENTS, "section", "card", named)
+
+
+# Words said in the muted voice: a line or a paragraph, its element a choice.
+MUTED_ELEMENTS = frozenset(("span", "p"))
+
+
+def muted_frame(name: str, given: dict) -> dict:
+    """Muted words' opening and closing tags."""
+
+    return framed(name, given, MUTED_ELEMENTS, "span", "muted", {"id": given.get("id"), "title": given.get("title")})
+
+
+# Words said quietly beside what they are about (a context line, a sentence
+# under a value), the one way a page or an extension writes muted text.
+slotted(
+    "muted",
+    "partials/_muted.html",
+    ("content",),
+    frozenset(("element", "css", "id", "title")),
+    shape=muted_frame,
+)
 
 
 slotted(
@@ -723,15 +769,17 @@ def reading_frame(name: str, given: dict) -> dict:
     """A reading's options as its partial draws them: its tone as the shared
     tone class, and each ``data_*`` option as an attribute of the reading."""
 
-    tone, note_tone = given.get("tone") or "", given.get("note_tone") or ""
-    if tone and tone not in STATUS_VALUES:
-        raise template.TemplateSyntaxError(f"{name} tone= is one of {', '.join(sorted(STATUS_VALUES))}")
+    note_tone = given.get("note_tone") or ""
+    try:
+        tone = Tone(given.get("tone") or Tone.NEUTRAL)
+    except ValueError:
+        raise template.TemplateSyntaxError(f"{name} tone= is one of {', '.join(Tone)}") from None
     if note_tone not in NOTE_TONES:
         raise template.TemplateSyntaxError(f"{name} note_tone= is one of {', '.join(sorted(filter(None, NOTE_TONES)))}")
     data = {option.replace("_", "-"): value for option, value in given.items() if option.startswith("data_")}
     return {
         **{option: value for option, value in given.items() if not option.startswith("data_")},
-        "tone_class": f" tone-{tone}" if tone not in ("", "neutral") else "",
+        "tone_class": f" tone-{tone}" if tone is not Tone.NEUTRAL else "",
         "attributes": html_attributes(data),
     }
 

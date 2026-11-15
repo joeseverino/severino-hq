@@ -8,8 +8,8 @@ from hq.platform.core.models import AuditLog
 
 from ..adoption_testing import managing_everything
 from ..capabilities import execute_capability
+from ..report_testing import bridged
 from ..security import cli_principal
-from ..sweep import record_sweep
 from .inventory_records import A_REWRITE, a_sweep
 
 KIND = "adguard.rewrite"
@@ -18,7 +18,7 @@ KIND = "adguard.rewrite"
 class ActNameTests(TestCase):
     def setUp(self):
         managing_everything()
-        record_sweep(a_sweep(**{KIND: [A_REWRITE]}), principal=cli_principal())
+        bridged("inventory", a_sweep(**{KIND: [A_REWRITE]}))
         self.key = ManagedResource.objects.get(kind=KIND).key
 
     def test_each_row_a_run_writes_names_the_capability(self):

@@ -29,7 +29,7 @@ def _keeping_specs():
     return [
         spec
         for spec in registry.values()
-        if spec.name in names or (spec.target_kind and spec.command_type in creating and spec.effect != "read")
+        if spec.name in names or (spec.target_kind and spec.command_type in creating and spec.effect.changes)
     ]
 
 
@@ -44,7 +44,7 @@ class _Named:
 
 
 def _spec(name: str, command_type: type, target_kind: str | None) -> CapabilitySpec:
-    return CapabilitySpec(name, name, "write", "example.write", command_type, lambda _command: {}, target_kind)
+    return CapabilitySpec(name, name, "remote_write", "example.write", command_type, lambda _command: {}, target_kind)
 
 
 class KeepingSelectionTests(SimpleTestCase):

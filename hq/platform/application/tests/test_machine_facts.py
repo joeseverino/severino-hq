@@ -8,6 +8,7 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.providers import PROVIDERS
+from hq.platform.application.markup_testing import hrefs, text, texts
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from ..connections import connection_readings
@@ -16,7 +17,6 @@ from ..machines import machine, machine_catalog
 from ..relationships import relationships_for
 from ..security import Capability, Principal
 from ..tailnet import TAILNET_KIND
-from .markup import hrefs, text, texts
 
 CONTROLLER = "example-controller"
 TAILNET_REF = "example-tailnet"

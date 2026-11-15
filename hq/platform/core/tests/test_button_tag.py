@@ -15,6 +15,15 @@ class ButtonTagTests(SimpleTestCase):
         self.assertIn('href="/example/"', html)
         self.assertIn('class="btn primary"', html)
 
+    def test_a_row_of_a_menu_or_a_link_takes_no_look_that_paints_a_box(self):
+        for drawn in ("menu", "link"):
+            with self.subTest(drawn):
+                html = draw(f'{{% button "Example" "/example/" look="primary ghost danger {drawn}" %}}')
+                classes = set(html.split('class="')[1].split('"')[0].split())
+
+                self.assertLessEqual({"btn", drawn, "danger"}, classes)
+                self.assertFalse({"primary", "ghost"} & classes)
+
     def test_a_look_it_does_not_offer_is_refused(self):
         with self.assertRaises(TemplateSyntaxError):
             draw('{% button "Example" "/example/" look="invented" %}')

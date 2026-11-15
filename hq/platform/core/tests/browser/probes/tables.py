@@ -407,14 +407,21 @@ ROOM_UNSHARED = (
     ruler.setAttribute('aria-hidden', 'true');
     ruler.style.cssText += '; position: absolute; visibility: hidden; inset: 0 auto auto 0; inline-size: max-content; max-inline-size: none';
     table.after(ruler);
-    const whole = new Map(placed(ruler).map((cell, at) => [cells[at], cell.getBoundingClientRect()]));
+    // A cell is as tall as its row, so its words' own box says how many lines they take.
+    const range = document.createRange();
+    const said = (cell) => {
+      range.selectNodeContents(cell);
+      const box = range.getBoundingClientRect();
+      return {width: cell.getBoundingClientRect().width, height: box.height};
+    };
+    const whole = new Map(placed(ruler).map((cell, at) => [cells[at], said(cell)]));
     ruler.remove();
     const columns = new Map();
     const squeezed = [];
     for (const cell of cells) {
       const at = whole.get(cell);
       if (!at) continue;
-      const r = cell.getBoundingClientRect();
+      const r = said(cell);
       const line = lineOf(cell);
       const asks = Math.min(at.width - padded(cell), line);
       const column = columns.get(cell.cellIndex) ?? {width: r.width, needs: 0, name: heads[cell.cellIndex]?.textContent.trim()};

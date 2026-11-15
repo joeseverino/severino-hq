@@ -15,6 +15,7 @@ lazy from django.urls import reverse
 lazy from django.utils.text import capfirst, slugify
 
 from hq.platform.application.roles import Role
+from hq.platform.application.tone import Tone, TonedChoices
 lazy from hq.platform.application.doors import Attribution
 lazy from hq.platform.application.labels import dotted, plural
 
@@ -118,24 +119,27 @@ def free_slug(record: models.Model, text: str, fallback: str) -> str:
 class AuditLog(models.Model):
     """A single record of something a user (or the system) did."""
 
-    class Action(models.TextChoices):
-        CREATED = "created", "Created"
-        UPDATED = "updated", "Updated"
-        DELETED = "deleted", "Deleted"
-        LOGIN = "login", "Login"
-        LOGOUT = "logout", "Logout"
-        LOGIN_FAILED = "login_failed", "Login failed"
-        UPLOADED = "uploaded", "Uploaded"
-        EXPORTED = "exported", "Exported"
-        IMPORTED = "imported", "Imported"
+    class Action(TonedChoices):
+        """Each act, in the tone its row's pill takes: what comes is good
+        news and what goes is serious, as a change's rows say it."""
+
+        CREATED = "created", Tone.GOOD, "Created"
+        UPDATED = "updated", Tone.NEUTRAL, "Updated"
+        DELETED = "deleted", Tone.SERIOUS, "Deleted"
+        LOGIN = "login", Tone.NEUTRAL, "Login"
+        LOGOUT = "logout", Tone.NEUTRAL, "Logout"
+        LOGIN_FAILED = "login_failed", Tone.SERIOUS, "Login failed"
+        UPLOADED = "uploaded", Tone.GOOD, "Uploaded"
+        EXPORTED = "exported", Tone.NEUTRAL, "Exported"
+        IMPORTED = "imported", Tone.NEUTRAL, "Imported"
         # A run of work that finished and changed something: its outcome.
-        DONE = "done", "Done"
-        FAILED = "failed", "Failed"
-        SETTINGS_CHANGED = "settings_changed", "Settings changed"
-        VIEWED = "viewed", "Viewed"
-        DENIED = "denied", "Denied"
+        DONE = "done", Tone.GOOD, "Done"
+        FAILED = "failed", Tone.SERIOUS, "Failed"
+        SETTINGS_CHANGED = "settings_changed", Tone.NEUTRAL, "Settings changed"
+        VIEWED = "viewed", Tone.NEUTRAL, "Viewed"
+        DENIED = "denied", Tone.SERIOUS, "Denied"
         # HQ looking through a connection: a probe or a routine read.
-        OBSERVED = "observed", "Checked"
+        OBSERVED = "observed", Tone.NEUTRAL, "Checked"
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,

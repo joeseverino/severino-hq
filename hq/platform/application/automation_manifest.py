@@ -11,7 +11,7 @@ from typing import Annotated, Any, Literal, Self, get_args, get_origin
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 
 from hq.domains.control_plane.names import is_hostname, normalized_hostname
-from hq.platform.application.contracts import DOTTED_NAME, Closed
+from hq.platform.application.contracts import DOTTED_NAME, Closed, Effect
 
 # An hour: a procedure that needs longer is more than one procedure, and a
 # stalled run holds what it acts on no longer than this.
@@ -131,6 +131,10 @@ def _closed(model: type[BaseModel], seen: set[type[BaseModel]]) -> None:
                 _closed(annotation, seen)
 
 
+# What a playbook may do: it acts on machines, so it never only changes a record.
+PlaybookEffect = Literal[Effect.READ, Effect.INFRASTRUCTURE_CHANGE, Effect.DESTRUCTIVE]
+
+
 class ProcedureTerms(Closed):
     """What a playbook's manifest and its sidecar both say of it: where it
     may run, what it does, and how to recover from a failed run."""
@@ -143,7 +147,7 @@ class ProcedureTerms(Closed):
     hosts: Annotated[tuple[str, ...], AfterValidator(host_names)] = ()
     # None, or the reviewed profile a run escalates through.
     privilege: DottedName | None
-    effect: Literal["read", "infrastructure_change", "destructive"]
+    effect: PlaybookEffect
     timeout_seconds: Annotated[int, Field(ge=1, le=LONGEST_TIMEOUT_SECONDS)]
     recovery: Statements
     retry: Literal["never", "observe_first", "safe"]
@@ -154,7 +158,7 @@ class ProcedureTerms(Closed):
 
     @model_validator(mode="after")
     def _read_needs_no_privilege(self) -> Self:
-        if self.effect == "read" and self.privilege is not None:
+        if not self.effect.changes and self.privilege is not None:
             raise ValueError("A read takes no privilege, so remove it.")
         return self
 
@@ -178,7 +182,7 @@ class OperationManifest(ProcedureTerms):
 
     @model_validator(mode="after")
     def _a_change_says_how_it_is_checked(self) -> Self:
-        if self.effect != "read" and not (self.preconditions and self.verification):
+        if self.effect.changes and not (self.preconditions and self.verification):
             raise ValueError("A change needs preconditions and verification: its play's pre_tasks and post_tasks.")
         return self
 

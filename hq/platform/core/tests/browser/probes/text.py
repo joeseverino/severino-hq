@@ -552,9 +552,9 @@ CUT_DECISIONS = (
 # left, a line past a clamp is not drawn, and what wraps by design (`wraps`,
 # figures.css: a row's own name, free text, a context line) and an opened row
 # are not counted. A name is held to its line where its table says so: by
-# `nowrap`, or as a short value's chip (`data-short` on its cell), one box as
-# wide as the name up to its share (`max-inline-size`, tables.css), which
-# breaks at its seams only once it is that wide.
+# `nowrap`, or in a short value's box (`cell-short`), as wide as the value
+# up to its share (`max-inline-size`, tables.css), which breaks at its seams
+# only once it is that wide.
 BROKEN_TOKENS = (
     "([tokens, wraps]) => {"
     + DESCRIBE
@@ -567,8 +567,8 @@ BROKEN_TOKENS = (
     const narrow = narrowBox(table);
     if (narrow || token.closest(wraps) || token.closest('tr:has(> * > [aria-expanded="true"])')) continue;
     const style = getComputedStyle(token);
-    const chip = token.closest('td[data-short] code');
-    const held = chip && chip.getBoundingClientRect().width < parseFloat(getComputedStyle(chip).maxInlineSize) - 1;
+    const box = token.closest('.cell-short');
+    const held = box && box.getBoundingClientRect().width < parseFloat(getComputedStyle(box).maxInlineSize) - 1;
     if (!held && !style.whiteSpace.startsWith('nowrap') && style.textWrapMode !== 'nowrap') continue;
     const lines = [];
     const walker = document.createTreeWalker(token, NodeFilter.SHOW_TEXT);

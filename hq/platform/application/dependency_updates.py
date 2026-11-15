@@ -9,7 +9,7 @@ the reading each run comes back as are docs/Derived-Facts.md#dependency-updates.
 
 import re
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 from django.utils import timezone
@@ -20,21 +20,19 @@ from hq.domains.jobs.models import JobState
 from hq.domains.projects.models import Project
 
 from .asks import AskedAnswer, asked_read
-from .freshness import freshness
+from .freshness import RETRY_AFTER, freshness
 from .projection import iso, read_once
 from .refusal_status import RefusalEnvelope, refuse
 from .security import Principal
+from .tone import Tone
 lazy from .cadence import ask, asked_at as read_asked_at
 lazy from .capabilities import command_spec
 lazy from .moments import moment
 lazy from .projects import repository_key
-lazy from .work_runs import TONES
 
 RUN_NOW = "project.dependency_updates.run"
 # Each outcome a run reports, as the job state every page words and tones.
 SEEN = {"ok": JobState.SUCCEEDED, "handed_off": JobState.RUNNING, "timeout": JobState.LOST}
-# A hand-off that failed is tried again after this, not on every sweep.
-RETRY_AFTER = timedelta(hours=1)
 _REPOSITORY = re.compile(REPOSITORY)
 
 
@@ -76,8 +74,8 @@ class Run:
         return SEEN.get(self.outcome, JobState.FAILED)
 
     @property
-    def tone(self) -> str:
-        return TONES[self.seen]
+    def tone(self) -> Tone:
+        return self.seen.tone
 
     def as_record(self) -> dict[str, Any]:
         return {"outcome": self.outcome, "started_at": iso(self.started_at), "finished_at": iso(self.finished_at)}

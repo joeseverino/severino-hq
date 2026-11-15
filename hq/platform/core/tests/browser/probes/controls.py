@@ -114,9 +114,10 @@ WRAPPED_CONTROLS = (
 # stylesheet's `--row-words` is held to.
 ROW_WORDS = "30ch"
 
-# A row's words keep a line of ``measure`` (ROW_WORDS) beside its controls: a
-# cell of controls (``cells``) beside a widest cell of words whose room is
-# under that measure, resolved in the words' own font, some text of which runs
+# A row's words keep a line of ``measure`` (ROW_WORDS) beside its controls, or
+# their column's share where that is less (`--share`, tables.css): a cell of
+# controls (``cells``) beside a widest cell of words whose room is under that
+# line, resolved in the words' own font, some text of which runs
 # onto a second line. A row in that shape reads a few words to a line beside a
 # column of buttons, where its buttons belong in the line beneath (a narrow
 # box, tables.css).
@@ -142,7 +143,7 @@ ACTIONS_BESIDE_SQUEEZED_WORDS = (
   };
   const measureIn = (cell) => {
     const ruler = document.createElement('span');
-    ruler.style.cssText = `position: absolute; visibility: hidden; inline-size: ${measure}`;
+    ruler.style.cssText = `position: absolute; visibility: hidden; inline-size: min(${measure}, var(--share, ${measure}))`;
     cell.append(ruler);
     const width = box(ruler).width;
     ruler.remove();

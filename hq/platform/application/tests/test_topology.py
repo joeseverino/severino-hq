@@ -1,7 +1,6 @@
 """The topology HQ derives: its nodes, what carries what, and what each node measures."""
 
 from datetime import timedelta
-from unittest import mock
 
 from django.db import connection as database_connection
 from django.test import TestCase, override_settings
@@ -15,11 +14,12 @@ from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from ..connections import ConnectionInstance, ConnectionLink, ConnectionSpec
 from ..plugin_testing import offering
+from ..report_testing import bridged
 from ..security import Capability
 from ..topology import TOPOLOGY_SCHEMA_VERSION, derive_topology, serialize_topology, topology as serialized_topology
 from .host_only import host_only
 from .sentinel import RESOURCE as SENTINEL_RESOURCE, SentinelMixin, plant_credentials
-from .topology_principals import MANAGE, NONE, READ
+from .topology_principals import MANAGE, READ
 
 
 class DerivedTopologyTests(SentinelMixin, TestCase):
@@ -196,15 +196,6 @@ class DerivedTopologyTests(SentinelMixin, TestCase):
             [action.name for action in node.actions],
             ["open", "edit", "remove"],
         )
-
-    def test_read_is_required_before_any_provider_is_invoked(self):
-        with (
-            mock.patch("hq.platform.application.topology.connection_catalog") as catalog,
-            self.assertRaisesRegex(PermissionError, "lacks 'read'"),
-        ):
-            derive_topology(principal=NONE)
-
-        catalog.assert_not_called()
 
     def test_serialization_is_normalized_and_carries_no_credential_a_controller_reported(self):
         plant_credentials()
@@ -407,15 +398,14 @@ class AnUnrecognizedContainerIsCarriedByItsMachineTests(TestCase):
     """A container the sweep declined has no node, so its machine holds it."""
 
     def setUp(self):
-        from ..security import cli_principal
-        from ..sweep import record_sweep
 
         ManagedResource.objects.create(
             key="a-docker-host",
             kind="machine",
             spec={"name": "a-docker-host", "addresses": ["10.0.0.9"]},
         )
-        record_sweep(
+        bridged(
+            "inventory",
             {
                 "portainer.container": {
                     "ok": True,
@@ -430,7 +420,6 @@ class AnUnrecognizedContainerIsCarriedByItsMachineTests(TestCase):
                     ],
                 }
             },
-            principal=cli_principal(),
         )
         with host_only():
             self.nodes = {node.id: node for node in derive_topology(principal=READ).nodes}

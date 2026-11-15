@@ -14,6 +14,7 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.forms import ModelForm
 from django.utils.text import capfirst
 
+from .contracts import Effect
 from .deletion import DeleteCommand, RecordDeleted, delete_record
 from .describe import meanings
 from .domains import Records, host_records, load, records_of
@@ -150,7 +151,7 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
         (
             "create",
             records.create,
-            "remote_write",
+            Effect.REMOTE_WRITE,
             records.write,
             command,
             records.save,
@@ -161,7 +162,7 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
         (
             "upsert",
             bool(records.upsert),
-            "remote_write",
+            Effect.REMOTE_WRITE,
             records.write,
             command,
             records.upsert,
@@ -172,7 +173,7 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
         (
             "update",
             True,
-            "remote_write",
+            Effect.REMOTE_WRITE,
             records.write,
             command,
             records.save,
@@ -183,7 +184,7 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
         (
             "delete",
             True,
-            "destructive",
+            Effect.DESTRUCTIVE,
             records.delete,
             DeleteCommand,
             deleter(records.resource),

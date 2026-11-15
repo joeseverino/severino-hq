@@ -7,8 +7,7 @@ from django.test import RequestFactory, TestCase
 from django.urls import reverse
 
 from hq.platform.application import fragments
-
-from .markup import elements, select
+from hq.platform.application.markup_testing import elements, select
 
 PART = {"X-Fragment": "calendar"}
 

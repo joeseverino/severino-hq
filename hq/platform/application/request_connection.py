@@ -13,15 +13,16 @@ from datetime import datetime
 from ipaddress import ip_address
 from typing import Any
 
-from hq.platform.core.network import client_ip, is_trusted_proxy, socket_peer, split_host_port
+from hq.platform.core.network import split_host_port
 
 from . import tailnet
 from .labels import dotted, human_bytes
 from .reach import network_of, on_link_networks
-from .request_channel import Channel, channel_for_request, displayed_client_ip, encryption, forwarded_chain
+from .request_channel import Channel, encryption, forwarding_of
 from .request_identity import Identity, identity_of
 from .request_standard import RequestFacts, ServingDeviceResolution, measure_request
 from .standards import CheckResult, Measurement, Standing
+from .tone import Tone
 from .ui import MISSING, counted
 lazy from . import connections
 lazy from .entity_links import entity_link
@@ -177,7 +178,7 @@ class Connection:
 
         if self.channel.id != "tailnet" or self.verdict == "confirmed":
             return self.channel.tone
-        return "attention" if self.verdict == "failing" else "neutral"
+        return Tone.ATTENTION if self.verdict == "failing" else Tone.NEUTRAL
 
     @property
     def summary(self) -> str:
@@ -357,20 +358,12 @@ def request_facts(request, *, edge=None, firewall=None, principal=None) -> Reque
     """What HQ reads about the request in front of it, once; ``principal``
     is the caller an agent's door authenticated."""
 
-    address = client_ip(request)
-    peer = socket_peer(request)
-    forwarded = bool(forwarded_chain(request))
-    forwarding_trusted = forwarded and is_trusted_proxy(peer)
-    untrusted_forwarding = forwarded and not forwarding_trusted
-    # A chain that never named the caller is its own answer, and a more useful
-    # one than the class its last proxy happens to fall in. Reporting "local
-    # network" here would describe the proxy and read as a fact about the
-    # person, which is the one confusion this page exists to prevent.
-    channel = channel_for_request(request)
+    forwarding = forwarding_of(request)
+    address, peer, untrusted_forwarding = forwarding.client, forwarding.peer, forwarding.untrusted
     # One read of the sweep, answering every question asked of it below.
     known = tailnet.devices()
     device = tailnet.device_at(address, known)
-    reported_address = displayed_client_ip(request) if untrusted_forwarding else ""
+    reported_address = forwarding.reported if untrusted_forwarding else ""
     reported_device = tailnet.device_at(reported_address, known)
     declared = declared_machines()
     own = hq_service(request, catalog=connections.machines_once())
@@ -378,16 +371,19 @@ def request_facts(request, *, edge=None, firewall=None, principal=None) -> Reque
     return RequestFacts(
         request=request,
         address=address,
-        channel=channel,
+        # A chain that never named the caller is its own answer, and a more
+        # useful one than the class its last proxy happens to fall in.
+        # Reporting "local network" here would describe the proxy and read as
+        # a fact about the person, which is the one confusion this page
+        # exists to prevent.
+        channel=forwarding.channel,
         identity=identity_of(request, None if untrusted_forwarding else device, principal),
         host=request.get_host(),
         secure=bool(request.is_secure()),
-        peer=peer,
-        forwarded=forwarded,
-        forwarding_trusted=forwarding_trusted,
+        forwarding=forwarding,
         known=known,
         device=device,
-        forwarder=tailnet.device_at(peer, known) if forwarded else None,
+        forwarder=tailnet.device_at(peer, known) if forwarding.forwarded else None,
         reported_device=reported_device,
         reported_address=reported_address,
         # (see `_serving_device_resolution` for why the observer flag is not the answer)

@@ -46,8 +46,8 @@ and what needs you; with no facts line, the aside stays on the title's line.
         <div class="overflow-menu" data-menu>
           <button type="button" popovertarget="page-actions-more" aria-label="More actions">{% include "partials/_icon.html" with name="more" %}</button>
           <div class="overflow-menu-panel" id="page-actions-more" popover>
-            {% if split.1 %}<div class="overflow-menu-copies">{% for action in split.1 %}{% include "partials/_page_action.html" with extra="" %}{% endfor %}</div>{% endif %}
-            {% for action in split.2 %}{% include "partials/_page_action.html" with extra="" %}{% endfor %}
+            {% if split.1 %}<div class="overflow-menu-copies">{% for action in split.1 %}{% include "partials/_page_action.html" with extra="menu" %}{% endfor %}</div>{% endif %}
+            {% for action in split.2 %}{% include "partials/_page_action.html" with extra="menu" %}{% endfor %}
           </div>
         </div>
       {% endif %}

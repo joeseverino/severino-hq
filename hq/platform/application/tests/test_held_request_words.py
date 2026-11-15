@@ -7,6 +7,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule
+from hq.platform.application.markup_testing import select, text
 from hq.platform.core.models import AuditLog
 
 from ..approval_review import asked, preview
@@ -16,7 +17,6 @@ from ..capabilities import capability_registry, execute_capability
 from ..integration_specs import capability_schema
 from ..projects import DEPENDENCY_UPDATES
 from ..security import Capability, Principal
-from .markup import select, text
 from .writers import keyed
 
 # What a Python dump of a dict or a list leaves in the text.

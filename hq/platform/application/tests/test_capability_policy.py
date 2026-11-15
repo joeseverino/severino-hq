@@ -9,8 +9,8 @@ from django.urls import reverse
 from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule, ManagedResource
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.domains.projects.models import Project
+from hq.platform.application.markup_testing import text
 from hq.platform.application.plugin_testing import form_keyed
-from hq.platform.application.tests.markup import text
 from hq.platform.core.models import AgentIdentity, AuditLog
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 from hq_sdk.testing import plain
@@ -411,7 +411,7 @@ class PageTests(PolicyTestCase):
 
     def test_a_read_offers_no_approval(self):
         _columns, groups = matrix()
-        read = next(row for group in groups for row in group.rows if row.effect == "read")
+        read = next(row for group in groups for row in group.rows if not row.effect.changes)
         options = {value for cell in read.cells for value, _ in cell.options}
 
         self.assertNotIn(Rule.APPROVE, options)
@@ -455,13 +455,8 @@ class PageTests(PolicyTestCase):
 
         self.assertIn("Add a project", actions)
         self.assertIn("Delete a project", actions)
-        self.assertEqual(
-            [row.effect for row in projects.rows],
-            sorted(
-                (row.effect for row in projects.rows),
-                key=["read", "remote_write", "destructive", "infrastructure_change"].index,
-            ),
-        )
+        ranks = [row.effect.rank for row in projects.rows]
+        self.assertEqual(ranks, sorted(ranks))
 
     def test_no_two_groups_share_a_name(self):
         _, groups = matrix()
@@ -476,7 +471,7 @@ class PageTests(PolicyTestCase):
         for name, row in rows.items():
             with self.subTest(name):
                 self.assertEqual(row.label, spec(name).title)
-                self.assertEqual(bool(row.effect_label), row.effect != "read")
+                self.assertEqual(bool(row.effect_label), row.effect.changes)
         self.assertNotEqual(rows["project.delete"].effect_label, rows["project.create"].effect_label)
 
     def test_a_default_says_what_happens_in_the_words_the_choices_use(self):

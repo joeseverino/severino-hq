@@ -221,7 +221,7 @@ class ProjectDetailView(PageMixin, DetailView):
 
         # Its state beside its name, as a service shows its reach; the category
         # leads the line of facts under it.
-        context["page_badges"] = (PageBadge(self.object.get_status_display(), self.object.status),)
+        context["page_badges"] = (PageBadge(self.object.state.label, self.object.state.tone),)
         context["page_facts"] = self.facts()
         return context
 

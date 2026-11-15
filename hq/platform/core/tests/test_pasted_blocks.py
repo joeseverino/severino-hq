@@ -9,7 +9,7 @@ from unittest import skipUnless
 from django.test import TestCase
 
 from hq.platform.application.containers import containers
-from hq.platform.application.tests.markup import copied, within
+from hq.platform.application.markup_testing import copied, within
 from hq.platform.core.example_estate.testing import throwaway_media
 from hq.platform.core.tests.browser.estate import ask_as_production, owner_client
 

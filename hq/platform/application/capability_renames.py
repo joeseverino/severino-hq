@@ -16,6 +16,20 @@ from django.db import migrations
 # Loaded once a migration runs, when the apps are.
 lazy from .approvals import fingerprint
 
+# The names a handler's own binding once gave the rows it wrote, before the
+# runner alone named them: each is read as the capability that records the
+# act now, by that capability's title.
+RECORDED_AS = {
+    "certificate.renew.request": "certificate.renew",
+    "infrastructure.reconcile.request": "infrastructure.resource.reconcile",
+    "infrastructure.resource.forget": "infrastructure.resource.remove",
+    "infrastructure.restart.request": "infrastructure.resource.restart",
+    "infrastructure.start.request": "infrastructure.resource.start",
+    "infrastructure.stop.request": "infrastructure.resource.stop",
+    "project.refresh_content": "project.refresh",
+    "tailnet.routes.approve.request": "tailnet.routes.approve",
+}
+
 # The host migration whose state the operation reads. A migration using the
 # operation depends on it. It never moves once released: Django refuses a
 # history where an applied migration's dependency was applied after it.

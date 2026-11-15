@@ -12,7 +12,7 @@ from django.db import transaction
 from hq.domains.calendars.models import Entry
 
 from .answer_fields import CallMessage
-from .command_fields import Describe
+from .command_fields import Confirm, Describe, confirm
 from .record_saves import Held, held
 from .security import Principal
 
@@ -22,7 +22,7 @@ _RECORD = Held("That record was not found.", "That record changed after it was r
 
 @dataclass(frozen=True, slots=True)
 class DeleteCommand:
-    confirm: Annotated[str, Describe("The record's identifier again, to confirm the delete.")]
+    confirm: Confirm
 
 
 class DeletedPart(TypedDict):
@@ -52,8 +52,7 @@ def delete_record(
     expected_updated_at: str | None = None,
     after_commit=None,
 ) -> RecordDeleted:
-    if command.confirm != target:
-        raise ValueError(f"confirm must exactly match target {target!r}")
+    confirm(command.confirm, target)
     with transaction.atomic():
         obj = held(model, _RECORD, lookup, expected_updated_at)
         label = str(obj)

@@ -219,7 +219,7 @@ class ContentDetailView(PageMixin, DetailView):
     def get_page_lede(self):
         return dotted_html(
             self.object.get_content_type_display(),
-            status_pill(self.object.get_status_display(), tone=self.object.status),
+            status_pill(self.object.state),
         )
 
     @override

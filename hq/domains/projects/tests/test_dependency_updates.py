@@ -16,11 +16,11 @@ from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.dependency_updates import KIND as RUN_KIND, RUN_NOW, asked_at
 from hq.platform.application.derivation_testing import frozen
 from hq.platform.application.domains import records_of
+from hq.platform.application.markup_testing import Element, all_elements, hrefs, select, text, with_class, within
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.projects import DEPENDENCY_UPDATES, get_project, list_projects
 from hq.platform.application.security import Capability, Principal, cli_principal
 from hq.platform.application.tests import test_github_estate as estate
-from hq.platform.application.tests.markup import Element, all_elements, hrefs, select, text, with_class, within
 from hq.platform.application.tests.test_github_estate import store
 from hq.platform.application.tests.test_github_posture import kept
 from hq.platform.core.models import AuditLog
@@ -264,7 +264,6 @@ class LastRunSurfaceTests(TestCase):
 
     def test_the_last_run_shows_its_outcome_in_the_run_tables_word_and_tone(self):
         from hq.domains.jobs.models import JobState
-        from hq.platform.application.work_runs import TONES
 
         for outcome, seen in (
             ("ok", None),
@@ -281,7 +280,7 @@ class LastRunSurfaceTests(TestCase):
                 self.assertIn(seen.label if seen else "Last ran", run.words)
                 tones = {name for element in within(response, "data-updates-run") for name in element.classes}
                 if seen:
-                    self.assertIn(f"pill-{TONES[seen]}", tones)
+                    self.assertIn(f"pill-{seen.tone}", tones)
                 self.assertIn("2 hours ago", state.words)
 
     def test_a_run_asked_for_and_not_yet_handed_off_says_so_and_is_followed(self):

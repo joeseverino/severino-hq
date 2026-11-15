@@ -9,13 +9,12 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.control_plane.observations.portainer import RUNTIME_KIND
+from hq.platform.application.markup_testing import select
 from hq_sdk.testing import plain
 
 from ..container_reads import get_container
 from ..inventory import record_inventory
-from ..security import cli_principal
 from ..services import CONTAINER_KIND
-from .markup import select
 
 STARTED = "2026-10-31T11:00:00+00:00"
 SAMPLED = datetime(2026, 10, 31, 12, 0, tzinfo=UTC)
@@ -41,7 +40,7 @@ def runtime(*, after=timedelta(0), cpu=0, started=STARTED, **fields):
 
 
 def sweep(*records):
-    record_inventory({RUNTIME_KIND: {"ok": True, "records": list(records)}}, principal=cli_principal())
+    record_inventory({RUNTIME_KIND: {"ok": True, "records": list(records)}})
 
 
 def fact(page, which):
@@ -82,7 +81,7 @@ class CPUShareTests(TestCase):
     def test_an_unreachable_sweep_keeps_the_last_share(self):
         sweep(runtime(cpu=0))
         sweep(runtime(after=timedelta(minutes=1), cpu=6_000_000_000))
-        record_inventory({RUNTIME_KIND: {"ok": False, "records": [], "error": "down"}}, principal=cli_principal())
+        record_inventory({RUNTIME_KIND: {"ok": False, "records": [], "error": "down"}})
 
         self.assertEqual(stored()["cpu_percent"], 10.0)
 

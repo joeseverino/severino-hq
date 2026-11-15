@@ -83,7 +83,7 @@ docstring is the rule.
 | `StyleContractTests`, `TemplateClassStyleTests`, `HandRolledClassTests` | CSS, layers |
 | `TemplateCommentTests` | what a `{# #}` comment left open is |
 | `FileSizeTests` | no source or test file past `SEVERINO_FILE_LINE_LIMIT` |
-| `PageReadCapabilityTests` | every routed page reads under one capability (`required_capability`, else `read`), refused before its view; a route that answers without a session authorizes itself |
+| `PageReadCapabilityTests` | every routed page reads under `read` and the one capability it declares (`required_capability`), refused before its view; a route that answers without a session authorizes itself |
 | `PageTrailTests` | a view declares `page_trail`, every crumb above it, and `trail_label`, not a `get_page_trail` that restates them |
 | `lint:ast-grep` | the rules under `tools/lint/ast-grep`. Among them, a setting is read as `settings.NAME`, never with a default. An operation is queued through `resource_operations.enqueue`, whose unique key settles two writers. Who a request's session signed in is `request_identity.signed_in`. A module-level name is assigned once. A table cell is read by its text, never by the tag that closes it, in HQ or an extension |
 | `CountedTests` | plurals |

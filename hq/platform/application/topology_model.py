@@ -16,6 +16,7 @@ from .answer_fields import ObservedAt
 from .describe import Describe, listed
 from .entity_links import EntityLink
 from .moments import moment
+from .tone import Tone
 from .ui import ended
 
 if TYPE_CHECKING:
@@ -82,9 +83,6 @@ NODE_KIND_ORDER = {
     "dependency": 9,
 }
 
-# How a node, an edge or a finding stands, most severe first.
-STANDINGS = ("serious", "attention", "neutral", "good")
-
 
 @dataclass(frozen=True, slots=True)
 class TopologyNode:
@@ -117,7 +115,7 @@ class TopologyNode:
             "what tells the two apart. Empty otherwise."
         ),
     ] = ""
-    status: Annotated[str, Describe(ended(f"How it stands: {listed(STANDINGS)}"))] = "neutral"
+    status: Annotated[str, Describe(ended(f"How it stands: {listed(Tone)}"))] = Tone.NEUTRAL
     status_label: Annotated[str, Describe("How it stands, in the words a page shows beside it.")] = ""
     detail: Annotated[str, Describe("A line on why it stands as it does; empty when there is nothing to add.")] = ""
     url: Annotated[
@@ -243,7 +241,7 @@ class TopologyEdge:
     target: Annotated[str, Describe("The id of the node it points to.")]
     kind: Annotated[str, Describe(f"The relation: {listed(RELATIONS)}, the last for one a reading supports.")]
     label: Annotated[str, Describe("The relation as it reads from the source, such as `Runs on`.")]
-    status: Annotated[str, Describe(ended(f"How the relationship stands: {listed(STANDINGS)}"))] = "neutral"
+    status: Annotated[str, Describe(ended(f"How the relationship stands: {listed(Tone)}"))] = Tone.NEUTRAL
     # An edge a reading supports exists only while its reading does.
     source_kind: Annotated[
         str,
@@ -341,7 +339,7 @@ def gate_covers(holder: tuple[str, ...], gate: tuple[str, ...]) -> bool:
     return set(gate) - _READ_FLOOR <= set(holder) - _READ_FLOOR
 
 
-def edge_between(source: str, target: str, kind: str, label: str = "", status: str = "neutral") -> TopologyEdge:
+def edge_between(source: str, target: str, kind: str, label: str = "", status: str = Tone.NEUTRAL) -> TopologyEdge:
     """The edge of one relation kind from ``source`` to ``target``, with a stable id."""
 
     return TopologyEdge(

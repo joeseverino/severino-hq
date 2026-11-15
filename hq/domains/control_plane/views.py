@@ -8,12 +8,13 @@ from django.views import View
 from django.views.generic import DetailView, ListView
 
 from hq.platform.application.action_links import READ_NOW_CAPABILITY, command_url
-from hq.platform.application.approval_review import asked_by
-from hq.platform.application.approvals import DESTRUCTIVE_EFFECT
+from hq.platform.application.approvals import AUDIT_LABELS
 from hq.platform.application.capabilities import capability_words, command_spec
 from hq.platform.application.conditions import DRIFTED, holding
+from hq.platform.application.contracts import Effect
 from hq.platform.application.doors import NOBODY
 from hq.platform.application.entity_links import kind_label, record_name, web_url
+from hq.platform.application.history import asked_by
 from hq.platform.application.infrastructure import (
     declared_machines,
     delivery_targets,
@@ -30,7 +31,6 @@ from hq.platform.application.resource_capabilities import (
     Allowed,
     channels_inside,
     resource_capabilities,
-    verb_words,
 )
 from hq.platform.application.resource_context import (
     controller_summary,
@@ -53,7 +53,7 @@ from hq.platform.application.work_runs import run_rows
 from hq.platform.core.templatetags.nav_tags import returning_to
 lazy from hq.platform.application.page_relations import for_container
 
-from .models import ManagedResource, OperationRequest
+from .models import ApprovalRequest, ManagedResource, OperationRequest
 from .provider_adapters.portainer import CONTAINER_KIND
 from .provider_adapters.tls import CERTIFICATE_KIND
 from .providers import PROVIDERS, describe_providers, read_spec, readout_rows, shown_spec
@@ -371,7 +371,7 @@ class InfrastructureDetailView(PageMixin, DetailView):
                 label=(
                     capability_words(READ_NOW_CAPABILITY)
                     if verb == "reconcile" and provider.reported_fields
-                    else verb_words(verb)
+                    else capability_words(ACTION_CAPABILITY[verb])
                 ),
                 title="" if allowed.enabled else allowed.reason,
                 origin=self.request.get_full_path(),
@@ -434,7 +434,9 @@ class InfrastructureDetailView(PageMixin, DetailView):
         capabilities = self.capabilities
         context["capabilities"] = capabilities
         context["page_visit"] = page_visit("resource", self.object.key)
-        context["controller"] = controller_summary(capabilities.actions, verb_words)
+        context["controller"] = controller_summary(
+            capabilities.actions, lambda verb: capability_words(ACTION_CAPABILITY[verb])
+        )
         derived = self.derived
         context["status"] = record_status(self.object, health=derived.health, newest=newest_reading(self.object.kind))
         # A running container is summarized by what it runs, in its own band.
@@ -464,7 +466,7 @@ class InfrastructureDetailView(PageMixin, DetailView):
         # A change a credential asked for that nobody has answered, said on the
         # page an operator opens when a declaration has not moved.
         # Each said as who asked for it, from the audit row that opened it.
-        asked = asked_by(derived.awaiting_approval)
+        asked = asked_by(ApprovalRequest, derived.awaiting_approval, formerly=AUDIT_LABELS)
         context["awaiting_approval"] = tuple(asked.get(str(held.pk), NOBODY) for held in derived.awaiting_approval)
         # Nothing for a container: its panel is the sweep's answer and a
         # container declares identity and nothing else.
@@ -490,7 +492,7 @@ def is_destructive(verb: str) -> bool:
     as its capability declares: asked for by name on a page of its own, never
     pressed straight from a head."""
 
-    return command_spec(ACTION_CAPABILITY[verb]).effect == DESTRUCTIVE_EFFECT
+    return command_spec(ACTION_CAPABILITY[verb]).effect is Effect.DESTRUCTIVE
 
 
 def verb_action(
@@ -522,7 +524,7 @@ class OperationView(View):
             return HttpResponseNotAllowed(["POST"])
         resource = get_object_or_404(ManagedResource, key=key)
         name = record_name(resource.kind, resource.spec, resource.key)
-        label = f"{verb_words(self.action)} {name}"
+        label = f"{capability_words(ACTION_CAPABILITY[self.action])} {name}"
         return render(
             request,
             "control_plane/resource_confirm_verb.html",

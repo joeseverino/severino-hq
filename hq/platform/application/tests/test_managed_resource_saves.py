@@ -4,12 +4,12 @@ and as that caller last read it."""
 from django.test import TestCase
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
+from hq.platform.application.tests.consent import consented
 
 from ..adoption_testing import managing_everything
 from ..capabilities import execute_capability
 from ..infrastructure import ManagedResourceCommand, save_managed_resource
-from ..security import AuthorizationError, Capability, Principal, cli_principal
-from ..sweep import record_sweep
+from ..security import Capability, Principal, cli_principal
 
 PROXY = {
     "domain_names": ["app.example.com"],
@@ -39,7 +39,7 @@ class _Declared(TestCase):
         managing_everything()
         save_managed_resource(
             ManagedResourceCommand(key="example-proxy", kind="npm.proxy_host", spec=dict(PROXY)),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
         )
         OperationRequest.objects.all().delete()
 
@@ -65,11 +65,6 @@ class AuthorizedAtTheRunnerTests(_Declared):
                 self.assertEqual(result["error"]["code"], "forbidden", result)
         self.assertEqual(list(ManagedResource.objects.values_list("key", "spec", "generation")), before)
         self.assertFalse(OperationRequest.objects.exists())
-
-    def test_a_sweep_is_refused_before_it_adopts_anything(self):
-        with self.assertRaises(AuthorizationError):
-            record_sweep({}, principal=READER)
-        self.assertEqual(ManagedResource.objects.count(), 1)
 
     def test_an_authorized_writer_saves(self):
         result = self.update(forward_port=8080)

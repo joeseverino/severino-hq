@@ -19,9 +19,10 @@ from typing import Any
 # Every import of Django or HQ is lazy, so the walk's own process (apart.py) loads none.
 lazy from django.http import HttpResponse
 
+lazy from hq.platform.application.markup_testing import all_elements
+
 from .apart import apart
 lazy from ..web_writes import RETRY_KEY_FIELD
-lazy from .markup import all_elements
 lazy from .source import source_files
 
 # The chokepoint as a browser's form reaches it, under the key the form

@@ -37,7 +37,7 @@ lazy from hq.platform.application.automation_runs import playbooks_on
 lazy from hq.platform.application.containers import on_machine
 lazy from hq.platform.application.docker_sections import docker_line
 lazy from hq.platform.application.page_relations import for_machine
-lazy from hq.platform.application.request_channel import displayed_client_ip
+lazy from hq.platform.application.request_channel import forwarding_of
 lazy from hq.platform.application.tailnet import declaration, may_reach, ports, proposed_grant
 
 from .models import ManagedResource
@@ -65,7 +65,7 @@ class MachineListView(PageMixin, TemplateView):
         context["machines"] = machines
         context["hq_label"] = HQ_LABEL
         # How many are in each state, in the order the states first appear.
-        states = [item.state[0] for item in machines]
+        states = [item.state for item in machines]
         context["state_counts"] = [(states.count(state), state) for state in dict.fromkeys(states)]
         return context
 
@@ -277,7 +277,7 @@ class MachineDetailView(PageMixin, TemplateView):
         # carries the addresses it answers at, so the page could always have
         # known, and said "this machine" while you looked at your own laptop.
         # Arithmetic on one address: no query, no sweep.
-        context["is_this_device"] = displayed_client_ip(self.request) in found.addresses
+        context["is_this_device"] = forwarding_of(self.request).reported in found.addresses
         context["hq_label"] = HQ_LABEL
         context["page_aside"] = "control_plane/_machine_status.html"
         context["page_visit"] = page_visit("machine", found.name)

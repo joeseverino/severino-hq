@@ -19,7 +19,6 @@
   white-space: nowrap;
 }
 
-.pill-unread { font-weight: 650; }
 
 /* A control that posts a form of its own (a posting `{% button %}` with `fields`) stands where a button would. */
 .post-form { display: inline-block; margin: 0; }

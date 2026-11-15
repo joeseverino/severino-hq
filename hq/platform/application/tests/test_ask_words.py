@@ -6,7 +6,7 @@ from django.test import TestCase
 from hq.domains.jobs.models import JobState
 from hq.platform.application import asks
 from hq.platform.application.asks import FAILED, IDLE, QUEUED, Standing
-from hq.platform.application.tests.markup import Element, all_elements
+from hq.platform.application.markup_testing import Element, all_elements
 from hq.platform.core.tests.browser.catalog import CATALOG
 
 

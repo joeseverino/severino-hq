@@ -18,6 +18,7 @@ from hq.domains.control_plane.providers import PROVIDERS, read_record
 from .connection_lifecycle import UNREPORTED_NODE
 from .entity_links import node_name
 from .finding_model import Finding, FindingEstate, FindingRemedy, FindingRule, fact_values
+from .tone import Tone
 from .topology_model import TopologyNode
 from .ui import counted, ended
 lazy from .facts import snapshots_of
@@ -126,7 +127,7 @@ def _no_connection(node: TopologyNode, ref: str, reported: tuple[str, ...]) -> F
         rule=RULE,
         subject=node.id,
         title=f"{name} uses a connection no controller has",
-        severity="attention",
+        severity=Tone.ATTENTION,
         explanation=(
             f"It names the connection {ended(ref)} No controller has one called that, so "
             f"nothing reads {name} and nothing applies HQ's config to it."
@@ -146,7 +147,7 @@ def _no_parent(node: TopologyNode, kind: str, missing: str) -> Finding:
         rule=RULE,
         subject=node.id,
         title=f"{name} is in {missing}, which HQ does not have",
-        severity="attention",
+        severity=Tone.ATTENTION,
         explanation=(
             f"HQ expects no {what} called {missing} and no connection reads one, so {name} cannot be applied anywhere."
         ),
@@ -181,10 +182,10 @@ RULES: tuple[FindingRule, ...] = (
     FindingRule(
         RULE,
         "A record names something that is not there",
-        "attention",
+        Tone.ATTENTION,
         _names_nothing,
         operator_action=("Change the record to name a connection or a domain HQ has, or add the one it names."),
         no_help_reason="HQ cannot tell which one was meant.",
-        bars={"attention": "a record names a connection or domain HQ does not have"},
+        bars={Tone.ATTENTION: "a record names a connection or domain HQ does not have"},
     ),
 )

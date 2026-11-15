@@ -52,7 +52,7 @@ from .projects import (
 from .record_errors import RecordConflict, RecordNotFound
 from .record_fields import Notes, PublishedUrl, TotalCost
 from .refusal_status import RefusalEnvelope, refuse
-from .security import Principal, require_all
+from .security import Principal
 from .ui import counted, ended
 
 MAX_IMPORT_RECORDS = 1000
@@ -362,7 +362,6 @@ class HqImported(TypedDict):
 def import_registry(command: HQImportCommand, *, principal: Principal) -> HqImported | RefusalEnvelope:
     """Validate the whole document, then upsert every record or none."""
 
-    require_all(principal, REQUIRED_CAPABILITIES)
     total = len(command.projects) + len(command.assets)
     if total > MAX_IMPORT_RECORDS:
         limit = f"The document holds {counted(total, 'record')}; the limit is {MAX_IMPORT_RECORDS}."

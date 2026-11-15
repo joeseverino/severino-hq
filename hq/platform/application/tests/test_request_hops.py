@@ -9,6 +9,7 @@ from hq.platform.core.tests.estate_sizes import assert_subject_cost_does_not_gro
 from hq.platform.core.tests.forwarding import arrived
 
 from ..request_addresses import addresses_of, addresses_of_hq
+from ..request_channel import forwarding_of
 from ..request_connection import connection
 from ..request_headers import headers_of
 from ..request_path import address_chain
@@ -83,7 +84,7 @@ class AddressEvidenceTests(TestCase):
         and a flow would leave it beside yours with a gap under it.
         """
 
-        from .markup import select
+        from hq.platform.application.markup_testing import select
 
         a_tailnet(
             a_device("a-laptop", A_TAILNET_ADDRESS, user="someone@example.test"),
@@ -127,7 +128,7 @@ class HopTests(TestCase):
             HTTP_HOST="hq.example.test",
             **arrived(REMOTE_ADDR=peer, **({"HTTP_X_FORWARDED_FOR": forwarded} if forwarded else {})),
         )
-        return address_chain(request)
+        return address_chain(forwarding_of(request))
 
     def test_the_caller_is_the_last_hop_a_known_proxy_observed(self):
         found = self.hops(peer="10.0.0.9", forwarded="100.64.0.5")

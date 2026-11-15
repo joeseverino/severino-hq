@@ -4,6 +4,8 @@ import math
 import re
 from dataclasses import dataclass
 from datetime import date, timedelta
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from numbers import Number
 from typing import ClassVar
 
 from .card_items import Kpi, TimelineItem
@@ -18,31 +20,29 @@ from .chart_numbers import (
 )
 from .display_words import display
 from .labels import dotted, plural
-
-# The one status vocabulary. Every surface that shows state (dashboard cards,
-# insight panels, extension-provided projections) draws from this set, so a
-# state means the same thing and looks the same wherever it is rendered.
-# Reserved: these never double as categorical series colors, and each is always
-# rendered with its own text so state is never carried by color alone.
-STATUS_VALUES = frozenset({"good", "attention", "serious", "neutral"})
+from .money import signed_number
+from .tone import Tone
 
 # An advisory's severity as the tone it is drawn in, wherever one is listed:
 # critical and high serious, medium attention, the rest neutral. A weather
 # alert's severity (extreme, severe, moderate, minor) reads the same way.
 SEVERITY_TONES = {
-    "critical": "serious",
-    "extreme": "serious",
-    "high": "serious",
-    "severe": "serious",
-    "medium": "attention",
-    "moderate": "attention",
+    "critical": Tone.SERIOUS,
+    "extreme": Tone.SERIOUS,
+    "high": Tone.SERIOUS,
+    "severe": Tone.SERIOUS,
+    "medium": Tone.ATTENTION,
+    "moderate": Tone.ATTENTION,
 }
 
 
 # What a button may look like beside a plain one. The button's own class is
 # written by ``button_classes`` alone, so a control that looks like a button
 # is drawn by the button tag (action_tags.button) or a Python part through it.
-BUTTON_LOOKS = frozenset({"primary", "ghost", "danger", "compact"})
+BUTTON_LOOKS = frozenset({"primary", "ghost", "danger", "compact", "link", "menu"})
+# The looks that paint a button's box, which a row of a menu or a link among
+# words is drawn without, so no rule takes that paint back off.
+_PAINTED = frozenset({"primary", "ghost"})
 
 
 def button_classes(look: str = "") -> str:
@@ -52,13 +52,15 @@ def button_classes(look: str = "") -> str:
     unknown = sorted(set(words) - BUTTON_LOOKS)
     if unknown:
         raise ValueError(f"A button looks {', '.join(sorted(BUTTON_LOOKS))}, never {', '.join(unknown)}.")
+    if {"link", "menu"} & set(words):
+        words = [word for word in words if word not in _PAINTED]
     return " ".join(dict.fromkeys(("btn", *words)))
 
 
-def severity_tone(severity: object) -> str:
+def severity_tone(severity: object) -> Tone:
     """The tone an advisory's severity is drawn in."""
 
-    return SEVERITY_TONES.get(str(severity or "").lower(), "neutral")
+    return SEVERITY_TONES.get(str(severity or "").lower(), Tone.NEUTRAL)
 
 
 def _one_of(name: str, value: str, allowed: frozenset[str], *, or_empty: bool = False) -> None:
@@ -86,6 +88,54 @@ def counted(count: int, one: str, many: str | None = None) -> str:
     """
     one, many = counted_forms(one, many)
     return f"{count:,} {one if count == 1 else many}"
+
+
+def measured(value: Decimal | float | str | None, unit: str, places: int | None = None, *, plus: bool = False) -> str:
+    """A figure and its unit: "4.25 mi", "1,250 ft", "12%", "3 more".
+
+    ``places`` rounds the figure half away from zero, as ``floatformat`` does:
+    that many decimals, or with a negative count that many only when the figure
+    is not whole. Left out, a number is written as it came. A figure is
+    grouped by thousands and signed as ``money.signed_number`` signs one, so a
+    figure that rounds to zero is never negative, and ``plus`` signs a change.
+    Zero is a figure; only None and the empty string are the missing mark. A
+    figure already written as words ("1:23") is written as it is.
+    """
+
+    if value is None or value == "":
+        return MISSING
+    joint = "" if unit == "%" else " "
+    number = _figure(value)
+    if number is None:
+        return f"{value}{joint}{unit}"
+
+    def written(magnitude: Decimal) -> str:
+        return f"{_places(magnitude, places):,f}{joint}{unit}"
+
+    return signed_number(number, written, plus=plus)
+
+
+def _figure(value: object) -> Decimal | None:
+    """``value`` as a number, or None when it is words; a float through its
+    shortest form, so 1.1 means 1.1."""
+
+    if isinstance(value, bool):
+        return None
+    try:
+        number = Decimal(str(value)) if isinstance(value, (Number, str)) else None
+    except InvalidOperation:
+        return None
+    return number if number is not None and number.is_finite() else None
+
+
+def _places(number: Decimal, places: int | None) -> Decimal:
+    """``number`` rounded as ``measured`` says ``places`` asks."""
+
+    if places is None:
+        return number
+    if places < 0 and number == number.to_integral_value():
+        places = 0
+    return number.quantize(Decimal(1).scaleb(-abs(places)), rounding=ROUND_HALF_UP)
 
 
 def counted_forms(one: str, many: str | None = None) -> tuple[str, str]:

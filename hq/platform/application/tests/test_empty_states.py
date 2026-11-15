@@ -9,13 +9,13 @@ from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS
 from hq.domains.control_plane.models import ProviderConnection
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.provider_adapters import DECLARATIONS
+from hq.platform.application.markup_testing import all_elements, elements, hrefs, text as page_text, texts, with_class
 from hq.platform.application.tests.reads import reads
 
 from ..connection_setup import setups
 from ..entity_links import connection_anchor
 from ..page_reads import Remedy, need, pages_reading, readers, remedy, setup_url
 from ..pages import PageAction, page_context
-from .markup import all_elements, elements, hrefs, text as page_text, texts, with_class
 from .source import template_files
 
 PARTIAL = "partials/_empty_state.html"

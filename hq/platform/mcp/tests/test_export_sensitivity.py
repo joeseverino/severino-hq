@@ -9,7 +9,7 @@ from django.test.utils import CaptureQueriesContext
 from hq.domains.content.models import ContentItem
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.reports import exports
-from hq.platform.application.security import AuthorizationError, Capability, Principal
+from hq.platform.application.security import Capability, Principal
 
 from ..identity import set_principal
 from ..services import export_year_summary
@@ -69,10 +69,6 @@ class ExportSensitivityTests(TestCase):
         self.assertEqual({doc["doc_id"] for doc in data["documentation"]}, {doc.doc_id for doc in self.docs})
         for doc in self.docs:
             self.assertIn(doc.title, exports.year_summary_markdown(2026))
-
-    def test_a_caller_without_read_is_refused(self):
-        with set_principal(Principal("example-ungranted", "mcp", frozenset())), self.assertRaises(AuthorizationError):
-            export_year_summary(2026, "json")
 
     def test_more_content_with_document_links_adds_no_queries(self):
         with CaptureQueriesContext(connection) as initial:

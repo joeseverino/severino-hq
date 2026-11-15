@@ -27,6 +27,7 @@ from .facts import Joined, Subject, inventory_records, readings
 from .inventory import record_identity
 from .locate import Machines, index_of
 from .paths import path_to
+from .tone import Tone
 from .topology_model import (
     RELATIONS,
     TopologyEdge,
@@ -61,8 +62,6 @@ lazy from .zones import ZONE_KIND, zone_reads
 _FOLDS_INTO_MACHINE = {"controller": "Runs the controller", "target": RELATIONS["stands_for"].inverse}
 # How one kept apart by its gate joins the node it names instead.
 _JOINS_WHEN_KEPT = {"controller": "runs_on", "target": "stands_for"}
-
-_SERVICE_STATUS = {"good": "good", "attention": "attention", "serious": "serious"}
 
 
 @dataclass
@@ -154,7 +153,7 @@ def _machines(nodes, edges) -> _Estate:
             kind="machine",
             label=machine.name,
             subtitle=machine.role or "Machine",
-            status="good" if machine.reachable else "neutral",
+            status=Tone.GOOD if machine.reachable else Tone.NEUTRAL,
             status_label="Reachable" if machine.reachable else "",
             url=machine.url,
             kind_key="machine",
@@ -226,7 +225,7 @@ def _services(nodes, edges, estate: _Estate, zones: tuple[str, ...]) -> None:
             subtitle=(
                 own.label if service.is_hq and own is not None else _SERVICE_SUBTITLES.get(service.mark, "Service")
             ),
-            status=_SERVICE_STATUS.get(service.base_health.state, "neutral"),
+            status=service.base_health.tone,
             status_label=service.base_health.label,
             detail=service.faults[0] if service.faults else "",
             url=service.url,
@@ -553,7 +552,7 @@ def _reading_edges(nodes, edges, estate: _Estate) -> None:
             target=target,
             kind="reading",
             label=items[0].relation,
-            status="attention" if any(item.stale for item in items) else "neutral",
+            status=Tone.ATTENTION if any(item.stale for item in items) else Tone.NEUTRAL,
             source_kind=kind,
             detail=", ".join(titles),
             observed_at=oldest.isoformat() if oldest else "",

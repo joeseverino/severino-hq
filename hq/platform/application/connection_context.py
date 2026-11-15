@@ -31,30 +31,26 @@ from .connection_catalog import (
 from .connection_contracts import ConnectionInstance
 from .connection_lifecycle import WORKING, Lifecycle, standing
 from .connection_reach import ConnectionReach, connection_reach
-from .connection_security import (
-    REQUEST_CONTROLS,
-    ConnectionSecurityPosture,
-    connection_security_posture,
-    observed_connection_controls,
-)
+from .connection_security import ConnectionSecurityPosture, connection_security_posture
 from .connection_setup import ProviderSetup, guide_url, setups
 from .connections import connection_rows
 from .credential_mint import CredentialFix, credential_fixes
 from .credential_sight import PART_SOURCE, ProviderSight, Sight, fed_kinds, sight_by_connection
-from .derived_reads import serialize_path, serialize_provider_sight, serialize_sight
+from .derived_reads import serialize_check, serialize_path, serialize_provider_sight, serialize_sight
 from .entity_links import entity_link
 from .freshness import freshness
-from .hq_self import hq_hostnames
 from .moments import ago
 from .path_model import ServicePath
 from .paths import hq_path
-from .posture import Inputs, as_part, guide, posture
+from .posture import as_part, estate_inputs, guide, posture
 from .problems import problem_counts
 from .projection import complete, projection_scope, read_once
 from .record_errors import RecordNotFound
+from .request_connection import connection as request_connection
 from .request_path import joined
 from .security import Principal
 from .standards import Measurement
+from .tone import Tone
 from .ui import counted
 from .workflow_contracts import ActionLink
 lazy from . import domains
@@ -122,7 +118,7 @@ class ConnectionRow:
             *(
                 Read(state.ability.label, ability=state)
                 for state in self.connection.abilities
-                if state.ability.effect == "read" and state.ability.name not in swept
+                if not state.ability.effect.changes and state.ability.name not in swept
             ),
         )
         return tuple(sorted(reads, key=lambda read: read.label))
@@ -131,7 +127,7 @@ class ConnectionRow:
     def changes(self) -> tuple[ConnectionAbilityState, ...]:
         """What the connection's credential lets HQ change."""
 
-        return tuple(state for state in self.connection.abilities if state.ability.effect != "read")
+        return tuple(state for state in self.connection.abilities if state.ability.effect.changes)
 
     @property
     def changes_only(self) -> bool:
@@ -193,7 +189,7 @@ class ConnectionRow:
         """The tone of ``state_line``: a fault when a permission is missing,
         else none, and the line reads as context."""
 
-        return "serious" if self._permissions_missing or self.connection.authority == "missing" else ""
+        return Tone.SERIOUS if self._permissions_missing or self.connection.authority == "missing" else ""
 
     def as_dict(self) -> dict[str, Any]:
         # Every ability and every sight is under ``reads`` or ``changes``, the
@@ -263,10 +259,6 @@ def _fix(fix: CredentialFix) -> dict[str, Any]:
         "permissions": list(fix.permissions),
         "steps": [asdict(step) for step in fix.steps],
     }
-
-
-def _control(control: Any) -> dict[str, str]:
-    return asdict(control)
 
 
 @dataclass(frozen=True, slots=True)
@@ -358,7 +350,7 @@ class ConnectionsContext:
             **complete(items),
             "summary": {
                 "connections": estate.connection_count,
-                "attention": estate.attention_count,
+                Tone.ATTENTION: estate.attention_count,
                 "healthy": estate.healthy_count,
                 "unverified": estate.unverified_count,
                 "externally_custodied": estate.external_custody_count,
@@ -396,7 +388,7 @@ class ConnectionsContext:
             "posture": {
                 "state": estate.state,
                 "summary": estate.summary,
-                "controls": [_control(control) for control in estate.controls],
+                "checks": [serialize_check(result) for result in estate.results],
                 "network_gate_enforced": estate.network_gate_enforced,
                 "abilities": estate.ability_count,
                 "dependencies": estate.dependency_count,
@@ -416,10 +408,10 @@ class ConnectionsContext:
         return {
             "headline": posture.headline,
             "state": posture.state,
-            "channel": posture.channel_label,
-            "secure_transport": posture.secure_transport,
+            "channel": posture.connection.channel.label,
+            "secure_transport": posture.connection.facts.secure,
             "trusted_proxies": posture.trusted_proxy_count,
-            "controls": [_control(control) for control in posture.controls if control.id in REQUEST_CONTROLS],
+            "checks": [serialize_check(result) for result in posture.admission],
             "caller": caller.hops[0].name if caller and caller.hops else None,
         }
 
@@ -523,9 +515,10 @@ def connections_context(*, principal: Principal, request: Any = None) -> Connect
         every = setups()
         connected = frozenset(controller_refs.values())
         available = tuple(setup for setup in every if setup.provider not in connected)
-        site = next(iter(hq_hostnames()), "")
-        tailnet_policy, edge = observed_connection_controls(site)
-        estate = connection_security_posture(groups, tailnet_policy=tailnet_policy, edge=edge)
+        inputs = estate_inputs(groups)
+        standard = posture(inputs)
+        estate = connection_security_posture(inputs, standard)
+        found = request_connection(request) if request is not None else None
         walked = hq_path()
         return ConnectionsContext(
             groups=groups,
@@ -548,14 +541,10 @@ def connections_context(*, principal: Principal, request: Any = None) -> Connect
                 default=None,
             ),
             estate_posture=estate,
-            standard=posture(Inputs(edge, groups)),
-            posture=(
-                connection_security_posture(groups, request=request, tailnet_policy=tailnet_policy, edge=edge)
-                if request is not None
-                else estate
-            ),
+            standard=standard,
+            posture=(connection_security_posture(inputs, standard, connection=found) if found is not None else estate),
             hq_path=walked,
-            caller_path=(joined(walked, request, None) if walked is not None and request is not None else None),
+            caller_path=(joined(walked, request, found) if walked is not None and request is not None else None),
             read_all=read_now_link(principal, every_connection=True),
             reading_everything_since=everything,
             answers_request=request is not None,

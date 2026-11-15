@@ -14,7 +14,6 @@ answers for the client alone.
 import contextlib
 import logging
 from dataclasses import dataclass
-from datetime import timedelta
 from enum import StrEnum
 from typing import Annotated, Literal, TypedDict
 
@@ -28,6 +27,7 @@ from . import tailnet, tailscaled
 from .command_fields import Describe
 from .record_errors import RecordNotFound
 from .security import AGENT_SURFACES, AuthorizationError, Principal, person
+lazy from .agent_registry import TOUCH_INTERVAL
 lazy from .hq_self import site_url
 lazy from .routes import reverse
 
@@ -36,9 +36,6 @@ logger = logging.getLogger("severino.agents")
 
 APPROVE_AGENT_DEVICE = "agent.device_approval.set"
 BLOCK_AGENT_DEVICE = "agent.device_block.set"
-
-# A device's name, os and owner are kept to this precision, as an identity's last seen is.
-TOUCH_INTERVAL = timedelta(minutes=10)
 
 
 class Unplaced(StrEnum):

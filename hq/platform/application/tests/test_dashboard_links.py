@@ -7,8 +7,9 @@ from django.template.loader import render_to_string
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
+from hq.platform.application.markup_testing import elements
+
 from ..outward_links import offered_links
-from .markup import elements
 
 OPERATOR_LINKS = '[{"label": "Status", "sub": "status page", "href": "https://status.example.com/"}]'
 

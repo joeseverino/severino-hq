@@ -617,7 +617,7 @@ class _Builder:
                 self.tags.of_capability(name),
                 summary=spec["label"],
                 description=spec["summary"],
-                parameters=([{"$ref": "#/components/parameters/IdempotencyKey"}] if spec["effect"] != "read" else []),
+                parameters=([{"$ref": "#/components/parameters/IdempotencyKey"}] if spec["effect"].changes else []),
                 requestBody=_body(body),
                 codes=views.execute_codes(registry[name]),
                 answer=self.answer_of(registry[name]),

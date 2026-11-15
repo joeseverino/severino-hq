@@ -11,16 +11,16 @@ from django.test import TestCase, override_settings
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.providers import PROVIDERS, describe_providers
+from hq.platform.application.tests.consent import another_command_writing, consented
 
 from ..adoption import ADOPT, ADOPT_SERVICE
-from ..capabilities import capability_registry, execute_capability
+from ..capabilities import NEEDS_APPROVAL, capability_registry, execute_capability
 from ..capability_policy import matrix
 from ..default_hold import may_be_held_by_default
 from ..entity_links import kind_label
 from ..infrastructure import ManagedResourceCommand, save_managed_resource
 from ..integration_specs import capability_schema
 from ..labels import lower_first
-from ..record_errors import PolicyError
 from ..security import DEVICE_INTERFACE, Capability, Principal, cli_principal, could_hold
 from ..zones import ADOPT_ZONE
 from .writers import keyed
@@ -62,7 +62,7 @@ def record(key: str, kind: str) -> ManagedResourceCommand:
 
 def declare(kind: str) -> ManagedResource:
     key = fresh_key()
-    save_managed_resource(record(key, kind), principal=cli_principal(), copied_from_live=True)
+    ManagedResource.objects.create(key=key, kind=kind, spec=record(key, kind).spec)
     return ManagedResource.objects.get(key=key)
 
 
@@ -162,22 +162,26 @@ class HoldTests(TestCase):
 
 @override_settings(SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS=True)
 class FloorTests(TestCase):
-    """The use case refuses what the hold would have held, by the same rule."""
+    """The write refuses what the hold would have held, by the same rule."""
 
     def setUp(self):
         from hq.platform.application.adoption_testing import managing_everything
 
         managing_everything()
 
-    def test_an_agents_direct_write_of_a_public_kind_is_refused_on_either_surface(self):
+    def test_an_agents_write_of_a_public_kind_under_another_command_is_refused_on_either_surface(self):
         for kind in public_kinds():
             for interface in ("mcp", "api"):
                 with self.subTest(kind=kind, interface=interface):
                     key = fresh_key()
 
-                    with self.assertRaisesMessage(PolicyError, "This change needs approval."):
-                        save_managed_resource(record(key, kind), principal=agent(interface))
+                    def write(given, key=key, kind=kind):
+                        save_managed_resource(record(key, kind), consented=given)
 
+                    with another_command_writing(write) as name:
+                        answer = execute_capability(name, keyed({}), principal=agent(interface))
+
+                    self.assertEqual(answer["error"]["message"], NEEDS_APPROVAL, answer)
                     self.assertFalse(ManagedResource.objects.filter(key=key).exists())
 
     def test_an_operator_writes_a_public_kind_without_an_approval(self):
@@ -187,7 +191,7 @@ class FloorTests(TestCase):
                     key = fresh_key()
                     self.assertFalse(principal.approved_by)
 
-                    save_managed_resource(record(key, kind), principal=principal)
+                    save_managed_resource(record(key, kind), consented=consented(principal))
 
                     self.assertTrue(ManagedResource.objects.filter(key=key, kind=kind).exists())
 

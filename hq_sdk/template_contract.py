@@ -93,6 +93,7 @@ TAGS = (
     "fact",
     "facts",
     "filter_bar",
+    "muted",
     "notice",
     "outside_link",
     "button",

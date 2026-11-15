@@ -12,6 +12,7 @@ from typing import Any
 from django.db import transaction
 
 from hq.platform.core.audit import audit_operation
+lazy from hq.domains.control_plane.bridge_actions import Admitted, admission
 lazy from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 lazy from hq.domains.control_plane.observations.portainer import IMAGE_KIND
 lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
@@ -38,10 +39,12 @@ ADOPT = "infrastructure.resource.adopt"
 # adopting takes the stored sweep with it rather than leave declarations
 # describing a world nothing recorded.
 @transaction.atomic
-def record_sweep(payload: dict[str, Any], *, principal, controller_id: str = "") -> dict[str, Any]:
+def record_sweep(payload: dict[str, Any], *, admitted: Admitted) -> dict[str, Any]:
     """Store a controller sweep, then adopt what it revealed."""
 
-    result = record_inventory(payload, principal=principal, controller_id=controller_id)
+    report = admission(admitted)
+    principal = report.principal
+    result = record_inventory(payload, controller_id=report.controller_id)
     # After the sweep is stored: adoption reads each spec back out of the
     # records just recorded, so every declaration it writes starts equal to
     # what the controller found and the first reconcile is a no-op.

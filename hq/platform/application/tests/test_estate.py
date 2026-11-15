@@ -16,6 +16,7 @@ from hq.domains.control_plane.models import (
     ProviderConnection,
 )
 from hq.platform.application.derivation_testing import uncached
+from hq.platform.application.markup_testing import elements, hrefs, text
 from hq.platform.application.security import cli_principal
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
@@ -35,7 +36,6 @@ from ..security import Capability, Principal
 from ..tailnet_presence import tailnet_presence
 from .glance_readings import HOST, reported_hour, reported_machine, reported_weather
 from .host_only import host_only
-from .markup import elements, hrefs, text
 
 READ = Principal("test", "read", frozenset({Capability.READ}))
 # 203.0.113.0/24 stands in for a public range here.
@@ -287,7 +287,7 @@ class EstateCardTests(TestCase):
             (figure,) = (
                 kpi for kpi in overview(principal=cli_principal()).kpis if kpi.url == reverse("control_plane:services")
             )
-        unread = [service for service in services if service.health.state == "unknown"]
+        unread = [service for service in services if service.health.state is None]
 
         self.assertTrue(unread, "the estate has no service without a health reading")
         self.assertEqual(len(figure.drawing.dots), len(services) - len(unread))
@@ -872,18 +872,12 @@ class WatchedTests(TestCase):
     def test_online_is_out_of_what_hq_watches(self):
         from types import SimpleNamespace as Row
 
+        from ..machines import MachineState
+
         def machine(state, presence=None):
             return Row(state=state, presence=presence)
 
-        estate = Estate(
-            machines=(
-                machine(("online", "reachable")),
-                machine(("not answering", "unreachable")),
-                machine(("offline", "unreachable")),
-                machine(("away", "unprobed")),
-                machine(("not monitored", "unprobed")),
-            )
-        )
+        estate = Estate(machines=(*(machine(state) for state in MachineState),))
 
         self.assertEqual(len(estate.watched), 3)
 

@@ -34,24 +34,27 @@ lazy from hq.platform.core.templatetags.value_tags import seconds
 
 from .automation_manifest import OperationManifest, OperationRegistry, sorted_unique
 from .command_fields import Among, AmongNow, Describe, ForAgents, Names
+from .contracts import Effect
 from .integration_specs import CapabilitySpec, CommandAbout, CommandFact, command_adapter
 from .record_errors import PolicyError, RecordNotFound
 from .security import Capability, Principal
+from .tone import Tone
 lazy from . import approvals, automation_adoption, pages
 lazy from .action_links import command_url
-lazy from .approval_review import ChangePreview, asked_by
-lazy from .approvals import ApprovalSubject, every_call, measured_by, waits_for_a_person
+lazy from .approval_review import ChangePreview
+lazy from .approvals import AUDIT_LABELS, ApprovalSubject, every_call, measured_by, waits_for_a_person
 lazy from .automation_sources import PLAYBOOKS, SHORT_REVISION
 lazy from .cadence import ask, automation_standing
-lazy from .capabilities import capability_words
+lazy from .capabilities import Consented, capability_words, consent
 lazy from .controller import release_lapsed
 lazy from .doors import NOBODY
 lazy from .entity_links import entity_link, kind_label
 lazy from .finding_model import FindingRemedy
 lazy from .findings import rule_for
+lazy from .history import asked_by
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
 lazy from .json_schemas import fields as whole_fields, json_schema
-lazy from .labels import effect_label, lower_first
+lazy from .labels import lower_first
 lazy from .machines import machine_catalog
 lazy from .moments import ago, moment, when
 lazy from .payload_words import ChangeRow, field_words, value_words
@@ -336,7 +339,7 @@ def run_subject(manifest: OperationManifest, command: RunCommand) -> ApprovalSub
     )
 
 
-def _record(manifest: OperationManifest, *, principal: Principal) -> ManagedResource:
+def _record(manifest: OperationManifest, *, consented: Consented) -> ManagedResource:
     """The procedure's record, written as its manifest now says.
 
     Written here, when a run is asked for, rather than when the registry is
@@ -355,7 +358,7 @@ def _record(manifest: OperationManifest, *, principal: Principal) -> ManagedReso
             ManagedResourceCommand(
                 key=key, kind=OPERATION_KIND, spec=spec, enabled=current.enabled if current else True
             ),
-            principal=principal,
+            consented=consented,
             current_key=key if current else None,
         )
     return ManagedResource.objects.select_for_update().get(key=key)
@@ -442,7 +445,7 @@ def _holder_cancel(holding: dict[str, Any], principal: Principal | None) -> Page
 
 
 @transaction.atomic
-def request_run(manifest: OperationManifest, command: RunCommand, *, principal: Principal) -> OperationAsked:
+def request_run(manifest: OperationManifest, command: RunCommand, *, consented: Consented) -> OperationAsked:
     """Queue one run of ``manifest`` for the automation worker.
 
     A read takes no retry key, so asking twice queues twice, and the
@@ -457,7 +460,7 @@ def request_run(manifest: OperationManifest, command: RunCommand, *, principal: 
         untaken = automation_standing().cannot("run", now=timezone.now())
         if untaken:
             raise PolicyError(untaken)
-        resource = _record(manifest, principal=principal)
+        resource = _record(manifest, consented=consented)
         if not resource.enabled:
             raise PolicyError("This playbook is switched off in HQ.")
         # A claim whose lease ran out is ended or put back first, by the rule
@@ -470,7 +473,9 @@ def request_run(manifest: OperationManifest, command: RunCommand, *, principal: 
                 "Ask again once it ends.",
                 details=_held_by(holder, resource, bound["hosts"]),
             )
-        return resource, asked_fields(principal, reason=command.reason, generation=resource.generation, **bound)
+        return resource, asked_fields(
+            consent(consented).principal, reason=command.reason, generation=resource.generation, **bound
+        )
 
     operation, queued = enqueue(OperationRequest.Action.RUN, prepare)
     if not queued:
@@ -490,7 +495,7 @@ CANCELLED_REASON = "Cancelled"
 def run_authority(effect: str) -> Capability:
     """What asking for a run of a procedure of ``effect`` takes, and so what cancelling one does."""
 
-    return Capability.READ if effect == "read" else Capability.MANAGE_INFRASTRUCTURE
+    return Capability.READ if effect == Effect.READ else Capability.MANAGE_INFRASTRUCTURE
 
 
 @dataclass(frozen=True, slots=True)
@@ -696,14 +701,14 @@ def _held_runs(manifest: OperationManifest, principal: Principal) -> ServiceSect
     when none waits."""
 
     waiting = approvals.pending(principal=principal, capability=capability_name(manifest.id))
-    who = asked_by(waiting)
+    who = asked_by(ApprovalRequest, waiting, formerly=AUDIT_LABELS)
     records = tuple(
         (
             machines_cell([str(host) for host in held.baseline.get("hosts") or ()]),
             Cell(
                 "Waiting for approval",
                 reverse("core:approval_entry", kwargs={"approval_id": held.id}),
-                tone="attention",
+                tone=Tone.ATTENTION,
             ),
             Cell(ago(held.created_at), muted=True),
             Cell(who.get(str(held.pk), NOBODY).words),
@@ -725,7 +730,7 @@ def about(manifest: OperationManifest, principal: Principal) -> CommandAbout:
 
     facts = (
         _runs_on(manifest),
-        CommandFact("Effect", effect_label(manifest.effect)),
+        CommandFact("Effect", manifest.effect.label),
         CommandFact("Access", access_words(manifest.privilege)),
         CommandFact("Timeout", timeout_words(manifest.timeout_seconds)),
         CommandFact("Preconditions", _statements(manifest.preconditions)),
@@ -760,7 +765,7 @@ def run_preview(manifest: OperationManifest, held: ApprovalRequest) -> ChangePre
             (field_words(name, inputs.get(name)), value_words(value, inputs.get(name)))
             for name, value in dict(held.baseline.get("parameters") or {}).items()
         ),
-        ("Effect", effect_label(str(pinned.get("effect", "")))),
+        ("Effect", Effect(pinned["effect"]).label if pinned.get("effect") in Effect else ""),
         ("Access", access_words(str(pinned.get("privilege", "")))),
         ("Adopted commit", str(pinned.get("revision", ""))[:SHORT_REVISION]),
         (field_words("correlation"), str(held.payload.get("correlation") or "")),
@@ -809,7 +814,7 @@ def _capability(manifest: OperationManifest, titles: Mapping[str, str]) -> Capab
         "A read takes no `idempotency_key`. Asked again after `call_timed_out`, it is refused while the first "
         "run waits or works, and `details.holding` is that run."
     )
-    if manifest.effect != "read":
+    if manifest.effect.changes:
         # A procedure that changes a machine is a person's to approve each time
         # an agent asks; a person's own click is their consent.
         run = waits_for_a_person(every_call)(run)
@@ -825,7 +830,7 @@ def _capability(manifest: OperationManifest, titles: Mapping[str, str]) -> Capab
             "Refuse while another run waits or works on this playbook or on one of those machines.",
             "Queue it once, and HQ runs it with Ansible outside this request.",
             # What ``waits_for_a_person`` above holds, for an agent to read before it asks.
-            *((asked_again,) if manifest.effect == "read" else (WAITS_FOR_APPROVAL,)),
+            *((WAITS_FOR_APPROVAL,) if manifest.effect.changes else (asked_again,)),
             f"Read how it went from `{RUNS}`, by the `operation.id` this answers.",
             *_reviewed_notes(manifest),
         ),
@@ -844,7 +849,7 @@ def _cancel_spec() -> CapabilitySpec:
         CANCEL,
         "Cancel a playbook's run that has not started, so it holds its playbook and machines no more. "
         "Send the run's `operation.id`. An agent may cancel only a run it asked for.",
-        "remote_write",
+        Effect.REMOTE_WRITE,
         # Held to the run's own authority by the handler, which reads the run.
         Capability.READ,
         CancelRunCommand,

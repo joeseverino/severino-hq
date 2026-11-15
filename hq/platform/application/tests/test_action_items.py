@@ -9,6 +9,7 @@ from django.test import TestCase, tag
 from django.urls import reverse
 from django.utils import timezone
 
+from hq.platform.application.markup_testing import select
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import ActionItemRead, AuditLog
@@ -30,7 +31,6 @@ from ..action_items import (
 from ..capabilities import execute_capability
 from ..card_items import Insight
 from ..security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal, internal_principal
-from .markup import select
 
 ITEM = {
     "key": "example:widgets",
@@ -384,7 +384,7 @@ class ActivityActorTests(TestCase):
         )
 
         self.assertEqual(
-            recent_activity(principal=cli_principal(), limit=1)["items"][0]["actor"],
+            recent_activity(limit=1)["items"][0]["actor"],
             "example-agent",
         )
 
@@ -392,14 +392,11 @@ class ActivityActorTests(TestCase):
         from hq.platform.core.models import AuditLog
 
         from ..dashboard import operating_snapshot
-        from ..read_models import recent_activity
-        from ..security import AuthorizationError, Capability, Principal
+        from ..security import Capability, Principal
 
         AuditLog.objects.create(action=AuditLog.Action.CREATED, object_type="Approval")
         reader = Principal("example-agent", "mcp", frozenset({Capability.READ}))
 
-        with self.assertRaises(AuthorizationError):
-            recent_activity(principal=reader)
         self.assertEqual(operating_snapshot(principal=reader)["recent_activity"], [])
         self.assertTrue(operating_snapshot(principal=cli_principal())["recent_activity"])
 

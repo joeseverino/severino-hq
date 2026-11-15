@@ -2,11 +2,11 @@
 
 from django.test import TestCase
 
+from hq.platform.application.markup_testing import select, text, with_class, within
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 
 from ..exposure import GATED, OPEN, PRIVATE, UNKNOWN, UNROUTED, exposure_of_name, status_at
 from ..projection import projection_scope
-from .markup import select, text, with_class, within
 from .test_paths import CLOUDFLARE, PUBLIC_RANGE, estate, record, store
 
 

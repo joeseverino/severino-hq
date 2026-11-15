@@ -122,15 +122,16 @@ holds the boundary with Ruff's `banned-api` over the package's source
 (`tools/pipeline/extension-imports.toml`), which also refuses
 `django.core.cache`: a cache the host cannot see serves a stale answer, so a
 derived read is kept with `hq_sdk.reads.derivation` ([Derived
-reads](#derived-reads)). The check refuses three habits, the first two by the
-host's `cell-read-by-its-text` and `absent-text-read-from-the-text` rules
-(`tools/lint/ast-grep/rules`) and the last by `python -m hq_sdk.validation
-src`:
+reads](#derived-reads)). The check refuses four habits, the first three by the
+host's `cell-read-by-its-text`, `absent-text-read-from-the-text` and
+`page-read-by-what-it-says` rules (`tools/lint/ast-grep/rules`) and the last
+by `python -m hq_sdk.validation src`:
 
 | Refused | Why | Instead |
 | --- | --- | --- |
 | A test whose `assertContains`, `assertNotContains`, `assertIn` or `assertNotIn` looks for text ending on `</td>` or `</th>` | the host may wrap what a cell says | read the cell's text |
 | A test whose `assertNotContains` or `assertNotIn` over a response's markup says a short word (one to seven letters, digits, `_` or `-`) is absent | a CSRF token, nonce or retry key on the page can hold it by chance | `assertNotContains(response, word, html=True)`, which reads the text between the tags |
+| A test that asserts on, or searches a page for, a literal holding a tag or a `class=` attribute | a shared part's markup changes though the page says the same thing | read the page through `hq_sdk.testing`'s reader (`text`, `texts`, `links`, `hrefs`, `elements`, `select`, `within`), or its `data-` hook |
 | A page sentence that closes on a value with a period written by hand (`f"Renews through {registrar}."`) | a value HQ did not write can end in its own period | close it through `hq_sdk.ui.ended(f"... {value}")`, which adds the full stop only when the text has none |
 
 The host's own code is held to the same rule, and an extension to the refusal
@@ -159,9 +160,9 @@ of its own (a `BaseModel`, or a type under `with_config`), which would hold
 over HQ's.
 Class-based views inherit
 `CapabilityRequiredMixin` and declare `required_capability`; function views use
-`@capability_required(...)`. Either only names the capability. The host's page
-gate refuses a person who does not hold it, and records the refusal, before the
-view runs. It also refuses to serve a mixin view that names none. Bulk work
+`@capability_required(...)`. Either only names the capability, which the page
+reads under beside the host's `read`. The host's page gate refuses a person who
+does not hold both, and records the refusal, before the view runs. It also refuses to serve a mixin view that names none. Bulk work
 records one summary with `record_operation`. Who acted and which operation a
 row belongs to are the door's: the capability runner names every row a
 handler writes by its capability and its caller, and the job runner every row
@@ -557,10 +558,16 @@ is wrong and holds what fixes it"):
 | `Insight.clears` | what clears an item a threshold raises, worded from that same threshold as a clause after "Clears once" ("a balance newer than 3 days arrives"); the panel says it after the why. The plugin check's `threshold-says-what-clears-it` fails a why that names a constant without it |
 
 **Capabilities.** HQ validates every `CapabilitySpec` before describing or
-invoking the registry: name, effect, required permissions, target kind and
-label, command JSON Schema, duplicates and the handler's signature. MCP grants
+invoking the registry: name, required permissions, target kind and label,
+command JSON Schema, duplicates and the handler's signature. MCP grants
 must be a subset of the extension's operator grants. A typo fails the composition's
 checks instead of becoming a production-only failure or an authority gap.
+
+What running a command does is a `hq_sdk.capabilities.Effect` member
+(`Effect.READ`, `REMOTE_WRITE`, `INFRASTRUCTURE_CHANGE`, `DESTRUCTIVE`), which
+`CapabilitySpec`, `ConnectionAbility` and `OutboundWork` take as `effect`. A
+spec given the value's string holds the member, and a value no member has is
+refused where the spec is written.
 
 A handler is called as `handler(command, *, principal, <target keyword>)`,
 the keyword being the one its `target_kind` binds (`current_slug`,
@@ -895,7 +902,8 @@ dataclass or a TypedDict, and a bound on a field (a length, a range) is an
 `PLUGIN_API_VERSION` 16 retires `{% post_button %}` and the `btn` class:
 `{% button %}` draws every control that looks like a button.
 It also retires a region's `room=` and a list's `table_room`: the browser
-sizes every column.
+sizes every column. And it retires `Principal.require`'s `capability=`
+keyword: it takes any number of capabilities, by position.
 
 A notice is `{% notice tone=... title=... %}body{% endnotice %}`, with a
 title the page composes as its `{% title %}` part after the body
@@ -987,7 +995,7 @@ A test that posts a form without opening its page first sends
 | `partials/_timeline.html` | nothing | `timeline` | Chronological linked events, from `hq_sdk.ui.Timeline`. |
 | `partials/_week_plan.html` | `plan` | nothing | Which days of the week a thing is scheduled for, from `hq_sdk.ui.WeekPlan`. |
 
-Host tags: `{% arrow %}`, `{% button %}`, `{% card %}`, `{% dot %}`, `{% empty_value %}`, `{% entity %}`, `{% fact %}`, `{% facts %}`, `{% filter_bar %}`, `{% notice %}`, `{% outside_link %}`, `{% reference %}`, `{% referenced_by %}`, `{% row_actions %}`, `{% row_editor %}`, `{% row_group %}`, `{% row_toggle %}`, `{% section %}`, `{% status %}`, `{% table_heading %}`, `{% table_region %}`, `{% words %}`, `{% write_token %}`. Host filters: `|breakable[:arg]`, `|counted:arg`, `|measured:arg`, `|money[:arg]`, `|or_empty`, `|outside`, `|readout`, `|span`, `|web_url`, `|when[:arg]`, `|when_text[:arg]`. Django's own tags and filters, and `{% load %}` of `static` or the extension's own libraries.
+Host tags: `{% arrow %}`, `{% button %}`, `{% card %}`, `{% dot %}`, `{% empty_value %}`, `{% entity %}`, `{% fact %}`, `{% facts %}`, `{% filter_bar %}`, `{% muted %}`, `{% notice %}`, `{% outside_link %}`, `{% reference %}`, `{% referenced_by %}`, `{% row_actions %}`, `{% row_editor %}`, `{% row_group %}`, `{% row_toggle %}`, `{% section %}`, `{% status %}`, `{% table_heading %}`, `{% table_region %}`, `{% words %}`, `{% write_token %}`. Host filters: `|breakable[:arg]`, `|counted:arg`, `|measured:arg`, `|money[:arg]`, `|or_empty`, `|outside`, `|readout`, `|span`, `|web_url`, `|when[:arg]`, `|when_text[:arg]`. Django's own tags and filters, and `{% load %}` of `static` or the extension's own libraries.
 
 Classes: `actions-col`, `address-list`, `allocation`, `allocation-legend`, `cell-data`, `cell-part`, `cell-whole`, `chart-axis`, `chart-legend`, `code-list`, `compact`, `compact-table`, `count`, `danger`, `data-table`, `date-col`, `domain-charts`, `errors`, `eyebrow`, `field`, `finding`, `form`, `form-actions`, `ghost`, `help`, `icon-link`, `inline`, `key-col`, `keyboard-only`, `list-rows`, `muted`, `name-line`, `narrow-more`, `narrow-only`, `nowrap`, `one-line`, `optional-col`, `page-lede`, `primary`, `print-footer`, `print-only`, `prose-list`, `route-band-1`, `route-band-2`, `route-band-3`, `route-band-4`, `route-band-5`, `route-frame`, `route-line`, `route-map`, `route-marker`, `route-scale`, `route-swatch`, `row-actions`, `row-below`, `row-empty`, `row-group`, `row-gutter`, `row-less`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-flow`, `section-foot`, `split`, `stacked`, `subtle-link`, `table-clamp`, `table-scroll`, `tight-col`, `two-col`, `visually-hidden`, `whole`.
 
@@ -1030,14 +1038,17 @@ or markup into an extension is a contract failure. The rules the classes follow 
 in [Design](Design.md).
 
 What the host writes for a value is pinned by example in
-`hq_sdk/text_examples.json`: `span`, `when`, `when_day`, `counted`, `money`,
-`signed_number`, `ended` and `ago`, regenerated and reviewed like the
+`hq_sdk/text_examples.json`: `span`, `when`, `when_day`, `counted`,
+`measured`, `money`, `signed_number`, `ended` and `ago`, regenerated and reviewed like the
 contract.
 
 An extension's test asserts what it composed from them
 (`f"Due in {span(days)}"`), or reads a page through `hq_sdk.testing.plain`,
 which reads the host's no-break spaces as spaces. It never writes the host's
-words or markup out itself. Text that names the deployment reads
+words or markup out itself: what a page says and links to is read through the
+host's markup reader in `hq_sdk.testing` (`text`, `texts`, `links`, `hrefs`,
+`elements`, `select`, `within`, `with_class`, `all_elements`, and the
+`Element` each returns), which reads a page as a browser does. Text that names the deployment reads
 `hq_sdk.site.host()`, never a setting.
 
 An amount is written by `{{ amount|money }}` in a template and
@@ -1052,11 +1063,19 @@ An amount is written by `{{ amount|money }}` in a template and
 A debt is a negative value. No extension writes a sign of its own, since the
 host holds the sign to its figure so a line never ends between them.
 
-Any other figure takes its sign through
-`hq_sdk.money.signed_number(value, figure, plus=...)`. `figure` writes the
-magnitude in its own units (`lambda drop: f"{drop} bpm"`), and the host puts
-the sign before it by the rule an amount follows. So a value that writes as
-zero is never negative.
+A figure with its unit is written by `{{ miles|measured:"mi,2" }}` in a
+template and `hq_sdk.ui.measured(miles, "mi", 2)` in Python: "4.25 mi",
+"1,250 ft", "12%". The count after the comma is how many decimals, rounded
+half away from zero; a negative count gives them only to a figure that is not
+whole. Left out, the figure is written as it came. Zero is a figure, and only
+None and the empty string are the missing mark. The sign is the host's, so
+`plus=True` signs a change and a figure that rounds to zero is never negative.
+
+A figure whose magnitude is not a number and a unit (a pace, "1:15/mi") takes
+its sign through `hq_sdk.money.signed_number(value, figure, plus=...)`.
+`figure` writes the magnitude in its own units, and the host puts the sign
+before it by the rule an amount follows. So a value that writes as zero is
+never negative.
 
 An overview says what it is built from by putting
 `hq_sdk.pages.built_from(plugin.id)`, a link to the project that names the

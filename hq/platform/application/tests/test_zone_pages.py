@@ -6,12 +6,13 @@ from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.providers import PROVIDERS
+from hq.platform.application.markup_testing import elements, hrefs, text, texts
 from hq.platform.application.plugin_testing import form_keyed
+from hq.platform.application.tests.consent import consented
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 
 from ..adoption_testing import managing_everything
 from ..security import cli_principal
-from .markup import hrefs, text, texts
 from .zone_records import DNS_CONNECTIONS, RECORD_KIND, ZONE_KIND, record, sweep
 
 
@@ -384,7 +385,8 @@ class NewVerbReadinessTests(TestCase):
 
         from django.contrib.messages import get_messages
 
-        from ..resource_capabilities import verb_words
+        from ..capabilities import capability_words
+        from ..resource_operations import ACTION_CAPABILITY
 
         managing_everything()
         user = get_user_model().objects.create_user("op", password="x" * 20)
@@ -403,7 +405,7 @@ class NewVerbReadinessTests(TestCase):
         self.assertTrue(OperationRequest.objects.filter(action=OperationRequest.Action.RECONCILE).exists())
         said = [str(message) for message in get_messages(response.wsgi_request)]
         self.assertEqual(len(said), 1)
-        self.assertIn(verb_words(OperationRequest.Action.RECONCILE), said[0])
+        self.assertIn(capability_words(ACTION_CAPABILITY[OperationRequest.Action.RECONCILE]), said[0])
         self.assertIn("a-rewrite", said[0])
 
 
@@ -446,7 +448,7 @@ class PendingRemovalTests(TestCase):
 
         request_removal(
             OperationCommand(),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
             current_key="going",
         )
 
@@ -463,7 +465,7 @@ class PendingRemovalTests(TestCase):
 
         request_removal(
             OperationCommand(),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
             current_key="going",
         )
 
@@ -504,16 +506,19 @@ class ResourceListReadabilityTests(TestCase):
         )
 
     def row(self, page, key):
-        start = page.index(f'href="{reverse("control_plane:detail", args=[key])}"')
-        return page[start : page.index("</tr>", start)]
+        """The words of the row that links to ``key``'s page."""
+
+        target = reverse("control_plane:detail", args=[key])
+        link = next(element for element in elements(page, "a") if element.attrs.get("href") == target)
+        return next(ancestor for ancestor in reversed(link.ancestors) if ancestor.tag == "tr").words
 
     def test_each_row_says_what_it_is_and_only_a_converging_one_waits(self):
         """A domain has no controller action, so nothing is ever coming to it."""
 
-        page = self.client.get(reverse("control_plane:list")).content.decode()
+        page = self.client.get(reverse("control_plane:list"))
         domain, caa = self.row(page, "example-com"), self.row(page, "example-com-caa")
 
-        self.assertIn('CAA 0 issue "letsencrypt.org"', text(caa))
+        self.assertIn('CAA 0 issue "letsencrypt.org"', caa)
         self.assertIn("Change waiting to apply", caa)
         self.assertNotIn("Change waiting to apply", domain)
 

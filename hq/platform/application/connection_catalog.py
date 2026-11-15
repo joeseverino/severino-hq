@@ -36,8 +36,8 @@ from .integrations import held_graph
 from .moments import ago
 from .projection import read_once
 from .security import Principal
+from .tone import Tone
 lazy from .entity_links import entity_link, link_url
-lazy from .ui import STATUS_VALUES
 
 # The family the controller observes on HQ's behalf. It leads every inventory
 # because it is the one the page is about; the gateways beside it are the
@@ -181,9 +181,9 @@ def _observed_lifecycle(instance: ConnectionInstance, authority: str, *, now: da
         return Lifecycle.STALE
     if authority == "missing":
         return Lifecycle.UNAUTHORIZED
-    if instance.status == "serious":
+    if instance.status == Tone.SERIOUS:
         return Lifecycle.UNREACHABLE
-    if instance.status == "neutral":
+    if instance.status == Tone.NEUTRAL:
         return Lifecycle.CONFIGURED
     return Lifecycle.READY if authority in {"proven", "whole_account"} else Lifecycle.REACHABLE
 
@@ -211,7 +211,7 @@ class ConnectionAbilityState:
 
     @property
     def evidence_tone(self) -> str:
-        return "serious" if self.evidence in FAILED_EVIDENCE else ""
+        return Tone.SERIOUS if self.evidence in FAILED_EVIDENCE else ""
 
 
 # Actions derived from the family's spec rather than from one connection.
@@ -329,8 +329,6 @@ def _validate_instance(spec: ConnectionSpec, instance: ConnectionInstance) -> Co
 def _check_reading(instance: ConnectionInstance) -> None:
     """The status a connection was read in, where it was read and by whom."""
 
-    if instance.status not in STATUS_VALUES:
-        raise ImproperlyConfigured(f"Connection {instance.id!r} has invalid status {instance.status!r}.")
     if not instance.status_label.strip():
         raise ImproperlyConfigured(f"Connection {instance.id!r} has no status label.")
     if instance.endpoint and endpoint_has_private_parts(instance.endpoint):
@@ -404,7 +402,7 @@ def connection_catalog(*, principal: Principal) -> tuple[ConnectionGroup, ...]:
 def _permitted(principal: Principal) -> tuple[ConnectionSpec, ...]:
     """The families ``principal`` may read, whose providers alone may run for it."""
 
-    return tuple(spec for spec in held_graph().connections.values() if principal.permits(*spec.required_capabilities))
+    return tuple(spec for spec in held_graph().connections.values() if spec.permitted_to(principal))
 
 
 def _connection_instances(spec: ConnectionSpec) -> tuple[ConnectionInstance, ...]:
@@ -473,7 +471,7 @@ def _connection_view(
         states,
         recommend_connection_action(
             actions,
-            unhealthy=instance.status != "good" or lifecycle in (Lifecycle.STALE, Lifecycle.REVOKED),
+            unhealthy=instance.status != Tone.GOOD or lifecycle in (Lifecycle.STALE, Lifecycle.REVOKED),
             missing_scope_count=sum(len(state.missing_scopes) for state in states),
             unknown_scope_count=sum(state.available is None for state in states),
         ),

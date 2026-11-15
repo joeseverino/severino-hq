@@ -10,7 +10,7 @@ from hq.domains.control_plane.models import ManagedResource
 from ..findings import finding_rules, findings
 from ..projection import QueryRefusal
 from ..refusal_status import refusal_of
-from ..security import AuthorizationError, Capability, Principal
+from ..security import Capability, Principal
 from ..topology import derive_topology, topology
 from ..topology_lenses import TRACE_DIRECTIONS, topology_lenses
 from .host_only import host_only
@@ -79,13 +79,6 @@ class TopologyNarrowingTests(TestCase):
         for depth in (0, 99):
             with self.subTest(depth=depth):
                 self.refusal(focus="resource:lonely-record", depth=depth)
-
-    def test_a_caller_without_read_is_denied_before_any_input_is_judged(self):
-        with host_only():
-            with self.assertRaises(AuthorizationError):
-                topology(principal=NONE, lens="not-a-lens")
-            with self.assertRaises(AuthorizationError):
-                findings(principal=NONE, rule="not-a-rule")
 
     def test_a_known_focus_answers_its_neighborhood(self):
         with host_only():

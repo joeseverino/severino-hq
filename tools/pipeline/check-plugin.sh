@@ -45,7 +45,8 @@ if ! grep -q '^\[tool\.mypy\]' pyproject.toml; then
 fi
 
 # The host's structural rules for a test's read
-# of a table cell or of a word a page lacks, the shapes a shared part draws
+# of a table cell, of a word a page lacks or of a shared part's markup
+# (page-read-by-what-it-says), the shapes a shared part draws
 # drawn by hand in a template (hand-drawn-*), and a queue item that does not
 # say why it is urgent (attention-item-says-why) or only restates its rating
 # (attention-why-restates-rating) or, raised by a threshold, not what clears it
@@ -60,7 +61,7 @@ ast_grep=$(pinned) || { mise -C "$hq_root" install --quiet ast-grep 2>/dev/null 
     echo "ast-grep is not installed: \`mise -C $hq_root install ast-grep\` installs the host's pin, or says why it cannot." >&2
     exit 1
 }
-"$ast_grep" scan -c "$hq_root/tools/lint/ast-grep/sgconfig.yml" --filter '^(cell-read-by-its-text|absent-text-read-from-the-text|attention-item-says-why|attention-why-restates-rating|threshold-says-what-clears-it|hand-drawn-.+)$' \
+"$ast_grep" scan -c "$hq_root/tools/lint/ast-grep/sgconfig.yml" --filter '^(cell-read-by-its-text|absent-text-read-from-the-text|page-read-by-what-it-says|attention-item-says-why|attention-why-restates-rating|threshold-says-what-clears-it|hand-drawn-.+)$' \
     --error=unused-suppression --report-style medium src
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/hq-plugin-check.XXXXXX")

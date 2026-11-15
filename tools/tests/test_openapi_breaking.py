@@ -2,6 +2,7 @@
 
 import json
 import os
+import subprocess
 import sys
 import tempfile
 from collections.abc import Iterator
@@ -12,6 +13,7 @@ from unittest.mock import patch
 
 from django.test import SimpleTestCase, tag
 
+from tools.gate.chain import ROOT as CHECKOUT
 from tools.gate.tests.base import fixture_git
 
 # Each form oasdiff matches an --err-ignore line to: an operation's change, a
@@ -97,6 +99,21 @@ def terminal() -> Iterator[IO[str]]:
 @tag("source")
 class VerdictTests(SimpleTestCase):
     """oasdiff judges planted documents in a fixture repository, as the gate runs it on the real one."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+
+        # oasdiff is lazy, and its shim runs it only from a directory whose mise config pins it,
+        # which the fixture repository is not: installed at the checkout's pin, as setup:sandbox
+        # installs a lazy tool, its own directory leads the PATH the gate runs it from.
+        def mise(*args: str) -> str:
+            done = subprocess.run(["mise", "-C", str(CHECKOUT), *args], capture_output=True, text=True, check=True)
+            return done.stdout.strip()
+
+        mise("install", "--quiet", "github:oasdiff/oasdiff")
+        path = f"{Path(mise('which', 'oasdiff')).parent}{os.pathsep}{os.environ.get('PATH', '')}"
+        cls.enterClassContext(patch.dict(os.environ, {"PATH": path}))
 
     def judge(self, exemptions: str, **revision: set[int]) -> tuple[int, list[str]]:
         from tools import openapi_breaking

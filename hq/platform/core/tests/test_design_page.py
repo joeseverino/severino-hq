@@ -17,7 +17,7 @@ from django.core.management import CommandError, call_command
 from django.test import SimpleTestCase, TestCase, override_settings, tag
 from django.urls import reverse
 
-from hq.platform.application.tests.markup import all_elements, elements, select
+from hq.platform.application.markup_testing import all_elements, elements, select
 from hq.platform.core import design_gallery
 from hq.platform.core.models import AuditLog
 from hq.platform.core.tests.browser import catalog

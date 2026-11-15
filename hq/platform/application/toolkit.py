@@ -40,7 +40,7 @@ class ToolTab:
         """
 
         specs = [spec for name in self.capabilities if (spec := capability_spec(name))]
-        return any(principal.permits(*spec.required_capabilities) for spec in specs)
+        return any(spec.permitted_to(principal) for spec in specs)
 
 
 TOOL_TABS: tuple[ToolTab, ...] = (

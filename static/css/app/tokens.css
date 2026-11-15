@@ -244,13 +244,7 @@
   --tone-info-ink: light-dark(#1f3656, #b0c8ea);
   --tone-info-line: light-dark(#c9d3e3, #2f425e);
 
-  --tone-notable-bg: light-dark(#dfe6f1, #1b2640);
-  --tone-notable-ink: light-dark(#1c3463, #b0c2f2);
-  --tone-notable-line: light-dark(#c5d2e9, #314368);
-
-  --tone-special-bg: light-dark(#ebe0f0, #2a1e3a);
   --tone-special-ink: light-dark(#4a2a72, #d4bff2);
-  --tone-special-line: light-dark(#d3c2e8, #4a3666);
 
   /* Categorical series palette. Assigned in fixed order, never cycled: color
      follows the entity, not its rank, so filtering a series must not repaint

@@ -20,7 +20,6 @@ class ConnectionEventTests(TestCase):
     def test_a_probe_is_a_routine_event_on_its_connection(self):
         report_connections(
             [{"connection_ref": "example-dns", "provider": "cloudflare_dns", "ok": True}],
-            principal=cli_principal(),
             controller_id="example-controller",
         )
 
@@ -34,7 +33,6 @@ class ConnectionEventTests(TestCase):
         def sweep(*, ok):
             report_connections(
                 [{"connection_ref": "example-dns", "provider": "cloudflare_dns", "ok": ok}],
-                principal=cli_principal(),
                 controller_id="example-controller",
             )
 
@@ -52,7 +50,6 @@ class ConnectionEventTests(TestCase):
         def sweep(*, manages):
             report_connections(
                 [{"connection_ref": "example-dns", "provider": "cloudflare_dns", "ok": True, "manages": manages}],
-                principal=cli_principal(),
                 controller_id="example-controller",
             )
 
@@ -65,16 +62,12 @@ class ConnectionEventTests(TestCase):
 
     def test_a_carried_connection_was_not_asked_and_writes_nothing(self):
         report_connections(
-            [{"connection_ref": "example-ssh", "provider": "ssh", "ok": True}],
-            principal=cli_principal(),
-            controller_id="example-controller",
+            [{"connection_ref": "example-ssh", "provider": "ssh", "ok": True}], controller_id="example-controller"
         )
         before = audit_rows.mark()
 
         report_connections(
-            [{"connection_ref": "example-ssh", "provider": "ssh", "carried": True}],
-            principal=cli_principal(),
-            controller_id="example-controller",
+            [{"connection_ref": "example-ssh", "provider": "ssh", "carried": True}], controller_id="example-controller"
         )
 
         self.assertFalse(audit_rows.since(before).filter(connection="example-ssh").exists())

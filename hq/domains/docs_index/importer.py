@@ -17,6 +17,7 @@ from django.db.models import Count, F, Q
 from hq.domains.assets.models import Asset
 from hq.domains.content.models import ContentItem
 from hq.domains.projects.models import Project
+from hq.platform.application.lists import split_list
 from hq.platform.application.ui import counted
 
 from . import frontmatter_schema
@@ -273,7 +274,7 @@ def _tag_list(entry: dict) -> list[str]:
     if isinstance(tags, list):
         return [str(tag).strip() for tag in tags if str(tag).strip()]
     if isinstance(tags, str):
-        return [tag.strip() for tag in tags.split(",") if tag.strip()]
+        return split_list(tags)
     return []
 
 

@@ -4,8 +4,8 @@ of its own, drawn wherever a page action is."""
 from django.template import RequestContext, Template
 from django.test import RequestFactory, SimpleTestCase
 
+from hq.platform.application.markup_testing import elements
 from hq.platform.application.pages import PageAction
-from hq.platform.application.tests.markup import elements
 
 
 class PostButtonFieldsTests(SimpleTestCase):

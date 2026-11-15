@@ -12,6 +12,7 @@ from enum import StrEnum
 from typing import Any, Self
 
 from .labels import dotted
+from .tone import Tone
 lazy from .card_items import Insight
 lazy from .dashboard import queue_item
 lazy from .workflow_contracts import ActionLink
@@ -27,6 +28,9 @@ class Standing(StrEnum):
 
 # A result, not a standing: a check failed on purpose, for a declared reason.
 INTENDED = "intended"
+
+# The word a page answers a check's statement with, by its result's state.
+ANSWER = {Standing.MET: "Yes", Standing.UNMET: "No", Standing.UNAVAILABLE: "Unknown", INTENDED: "By design"}
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -126,12 +130,16 @@ class CheckResult:
         return self.reading.standing is Standing.MET
 
     @property
+    def answer(self) -> str:
+        return ANSWER[self.state]
+
+    @property
     def tone(self) -> str:
         if self.met:
-            return "neutral" if self.reading.limited else "good"
+            return Tone.NEUTRAL if self.reading.limited else Tone.GOOD
         if self.state == Standing.UNMET and self.enforced:
-            return "serious" if self.check.serious else "attention"
-        return "neutral"
+            return Tone.SERIOUS if self.check.serious else Tone.ATTENTION
+        return Tone.NEUTRAL
 
     @property
     def icon(self) -> str:
@@ -142,7 +150,7 @@ class CheckResult:
             return "check-circle"
         if self.reading.standing is Standing.UNAVAILABLE:
             return "clock"
-        return "x-circle" if self.tone in {"serious", "attention"} else "circle"
+        return "x-circle" if self.tone in {Tone.SERIOUS, Tone.ATTENTION} else "circle"
 
 
 @dataclass(frozen=True, slots=True)
@@ -215,7 +223,7 @@ class Measurement:
             _row(
                 f"{result.check.unmet} by design",
                 result.reason,
-                status="good",
+                status=Tone.GOOD,
                 key=result.check.id,
                 why="It fails this check on purpose, for the reason given, so nothing needs doing.",
             )
@@ -258,7 +266,7 @@ def gap(check: Check, *, facts: tuple[tuple[str, str], ...] = (), links: tuple[A
     return _row(
         check.unmet,
         check.why,
-        status="serious" if check.serious else "attention",
+        status=Tone.SERIOUS if check.serious else Tone.ATTENTION,
         key=check.id,
         why=check.why,
         action=check.fix,

@@ -12,7 +12,7 @@ from hq.platform.search_index.registry import by_scope
 
 from .projection import page_size, projection_scope
 from .resources import resource_search_capabilities
-from .security import Capability, Principal, require_all
+from .security import Capability, Principal
 
 MAX_SEARCH_RESULTS = 5000
 
@@ -43,7 +43,7 @@ def _fts5_available() -> bool:
 def _authorize(scope: str, principal: Principal) -> None:
     if scope not in by_scope():
         raise UnknownSearchScope(f"Unknown search scope {scope!r}.")
-    require_all(principal, _required(scope))
+    principal.require(*_required(scope))
 
 
 def _required(scope: str) -> tuple[Capability | str, ...]:

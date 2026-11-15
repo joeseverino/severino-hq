@@ -11,8 +11,7 @@ from django.test import RequestFactory, SimpleTestCase
 from hq.platform.application.action_items import by_source
 from hq.platform.application.card_items import Insight
 from hq.platform.application.dashboard import queue_item
-
-from .markup import Element, all_elements
+from hq.platform.application.markup_testing import Element, all_elements
 
 
 def _item(title: str, *, family: str = "", status: str = "attention") -> dict:
@@ -85,15 +84,13 @@ class FamiliesTests(SimpleTestCase):
         self.assertEqual([lead["url"] for lead in shared["lead"]], ["/example/"])
         self.assertEqual(split["lead"], [])
 
-    def test_a_family_of_one_rule_with_no_shared_fix_opens_the_list_of_them(self):
+    def test_a_family_of_one_rule_with_no_shared_fix_offers_nothing_on_its_row(self):
         def finding(title, url):
             return {**_item(title, family="Pins"), "key": f"example:finding:example-rule:{title}", "url": url}
 
         (entry,) = families([finding("a", "/example/a/"), finding("b", "/example/b/")])
 
-        (lead,) = entry["lead"]
-        self.assertTrue(lead["url"].endswith("?rule=example-rule"))
-        self.assertTrue(lead["recommended"])
+        self.assertEqual(entry["lead"], [])
 
     def test_the_queue_page_folds_the_same_way(self):
         items = [_item("a", family="Pins"), _item("b"), _item("c", family="Pins")]

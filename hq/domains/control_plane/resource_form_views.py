@@ -26,6 +26,7 @@ from hq.platform.application.provider_forms import (
 )
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import safe_next
+from hq.platform.application.tone import Tone
 from hq.platform.application.web_writes import execute_posted, refused
 from hq.platform.core import secrets
 
@@ -86,7 +87,7 @@ class ResourceFormView(View):
                             title=provider["label"],
                             detail=provider["summary"],
                             url=f"{reverse('control_plane:create')}?{urlencode({'kind': provider['kind']})}",
-                            status="attention" if provider["public_effect"] else "",
+                            status=Tone.ATTENTION if provider["public_effect"] else "",
                             badge="Visible on the internet" if provider["public_effect"] else "",
                         )
                         for provider in describe_providers()["providers"]

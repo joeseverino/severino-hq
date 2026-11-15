@@ -131,16 +131,6 @@ class ServiceTests(SentinelMixin, TestCase):
         self.assertEqual(result["relationships"]["assets"], [asset.slug])
         self.assertEqual(result["relationships"]["documentation"], ["rb-hq-mcp"])
 
-    def test_a_caller_that_may_read_nothing_is_answered_by_no_read_tool(self):
-        from hq.platform.application.security import AuthorizationError
-
-        from ..identity import set_principal
-
-        self.enterContext(set_principal(Principal("example-writer", "mcp", frozenset({"write_projects"}))))
-        for tool in (services.audit_registry, services.documentation_status, services.system_health):
-            with self.subTest(tool=tool.__name__), self.assertRaises(AuthorizationError):
-                tool()
-
     def test_documentation_status_excludes_sensitive_and_restricted_records(self):
         DocumentationRecord.objects.create(
             doc_id="rb-safe",

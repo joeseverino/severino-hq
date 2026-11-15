@@ -35,6 +35,7 @@ from .labels import field_label, lower_first, plural
 from .moments import ago, duration
 from .reading_facts import refusals_on
 from .render_status_findings import RENDERER_UNITS
+from .tone import Tone
 from .topology_model import TopologyNode
 from .ui import counted, ended
 lazy from .facts import inventory_records
@@ -99,7 +100,7 @@ def _skipped_by_a_sweep(estate: FindingEstate) -> tuple[Finding, ...]:
                 rule="skipped-by-a-sweep",
                 subject=node.id,
                 title=f"{name} was missing from HQ's last read",
-                severity="serious",
+                severity=Tone.SERIOUS,
                 # The point first: a narrow card shows only the first line.
                 explanation=(
                     "It has probably been removed or renamed. "
@@ -218,7 +219,7 @@ def _environment_read_empty(estate: FindingEstate) -> tuple[Finding, ...]:
                     if name and name != machine
                     else f"Portainer lists no containers on {machine}"
                 ),
-                severity="serious",
+                severity=Tone.SERIOUS,
                 explanation=(
                     f"It listed {counted(len(containers), 'container')} until {ago(last, estate.now)} and none in "
                     "HQ's last read. "
@@ -291,7 +292,7 @@ def _kind_never_swept(estate: FindingEstate) -> tuple[Finding, ...]:
                 subject="",
                 scope=kind_key,
                 title=f"{_many(kind_key)} have not been read for {duration(silent)}",
-                severity="serious",
+                severity=Tone.SERIOUS,
                 explanation="Refresh them. If that fails, the connection that reads them needs fixing.",
                 evidence=(
                     _when(LAST_READ, newest),
@@ -312,7 +313,7 @@ def _kind_never_swept(estate: FindingEstate) -> tuple[Finding, ...]:
                 subject="",
                 scope=kind_key,
                 title=f"{_many(kind_key)} have never been read",
-                severity="serious",
+                severity=Tone.SERIOUS,
                 explanation=(
                     "What HQ shows for them is only what was entered in HQ. Refresh "
                     "them. If that fails, the connection that reads them needs fixing."
@@ -363,7 +364,7 @@ def _controller_stopped(estate: FindingEstate, machine: str, controller: str, ki
             f"{counted(len(kinds), 'type of record', 'types of record')}"
             + (f" for {duration(since(last, now=estate.now))}" if last else "")
         ),
-        severity="serious",
+        severity=Tone.SERIOUS,
         explanation="Everything listed is read by the same controller, so check it first.",
         evidence=(("Not read", ", ".join(sorted(_many(kind) for kind in kinds))),),
         remedies=(_read_again("all"),),
@@ -476,7 +477,7 @@ def _reporting_a_fault(estate: FindingEstate) -> tuple[Finding, ...]:
             rule="reporting-a-fault",
             subject=node.id,
             title=_fault_title(node, f"{node_name(node)} reports an error"),
-            severity="serious" if node.status == "serious" else "attention",
+            severity=Tone.SERIOUS if node.status == Tone.SERIOUS else Tone.ATTENTION,
             explanation=node.detail or "It reports an error, and your last change to it has not been applied.",
             evidence=_fault_evidence(node),
             remedies=_fault_remedies(node),
@@ -485,7 +486,7 @@ def _reporting_a_fault(estate: FindingEstate) -> tuple[Finding, ...]:
         for node in estate.nodes()
         if node.kind == "resource"
         and node.managed
-        and node.status in {"attention", "serious"}
+        and node.status in {Tone.ATTENTION, Tone.SERIOUS}
         # The other rule owns the converged case and says something sharper
         # about it, so this one takes what is left rather than doubling it.
         and node.declared_revision != node.observed_revision
@@ -507,7 +508,7 @@ def _reconciled_but_still_wrong(estate: FindingEstate) -> tuple[Finding, ...]:
             rule="reconciled-but-still-wrong",
             subject=node.id,
             title=_fault_title(node, f"{node_name(node)} is not set the way HQ last set it"),
-            severity="serious",
+            severity=Tone.SERIOUS,
             explanation=node.detail
             or (
                 f"HQ applied its settings and {node_name(node)} still differs. Applying again "
@@ -531,7 +532,7 @@ def _reconciled_but_still_wrong(estate: FindingEstate) -> tuple[Finding, ...]:
         for node in estate.nodes()
         if node.kind == "resource"
         and node.managed
-        and node.status in {"attention", "serious"}
+        and node.status in {Tone.ATTENTION, Tone.SERIOUS}
         and node.declared_revision == node.observed_revision
         and node.declared_revision > 0
     )
@@ -551,7 +552,7 @@ def _never_observed(estate: FindingEstate) -> tuple[Finding, ...]:
             rule="never-observed",
             subject=node.id,
             title=f"{node_name(node)} has never been found",
-            severity="attention",
+            severity=Tone.ATTENTION,
             explanation=(
                 f"HQ found the other {lower_first(_many(node.kind_key))} but never this one. "
                 "What you see for it is only what was entered in HQ."
@@ -583,7 +584,7 @@ def _unchecked(estate: FindingEstate) -> tuple[Finding, ...]:
             rule="resource-unchecked",
             subject=node.id,
             title=f"{kind_label(node.kind_key)} {node.label} could not be checked",
-            severity="attention",
+            severity=Tone.ATTENTION,
             explanation=f"It was last read {ago(node.observed_at)}." if node.observed_at else "It has never been read.",
             remedies=reconcile_remedy(node),
         )
@@ -606,7 +607,7 @@ def _weakly_verified(estate: FindingEstate) -> tuple[Finding, ...]:
             rule="weakly-verified",
             subject=node.id,
             title=(f"HQ could not confirm {counted(len(node.unconfirmed_fields), 'setting')} of {node_name(node)}"),
-            severity="attention",
+            severity=Tone.ATTENTION,
             explanation=(
                 f"HQ set these and the last reading did not include them: {ended(_settings(node))} "
                 "Apply HQ's config to set them and read them back. If this stays after applying, "
@@ -648,7 +649,7 @@ def _work_that_keeps_failing(estate: FindingEstate) -> tuple[Finding, ...]:
         estate,
         "work-unfinished",
         rule="work-that-keeps-failing",
-        severity="attention",
+        severity=Tone.ATTENTION,
         shown_as="Keeps failing",
         says=lambda node, unfinished: _keeps_failing(node, unfinished, machines.get(node.id, "")),
     )
@@ -693,7 +694,7 @@ def _connections_lost(estate: FindingEstate) -> tuple[Finding, ...]:
                 rule="connections-lost",
                 subject=node.id,
                 title=f"The controller on {node.label} reports no connections",
-                severity="serious",
+                severity=Tone.SERIOUS,
                 explanation=(
                     f"It reported {counted(len(connections), 'connection', 'connections')} until {since}, "
                     "and none since, so nothing is read or changed through them. "
@@ -733,7 +734,7 @@ def _report_refused(estate: FindingEstate) -> tuple[Finding, ...]:
             subject=node.id,
             part=refusal.action,
             title=f"HQ refuses the controller's {refusal.action} report from {node.label}",
-            severity="serious",
+            severity=Tone.SERIOUS,
             explanation=(
                 "Nothing in it is stored, so what HQ shows from it stops changing. "
                 "HQ and the controller disagree about the contract between them; the reason "
@@ -768,128 +769,128 @@ RULES: tuple[FindingRule, ...] = (
     FindingRule(
         "report-refused",
         "HQ refuses what the controller reports",
-        "serious",
+        Tone.SERIOUS,
         _report_refused,
         operator_action=(
             "Read the reason, then deploy HQ so the controller and HQ are built from one release. "
             "If it stays, fix the side that departs from the contract."
         ),
         no_help_reason="HQ cannot change what the controller sends.",
-        bars={"serious": "the controller's report breaks the contract, so nothing new is read"},
+        bars={Tone.SERIOUS: "the controller's report breaks the contract, so nothing new is read"},
     ),
     FindingRule(
         "connections-lost",
         "The controller reports no connections",
-        "serious",
+        Tone.SERIOUS,
         _connections_lost,
         operator_action=(
             "Check that the vault this machine reads holds the connection items, "
             f"run the refresh job, then press {CONTROLLER_REFRESH.words()}."
         ),
         no_help_reason="HQ cannot read the vault.",
-        bars={"serious": "the controller reports no connections at all"},
+        bars={Tone.SERIOUS: "the controller reports no connections at all"},
     ),
     FindingRule(
         "work-that-keeps-failing",
         "A connection works but something through it keeps failing",
-        "attention",
+        Tone.ATTENTION,
         _work_that_keeps_failing,
         operator_action=("Read the controller's log for this connection and fix what it names."),
         no_help_reason="HQ cannot read the controller's log.",
-        bars={"attention": "work sent through a connection that answers keeps failing"},
+        bars={Tone.ATTENTION: "work sent through a connection that answers keeps failing"},
     ),
     FindingRule(
         "controller-sweep-stale",
         "The controller has stopped reading",
-        "serious",
+        Tone.SERIOUS,
         _controller_sweep_stale,
         operator_action=f"On its machine, check the controller is running, then press {CONTROLLER_REFRESH.words('all')}.",
         no_help_reason="HQ cannot start the controller.",
         subsumes=("kind-never-swept",),
-        bars={"serious": "one controller is behind on two or more types of record"},
+        bars={Tone.SERIOUS: "one controller is behind on two or more types of record"},
     ),
     FindingRule(
         "environment-read-empty",
         "A Docker environment lists no containers",
-        "serious",
+        Tone.SERIOUS,
         _environment_read_empty,
         operator_action=(
             "On the machine, restart Portainer, or its agent where the machine is read through one, "
             f"then press {CHECK_AGAIN}."
         ),
         no_help_reason="HQ restarts containers through Portainer, which cannot reach Docker there now.",
-        bars={"serious": "a Docker environment that had containers lists none"},
+        bars={Tone.SERIOUS: "a Docker environment that had containers lists none"},
     ),
     FindingRule(
         "skipped-by-a-sweep",
         "Missing from HQ's last read",
-        "serious",
+        Tone.SERIOUS,
         _skipped_by_a_sweep,
         operator_action=("If it is gone, remove it from HQ. If it only runs sometimes, mark it so."),
         no_help_reason="HQ cannot tell whether it was removed on purpose.",
         subsumes=("resource-unchecked",),
-        bars={"serious": "the last read found its siblings but not it"},
+        bars={Tone.SERIOUS: "the last read found its siblings but not it"},
     ),
     FindingRule(
         "kind-never-swept",
         "Something has not been read for days",
-        "serious",
+        Tone.SERIOUS,
         _kind_never_swept,
         operator_action=f"Fix the connection that reads them, then press {CONTROLLER_REFRESH.words()}.",
         no_help_reason="HQ cannot fix a connection that is not answering.",
         # When the sweep itself is the fault, every record of the kind looks
         # skipped. Saying it once about the kind beats saying it about each.
         subsumes=("skipped-by-a-sweep", "never-observed", "environment-read-empty", "resource-unchecked"),
-        bars={"serious": "a type of record has gone unread past the interval HQ reads it at"},
+        bars={Tone.SERIOUS: "a type of record has gone unread past the interval HQ reads it at"},
     ),
     FindingRule(
         "reporting-a-fault",
         "Something reports an error",
-        "serious",
+        Tone.SERIOUS,
         _reporting_a_fault,
         operator_action="Open it, read the error, fix it, then apply again.",
         no_help_reason="HQ cannot tell what to change from the error alone.",
         bars={
-            "serious": "the service reports a serious error",
-            "attention": "the service reports an error",
+            Tone.SERIOUS: "the service reports a serious error",
+            Tone.ATTENTION: "the service reports an error",
         },
     ),
     FindingRule(
         "reconciled-but-still-wrong",
         "Differs from HQ's config",
-        "serious",
+        Tone.SERIOUS,
         _reconciled_but_still_wrong,
         operator_action=("Change HQ's config to something the service accepts, then apply again."),
         no_help_reason="HQ cannot tell which setting was refused.",
-        bars={"serious": "HQ applied its config and the service still differs"},
+        bars={Tone.SERIOUS: "HQ applied its config and the service still differs"},
     ),
     FindingRule(
         "weakly-verified",
         "Settings HQ could not check",
-        "attention",
+        Tone.ATTENTION,
         _weakly_verified,
         operator_action="Apply HQ's config, so HQ sets them and reads them back.",
         no_help_reason="HQ cannot read this setting from the service.",
         subsumes=("resource-unchecked",),
-        bars={"attention": "HQ cannot read back a setting it holds"},
+        bars={Tone.ATTENTION: "HQ cannot read back a setting it holds"},
     ),
     FindingRule(
         "never-observed",
         "Added to HQ but never found",
-        "attention",
+        Tone.ATTENTION,
         _never_observed,
         operator_action=("Check it exists on the service under this exact name, or remove it from HQ."),
         no_help_reason="HQ cannot tell whether it exists under another name.",
         subsumes=("resource-unchecked",),
-        bars={"attention": "a record added to HQ has never been found on its service"},
+        bars={Tone.ATTENTION: "a record added to HQ has never been found on its service"},
     ),
     FindingRule(
         "resource-unchecked",
         "Could not be checked",
-        "attention",
+        Tone.ATTENTION,
         _unchecked,
         operator_action="Apply HQ's config to it, so HQ reads it back.",
         no_help_reason="HQ does not change this type. Change it at its source.",
-        bars={"attention": "HQ has no way to check a record against its service"},
+        bars={Tone.ATTENTION: "HQ has no way to check a record against its service"},
     ),
 )

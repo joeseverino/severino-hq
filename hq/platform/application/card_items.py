@@ -7,12 +7,12 @@ Each is the shape one shared partial draws (``_kpi_grid.html``,
 
 from dataclasses import field
 from datetime import date, datetime
-from typing import Protocol
+from typing import Literal, Protocol
 
 from .display_words import QUOTED, display, in_words
 from .drawings import AllocationBar, Dots, Trend
+from .tone import Tone
 from .workflow_contracts import ActionLink, WorkflowPlan
-lazy from .ui import STATUS_VALUES, _one_of
 
 
 @display
@@ -39,17 +39,15 @@ class Kpi:
     # Which way a figure that is itself a change went, as a status tone: the
     # value is drawn in it, in a featured row too, so a rise and a fall never
     # read alike.
-    tone: str = ""
+    tone: Tone | Literal[""] = ""
     # The same for the line under the value, where the value is a level and
     # the line says how it moved ("+$120 in 30 days").
-    detail_tone: str = ""
+    detail_tone: Tone | Literal[""] = ""
     # Where the line under the value leads, when it counts things with a page
     # of their own ("12 expenses").
     detail_url: str = ""
 
     def __post_init__(self) -> None:
-        _one_of("Kpi tone", self.tone, STATUS_VALUES, or_empty=True)
-        _one_of("Kpi detail_tone", self.detail_tone, STATUS_VALUES, or_empty=True)
         if self.detail_url and not self.detail:
             raise ValueError("Kpi detail_url needs a detail: a link is said by its words.")
 
@@ -72,7 +70,7 @@ class Insight:
     markup or re-map its own status names onto styling.
     """
 
-    status: str
+    status: Tone
     eyebrow: str
     title: str
     value: str
@@ -157,7 +155,6 @@ class Insight:
     clears: str = ""
 
     def __post_init__(self) -> None:
-        _one_of("Insight status", self.status, STATUS_VALUES)
         for label, _value in self.facts:
             in_words(label, label=True)
 
@@ -231,7 +228,7 @@ class ListRow:
     # linked page cannot reach back through window.opener.
     external: bool = False
     # Optional state. `badge` carries the text, so state is never color alone.
-    status: str = ""
+    status: Tone | Literal[""] = ""
     badge: str = ""
     # When the record happened, after ``meta``: a value, so the row says it
     # in HQ's time words as the day it fell on, the moment itself on hover.
@@ -256,7 +253,6 @@ class ListRow:
     chips: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        _one_of("ListRow status", self.status, STATUS_VALUES, or_empty=True)
         if self.link is not None and (self.title or self.url or self.external):
             raise ValueError("A ListRow names its record once: by its title and url, or by its link.")
         if self.status and not self.badge:
@@ -276,11 +272,8 @@ class TimelineItem:
     title: str
     detail: str = ""
     url: str = ""
-    status: str = "neutral"
+    status: Tone = Tone.NEUTRAL
     badge: str = ""
-
-    def __post_init__(self) -> None:
-        _one_of("TimelineItem status", self.status, STATUS_VALUES)
 
 
 @display

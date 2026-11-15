@@ -1,8 +1,8 @@
 from django.test import SimpleTestCase
 from django.urls import reverse
 
+from hq.platform.application.markup_testing import elements
 from hq.platform.application.tables import ranked
-from hq.platform.application.tests.markup import elements
 from hq.platform.core.audit_views import AuditLogListView
 from hq.platform.core.models import AuditLog
 from hq_sdk.testing import plain

@@ -8,5 +8,5 @@
   <td>{% if row.total_cost %}{{ row.total_cost|money }}{% else %}{% empty_value %}{% endif %}</td>
   <td class="muted">{{ row.business_use_percentage|breakable }}%</td>
   <td>{% if row.total_cost %}{{ row.estimated_deductible_amount|money }}{% else %}{% empty_value %}{% endif %}</td>
-  <td>{% status row.get_status_display tone=row.status %}</td>
+  <td>{% status row.state %}</td>
 {% endblock %}

@@ -16,6 +16,7 @@ from pydantic import TypeAdapter
 from hq.platform.application import read_models
 from hq.platform.application.access import Access
 from hq.platform.application.security import Principal
+from hq.platform.application.tone import Tone
 
 from .finding_actions import agent_findings
 from .resources import READS, action_queue, held_requests, hq_itself
@@ -38,10 +39,10 @@ class Prompt:
 
 
 def _status(principal: Principal) -> dict[str, Any]:
-    problems = agent_findings(principal=principal, severity="attention", limit=BRIEF_FINDINGS)
+    problems = agent_findings(principal=principal, severity=Tone.ATTENTION, limit=BRIEF_FINDINGS)
     return {
         "hq": hq_itself(principal),
-        "health": read_models.system_health(principal=principal),
+        "health": read_models.system_health(),
         "problems": {"summary": problems["summary"], "findings": problems["findings"]},
     }
 

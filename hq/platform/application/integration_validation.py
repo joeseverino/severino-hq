@@ -13,8 +13,9 @@ from django.core.exceptions import ImproperlyConfigured
 from pydantic import BaseModel, PydanticUndefinedAnnotation, PydanticUserError, ValidationError
 
 from .connection_contracts import GRANT_MODELS, ConnectionAbility, ConnectionSpec
-from .contracts import DJANGO_ROUTE, DOTTED_NAME, EFFECTS, SCOPE_NAME
+from .contracts import DJANGO_ROUTE, DOTTED_NAME, SCOPE_NAME
 from .integration_specs import (
+    CONSENT_KEYWORD,
     PAGE_FIELD,
     RESERVED_QUERY_FIELD,
     SENT_KEYWORD,
@@ -24,6 +25,7 @@ from .integration_specs import (
     CapabilitySpec,
     ResourceSpec,
     command_schema,
+    takes_consent,
     takes_sent_fields,
     takes_stale_write_token,
     typed_keys,
@@ -58,8 +60,6 @@ def _validate_capability_identity(spec: CapabilitySpec) -> None:
     names = [name for name, _text in spec.variants]
     if any(not name or not text for name, text in spec.variants) or len(names) != len(set(names)):
         raise ImproperlyConfigured(f"Capability {spec.name!r} names each variant once, with its words.")
-    if spec.effect not in EFFECTS:
-        raise ImproperlyConfigured(f"Capability {spec.name!r} has invalid effect {spec.effect!r}.")
 
 
 def _validate_capability_target(spec: CapabilitySpec) -> None:
@@ -108,7 +108,8 @@ def _validate_capability_requirements(spec: CapabilitySpec) -> None:
 def _validate_capability_handler(spec: CapabilitySpec) -> None:
     if not callable(spec.handler):
         raise ImproperlyConfigured(f"Capability {spec.name!r} handler is not callable.")
-    kwargs: dict[str, Any] = {"principal": None}
+    # A handler that writes a declaration takes the consent in place of the principal.
+    kwargs: dict[str, Any] = {CONSENT_KEYWORD if takes_consent(spec.handler) else "principal": None}
     if takes_stale_write_token(spec.handler):
         kwargs[STALE_WRITE_KEYWORD] = None
     if takes_sent_fields(spec.handler):
@@ -237,8 +238,6 @@ def _validate_ability(spec: ConnectionSpec, ability: ConnectionAbility) -> None:
         raise ImproperlyConfigured(f"Connection {spec.name!r} has invalid ability {ability.name!r}.")
     if not ability.label.strip() or not ability.summary.strip():
         raise ImproperlyConfigured(f"Connection ability {ability.name!r} needs a label and summary.")
-    if ability.effect not in EFFECTS:
-        raise ImproperlyConfigured(f"Connection ability {ability.name!r} has invalid effect {ability.effect!r}.")
     if len(ability.required_scopes) != len(set(ability.required_scopes)) or any(
         not SCOPE_NAME.fullmatch(scope) for scope in ability.required_scopes
     ):

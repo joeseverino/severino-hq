@@ -33,6 +33,7 @@ from hq.platform.application.outward_links import link_choices, outward_links
 from hq.platform.application.pages import PageVisit, page_context
 from hq.platform.application.request_path import request_path
 from hq.platform.application.security import safe_next, web_principal
+from hq.platform.application.tone import Tone
 from hq.platform.application.visit_refresh import worth_asking
 from hq.platform.application.web_writes import execute_posted, refused
 lazy from hq.platform.application.pins import CHOOSE, DASHBOARD_LINK
@@ -147,7 +148,7 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
         for item in doing:
             if item.get("held"):
                 held.append(item)
-            elif item["status"] == "serious":
+            elif item["status"] == Tone.SERIOUS:
                 serious.append(item)
         needs_you = [*held, *serious] if len(held) + len(serious) <= NEEDS_YOU_IN_PLACE else held
         hour = timezone.localtime().hour

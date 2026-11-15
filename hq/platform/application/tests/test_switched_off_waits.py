@@ -13,15 +13,16 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.providers import registry_label
+from hq.platform.application.tests.consent import consented
 from hq.platform.core.models import AuditLog
 
 from ..adoption_testing import managing_everything
 from ..capabilities import execute_capability
 from ..controller import claim_next_operation, peek_next_operation
 from ..labels import lower_first
+from ..report_testing import bridged
 from ..resource_operations import OperationCommand, request_reconcile, request_removal
 from ..security import cli_principal
-from ..sweep import record_sweep
 from .inventory_records import A_REWRITE, a_sweep
 
 KIND = "adguard.rewrite"
@@ -39,9 +40,9 @@ class SwitchedOffRecord(TestCase):
     def setUp(self):
         super().setUp()
         managing_everything()
-        record_sweep(a_sweep(**{KIND: [A_REWRITE]}), principal=cli_principal())
+        bridged("inventory", a_sweep(**{KIND: [A_REWRITE]}))
         self.resource = ManagedResource.objects.get(kind=KIND)
-        request_reconcile(OperationCommand(), principal=cli_principal(), current_key=self.resource.key)
+        request_reconcile(OperationCommand(), consented=consented(cli_principal()), current_key=self.resource.key)
 
 
 class QueuedBeforeTheSwitchOffTests(SwitchedOffRecord):
@@ -68,7 +69,7 @@ class QueuedBeforeTheSwitchOffTests(SwitchedOffRecord):
         )
 
     def test_its_removal_is_still_handed_over(self):
-        request_removal(OperationCommand(), principal=cli_principal(), current_key=self.resource.key)
+        request_removal(OperationCommand(), consented=consented(cli_principal()), current_key=self.resource.key)
 
         claim = claim_next_operation("test-controller", capabilities=((KIND, "delete"),))
 

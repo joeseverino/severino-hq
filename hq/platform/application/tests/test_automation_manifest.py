@@ -1,4 +1,4 @@
-from typing import Any, get_args
+from typing import Any
 
 from django.test import SimpleTestCase
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -9,7 +9,7 @@ from hq.platform.application.automation_manifest import (
     OperationRegistry,
     UnknownOperation,
 )
-from hq.platform.application.contracts import EFFECTS, Closed
+from hq.platform.application.contracts import Closed
 
 
 class ServiceLogs(Closed):
@@ -72,11 +72,6 @@ class DeclarationTests(SimpleTestCase):
 
         with self.assertRaises(ValidationError):
             built.timeout_seconds = 9999  # type: ignore[misc]  # the assignment is the refusal under test
-
-    def test_its_effects_are_capability_effects(self) -> None:
-        effects = get_args(OperationManifest.model_fields["effect"].annotation)
-
-        self.assertLessEqual(set(effects), EFFECTS)
 
     def test_targets_and_hosts_read_in_one_order(self) -> None:
         first = manifest(target_kinds=("example.vm", "example.machine"), hosts=("b.example.com", "a.example.com"))

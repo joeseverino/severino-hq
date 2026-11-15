@@ -3,7 +3,7 @@
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase
 
-from hq.platform.application.tests.markup import elements, links, select, within
+from hq.platform.application.markup_testing import elements, links, select, within
 from hq_sdk.ui import AllocationBar, Share
 
 

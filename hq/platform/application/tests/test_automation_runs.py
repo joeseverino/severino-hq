@@ -10,6 +10,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 
 from hq.domains.control_plane.models import CapabilityRule, ManagedResource, OperationRequest
+from hq.platform.application.markup_testing import links, text
 from hq.platform.core.models import AgentIdentity
 
 from ..automation_runs import CANCEL
@@ -17,7 +18,6 @@ from ..capabilities import capability_registry, run_capability
 from ..capability_policy import Rule, matrix, set_rule
 from ..controller import claim_next_operation
 from ..security import Capability, Principal, cli_principal
-from .markup import links, text
 from .procedures import APP, DB, EDGE, RESTART, RESTART_KEY, RESTART_RUN, REVISION, Supply, manifest, run_payload
 
 # A person's own click in the browser, which is their consent.

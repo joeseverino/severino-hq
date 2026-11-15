@@ -40,7 +40,6 @@ from .agent_devices import (
 from .appearance import SET_THEME, ThemeCommand, set_theme
 from .approvals import (
     APPROVE,
-    DESTRUCTIVE_EFFECT,
     REJECT,
     WITHDRAW,
     ApproveCommand,
@@ -54,6 +53,8 @@ from .approvals import (
 from .cadence import ControllerSweepCommand, request_controller_sweep
 from .capability_policy import SET_POLICY, PolicyCommand, apply_changes
 from .certificates import UPLOAD, UploadCertificateCommand, store_certificate
+from .contracts import Effect
+from .demo import SET_DEMO, DemoCommand, set_demo, showing_demo
 from .dependency_updates import RUN_NOW as DEPENDENCY_RUN_NOW, DependencyRunCommand, request_run
 from .documentation import (
     SYNC as DOCUMENTATION_SYNC,
@@ -127,7 +128,7 @@ from .zones import ADOPT_ZONE, AdoptZoneCommand, adopt_zone
 CONTROLLER_REFRESH = CapabilitySpec(
     "infrastructure.controller.refresh",
     "Ask HQ to read everything again now.",
-    "infrastructure_change",
+    Effect.INFRASTRUCTURE_CHANGE,
     Capability.MANAGE_INFRASTRUCTURE,
     ControllerSweepCommand,
     request_controller_sweep,
@@ -151,7 +152,7 @@ CORE_CAPABILITY_SPECS = (
     CapabilitySpec(
         "hq.sync",
         "Bring HQ's list of docs up to date from the vault.",
-        "remote_write",
+        Effect.REMOTE_WRITE,
         # Documentation authority alone, so an account allowed to sync docs
         # needs no control-plane authority.
         Capability.SYNC_DOCUMENTATION,
@@ -163,7 +164,7 @@ CORE_CAPABILITY_SPECS = (
     CapabilitySpec(
         "hq.import",
         "Import projects and assets from one file. Nothing is saved unless every record in it is valid.",
-        "remote_write",
+        Effect.REMOTE_WRITE,
         # The capabilities of the upserts it runs, both of them.
         IMPORT_CAPABILITIES,
         HQImportCommand,
@@ -180,7 +181,7 @@ CORE_CAPABILITY_SPECS = (
     CapabilitySpec(
         DEPENDENCY_UPDATES,
         "Turn HQ's dependency update pull requests on or off for a project's repository, from the next run.",
-        "remote_write",
+        Effect.REMOTE_WRITE,
         records_of("projects").write,
         DependencyUpdatesCommand,
         set_dependency_updates,
@@ -202,7 +203,7 @@ CORE_CAPABILITY_SPECS = (
         DEPENDENCY_RUN_NOW,
         "Update dependencies in every opted-in repository.",
         # The controller's run opens pull requests on GitHub.
-        "infrastructure_change",
+        Effect.INFRASTRUCTURE_CHANGE,
         # The ask is a controller read, which needs infrastructure as well.
         (records_of("projects").write, Capability.MANAGE_INFRASTRUCTURE),
         DependencyRunCommand,
@@ -218,7 +219,7 @@ CORE_CAPABILITY_SPECS = (
     CapabilitySpec(
         DOCUMENTATION_SYNC,
         "Bring HQ's list of docs up to date from a vault export.",
-        "remote_write",
+        Effect.REMOTE_WRITE,
         Capability.SYNC_DOCUMENTATION,
         DocumentationSyncCommand,
         execute_documentation_sync,
@@ -228,7 +229,7 @@ CORE_CAPABILITY_SPECS = (
     CapabilitySpec(
         "infrastructure.resource.create",
         "Add something for HQ to manage.",
-        "remote_write",
+        Effect.REMOTE_WRITE,
         Capability.MANAGE_INFRASTRUCTURE,
         ManagedResourceCommand,
         save_managed_resource,
@@ -238,7 +239,7 @@ CORE_CAPABILITY_SPECS = (
     CapabilitySpec(
         "infrastructure.resource.update",
         f"Change HQ's copy of a record. HQ then applies it to the live system. {KEPT}",
-        "remote_write",
+        Effect.REMOTE_WRITE,
         Capability.MANAGE_INFRASTRUCTURE,
         ManagedResourceCommand,
         save_managed_resource,
@@ -254,7 +255,7 @@ CORE_CAPABILITY_SPECS = (
     CapabilitySpec(
         ADOPT,
         "Manage a record HQ found live, starting from exactly what is live.",
-        "remote_write",
+        Effect.REMOTE_WRITE,
         Capability.MANAGE_INFRASTRUCTURE,
         AdoptCommand,
         adopt,
@@ -271,7 +272,7 @@ CORE_CAPABILITY_SPECS = (
     CapabilitySpec(
         ADOPT_SERVICE,
         "Manage every record HQ found live behind one hostname, or none of them.",
-        "remote_write",
+        Effect.REMOTE_WRITE,
         Capability.MANAGE_INFRASTRUCTURE,
         AdoptServiceCommand,
         adopt_service,
@@ -286,7 +287,7 @@ CORE_CAPABILITY_SPECS = (
     CapabilitySpec(
         ADOPT_ZONE,
         "Manage a domain HQ found live, and every record in it, exactly as they are.",
-        "remote_write",
+        Effect.REMOTE_WRITE,
         Capability.MANAGE_INFRASTRUCTURE,
         AdoptZoneCommand,
         adopt_zone,
@@ -301,7 +302,7 @@ CORE_CAPABILITY_SPECS = (
     CapabilitySpec(
         "infrastructure.resource.accept_observed",
         "Copy what is live into HQ's copy, keeping a change made outside HQ.",
-        "remote_write",
+        Effect.REMOTE_WRITE,
         Capability.MANAGE_INFRASTRUCTURE,
         OperationCommand,
         accept_observed,
@@ -315,7 +316,7 @@ CORE_CAPABILITY_SPECS = (
     CapabilitySpec(
         ACTION_CAPABILITY[OperationRequest.Action.RECONCILE],
         "Apply HQ's copy of one record to the live system.",
-        "infrastructure_change",
+        Effect.INFRASTRUCTURE_CHANGE,
         Capability.MANAGE_INFRASTRUCTURE,
         OperationCommand,
         request_reconcile,
@@ -329,7 +330,7 @@ CORE_CAPABILITY_SPECS = (
     CapabilitySpec(
         SIGN_OUT,
         "Sign a user out of every HQ session when Pocket ID signs them out.",
-        "remote_write",
+        Effect.REMOTE_WRITE,
         Capability.END_SESSIONS,
         SignOutCommand,
         sign_out,
@@ -342,7 +343,7 @@ CORE_CAPABILITY_SPECS = (
     CapabilitySpec(
         ACTION_CAPABILITY[OperationRequest.Action.DELETE],
         "Remove what this record describes from where it runs, then the record from HQ.",
-        DESTRUCTIVE_EFFECT,
+        Effect.DESTRUCTIVE,
         Capability.MANAGE_INFRASTRUCTURE,
         OperationCommand,
         request_removal,
@@ -380,13 +381,13 @@ CORE_CAPABILITY_SPECS = (
                 OperationRequest.Action.RESTART,
                 request_restart,
                 "Restart the container through Portainer.",
-                "infrastructure_change",
+                Effect.INFRASTRUCTURE_CHANGE,
             ),
             (
                 OperationRequest.Action.START,
                 request_start,
                 "Start the container through Portainer.",
-                "infrastructure_change",
+                Effect.INFRASTRUCTURE_CHANGE,
             ),
             # A stop takes the thing away from whoever uses it until someone
             # starts it again: an agent's waits for a person by default, and a
@@ -395,14 +396,14 @@ CORE_CAPABILITY_SPECS = (
                 OperationRequest.Action.STOP,
                 request_stop,
                 "Stop the container through Portainer; it stays down until it is started.",
-                DESTRUCTIVE_EFFECT,
+                Effect.DESTRUCTIVE,
             ),
         )
     ),
     CapabilitySpec(
         ACTION_CAPABILITY[OperationRequest.Action.APPROVE_ROUTES],
         "Approve the routes a tailnet device already offers.",
-        "infrastructure_change",
+        Effect.INFRASTRUCTURE_CHANGE,
         Capability.MANAGE_INFRASTRUCTURE,
         OperationCommand,
         request_route_approval,
@@ -423,7 +424,7 @@ CORE_CAPABILITY_SPECS = (
     CapabilitySpec(
         "tailnet.reach.allow",
         "Allow a connection Tailscale blocks that a reading needs.",
-        "infrastructure_change",
+        Effect.INFRASTRUCTURE_CHANGE,
         Capability.MANAGE_INFRASTRUCTURE,
         OperationCommand,
         request_reach_allow,
@@ -448,7 +449,7 @@ CORE_CAPABILITY_SPECS = (
     CapabilitySpec(
         "tailnet.policy.remove_empty_groups",
         "Remove the groups with no members that the tailnet policy still grants.",
-        "infrastructure_change",
+        Effect.INFRASTRUCTURE_CHANGE,
         Capability.MANAGE_INFRASTRUCTURE,
         OperationCommand,
         request_empty_groups_removal,
@@ -471,7 +472,7 @@ CORE_CAPABILITY_SPECS = (
     CapabilitySpec(
         ACTION_CAPABILITY[OperationRequest.Action.RENEW],
         "Ask for a certificate to be renewed, where its renewal rules allow it.",
-        "infrastructure_change",
+        Effect.INFRASTRUCTURE_CHANGE,
         Capability.REQUEST_CERTIFICATE_RENEWAL,
         OperationCommand,
         request_certificate_renewal,
@@ -491,7 +492,7 @@ CORE_CAPABILITY_SPECS = (
     CapabilitySpec(
         UPLOAD,
         "Hold a certificate and key you generated elsewhere, for HQ to install.",
-        "infrastructure_change",
+        Effect.INFRASTRUCTURE_CHANGE,
         # Held only by an operator in the browser or at the host: a private key
         # never arrives with a token (security.HELD_ONLY_AT).
         Capability.UPLOAD_CERTIFICATE,
@@ -514,7 +515,7 @@ CORE_CAPABILITY_SPECS = (
     CapabilitySpec(
         RECEIPT_UPLOAD,
         "Keep a receipt's file, out of reach of any public address, with its details.",
-        "remote_write",
+        Effect.REMOTE_WRITE,
         (records_of("receipts").write, Capability.UPLOAD_RECEIPT),
         ReceiptUploadCommand,
         upload_receipt,
@@ -525,7 +526,7 @@ CORE_CAPABILITY_SPECS = (
     CapabilitySpec(
         RECEIPT_REPLACE,
         f"Replace a receipt's file, and change its details with it. {KEPT}",
-        "remote_write",
+        Effect.REMOTE_WRITE,
         (records_of("receipts").write, Capability.UPLOAD_RECEIPT),
         ReceiptUploadCommand,
         replace_receipt,
@@ -541,7 +542,7 @@ CORE_CAPABILITY_SPECS = (
     CapabilitySpec(
         DASHBOARD_MACHINE,
         "Show a machine's telemetry on the dashboard, or take it off.",
-        "remote_write",
+        Effect.REMOTE_WRITE,
         Capability.SET_PREFERENCES,
         DashboardMachineCommand,
         select_dashboard_machine,
@@ -562,7 +563,7 @@ CORE_CAPABILITY_SPECS = (
     CapabilitySpec(
         APPROVE,
         "Agree to a change an agent asked for, and apply exactly what it asked.",
-        "remote_write",
+        Effect.REMOTE_WRITE,
         Capability.DECIDE_APPROVALS,
         ApproveCommand,
         answered(approve),
@@ -577,7 +578,7 @@ CORE_CAPABILITY_SPECS = (
     CapabilitySpec(
         REJECT,
         "Refuse a change an agent asked for, so its request has an answer.",
-        "remote_write",
+        Effect.REMOTE_WRITE,
         Capability.DECIDE_APPROVALS,
         RejectCommand,
         answered(reject),
@@ -591,7 +592,7 @@ CORE_CAPABILITY_SPECS = (
         WITHDRAW,
         "Take back a change you asked for that still waits for approval, so no operator is asked to decide it. "
         "Send the `approval.id` its held answer carried.",
-        "remote_write",
+        Effect.REMOTE_WRITE,
         Capability.READ,
         WithdrawCommand,
         answered(withdraw),
@@ -609,7 +610,7 @@ CORE_CAPABILITY_SPECS = (
     CapabilitySpec(
         SET_AGENT_ACCESS,
         "Pause every agent, on MCP and the machine API, or let them back in.",
-        "remote_write",
+        Effect.REMOTE_WRITE,
         Capability.GOVERN_AGENTS,
         AgentAccessCommand,
         set_agents_paused,
@@ -621,7 +622,7 @@ CORE_CAPABILITY_SPECS = (
     CapabilitySpec(
         SET_AGENT_BLOCK,
         "Block one agent's client on MCP and the machine API, or let it back in.",
-        "remote_write",
+        Effect.REMOTE_WRITE,
         Capability.GOVERN_AGENTS,
         AgentBlockCommand,
         set_agent_blocked,
@@ -640,7 +641,7 @@ CORE_CAPABILITY_SPECS = (
     CapabilitySpec(
         REMOVE_AGENT,
         "Remove one agent HQ has seen, with its devices and its own rules, so it is listed no more.",
-        DESTRUCTIVE_EFFECT,
+        Effect.DESTRUCTIVE,
         Capability.GOVERN_AGENTS,
         AgentRemoveCommand,
         remove_agent,
@@ -659,7 +660,7 @@ CORE_CAPABILITY_SPECS = (
     CapabilitySpec(
         APPROVE_AGENT_DEVICE,
         "Approve a tailnet device an agent called from, so its calls from there run, or withdraw the approval.",
-        "remote_write",
+        Effect.REMOTE_WRITE,
         Capability.GOVERN_AGENTS,
         AgentDeviceApprovalCommand,
         set_device_approved,
@@ -679,7 +680,7 @@ CORE_CAPABILITY_SPECS = (
     CapabilitySpec(
         BLOCK_AGENT_DEVICE,
         "Block one tailnet device an agent calls from, on MCP and the machine API, or let it back in.",
-        "remote_write",
+        Effect.REMOTE_WRITE,
         Capability.GOVERN_AGENTS,
         AgentDeviceBlockCommand,
         set_device_blocked,
@@ -698,7 +699,7 @@ CORE_CAPABILITY_SPECS = (
     CapabilitySpec(
         SET_OWN_DEVICE,
         "Register a client as one of your own devices, so its token acts as you, or remove it.",
-        "remote_write",
+        Effect.REMOTE_WRITE,
         Capability.GOVERN_AGENTS,
         OwnDeviceCommand,
         set_own_device,
@@ -717,7 +718,7 @@ CORE_CAPABILITY_SPECS = (
     CapabilitySpec(
         SET_POLICY,
         "Set whether one agent's call to one action runs, waits for approval, or is refused.",
-        "remote_write",
+        Effect.REMOTE_WRITE,
         Capability.GOVERN_AGENTS,
         PolicyCommand,
         apply_changes,
@@ -744,7 +745,7 @@ def dashboard() -> tuple[CapabilitySpec, ...]:
         CapabilitySpec(
             pins.PIN,
             "Pin something so it sorts first for you, or unpin it.",
-            "remote_write",
+            Effect.REMOTE_WRITE,
             Capability.PIN_FAVORITES,
             pins.PinCommand,
             pins.pin,
@@ -756,7 +757,7 @@ def dashboard() -> tuple[CapabilitySpec, ...]:
         CapabilitySpec(
             pins.MOVE,
             "Move one of your pins past its neighbor.",
-            "remote_write",
+            Effect.REMOTE_WRITE,
             Capability.PIN_FAVORITES,
             pins.MoveCommand,
             pins.move_pin,
@@ -767,7 +768,7 @@ def dashboard() -> tuple[CapabilitySpec, ...]:
         CapabilitySpec(
             pins.CHOOSE,
             "Choose exactly which things of one type you pin.",
-            "remote_write",
+            Effect.REMOTE_WRITE,
             Capability.PIN_FAVORITES,
             pins.ChooseCommand,
             pins.choose,
@@ -778,7 +779,7 @@ def dashboard() -> tuple[CapabilitySpec, ...]:
         CapabilitySpec(
             action_items.SET_ASIDE,
             "Set action items aside for you until they get worse or change.",
-            "remote_write",
+            Effect.REMOTE_WRITE,
             Capability.SET_ASIDE_ACTION_ITEMS,
             action_items.SetAsideCommand,
             action_items.set_items_aside,
@@ -793,7 +794,7 @@ def dashboard() -> tuple[CapabilitySpec, ...]:
         CapabilitySpec(
             action_items.RESTORE,
             "Bring set-aside action items back into your queue.",
-            "remote_write",
+            Effect.REMOTE_WRITE,
             Capability.SET_ASIDE_ACTION_ITEMS,
             action_items.RestoreCommand,
             action_items.restore,
@@ -804,7 +805,7 @@ def dashboard() -> tuple[CapabilitySpec, ...]:
         CapabilitySpec(
             DASHBOARD_SETTINGS,
             "Set the dashboard's weather location and its panel names.",
-            "remote_write",
+            Effect.REMOTE_WRITE,
             Capability.SET_PREFERENCES,
             DashboardSettingsCommand,
             save_dashboard_settings,
@@ -817,7 +818,7 @@ def dashboard() -> tuple[CapabilitySpec, ...]:
         CapabilitySpec(
             SET_THEME,
             "Choose whether your pages are light, dark, or follow the system.",
-            "remote_write",
+            Effect.REMOTE_WRITE,
             Capability.SET_PREFERENCES,
             ThemeCommand,
             set_theme,
@@ -825,9 +826,21 @@ def dashboard() -> tuple[CapabilitySpec, ...]:
             label="Choose a theme",
         ),
         CapabilitySpec(
+            SET_DEMO,
+            "Show stand-in values in place of real ones in this browser, or the real ones again.",
+            Effect.REMOTE_WRITE,
+            Capability.SHOW_DEMO,
+            DemoCommand,
+            set_demo,
+            execution_notes=("Set the mode rather than cycle it, so asking twice changes nothing.",),
+            label="Show or hide demo data",
+            variants=(("on", "Show demo data"), ("off", "Show real data")),
+            state=showing_demo,
+        ),
+        CapabilitySpec(
             DASHBOARD_REFRESH,
             "Ask for a fresh reading of every dashboard panel a controller can read.",
-            "infrastructure_change",
+            Effect.INFRASTRUCTURE_CHANGE,
             Capability.MANAGE_INFRASTRUCTURE,
             DashboardRefreshCommand,
             request_dashboard_refresh,
@@ -838,7 +851,7 @@ def dashboard() -> tuple[CapabilitySpec, ...]:
         CapabilitySpec(
             DASHBOARD_REFRESH_STALE,
             "Ask again for the dashboard panels whose reading is due.",
-            "infrastructure_change",
+            Effect.INFRASTRUCTURE_CHANGE,
             Capability.MANAGE_INFRASTRUCTURE,
             DashboardRefreshCommand,
             request_stale_panel_refresh,
@@ -853,7 +866,7 @@ def watching() -> tuple[CapabilitySpec, ...]:
         CapabilitySpec(
             PROFILE_READ_NOW,
             "Ask HQ to read a user's GitHub profile now.",
-            "infrastructure_change",
+            Effect.INFRASTRUCTURE_CHANGE,
             # A public lookup that spends GitHub's allowance, and a wake of the
             # controller, as Refresh is.
             (Capability.LOOK_UP_PUBLIC_RECORDS, Capability.MANAGE_INFRASTRUCTURE),
@@ -878,7 +891,7 @@ def tools() -> tuple[CapabilitySpec, ...]:
         CapabilitySpec(
             LOOK_UP_NAME,
             "Ask a public resolver what the internet returns for a hostname.",
-            "read",
+            Effect.READ,
             Capability.LOOK_UP_PUBLIC_RECORDS,
             NameCommand,
             look_up_name,
@@ -895,7 +908,7 @@ def tools() -> tuple[CapabilitySpec, ...]:
         CapabilitySpec(
             LOOK_UP_ADDRESS,
             "Ask what name and which allocation a public address belongs to.",
-            "read",
+            Effect.READ,
             Capability.LOOK_UP_PUBLIC_RECORDS,
             AddressCommand,
             look_up_address,
@@ -920,7 +933,7 @@ def connections() -> tuple[CapabilitySpec, ...]:
         CapabilitySpec(
             VISIT_REFRESH,
             "Ask again for the readings one page is made of, where they are due.",
-            "infrastructure_change",
+            Effect.INFRASTRUCTURE_CHANGE,
             Capability.MANAGE_INFRASTRUCTURE,
             VisitRefreshCommand,
             request_visit_refresh,

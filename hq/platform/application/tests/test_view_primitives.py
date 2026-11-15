@@ -74,9 +74,10 @@ class ListRowTests(SimpleTestCase):
     def test_a_row_named_by_its_link_draws_it_as_every_mention_is_drawn(self):
         from django.template.loader import render_to_string
 
+        from hq.platform.application.markup_testing import select
+
         from ..card_items import ListRow
         from ..entity_links import EntityLink
-        from .markup import select
 
         host = EntityLink("example-host", "/example/host/", kind="machine", kind_label="machine")
         drawn = render_to_string("partials/_record_list.html", {"rows": [ListRow(link=host, meta="An example note")]})
@@ -91,9 +92,10 @@ class ListRowTests(SimpleTestCase):
         from django.template.loader import render_to_string
         from django.utils import timezone
 
+        from hq.platform.application.markup_testing import text
+
         from ..card_items import ListRow
         from ..moments import when_day
-        from .markup import text
 
         today = timezone.localdate()
         for stamp in ("2026-10-22 09:36:47", "2026-10-22T09:36:47Z", "2026-10-22", today):
@@ -109,8 +111,9 @@ class ListRowTests(SimpleTestCase):
 
         from django.template.loader import render_to_string
 
+        from hq.platform.application.markup_testing import elements, text
+
         from ..card_items import ListRow
-        from .markup import elements, text
 
         quoted = "enabled: False at 2026-11-02 09:30, <b> "
         row = ListRow(title="Example host", snippet=((quoted, False), ("backup", True)))
@@ -124,8 +127,9 @@ class ListRowTests(SimpleTestCase):
     def test_a_places_chips_are_each_a_word_after_its_line(self):
         from django.template.loader import render_to_string
 
+        from hq.platform.application.markup_testing import elements
+
         from ..card_items import ListRow
-        from .markup import elements
 
         row = ListRow(
             title="Example connection", url="/example/connection/", chips=("Reads accounts", "Reads balances")
@@ -143,9 +147,10 @@ class ListRowTests(SimpleTestCase):
 
         from django.template.loader import render_to_string
 
+        from hq.platform.application.markup_testing import elements, select
+
         from ..card_items import ListRow
         from ..pages import PageAction
-        from .markup import elements, select
 
         row = ListRow(
             title="Example group",

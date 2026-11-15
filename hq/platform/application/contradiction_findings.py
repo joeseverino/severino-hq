@@ -32,6 +32,7 @@ from .finding_model import (
     on_machine,
     opens,
 )
+from .tone import Tone
 from .ui import counted, ended
 lazy from . import exposure, zones
 lazy from .containers import containers
@@ -105,7 +106,7 @@ def _answered_by_nothing() -> tuple[Finding, ...]:
                     rule="public-name-served-by-nothing",
                     subject=_subject(name),
                     title=f"{name} points at {last.name}, which serves nothing for it",
-                    severity="attention",
+                    severity=Tone.ATTENTION,
                     explanation=(
                         f"Public DNS sends {name} to {ended(last.name)} No proxy answers for "
                         f"this name, and no container on {last.name} answers on a web port. "
@@ -169,7 +170,7 @@ def _routed_to_stopped() -> tuple[Finding, ...]:
                         rule="route-to-stopped-container",
                         subject=_subject(name),
                         title=f"{name} leads to {container} on {machine}, which is {_said(state)}",
-                        severity="serious",
+                        severity=Tone.SERIOUS,
                         explanation=(
                             f"Requests for {name} fail until {container} runs again or "
                             "the proxy route points at what replaced it."
@@ -210,7 +211,7 @@ def _gates_guarding_nothing() -> tuple[Finding, ...]:
                         rule="gate-guards-nothing",
                         subject=f"service:{name}",
                         title=f"{spec.label} {title} protects {name}, which has no DNS record",
-                        severity="neutral",
+                        severity=Tone.NEUTRAL,
                         explanation=(
                             f"Nothing answers at {ended(name)} If the name is published again "
                             "later, this rule will apply to it without anyone reviewing it."
@@ -268,7 +269,7 @@ def _split_horizon_finding(name: str, routes: tuple[Route, ...], public: set[str
         title=(
             f"{name} goes to {', '.join(sorted(public))} from the internet and {', '.join(sorted(internal))} from home"
         ),
-        severity="attention",
+        severity=Tone.ATTENTION,
         explanation=(
             "That is right only if you meant it. Otherwise the public record or the internal record is out of date."
         ),
@@ -311,7 +312,7 @@ def _unfronted_ports() -> tuple[Finding, ...]:
                 title=f"{item.running.name} on {machine.name} is open to the internet on "
                 f"{'port' if len(open_ports) == 1 else 'ports'} "
                 f"{', '.join(str(port) for port in open_ports)}",
-                severity="serious",
+                severity=Tone.SERIOUS,
                 explanation="It answered a test from outside your network, with no proxy in front.",
                 evidence=(
                     ("Container", item.running.name),
@@ -353,7 +354,7 @@ def _served_not_held() -> tuple[Finding, ...]:
                 rule="served-certificate-not-held",
                 subject=f"resource:{resource.key}",
                 title=f"{names} serves a certificate other than {resource.key}",
-                severity="serious",
+                severity=Tone.SERIOUS,
                 explanation=(
                     f"HQ renews {resource.key}, but {names} is serving a different "
                     "one. Visitors will not get renewals until it serves HQ's."
@@ -411,7 +412,7 @@ def _wiring_incomplete(estate: FindingEstate) -> tuple[Finding, ...]:
         Finding(
             rule="service-wiring-incomplete",
             subject=node.id,
-            severity="attention",
+            severity=Tone.ATTENTION,
             title=_fault_title(node.label, faults),
             explanation=" ".join(faults),
             primary=opens("Open service", node.url) if node.url else None,
@@ -425,64 +426,64 @@ RULES: tuple[FindingRule, ...] = (
     FindingRule(
         "served-certificate-not-held",
         "A site is serving a different certificate",
-        "serious",
+        Tone.SERIOUS,
         carried("served-certificate-not-held"),
         operator_action="Install HQ's certificate again, or point the site at it.",
         no_help_reason="HQ cannot tell why the site is serving another certificate.",
-        bars={"serious": "a site serves a certificate other than the one HQ holds for it"},
+        bars={Tone.SERIOUS: "a site serves a certificate other than the one HQ holds for it"},
     ),
     FindingRule(
         "public-name-served-by-nothing",
         "A public name that leads nowhere",
-        "attention",
+        Tone.ATTENTION,
         carried("public-name-served-by-nothing"),
         operator_action="Remove the public record, or add the proxy route that should serve the name.",
         no_help_reason="HQ cannot tell whether the name should still exist.",
-        bars={"attention": "a public name has no proxy route behind it"},
+        bars={Tone.ATTENTION: "a public name has no proxy route behind it"},
     ),
     FindingRule(
         "route-to-stopped-container",
         "A route to a container that is not running",
-        "serious",
+        Tone.SERIOUS,
         carried("route-to-stopped-container"),
         operator_action="Start the container, or point the proxy route at what replaced it.",
         no_help_reason="HQ cannot start containers.",
-        bars={"serious": "a proxy route leads to a container that is not running"},
+        bars={Tone.SERIOUS: "a proxy route leads to a container that is not running"},
     ),
     FindingRule(
         "gate-guards-nothing",
         "Access rule for a name that no longer exists",
-        "neutral",
+        Tone.NEUTRAL,
         carried("gate-guards-nothing"),
         operator_action="Remove the name from the rule.",
         no_help_reason="HQ cannot edit Access applications or access lists.",
-        bars={"neutral": "an access rule names a name that no longer exists"},
+        bars={Tone.NEUTRAL: "an access rule names a name that no longer exists"},
     ),
     FindingRule(
         "split-horizon-disagrees",
         "One name, two different machines",
-        "attention",
+        Tone.ATTENTION,
         carried("split-horizon-disagrees"),
         operator_action="Point the internal and public records at the same machine.",
         no_help_reason="HQ cannot tell which one is right.",
-        bars={"attention": "a name's internal and public records point at different machines"},
+        bars={Tone.ATTENTION: "a name's internal and public records point at different machines"},
     ),
     FindingRule(
         "published-port-unfronted",
         "A container is open to the internet",
-        "serious",
+        Tone.SERIOUS,
         carried("published-port-unfronted"),
         operator_action="Bind the published ports to 127.0.0.1, or put a proxy route in front of them.",
         no_help_reason=CANNOT_EDIT_COMPOSE,
-        bars={"serious": "a container publishes a port to the internet with no proxy in front"},
+        bars={Tone.SERIOUS: "a container publishes a port to the internet with no proxy in front"},
     ),
     FindingRule(
         "service-wiring-incomplete",
         "A service not fully set up",
-        "attention",
+        Tone.ATTENTION,
         _wiring_incomplete,
         operator_action="Change the service's records on its page so they agree.",
         no_help_reason="HQ cannot tell which of the records is meant.",
-        bars={"attention": "a service's records disagree about how it is reached"},
+        bars={Tone.ATTENTION: "a service's records disagree about how it is reached"},
     ),
 )

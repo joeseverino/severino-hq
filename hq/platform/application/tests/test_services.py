@@ -9,11 +9,11 @@ from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.projects.models import Project
+from hq.platform.application.markup_testing import within
 
 from .. import estate, security
 from ..attention import infrastructure
 from ..services import alias_target, find_service, service_catalog, service_reading
-from .markup import within
 from .service_world import declare_world, facet, healthy
 
 

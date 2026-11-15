@@ -11,10 +11,10 @@ from django.test import TestCase
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource
+from hq.platform.application.markup_testing import all_elements, within
 from hq.platform.application.resources import get_resource
 from hq.platform.application.run_reads import RUNS
 from hq.platform.application.security import Capability, Principal
-from hq.platform.application.tests.markup import all_elements, within
 from hq.platform.application.tests.procedures import APPROVER, Supply, approved_run, manifest, run_payload
 from hq.platform.core.attribution import operation_context
 from hq.platform.core.models import AuditLog

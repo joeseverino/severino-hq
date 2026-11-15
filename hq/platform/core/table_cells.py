@@ -24,10 +24,11 @@ _OFF_LINE = frozenset({"visually-hidden", "row-below", "row-more", "narrow-only"
 # may be cut is held to a few lines (`cell-clamp`, cuts.css), and its row,
 # opened in a narrow box, shows it whole.
 LONG = 48
-# The characters of the longest value a column holds whole on its line, up to
-# its share (`data-short`, tables.css), counted generously: a proportional
-# face sets most letters narrower than `ch`. An address and its port, a host,
-# a mailbox or a project's name is no longer; a longer one wraps.
+# The characters of the longest value of such a kind a column holds whole on
+# its line, up to its share (`cell-short`, tables.css), counted generously: a
+# proportional face sets most letters narrower than `ch`. An address and its
+# port, a host, a mailbox or a project's name is no longer; a longer one wraps,
+# never to fewer than a line of words, as a long one does.
 SHORT = 32
 # The kinds whose values wrap and may be clamped, each saying its whole value
 # in its title; the others (a status, a figure, a control) keep their line,
@@ -200,8 +201,10 @@ class Cells(HTMLParser):
         self.table_at: Position = (0, 0)
         # Where each element or cell with a role starts, and its roles.
         self.roles: dict[tuple[int, int], set[str]] = {}
-        # Each long cell's content, held to a few lines (`cell-clamp`).
+        # Each long cell's content, held to a few lines (`cell-clamp`), and
+        # each short one's, held whole up to its column's share (`cell-short`).
         self.clamps: list[Span] = []
+        self.shorts: list[Span] = []
         # Each row's open line: where it goes, how many columns it spans, the
         # blocks it shows whole and the entries it names.
         self.details: list[tuple[Position, int, list[Span], list[LineEntry]]] = []
@@ -522,14 +525,16 @@ class Cells(HTMLParser):
         marks = [] if "data-kind" in cell.attrs else [f' data-kind="{kind}"']
         if body and _long(cell):
             marks.append(" data-long")
-        elif body and not cell.says_nothing and cell.longest <= SHORT:
-            marks.append(" data-short")
         if body and kind in _CUT_KINDS and not cell.says_nothing:
             said = " ".join("".join(cell.text).split())
             if said and "title" not in cell.attrs:
                 marks.append(f' title="{html.escape(said)}"')
             if _long(cell) and cell.closed:
                 self.clamps.append((cell.opened, cell.value_end))
+            # A fold's toggle is drawn before its head's value, which the
+            # value's span (ended at a toggle) would leave out.
+            elif cell.longest <= SHORT and cell.closed and not cell.folds:
+                self.shorts.append((cell.opened, cell.value_end))
         return marks
 
     def _name(self, row: _Row, kinds: dict[int, str], named: int) -> None:

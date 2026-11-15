@@ -22,6 +22,7 @@ from hq.platform.application.resource_operations import (
     request_removal,
 )
 from hq.platform.application.security import MCP_INTERFACE, agent_principal, cli_principal
+from hq.platform.application.tests.consent import consented
 
 from ..models import ManagedResource, OperationRequest
 from ..providers import PROVIDERS
@@ -35,7 +36,7 @@ class OperationPolicyTests(TestCase):
         declare_targets()
         save_managed_resource(
             ManagedResourceCommand(key="example-wildcard", kind="tls.certificate", spec=certificate_spec()),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
         )
         OperationRequest.objects.all().delete()  # applied, so the reconcile its save queued is done
         self.resource = ManagedResource.objects.get(key="example-wildcard")
@@ -129,7 +130,7 @@ class OperationPolicyTests(TestCase):
     def test_active_controller_capability_queues_renewal_work(self):
         result = request_certificate_renewal(
             OperationCommand(),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
             current_key=self.resource.key,
         )
 
@@ -152,13 +153,13 @@ class OperationPolicyTests(TestCase):
                 kind="cloudflare.zone",
                 spec={"zone": "example.com", "connection_ref": "cf-example"},
             ),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
         )
 
         with self.assertRaisesMessage(PolicyError, PROVIDERS["cloudflare.zone"].actions["reconcile"].reason):
             request_reconcile(
                 OperationCommand(),
-                principal=cli_principal(),
+                consented=consented(cli_principal()),
                 current_key="a-domain",
             )
         self.assertFalse(OperationRequest.objects.exists())
@@ -173,7 +174,7 @@ class OperationPolicyTests(TestCase):
         with self.assertRaisesRegex(PolicyError, "Renews automatically from"):
             request_certificate_renewal(
                 OperationCommand(),
-                principal=cli_principal(),
+                consented=consented(cli_principal()),
                 current_key=self.resource.key,
             )
 
@@ -187,12 +188,12 @@ class OperationPolicyTests(TestCase):
         self.resource.save()
         first = request_certificate_renewal(
             OperationCommand(),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
             current_key=self.resource.key,
         )
         second = request_certificate_renewal(
             OperationCommand(),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
             current_key=self.resource.key,
         )
         self.assertTrue(first["queued"])
@@ -214,7 +215,7 @@ class OperationPolicyTests(TestCase):
 
         save_managed_resource(
             ManagedResourceCommand(key="other-wildcard", kind="tls.certificate", spec=certificate_spec()),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
         )
         OperationRequest.objects.filter(resource__key="other-wildcard").delete()  # applied, as above
 
@@ -229,7 +230,9 @@ class OperationPolicyTests(TestCase):
     def test_an_operation_answers_how_it_stands_as_every_ask_does(self, _policy):
         from hq.platform.application.asks import Asked
 
-        answer = request_reconcile(OperationCommand(), principal=cli_principal(), current_key=self.resource.key)
+        answer = request_reconcile(
+            OperationCommand(), consented=consented(cli_principal()), current_key=self.resource.key
+        )
 
         asked = Asked.of(answer)
         self.assertTrue(asked.standing.live)
@@ -269,7 +272,7 @@ class OperationPolicyTests(TestCase):
     def test_controller_claim_and_report_updates_observed_state(self, _policy):
         queued = request_reconcile(
             OperationCommand(),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
             current_key=self.resource.key,
         )
         claim_payload = bridge_client.call(
@@ -372,7 +375,7 @@ class QueueHeadTests(TestCase):
 
         request_removal(
             OperationCommand(),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
             current_key="edge-certificate-target",
         )
 

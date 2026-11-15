@@ -124,17 +124,3 @@ def dotted_html(*parts: object) -> SafeString:
     joined by ``{% dot %}``'s mark."""
 
     return mark_safe(DOT_MARKUP.join(conditional_escape(part) for part in parts if _drawn(part)))  # noqa: S308 - each part escaped here
-
-
-# What running a command does, in the words every page uses for it: the search
-# results, the command's own page and the agents table.
-EFFECT_LABELS = {
-    "read": "Reads only",
-    "remote_write": "Changes HQ",
-    "infrastructure_change": "Changes a live system",
-    "destructive": "Stops or deletes",
-}
-
-
-def effect_label(effect: str) -> str:
-    return EFFECT_LABELS.get(effect, "")

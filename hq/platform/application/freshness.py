@@ -52,6 +52,11 @@ GLANCE_EVERY = timedelta(minutes=5)
 # own, slower, cadence however the page is opened.
 VISIT_EVERY = timedelta(minutes=2)
 
+# A read or hand-off that failed is asked again after this, not on every
+# pass, whatever the cadence of its kind. GitHub's allowance is by the hour,
+# so an hour also lets a read refused by its rate limit succeed.
+RETRY_AFTER = timedelta(hours=1)
+
 
 @dataclass(frozen=True, slots=True)
 class ReadCadence:

@@ -16,16 +16,14 @@ from django.utils.text import capfirst
 from hq.domains.control_plane.names import is_hostname
 from hq.platform.application.labels import dotted
 from hq.platform.core.network import split_host_port
-lazy from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
-lazy from hq.domains.control_plane.providers import PROVIDERS
+lazy from hq.domains.control_plane.providers import PROVIDERS, operator_label
 
 from . import tailnet
-from .connection_security import EDGE_LABEL, FIREWALL_LABEL
 from .doors import approved_words
 from .freshness import PAGE_VISIT, freshness
 from .moments import expiry_words, moment
-from .posture import SIGN_IN, STANDARD, advanced
-from .request_channel import UNTRUSTED_FORWARDER, Channel, encryption
+from .posture import EDGE, FIREWALL, SIGN_IN, STANDARD, advanced
+from .request_channel import UNTRUSTED_FORWARDER, Channel, Forwarding, encryption
 from .request_identity import SSO_LINK, Identity
 from .standards import Check, Measurement, Reading, Standing, measure
 from .ui import counted, ended
@@ -62,10 +60,8 @@ class RequestFacts:
     identity: Identity
     host: str = ""
     secure: bool = False
-    # The socket peer, which is the forwarding proxy when one forwarded it.
-    peer: str = ""
-    forwarded: bool = False
-    forwarding_trusted: bool = False
+    # Who handed it to HQ, and which of them HQ trusts: decided once, read here.
+    forwarding: Forwarding = field(default_factory=Forwarding)
     # The tailnet as swept, read once for every question asked of it.
     known: dict[str, tailnet.Device] = field(default_factory=dict)
     device: tailnet.Device | None = None
@@ -83,14 +79,24 @@ class RequestFacts:
     lock: dict[str, Any] = field(default_factory=dict)
     # What HQ was told about its machines.
     declared: tuple = ()
-    # The proxy's access-list control for HQ's name, and the host firewall's
-    # for its port; None where nothing observed them.
-    edge: Any = None
-    firewall: Any = None
+    # The proxy's reading for HQ's name, and the host firewall's for its port
+    # (``connection_security``); None where nothing asked for them.
+    edge: Reading | None = None
+    firewall: Reading | None = None
+
+    @property
+    def peer(self) -> str:
+        """The socket peer, which is the forwarding proxy when one forwarded it."""
+
+        return self.forwarding.peer
+
+    @property
+    def forwarded(self) -> bool:
+        return self.forwarding.forwarded
 
     @property
     def untrusted_forwarding(self) -> bool:
-        return self.forwarded and not self.forwarding_trusted
+        return self.forwarding.untrusted
 
     @property
     def serves(self) -> tailnet.Device | None:
@@ -127,17 +133,6 @@ def measure_request(facts: RequestFacts) -> Measurement:
 # ----- The checks -----------------------------------------------------------------
 
 
-def _control(control) -> Reading:
-    """A shared provider control, as the request reads it: "neutral" is the
-    reading that never came, which is neither a pass nor a denial."""
-
-    if control.state == "good":
-        return Reading.met(control.evidence, detail=control.detail)
-    if control.state == "neutral":
-        return Reading.unavailable(control.evidence, detail=control.detail)
-    return Reading.unmet(control.evidence, detail=control.detail)
-
-
 def _name(facts: RequestFacts) -> Reading:
     """Whether the name in the address bar is one the internet can resolve."""
 
@@ -150,18 +145,6 @@ def _name(facts: RequestFacts) -> Reading:
             f"{host} resolves to {', '.join(answers)}", detail="A public DNS record exists for this name."
         )
     return Reading.met(host, detail="No public DNS record exists for this name in any domain HQ reads.")
-
-
-def _edge(facts: RequestFacts) -> Reading:
-    return _control(facts.edge)
-
-
-def _arrival(facts: RequestFacts) -> Reading:
-    """Whether the address was required, or only presented: the host
-    firewall's own rule for HQ's port, accepted only from packets that arrived
-    on the tailnet interface, which no sender can set."""
-
-    return _control(facts.firewall)
 
 
 def _channel(facts: RequestFacts) -> Reading:
@@ -368,7 +351,7 @@ def _forwarding(facts: RequestFacts) -> bool:
 
 def _forwarder(facts: RequestFacts) -> Reading:
     device = facts.forwarder
-    if not facts.forwarding_trusted:
+    if not facts.forwarding.trusted:
         return Reading.unmet(facts.peer, detail=UNTRUSTED_FORWARDER)
     if device is None:
         return Reading.met(facts.peer, detail="A trusted proxy.")
@@ -385,7 +368,7 @@ def _forwarding_spec():
 
 
 def _proxy_headers_apply(facts: RequestFacts) -> bool:
-    return facts.forwarded and facts.forwarding_trusted and _forwarding_spec() is not None
+    return facts.forwarding.trusted and _forwarding_spec() is not None
 
 
 def _proxy_headers(facts: RequestFacts) -> Reading:
@@ -394,10 +377,7 @@ def _proxy_headers(facts: RequestFacts) -> Reading:
 
     declared = _forwarding_spec()
     client_header, scheme_header = declared.forwarding_headers
-    proxy = next(
-        (CONNECTION_LABELS[name] for name in declared.connection_providers if name in CONNECTION_LABELS),
-        declared.label,
-    )
+    proxy = operator_label(declared.kind)
 
     def header(name: str) -> str:
         return str(facts.request.META.get(f"HTTP_{name.upper().replace('-', '_')}", "") or "").strip()
@@ -568,6 +548,44 @@ def _transport(facts: RequestFacts) -> Reading:
     return Reading.judged(tls or over_tailnet, evidence=encryption(facts.channel, tls), detail=detail)
 
 
+GATE = Check(
+    "gate",
+    "Other networks are refused",
+    _gate,
+    "HQ answering the internet",
+    "",
+    unmet="Other networks are not refused",
+    hop="hq",
+    boundary="Application edge",
+    mechanism="HQ's trusted-network setting",
+)
+TRANSPORT = Check(
+    "transport",
+    "The connection is encrypted",
+    _transport,
+    "",
+    "",
+    unmet="The connection is not encrypted",
+    hop="network",
+    boundary="Transport",
+    mechanism="WireGuard and TLS",
+)
+FORWARDER = Check(
+    "forwarder",
+    "HQ trusts the proxy that forwarded this",
+    _forwarder,
+    "",
+    "",
+    applies=_forwarding,
+    unmet="An untrusted proxy forwarded this",
+    hop="ingress",
+    boundary="Forwarding identity",
+    mechanism="HQ's list of trusted proxies",
+)
+# How the request was let in: what the connections page answers beside the
+# connections' own checks.
+ADMISSION = (GATE, TRANSPORT, FORWARDER)
+
 # Read again by the proxy's hop, whose check the headers settle.
 PROXY_HEADERS = Check(
     "proxy-evidence",
@@ -584,7 +602,8 @@ PROXY_HEADERS = Check(
 
 # Each check as a request meets it rather than by importance, so reading down
 # is reading the path in: no single one is the reason HQ is not on the
-# internet. A check only the connection panel draws says no ``why`` or ``fix``.
+# internet. A check of every HQ (its hop is HQ's own) says what it stops, which
+# docs/Posture.md lists; one only the connection panel draws says no ``why``.
 REQUEST_STANDARD: tuple[Check, ...] = (
     Check(
         "name",
@@ -597,18 +616,7 @@ REQUEST_STANDARD: tuple[Check, ...] = (
         boundary="Exposure",
         mechanism="Public DNS records",
     ),
-    Check(
-        "edge",
-        EDGE_LABEL,
-        _edge,
-        "",
-        "",
-        applies=lambda facts: facts.edge is not None,
-        unmet="The proxy lets in more than the tailnet",
-        hop="ingress",
-        boundary="Reverse proxy edge",
-        mechanism="The proxy's access list",
-    ),
+    EDGE,
     Check(
         "channel",
         "The address is on the tailnet",
@@ -621,20 +629,8 @@ REQUEST_STANDARD: tuple[Check, ...] = (
         mechanism="The tailnet address range",
     ),
     # Against the address claim above, because that is what it qualifies:
-    # whether the packet had to arrive on the tailnet to be let in. Absent
-    # where nothing observed the firewall, rather than a verdict from silence.
-    Check(
-        "arrival",
-        FIREWALL_LABEL,
-        _arrival,
-        "",
-        "",
-        applies=lambda facts: facts.firewall is not None,
-        unmet="The firewall accepts HQ's port by address alone",
-        hop="machine",
-        boundary="Network",
-        mechanism="The firewall rule",
-    ),
+    # whether the packet had to arrive on the tailnet to be let in.
+    FIREWALL,
     Check(
         "policy",
         "The tailnet policy allows this device",
@@ -719,18 +715,7 @@ REQUEST_STANDARD: tuple[Check, ...] = (
         boundary="Identity correlation",
         mechanism="Device approval on the Agents page",
     ),
-    Check(
-        "forwarder",
-        "HQ trusts the proxy that forwarded this",
-        _forwarder,
-        "",
-        "",
-        applies=_forwarding,
-        unmet="An untrusted proxy forwarded this",
-        hop="ingress",
-        boundary="Forwarding identity",
-        mechanism="HQ's list of trusted proxies",
-    ),
+    FORWARDER,
     PROXY_HEADERS,
     Check(
         "tailnet-observer",
@@ -743,45 +728,25 @@ REQUEST_STANDARD: tuple[Check, ...] = (
         boundary="Transport attestation",
         mechanism="Tailscale on the machine that read the tailnet",
     ),
-    Check(
-        "gate",
-        "Other networks are refused",
-        _gate,
-        "",
-        "",
-        unmet="Other networks are not refused",
-        hop="hq",
-        boundary="Application edge",
-        mechanism="HQ's trusted-network setting",
-    ),
+    GATE,
     SIGN_IN,
     Check(
         "session",
         "Session cookie is locked to this site",
         _session,
-        "",
+        "a cookie stolen or set by another host",
         "",
         unmet="The session cookie is missing a protection",
         hop="hq",
         boundary="Session",
         mechanism="HQ's cookie settings",
     ),
-    Check(
-        "transport",
-        "The connection is encrypted",
-        _transport,
-        "",
-        "",
-        unmet="The connection is not encrypted",
-        hop="network",
-        boundary="Transport",
-        mechanism="WireGuard and TLS",
-    ),
+    TRANSPORT,
     Check(
         "canonical",
         "HTTPS only",
         _canonical,
-        "",
+        "a downgrade to plain HTTP",
         "",
         unmet="Plain HTTP is a way in",
         hop="hq",
@@ -792,7 +757,7 @@ REQUEST_STANDARD: tuple[Check, ...] = (
         "browser",
         "Scripts only from HQ",
         _browser,
-        "",
+        "injected script",
         "",
         unmet="The content security policy is missing a rule",
         hop="hq",

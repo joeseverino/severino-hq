@@ -4,7 +4,7 @@
   <td><code>{{ row.doc_id|breakable }}</code></td>
   <td>{{ row.get_doc_type_display|breakable }}</td>
   <td>{{ row.get_environment_display|breakable }}</td>
-  <td>{% status row.get_status_display tone=row.status %}</td>
-  <td>{% status row.get_sensitivity_display tone=row.sensitivity %}</td>
+  <td>{% status row.state %}</td>
+  <td>{% status row.get_sensitivity_display chip=True %}</td>
   <td class="muted">{% if row.last_reviewed %}{{ row.last_reviewed|when:"day" }}{% endif %}</td>
 {% endblock %}

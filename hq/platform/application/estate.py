@@ -28,7 +28,7 @@ from .expiry import DEFAULT_RENEWAL_WINDOW_DAYS, days_until, renewal_window
 from .moments import moment, when_day
 from .projection import read_once
 from .security import Principal
-from .service_health import UNKNOWN
+from .tone import Tone
 from .ui import DomainOverview, counted
 from .workflow_contracts import ActionLink
 lazy from . import connections, services, zones
@@ -37,6 +37,7 @@ lazy from .connections import connection_rows
 lazy from .credential_sight import credential_sight
 lazy from .facts import Subject, inventory_about, readings
 lazy from .infrastructure import enabled_resources
+lazy from .machines import MachineState
 lazy from .services import service_reading
 lazy from .zones import ZONE_KIND
 
@@ -119,18 +120,17 @@ class Estate:
 
     @property
     def online(self) -> tuple[Any, ...]:
-        return tuple(item for item in self.machines if item.state[0] == "online")
+        return tuple(item for item in self.machines if item.state is MachineState.ONLINE)
 
     @property
     def offline(self) -> tuple[Any, ...]:
         # A personal device that is off reads as away, never offline.
-        return tuple(item for item in self.machines if item.state[0] == "offline")
+        return tuple(item for item in self.machines if item.state is MachineState.OFFLINE)
 
     @property
     def watched(self) -> tuple[Any, ...]:
-        # What "online" is out of: a machine no connection reaches (an offline
-        # CA, a printer) and a personal device that is away are not missing.
-        return tuple(item for item in self.machines if item.state[1] != "unprobed")
+        # What "online" is out of.
+        return tuple(item for item in self.machines if item.state.watched)
 
     @property
     def empty(self) -> bool:
@@ -283,7 +283,7 @@ def cards(*, principal: Principal) -> tuple[dict[str, Any], ...]:
             "value": str(len(estate.online)),
             "url": reverse("control_plane:machines"),
             "detail": (f"{len(estate.offline)} offline" if estate.offline else f"of {len(estate.watched)}"),
-            **({"status": "attention"} if estate.offline else {}),
+            **({"status": Tone.ATTENTION} if estate.offline else {}),
         },
         {
             "id": "hq.estate.services",
@@ -319,7 +319,7 @@ def cards(*, principal: Principal) -> tuple[dict[str, Any], ...]:
                     "value": counted(max(first.days, 0), "day"),
                     "url": first.url or reverse(listed),
                     "detail": dotted(first.subject, first.source, "not renewed by its issuer" if first.overdue else ""),
-                    **({"status": "attention"} if first.overdue else {}),
+                    **({"status": Tone.ATTENTION} if first.overdue else {}),
                 }
             )
     if total := connection_total(principal=principal):
@@ -345,7 +345,7 @@ def _connections_card(estate: Estate, total: int) -> dict[str, Any]:
         }
     elif troubled:
         card["detail"] = f"{len(troubled)} with a problem"
-    return card | ({"status": "attention"} if troubled else {})
+    return card | ({"status": Tone.ATTENTION} if troubled else {})
 
 
 def _answers_at(machine) -> str:
@@ -368,7 +368,7 @@ def overview(*, principal: Principal):
     # A service is drawn when HQ reads its health, as a machine is when a
     # connection reaches it: one with no health reading (a DNS record only,
     # hosted elsewhere) is neither up nor down, and a hollow dot would say down.
-    checked = tuple(service for service in estate.services if service.health.state != UNKNOWN)
+    checked = tuple(service for service in estate.services if service.health.state is not None)
     # A part of a whole is drawn as well as said: one dot a machine or a
     # service, naming it when pointed at and leading to its page. On the
     # overview only: the cards are also a transport payload, which carries no
@@ -377,8 +377,8 @@ def overview(*, principal: Principal):
         "hq.estate.machines": Dots(
             tuple(
                 Dot(
-                    filled=machine.state[0] == "online",
-                    tip=dotted(machine.name, _answers_at(machine), machine.state[0]),
+                    filled=machine.state is MachineState.ONLINE,
+                    tip=dotted(machine.name, _answers_at(machine), machine.state),
                     url=entity_link("machine", machine.name).url,
                 )
                 for machine in estate.watched
@@ -389,7 +389,7 @@ def overview(*, principal: Principal):
                 # Filled for what the services page calls healthy, so a dot is
                 # never greener than the State it leads to.
                 Dot(
-                    filled=service.health.state == "good",
+                    filled=service.health.state == Tone.GOOD,
                     tip=dotted(service.hostname, service.faults[0] if service.faults else service.health.label),
                     url=entity_link("service", service.hostname).url,
                 )

@@ -10,6 +10,7 @@ from django.urls import reverse
 
 from hq.domains.assets.models import Asset
 from hq.domains.control_plane.models import ProviderConnection
+from hq.platform.application.markup_testing import hrefs, with_class
 
 from ..attention import raised
 from ..connection_context import connections_context
@@ -18,7 +19,6 @@ from ..resource_context import RecordStatus, record_list
 from ..security import cli_principal
 from ..services import certificate_use
 from .host_only import host_only
-from .markup import hrefs, with_class
 from .test_relationships import connected, estate
 
 
@@ -102,7 +102,7 @@ def _row(key, kind, label, tone="healthy", **extra):
         shown_name=key,
         summary=extra.get("summary", ""),
         record_status=RecordStatus(
-            "working" if tone == "healthy" else "degraded", tone, "Working" if tone == "healthy" else "Has a problem"
+            "working" if tone == "healthy" else "degraded", "Working" if tone == "healthy" else "Has a problem"
         ),
     )
 

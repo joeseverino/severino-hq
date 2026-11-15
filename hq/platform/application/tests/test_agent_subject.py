@@ -15,7 +15,7 @@ from mcp.shared.exceptions import MCPError
 
 from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
 from hq.domains.projects.models import Project
-from hq.platform.application.tests.markup import select
+from hq.platform.application.markup_testing import select
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AgentIdentity
 from hq.platform.mcp import tasks
@@ -23,7 +23,7 @@ from hq.platform.mcp import tasks
 from .. import agent_admission, agent_registry, roles
 from ..agent_access import SET_AGENT_BLOCK, refusal
 from ..agent_activity import standings
-from ..approvals import ApprovalError, ApproveCommand, approve, asked_by, pending
+from ..approvals import ApprovalError, ApproveCommand, approve, own_held_request, pending
 from ..capabilities import capability_registry, execute_capability
 from ..capability_policy import Rule, columns, decide, set_rule
 from ..controller import claim_next_operation
@@ -157,7 +157,7 @@ class OneSubjectPerAgentAndPersonTests(TestCase):
             with self.subTest(person=caller.person_key):
                 self.assertEqual({str(held.pk) for held in pending(principal=caller)}, {own_id})
                 for owner, held_id in holds:
-                    self.assertEqual(asked_by(held_id, principal=caller) is not None, owner == caller)
+                    self.assertEqual(own_held_request(held_id, principal=caller) is not None, owner == caller)
 
     def test_the_action_queue_leaves_out_another_persons_hold(self):
         declare_policy()

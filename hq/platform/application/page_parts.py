@@ -9,7 +9,7 @@ an extension builds the same part. docs/Design.md ("A section is drawn by
 from collections.abc import Mapping
 from dataclasses import field
 from datetime import date
-from typing import Any
+from typing import Any, Literal
 
 from django.utils.html import conditional_escape, format_html, format_html_join, strip_tags
 from django.utils.safestring import SafeString, mark_safe
@@ -19,7 +19,7 @@ lazy from django.template.loader import render_to_string
 lazy from hq.platform.core.templatetags.value_tags import breakable
 
 from .display_words import display
-lazy from .ui import STATUS_VALUES
+from .tone import Tone
 
 # The arrow that ends a link onward, written inside its last word's box as
 # breakable writes a mark, so a wrapped label never leaves it alone on a line.
@@ -92,7 +92,7 @@ class SectionPart:
     more_label: str = ""
     more_url: str = ""
     figure: bool = False
-    edge: str = ""
+    edge: Tone | Literal[""] = ""
 
     def __post_init__(self) -> None:
         if self.head not in HEADS:
@@ -109,8 +109,6 @@ class SectionPart:
             raise ValueError("A figure is drawn open, with its caption as its head; it does not fold.")
         if self.when and self.moment is None:
             raise ValueError("A section's when is the form of the moment it names, and it names none.")
-        if self.edge and self.edge not in STATUS_VALUES:
-            raise ValueError(f"A section's edge is a status tone, one of {', '.join(sorted(STATUS_VALUES))}.")
         if not TOP_LEVEL <= self.level <= LAST_LEVEL:
             raise ValueError(f"A section's heading is h{TOP_LEVEL} to h{LAST_LEVEL}.")
 

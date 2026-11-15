@@ -12,6 +12,7 @@ from typing import Any
 
 from .containers import BEHIND, SERIOUS, VULNERABLE, Container, containers, ranked
 from .images import affected, version
+from .tone import Tone
 from .ui import ended
 lazy from . import exposure
 lazy from .container_standard import DOCKER_SOCKETS, runtime_path, system_path
@@ -68,15 +69,15 @@ class Plan:
 
     @property
     def fixes_tone(self) -> str:
-        return "good" if self.fixes else ""
+        return Tone.GOOD if self.fixes else ""
 
     @property
     def data_tone(self) -> str:
-        return "attention" if self.stateful else ""
+        return Tone.ATTENTION if self.stateful else ""
 
     @property
     def verified_tone(self) -> str:
-        return "" if self.verified_by else "attention"
+        return "" if self.verified_by else Tone.ATTENTION
 
     @property
     def risk(self) -> str:
@@ -354,11 +355,11 @@ class Readiness:
 
     @property
     def automatic_tone(self) -> str:
-        return "good" if self.automatic else ""
+        return Tone.GOOD if self.automatic else ""
 
     @property
     def verified_tone(self) -> str:
-        return "good" if self.verified_by else "attention"
+        return Tone.GOOD if self.verified_by else Tone.ATTENTION
 
 
 def readiness_of(item: Container) -> Readiness:

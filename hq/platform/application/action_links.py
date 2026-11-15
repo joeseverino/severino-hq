@@ -148,7 +148,7 @@ def _permitted_spec(name: str, principal: Principal):
     spec = capabilities.capability_spec(name)
     if spec is None:
         return None
-    return spec if principal.permits(*spec.required_capabilities) else None
+    return spec if spec.permitted_to(principal) else None
 
 
 READ_NOW_CAPABILITY = "infrastructure.controller.refresh"

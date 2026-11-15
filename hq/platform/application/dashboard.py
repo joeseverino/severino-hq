@@ -308,5 +308,5 @@ WITHHELD_ACTIVITY = "not read: recent_activity, because this caller may not read
 
 def _activity(principal) -> _Activity:
     if principal.permits(Capability.READ_AUDIT_LOG):
-        return {"recent_activity": recent_activity(principal=principal, limit=8)["items"], "unread": []}
+        return {"recent_activity": recent_activity(limit=8)["items"], "unread": []}
     return {"recent_activity": [], "unread": [WITHHELD_ACTIVITY]}

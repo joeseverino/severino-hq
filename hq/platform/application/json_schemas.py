@@ -106,8 +106,13 @@ class PublishedSchema(GenerateJsonSchema):
         return _untitled(super().dataclass_schema(schema), schema["cls"])
 
     @override
-    def enum_schema(self, schema: core_schema.EnumSchema) -> JsonSchemaValue:
-        return _untitled(super().enum_schema(schema), schema["cls"])
+    def generate_inner(self, schema: Any) -> JsonSchemaValue:
+        value = super().generate_inner(schema)
+        # Pydantic titles an enum by its class after ``enum_schema`` answers,
+        # in the definition the value may refer to.
+        if isinstance(schema, dict) and schema.get("type") == "enum":
+            _untitled(self.resolve_ref_schema(value), schema["cls"])
+        return value
 
     @override
     def dict_schema(self, schema: core_schema.DictSchema) -> JsonSchemaValue:

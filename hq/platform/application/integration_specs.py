@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, TypeAliasType, Union, get_args, get_origi
 
 from pydantic import BaseModel, ConfigDict, TypeAdapter
 
+from .contracts import Effect
 from .display_words import display
 from .json_schemas import fields, json_schema
 from .search_contracts import SearchDefinition
@@ -113,6 +114,18 @@ STALE_WRITE_KEYWORD = "expected_updated_at"
 SENT_KEYWORD = "sent"
 
 
+# The runner's consent (``capabilities.Consented``), handed in place of the
+# principal only to a handler that names it: one that writes a declaration.
+CONSENT_KEYWORD = "consented"
+
+
+def takes_consent(handler: Callable[..., Any]) -> bool:
+    """Whether a capability handler declares ``consented`` by name: it writes a
+    declaration, which only a consented act may."""
+
+    return _declares(handler, CONSENT_KEYWORD)
+
+
 def takes_stale_write_token(handler: Callable[..., Any]) -> bool:
     """Whether a capability handler declares ``expected_updated_at`` by name.
 
@@ -192,7 +205,7 @@ def capability_schema(spec: CapabilitySpec) -> dict[str, Any]:
     schema = records.as_its_model_declares(spec.command_type, command_schema(spec.command_type))
     if kept := kept_by(spec):
         schema = records.as_an_update_declares(schema, kept.always_sent)
-    if spec.effect == "read":
+    if not spec.effect.changes:
         return schema
     properties = dict(schema.get("properties", {}))
     properties[IDEMPOTENCY_FIELD] = dict(IDEMPOTENCY_FIELD_SCHEMA)
@@ -249,7 +262,8 @@ def _declared(command: type) -> frozenset[str]:
 class CapabilitySpec(Requires):
     name: str
     summary: str
-    effect: str
+    # Given as its value's string too, as an extension may write it.
+    effect: Effect
     required_capability: Capability | str | tuple[Capability | str, ...]
     command_type: type
     handler: Callable[..., Mapping[str, Any]]
@@ -295,6 +309,7 @@ class CapabilitySpec(Requires):
     about: Callable[[Principal], CommandAbout] | None = None
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "effect", Effect(self.effect))
         # A type with a config of its own keeps it over the one
         # ``command_adapter`` closes a command with, so a command has none.
         command = self.command_type

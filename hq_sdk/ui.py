@@ -18,6 +18,7 @@ from hq.platform.application.moments import (
     when_range,
 )
 from hq.platform.application.page_parts import SectionPart
+from hq.platform.application.tone import Tone
 from hq.platform.application.ui import (
     MISSING,
     ActivityCalendar,
@@ -35,6 +36,7 @@ from hq.platform.application.ui import (
     counted,
     ended,
     line_chart,
+    measured,
     stacked_bar_chart,
 )
 from hq.platform.core.templatetags.status_tags import status_pill
@@ -66,6 +68,7 @@ __all__ = [
     "StackedBarChart",
     "Timeline",
     "TimelineItem",
+    "Tone",
     "Trend",
     "WeekPlan",
     "ago",
@@ -73,6 +76,7 @@ __all__ = [
     "dotted",
     "ended",
     "line_chart",
+    "measured",
     "span",
     "stacked_bar_chart",
     "status_pill",

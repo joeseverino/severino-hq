@@ -16,6 +16,8 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, Any, TypeAliasType, get_args, get_origin, get_type_hints
 
+from django.core.exceptions import ValidationError
+
 from .describe import Describe
 
 # Lazy: it loads pydantic, which declaring a command does not.
@@ -170,6 +172,20 @@ class Upload:
         return {**handler(schema), UPLOAD: True}
 
 
+# A delete's confirmation: the identifier of what it deletes, sent again, so
+# no caller deletes a record it named only once. ``confirm`` checks it.
+type Confirm = Annotated[str, Describe("The identifier of what it deletes, again, to confirm the delete.")]
+
+CONFIRM_MISMATCH = "Must match the identifier of what it deletes."
+
+
+def confirm(given: str, target: str | int) -> None:
+    """Refuse a delete whose ``Confirm`` field, named ``confirm``, is not ``target``'s identifier."""
+
+    if given != str(target):
+        raise ValidationError({"confirm": ValidationError(CONFIRM_MISMATCH, code="invalid")})
+
+
 def is_upload(schema: dict[str, Any]) -> bool:
     """Whether one field's schema is a file a person picks."""
 
@@ -200,12 +216,14 @@ def referred(schema: dict[str, Any]) -> tuple[str, str] | None:
 # Every marker is imported from here, Describe too, though it lives in a leaf of its own.
 __all__ = [
     "AMONG",
+    "CONFIRM_MISMATCH",
     "NAMES_RECORDS",
     "REFERS",
     "UPLOAD",
     "Among",
     "AmongNow",
     "Choices",
+    "Confirm",
     "Describe",
     "ForAgents",
     "Names",
@@ -213,6 +231,7 @@ __all__ = [
     "Upload",
     "among",
     "among_now",
+    "confirm",
     "for_agents",
     "is_upload",
     "named_records",

@@ -96,16 +96,17 @@
 .data-table:has(> thead > tr:last-child > :nth-child(8)) { --columns: 8; }
 .data-table:has(> thead > tr:last-child > :nth-child(9)) { --columns: 9; }
 .data-table:has(> thead > tr:last-child > :nth-child(10)) { --columns: 10; }
-/* Laid out as a table (a narrow box stacks it, below): a value that is no longer than a line of words keeps its line, as a state does, up to its share; a long one wraps at its words in a line of `--row-words`, or its share where that is less, so no column of words is set a word to a line. */
+/* A short value's box (below) is no box in a stacked row or on the open line. */
+.cell-short { display: contents; }
+/* Laid out as a table (a narrow box stacks it, below): a state keeps its line. A short value of words keeps its line up to its share; a longer one (past `table_cells.SHORT`, or a state or figure longer than a line of words, `data-long`) wraps at its words in a line of `--row-words`, or its share where that is less, so no column of words is set a word to a line. */
 @container table-region (width >= 36rem) {
   .data-table > tbody > tr:not(.row-detail) > [data-kind="status"]:not([data-long]) { white-space: nowrap; }
   /* The line is the words', so the cell's padding is added to it. */
-  .data-table > tbody > tr:not(.row-detail) > td[data-long] { box-sizing: content-box; min-inline-size: min(var(--row-words), var(--share)); }
-  /* A short value (`data-short`, table_cells) that is one box, a link alone in its cell or a name in its chip, is as wide as it says, up to its share, so its column holds it whole: broken, a project's name or an address and its port reads as two. Past its share it wraps inside its box. */
-  .data-table > tbody > tr:not(.row-detail) > td[data-short]:not([data-kind="identifier"]) > a[href]:only-child,
-  .data-table > tbody > tr:not(.row-detail) > td[data-short] code:not(.cell-whole) {
-    display: inline-block; inline-size: max-content; max-inline-size: var(--share); baseline-source: first;
+  .data-table > tbody > tr:not(.row-detail) > :is(td, th):is([data-long], :is([data-kind="name"], [data-kind="prose"], [data-kind="identifier"]):not([data-blank], :has(> .cell-short))) {
+    box-sizing: content-box; min-inline-size: min(var(--row-words), var(--share));
   }
+  /* A short value of words (`cell-short`, table_cells) is one box as wide as it says, up to its share, so its column holds it whole: broken, a project's name or an address and its port reads as two. Past its share it wraps inside its box. The box fills its cell, so a column given more than its share (the room a table has past every column's needs) holds the value on that wider line. */
+  .data-table > tbody > tr:not(.row-detail) > :is(td, th) > .cell-short { display: inline-block; inline-size: max-content; max-inline-size: var(--share); min-inline-size: 100%; vertical-align: top; baseline-source: first; }
 }
 /* Figures right-aligned on fixed digit widths compare by eye; the heading too, so the label sits over them. A cell is a figure by its heading's kind, which the region writes on it (table_tags). */
 .data-table > * > tr > [data-kind="numeric"] { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }

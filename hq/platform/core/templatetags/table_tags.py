@@ -137,7 +137,8 @@ def mark_cells(markup: str, *, sorts: bool = True) -> str | None:
     A blank body cell is ``data-blank``, a cell of a column blank in every
     row ``data-blank-column``; a cell says the width its column leaves at
     (``data-drop``), a body cell its column's kind and a cut one its whole
-    value in its title, a long one held to a few lines (``cell-clamp``), and
+    value in its title, a long one held to a few lines (``cell-clamp``), a
+    short one held whole up to its column's share (``cell-short``), and
     a group's heading row spans every declared column. After each row that
     holds something back is its open line (``_detail_row``).
     What a part of a cell is, which decides how it wraps, is its ``data-cell``:
@@ -152,7 +153,7 @@ def mark_cells(markup: str, *, sorts: bool = True) -> str | None:
     cells.close()
     if cells.bodies and not any(cells.bodies):
         return None
-    if not any((cells.marks, cells.details, cells.roles, cells.cuts, cells.gutters, cells.toggles)):
+    if not any((cells.marks, cells.details, cells.roles, cells.cuts, cells.gutters, cells.toggles, cells.shorts)):
         return markup
     text = _Markup(markup)
     cuts = sorted((text.point(start), text.point(end)) for start, end in cells.cuts)
@@ -186,6 +187,8 @@ def _inserts(cells: Cells, markup: str, text: _Markup) -> list[tuple[int, str]]:
         inserts.append((after_name(point[0]) if point[1] is None else text.point(point), mark))
     for opened, closed in cells.clamps:
         inserts += [(text.at(opened), '<div class="cell-clamp">'), (text.at(closed), "</div>")]
+    for opened, closed in cells.shorts:
+        inserts += [(text.at(opened), '<div class="cell-short">'), (text.at(closed), "</div>")]
     if cells.toggles:
         # A row drawn open (its editor open) says so on its toggle.
         toggles = {shown: render_to_string("partials/_row_toggle.html", {"open": shown}) for shown in (False, True)}

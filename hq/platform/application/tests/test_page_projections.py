@@ -14,6 +14,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
 from hq.domains.control_plane.permissions import Tailscale
+from hq.platform.application.markup_testing import select, text
 from hq.platform.application.plugin_testing import form_keyed
 
 from ..connection_context import ConnectionsContext, connections_context
@@ -26,7 +27,6 @@ from ..resources import (
 )
 from ..security import AuthorizationError, Capability, Principal, cli_principal
 from ..tailnet_context import TailnetContext
-from .markup import select, text
 
 NOW = timezone.now()
 
@@ -218,11 +218,9 @@ class ConnectionProjectionTests(TestCase):
         # The estate is the same for every caller; the request half is the page's.
         self.assertEqual(without_request(web), without_request(read))
         self.assertIsNone(read["request"])
-        self.assertEqual(
-            {control["id"] for control in web["request"]["controls"]},
-            {"network", "transport", "proxy"},
-        )
-        self.assertFalse({"network", "transport", "proxy"} & {control["id"] for control in read["posture"]["controls"]})
+        # A request not forwarded has no proxy to judge.
+        self.assertEqual({check["id"] for check in web["request"]["checks"]}, {"gate", "transport"})
+        self.assertFalse({"gate", "transport", "forwarder"} & {check["id"] for check in read["posture"]["checks"]})
 
     def test_one_connection_reads_as_its_row(self):
         read = list_resource("connections", principal=cli_principal(), fields=[WHOLE_RECORD])

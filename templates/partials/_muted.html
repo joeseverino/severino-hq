@@ -1,0 +1,10 @@
+{% comment %}
+Words in the muted voice, drawn by {% muted %}:
+{% muted %}since the last read{% endmuted %} beside a value, or
+{% muted element="p" %}A sentence under it.{% endmuted %} as a paragraph of its own.
+A line among other words by default; element= "p" makes it a paragraph. css adds
+the classes of where it stands (narrow-more, row-more, cell-part), id and title
+are its attributes, and each data_* option is a data- attribute. The tags are
+built by value_tags.muted_frame.
+{% endcomment %}
+{{ opening|safe }}{{ content|safe }}{{ closing|safe }}

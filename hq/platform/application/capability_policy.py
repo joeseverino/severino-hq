@@ -20,11 +20,12 @@ from hq.domains.control_plane.models import CapabilityRule
 from hq.platform.core.models import AgentIdentity
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
-from .approvals import DESTRUCTIVE_EFFECT, READ_EFFECT, is_destructive, no_rule_allows, waits
+from .approvals import is_destructive, no_rule_allows, waits
 from .command_fields import Describe
+from .contracts import Effect
 from .default_hold import held_by_default, may_be_held_by_default, needs_approval
 from .doors import interface_label
-from .labels import dotted, effect_label, field_label, lower_first
+from .labels import dotted, field_label, lower_first
 from .security import (
     AGENT_SURFACES,
     NEEDS_A_PERSON,
@@ -36,6 +37,7 @@ from .security import (
     person,
     subject_of,
 )
+from .tone import Tone
 lazy from . import capabilities
 lazy from .agent_registry import identity_of
 lazy from .entity_links import kind_label
@@ -111,7 +113,7 @@ def set_rule(
         raise ValueError(f"{rule!r} is not a rule.")
     if not agents_may_hold(spec):
         raise ValueError(f"You can only {spec.title.lower()} in the browser, so no agent has a rule for it.")
-    if rule == Rule.APPROVE and spec.effect == READ_EFFECT:
+    if rule == Rule.APPROVE and not spec.effect.changes:
         raise ValueError(f"{spec.title} only reads. It can be allowed or blocked, not held for approval.")
     if rule == Rule.ALLOW and no_rule_allows(spec):
         raise ValueError(f"{spec.title} always waits for approval when an agent asks, so no agent can be allowed it.")
@@ -171,7 +173,7 @@ def _usable_by(spec, identity: AgentIdentity) -> bool:
 # What a rule is called on the page, beside "Default". The stored values keep their names.
 RULE_LABELS = {rule: rule.label for rule in Rule}
 # The status tone a rule is drawn in; the default is neutral.
-RULE_TONES = {Rule.ALLOW: "good", Rule.APPROVE: "attention", Rule.DENY: "serious"}
+RULE_TONES = {Rule.ALLOW: Tone.GOOD, Rule.APPROVE: Tone.ATTENTION, Rule.DENY: Tone.SERIOUS}
 
 
 def _name(rule: str | None) -> str:
@@ -180,19 +182,6 @@ def _name(rule: str | None) -> str:
 
 # Form field names are produced and parsed only here.
 _FIELD_SEPARATOR = "|"
-
-# What each kind of action does, beside its name. A read changes nothing and
-# says nothing.
-EFFECTS = {
-    "read": "",
-    "remote_write": effect_label("remote_write"),
-    "destructive": effect_label("destructive"),
-    "infrastructure_change": effect_label("infrastructure_change"),
-}
-_EFFECT_ORDER = tuple(EFFECTS)
-# The tone each effect is said in beside its action: one that removes
-# serious, one that changes infrastructure attention, any other neutral.
-_EFFECT_TONES = {"destructive": "serious", "infrastructure_change": "attention"}
 
 
 def field_name(subject: str, capability: str) -> str:
@@ -240,21 +229,26 @@ class PolicyCell:
 
     @property
     def tone(self) -> str:
-        return RULE_TONES.get(self.rule, "neutral")
+        return RULE_TONES.get(self.rule, Tone.NEUTRAL)
 
 
 @dataclass(frozen=True, slots=True)
 class Row:
     name: str
     label: str
-    effect: str
-    effect_label: str
+    effect: Effect
     default: str
     cells: tuple[PolicyCell, ...]
 
     @property
-    def effect_tone(self) -> str:
-        return _EFFECT_TONES.get(self.effect, "neutral")
+    def effect_label(self) -> str:
+        """What the command does, beside its name: a read changes nothing and says nothing."""
+
+        return self.effect.label if self.effect.changes else ""
+
+    @property
+    def effect_tone(self) -> Tone:
+        return self.effect.tone
 
     @property
     def overrides(self) -> tuple[PolicyCell, ...]:
@@ -305,11 +299,11 @@ def matrix(current: dict[tuple[str, str], str] | None = None) -> tuple[tuple[Col
     current = rules() if current is None else current
     grouped: dict[str, list] = {}
     for spec in capabilities.capability_registry().values():
-        if spec.effect in EFFECTS and agents_may_hold(spec):
+        if agents_may_hold(spec):
             grouped.setdefault(_subject_label(_subject(spec)), []).append(spec)
     groups = []
     for label in sorted(grouped):
-        specs = sorted(grouped[label], key=lambda spec: (_EFFECT_ORDER.index(spec.effect), spec.name))
+        specs = sorted(grouped[label], key=lambda spec: (spec.effect.rank, spec.name))
         rows = tuple(
             Row(
                 spec.name,
@@ -317,7 +311,6 @@ def matrix(current: dict[tuple[str, str], str] | None = None) -> tuple[tuple[Col
                 # group stops saying what the command does.
                 spec.title,
                 spec.effect,
-                EFFECTS[spec.effect],
                 _default_label(spec),
                 tuple(_cell(spec, column, current, grants, label) for column in cols),
             )
@@ -345,7 +338,7 @@ def _default_label(spec) -> str:
     for a person, always asks, and a change to a type that needs approval
     asks for that type."""
 
-    if spec.effect == DESTRUCTIVE_EFFECT or waits(spec) is not None:
+    if spec.effect is Effect.DESTRUCTIVE or waits(spec) is not None:
         return RULE_LABELS[Rule.APPROVE]
     if may_be_held_by_default(spec):
         return f"{RULE_LABELS[Rule.APPROVE]} for {_approved_types(spec)}"
@@ -372,7 +365,7 @@ def _cell(spec, column: Column, current, grants, group: str) -> PolicyCell:
     options = [("", "Default")]
     if not no_rule_allows(spec):
         options.append((Rule.ALLOW, RULE_LABELS[Rule.ALLOW]))
-    if spec.effect != READ_EFFECT:
+    if spec.effect.changes:
         options.append((Rule.APPROVE, RULE_LABELS[Rule.APPROVE]))
     options.append((Rule.DENY, RULE_LABELS[Rule.DENY]))
     return PolicyCell(

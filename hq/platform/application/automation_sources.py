@@ -37,6 +37,7 @@ lazy from hq.platform.core.models import AuditLog
 
 from .automation_manifest import DottedName, ProcedureTerms
 from .command_fields import Describe
+from .contracts import Effect
 from .integration_specs import CapabilitySpec
 from .resource_operations import OperationAsked
 from .security import Capability, Principal
@@ -46,10 +47,9 @@ lazy from .action_links import capability_action_link, command_url
 lazy from .approval_review import grouped, marked
 lazy from .automation_runs import access_words, anywhere, capability_name
 lazy from .cadence import ask, automation_standing
-lazy from .capabilities import capability_words
+lazy from .capabilities import Consented, capability_words, consent
 lazy from .findings import rule_for
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
-lazy from .labels import effect_label
 lazy from .record_errors import PolicyError, RecordNotFound
 lazy from .resource_operations import Prepared, asked_fields, enqueue, operation_asked
 lazy from .routes import reverse
@@ -190,11 +190,11 @@ class RefreshCommand:
     reason: Annotated[StrictStr, Field(max_length=300), Describe("Why it is refreshed, kept with the scan.")] = ""
 
 
-def _source(principal: Principal) -> ManagedResource:
+def _source(consented: Consented) -> ManagedResource:
     current = models.ManagedResource.objects.select_for_update().filter(key=SOURCE_KEY).first()
     if current is None:
         save_managed_resource(
-            ManagedResourceCommand(key=SOURCE_KEY, kind=SOURCE_KIND, spec={"named_by": "host"}), principal=principal
+            ManagedResourceCommand(key=SOURCE_KEY, kind=SOURCE_KIND, spec={"named_by": "host"}), consented=consented
         )
     return models.ManagedResource.objects.select_for_update().get(key=SOURCE_KEY)
 
@@ -215,7 +215,7 @@ def _scan_asked(operation: OperationRequest, *, queued: bool) -> OperationAsked:
 
 
 @transaction.atomic
-def refresh(command: RefreshCommand, *, principal: Principal) -> OperationAsked:
+def refresh(command: RefreshCommand, *, consented: Consented) -> OperationAsked:
     """Queue one scan of the automation source for the worker, and answer the
     one already waiting while there is one."""
 
@@ -225,8 +225,10 @@ def refresh(command: RefreshCommand, *, principal: Principal) -> OperationAsked:
         untaken = automation_standing().cannot("refresh", now=timezone.now())
         if untaken:
             raise PolicyError(untaken)
-        resource = _source(principal)
-        return resource, asked_fields(principal, reason=command.reason, generation=resource.generation)
+        resource = _source(consented)
+        return resource, asked_fields(
+            consent(consented).principal, reason=command.reason, generation=resource.generation
+        )
 
     operation, created = enqueue(models.OperationRequest.Action.SCAN, prepare)
     if created:
@@ -521,7 +523,7 @@ def _row(
     return PlaybookTableRow(
         procedure.title,
         command_url(capability_name(procedure.id)) if adopted else "",
-        effect_label(procedure.effect),
+        procedure.effect.label,
         tuple(procedure.hosts),
         anywhere(procedure.target_kinds),
         access_words(procedure.privilege),
@@ -535,7 +537,7 @@ def capability_specs() -> tuple[CapabilitySpec, ...]:
         CapabilitySpec(
             REFRESH,
             "Scan your repository for playbooks and keep the scan result. Nothing in it runs until an operator adopts it.",
-            "remote_write",
+            Effect.REMOTE_WRITE,
             Capability.MANAGE_INFRASTRUCTURE,
             RefreshCommand,
             refresh,

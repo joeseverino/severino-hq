@@ -12,10 +12,10 @@ from django.urls import reverse
 
 from hq.platform.application import asks
 from hq.platform.application.asks import Ask, Standing
+from hq.platform.application.markup_testing import all_elements, elements, links, select, with_class, within
 from hq.platform.application.plugin_testing import hand_drawn_tables, table_problems
 from hq.platform.application.routes import routed
 from hq.platform.application.tables import TableColumn, TableListMixin, ranked, typed
-from hq.platform.application.tests.markup import all_elements, elements, links, select, with_class, within
 from hq.platform.application.tests.reads import reads
 from hq.platform.core.stylesheets import stylesheet as whole_stylesheet
 
@@ -453,10 +453,10 @@ class TableTagTests(SimpleTestCase):
             ["State", "Act", "status", "control"],
         )
 
-    def test_a_value_no_longer_than_a_name_is_marked_short(self):
+    def test_a_short_value_is_one_box_and_a_longer_one_is_not(self):
         """A body cell whose longest line is a short name (an address and its
-        port) holds it whole up to its share (tables.css); a longer value, a
-        heading or a blank cell is not short."""
+        port) holds it in one box, whole up to its share (tables.css); a
+        longer value, a heading or a blank cell has none."""
 
         source = (
             '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
@@ -466,10 +466,8 @@ class TableTagTests(SimpleTestCase):
             '<td data-col="blank"><span class="empty-value">–</span></td></tr>'
             "</tbody></table>{% endtable_region %}"
         )
-        found = all_elements(_render(source))
-        self.assertEqual(
-            [each.attrs.get("data-col") for each in found if "data-short" in each.attrs], ["name", "proxy"]
-        )
+        boxed = re.findall(r'data-col="(\w+)"[^>]*>\s*<div class="cell-short">', _render(source))
+        self.assertEqual(boxed, ["name", "proxy"])
 
     def test_a_row_that_holds_something_back_has_its_line_beneath(self):
         """After a row is the line its toggle opens: its controls, the blocks

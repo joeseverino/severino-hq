@@ -63,7 +63,7 @@ from .answer_fields import CallMessage
 from .automation_manifest import PLAYBOOK, REVISION, OperationManifest, ProcedureTerms, Statement
 from .automation_sources import InputBound, ProcedureDeclaration
 from .command_fields import Describe
-from .contracts import Closed
+from .contracts import Closed, Effect
 from .integration_specs import CapabilitySpec
 from .projection import read_once
 from .record_errors import PolicyError, RecordNotFound
@@ -72,7 +72,7 @@ lazy from . import agent_registry
 lazy from .approval_review import SUMMARY
 lazy from .automation_runs import RETRY_WORDS, access_words, anywhere, timeout_words
 lazy from .findings import rule_for
-lazy from .labels import dotted, effect_label, lower_first
+lazy from .labels import dotted, lower_first
 lazy from .payload_words import field_words
 lazy from .ui import ended
 
@@ -90,8 +90,7 @@ REFUSED_KINDS = {
 }
 # Where a role's own files sit, beside a playbook or at the project's root.
 ROLES = "roles"
-# How a change's effect ranks, so a raise is seen as one.
-EFFECT_RANK = {"read": 0, "infrastructure_change": 1, "destructive": 2}
+
 # The most characters of an object id a comparison shows: enough to tell two apart.
 SHOWN_OBJECT = 12
 
@@ -474,10 +473,10 @@ def _procedure(
     return procedure
 
 
-def _does(effect: str) -> str:
+def _does(effect: Effect) -> str:
     """What a procedure of ``effect`` does, in the words its command's page says it with."""
 
-    return lower_first(effect_label(effect))
+    return lower_first(effect.label)
 
 
 def titles(procedures: Mapping[str, AdoptedProcedure]) -> dict[str, str]:
@@ -507,7 +506,7 @@ def _gains(before: AdoptedProcedure, after: AdoptedProcedure, named: str) -> lis
         gained.append(f"{named} can run on more machines.")
     if set(after.target_kinds) - set(before.target_kinds):
         gained.append(f"{named} can run on more types of record.")
-    if EFFECT_RANK[after.effect] > EFFECT_RANK[before.effect]:
+    if after.effect.rank > before.effect.rank:
         gained.append(ended(f"{named} now {_does(after.effect)}, where before it {_does(before.effect)}"))
     if after.privilege and after.privilege != before.privilege:
         gained.append(ended(f"{named} gains {access_words(after.privilege)}"))
@@ -533,7 +532,7 @@ def _widens(
         if procedure is None:
             continue
         if was is None:
-            if procedure.effect != "read" or procedure.privilege is not None:
+            if procedure.effect.changes or procedure.privilege is not None:
                 widens.append(ended(f"{called[key]} is new, and it {_does(procedure.effect)}"))
             continue
         widens.extend(_gains(was, procedure, called[key]))
@@ -544,7 +543,7 @@ def _summary(procedure: AdoptedProcedure) -> str:
     """Its Effect, Runs on and Access, in the Playbooks table's words."""
 
     where = ", ".join(procedure.hosts) or anywhere(procedure.target_kinds)
-    return dotted(effect_label(procedure.effect), where, access_words(procedure.privilege))
+    return dotted(procedure.effect.label, where, access_words(procedure.privilege))
 
 
 def _shown(procedure: AdoptedProcedure, named: str) -> dict[str, Any]:
@@ -555,7 +554,7 @@ def _shown(procedure: AdoptedProcedure, named: str) -> dict[str, Any]:
 
     return {
         SUMMARY: {"label": named, "value": _summary(procedure)},
-        "effect": effect_label(procedure.effect),
+        "effect": procedure.effect.label,
         "runs_on": list(procedure.hosts) or anywhere(procedure.target_kinds),
         "access": access_words(procedure.privilege),
         "timeout": timeout_words(procedure.timeout_seconds),
@@ -926,7 +925,7 @@ def capability_specs() -> tuple[CapabilitySpec, ...]:
             "Adopt what a scanned commit changes in the playbooks HQ runs: one playbook's change, or every "
             "change that waits. A commit GitHub did not verify, or one carrying an ansible.cfg or a plugins "
             "directory, is refused. Only an operator adopts, and never through an agent.",
-            "infrastructure_change",
+            Effect.INFRASTRUCTURE_CHANGE,
             # Held only at the operator's own interfaces (security.HELD_ONLY_AT).
             Capability.ADOPT_PLAYBOOKS,
             AdoptProposal,
@@ -947,7 +946,7 @@ def capability_specs() -> tuple[CapabilitySpec, ...]:
             "Reject what a scanned commit changes: one playbook's change, which stays as adopted, or the whole "
             "commit, so nothing waits to be adopted until a Refresh reads another. Only an operator rejects, "
             "and never through an agent.",
-            "remote_write",
+            Effect.REMOTE_WRITE,
             Capability.ADOPT_PLAYBOOKS,
             RejectProposal,
             reject,

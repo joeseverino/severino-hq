@@ -37,7 +37,7 @@ class ControllerSummaryTests(SimpleTestCase):
             label,
         )
 
-        self.assertEqual((found.headline, found.tone), ("Applied automatically", "good"))
+        self.assertEqual(found.headline, "Applied automatically")
         self.assertEqual(found.lines, ("Not due yet.",))
 
     def test_no_actions_no_summary(self):

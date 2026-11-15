@@ -11,10 +11,10 @@ View = Callable[Concatenate[HttpRequest, ...], HttpResponseBase]
 
 
 def capability_required(capability: str) -> Callable[[View], View]:
-    """Authenticate a function view and name the one capability its page reads under.
+    """Authenticate a function view and name the capability its page reads under, beside READ.
 
-    The page gate refuses a person who does not hold it before the view runs
-    (``hq.platform.application.pages.page_capability``).
+    The page gate refuses a person who does not hold both before the view runs
+    (``hq.platform.application.pages.page_capabilities``).
     """
 
     if not capability:
@@ -29,10 +29,10 @@ def capability_required(capability: str) -> Callable[[View], View]:
 
 
 class CapabilityRequiredMixin(LoginRequiredMixin):
-    """Authenticate a class-based view that names ``required_capability``, the one its page reads under.
+    """Authenticate a class-based view that names ``required_capability``, which its page reads under beside READ.
 
     Left empty, the page gate refuses to serve the view rather than read it
-    under READ.
+    under READ alone.
     """
 
     required_capability = ""

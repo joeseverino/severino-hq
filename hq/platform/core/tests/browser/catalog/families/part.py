@@ -25,6 +25,7 @@ from hq.platform.application.calendar import CalendarEvent, CalendarSource, Sour
 from hq.platform.application.capability_policy import RULE_LABELS, Column, Group, PolicyCell, Row
 from hq.platform.application.card_items import Insight, Kpi, ListRow, Timeline, TimelineItem
 from hq.platform.application.command_center import DiscoveryItem
+from hq.platform.application.contracts import Effect
 from hq.platform.application.credential_mint import CredentialFix
 from hq.platform.application.drawings import AllocationBar, Dot, Dots, Share, StripTile, Trend
 from hq.platform.application.entity_links import EntityLink
@@ -38,10 +39,11 @@ from hq.platform.application.request_connection import Connection, Peering
 from hq.platform.application.request_identity import Identity
 from hq.platform.application.request_standard import RequestFacts, ServingDeviceResolution
 from hq.platform.application.security import MCP_INTERFACE
-from hq.platform.application.standards import Check, Reading, measure
+from hq.platform.application.standards import Check, Reading, Standing as CheckStanding, measure
 from hq.platform.application.tables import TableSort
 from hq.platform.application.tailnet import Device
 from hq.platform.application.tailnet_presence import Presence
+from hq.platform.application.tone import Tone
 from hq.platform.application.ui import (
     PageNavigation,
     PageSection,
@@ -54,8 +56,8 @@ lazy from hq.platform.application.dashboard import queue_item
 lazy from hq.platform.application.github_estate import Repository
 lazy from hq.platform.application.github_posture import posture_of
 lazy from hq.platform.application.path_model import Certificate, Hop, Route
-lazy from hq.platform.application.request_path import CONTRADICTED, PROVEN, HopCheck
-lazy from hq.platform.application.work_runs import RunEvidence
+lazy from hq.platform.application.request_path import HopCheck
+lazy from hq.platform.application.work_runs import RunEvidence, outcome_tone
 
 # The fields of an example record, as a change sets them and as two records hold them.
 _CHANGED_AFTER = {
@@ -215,7 +217,7 @@ def _policy():
     options = (("", "Default"), *((rule, words) for rule, words in RULE_LABELS.items()))
     column = Column("example-agent", "example-agent", "MCP", AgentIdentity(client_id="example-agent"))
 
-    def row(name, label, effect, effect_label, default, rule, unavailable=""):
+    def row(name, label, effect, default, rule, unavailable=""):
         cell = PolicyCell(
             f"example-agent-{name}",
             column.label,
@@ -224,7 +226,7 @@ def _policy():
             unavailable=unavailable,
             label=f"{label}, for {column.label}",
         )
-        return Row(name, label, effect, effect_label, default, (cell,))
+        return Row(name, label, effect, default, (cell,))
 
     return {
         "columns": (column,),
@@ -233,21 +235,19 @@ def _policy():
             Group(
                 "Example records",
                 (
-                    row("example.edit", "Edit an example record", "write", "Changes HQ", "On", "allow"),
-                    row("example.move", "Move an example record", "write", "Changes HQ", "On", None),
+                    row("example.edit", "Edit an example record", Effect.REMOTE_WRITE, "On", "allow"),
+                    row("example.move", "Move an example record", Effect.REMOTE_WRITE, "On", None),
                     row(
                         "example.stop",
                         "Stop an example container",
-                        "destructive",
-                        "Stops or deletes",
+                        Effect.DESTRUCTIVE,
                         "Ask me first",
                         "approve",
                     ),
                     row(
                         "example.delete",
                         "Delete an example record",
-                        "destructive",
-                        "Stops or deletes",
+                        Effect.DESTRUCTIVE,
                         "Ask me first",
                         "deny",
                     ),
@@ -255,7 +255,7 @@ def _policy():
             ),
             Group(
                 "Example hosts",
-                (row("example.read", "Read an example host", "read", "", "On", None, "Not granted"),),
+                (row("example.read", "Read an example host", Effect.READ, "On", None, "Not granted"),),
             ),
         ),
     }
@@ -331,14 +331,24 @@ def _route():
     return Route(
         via="example record",
         hops=(
-            Hop("device", "Your device", name="example-laptop", check=HopCheck(PROVEN, "Example address 192.0.2.10.")),
-            Hop("dns", "Internal DNS", name="app.example.com", check=HopCheck(PROVEN, "Example answer 192.0.2.20.")),
+            Hop(
+                "device",
+                "Your device",
+                name="example-laptop",
+                check=HopCheck(CheckStanding.MET, "Example address 192.0.2.10."),
+            ),
+            Hop(
+                "dns",
+                "Internal DNS",
+                name="app.example.com",
+                check=HopCheck(CheckStanding.MET, "Example answer 192.0.2.20."),
+            ),
             Hop(
                 "ingress",
                 "Proxy",
                 name="example-proxy-host-with-a-long-name.example.com",
                 certificate=Certificate("Proxy", name="app.example.com", issuer="Example CA"),
-                check=HopCheck(CONTRADICTED, "The example request came another way."),
+                check=HopCheck(CheckStanding.UNMET, "The example request came another way."),
             ),
             Hop(
                 "machine",
@@ -636,10 +646,10 @@ def _palette():
     }
 
 
-def _event(task: str, outcome: str, tone: str, *, host: str = "example-01", message: str = "") -> dict:
+def _event(task: str, outcome: str, *, host: str = "example-01", message: str = "") -> dict:
     """A task's outcome as a run reports it (the bridge's ``RunEvent``), with its tone."""
 
-    return {"host": host, "task": task, "outcome": outcome, "message": message, "tone": tone}
+    return {"host": host, "task": task, "outcome": outcome, "message": message, "tone": outcome_tone(outcome)}
 
 
 _LONG_HOST = "example-machine-with-a-long-name-01.example.com"
@@ -647,7 +657,7 @@ _EXAMPLE_RUNS = (
     (
         "Run example.cache_flush",
         "Running",
-        "active",
+        JobState.RUNNING.tone,
         "Applying the example playbook.",
         RunEvidence(
             hosts=("example-01", "example-02"),
@@ -655,16 +665,16 @@ _EXAMPLE_RUNS = (
             worker="example-automation-worker",
             lease_until=datetime(2026, 3, 2, 9, 35, tzinfo=UTC),
             events=(
-                _event("Flush the example cache", "changed", "active"),
-                _event("Check the example cache", "ok", "good", host="example-02"),
+                _event("Flush the example cache", "changed"),
+                _event("Check the example cache", "ok", host="example-02"),
             ),
         ),
     ),
-    ("Refresh playbooks", "Queued", "paused", "Waiting for HQ to start it.", RunEvidence()),
+    ("Refresh playbooks", "Queued", JobState.QUEUED.tone, "Waiting for HQ to start it.", RunEvidence()),
     (
         "Run example.package_upgrade",
         "Failed",
-        "serious",
+        JobState.FAILED.tone,
         "The example upgrade failed on one machine.",
         RunEvidence(
             hosts=(_LONG_HOST,),
@@ -673,7 +683,6 @@ _EXAMPLE_RUNS = (
                 _event(
                     "Upgrade every example package to the release the example repository pins",
                     "failed",
-                    "serious",
                     host=_LONG_HOST,
                     message="example-package-with-a-long-name 2.0.1 conflicts with "
                     "example-other-package-with-a-long-name 1.4.0, which the example machine also holds.",
@@ -684,17 +693,14 @@ _EXAMPLE_RUNS = (
     (
         "Run example.disk_report",
         "Done",
-        "good",
+        JobState.SUCCEEDED.tone,
         "Reported every example disk.",
         RunEvidence(
             hosts=("example-01",),
             stated=("example.filesystem", "example.reading_with_a_longer_name"),
             events=tuple(
-                _event(f"Example task {number}", outcome, tone)
-                for number, (outcome, tone) in enumerate(
-                    (("ok", "good"), ("changed", "active"), ("skipped", "paused"), ("unreachable", "serious")) * 3,
-                    start=1,
-                )
+                _event(f"Example task {number}", outcome)
+                for number, outcome in enumerate(("ok", "changed", "skipped", "unreachable") * 3, start=1)
             ),
         ),
     ),
@@ -896,7 +902,7 @@ ENTRIES = {
                 (
                     Share("Cash", 4200, 1, url="/example/?type=cash", detail="$4,200.00"),
                     Share("Investments", 12800, 3, url="/example/?type=investment", detail="$12,800.00"),
-                    Share("Owed", 1500, 2, url="/example/?type=owed", detail="-$1,500.00", tone="attention"),
+                    Share("Owed", 1500, 2, url="/example/?type=owed", detail="-$1,500.00", tone=Tone.ATTENTION),
                 ),
             )
         },
@@ -934,6 +940,12 @@ ENTRIES = {
         "{% card %}<p>An example line about the card.</p>"
         '{% section "Example preview" count=2 %}<p>An example line in the inner section.</p>'
         '{% aside %}<span class="pill pill-neutral">Example state</span>{% endsection %}{% endcard %}'
+    ),
+    # Muted words as a line beside a value and as a paragraph under it.
+    "part/muted": Entry(
+        '{% section "Example muted words" %}<p>3 example checks {% muted %}since the last read{% endmuted %}</p>'
+        '{% muted element="p" %}An example sentence under the value, long enough to wrap at a phone width.'
+        "{% endmuted %}{% endsection %}"
     ),
     # A reading as a folded section, open: its long lines wrap in the frame and
     # only its height scrolls.
@@ -1015,19 +1027,19 @@ ENTRIES = {
                     "$15,500.00",
                     "+$1,240.00 in the last 30 days",
                     url="/example/accounts/",
-                    detail_tone="good",
+                    detail_tone=Tone.GOOD,
                     drawing=AllocationBar(
                         "Example assets by kind",
                         (
                             Share("Cash", 4200, 1, url="/example/?type=cash", detail="$4,200.00"),
                             Share("Investments", 12800, 3, url="/example/?type=investment", detail="$12,800.00"),
-                            Share("Owed", 1500, 2, url="/example/?type=owed", detail="-$1,500.00", tone="attention"),
+                            Share("Owed", 1500, 2, url="/example/?type=owed", detail="-$1,500.00", tone=Tone.ATTENTION),
                         ),
                     ),
                 ),
-                Kpi("Since yesterday", "+$120.00", tone="good"),
-                Kpi("Available credit", "$8,000.00", tone="neutral"),
-                Kpi("Unrealized gain", "−$40.00", tone="attention"),
+                Kpi("Since yesterday", "+$120.00", tone=Tone.GOOD),
+                Kpi("Available credit", "$8,000.00", tone=Tone.NEUTRAL),
+                Kpi("Unrealized gain", "−$40.00", tone=Tone.ATTENTION),
             ]
         },
     ),
@@ -1063,7 +1075,7 @@ ENTRIES = {
                 ListRow(
                     "Example checking",
                     url="/example/checking/",
-                    status="attention",
+                    status=Tone.ATTENTION,
                     badge="Needs review",
                     meta="2 example accounts",
                     at=date(2026, 11, 2),
@@ -1916,7 +1928,7 @@ ENTRIES = {
         {
             "items": [
                 Insight(
-                    "attention",
+                    Tone.ATTENTION,
                     "Example readiness",
                     "Example records missing a category",
                     "12",
@@ -1924,15 +1936,15 @@ ENTRIES = {
                     action="Give each one a category.",
                     url="/example/records/",
                 ),
-                Insight("good", "Example pace", "Example pace this month", "On track", "Ahead of the example plan."),
+                Insight(Tone.GOOD, "Example pace", "Example pace this month", "On track", "Ahead of the example plan."),
                 Insight(
-                    "serious",
+                    Tone.SERIOUS,
                     "Example spend",
                     "An example reading with a title long enough to wrap on a phone",
                     "$1,204.50",
                     "Spent past the example budget by a margin worth reading about.",
                 ),
-                Insight("neutral", "", "An example reading with nothing to show", "", "An example interpretation."),
+                Insight(Tone.NEUTRAL, "", "An example reading with nothing to show", "", "An example interpretation."),
             ]
         },
     ),
@@ -1944,14 +1956,14 @@ ENTRIES = {
         {
             "items": [
                 Insight(
-                    "neutral",
+                    Tone.NEUTRAL,
                     "Example receiving",
                     "Who accepts example mail?",
                     "mx1.example.com, mx2.example.com, mx3.example.com",
                     "Three example servers, tried in priority order.",
                 ),
                 Insight(
-                    "attention",
+                    Tone.ATTENTION,
                     "Example enforcing",
                     "What happens to failing example mail?",
                     "Delivered anyway",
@@ -1984,18 +1996,18 @@ ENTRIES = {
     # on), a stop not read, and one that does not hold, drawn opened.
     "part/check-ladder-route": Entry(
         '{% section "Example path 4" %}{% check_ladder route=True %}'
-        '{% check_rung state="holds" kind="Device" open=True data_example="device" %}example-laptop{% detail %}Example OS'
+        '{% check_rung state="met" kind="Device" open=True data_example="device" %}example-laptop{% detail %}Example OS'
         '{% more %}2 checks{% page %}<a href="/example/machines/example-laptop/">example-laptop</a>{% body %}<p>Example HQ confirmed this example device.</p>'
         "{% check_ladder %}"
-        '{% check_rung state="holds" evidence="192.0.2.10" %}Example address is the device\'s'
+        '{% check_rung state="met" evidence="192.0.2.10" %}Example address is the device\'s'
         "{% body %}<p>The address the request came from is the device's own.</p>{% endcheck_rung %}"
-        '{% check_rung state="does-not" evidence=long %}Example policy admits the device'
+        '{% check_rung state="unmet" evidence=long %}Example policy admits the device'
         "{% body %}<p>No example rule admits it.</p>{% stack_list %}<li><code>example:rule-one</code></li>"
         "<li><code>example:rule-two</code></li>{% endstack_list %}{% endcheck_rung %}"
         "{% endcheck_ladder %}{% endcheck_rung %}"
         '{% check_rung kind="Tailnet" %}example-tailnet.example.com{% more %}Details'
         "{% body %}<p>Example HQ could not read the tailnet.</p>{% endcheck_rung %}"
-        '{% check_rung state="does-not" kind="HQ" open=True %}hq.example.com{% more %}Details'
+        '{% check_rung state="unmet" kind="HQ" open=True %}hq.example.com{% more %}Details'
         "{% body %}<p>This request disagrees with what example HQ read here.</p>"
         '{% notice tone="warning" %}Point example-hq.example.com at the example proxy.{% endnotice %}{% endcheck_rung %}'
         "{% endcheck_ladder %}{% endsection %}",
@@ -2004,9 +2016,9 @@ ENTRIES = {
     # Checks read down as rows, with no route: each in a frame of its own.
     "part/check-ladder": Entry(
         '{% section "Example checks 2" %}{% check_ladder %}'
-        '{% check_rung state="holds" evidence="192.0.2.10" %}Example address is known'
+        '{% check_rung state="met" evidence="192.0.2.10" %}Example address is known'
         "{% body %}<p>Example HQ knows this address.</p>{% endcheck_rung %}"
-        '{% check_rung state="does-not" %}Example sign-in is linked{% body %}<p>No example account links it.</p>'
+        '{% check_rung state="unmet" %}Example sign-in is linked{% body %}<p>No example account links it.</p>'
         "{% endcheck_rung %}"
         "{% check_rung %}Example lock is read{% body %}<p>Example HQ could not read it.</p>{% endcheck_rung %}"
         "{% endcheck_ladder %}{% endsection %}",
@@ -2259,11 +2271,11 @@ ENTRIES = {
                         date(2026, 1, 19),
                         "Example certificate with a name long enough to wrap",
                         detail="example-host-01.example.com",
-                        status="attention",
+                        status=Tone.ATTENTION,
                         badge="Due soon",
                     ),
-                    TimelineItem(date(2026, 2, 2), "Example review", detail="Every quarter", status="good"),
-                    TimelineItem(date(2026, 3, 16), "Example payment", status="serious", badge="Overdue"),
+                    TimelineItem(date(2026, 2, 2), "Example review", detail="Every quarter", status=Tone.GOOD),
+                    TimelineItem(date(2026, 3, 16), "Example payment", status=Tone.SERIOUS, badge="Overdue"),
                 ),
             )
         },

@@ -30,6 +30,7 @@ from .finding_model import (
     cannot_run_commands,
     machine_step,
 )
+from .tone import Tone
 from .ui import ended
 lazy from .adoption import unmanaged
 lazy from .inventory import record_token
@@ -169,7 +170,7 @@ def unrecognized_containers(estate: FindingEstate) -> tuple[Finding, ...]:
                     rule="unrecognized-container",
                     subject=node.id,
                     title=f"Unrecognized container {name} on {node.label}",
-                    severity="serious",
+                    severity=Tone.SERIOUS,
                     explanation=(
                         "No compose project started it, so HQ is not tracking it. "
                         "Adopt it if you started it. Otherwise find what did and remove it."
@@ -210,7 +211,7 @@ def images_behind(estate: FindingEstate) -> tuple[Finding, ...]:
             rule="container-image-behind",
             subject=node.id,
             title=f"{container} on {node.label} runs an older {reference}",
-            severity="attention",
+            severity=Tone.ATTENTION,
             explanation=(
                 f"{reference} on this machine is now image {tagged}, and the "
                 f"container still runs {ended(running)} Recreate it to run what "
@@ -238,7 +239,7 @@ def images_untagged(estate: FindingEstate) -> tuple[Finding, ...]:
             rule="container-image-untagged",
             subject=node.id,
             title=f"{container} on {node.label} runs an untagged image",
-            severity="attention",
+            severity=Tone.ATTENTION,
             explanation=(
                 "No tag on this machine names the image it runs, so its "
                 "version cannot be told or reproduced. Pin a tag in its "
@@ -273,31 +274,31 @@ RULES: tuple[FindingRule, ...] = (
     FindingRule(
         "unrecognized-container",
         "Container started outside compose",
-        "serious",
+        Tone.SERIOUS,
         unrecognized_containers,
         operator_action=("Adopt it if you started it. Otherwise remove it on its machine."),
         no_help_reason=("HQ cannot remove a container it did not start."),
         card=CONTAINERS_CARD,
-        bars={"serious": "a container runs that no compose project started"},
+        bars={Tone.SERIOUS: "a container runs that no compose project started"},
     ),
     FindingRule(
         "container-image-behind",
         "Container runs an older image than its tag",
-        "attention",
+        Tone.ATTENTION,
         images_behind,
         operator_action=("Recreate the container from its compose project so it runs the image its tag names now."),
         no_help_reason=cannot_run_commands(),
         card=CONTAINERS_CARD,
-        bars={"attention": "a container runs an older image than its tag names now"},
+        bars={Tone.ATTENTION: "a container runs an older image than its tag names now"},
     ),
     FindingRule(
         "container-image-untagged",
         "Container runs an untagged image",
-        "attention",
+        Tone.ATTENTION,
         images_untagged,
         operator_action=("Pin a tag for the image in the container's compose file and recreate it."),
         no_help_reason=CANNOT_EDIT_COMPOSE,
         card=CONTAINERS_CARD,
-        bars={"attention": "a container runs an image with no tag"},
+        bars={Tone.ATTENTION: "a container runs an image with no tag"},
     ),
 )

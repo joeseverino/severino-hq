@@ -15,6 +15,7 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
+from hq.platform.application.tone import Tone, TonedChoices
 from hq.platform.core.lapses import Lapse
 from hq.platform.core.rules import Rule, one_of
 
@@ -27,16 +28,17 @@ HEARTBEAT_GRACE = timedelta(minutes=5)
 LOST_ERROR = "HQ stopped before it finished."
 
 
-class JobState(models.TextChoices):
-    """A job's state, in the words every page says it in."""
+class JobState(TonedChoices):
+    """A job's state, in the words and the tone every page says it in, the
+    same for a job and an automation run."""
 
-    QUEUED = "queued", "Waiting"
-    RUNNING = "running", "Running"
-    SUCCEEDED = "succeeded", "Done"
-    FAILED = "failed", "Failed"
+    QUEUED = "queued", Tone.NEUTRAL, "Waiting"
+    RUNNING = "running", Tone.GOOD, "Running"
+    SUCCEEDED = "succeeded", Tone.GOOD, "Done"
+    FAILED = "failed", Tone.SERIOUS, "Failed"
     # Distinct from FAILED: a vanished process is a restart to retry,
     # a raised exception is a fault to read in the log.
-    LOST = "lost", "Stopped early"
+    LOST = "lost", Tone.ATTENTION, "Stopped early"
 
 
 # A live job nothing has heard from for too long has stopped early: running

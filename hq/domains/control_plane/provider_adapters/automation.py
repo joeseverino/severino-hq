@@ -11,7 +11,8 @@ from typing import Any, Literal
 
 from pydantic import Field
 
-from hq.platform.application.automation_manifest import PLAYBOOK, PLAYBOOK_LONGEST, REVISION
+from hq.platform.application.automation_manifest import PLAYBOOK, PLAYBOOK_LONGEST, REVISION, PlaybookEffect
+from hq.platform.application.contracts import Effect
 from hq.platform.application.ui import ended
 lazy from hq.platform.application.action_links import command_url
 lazy from hq.platform.application.automation_runs import (
@@ -23,7 +24,6 @@ lazy from hq.platform.application.automation_runs import (
     resource_key,
     timeout_words,
 )
-lazy from hq.platform.application.labels import effect_label
 lazy from hq.platform.application.routes import reverse
 
 from ..provider_spec import ProviderModel, ProviderSpec, locked
@@ -48,7 +48,7 @@ class OperationSpec(ProviderModel):
     target_kinds: list[str] = Field(min_length=1, title="Record types")
     hosts: list[str] = Field(default_factory=list, title="Machines")
     privilege: str = Field(default="", max_length=160, title="Privilege")
-    effect: Literal["read", "infrastructure_change", "destructive"] = Field(title="Effect")
+    effect: PlaybookEffect = Field(title="Effect")
     timeout_seconds: int = Field(ge=1, le=3600, title="Timeout")
     # A read may assert nothing before or after it (``OperationManifest``).
     preconditions: list[str] = Field(default_factory=list, title="Preconditions")
@@ -63,7 +63,7 @@ def _readout(spec: dict[str, Any], _status: dict[str, Any]) -> tuple[tuple[str, 
     return (
         ("Reviewed commit", "", str(spec.get("revision", ""))),
         ("Playbook file", "", str(spec.get("playbook", ""))),
-        ("Effect", "", effect_label(str(spec.get("effect", ""))) or str(spec.get("effect", ""))),
+        ("Effect", "", Effect(spec["effect"]).label if spec.get("effect") in Effect else str(spec.get("effect", ""))),
         ("Access", "", access_words(str(spec.get("privilege", "")))),
         ("Record types", "", ", ".join(spec.get("target_kinds", ()))),
         ("Machines", "", ", ".join(spec.get("hosts", ())) or anywhere(spec.get("target_kinds", ()))),

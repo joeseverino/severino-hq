@@ -5,10 +5,10 @@ against it. HQ's own image answers the last two from the GitHub App's reading
 of its repository instead: the production deploy, and the repository's alerts.
 {% endcomment %}
 {% facts layout="band" %}
-  {% fact running.state|capfirst|default:"Unknown" icon="activity" tone=running.state_tone %}
+  {% fact running.state.label|capfirst icon="activity" tone=running.state.tone %}
     {{ container.item.uptime|default:running.uptime|default:running.status|default:"No status"|breakable }}
   {% detail %}
-    <small>{% if running.check %}{{ running.check|capfirst|breakable:"·" }}{% endif %}{% if machine %}on {% entity machine.link %}{% endif %}</small>
+    <small>{% if running.check %}{{ running.check.said|capfirst|breakable:"·" }}{% endif %}{% if machine %}on {% entity machine.link %}{% endif %}</small>
   {% endfact %}
   {% fact "Version" icon="layers" %}
     {% if standing.tag %}<code>{{ standing.tag|breakable }}</code>{% else %}No version tag{% endif %}

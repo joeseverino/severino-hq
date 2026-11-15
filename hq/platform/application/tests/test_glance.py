@@ -18,6 +18,7 @@ from hq.domains.control_plane.models import (
     ManagedResource,
     ProviderConnection,
 )
+from hq.platform.application.markup_testing import hrefs, select, text, with_class
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog
@@ -35,13 +36,12 @@ from ..glance import (
     dashboard_panels,
     dashboard_refresh_plan,
     panel_specs,
-    record_dashboard_observations,
     refresh_ask,
     select_dashboard_machine,
 )
+from ..report_testing import bridged
 from ..security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal
 from .glance_readings import DOCKER, HOST, reported_hour, reported_machine, reported_weather
-from .markup import hrefs, select, text, with_class
 
 AN_OPERATOR = Principal("operator", "web", OPERATOR_CAPABILITIES)
 
@@ -186,7 +186,8 @@ class DashboardGlanceTests(TestCase):
     def test_controller_reading_is_owned_by_the_machine_record(self):
         DashboardRefreshRequest.objects.create(panel_id=self.machine_request_id)
 
-        result = record_dashboard_observations(
+        result = bridged(
+            "glance",
             [
                 {
                     "panel_id": "infrastructure",
@@ -194,7 +195,6 @@ class DashboardGlanceTests(TestCase):
                     "machines": [reported_machine("app-server", host=HOST)],
                 }
             ],
-            principal=cli_principal(),
             controller_id="app-server",
         )
 
@@ -212,11 +212,7 @@ class DashboardGlanceTests(TestCase):
 
     def _weather(self, reading):
         DashboardRefreshRequest.objects.update_or_create(panel_id="weather", defaults={"completed_at": None})
-        record_dashboard_observations(
-            [{"panel_id": "weather", "as_of": _now(), "weather": reading}],
-            principal=cli_principal(),
-            controller_id="app-server",
-        )
+        bridged("glance", [{"panel_id": "weather", "as_of": _now(), "weather": reading}], controller_id="app-server")
         return readings.stored(readings.weather(POINT))
 
     FAILED = reported_weather(POINT, refresh_failed="network")
@@ -265,9 +261,9 @@ class DashboardGlanceTests(TestCase):
             DashboardRefreshRequest.objects.update_or_create(
                 panel_id=self.machine_request_id, defaults={"completed_at": None}
             )
-            record_dashboard_observations(
+            bridged(
+                "glance",
                 [{"panel_id": "infrastructure", "as_of": _now(), "machines": [{"key": "app-server", **reading}]}],
-                principal=cli_principal(),
                 controller_id="app-server",
             )
             return readings.stored(readings.machine_telemetry(self.machine.key))
@@ -368,7 +364,8 @@ class DashboardGlanceTests(TestCase):
     def test_unknown_machine_is_rejected_and_not_created(self):
         DashboardRefreshRequest.objects.create(panel_id=self.machine_request_id)
         with self.assertRaisesMessage(ValueError, "No machine HQ knows matched"):
-            record_dashboard_observations(
+            bridged(
+                "glance",
                 [
                     {
                         "panel_id": "infrastructure",
@@ -376,7 +373,6 @@ class DashboardGlanceTests(TestCase):
                         "machines": [reported_machine("not-declared", host=HOST)],
                     }
                 ],
-                principal=cli_principal(),
                 controller_id="app-server",
             )
 
@@ -475,7 +471,8 @@ class DashboardGlanceTests(TestCase):
 
     def test_unsolicited_observation_is_rejected(self):
         with self.assertRaisesMessage(ValueError, "No refresh is pending"):
-            record_dashboard_observations(
+            bridged(
+                "glance",
                 [
                     {
                         "panel_id": "infrastructure",
@@ -483,14 +480,13 @@ class DashboardGlanceTests(TestCase):
                         "machines": [reported_machine("app-server", host=HOST)],
                     }
                 ],
-                principal=cli_principal(),
                 controller_id="app-server",
             )
 
     def _report_machine(self, as_of):
-        return record_dashboard_observations(
+        return bridged(
+            "glance",
             [{"panel_id": "infrastructure", "as_of": as_of, "machines": [reported_machine("app-server", host=HOST)]}],
-            principal=cli_principal(),
             controller_id="app-server",
         )
 

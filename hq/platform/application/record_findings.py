@@ -24,6 +24,7 @@ from .entity_links import EntityLink, entity_link
 from .finding_model import Finding, FindingEstate, FindingRule, opens
 from .projection import read_once
 from .references import UNLINK, naming_nothing
+from .tone import Tone
 from .ui import counted, ended
 
 # How many of a backlog's things a finding says by name before it counts the rest.
@@ -81,7 +82,7 @@ class _Backlog:
                 rule=rule,
                 subject="",
                 title=counted(count, self.one, self.many),
-                severity="attention",
+                severity=Tone.ATTENTION,
                 explanation=" ".join(part for part in (ended(names), self.said) if part),
                 evidence=((self.counts, f"{count:,}"),),
                 primary=opens(self.opens_as, f"{reverse(self.route)}?{self.query}"),
@@ -103,11 +104,11 @@ def _backlog(
     return FindingRule(
         rule,
         title,
-        "attention",
+        Tone.ATTENTION,
         detect,
         operator_action=operator_action,
         no_help_reason=no_help_reason,
-        bars={"attention": bar},
+        bars={Tone.ATTENTION: bar},
         domain=domain,
         gathered=True,
     )
@@ -144,7 +145,7 @@ def _links_to_nothing(rule: str, model: type) -> FindingRule:
                 subject="",
                 part=found.key,
                 title=found.title,
-                severity="attention",
+                severity=Tone.ATTENTION,
                 explanation=UNLINK,
                 primary=opens("Open record", found.url),
             )
@@ -154,11 +155,11 @@ def _links_to_nothing(rule: str, model: type) -> FindingRule:
     return FindingRule(
         rule,
         "Links to nothing",
-        "attention",
+        Tone.ATTENTION,
         detect,
         operator_action="Open the record, then choose something else for the link or clear it.",
         no_help_reason="Only a person knows what the record was meant to name.",
-        bars={"attention": "a record links to something HQ no longer has, so the record points nowhere"},
+        bars={Tone.ATTENTION: "a record links to something HQ no longer has, so the record points nowhere"},
         domain={Expense: "hq.expenses", Asset: "hq.assets", Entry: "hq.calendar"}[model],
         gathered=True,
     )

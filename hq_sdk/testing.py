@@ -1,4 +1,4 @@
-"""For an extension's test suite: synthetic siblings, held jobs, frozen time and the host's style checks."""
+"""For an extension's test suite: synthetic siblings, held jobs, frozen time, the markup reader and style checks."""
 
 import re
 import time
@@ -8,6 +8,18 @@ from django.db.models import Manager
 from hq.domains.jobs.testing import held_jobs
 from hq.platform.application.demo import demo_scope
 from hq.platform.application.derivation_testing import frozen
+from hq.platform.application.markup_testing import (
+    Element,
+    all_elements,
+    elements,
+    hrefs,
+    links,
+    select,
+    text,
+    texts,
+    with_class,
+    within,
+)
 from hq.platform.application.plugin_testing import (
     ComposedPluginTestCase,
     form_keyed,
@@ -69,17 +81,27 @@ def plain(text: str | bytes) -> str:
 
 __all__ = [
     "ComposedPluginTestCase",
+    "Element",
     "OutboundInRequest",
+    "all_elements",
     "audit_writer",
     "demo_scope",
+    "elements",
     "form_keyed",
     "frozen",
     "held_jobs",
     "holding",
+    "hrefs",
+    "links",
     "plain",
     "providers_derived_again",
     "reaches_out",
+    "select",
     "sibling",
+    "text",
+    "texts",
     "unclosed_template_comments",
     "undefined_style_classes",
+    "with_class",
+    "within",
 ]

@@ -16,6 +16,7 @@ from ..paths import hq_path, path_to, why_unread
 from ..projection import projection_scope
 from ..resources import get_resource
 from ..security import Capability, Principal
+from ..tone import Tone
 
 READ = Principal("reader", "test", frozenset({Capability.READ}))
 CLOUDFLARE = "example-cloudflare"
@@ -622,7 +623,7 @@ class ObservedNameTests(TestCase):
         summary = {item.label: item for item in response.context["summary"]}
         path = self.walk("admin.example.com")
 
-        self.assertEqual(summary["Health"].tone, "unknown")
+        self.assertEqual(summary["Health"].tone, Tone.NEUTRAL)
         self.assertIn(path.observed_line, " ".join(summary["Health"].detail))
         self.assertIn("Admin", summary["What it is"].value)
         section = page[page.index('id="path"') : page.index('id="parts"')]

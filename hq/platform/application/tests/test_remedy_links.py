@@ -9,8 +9,6 @@ it acts on, however far down the catalog, and every link the findings, the
 action queue and the service pages emit is followed and checked.
 """
 
-import re
-from html import unescape
 from urllib.parse import parse_qs, urlsplit
 
 from django.contrib.auth import get_user_model
@@ -19,6 +17,7 @@ from django.urls import Resolver404, resolve, reverse
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.providers import PROVIDERS
+from hq.platform.application.markup_testing import all_elements, elements, text, texts
 
 from ..action_links import command_url
 from ..capabilities import capability_registry, capability_words
@@ -29,7 +28,6 @@ from ..projection import MAX_PAGE_SIZE, projection_scope
 from ..resource_capabilities import UPDATE_CAPABILITY
 from ..security import web_principal
 from ..topology import derive_topology
-from .markup import all_elements, elements, text, texts
 from .test_approvals import POLICY_KEY, declare_policy
 from .test_finding_fixes import document
 from .test_paths import PUBLIC_RANGE, estate, record, store
@@ -200,10 +198,11 @@ class EveryEmittedRemedyOpensReadyTests(TestCase):
 
         found = []
         for page in self.pages():
-            body = self.client.get(page).content.decode()
-            for label_url in re.finditer(r'<a [^>]*href="(/commands/[^"]+)"[^>]*>(.*?)</a>', body, re.DOTALL):
-                url, label = unescape(label_url.group(1)), " ".join(re.sub(r"<[^>]+>", "", label_url.group(2)).split())
-                found.append((label, url, "GET"))
+            found += [
+                (element.words, element.attrs["href"], "GET")
+                for element in all_elements(self.client.get(page))
+                if element.tag == "a" and element.attrs.get("href", "").startswith("/commands/")
+            ]
         return found
 
     def test_the_estate_emits_command_remedies_to_follow(self):

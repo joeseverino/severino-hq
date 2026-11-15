@@ -181,6 +181,20 @@ class IntegrationGraphTests(TestCase):
         self.assertEqual(violation.code, "connection.repeated_words")
         self.assertEqual(set(violation.subjects), {"example.resolver", *(spec.name for spec in capabilities)})
 
+    def test_an_effect_nothing_declares_is_refused_where_it_is_written(self):
+        # Imported where it runs, so this module imports at a base without it.
+        from ..contracts import Effect
+
+        for build in (
+            lambda effect: CapabilitySpec(
+                "example.bad", "Bad effect.", effect, Capability.READ, SyntheticCommand, execute_synthetic
+            ),
+            lambda effect: ConnectionAbility("example.bad", "Bad", "Bad effect.", effect=effect),
+        ):
+            with self.assertRaises(ValueError):
+                build("maybe_writes")
+            self.assertIs(build("destructive").effect, Effect.DESTRUCTIVE)
+
     def test_compilation_reports_intrinsic_and_duplicate_violations_together(self):
         valid = CapabilitySpec(
             "example.read",
@@ -192,11 +206,12 @@ class IntegrationGraphTests(TestCase):
         )
         malformed_capability = CapabilitySpec(
             "example.bad",
-            "Bad effect.",
-            "maybe_writes",
+            "Bad variants.",
+            "read",
             Capability.READ,
             SyntheticCommand,
             execute_synthetic,
+            variants=(("", "Read"),),
         )
         malformed_resource = ResourceSpec("example.empty", "Empty", "Exposes nothing.", Capability.READ)
         malformed_connection = ConnectionSpec(
@@ -224,7 +239,7 @@ class IntegrationGraphTests(TestCase):
                 "invalid.connection",
             ],
         )
-        self.assertIn("invalid effect", str(raised.exception))
+        self.assertIn("names each variant once", str(raised.exception))
         self.assertIn("exposes no operations", str(raised.exception))
         self.assertIn("invalid documentation URL", str(raised.exception))
 

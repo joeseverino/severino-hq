@@ -39,6 +39,20 @@ class EstateRunTests(TestCase):
             with self.subTest(state=state):
                 self.assertTrue(found.exists())
 
+    def test_an_agents_approved_run_names_the_person_whose_approval_ran_it(self):
+        from hq.domains.control_plane.models import ApprovalRequest
+
+        decided = {
+            str(held.result["operation"]["id"]): held.decided_actor
+            for held in ApprovalRequest.objects.filter(state=ApprovalRequest.State.APPROVED)
+        }
+        approved = [run for run in self.runs(requested_interface="mcp") if run.input.get("approved_by")]
+
+        self.assertTrue(approved)
+        for run in approved:
+            with self.subTest(run=run.pk):
+                self.assertEqual(run.input["approved_by"], decided.get(str(run.pk)))
+
     def test_a_finished_run_reports_what_its_tasks_did(self):
         for run in self.runs(state__in=(State.SUCCEEDED, State.FAILED)):
             with self.subTest(run=run.pk):

@@ -59,7 +59,7 @@ def created(answer: Mapping[str, Any], principal: Principal) -> dict[str, Any] |
     this caller could not read as a task, so it keeps the held answer.
     """
 
-    held = approvals.asked_by(str(answer["approval"]["id"]), principal=principal)
+    held = approvals.own_held_request(str(answer["approval"]["id"]), principal=principal)
     if held is None:
         return None
     task, _ = _task(held)
@@ -106,7 +106,7 @@ def cancel(task_id: str, principal: Principal) -> dict[str, Any]:
 
 
 def _own(task_id: str, principal: Principal) -> Any:
-    held = approvals.asked_by(task_id, principal=principal)
+    held = approvals.own_held_request(task_id, principal=principal)
     if held is None:
         raise MCPError(types.INVALID_PARAMS, _UNKNOWN)
     return held

@@ -17,6 +17,7 @@ from hq.domains.control_plane.models import ProviderConnection
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_STACK_KIND
 from hq.domains.control_plane.provider_spec import NameContext
 from hq.domains.control_plane.providers import PROVIDERS
+from hq.platform.application.markup_testing import all_elements, hrefs, text
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 
@@ -25,9 +26,8 @@ from ..connections import connection_readings, connections_for, reachable_throug
 from ..derivation_testing import frozen
 from ..derivations import counting
 from ..provider_choices import container_stack, zone
-from ..report_testing import report_connections
+from ..report_testing import bridged, report_connections
 from ..security import cli_principal
-from .markup import all_elements, hrefs, text
 from .sentinel import CONNECTION, SentinelMixin, plant_credentials
 
 A_PORTAINER = {
@@ -51,7 +51,7 @@ A_DNS_TOKEN = {
 
 
 def sweep(*connections, controller_id="a-controller"):
-    return report_connections(list(connections), principal=cli_principal(), controller_id=controller_id)
+    return report_connections(list(connections), controller_id=controller_id)
 
 
 class RecordingTests(TestCase):
@@ -835,11 +835,11 @@ class StepFailureRecordingTests(TestCase):
 
     def test_failures_land_on_the_connection_that_carried_them(self):
         from hq.platform.application.connections import connection_readings
-        from hq.platform.application.inventory import record_step_failures
 
         self._connection()
 
-        record_step_failures(
+        bridged(
+            "steps",
             [
                 {
                     "subject": A_PORTAINER["connection_ref"],
@@ -847,7 +847,6 @@ class StepFailureRecordingTests(TestCase):
                     "reason": "exit 126",
                 }
             ],
-            principal=cli_principal(),
             controller_id="a-host",
         )
 
@@ -861,10 +860,10 @@ class StepFailureRecordingTests(TestCase):
         """Only writing failures would leave the last one standing forever."""
 
         from hq.platform.application.connections import connection_readings
-        from hq.platform.application.inventory import record_step_failures
 
         self._connection()
-        record_step_failures(
+        bridged(
+            "steps",
             [
                 {
                     "subject": A_PORTAINER["connection_ref"],
@@ -872,24 +871,20 @@ class StepFailureRecordingTests(TestCase):
                     "reason": "exit 126",
                 }
             ],
-            principal=cli_principal(),
             controller_id="a-host",
         )
 
-        record_step_failures([], principal=cli_principal(), controller_id="a-host")
+        bridged("steps", [], controller_id="a-host")
 
         self.assertEqual(connection_readings()[0].failing_steps, ())
 
     def test_a_failure_for_something_this_controller_does_not_carry_is_dropped(self):
         from hq.platform.application.connections import connection_readings
-        from hq.platform.application.inventory import record_step_failures
 
         self._connection()
 
-        record_step_failures(
-            [{"subject": "not-a-connection", "step": "a step", "reason": "exit 1"}],
-            principal=cli_principal(),
-            controller_id="a-host",
+        bridged(
+            "steps", [{"subject": "not-a-connection", "step": "a step", "reason": "exit 1"}], controller_id="a-host"
         )
 
         self.assertEqual(connection_readings()[0].failing_steps, ())

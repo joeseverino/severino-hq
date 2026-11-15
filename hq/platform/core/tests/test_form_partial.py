@@ -5,7 +5,7 @@ from django.template import engines
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase
 
-from hq.platform.application.tests.markup import all_elements, elements, select, with_class
+from hq.platform.application.markup_testing import all_elements, elements, select, with_class
 from hq.platform.application.web_writes import RETRY_KEY_FIELD
 
 FORM = "partials/_form.html"

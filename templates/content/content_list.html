@@ -3,7 +3,7 @@
 {% block row %}
   <td><a href="{{ row.get_absolute_url }}"><strong>{{ row.title|breakable }}</strong></a></td>
   {% if show_type %}<td>{{ row.get_content_type_display|breakable }}</td>{% endif %}
-  <td>{% status row.get_status_display tone=row.status %}</td>
+  <td>{% status row.state %}</td>
   <td class="muted">{% if row.topic %}<span class="table-clamp">{{ row.topic|breakable }}</span>{% else %}{% empty_value %}{% endif %}</td>
   <td>{{ row.pageviews|or_empty }}</td>
   <td class="muted">{{ row.published_at|when }}</td>

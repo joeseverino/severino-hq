@@ -41,7 +41,7 @@ lazy from hq.domains.jobs.models import JobState
 lazy from hq.platform.application.asks import FAILED, Ask, AskMixin, Standing, WatchView
 lazy from hq.platform.application.cadence import automation_standing
 lazy from hq.platform.application.refusal_status import WANTS_A_GRANT, refusal_of
-lazy from hq.platform.application.work_runs import TONES, UNENDED
+lazy from hq.platform.application.work_runs import UNENDED
 lazy from hq.platform.core.templatetags.action_tags import MOST_BESIDE
 
 
@@ -99,7 +99,7 @@ class PlaybooksView(PageMixin, TemplateView):
             # View diff, Adopt all and Reject all, then Refresh, side by side while a commit waits.
             page_beside=MOST_BESIDE if sources.pending else "",
             failed_tone=(
-                TONES[JobState(sources.reached.seen)]
+                JobState(sources.reached.seen).tone
                 if sources.reached is not None and sources.reach.state == FAILED
                 else ""
             ),

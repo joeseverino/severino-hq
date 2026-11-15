@@ -972,6 +972,9 @@ Only a record read through a connection that manages is adopted, by a sweep or
 by an operator. A record that names its connection needs that connection to
 manage; one that names none needs every connection of its kind's providers to
 manage. Anything else shows everywhere as observed and is never declared.
+A sweep takes a kind that stands behind access (`requires_approval`) on
+switched off, until a person switches it on
+([Security](Security.md#what-hq-enforces)).
 
 "Stop managing" an adopted record stores a `NotManaged` row (kind, record
 token, who, when), and sweeps skip it. Managing it again ("Manage domain",

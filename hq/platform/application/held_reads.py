@@ -3,7 +3,7 @@
 One read for every door: the API's record route, MCP's ``get_resource`` and
 ``hq://approvals/{id}``, and the MCP task a held call becomes, which says the
 same standing as a task's state. Only the caller that asked reads a request
-(``approvals.asked_by``); another caller's reads as an id nothing holds.
+(``approvals.own_held_request``); another caller's reads as an id nothing holds.
 """
 
 from dataclasses import dataclass
@@ -90,7 +90,7 @@ def standing(held: ApprovalRequest) -> HoldStanding:
 def get_held(approval_id: str, *, principal: Principal) -> dict[str, Any]:
     """The held request ``principal`` asked for, by its id."""
 
-    held = approvals.asked_by(approval_id, principal=principal)
+    held = approvals.own_held_request(approval_id, principal=principal)
     if held is None:
         # The same answer for another caller's request as for none at all.
         raise RecordNotFound("No held request of yours has that id.")

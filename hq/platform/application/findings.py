@@ -60,7 +60,7 @@ from .action_links import (
     topology_investigation_links,
 )
 from .answer_fields import Pinned, SchemaVersion
-from .contracts import route_url
+from .contracts import Effect, route_url
 from .derivations import derivation, present
 from .derived_inputs import FINDINGS_READS, estate_variant
 from .describe import Describe, listed
@@ -80,11 +80,11 @@ from .integration_validation import required_capability_names
 from .integrations import IntegrationGraph, held_graph, integration_graph
 from .json_schemas import Written
 from .projection import QUERY
-from .security import Capability, Principal
+from .security import Principal
+from .tone import Tone
 from .topology import derive_topology
 from .topology_model import (
     JOINED_KINDS,
-    STANDINGS,
     Topology,
     TopologyNode,
 )
@@ -297,15 +297,15 @@ def _declared_at(detect: Callable[..., Any]) -> tuple[Path, int]:
     )
 
 
-def _permitted(capability: str, principal: Principal, graph: IntegrationGraph) -> tuple[bool, str]:
+def _permitted(capability: str, principal: Principal, graph: IntegrationGraph) -> tuple[bool, Effect | None]:
     """Whether this principal may run it, and what the registry says it does."""
 
     spec = graph.capabilities.get(capability)
     if spec is not None:
-        return principal.permits(*spec.required_capabilities), spec.effect
+        return spec.permitted_to(principal), spec.effect
     # A rule naming a capability the registry does not hold is a contract error
     # the suite catches; at runtime the honest answer is to offer nothing.
-    return False, ""
+    return False, None
 
 
 def _playbooks(finding: Finding, subject: TopologyNode | None) -> tuple[FindingRemedy, ...]:
@@ -329,7 +329,7 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
     kept = []
     for remedy in (*finding.remedies, *_playbooks(finding, subject)):
         allowed, effect = _permitted(remedy.capability, principal, graph)
-        if not allowed or effect == "destructive":
+        if not allowed or effect is None or effect is Effect.DESTRUCTIVE:
             continue
         action = next(
             (
@@ -353,7 +353,9 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
         )
     resolved_remedies = tuple(kept)
     offers = finding.offers + tuple(
-        action for action in (subject.actions if subject else ()) if action.effect == "read" and action.method == "GET"
+        action
+        for action in (subject.actions if subject else ())
+        if action.effect == Effect.READ and action.method == "GET"
     )
     investigations = topology_investigation_links(subject.id) if subject else ()
     remedy_actions = tuple(
@@ -608,21 +610,12 @@ def derive_findings(
                 continue
             findings.append(_resolved(finding, principal, node))
 
-    return tuple(sorted(findings, key=lambda f: (_rank(f.severity), f.rule, f.subject)))
-
-
-# Most severe first: the order findings are served in and a floor reads.
-SEVERITIES = STANDINGS
-
-
-def _rank(severity: str) -> int:
-    return SEVERITIES.index(severity) if severity in SEVERITIES else len(SEVERITIES)
+    return tuple(sorted(findings, key=lambda f: (f.severity.rank, f.rule, f.subject)))
 
 
 def estate_findings(*, principal: Principal, rule: str = "") -> tuple[Any, ...]:
     """Every finding the topology ``principal`` may see supports."""
 
-    principal.require(Capability.READ)
     return _estate_findings(principal, rule)
 
 
@@ -714,7 +707,7 @@ class FindingFacts(TypedDict):
     ]
     affected_scopes: Annotated[list[str], Describe("Other record types or reading types it bears on.")]
     title: Annotated[str, Describe("The problem, in a line.")]
-    severity: Annotated[str, Describe(f"How serious it is: {listed(SEVERITIES)}, most severe first.")]
+    severity: Annotated[str, Describe(f"How serious it is: {listed(Tone)}, most severe first.")]
     explanation: Annotated[str, Describe("Why it matters and what it rests on, in sentences.")]
     evidence: Annotated[list[FindingEvidence], Describe("What it rests on, a labeled line each.")]
     operator_steps: Annotated[
@@ -787,7 +780,7 @@ def serialize_finding(finding: Finding) -> SerializedFinding:
 
 # Built from the declarations, so a type checker reads each as a value.
 _RULE: Any = Literal[tuple(rule.name for rule in RULES)]
-_SEVERITY: Any = Literal[SEVERITIES]
+_SEVERITY: Any = Literal[tuple(tone.value for tone in Tone)]
 
 # The API's query and get_findings' arguments are both this model, so the two
 # doors publish one schema and refuse one input in one sentence.
@@ -877,14 +870,13 @@ def narrowed_findings(*, principal: Principal, **narrowing: object) -> NarrowedF
     limit held some back.
     """
 
-    principal.require(Capability.READ)
     query = FindingsQuery.model_validate(narrowing).model_dump()
     rule: str = query["rule"] or ""
     limit: int | None = query["limit"]
-    floor = SEVERITIES.index(query["severity"]) if query["severity"] else len(SEVERITIES)
+    floor = Tone(query["severity"]).rank if query["severity"] else len(Tone)
     raised = estate_findings(principal=principal, rule=rule)
     counts = Counter(finding.severity for finding in raised)
-    eligible = [finding for finding in raised if _rank(finding.severity) <= floor]
+    eligible = [finding for finding in raised if finding.severity.rank <= floor]
     kept = tuple(eligible[:limit])
     return NarrowedFindings(
         rule=rule or None,
@@ -984,7 +976,7 @@ def _unreachable_kinds(topology: Topology) -> frozenset[str]:
 
     status_of = {node.id: node.status for node in topology.nodes}
     live_abilities = {
-        edge.target for edge in topology.edges if edge.kind == "enables" and status_of.get(edge.source) != "serious"
+        edge.target for edge in topology.edges if edge.kind == "enables" and status_of.get(edge.source) != Tone.SERIOUS
     }
     governed_by: dict[str, set[str]] = {}
     kinds_of = {node.id: node.kind_key for node in topology.nodes}

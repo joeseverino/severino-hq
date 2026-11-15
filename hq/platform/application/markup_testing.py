@@ -4,11 +4,16 @@ from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from typing import override
 
+from django.http import HttpResponse
+
 _VOID = frozenset({"area", "br", "col", "hr", "img", "input", "link", "meta", "source", "wbr"})
 # The spans `|breakable` writes for a token, which are no edge in its text.
 _TOKEN_PARTS = frozenset({"strut", "token", "cut", "whole", "part", "joined", "seam", "mark"})
 # Elements whose text is their name or their value: a mark held inside one is the sentence's.
 _NAMED = frozenset({"a", "button", "code"})
+
+# What a test reads: a response, its body, or the markup a template rendered.
+type Page = str | bytes | HttpResponse
 
 
 @dataclass
@@ -135,26 +140,27 @@ class _Page(HTMLParser):
         return not (self._edge or not self.words or self.words[-1][-1:].isspace() or data[:1].isspace())
 
 
-def _page(html) -> _Page:
+def _page(html: Page) -> _Page:
     page = _Page()
-    page.feed(html.content.decode() if hasattr(html, "content") else str(html))
+    body = html.content if isinstance(html, HttpResponse) else html
+    page.feed(body.decode() if isinstance(body, bytes) else body)
     page.close()
     return page
 
 
-def _shown(html) -> list[Element]:
+def _shown(html: Page) -> list[Element]:
     """Every element a reader meets before opening a row, in page order."""
 
     return [element for element in _page(html).elements if not element.beneath]
 
 
-def all_elements(html) -> list[Element]:
+def all_elements(html: Page) -> list[Element]:
     """Every element, in page order, the line beneath each row included."""
 
     return _page(html).elements
 
 
-def select(html, attribute: str, value: str | None = None) -> list[Element]:
+def select(html: Page, attribute: str, value: str | None = None) -> list[Element]:
     """Every element carrying ``attribute`` (equal to ``value`` when given)."""
 
     return [
@@ -164,19 +170,19 @@ def select(html, attribute: str, value: str | None = None) -> list[Element]:
     ]
 
 
-def elements(html, tag: str) -> list[Element]:
+def elements(html: Page, tag: str) -> list[Element]:
     """Every ``tag`` element, in page order."""
 
     return [element for element in _shown(html) if element.tag == tag]
 
 
-def with_class(html, name: str) -> list[Element]:
+def with_class(html: Page, name: str) -> list[Element]:
     """Every element whose class list includes ``name``, in page order."""
 
     return [element for element in _shown(html) if name in element.classes]
 
 
-def within(html, attribute: str, value: str | None = None) -> list[Element]:
+def within(html: Page, attribute: str, value: str | None = None) -> list[Element]:
     """Every element inside one carrying ``attribute``, in page order, a row's
     open line counted as inside the row it opens.
 
@@ -196,7 +202,7 @@ def within(html, attribute: str, value: str | None = None) -> list[Element]:
     return [element for element in _shown(html) if any(holds(ancestor) for ancestor in element.ancestors)]
 
 
-def links(html) -> list[tuple[str, str]]:
+def links(html: Page) -> list[tuple[str, str]]:
     """Each link's words and its target, in page order."""
 
     return [
@@ -206,19 +212,19 @@ def links(html) -> list[tuple[str, str]]:
     ]
 
 
-def texts(html, tag: str) -> list[str]:
+def texts(html: Page, tag: str) -> list[str]:
     """The words of each ``tag`` element, whitespace collapsed, in page order."""
 
     return [element.words for element in elements(html, tag)]
 
 
-def hrefs(html) -> list[str]:
+def hrefs(html: Page) -> list[str]:
     """Every link's target, in page order."""
 
     return [element.attrs["href"] for element in _shown(html) if element.tag == "a" and "href" in element.attrs]
 
 
-def actions(html) -> list[str]:
+def actions(html: Page) -> list[str]:
     """Every form's action, in page order."""
 
     return [element.attrs.get("action", "") for element in _shown(html) if element.tag == "form"]
@@ -231,7 +237,7 @@ def copied(block: Element) -> str:
     return block.text.strip().replace("\xa0", " ")
 
 
-def text(html) -> str:
+def text(html: Page) -> str:
     """The words a reader sees, whitespace collapsed."""
 
     return " ".join(" ".join(_page(html).words).split())

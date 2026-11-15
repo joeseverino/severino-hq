@@ -9,6 +9,7 @@ from django.test import TestCase
 from pydantic import Field
 
 from hq.platform.application.contracts import Closed
+from hq.platform.application.markup_testing import elements
 
 from ..capabilities import capability_registry, run_capability
 from ..command_forms import command_form_class
@@ -87,7 +88,7 @@ class RunFormTests(TestCase):
         drawn = str(self.form_class()()["hosts"])
 
         self.assertEqual(drawn.count('type="checkbox"'), 3)
-        self.assertNotIn("<select", drawn)
+        self.assertEqual(elements(drawn, "select"), [])
 
     def test_a_worker_that_reaches_nothing_offers_nothing_and_says_so(self):
         self.supply.reach()

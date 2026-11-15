@@ -18,6 +18,7 @@ from hq.domains.control_plane.dns_lookup import LookupNotFound, LookupUnavailabl
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
 from hq.domains.control_plane.observations.public_registry import ADDRESS_KIND, DOMAIN_KIND
 from hq.domains.control_plane.permissions import Cloudflare
+from hq.platform.application.markup_testing import select, text
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 from hq_sdk.testing import plain
 
@@ -33,7 +34,6 @@ from ..topology import derive_topology
 from ..zone_insights import certificates, registration
 from ..zones import ZONE_KIND, find_zone
 from .host_only import host_only
-from .markup import select, text
 
 READ = Principal("reader", "test", frozenset({Capability.READ}))
 CLOUDFLARE = "example-cloudflare"
@@ -740,6 +740,17 @@ class PublicRegistryRefreshTests(TestCase):
         stored = ProviderInventory.objects.get(kind=ADDRESS_KIND)
         self.assertFalse(stored.reachable)
         self.assertIn("could not be reached", stored.error)
+
+    def test_a_principal_who_may_only_look_up_stores_nothing(self):
+        from ..public_registry import refresh
+        from ..security import AuthorizationError
+
+        looker = Principal("looker", "test", frozenset({Capability.READ, Capability.LOOK_UP_PUBLIC_RECORDS}))
+        asked = mock.Mock(side_effect=AssertionError("looked up"))
+
+        with self.assertRaises(AuthorizationError):
+            refresh(principal=looker, addresses=("203.0.113.7",), domains=(), allocations=asked, registrations=asked)
+        self.assertFalse(ProviderInventory.objects.exists())
 
     @override_settings(SEVERINO_RDAP_ENDPOINT="")
     def test_an_unconfigured_registry_is_not_connected(self):

@@ -24,15 +24,16 @@ from hq.domains.control_plane.providers import validate_spec
 from .adoption import WriteGap, require_writable, write_gap
 from .answer_fields import CallMessage
 from .cadence import ask
-from .command_fields import Choices, Describe
+from .command_fields import Choices, Describe, confirm
+from .deletion import DeleteCommand
 from .integration_specs import Kept, keeps
 from .projection import window
 from .record_errors import PolicyError, RecordNotFound
 from .record_saves import written
 from .resource_operations import queue_reconcile
-from .security import Principal
 from .ui import ended
 lazy from .asks import APPLIES_SHORTLY
+lazy from .capabilities import Consented, consent
 
 CONTACT_STATUSES = frozenset(get_args(ContactStatus))
 ASSIGNEE_LENGTH = 120
@@ -57,9 +58,8 @@ class ContactReviewCommand:
     admin_notes: AdminNotes = ""
 
 
-@dataclass(frozen=True, slots=True)
-class ContactDeleteCommand:
-    confirm: Annotated[str, Describe("The submission's ID again, to confirm the delete.")]
+# The name the contact specs import the shared delete command by.
+ContactDeleteCommand = DeleteCommand
 
 
 def _status(value: str, *, allow_blank: bool = False) -> str:
@@ -160,9 +160,10 @@ def _ids(spec: dict[str, Any]) -> dict[str, str]:
     return {name: str(spec.get(name, "")) for name in ("connection_ref", "account_id", "database_id")}
 
 
-def _declare(spec: dict[str, Any], *, principal: Principal, said: str) -> None:
+def _declare(spec: dict[str, Any], *, consented: Consented, said: str) -> None:
     """Write the declaration and queue the controller to apply it; ``said`` is what its audit row says."""
 
+    consent(consented).require(inbox.DECLARATION)
     validated = validate_spec(inbox.DECLARATION, spec)
     require_writable(inbox.DECLARATION, validated)
     resource = ManagedResource.objects.select_for_update().filter(key=inbox.DECLARATION_KEY).first()
@@ -178,7 +179,7 @@ def _declare(spec: dict[str, Any], *, principal: Principal, said: str) -> None:
     resource.full_clean()
     resource.audit_said = said
     resource.save()
-    queue_reconcile(resource, principal=principal, reason="A contact message was changed.")
+    queue_reconcile(resource, consented=consented, reason="A contact message was changed.")
     ask(reads=(inbox.READING,))
 
 
@@ -203,7 +204,7 @@ class ContactReviewed(TypedDict):
 def execute_contact_review(
     command: ContactReviewCommand,
     *,
-    principal: Principal,
+    consented: Consented,
     current_id: int,
     sent: frozenset[str] | None = None,
 ) -> ContactReviewed:
@@ -218,7 +219,7 @@ def execute_contact_review(
     review["assigned_to"] = review["assigned_to"].strip()
     _declare(
         _change(current, review),
-        principal=principal,
+        consented=consented,
         said=f"Asked for contact submission #{current_id} to be reviewed.",
     )
     marked = status != _review_of(before)["status"]
@@ -254,13 +255,12 @@ class ContactDeleted(TypedDict):
 
 @transaction.atomic
 def execute_contact_delete(
-    command: ContactDeleteCommand,
+    command: DeleteCommand,
     *,
-    principal: Principal,
+    consented: Consented,
     current_id: int,
 ) -> ContactDeleted:
-    if command.confirm != str(current_id):
-        raise ValidationError({"confirm": ValidationError("Must match the message.", code="invalid")})
+    confirm(command.confirm, current_id)
     current = inbox.current()
     before = find_submission(current_id, current)
     if before is None:
@@ -269,7 +269,7 @@ def execute_contact_delete(
         return {"ok": True, "deleted": {"id": current_id, "already_absent": True}, "message": "Message deleted."}
     _declare(
         _change(current, {"delete": current_id}),
-        principal=principal,
+        consented=consented,
         said=f"Asked for contact submission #{current_id} to be deleted.",
     )
     return {

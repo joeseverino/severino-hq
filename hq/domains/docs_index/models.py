@@ -11,16 +11,18 @@ from django.db.models import Q
 from django.urls import reverse
 
 from hq.platform.application.labels import dotted
+from hq.platform.application.tone import Tone, TonedChoices
 from hq.platform.application.ui import ended
 from hq.platform.core.models import TimestampedModel
 from hq.platform.core.rules import Rule
 
 
-class DocStatus(models.TextChoices):
-    DRAFT = "draft", "Draft"
-    ACTIVE = "active", "Active"
-    DEPRECATED = "deprecated", "Deprecated"
-    ARCHIVED = "archived", "Archived"
+class DocStatus(TonedChoices):
+    DRAFT = "draft", Tone.NEUTRAL, "Draft"
+    ACTIVE = "active", Tone.GOOD, "Active"
+    # Still read, and due its replacement or its archive.
+    DEPRECATED = "deprecated", Tone.ATTENTION, "Deprecated"
+    ARCHIVED = "archived", Tone.NEUTRAL, "Archived"
 
 
 class DocumentationRecord(TimestampedModel):
@@ -49,6 +51,8 @@ class DocumentationRecord(TimestampedModel):
     # Declared above the model so the rule in ``Meta`` can name its values.
     Status = DocStatus
 
+    # A classification, not a standing, so it takes no tone: a page draws
+    # it as a chip in its own words.
     class Sensitivity(models.TextChoices):
         PUBLIC = "public", "Public"
         INTERNAL = "internal", "Internal"
@@ -134,6 +138,12 @@ class DocumentationRecord(TimestampedModel):
 
     def get_absolute_url(self) -> str:
         return reverse("docs_index:detail", args=[self.doc_id])
+
+    @property
+    def state(self) -> DocStatus:
+        """Its status as the member its pill is drawn from, in its words and tone."""
+
+        return DocStatus(self.status)
 
     @property
     def is_safe_for_ai_export(self) -> bool:

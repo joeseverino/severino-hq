@@ -24,6 +24,12 @@ lazy from .moments import ago
 lazy from .tailnet import device_at, may_reach, observer, posture_facts
 lazy from .zones import ZONE_KIND
 
+# The facts a node carries for a path a sweep could not take, which
+# ``connection_findings`` reads back: a consumer it could not reach, and the
+# tailnet policy refusing the way there.
+UNREACHABLE = "unreachable"
+PATH_DENIED = "path-denied"
+
 
 def _inventory_of(kind: str) -> tuple[Any, ...]:
     """Snapshots of one kind, from the join engine's one read of the inventory."""
@@ -142,7 +148,7 @@ def _policy_verdicts(
             continue
         found[node_id] = (
             *found.get(node_id, ()),
-            ("path-denied", f"{watcher.name} to {target.name} on {port}"),
+            (PATH_DENIED, f"{watcher.name} to {target.name} on {port}"),
         )
     return found
 
@@ -208,7 +214,7 @@ def unreachable_consumers(resource) -> tuple[tuple[tuple[str, str], ...], tuple[
         return (), ()
     consumers = [item for item in unreachable if isinstance(item, dict)]
     entries = tuple(
-        ("unreachable", name)
+        (UNREACHABLE, name)
         for name in (str(item.get("domain") or item.get("consumer") or "").strip() for item in consumers)
         if name
     )

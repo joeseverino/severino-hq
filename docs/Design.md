@@ -406,12 +406,13 @@ A long value in a cell (a line past `table_cells.LONG`) wraps and is held to
 its third line by a clamp with its mark (`.cell-clamp`, cuts.css), its whole
 value in its cell's title (written by the server). Only words are held: each
 part of words in it (`data-cell`) is clamped on its own, so a pill or a
-toggle beside them stays whole. A value of 32 characters at most
+toggle beside them stays whole. A value of words of 32 characters at most
 (`table_cells.SHORT`: an address and its port, a host, a project's name) is
-marked `data-short`, and one box of it (a link alone in its cell, a chip) is
-as wide as the value up to its column's share, so its column holds it whole
-while the table is laid out as one, and past its share it breaks at its seams
-inside its box; a longer identifier and a row's own name break
+one box (`cell-short`) as wide as the value up to its column's share, and as
+wide as its column where that is more, so its column holds it whole while the
+table is laid out as one, and past its share it wraps inside its box; a longer
+one wraps at its words in a line of `--row-words`, or its share where that is
+less, as a long one does; a longer identifier and a row's own name break
 anywhere their column lacks room; a pill and prose break only inside a word
 wider than their column, a pill longer than its column wrapping inside its
 one box. A status, a figure, a date or a control is never cut: its column is
@@ -433,7 +434,7 @@ What each part of a cell is decides how it wraps, and the region marks it
 wraps on that mark, never on a page's class or a cell's tags. The bold a cell
 leads with, or its leading link's, is the row's `name`; free text (a message, a
 record's words) is declared `cell-data` and marked `data`; what a row means in
-words is declared `cell-prose`. A context line is the shared `.muted`. A row's
+words is declared `cell-prose`. A context line is `{% muted %}`. A row's
 name set in one line with its controls (a star, a move) is a `.name-line`,
 where the name is cut rather than wrapped. A service's star and the pair that
 moves a favorite are one part, `control_plane/_service_pin.html` (*Catalog:*
@@ -537,7 +538,11 @@ refused by the `hand-drawn-facts` rule, and so is a figure set bold apart from
 the words that count it.
 
 What names a value (`.fact-label`, a tile's label, a `<dt>`) is sentence case
-in the muted voice. Capitals are for a kicker over a group (`.eyebrow`), never
+in the muted voice. Words in that voice anywhere else (a context line beside
+a value, a sentence under it) are `{% muted %}...{% endmuted %}`, a line among
+other words, or a paragraph with `element="p"`; `css` adds the classes of where
+it stands (`narrow-more`, `row-more`, `cell-part`). *Catalog:* `part/muted`.
+Capitals are for a kicker over a group (`.eyebrow`), never
 a value's name, a state or a tag; `lint:css` refuses a change of case
 anywhere but a kicker, whose rule says what it heads in its disable comment.
 
@@ -601,7 +606,7 @@ under it where the line is full, and that evidence is shown at every width.
 
 **Checks read down a ladder.** `{% check_ladder %}` draws checks one after
 another, each a `{% check_rung %}`. A rung holds its tick for how it stands
-(`state`: holds, does-not, or unknown when not read), its `kind`, the statement
+(`state`: met, unmet, or unavailable when not read), its `kind`, the statement
 with the `evidence` it was read from, and a `more` part saying what opening it
 shows. Its `body` part is what it opens to. `route=True` draws the rungs as the
 stops of a route, the connection panel's path to HQ, and a ladder inside a
@@ -720,8 +725,8 @@ registrar is the one the zone record names, and a certificate's issuer and
 expiry are what its status holds. Each fact appears once, where it belongs: a
 card does not repeat the strip beside it.
 
-**A check's title states the fact it checks.** "Tokens hold only the permissions HQ
-uses", "Keys are kept in a vault": what was checked, in plain words. Not a
+**A check's title states the fact it checks.** "Tokens hold the permissions HQ
+uses, and no more", "Keys are kept in a vault": what was checked, in plain words. Not a
 sweeping claim ("every credential is limited to what HQ needs"), and not
 "knows", "ensures" or "limited".
 
@@ -862,15 +867,17 @@ the title, what happened and what to do, and the one way back to the dashboard.
 offers the search field. *Catalog:* `part/error-page`,
 `part/error-page-request`.
 
-**A state is a pill drawn by `{% status %}`.** `{% status
-row.get_status_display tone=row.status %}` (`status_tags.py`;
-`hq_sdk.ui.status_pill` from Python) says the state in sentence case
-(`labels.sentence`), whatever its source wrote: Docker's "exited" reads
-"Exited" beside a model's "Done". Its `tone` names its color (`good`,
-`attention`, `serious`, `neutral`, or a status the stylesheet colors), and a
-declared resource's health state ("healthy", "drifted") takes the tone every
-page draws it in. Several parts are one label (`{% status "HQ expects" desired
-tone="serious" %}`); `href`, `title`, `tip`, `css` and `data_*` say the rest.
+**A state is a pill drawn by `{% status %}`.** `{% status row.state %}`
+(`status_tags.py`; `hq_sdk.ui.status_pill` from Python) says the state in
+sentence case (`labels.sentence`), whatever its source wrote: Docker's
+"exited" reads "Exited" beside a model's "Done". Its color is one of the four
+tones (`good`, `attention`, `serious`, `neutral`), never a word of its own:
+`tone` takes a `Tone`, and a subject's state is a `Toned` member that carries
+its words and its tone (a machine's `MachineState`, a model's stored status
+declared as `TonedChoices`, `ARCHIVED = "archived", Tone.NEUTRAL,
+"Archived"`). Any other word is refused where it is drawn. Several parts are
+one label (`{% status "HQ expects" desired tone="serious" %}`); `href`,
+`title`, `tip`, `css` and `data_*` say the rest.
 No template or module writes a pill by hand. With `chip=True` it is one of a
 record's names (a technology, a domain, a role) as a neutral chip, said as
 written and taking no tone, so no template writes a `.tag` by hand. With
@@ -1166,8 +1173,10 @@ A figure and the word it counts or measures share one line, held by the
 no-break space `breakable` puts between them, so the word never opens a line
 alone below its number. A template never writes the word after the figure
 itself. It uses `{{ n|counted:"check" }}` for a count, and `{{
-miles|floatformat:2|measured:"mi" }}` for a unit or a word the count leaves
-alone (`measured:"more"`). The value tags that say a figure in words (`bytes`,
+miles|measured:"mi,2" }}` for a unit or a word the count leaves alone
+(`measured:"more"`), never `floatformat` before it: the count after the comma
+rounds the figure as `floatformat` would, and `ui.measured` writes the same
+in Python. A measured zero is 0; the missing mark is for no value. The value tags that say a figure in words (`bytes`,
 `seconds`, `when`) join theirs. *Gate:* the `hand-drawn-split-figure` rule,
 over the host's templates and every extension's.
 
@@ -1195,7 +1204,10 @@ fill, `--muted` on a surface, `--code-muted` beside code.
 **Buttons.** Primary for the one thing a page is for; default for the rest;
 `ghost` for link-like actions that sit inline; `danger` in red text on the same
 surface as its neighbors, loud only in its confirmation; `compact` for one
-that stands in a row, a list or a head, a line tall. Every control that
+that stands in a row, a list or a head, a line tall; `link` for one among
+words, drawn as a link; `menu` for a row of a menu. `link` and `menu` draw
+no box, so `button_classes` drops a look that paints one beside them, and a
+destructive row keeps only its red. Every control that
 looks like a button is `{% button label url look="primary compact" %}`, the one
 writer of `.btn` (`ui.button_classes` for Python's parts): a link, with
 `post=True` one that posts, with `submit=True` its form's own, and with neither
@@ -1720,7 +1732,9 @@ asks the page for an element at load outside `hqFragment.each`);
 **Moving between pages is not a flash.** A same-origin navigation fades the
 new page in under a header that does not move (`@view-transition`, with the
 header as its own unanimated layer). It does so in browsers that have it and
-for readers who have not asked for less motion.
+for readers who have not asked for less motion. For a reader who has, one rule
+in `base.css` stops every transition and animation, so no part writes its own
+(`lint:css`).
 
 Every page names one set of speculation rules by header: a link to a page of
 HQ's is prefetched when the pointer or finger goes down on it, so the document

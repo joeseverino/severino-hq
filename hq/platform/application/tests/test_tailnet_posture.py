@@ -8,12 +8,12 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection
+from hq.platform.application.markup_testing import texts
 
 from ..findings import findings
 from ..inventory_testing import store
 from ..security import Capability, Principal
 from ..tailnet import TAILNET_KIND, WELL_KNOWN_PORTS, grant_ports
-from .markup import texts
 
 EVERYTHING = Principal("test", "operator", frozenset(Capability))
 

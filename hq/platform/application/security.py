@@ -10,6 +10,7 @@ lazy from django.contrib.auth.base_user import AbstractBaseUser
 lazy from django.contrib.auth.models import AnonymousUser
 lazy from django.http import HttpRequest
 
+from .titled import Titled
 lazy from . import roles
 lazy from .domains import host_records
 lazy from .linked_accounts import SIGN_IN
@@ -64,6 +65,10 @@ class Capability(StrEnum):
     # only by HQ itself (``HELD_ONLY_AT``): the provider's signed logout token
     # is its credential, so no person or token signs anyone out through it.
     END_SESSIONS = "end_sessions"
+    # Shows stand-in values in place of real ones in one browser. Held only by
+    # a person (``HELD_ONLY_AT``): the mode lives in a browser's session, so
+    # no agent is offered it.
+    SHOW_DEMO = "show_demo"
 
 
 # Every interface a principal or a record names, declared once here, so a
@@ -83,7 +88,7 @@ API_INTERFACE = "api"
 # request through that door from one through the web.
 API_NAMESPACE = "hq_api"
 # What the MCP mount names each request, until a tool binds an operation of its own.
-MCP_OPERATION = "mcp"
+MCP_OPERATION = Titled("mcp", "An agent connected over MCP")
 # Work HQ runs from its job queue, attributed to whoever started it.
 JOB_INTERFACE = "job"
 # The controller, reporting what it saw or applied on its own schedule.
@@ -143,6 +148,7 @@ HELD_ONLY_AT: dict[str, frozenset[str]] = {
     Capability.DECIDE_APPROVALS: INTERACTIVE_INTERFACES,
     Capability.GOVERN_AGENTS: INTERACTIVE_INTERFACES,
     Capability.END_SESSIONS: frozenset({INTERNAL_INTERFACE}),
+    Capability.SHOW_DEMO: INTERACTIVE_INTERFACES,
 }
 
 # Capabilities that keep something of a person's, held only by a principal with
@@ -264,13 +270,18 @@ class Principal:
         """
 
         try:
-            for capability in capabilities:
-                self.require(capability)
+            self.require(*capabilities)
         except AuthorizationError:
             return False
         return True
 
-    def require(self, capability: Capability | str) -> None:
+    def require(self, *capabilities: Capability | str) -> None:
+        """Raise on the first of ``capabilities`` this principal does not hold."""
+
+        for capability in capabilities:
+            self._require_one(capability)
+
+    def _require_one(self, capability: Capability | str) -> None:
         name = capability.value if isinstance(capability, Capability) else capability
         # Asked first, since no grant or new sign-in gives a machine a person.
         if name in NEEDS_A_PERSON and not has_a_person(self):
@@ -321,7 +332,12 @@ def could_hold(interface: str, capabilities: Iterable[Capability | str]) -> bool
 
 
 class Requires:
-    """What a spec that names the capabilities it needs says them as: a tuple, however it declared them."""
+    """A spec that names the capabilities it needs, and the one way to ask whether a principal may use it.
+
+    Every registry's spec (a capability, a resource, a connection) inherits
+    this, so ``authorize`` and ``permitted_to`` are the only questions asked of
+    one: a refusal and a ``permitted`` flag cannot disagree.
+    """
 
     __slots__ = ()
     required_capability: Capability | str | tuple[Capability | str, ...]
@@ -332,15 +348,15 @@ class Requires:
             return self.required_capability
         return (self.required_capability,)
 
+    def authorize(self, principal: Principal) -> None:
+        """Raise unless ``principal`` holds every capability this spec requires."""
 
-def require_all(principal: Principal, capabilities: Iterable[Capability | str]) -> None:
-    """``Principal.require`` for a set: raise on the first capability it lacks.
+        principal.require(*self.required_capabilities)
 
-    The one authorization rule every registry applies to what a spec requires.
-    """
+    def permitted_to(self, principal: Principal) -> bool:
+        """Whether ``principal`` may use this spec: ``authorize`` as a boolean."""
 
-    for capability in capabilities:
-        principal.require(capability)
+        return principal.permits(*self.required_capabilities)
 
 
 def operator_capabilities() -> frozenset[Capability | str]:

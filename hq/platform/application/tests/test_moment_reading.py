@@ -10,7 +10,7 @@ from unittest import mock, skipUnless
 
 from django.test import SimpleTestCase
 
-from hq.platform.application.tests.markup import text
+from hq.platform.application.markup_testing import text
 
 from ..moments import moment
 

@@ -12,6 +12,7 @@ from datetime import timedelta
 from .derivations import reached
 from .finding_model import Finding, FindingEstate, FindingRule, opens
 from .moments import ago, duration, moment
+from .tone import Tone
 from .ui import counted, ended
 lazy from .estate import estate_reading
 
@@ -40,7 +41,7 @@ def _offline(_estate: FindingEstate) -> tuple[Finding, ...]:
                 rule=OFFLINE,
                 subject=f"machine:{machine.name}",
                 title=f"{machine.name} is offline",
-                severity="serious" if machine.hostnames or machine.roles or machine.runs_hq else "attention",
+                severity=Tone.SERIOUS if machine.hostnames or machine.roles or machine.runs_hq else Tone.ATTENTION,
                 explanation=(
                     f"Last seen {ago(seen)}."
                     + (ended(f" It is the {what}") if what else "")
@@ -58,13 +59,13 @@ RULES: tuple[FindingRule, ...] = (
     FindingRule(
         OFFLINE,
         "Machines offline",
-        "attention",
+        Tone.ATTENTION,
         _offline,
         operator_action="Bring the machine back on the machine itself: power, network, then Tailscale.",
         no_help_reason="HQ has no power or console access to machines. Bring it back on the machine itself.",
         bars={
-            "serious": f"a machine that serves a name or a role has been away for {duration(OFFLINE_AFTER)}",
-            "attention": f"a machine that serves no name or role has been away for {duration(OFFLINE_AFTER)}",
+            Tone.SERIOUS: f"a machine that serves a name or a role has been away for {duration(OFFLINE_AFTER)}",
+            Tone.ATTENTION: f"a machine that serves no name or role has been away for {duration(OFFLINE_AFTER)}",
         },
         clears="Tailscale sees the machine again",
         domain="hq.estate",

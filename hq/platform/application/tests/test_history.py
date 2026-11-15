@@ -8,7 +8,7 @@ from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
-from hq.platform.application.tests.markup import text
+from hq.platform.application.markup_testing import text
 from hq.platform.core import append_only
 from hq.platform.core.models import AuditLog
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
@@ -16,7 +16,6 @@ from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, disti
 from ..conditions import held_since, stamped
 from ..history import moments, near
 from ..inventory import READING_AUDIT_TYPE, record_inventory
-from ..security import cli_principal
 from ..topology_facts import add_observed_facts
 
 
@@ -33,7 +32,7 @@ def dns(content="192.0.2.10", name="app.example.com"):
 
 
 def sweep(*records):
-    record_inventory({"cloudflare.dns_record": {"ok": True, "records": list(records)}}, principal=cli_principal())
+    record_inventory({"cloudflare.dns_record": {"ok": True, "records": list(records)}})
 
 
 def readings():
@@ -92,9 +91,7 @@ class ReadingChangeTests(TestCase):
 
     def test_a_failed_read_is_not_a_change(self):
         sweep(dns())
-        record_inventory(
-            {"cloudflare.dns_record": {"ok": False, "records": [], "error": "refused"}}, principal=cli_principal()
-        )
+        record_inventory({"cloudflare.dns_record": {"ok": False, "records": [], "error": "refused"}})
 
         self.assertEqual(readings(), [])
 

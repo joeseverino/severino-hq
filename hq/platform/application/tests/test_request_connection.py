@@ -13,6 +13,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderInventory
+from hq.platform.application.markup_testing import select, text, texts, within
 from hq.platform.core.tests.forwarding import arrived
 
 from ..moments import when
@@ -21,7 +22,6 @@ from ..request_connection import connection
 from ..standards import Standing
 from ..ui import MISSING
 from .connection_requests import A_LAN_ADDRESS, A_TAILNET_ADDRESS, a_device, a_request, a_tailnet
-from .markup import select, text, texts, within
 from .people import someone
 
 

@@ -23,6 +23,7 @@ from hq.platform.application.avatars import avatar_of
 from hq.platform.application.capabilities import capability_words
 from hq.platform.application.card_items import ListRow
 from hq.platform.application.command_center import command_center
+from hq.platform.application.demo import DEMO_SESSION_KEY, SET_DEMO
 from hq.platform.application.denials import COALESCE_WINDOW, LABEL as DENIAL_LABEL
 from hq.platform.application.moments import moment
 from hq.platform.application.own_devices import SET_OWN_DEVICE, devices_of
@@ -32,7 +33,7 @@ from hq.platform.application.refusal_status import refusal_of
 from hq.platform.application.search import global_search
 from hq.platform.application.security import Capability, agent_grantable, safe_next, web_principal
 from hq.platform.application.ui import PageNavigation, PageSection, counted
-from hq.platform.application.web_writes import execute_posted, refusal_response, refused
+from hq.platform.application.web_writes import execute_posted, refusal_response, refused, run_posted
 lazy from hq.platform.application.approvals import awaiting_ids, entry_event
 lazy from hq.platform.application.connection_catalog import connection_catalog
 lazy from hq.platform.application.hq_context import hq_context
@@ -43,9 +44,7 @@ lazy from hq.platform.application.visit_refresh import worth_asking
 lazy from hq.platform.mcp import listing
 
 from . import design_gallery
-from .audit import record_event
 from .forms import OwnDeviceForm, PolicyForm
-from .middleware import DEMO_SESSION_KEY
 from .models import AuditLog
 from .write_bounds import Bound, RowCap, writes
 lazy from .network import client_ip
@@ -132,21 +131,14 @@ class DemoModeView(View):
 
     POST because it changes what every number on every page means, and a thing
     that can be flipped by following a link can be flipped by an image tag on
-    another page. Nothing is written beyond the session, so the audit entry is
-    the only trace it leaves, and it is recorded because an operator who
-    forgets the mode is on can screenshot fiction and file it as fact.
+    another page. The menu's switch posts no state, so the view sends the
+    opposite of the one this browser holds.
     """
 
     def post(self, request):
-        showing = not request.session.get(DEMO_SESSION_KEY)
-        request.session[DEMO_SESSION_KEY] = showing
-        record_event(
-            action=AuditLog.Action.UPDATED,
-            obj=request.user,
-            type_label="Demo mode",
-            message="Demo mode on" if showing else "Demo mode off",
-            user=request.user,
-        )
+        result = run_posted(request, SET_DEMO, {"showing": not request.session.get(DEMO_SESSION_KEY)}).answer
+        if not result["ok"]:
+            return refusal_response(result)
         # No message. The switch shows its own state and the header carries a
         # mark while it is on: a paragraph on every flip is a third telling
         # of something already said twice.

@@ -14,7 +14,7 @@ from django.test import TestCase
 from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
 
 from ..approval_review import asked
-from ..approvals import ApprovalError, ApproveCommand, approve, asked_by, pending
+from ..approvals import ApprovalError, ApproveCommand, approve, own_held_request, pending
 from ..capabilities import execute_capability
 from ..resources import list_resource
 from ..security import Capability, Principal, cli_principal
@@ -55,7 +55,7 @@ class HoldsBelongToTheirAskerTests(TestCase):
         self.assertNotEqual(first["approval"]["id"], second["approval"]["id"])
         self.assertFalse(second["repeated"])
         self.assertEqual(second["approval"]["requested_actor"], SECOND.actor)
-        self.assertIsNotNone(asked_by(second["approval"]["id"], principal=SECOND))
+        self.assertIsNotNone(own_held_request(second["approval"]["id"], principal=SECOND))
         # Each caller's own retry is still the one request it already holds.
         again = ask_reconcile(SECOND)
         self.assertEqual(again["approval"]["id"], second["approval"]["id"])

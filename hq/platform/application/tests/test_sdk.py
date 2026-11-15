@@ -113,7 +113,7 @@ class SdkContractTests(SimpleTestCase):
 
         for command in (ExampleModel, ExampleClosedModel, ExampleOpen, ExampleClosed):
             with self.subTest(command.__name__), self.assertRaises(TypeError):
-                CapabilitySpec("example.open", "Open it.", "local_write", "example.write", command, dict)
+                CapabilitySpec("example.open", "Open it.", "remote_write", "example.write", command, dict)
 
     def test_a_command_declares_its_fields_with_the_hosts_markers(self):
         from typing import Annotated
@@ -164,7 +164,7 @@ class AuditSdkTests(TestCase):
             record_operation("example.rows", "Imported records.", metadata={"changed": 2})
             return {"ok": True}
 
-        spec = CapabilitySpec("example.import", "Import examples.", "local_write", "example.write", _Nothing, handler)
+        spec = CapabilitySpec("example.import", "Import examples.", "remote_write", "example.write", _Nothing, handler)
         principal = Principal("example-client", "cli", frozenset({"example.write"}))
 
         with commands_registered({spec.name: spec}):

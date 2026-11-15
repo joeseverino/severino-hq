@@ -10,7 +10,7 @@ from django.template import Context, Template, TemplateSyntaxError
 from django.template.loader import render_to_string
 from django.test import RequestFactory, SimpleTestCase, tag
 
-from hq.platform.application.tests.markup import all_elements, elements, select, with_class
+from hq.platform.application.markup_testing import all_elements, elements, select, with_class
 from hq.platform.application.tests.reads import reads
 from hq.platform.core.tests.browser.catalog import CATALOG
 from hq_sdk.testing import plain

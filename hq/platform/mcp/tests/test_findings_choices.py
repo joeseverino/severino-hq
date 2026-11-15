@@ -15,9 +15,10 @@ from hq.domains.control_plane.models import ManagedResource
 from hq.platform.application.action_links import ActionLink
 from hq.platform.application.capabilities import capability_registry
 from hq.platform.application.finding_model import Finding, FindingRemedy
-from hq.platform.application.findings import RULES, SEVERITIES, derive_findings
+from hq.platform.application.findings import RULES, derive_findings
 from hq.platform.application.security import Capability, Principal
 from hq.platform.application.tests.inventory_records import kind_read
+from hq.platform.application.tone import Tone
 from hq.platform.application.topology_model import Topology, TopologyEdge, TopologyNode
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.testing import throwaway_media
@@ -61,7 +62,7 @@ class FindingsChoicesTests(TestCase):
             return next(option["enum"] for option in properties[name]["anyOf"] if "enum" in option)
 
         self.assertEqual(values("rule"), [rule.name for rule in RULES])
-        self.assertEqual(values("severity"), list(SEVERITIES))
+        self.assertEqual(values("severity"), [tone.value for tone in Tone])
 
     def test_a_rule_the_registry_lacks_is_refused(self):
         _, (answer,) = session(("get_findings", {"rule": "example-unknown"}))

@@ -8,7 +8,7 @@ from django.template import Context, Template
 from django.test import SimpleTestCase, TestCase
 
 from hq.domains.control_plane.models import ManagedResource
-from hq.platform.application.tests.markup import Element, all_elements, select, with_class
+from hq.platform.application.markup_testing import Element, all_elements, select, with_class
 
 User = get_user_model()
 

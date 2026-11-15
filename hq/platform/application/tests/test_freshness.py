@@ -10,6 +10,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderConnection
+from hq.platform.application.markup_testing import elements, links, select, text
 
 from ..entity_links import entity_link
 from ..freshness import (
@@ -26,8 +27,6 @@ from ..freshness import (
 )
 from ..plugin_testing import installed, sibling
 from ..report_testing import report_connections
-from ..security import cli_principal
-from .markup import elements, links, select, text
 
 # A kind the controller sweeps, read through a provider's API.
 SWEPT = "adguard.rewrite"
@@ -182,15 +181,11 @@ class CarriedConnectionTests(TestCase):
     """An SSH connection carried between probes is still reported each pass."""
 
     def test_a_carried_connection_is_reported_now_and_probed_earlier(self):
-        report_connections([ssh_report()], principal=cli_principal(), controller_id="c")
+        report_connections([ssh_report()], controller_id="c")
         earlier = timezone.now() - timedelta(minutes=48)
         ProviderConnection.objects.update(observed_at=earlier, reported_at=earlier)
 
-        report_connections(
-            [ssh_report(carried=True, probed=False)],
-            principal=cli_principal(),
-            controller_id="c",
-        )
+        report_connections([ssh_report(carried=True, probed=False)], controller_id="c")
 
         row = ProviderConnection.objects.get()
         self.assertEqual(row.observed_at, earlier)
@@ -204,7 +199,7 @@ class CarriedConnectionTests(TestCase):
         self.assertEqual(reading.probed_at, earlier)
 
     def test_a_probed_connection_has_no_separate_probe_time(self):
-        report_connections([ssh_report()], principal=cli_principal(), controller_id="c")
+        report_connections([ssh_report()], controller_id="c")
 
         from ..connections import connection_readings
 

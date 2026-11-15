@@ -10,6 +10,8 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
+from hq.platform.application.markup_testing import hrefs, select
+
 from ..attention import raised
 from ..github_posture import (
     COMMANDS,
@@ -22,7 +24,6 @@ from ..github_posture import (
 from ..item_help import CANNOT, DO, RUN
 from ..repository_findings import PROJECTS
 from ..standards import INTENDED, Standing
-from .markup import hrefs, select
 from .test_github_estate import store
 from .test_item_help import COMMAND, item_help
 

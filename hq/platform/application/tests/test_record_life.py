@@ -17,6 +17,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest, ProviderInventory
+from hq.platform.application.tests.consent import consented
 
 from ..adoption import AdoptCommand, adopt
 from ..adoption_testing import managing_everything
@@ -25,9 +26,9 @@ from ..findings import derive_findings
 from ..infrastructure import ManagedResourceCommand, save_managed_resource
 from ..inventory import record_identity
 from ..record_errors import PolicyError, RecordNotFound
+from ..report_testing import bridged
 from ..resource_operations import OperationCommand, accept_observed, request_reconcile, request_removal
 from ..security import cli_principal
-from ..sweep import record_sweep
 from ..topology import derive_topology
 from .inventory_records import a_sweep
 
@@ -113,7 +114,7 @@ if HYPOTHESIS:
             key = self._ask("declared")
             save_managed_resource(
                 ManagedResourceCommand(key=key, kind=KIND, spec={"domain": domain, "answer": answer}),
-                principal=self.principal,
+                consented=consented(self.principal),
             )
             self._forget_removed(domain)
             return key
@@ -121,14 +122,14 @@ if HYPOTHESIS:
         @rule(key=declarations)
         def apply(self, key):
             if ManagedResource.objects.get(key=key).enabled:
-                request_reconcile(OperationCommand(), principal=self.principal, current_key=key)
+                request_reconcile(OperationCommand(), consented=consented(self.principal), current_key=key)
             self._controller("reconcile")
 
         @rule(key=declarations)
         def keep_what_is_live(self, key):
             # Refused when no sweep has listed it: there is nothing live to keep.
             with suppress(RecordNotFound):
-                accept_observed(OperationCommand(), principal=self.principal, current_key=key)
+                accept_observed(OperationCommand(), consented=consented(self.principal), current_key=key)
 
         @rule(key=declarations)
         def switch_off(self, key):
@@ -140,7 +141,7 @@ if HYPOTHESIS:
 
         @rule(key=consumes(declarations))
         def remove(self, key):
-            request_removal(OperationCommand(), principal=self.principal, current_key=key)
+            request_removal(OperationCommand(), consented=consented(self.principal), current_key=key)
             self._controller("delete")
             assert not ManagedResource.objects.filter(key=key).exists(), "a confirmed removal kept its declaration"
 
@@ -262,7 +263,7 @@ if HYPOTHESIS:
             report = payload.get(KIND, {})
             if report.get("ok") and not report.get("carried"):
                 self.answered_at = timezone.now()
-            adopted = record_sweep(payload, principal=self.principal)["adopted"]
+            adopted = bridged("inventory", payload)["adopted"]
             return multiple(*adopted)
 
         @staticmethod
@@ -273,7 +274,7 @@ if HYPOTHESIS:
             resource = ManagedResource.objects.get(key=key)
             save_managed_resource(
                 ManagedResourceCommand(key=key, kind=KIND, spec=resource.spec, enabled=enabled),
-                principal=self.principal,
+                consented=consented(self.principal),
                 current_key=key,
                 sent=frozenset({"enabled"}),
             )

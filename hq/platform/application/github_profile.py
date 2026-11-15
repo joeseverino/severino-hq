@@ -8,7 +8,7 @@ GitHub rations calls by the hour (its ``every``, ``observations.github``).
 """
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Annotated, Any
 
 from django.utils import timezone
@@ -19,16 +19,13 @@ from hq.platform.core.models import LinkedAccount
 
 from .asks import AskedAnswer, Standing, asked_read, read_standing
 from .command_fields import Describe
-from .freshness import freshness
+from .freshness import RETRY_AFTER, freshness
 from .linked_accounts import GITHUB
 from .record_errors import RecordNotFound
 from .security import Principal
 lazy from .cadence import ask, asked_at
 lazy from .capabilities import command_spec
 lazy from .moments import moment
-
-# GitHub's allowance is by the hour, so a read that failed is tried again after one.
-RETRY_AFTER = timedelta(hours=1)
 
 READ_NOW = "github.profile.read"
 

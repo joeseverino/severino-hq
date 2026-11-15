@@ -10,6 +10,7 @@ from hq.platform.application.capabilities import (
     execute_capability,
 )
 from hq.platform.application.command_fields import Choices, Describe, Names, Refers
+from hq.platform.application.contracts import Effect
 from hq.platform.application.integration_specs import ON_ITS_PAGE, CommandAbout, CommandFact
 from hq.platform.application.record_errors import InputError
 from hq.platform.application.security import (
@@ -31,6 +32,7 @@ __all__ = [
     "CommandAbout",
     "CommandFact",
     "Describe",
+    "Effect",
     "InputError",
     "Names",
     "Principal",

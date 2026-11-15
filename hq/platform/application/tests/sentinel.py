@@ -5,9 +5,7 @@ from typing import Any
 
 from hq.domains.control_plane.models import ManagedResource
 
-from ..report_testing import report_connections
-from ..security import cli_principal
-from ..sweep import record_sweep
+from ..report_testing import bridged, report_connections
 
 SENTINEL = "SENTINEL-c0ffee-not-a-secret"
 CONNECTION = "sentinel-dns"
@@ -44,7 +42,8 @@ def plant_credentials() -> None:
         ],
         controller_id="controller",
     )
-    record_sweep(
+    bridged(
+        "inventory",
         {
             "adguard.rewrite": {
                 "ok": True,
@@ -64,7 +63,6 @@ def plant_credentials() -> None:
                 ],
             },
         },
-        principal=cli_principal(),
         controller_id="controller",
     )
 

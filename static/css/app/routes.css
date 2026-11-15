@@ -143,11 +143,6 @@ span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-
 
 /* ── Responsive ─────────────────────────────────────────────────── */
 
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { transition: none !important; animation: none !important; }
-}
-
-
 /* Sections behind one control. Below this width the bar cannot hold every
    section beside the brand and the account chip, and a second row is not the
    answer: it spends chrome on every page before any of them begins. The

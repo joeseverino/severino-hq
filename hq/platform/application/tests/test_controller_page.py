@@ -10,13 +10,13 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest, ProviderInventory, ReadRequest
+from hq.platform.application.markup_testing import select, texts
 from hq.platform.core.templatetags.value_tags import dot
 
 from ..cadence import WorkerStanding
 from ..cadence_testing import controller_arrived
 from ..controller_page import controller_page
 from .commands import commands_on
-from .markup import select, texts
 
 SWEEPS = override_settings(
     SEVERINO_SWEEP_INTERVAL_ACTIVE_SECONDS=300,

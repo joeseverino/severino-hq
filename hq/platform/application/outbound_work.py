@@ -22,7 +22,7 @@ lazy from hq.domains.jobs.models import Job
 lazy from hq.domains.jobs.runner import ALREADY_RUNNING, SCHEDULER, JobConflict, Progress, due as is_due, run, start
 
 from .asks import FAILED, Ask, Asked, AskedAnswer, Standing
-from .contracts import DOTTED_NAME
+from .contracts import DOTTED_NAME, Effect
 from .describe import Describe
 from .integration_specs import CapabilitySpec, requested
 from .projection import read_once
@@ -35,8 +35,6 @@ lazy from .plugins import plugin_outbound_work
 lazy from .routes import reverse
 lazy from .work_runs import job_run, standing_of
 
-# What outbound work may be: a change somewhere else, never a read of HQ.
-EFFECTS = frozenset({"remote_write", "destructive", "infrastructure_change"})
 # ``jobs.Job.kind`` holds the name.
 NAME_LIMIT = 64
 # The job's label, and the button's words.
@@ -73,7 +71,8 @@ class OutboundWork:
     # it can): the control is drawn unusable with it, and an ask is refused with
     # it before any job is recorded.
     refuse: Callable[[str], str] | None = None
-    effect: str = "remote_write"
+    # A change somewhere else, never a read of HQ; given as its value's string too.
+    effect: Effect = Effect.REMOTE_WRITE
     execution_notes: tuple[str, ...] = ()
     # For work about no one record: once this long has passed since it last
     # succeeded, the host's due timer does it.
@@ -84,6 +83,9 @@ class OutboundWork:
     # or route offers it, so it needs no effect or required capability. The
     # host's own (``host_work``) is also what its units ask for by name.
     offered: bool = True
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "effect", Effect(self.effect))
 
     @property
     def takes_subject(self) -> bool:
@@ -110,8 +112,8 @@ def validate(work: object) -> OutboundWork:
         raise ImproperlyConfigured(f"Invalid outbound work name {work.name!r}.")
     if not work.label or any(text != text.strip() or len(text) > LABEL_LIMIT for text in (work.label, work.verb)):
         raise ImproperlyConfigured(f"Outbound work {work.name!r} needs a short label.")
-    if work.offered and work.effect not in EFFECTS:
-        raise ImproperlyConfigured(f"Outbound work {work.name!r} has invalid effect {work.effect!r}.")
+    if work.offered and not work.effect.changes:
+        raise ImproperlyConfigured(f"Outbound work {work.name!r} reads only, so it is no outbound work.")
     if work.refuse is not None and not callable(work.refuse):
         raise ImproperlyConfigured(f"Outbound work {work.name!r} refuse is not callable.")
     # Checked as what was given: a declaration does not have to respect the annotation.

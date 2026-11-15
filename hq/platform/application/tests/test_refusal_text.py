@@ -9,6 +9,7 @@ from django.core.management.base import CommandError
 from django.test import TestCase
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
+from hq.platform.application.tests.consent import consented
 from hq.platform.mcp import services
 from hq.platform.mcp.identity import set_principal
 
@@ -37,7 +38,7 @@ def refusal_of(resource: ManagedResource) -> str:
     """What the use case itself says, so each adapter is held to it."""
 
     try:
-        request_reconcile(OperationCommand(), principal=cli_principal(), current_key=resource.key)
+        request_reconcile(OperationCommand(), consented=consented(cli_principal()), current_key=resource.key)
     except PolicyError as exc:
         return exc.reason
     raise AssertionError("The record was applied.")

@@ -11,11 +11,10 @@ from dataclasses import dataclass, field, replace
 from functools import cached_property
 from typing import Any
 
-from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.control_plane.names import certificate_covers, in_zone, normalized_hostname
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
-from hq.domains.control_plane.providers import PROVIDERS, registry_label, resource_home, service_facets
+from hq.domains.control_plane.providers import PROVIDERS, operator_label, registry_label, resource_home, service_facets
 
 from .card_items import ListRow
 from .containers import Running, container_watchers
@@ -32,6 +31,7 @@ from .published_sites import published_projects
 from .reach import is_documentation
 from .service_declarations import Claim, declarations, runtime_claim
 from .service_facets import CERTIFICATE_FACET, DNS_FACET, RUNTIME_FACET, ServiceFacet
+from .tone import Tone
 from .whereabouts import Origin, Whereabouts, locate, machine_for, whereabouts
 lazy from .exposure import exposure_of_name
 lazy from .paths import path_to
@@ -119,12 +119,7 @@ class Service:
         dns = next((facet for facet in self.facets if facet.id == DNS_FACET), None)
         if dns is None or not _served_by_the_provider(dns):
             return ""
-        for claim in dns.claims:
-            provider = PROVIDERS.get(claim.kind)
-            for name in provider.connection_providers if provider else ():
-                if name in CONNECTION_LABELS:
-                    return CONNECTION_LABELS[name]
-        return ""
+        return next((label for claim in dns.claims if (label := operator_label(claim.kind))), "")
 
     @property
     def project_link(self) -> EntityLink | None:
@@ -193,12 +188,13 @@ class Service:
 
     @property
     def status(self) -> str:
-        """``good``, ``attention``, ``serious``, or ``unknown`` for no health reading."""
+        """Its health's tone, or ``unknown`` for no health reading: the word
+        the API answers and the stylesheet keys its pill on."""
 
-        return self.health.state
+        return self.health.state or "unknown"
 
     @property
-    def tone(self) -> str:
+    def tone(self) -> Tone:
         return self.health.tone
 
     @property
@@ -215,7 +211,7 @@ class Service:
         alone, cannot be forgotten by one of them.
         """
 
-        return tuple(ListRow(title=fault, status="attention", badge="Setup") for fault in self.faults)
+        return tuple(ListRow(title=fault, status=Tone.ATTENTION, badge="Setup") for fault in self.faults)
 
 
 def _certificates_in_use() -> dict[str, dict[str, Any]]:

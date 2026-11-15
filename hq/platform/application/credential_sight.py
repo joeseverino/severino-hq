@@ -23,6 +23,7 @@ from hq.domains.control_plane.reading_parts import PartRefusal, parts_of, refuse
 
 from .labels import human_label
 from .projection import read_once
+from .tone import Tone
 lazy from .facts import stored_snapshots
 lazy from .freshness import STALE, freshness
 lazy from .ui import counted
@@ -45,7 +46,7 @@ STATE_LABELS = {
 }
 # The tone a state's word is drawn in where it stands beside the kind; a
 # state with none (never read, not connected) is said quietly.
-STATE_TONES = {READABLE: "good", PARTIAL: "attention", REFUSED: "serious", UNREADABLE: "serious"}
+STATE_TONES = {READABLE: Tone.GOOD, PARTIAL: Tone.ATTENTION, REFUSED: Tone.SERIOUS, UNREADABLE: Tone.SERIOUS}
 
 
 @dataclass(frozen=True, slots=True)

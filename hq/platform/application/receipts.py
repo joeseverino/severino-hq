@@ -170,6 +170,18 @@ def _uploaded(receipt: Receipt, sha256: str) -> StoredReceiptFile:
     return told
 
 
+def file_taken(receipt: Receipt) -> None:
+    """Record that the caller opened the file ``receipt`` holds: the one record
+    of a receipt's file leaving HQ, under the operation its door bound."""
+
+    record_event(
+        action=AuditLog.Action.VIEWED,
+        obj=receipt,
+        type_label="Receipt",
+        message=f"Receipt file viewed: {receipt.original_filename}",
+    )
+
+
 class StoredReceiptFile(TypedDict):
     """The file a receipt holds, as it arrived."""
 

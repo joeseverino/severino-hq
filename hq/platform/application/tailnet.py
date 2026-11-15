@@ -21,6 +21,7 @@ lazy from hq.domains.control_plane.observations.host import TAILNET_LOCK_KIND
 lazy from hq.domains.control_plane.observations.hq import ARRIVAL_KIND
 
 from .projection import projection_scope, read_once
+from .tone import Tone
 from .ui import ended
 lazy from . import connections
 lazy from .connections import connection_rows
@@ -131,6 +132,12 @@ class Verdict:
         if not self.known:
             return "Cannot say"
         return "Allowed" if self.allowed else "Not allowed"
+
+    @property
+    def tone(self) -> Tone:
+        if not self.known:
+            return Tone.NEUTRAL
+        return Tone.GOOD if self.allowed else Tone.SERIOUS
 
 
 def devices() -> dict[str, Device]:

@@ -12,7 +12,7 @@ from hq.platform.application.routes import reverse
 lazy from hq.platform.application.default_hold import needs_approval
 
 from .attribution import unattributed_kinds
-from .connection_kinds import CONNECTION_CREDENTIALS
+from .connection_kinds import CONNECTION_CREDENTIALS, CONNECTION_LABELS
 from .observations import OBSERVATIONS
 from .provider_adapters import DECLARATIONS
 from .provider_spec import (
@@ -51,6 +51,19 @@ def registry_label(kind: str) -> str:
     if kind in OBSERVATIONS:
         return OBSERVATIONS[kind].label
     return "Unknown type"
+
+
+def operator_label(kind: str) -> str:
+    """Who answers for a kind's readings, named as the connection they are
+    read through; the kind's label where no connection names it, and "" for a
+    kind nothing declares."""
+
+    spec = PROVIDERS.get(kind)
+    if spec is None:
+        return ""
+    return next(
+        (CONNECTION_LABELS[name] for name in spec.connection_providers if name in CONNECTION_LABELS), spec.label
+    )
 
 
 def _registry() -> dict[str, ProviderSpec]:

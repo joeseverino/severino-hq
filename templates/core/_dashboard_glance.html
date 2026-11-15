@@ -47,7 +47,7 @@ are the row's own (partials/_readings.html).
     {% foot %}
       {% if panel.link %}<a href="{{ panel.link.url }}">{{ panel.link.label|breakable }}{% arrow %}</a>{% endif %}
       <span>
-        {% if panel.ask %}{% include "partials/_ask.html" with ask=panel.ask heard=True %}{% endif %}
+        {% if panel.ask %}{% include "partials/_ask.html" with ask=panel.ask heard=True extra="link" %}{% endif %}
         <a href="{% url 'dashboard_glance_settings' %}">Settings</a>
       </span>
     {% endreading %}

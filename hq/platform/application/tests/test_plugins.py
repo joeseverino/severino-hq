@@ -15,6 +15,8 @@ from django.template.loader import render_to_string
 from django.test import SimpleTestCase, TestCase as DatabaseTestCase, tag
 from django.utils import timezone
 
+from hq.platform.application.markup_testing import hrefs, text, with_class
+
 from ..card_items import Insight, Kpi
 from ..domains import domain_navigation
 from ..pages import page_context
@@ -34,7 +36,6 @@ from ..plugins import (
     plugin_health,
 )
 from ..ui import PageNavigation, PageSection
-from .markup import hrefs, text, with_class
 
 # What the coupling scan walks past. Generated trees, virtualenvs and vendored
 # assets are not host source, and the runtime image has neither `.git` nor git
@@ -798,9 +799,29 @@ class ComposedPluginTestKitTests(TestCase):
 
 
 class AttentionOrderTests(SimpleTestCase):
-    def entry(self, title, status="attention", *, since=None, notice=False, source="Example"):
-        item = Insight(status, "Example", title, "", "", since=since, notice=notice)
+    def entry(self, title, status="attention", *, since=None, notice=False, source="Example", actions=()):
+        item = Insight(status, "Example", title, "", "", since=since, notice=notice, actions=actions)
         return {"item": item, "source": source, "source_id": "example"}
+
+    def test_within_one_urgency_what_hq_fixes_in_one_press_comes_first(self):
+        from ..workflow_contracts import ActionLink
+
+        def press(name="remedy", *, capability="example.fix", refusal=""):
+            link = ActionLink(name, "Fix", "remote_write", "/example/fix/", capability=capability, refusal=refusal)
+            return (replace(link, recommended=True),)
+
+        old = timezone.now() - timedelta(days=30)
+        entries = [
+            self.entry("a page", since=old, actions=press(capability="")),
+            self.entry("a check again", since=old, actions=press("verify")),
+            self.entry("refused", since=old, actions=press(refusal="Not now.")),
+            self.entry("one press", actions=press()),
+            self.entry("serious", status="serious", since=old),
+        ]
+
+        order = [entry["item"].title for entry in ordered_attention(entries)]
+
+        self.assertEqual(order[:2], ["serious", "one press"])
 
     def test_severity_then_what_needs_doing_then_the_longest_standing(self):
         now = timezone.now()

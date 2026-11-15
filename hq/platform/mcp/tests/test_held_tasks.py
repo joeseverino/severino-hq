@@ -21,14 +21,13 @@ from mcp.client.extension import ClientExtension, ResultClaim
 from mcp.shared.exceptions import MCPError
 from pydantic import Field, TypeAdapter
 
-from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule, OperationRequest
+from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule, ManagedResource, OperationRequest
 from hq.platform.application.approval_review import asked
 from hq.platform.application.approvals import ApproveCommand, RejectCommand, approve, reject
 from hq.platform.application.controller import ControllerReport, claim_next_operation, report_operation
 from hq.platform.application.hq_self import site_host
-from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
 from hq.platform.application.routes import reverse
-from hq.platform.application.security import Principal, cli_principal, mcp_principal, web_principal
+from hq.platform.application.security import Principal, mcp_principal, web_principal
 
 from ..identity import set_principal
 from ..server import mcp
@@ -119,11 +118,7 @@ class HeldTaskTests(TestCase):
         from hq.platform.application.adoption_testing import managing_everything
 
         managing_everything()
-        save_managed_resource(
-            ManagedResourceCommand(key=POLICY_KEY, kind="tailscale.policy", spec={"document": "{}"}),
-            principal=cli_principal(),
-            copied_from_live=True,
-        )
+        ManagedResource.objects.create(key=POLICY_KEY, kind="tailscale.policy", spec={"document": "{}"})
         self.agent = Principal("example-agent", "mcp", mcp_principal().capabilities)
         user = get_user_model().objects.create_user(username="operator", password="test-only-password")
         self.person = web_principal(user)

@@ -7,10 +7,11 @@ from hq.platform.core.network import split_host_port
 from .reach import NETWORKS
 from .request_channel import channel_of
 from .request_connection import Connection
+from .tone import Tone
 
 # The tone of an address's network: the tailnet is the private way in, the
 # internet the exposed one.
-_TONES = {"tailnet": "good", "elsewhere": "serious"}
+_TONES = {"tailnet": Tone.GOOD, "elsewhere": Tone.SERIOUS}
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,7 +26,7 @@ class Address:
 
     @property
     def tone(self) -> str:
-        return _TONES.get(self.kind, "neutral")
+        return _TONES.get(self.kind, Tone.NEUTRAL)
 
 
 def _address_row(value: str, source: str, *, current: bool = False) -> Address | None:

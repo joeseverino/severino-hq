@@ -11,10 +11,20 @@ import hashlib
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
+from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
+from typing import Annotated, Literal, TypedDict
 
+from . import request_context
+from .describe import Describe
 from .money import quantize_money, to_money
+from .record_errors import InputError
+lazy from .security import Principal
+
+# The capability that switches the mode, and where a browser's session keeps it.
+SET_DEMO = "appearance.demo.set"
+DEMO_SESSION_KEY = "showing_demo"
 
 # Set per request from the session of the one browser that turned the mode on,
 # so it cannot follow an operator to another device, reach the API or the MCP,
@@ -161,3 +171,34 @@ def day[T](value: T, *, key: str = "") -> T:
     if not showing_demo() or not isinstance(value, date):
         return value
     return value + _DAY_OFFSET
+
+
+@dataclass(frozen=True, slots=True)
+class DemoCommand:
+    """Whether this browser shows stand-in values."""
+
+    showing: Annotated[bool, Describe("Whether this browser shows stand-in values in place of real ones.")]
+
+
+class DemoSet(TypedDict):
+    """Whether this browser shows stand-in values, as the call left it."""
+
+    ok: Literal[True]
+    showing: Annotated[bool, Describe("Whether this browser now shows stand-in values.")]
+    message: Annotated[str, Describe("Whether demo data is on or off now.")]
+
+
+def set_demo(command: DemoCommand, *, principal: Principal) -> DemoSet:
+    """Set, not cycle, so a repeated request cannot undo itself.
+
+    The session is all it writes, so the runner's record of the act is its
+    only trace, kept because an operator who forgets the mode is on can
+    screenshot fiction and file it as fact.
+    """
+
+    del principal
+    session = getattr(request_context.current(), "session", None)
+    if session is None:
+        raise InputError("Demo data belongs to one browser: switch it from HQ's pages.")
+    session[DEMO_SESSION_KEY] = command.showing
+    return {"ok": True, "showing": command.showing, "message": "Demo mode on" if command.showing else "Demo mode off"}

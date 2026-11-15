@@ -12,7 +12,7 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.permissions import NginxProxyManager
-from hq.platform.application.tests.markup import text
+from hq.platform.application.markup_testing import text
 
 from ..derived_reads import get_reading, serialize_path
 from ..findings import findings
@@ -21,7 +21,7 @@ from ..inventory_testing import store
 from ..paths import path_to
 from ..projection import projection_scope
 from ..relationships import relationships_for
-from ..security import Capability, Principal, cli_principal
+from ..security import Capability, Principal
 
 READER = Principal("reader", "test", frozenset({Capability.READ}))
 NPM = "example-npm"
@@ -289,8 +289,7 @@ class DeliveryTests(TestCase):
                     "ok": True,
                     "records": [{**certificate(in_days(60)), "meta": {"certificate_key": "PRIVATE"}}],
                 }
-            },
-            principal=cli_principal(),
+            }
         )
 
         found = get_reading("npm.certificate")

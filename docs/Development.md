@@ -612,21 +612,25 @@ beside it.
 
 ### Derived files
 
-`mise run fix` rewrites every file generated from a source, in the order each
-reads the last, then formats as the lint gates read:
+A file generated from a source is declared once, by the `lint:drift-*` gate
+that holds it, in `mise-tasks/lint.toml`: the gate is tagged `derived`, and its
+`vars.writes` names each file its fix mode writes whole (`vars.writes_part_of`,
+each hand-written file it writes a section of, as the SDK's table in
+`docs/Plugins.md`). `mise tasks -x --hidden --tag derived` lists them. Adding
+one is its writer and that gate; everything else reads the declaration:
 
-1. `hq_sdk/contract.json`, with the SDK's text examples and the table in
-   `docs/Plugins.md`;
-2. the machine API's OpenAPI document;
-3. the controller's contracts from the connection registry, and the Go types
-   generated from them;
-4. `docs/Connections.md`, from what the providers declare;
-5. the JSON Schema of a procedure's sidecar, from the model HQ validates one
-   with ([Declaring a playbook](Architecture.md#declaring-a-playbook));
-6. the served font, cut to the characters HQ prints.
+- `mise run fix` (`fix:derived`) runs every derived gate's fix mode, then
+  `go generate` for the Go types the controller's contracts feed, which
+  `lint:controller` holds and declares in its own `vars.writes`;
+- `.gitattributes` marks each declared file `linguist-generated`, written by
+  `lint:drift-gitattributes` (a hand-written attribute goes in a
+  `.gitattributes` in its own directory);
+- `tools/tests/test_drift_gates.py` deletes a gate's files, runs the command
+  its failure names and then its fix mode, and fails on a file the fix writes
+  that its declaration leaves out, or one it declares and does not write.
 
-It then lowers each count in `tools/lint/eslint-suppressions.json` that has
-fallen to what ESLint finds (`fix:suppressions`), so a change that removes a
+`mise run fix` then formats as the lint gates read. It also lowers each count
+in `tools/lint/eslint-suppressions.json` that has fallen to what ESLint finds (`fix:suppressions`), so a change that removes a
 suppressed problem leaves its count right. A count that rose is a new problem:
 `fix` leaves it, and `lint:js` refuses it.
 

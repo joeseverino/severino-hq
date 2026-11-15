@@ -11,7 +11,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import timedelta
 from functools import wraps
-from typing import Annotated, Any, Final
+from typing import TYPE_CHECKING, Annotated, Any, Final, final
 
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -26,11 +26,13 @@ lazy from hq.platform.core.models import AuditLog
 
 from . import derivations
 from .command_fields import Describe
+from .contracts import Effect
 from .derivations import holds_until
 from .held_answer import HELD, ApprovalApplied, ApprovalRejected, HeldCall, serialize_approval
 from .record_errors import PolicyError, RecordNotFound
 from .refusal_status import refusal_of, refuse
 from .routes import reverse
+from .sealing import Sealed, sealer
 from .security import (
     INTERNAL_INTERFACE,
     OPERATOR_INTERFACES,
@@ -39,8 +41,8 @@ from .security import (
     Principal,
     internal_principal,
     is_interactive,
-    require_all,
 )
+from .titled import Titled
 from .workflow_contracts import ActionLink
 lazy from . import agent_access, capabilities, resources, roles
 lazy from .approval_review import asked
@@ -53,18 +55,15 @@ lazy from .resources import InvalidResourceInput
 lazy from .roles import Role
 lazy from .ui import counted
 
+if TYPE_CHECKING:
+    from .integration_specs import CapabilitySpec
+
 # How many outstanding requests one actor may hold. A caller that has already
 # asked for ten decisions and been answered none does not need an eleventh: it
 # needs to stop. Without a ceiling, the cheapest way past this module is to fill
 # the page it is read on.
 MAX_PENDING_PER_ACTOR = 10
 
-# Reads never wait for anybody. Stated as the exemption rather than listing the
-# effects that are gated, so an effect introduced later is considered rather
-# than exempted by omission.
-READ_EFFECT = "read"
-# What takes something away from whoever is using it: a deletion, or a stop.
-DESTRUCTIVE_EFFECT = "destructive"
 # Payload fields that turn a write into deleting whatever it does not name: an
 # orphan prune removes every record the manifest leaves out, restricted ones
 # included. Such a call is held like a destructive capability, whatever the
@@ -75,7 +74,7 @@ DELETING_FLAGS = ("prune_orphans",)
 def is_destructive(spec, command: Any) -> bool:
     """Whether this call takes something away: by its effect, or by what it asks for."""
 
-    if spec.effect == DESTRUCTIVE_EFFECT:
+    if spec.effect is Effect.DESTRUCTIVE:
         return True
     return any(getattr(command, flag, False) is True for flag in DELETING_FLAGS)
 
@@ -262,7 +261,8 @@ def approval_subject(spec, command: Any, target: Any) -> ApprovalSubject | None:
     whose fingerprints must match. None for a read or a missing target.
     """
 
-    if spec.effect == READ_EFFECT:
+    # Reads never wait for anybody: an effect added later is held unless it says it changes nothing.
+    if not spec.effect.changes:
         return None
     if (measured := getattr(spec.handler, _MEASURED, None)) is not None:
         return measured(command)
@@ -302,7 +302,7 @@ def _record_subject(spec, target: Any) -> ApprovalSubject | None:
     except UnsupportedResourceOperation, InvalidResourceInput:
         # No canonical read: still holdable, but staleness cannot be detected.
         baseline = {}
-    if baseline and spec.effect != DESTRUCTIVE_EFFECT:
+    if baseline and spec.effect is not Effect.DESTRUCTIVE:
         # A change shows the fields it sends, as they are now, and the record's
         # name; the rest of a read (a last push, open pulls) moves with sweeps.
         read = baseline.get("resource", baseline)
@@ -435,7 +435,7 @@ def _awaiting(held: ApprovalRequest, *, repeated: bool) -> HeldCall:
     }
 
 
-def asked_by(approval_id: str, *, principal: Principal) -> ApprovalRequest | None:
+def own_held_request(approval_id: str, *, principal: Principal) -> ApprovalRequest | None:
     """The held request ``principal`` itself asked for, by its id, or None.
 
     None as much for another caller's request as for an id nothing holds, so
@@ -546,7 +546,6 @@ def pending(*, principal: Principal, limit: int | None = 50, capability: str = "
     decision ``approve`` would refuse.
     """
 
-    principal.require(Capability.READ)
     waiting = ApprovalRequest.objects.filter(state=ApprovalRequest.State.PENDING).exclude(
         APPROVAL_LAPSE.q(derivations.clock())
     )
@@ -621,11 +620,11 @@ def _decidable(approval_id: str, principal: Principal) -> ApprovalRequest:
     return held
 
 
-REQUEST = "approval.request"
+REQUEST = Titled("approval.request", "Asked for a change a person approves")
 APPROVE = "approval.approve"
 REJECT = "approval.reject"
 WITHDRAW = "approval.withdraw"
-LAPSE = "approval.lapse"
+LAPSE = Titled("approval.lapse", "A held change lapsed")
 _LAPSED_NOTE = "It expired without an answer."
 # Each decision a person takes on a held request: its path in the decide
 # route, and its button's words.
@@ -680,7 +679,7 @@ def require_decidable(principal: Principal, held: ApprovalRequest, decision: str
         return
     if refused.error is not None:
         raise refused.error
-    require_all(principal, refused.needs)
+    principal.require(*refused.needs)
 
 
 def offers(principal: Principal, rows: Iterable[ApprovalRequest]) -> dict[Any, Offer]:
@@ -808,6 +807,38 @@ def approve(command: ApproveCommand, *, principal: Principal) -> ApprovalApplied
         return _apply(held, principal)
 
 
+@final
+class Approved(Sealed):
+    """A held change a person has just approved, the only thing ``execute_approved`` runs (``sealing``).
+
+    - One place makes one: ``_apply``, once the approver may decide and the
+      change is still what was asked for. Only this module holds its seal, so
+      no other path has a value that makes a run approved.
+    - It carries the whole change (the spec, the validated command, its
+      target, the fields sent) and who acts, so what runs approved is what
+      the person saw, and nothing handed beside it can swap any part.
+    - ``execute_approved`` reads it only through ``approval``, which refuses
+      anything this module did not seal.
+    """
+
+    __slots__ = ()
+
+
+@dataclass(frozen=True, slots=True)
+class Approval:
+    """What an ``Approved`` carries: the change a person approved, and who it
+    runs as (its asker, with ``approved_by`` naming the person)."""
+
+    spec: CapabilitySpec
+    command: Any
+    target: str | int | None
+    acting: Principal
+    sent: frozenset[str]
+
+
+_seal, approval = sealer(Approved, Approval)
+
+
 def _apply(held: ApprovalRequest, principal: Principal) -> ApprovalApplied:
     require_decidable(principal, held, APPROVE)
     spec = capabilities.capability_spec(held.capability)
@@ -843,7 +874,7 @@ def _apply(held: ApprovalRequest, principal: Principal) -> ApprovalApplied:
         # operation: the approver agreed, and the change is the requester's.
         with own_operation(held, operation=spec.name, principal=acting, rebinds=True):
             result = execute_approved(
-                spec, command, locked.target or None, principal=acting, sent=frozenset(held.payload)
+                _seal(Approval(spec, command, locked.target or None, acting, frozenset(held.payload)))
             )
         _record(locked, ApprovalRequest.State.APPROVED, decider=principal, result=result)
     return {"ok": True, "approved": str(locked.id), "result": result, "message": "Approved and applied."}
@@ -876,12 +907,12 @@ def withdraw(command: WithdrawCommand, *, principal: Principal) -> ApprovalWithd
     """Take back a held request its asker no longer wants, before anybody decides it.
 
     Only the caller that asked may: another caller's request reads as one
-    nothing holds (``asked_by``). Withdrawn, it applies nothing, no person is
+    nothing holds (``own_held_request``). Withdrawn, it applies nothing, no person is
     asked to decide it, and it no longer counts against its asker's
     ``MAX_PENDING_PER_ACTOR``.
     """
 
-    held = asked_by(command.approval_id, principal=principal)
+    held = own_held_request(command.approval_id, principal=principal)
     if held is None:
         raise RecordNotFound("No held request of yours has that id.")
     held = _decidable(str(held.pk), principal)

@@ -3,11 +3,11 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from hq.domains.control_plane.models import DashboardMachine, ManagedResource, ProviderConnection, ProviderInventory
+from hq.platform.application.markup_testing import hrefs, text, with_class
 
 from .. import cadence
 from ..getting_started import remaining, steps
 from ..projection import projection_scope
-from .markup import hrefs, text, with_class
 
 
 class GettingStartedTests(TestCase):

@@ -30,6 +30,7 @@ from .github_estate import (
 from .github_posture import COMMANDS, REASONS, STANDARD, calls_workflows, left_out, postures
 from .moments import duration, moment
 from .standards import Check, Standing
+from .tone import Tone
 from .ui import counted, ended
 lazy from .projects import projects_by_repository, repository_key
 
@@ -70,7 +71,7 @@ def _as_read(repo: Repository, found: Said) -> Finding:
     finding, was = found
     if not repo.reading.stale:
         return finding
-    return replace(finding, title=was, severity="attention", notice=True)
+    return replace(finding, title=was, severity=Tone.ATTENTION, notice=True)
 
 
 def _each(said: Callable[[Repository], Iterator[Said]]) -> Callable[[FindingEstate], tuple[Finding, ...]]:
@@ -95,7 +96,7 @@ def _waiting(repo: Repository) -> Iterator[Said]:
             WAITING,
             str(run.get("id")),
             title=f"{name} waits for your approval to deploy to {where}",
-            severity="serious" if started and reached(started + WAITING_SERIOUS_AFTER) else "attention",
+            severity=Tone.SERIOUS if started and reached(started + WAITING_SERIOUS_AFTER) else Tone.ATTENTION,
             explanation=f"Commit {run.get('sha', '')[:7]} of {repo.short}",
             evidence=(("Waiting", f"{hours}h"),),
             primary=opens("Review deployment", web_url(run.get("url")) or repo.url),
@@ -114,7 +115,7 @@ def _failing(repo: Repository) -> Iterator[Said]:
         repo,
         FAILING,
         title=f"{repo.short} is failing on {repo.default_branch}",
-        severity="serious",
+        severity=Tone.SERIOUS,
         explanation=_named("Failing job", "Failing jobs", failing),
         evidence=(("Failing", str(len(failing) or 1)),),
         primary=opens("Open run", one.url) if one else opens("Open checks", f"{repo.url}/commit/{sha}"),
@@ -139,7 +140,7 @@ def _unverified(repo: Repository) -> Iterator[Said]:
         repo,
         UNVERIFIED,
         title=f"{repo.short}'s last deploy did not pass its own verification",
-        severity="serious",
+        severity=Tone.SERIOUS,
         explanation=_named("Failed step", "Failed steps", failed),
         evidence=(("Failed steps", str(len(failed))),),
         primary=opens("Open deploy", web_url(repo.production.get("url")) or repo.url),
@@ -184,7 +185,7 @@ def _alerts(repo: Repository) -> Iterator[Said]:
         repo,
         ALERTS,
         title=f"{counted(repo.serious_alerts, one, many)} in {repo.short}",
-        severity="serious" if repo.leaked_credentials or repo.alerts_at("critical") else "attention",
+        severity=Tone.SERIOUS if repo.leaked_credentials or repo.alerts_at("critical") else Tone.ATTENTION,
         explanation=body,
         evidence=(("Open", str(repo.serious_alerts)),),
         primary=opens("Open updates", updates) if updates else opens("Open alerts", kinds[0].url),
@@ -203,7 +204,7 @@ def _lapsing(repo: Repository) -> Iterator[Said]:
             LAPSING,
             artifact["name"],
             title=f"{repo.short}'s admission lapses in {days} days",
-            severity="serious" if days <= ARTIFACT_SERIOUS_DAYS else "attention",
+            severity=Tone.SERIOUS if days <= ARTIFACT_SERIOUS_DAYS else Tone.ATTENTION,
             explanation="Once it lapses, HQ's next build leaves it out. Run its admission again to renew it.",
             evidence=(("Lapses in", counted(days, "day")),),
             primary=opens("Open actions", f"{repo.url}/actions"),
@@ -248,7 +249,7 @@ def _posture(_estate: FindingEstate) -> tuple[Finding, ...]:
                 subject="",
                 part=check.id,
                 title=f"{check.label}: not met in {counted(len(missing), 'repository', 'repositories')}",
-                severity="serious" if check.serious else "attention",
+                severity=Tone.SERIOUS if check.serious else Tone.ATTENTION,
                 explanation=f"{ended(', '.join(missing))} {check.fix}",
                 evidence=(("Not met in", ", ".join(missing)), ("Why it matters", check.why)),
                 primary=opens("Open repo checks", reverse("posture")),
@@ -271,13 +272,13 @@ RULES: tuple[FindingRule, ...] = (
     FindingRule(
         WAITING,
         "Deployments awaiting approval",
-        "attention",
+        Tone.ATTENTION,
         _each(_waiting),
         operator_action="Approve or reject the run on GitHub, as one of its required reviewers.",
         no_help_reason="Only a required reviewer can approve a deployment, and HQ reads GitHub with read-only tokens.",
         bars={
-            "serious": f"a run has waited on a reviewer for {duration(WAITING_SERIOUS_AFTER)}",
-            "attention": "a run waits on a reviewer",
+            Tone.SERIOUS: f"a run has waited on a reviewer for {duration(WAITING_SERIOUS_AFTER)}",
+            Tone.ATTENTION: "a run waits on a reviewer",
         },
         clears="a reviewer approves or rejects the run",
         domain=PROJECTS,
@@ -286,18 +287,18 @@ RULES: tuple[FindingRule, ...] = (
     FindingRule(
         FAILING,
         "Failing workflows",
-        "serious",
+        Tone.SERIOUS,
         _each(_failing),
         operator_action="Read the failing run's log on GitHub, then fix the code or the workflow it names.",
         no_help_reason="HQ reads which checks fail, not their logs, and the fix is a change to the code or a workflow.",
-        bars={"serious": "a check fails on the newest commit to the default branch"},
+        bars={Tone.SERIOUS: "a check fails on the newest commit to the default branch"},
         domain=PROJECTS,
         gathered=True,
     ),
     FindingRule(
         UNVERIFIED,
         "Unverified commits",
-        "serious",
+        Tone.SERIOUS,
         _each(_unverified),
         operator_action="Read the failed step in the deploy's log on GitHub, then fix the repository.",
         no_help_reason=(
@@ -305,7 +306,7 @@ RULES: tuple[FindingRule, ...] = (
             "and the fix in the repository, which HQ never writes to."
         ),
         bars={
-            "serious": "a step of the last deploy's own verification failed, so production may not be what was meant"
+            Tone.SERIOUS: "a step of the last deploy's own verification failed, so production may not be what was meant"
         },
         domain=PROJECTS,
         gathered=True,
@@ -313,13 +314,13 @@ RULES: tuple[FindingRule, ...] = (
     FindingRule(
         ALERTS,
         "Security alerts",
-        "attention",
+        Tone.ATTENTION,
         _each(_alerts),
         operator_action="Upgrade the code each alert names, or revoke the leaked credential, then let GitHub close it.",
         no_help_reason="An alert closes when the code is upgraded. HQ never writes to the repository.",
         bars={
-            "serious": "a leaked credential or a critical alert is open, which anyone who finds it can use",
-            "attention": "a high severity alert is open, which stays open to attack until the code is upgraded",
+            Tone.SERIOUS: "a leaked credential or a critical alert is open, which anyone who finds it can use",
+            Tone.ATTENTION: "a high severity alert is open, which stays open to attack until the code is upgraded",
         },
         domain=PROJECTS,
         gathered=True,
@@ -327,15 +328,15 @@ RULES: tuple[FindingRule, ...] = (
     FindingRule(
         LAPSING,
         "Workflow artifacts",
-        "attention",
+        Tone.ATTENTION,
         _each(_lapsing),
         operator_action="Run the extension's admission workflow again on GitHub, which renews the artifact.",
         no_help_reason=(
             "The reading names the artifact but not the workflow that makes it, so HQ cannot name the run to repeat."
         ),
         bars={
-            "serious": f"an admission artifact lapses within {counted(ARTIFACT_SERIOUS_DAYS, 'day')}",
-            "attention": f"an admission artifact lapses within {counted(ARTIFACT_ATTENTION_DAYS, 'day')}",
+            Tone.SERIOUS: f"an admission artifact lapses within {counted(ARTIFACT_SERIOUS_DAYS, 'day')}",
+            Tone.ATTENTION: f"an admission artifact lapses within {counted(ARTIFACT_ATTENTION_DAYS, 'day')}",
         },
         clears="its admission runs again, which renews the artifact",
         domain=PROJECTS,
@@ -344,13 +345,13 @@ RULES: tuple[FindingRule, ...] = (
     FindingRule(
         POSTURE,
         "Repository checks",
-        "attention",
+        Tone.ATTENTION,
         _posture,
         operator_action="Change the setting the check names in each repository that misses it.",
         no_help_reason=CANNOT_WRITE,
         bars={
-            "serious": "a repository misses a check HQ's standard holds serious",
-            "attention": "a repository misses a check of HQ's standard",
+            Tone.SERIOUS: "a repository misses a check HQ's standard holds serious",
+            Tone.ATTENTION: "a repository misses a check of HQ's standard",
         },
         domain=PROJECTS,
         gathered=True,

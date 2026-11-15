@@ -12,6 +12,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_adapters.github import COMPOSE_WORKFLOW, CURRENT, KIND as DELIVERY
+from hq.platform.application.markup_testing import select, text
 
 from .. import first_seen, freshness
 from ..attention import infrastructure
@@ -21,12 +22,11 @@ from ..first_seen import note_open, recorded
 from ..infrastructure import resource_health
 from ..problems import note_open_problems, problem_counts, problems_about
 from ..projection import projection_scope
+from ..report_testing import bridged
 from ..resource_context import record_status
 from ..security import cli_principal
-from ..sweep import record_sweep
 from .host_only import host_only
 from .inventory_records import kind_read
-from .markup import select, text
 
 REWRITE = "adguard.rewrite"
 
@@ -165,13 +165,13 @@ class FirstSeenTests(TestCase):
 
     def test_a_problem_found_by_a_report_says_since_when_on_its_card(self):
         with host_only():
-            record_sweep({REWRITE: {"ok": True, "records": []}}, principal=cli_principal())
+            bridged("inventory", {REWRITE: {"ok": True, "records": []}})
             first_seen._looked.clear()
             broken()
             # A look due at once, the one before it still current.
             at_once = freshness.ReadCadence(timedelta(microseconds=1), self.cadence.stale_after)
             with mock.patch.dict(freshness._NAMED, {freshness.FIRST_SEEN: lambda: at_once}):
-                record_sweep({REWRITE: {"ok": True, "records": []}}, principal=cli_principal())
+                bridged("inventory", {REWRITE: {"ok": True, "records": []}})
             with projection_scope():
                 (item,) = [item for item in infrastructure() if item.key.endswith(":resource:app")]
                 card = one(problems_about(entity_link("resource", "app").url, cli_principal()))
@@ -185,7 +185,7 @@ class FirstSeenTests(TestCase):
             mock.patch("hq.platform.application.problems.note_open_problems", side_effect=RuntimeError("no")),
             self.assertLogs("severino.sweep", level="ERROR"),
         ):
-            result = record_sweep({REWRITE: {"ok": True, "records": []}}, principal=cli_principal())
+            result = bridged("inventory", {REWRITE: {"ok": True, "records": []}})
 
         self.assertTrue(result["ok"])
 
@@ -270,7 +270,7 @@ class DeployInProgressTests(TestCase):
         self.assertNotIn("serious", {item.status for item in self.items()})
         resource = ManagedResource.objects.get(key="delivery")
         self.assertEqual(resource_health(resource)["label"], "Deploy running")
-        self.assertEqual(record_status(resource).tone, "pending")
+        self.assertEqual(record_status(resource).tone, "attention")
 
     def test_a_run_waiting_for_approval_is_something_to_do(self):
         self.delivery("Deploy run 9 is waiting for approval")

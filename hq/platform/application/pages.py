@@ -25,6 +25,7 @@ from django.utils.functional import Promise
 
 from .asks import Ask
 from .fragments import FragmentMixin
+from .tone import Tone
 from .ui import PageNavigation, button_classes
 lazy from .page_reads import remedy
 lazy from .refusal_status import Refusal, refusal_of
@@ -132,7 +133,7 @@ class PageBadge:
     """A short fact beside a page's title: its reach, that it is read-only."""
 
     label: str
-    tone: str = ""
+    tone: Tone | None = None
     title: str = ""
 
 
@@ -304,14 +305,15 @@ class PageMixin(FragmentMixin):
         return context
 
 
-def page_capability(view: Callable[..., Any]) -> str:
-    """The one capability the routed ``view`` reads under: the ``required_capability`` it declares, else READ.
+def page_capabilities(view: Callable[..., Any]) -> tuple[str, ...]:
+    """What the routed ``view`` reads under: READ, and the one ``required_capability`` it declares.
 
-    A class declares it as an attribute, a function view through
-    ``hq_sdk.web.capability_required``. A page that declares nothing reads
-    under READ, never under nothing; one that declares the attribute and
-    leaves it empty (``hq_sdk.web.CapabilityRequiredMixin``'s default) is
-    refused, since it meant to name one.
+    Every page reads the estate HQ draws around it (its navigation, a
+    reference picker, the calendar's events), so READ is never replaced, only
+    added to. A class declares its own as an attribute, a function view
+    through ``hq_sdk.web.capability_required``. One that declares the
+    attribute and leaves it empty (``hq_sdk.web.CapabilityRequiredMixin``'s
+    default) is refused, since it meant to name one.
     """
 
     # A class view's attributes are its class's; a function view's are its own.
@@ -319,12 +321,12 @@ def page_capability(view: Callable[..., Any]) -> str:
     try:
         declared = owner.required_capability
     except AttributeError:
-        return str(Capability.READ)
+        return (str(Capability.READ),)
     if not isinstance(declared, str):
-        raise ImproperlyConfigured(f"A page reads under one capability, not {declared!r}.")
+        raise ImproperlyConfigured(f"A page declares one capability of its own, not {declared!r}.")
     if not declared:
         raise ImproperlyConfigured(f"{owner.__qualname__!r} must define required_capability.")
-    return str(declared)
+    return tuple(dict.fromkeys((str(Capability.READ), str(declared))))
 
 
 def authorizes_itself(view: Callable[..., Any]) -> bool:
@@ -342,7 +344,7 @@ def authorizes_itself(view: Callable[..., Any]) -> bool:
 def principal_opens(principal: Any, view: Callable[..., Any]) -> bool:
     """Whether ``principal`` may open the page ``view`` draws: the one place the page rule is written."""
 
-    return principal.permits(page_capability(view))
+    return principal.permits(*page_capabilities(view))
 
 
 def page_refusal(user: Any, view: Callable[..., Any]) -> Refusal | None:
@@ -354,7 +356,7 @@ def page_refusal(user: Any, view: Callable[..., Any]) -> Refusal | None:
     principal = web_principal(user)
     if principal_opens(principal, view):
         return None
-    capability = page_capability(view)
+    capability = next(each for each in page_capabilities(view) if not principal.permits(each))
     refused = AuthorizationError(f"{principal.actor!r} holds no {capability!r}, which this page reads under.")
     return refusal_of(refused, name=capability, principal=principal)
 

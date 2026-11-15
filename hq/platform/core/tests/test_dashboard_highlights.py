@@ -13,10 +13,10 @@ from hq.platform.application.dashboard import dashboard_highlights
 from hq.platform.application.derivation_testing import uncached
 from hq.platform.application.domains import Domain, domain_dashboard_cards
 from hq.platform.application.drawings import Dot, Dots, Trend
+from hq.platform.application.markup_testing import all_elements, elements, hrefs, links, select, text, with_class
 from hq.platform.application.plugins import NavigationItem, PluginIntegration
 from hq.platform.application.projection import projection_scope
 from hq.platform.application.security import cli_principal
-from hq.platform.application.tests.markup import all_elements, elements, hrefs, links, select, text, with_class
 from hq.platform.application.ui import ChartSeries, DomainOverview, stacked_bar_chart
 
 

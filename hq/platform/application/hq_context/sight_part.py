@@ -10,8 +10,9 @@ lazy from hq.domains.control_plane.observations import OBSERVATIONS
 
 from ..labels import dotted
 from ..projection import read_once
+from ..tone import Tone
 from ..ui import counted
-from .tones import ATTENTION, GOOD, Tile, iso
+from .band import Tile, iso
 lazy from ..connections import connection_rows
 lazy from ..credential_sight import (
     NEVER_SWEPT,
@@ -141,7 +142,7 @@ def sight_tile(seen: HqSight) -> Tile:
         counted(seen.read, "reading"),
         detail or "All current",
         reverse("control_plane:connections"),
-        ATTENTION if seen.stale or seen.failing or seen.never else GOOD,
+        Tone.ATTENTION if seen.stale or seen.failing or seen.never else Tone.GOOD,
         "eye",
     )
 

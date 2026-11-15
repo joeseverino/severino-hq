@@ -159,8 +159,8 @@ class DocsDetailView(PageMixin, DetailView):
             format_html("<code>{}</code>", breakable(record.doc_id)),
             record.get_doc_type_display(),
             record.get_environment_display(),
-            status_pill(record.get_status_display(), tone=record.status),
-            status_pill(record.get_sensitivity_display(), tone=record.sensitivity),
+            status_pill(record.state),
+            status_pill(record.get_sensitivity_display(), chip=True),
         )
 
     @override

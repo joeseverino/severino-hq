@@ -41,7 +41,7 @@ def allowance(*, at=timedelta(0), used, spent=40, resets=RESETS, **fields):
 
 
 def sweep(record):
-    record_inventory({KIND: {"ok": True, "records": [record]}}, principal=cli_principal())
+    record_inventory({KIND: {"ok": True, "records": [record]}})
 
 
 def stored():

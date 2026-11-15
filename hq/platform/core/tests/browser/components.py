@@ -1987,8 +1987,11 @@ class ComponentLayoutTests(LayoutBrowserTests):
             token.append(inner);
             const cell = row.insertCell();
             cell.style.cssText = 'padding: 0; overflow-wrap: anywhere';
-            cell.setAttribute('data-short', '');
-            cell.append(token);
+            const box = document.createElement('div');
+            box.className = 'cell-short';
+            box.style.display = 'inline';
+            box.append(token);
+            cell.append(box);
           }
           document.querySelector('main').prepend(table);
         }""")

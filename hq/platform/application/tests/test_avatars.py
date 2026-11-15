@@ -9,12 +9,12 @@ from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from hq.platform.application.markup_testing import Element, within
 from hq.platform.core.models import AuditLog, Avatar
 from hq.platform.core.oidc import SIGNED_IN_SESSION_KEY, HQOIDCAuthenticationBackend
 
 from .. import avatars
 from ..avatars import MAX_BYTES, SESSION_KEY, fetch_picture, picture_allowed, remember_avatar
-from .markup import Element, within
 
 ISSUER = "https://sso.example.test"
 PICTURE = f"{ISSUER}/api/users/1/profile-picture.png"

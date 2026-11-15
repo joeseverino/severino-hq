@@ -36,6 +36,7 @@ from hq.platform.application.glance import DASHBOARD_REFRESH
 from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
 from hq.platform.application.resource_operations import OperationCommand, request_reconcile
 from hq.platform.application.security import cli_principal
+from hq.platform.application.tests.consent import consented
 from hq.platform.core.tests.unix_serving import post, served, socket_directory
 
 from .certificate_cases import certificate_spec, declare_targets
@@ -68,11 +69,11 @@ class ConcurrentCallTests(LiveBridge):
         declare_targets()
         save_managed_resource(
             ManagedResourceCommand(key="example-wildcard", kind="tls.certificate", spec=certificate_spec()),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
         )
         queued = request_reconcile(
             OperationCommand(),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
             current_key=ManagedResource.objects.get(key="example-wildcard").key,
         )
         return str(queued["operation"]["id"])

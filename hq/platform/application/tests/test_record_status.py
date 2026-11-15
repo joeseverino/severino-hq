@@ -9,6 +9,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.provider_adapters.github import COMPOSE_WORKFLOW, CURRENT, KIND
+from hq.platform.application.markup_testing import all_elements, select, texts
 from hq.platform.core.attribution import operation_context
 from hq_sdk.testing import plain
 
@@ -19,7 +20,6 @@ from ..projection import projection_scope
 from ..resource_context import record_status
 from ..resource_operations import changes, resource_history, serialize_operation, summaries
 from .inventory_records import kind_read
-from .markup import all_elements, select, texts
 
 READY = [{"type": "Ready", "status": True, "reason": "Observed", "message": "Matches HQ's config."}]
 

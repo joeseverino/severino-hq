@@ -9,15 +9,15 @@ from django.views.generic import TemplateView, View
 
 from hq.platform.application import action_items as queue_state, fragments
 from hq.platform.application.dashboard import readable_queue, waiting
-from hq.platform.application.decisions import urgency
 from hq.platform.application.pages import PageMixin
 from hq.platform.application.projection import projection_scope
 from hq.platform.application.security import safe_next, web_principal
+from hq.platform.application.tone import Tone
 from hq.platform.application.web_writes import execute_posted, refused
 
 ACTION_ITEM_FILTERS = ("q", "status", "source", "about")
 # The urgencies the filter narrows to, in the words every pill says.
-_URGENCIES = tuple((status, urgency(status)) for status in ("serious", "attention"))
+_URGENCIES = tuple((tone, tone.urgency) for tone in Tone if tone.acted_on)
 
 
 def _action_items(request, current=None):

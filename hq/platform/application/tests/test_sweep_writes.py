@@ -22,8 +22,7 @@ from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 from hq.platform.search_index.models import SearchDocument
 
 from ..derived_inputs import ESTATE_READS
-from ..security import cli_principal
-from ..sweep import record_sweep
+from ..report_testing import bridged
 
 KIND = "adguard.rewrite"
 INVENTORY = ProviderInventory._meta.db_table
@@ -35,7 +34,7 @@ def _records(count: int) -> list[dict]:
 
 
 def _sweep(records):
-    return record_sweep({KIND: {"ok": True, "records": records}}, principal=cli_principal())
+    return bridged("inventory", {KIND: {"ok": True, "records": records}})
 
 
 def _measured(records):

@@ -10,7 +10,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from hq.domains.control_plane.models import OperationRequest
-from hq.platform.application.tests.markup import all_elements, elements, within
+from hq.platform.application.markup_testing import all_elements, elements, within
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.automation import CACHE_FLUSH, CORRELATION
 from hq.platform.core.example_estate.names import MACHINE
@@ -93,7 +93,8 @@ class RunPageTests(TestCase):
         from hq.platform.core.models import AuditLog
 
         queued = AuditLog.objects.get(object_id=str(run.pk), action=AuditLog.Action.CREATED)
-        self.assertEqual(said["Asked by"][0], queued.who.words)
+        # Read as words, whichever space keeps "· approved by" with what it follows.
+        self.assertEqual(said["Asked by"][0].split(), queued.who.words.split())
         self.assertEqual(said["Result"][0], run.result["message"])
         self.assertEqual(said["Correlation"][0], CORRELATION)
         self.assertEqual(said["Machines"][1], reverse("control_plane:machine", kwargs={"name": MACHINE}))

@@ -211,7 +211,7 @@ def capability_doors(spec: CapabilitySpec | None) -> tuple[Door, ...]:
     return call_doors(
         targeted=bool(spec.target_kind),
         stale_write=takes_stale_write_token(spec.handler),
-        changes=spec.effect != "read",
+        changes=spec.effect.changes,
     )
 
 

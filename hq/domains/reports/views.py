@@ -20,9 +20,9 @@ from hq.platform.application.entity_links import entity_link
 from hq.platform.application.money import money
 from hq.platform.application.pages import PageMixin
 from hq.platform.application.projection import years_of
+from hq.platform.application.reports import exported
+from hq.platform.application.security import web_principal
 from hq.platform.application.ui import counted
-from hq.platform.core.audit import record_event
-from hq.platform.core.models import AuditLog
 
 from . import exports as exporters
 
@@ -230,12 +230,7 @@ class ExportView(View):
 
         body = spec.build() if spec.year == "none" else spec.build(year)
         filename = spec.filename(year)
-        record_event(
-            action=AuditLog.Action.EXPORTED,
-            type_label="Export",
-            message=f"Generated export: {filename}",
-            metadata={"filename": filename, "bytes": len(body.encode("utf-8"))},
-        )
+        exported(filename, body, principal=web_principal(request.user))
         response = HttpResponse(body, content_type=spec.content_type)
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
         response["Cache-Control"] = "private, no-store"
