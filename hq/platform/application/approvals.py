@@ -545,7 +545,6 @@ def pending(*, principal: Principal, limit: int | None = 50, capability: str = "
     decision ``approve`` would refuse.
     """
 
-    principal.require(Capability.READ)
     waiting = ApprovalRequest.objects.filter(state=ApprovalRequest.State.PENDING).exclude(
         APPROVAL_LAPSE.q(derivations.clock())
     )

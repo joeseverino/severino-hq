@@ -80,7 +80,7 @@ from .integration_validation import required_capability_names
 from .integrations import IntegrationGraph, held_graph, integration_graph
 from .json_schemas import Written
 from .projection import QUERY
-from .security import Capability, Principal
+from .security import Principal
 from .tone import Tone
 from .topology import derive_topology
 from .topology_model import (
@@ -614,7 +614,6 @@ def derive_findings(
 def estate_findings(*, principal: Principal, rule: str = "") -> tuple[Any, ...]:
     """Every finding the topology ``principal`` may see supports."""
 
-    principal.require(Capability.READ)
     return _estate_findings(principal, rule)
 
 
@@ -869,7 +868,6 @@ def narrowed_findings(*, principal: Principal, **narrowing: object) -> NarrowedF
     limit held some back.
     """
 
-    principal.require(Capability.READ)
     query = FindingsQuery.model_validate(narrowing).model_dump()
     rule: str = query["rule"] or ""
     limit: int | None = query["limit"]

@@ -935,6 +935,10 @@ has nothing to ask for. prompts/list and resources/list follow the same rule.
 Each prompt and fixed view declares its access beside it (`requires` in
 `hq/platform/mcp/prompts.py` and `hq/platform/mcp/resources.py`) and is listed
 only to a caller it admits. `prompts/get` and `resources/read` refuse by it.
+Each machine API endpoint declares its access the same way (`_endpoint(...,
+requires=...)` in `hq/platform/api/views.py`) and refuses by it before its
+view runs. A read behind a door asks nobody's permission again: the door's
+declaration is the one place its authority is written.
 The Agents page lists as an operator's own device, the widest caller, so it
 shows every tool.
 

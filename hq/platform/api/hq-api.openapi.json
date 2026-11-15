@@ -281,6 +281,19 @@
         },
         "summary": "Recorded by HQ's test suite."
       },
+      "findingsV2Forbidden": {
+        "dataValue": {
+          "error": {
+            "code": "insufficient_scope",
+            "details": {
+              "scope": "read"
+            },
+            "message": "api principal 'example-automation' lacks 'read': its token does not carry it. Grant 'read' to the client 'example-automation' in Pocket ID, then sign in again."
+          },
+          "ok": false
+        },
+        "summary": "Recorded by HQ's test suite."
+      },
       "findingsV2OK": {
         "dataValue": {
           "data": {
@@ -24366,7 +24379,24 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "content": {
+              "application/json": {
+                "examples": {
+                  "recorded": {
+                    "$ref": "#/components/examples/findingsV2Forbidden"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenRefusal"
+                }
+              }
+            },
+            "description": "Forbidden.",
+            "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/InsufficientScopeWWWAuthenticate"
+              }
+            }
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"

@@ -345,6 +345,16 @@
           "message": "get_findings: limit must be greater than or equal to 1."
         },
         "ok": false
+      },
+      "403": {
+        "error": {
+          "code": "insufficient_scope",
+          "details": {
+            "scope": "read"
+          },
+          "message": "api principal 'example-automation' lacks 'read': its token does not carry it. Grant 'read' to the client 'example-automation' in Pocket ID, then sign in again."
+        },
+        "ok": false
       }
     }
   },

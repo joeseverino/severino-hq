@@ -173,7 +173,7 @@ class RecentActivityTests(TestCase):
         run("example.sweep", "Sweep the examples", _changes_two, actor=SCHEDULER)
         run("example.check", "Check the examples", lambda progress: {}, actor=SCHEDULER)
 
-        (event,) = recent_activity(principal=cli_principal())["items"]
+        (event,) = recent_activity()["items"]
 
         self.assertEqual((event["title"], event["actor"], event["action"]), ("Sweep the examples", SCHEDULER, "done"))
         self.assertEqual(sorted(item["message"] for item in event["items"]), ["Changed example-a", "Changed example-b"])

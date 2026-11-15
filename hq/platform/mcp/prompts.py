@@ -42,7 +42,7 @@ def _status(principal: Principal) -> dict[str, Any]:
     problems = agent_findings(principal=principal, severity=Tone.ATTENTION, limit=BRIEF_FINDINGS)
     return {
         "hq": hq_itself(principal),
-        "health": read_models.system_health(principal=principal),
+        "health": read_models.system_health(),
         "problems": {"summary": problems["summary"], "findings": problems["findings"]},
     }
 

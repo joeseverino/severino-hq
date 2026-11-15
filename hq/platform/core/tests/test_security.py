@@ -344,14 +344,15 @@ def _sent_to_sign_in(response, view) -> bool:
 class RouteExposureTests(SimpleTestCase):
     """No route reaches production unauthenticated by accident."""
 
-    def test_every_api_route_authenticates_itself(self):
+    def test_every_api_route_authenticates_itself_and_declares_who_may_call_it(self):
         """`/api/` skips the login redirect, so each view must do its own check.
 
         Not a style rule. A view added to `hq_api/urls.py` without the
         decorator is served to anybody who can reach the port, and nothing
-        else in the stack would stop it. A page mounted under /api/ that keeps
-        the login redirect (the reference at /api/docs/) is a page like any
-        other.
+        else in the stack would stop it. The decorator refuses every call its
+        declared access does not admit, so the read behind a route asks
+        nobody again. A page mounted under /api/ that keeps the login redirect
+        (the reference at /api/docs/) is a page like any other.
         """
 
         unguarded = [
@@ -359,9 +360,9 @@ class RouteExposureTests(SimpleTestCase):
             for route, view in _routes()
             if route.startswith("api/")
             and getattr(view, "login_required", True) is False
-            and not getattr(view, "__hq_authenticated__", False)
+            and not callable(getattr(getattr(view, "__hq_requires__", None), "check", None))
         ]
-        self.assertEqual(unguarded, [], f"API routes served without authentication: {unguarded}")
+        self.assertEqual(unguarded, [], f"API routes served without declaring who may call them: {unguarded}")
 
 
 class AnonymousSweepTests(TestCase):

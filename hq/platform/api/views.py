@@ -26,6 +26,14 @@ from pydantic import (
 )
 
 from hq.platform.application import agent_admission
+from hq.platform.application.access import (
+    ANYONE,
+    READS_A_LIST,
+    READS_A_RECORD,
+    RUNS_A_CAPABILITY,
+    Access,
+    holding,
+)
 from hq.platform.application.agent_access import AgentRefusal
 from hq.platform.application.agent_limits import Limited
 from hq.platform.application.answer_fields import Outcome, Pinned
@@ -68,7 +76,7 @@ from hq.platform.application.resources import (
     get_resource as get_application_resource,
     list_resource as list_application_resource,
 )
-from hq.platform.application.security import API_INTERFACE, Principal, web_principal
+from hq.platform.application.security import API_INTERFACE, Capability, Principal, web_principal
 from hq.platform.application.tokens import is_configured
 from hq.platform.application.topology import TopologyQuery, topology as application_topology
 from hq.platform.application.topology_answer import TopologyAnswer
@@ -370,6 +378,7 @@ def _endpoint(
     methods: tuple[str, ...],
     *,
     title: str,
+    requires: Access,
     data: Any,
     codes: Iterable[str] = (),
     held: Any = None,
@@ -379,6 +388,8 @@ def _endpoint(
     """Authenticate, then put every failure in the same envelope.
 
     Every argument is the endpoint's declaration, which ``openapi.py`` reads:
+    ``requires`` who may call it, which every call is refused by before the
+    view runs, as an MCP tool's is, so the read behind it asks nobody again;
     ``data`` is what a success carries under ``data`` (None: not enveloped),
     ``held`` what it carries there at HELD_STATUS (None: it holds nothing),
     ``codes`` the error codes it answers beside ENDPOINT_CODES, ``title``
@@ -407,9 +418,14 @@ def _endpoint(
             refused = _unserved(request, methods, configured=operator is not None or is_configured())
             if refused is not None:
                 return refused
+
+            def run(admitted: APIRequest) -> HttpResponse:
+                requires.check(admitted.principal)
+                return view(admitted, *args, **kwargs)
+
             if operator is not None:
-                return _run_for_operator(request, operator, wrapper, lambda admitted: view(admitted, *args, **kwargs))
-            return _run_for_agent(request, lambda admitted: view(admitted, *args, **kwargs))
+                return _run_for_operator(request, operator, wrapper, run)
+            return _run_for_agent(request, run)
 
         wrapper.__name__ = view.__name__
         wrapper.__doc__ = view.__doc__
@@ -417,9 +433,9 @@ def _endpoint(
         # `/api/` is exempt from the login *redirect*, so a view added here
         # without this decorator is not merely unprotected by convention: it
         # is served to anyone who asks. `core.tests.test_security` walks these routes
-        # and fails if one lacks the mark.
+        # and fails if one lacks the declaration of who may call it.
         wrapper.__dict__.update(
-            __hq_authenticated__=True,
+            __hq_requires__=requires,
             __hq_methods__=methods,
             __hq_title__=title,
             __hq_data__=data,
@@ -433,7 +449,7 @@ def _endpoint(
     return decorate
 
 
-@_endpoint(("GET",), title="API root", data=RootData)
+@_endpoint(("GET",), title="API root", requires=ANYONE, data=RootData)
 def root(request: APIRequest) -> HttpResponse:
     """What this API is, and what your credential may do."""
 
@@ -450,7 +466,7 @@ def root(request: APIRequest) -> HttpResponse:
     return _ok(data)
 
 
-@_endpoint(("GET",), title="OpenAPI document", data=None, operator_session=True)
+@_endpoint(("GET",), title="OpenAPI document", requires=ANYONE, data=None, operator_session=True)
 def openapi(_request: APIRequest) -> HttpResponse:
     """This API as an OpenAPI 3.2 document, derived from its routes and registries.
 
@@ -461,7 +477,9 @@ def openapi(_request: APIRequest) -> HttpResponse:
     return _json(document())
 
 
-@_endpoint(("GET",), title="List capabilities", data=CapabilityRequestCatalog, codes=("invalid_input",))
+@_endpoint(
+    ("GET",), title="List capabilities", requires=ANYONE, data=CapabilityRequestCatalog, codes=("invalid_input",)
+)
 def capabilities(request: APIRequest) -> HttpResponse:
     """Every capability, each flagged by whether your token may run it.
 
@@ -506,7 +524,9 @@ CAPABILITY_QUERY: Mapping[str, Mapping[str, Any]] = {
 capabilities.__dict__.update(__hq_query_fields__=CAPABILITY_QUERY)
 
 
-@_endpoint(("GET",), title="List resources", data=ResourceCatalog, codes=("invalid_input", "unknown_resource"))
+@_endpoint(
+    ("GET",), title="List resources", requires=ANYONE, data=ResourceCatalog, codes=("invalid_input", "unknown_resource")
+)
 def resources(request: APIRequest) -> HttpResponse:
     """Every readable resource, with the operations your token may use.
 
@@ -615,7 +635,9 @@ def _projection(
     # route-walking security test reads them.
     view.__name__ = name
     view.__doc__ = doc
-    served = _endpoint(("GET",), title=title, data=answers, codes=("invalid_input",), page=page)(view)
+    served = _endpoint(
+        ("GET",), title=title, requires=holding(Capability.READ), data=answers, codes=("invalid_input",), page=page
+    )(view)
     # The narrowing inputs, for the OpenAPI document's query parameters.
     served.__dict__.update(__hq_query_fields__=fields)
     return served
@@ -655,7 +677,9 @@ findings: View = _projection(
 )
 
 
-@_endpoint(("GET",), title="List connections", data=ConnectionCatalog, page="control_plane:connections")
+@_endpoint(
+    ("GET",), title="List connections", requires=ANYONE, data=ConnectionCatalog, page="control_plane:connections"
+)
 def connections(request: APIRequest) -> HttpResponse:
     """The connection contracts, and whether your token may use each.
 
@@ -676,7 +700,7 @@ def _selection(raw: str | None) -> list[str] | None:
     return [part for part in (piece.strip() for piece in raw.split(",")) if part]
 
 
-@_endpoint(("GET",), title="List a resource", data=ResourceCollection, codes=RESOURCE_CODES)
+@_endpoint(("GET",), title="List a resource", requires=READS_A_LIST, data=ResourceCollection, codes=RESOURCE_CODES)
 def resource_list(request: APIRequest, name: str) -> HttpResponse:
     """One resource's records, narrowed by the query its schema checks."""
 
@@ -699,7 +723,9 @@ type ResourceRecordAnswer = Annotated[
 ]
 
 
-@_endpoint(("GET",), title="Get a resource record", data=ResourceRecordAnswer, codes=RESOURCE_CODES)
+@_endpoint(
+    ("GET",), title="Get a resource record", requires=READS_A_RECORD, data=ResourceRecordAnswer, codes=RESOURCE_CODES
+)
 def resource_detail(request: APIRequest, name: str, identifier: str) -> HttpResponse:
     """One record of a resource, by its identifier."""
 
@@ -797,7 +823,14 @@ type CommandAnswer = Annotated[
 ]
 
 
-@_endpoint(("POST",), title="Run a capability", data=CommandAnswer, held=AwaitingApproval, codes=execute_codes(None))
+@_endpoint(
+    ("POST",),
+    title="Run a capability",
+    requires=RUNS_A_CAPABILITY,
+    data=CommandAnswer,
+    held=AwaitingApproval,
+    codes=execute_codes(None),
+)
 def execute(request: APIRequest, name: str) -> HttpResponse:
     """Run one HQ capability. A retry with the same idempotency key returns the first answer."""
 

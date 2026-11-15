@@ -836,17 +836,14 @@ class TransportTests(SentinelMixin, TestCase):
         self.assertEqual(response.json()["error"]["code"], "invalid_input")
         self.assertTrue(all(lens.name in response.json()["error"]["message"] for lens in topology_lenses()))
 
-    def test_topology_requires_read_before_deriving_any_state(self):
-        with (
-            _serving(),
-            patch("hq.platform.application.topology.connection_catalog") as catalog,
-        ):
-            response = self.client.get(
-                "/api/v2/topology/",
-                HTTP_AUTHORIZATION=f"Bearer {_token(scope='write_projects')}",
-            )
-
-        self.assertEqual(response.status_code, 403)
+    def test_a_projection_refuses_a_caller_without_read_before_it_judges_input_or_derives_state(self):
+        headers = {"HTTP_AUTHORIZATION": f"Bearer {_token(scope='write_projects')}"}
+        with _serving(), patch("hq.platform.application.topology.connection_catalog") as catalog:
+            for url in ("/api/v2/topology/", "/api/v2/topology/?lens=not-a-lens", "/api/v2/findings/?rule=not-a-rule"):
+                with self.subTest(url):
+                    response = self.client.get(url, **headers)
+                    self.assertEqual(response.status_code, 403)
+                    self.assertEqual(response.json()["error"]["code"], "insufficient_scope")
         catalog.assert_not_called()
 
     def test_no_read_serves_a_credential_a_controller_reported(self):

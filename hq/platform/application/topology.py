@@ -477,7 +477,6 @@ def derive_topology(*, principal: Principal, request: Any = None) -> Topology:
     ``request``, where there is one, says which address reached HQ.
     """
 
-    principal.require(Capability.READ)
     with projection_scope(seed=serving(request) if request is not None else None):
         return _derive(principal)
 
@@ -520,8 +519,6 @@ def relation_graph(*, principal: Principal) -> RelationGraph:
     needs: health, actions, abilities' governance, traffic and perimeter facts.
     Read once per projection, so every page section shares one derivation.
     """
-
-    principal.require(Capability.READ)
 
     def build() -> RelationGraph:
         nodes: dict[str, TopologyNode] = {}
@@ -715,7 +712,6 @@ def topology(*, principal: Principal, **narrowing: object) -> TopologyAnswer:
     choices that would.
     """
 
-    principal.require(Capability.READ)
     query = TopologyQuery.model_validate(narrowing).model_dump()
     selected: TopologyLens | None = lens_for(query["lens"]) if query["lens"] else None
     focus: str = query["focus"]

@@ -6,7 +6,7 @@ from hq.domains.reports import exports
 from hq.platform.core.audit import audit_operation, record_event
 from hq.platform.core.models import AuditLog
 
-from .security import Capability, Principal
+from .security import Principal
 from .sensitivity import safe_records
 
 # What a year summary is exported as: Markdown or JSON, by the file's own extension.
@@ -22,7 +22,6 @@ class YearSummary(TypedDict):
 
 
 def export_year_summary(year: int, output_format: ExportFormat, *, principal: Principal) -> YearSummary:
-    principal.require(Capability.READ)
     render = exports.year_summary_markdown if output_format == "md" else exports.year_summary_json
     body = render(year, documentation=safe_records())
     filename = f"year-summary-{year}.{output_format}"

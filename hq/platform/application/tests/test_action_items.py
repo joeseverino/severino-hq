@@ -384,7 +384,7 @@ class ActivityActorTests(TestCase):
         )
 
         self.assertEqual(
-            recent_activity(principal=cli_principal(), limit=1)["items"][0]["actor"],
+            recent_activity(limit=1)["items"][0]["actor"],
             "example-agent",
         )
 
@@ -392,14 +392,11 @@ class ActivityActorTests(TestCase):
         from hq.platform.core.models import AuditLog
 
         from ..dashboard import operating_snapshot
-        from ..read_models import recent_activity
-        from ..security import AuthorizationError, Capability, Principal
+        from ..security import Capability, Principal
 
         AuditLog.objects.create(action=AuditLog.Action.CREATED, object_type="Approval")
         reader = Principal("example-agent", "mcp", frozenset({Capability.READ}))
 
-        with self.assertRaises(AuthorizationError):
-            recent_activity(principal=reader)
         self.assertEqual(operating_snapshot(principal=reader)["recent_activity"], [])
         self.assertTrue(operating_snapshot(principal=cli_principal())["recent_activity"])
 

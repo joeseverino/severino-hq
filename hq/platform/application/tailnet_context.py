@@ -21,7 +21,7 @@ from .findings import estate_findings, serialize_finding
 from .policy_links import PolicyName, PolicyNames, tagged
 from .projection import complete, projection_scope
 from .routes import reverse
-from .security import Capability, Principal
+from .security import Principal
 from .tailnet import (
     NEW_DEVICES,
     RESOLVES_THROUGH,
@@ -244,7 +244,6 @@ def _sight() -> tuple[tuple[Sight, ...], str]:
 def tailnet_context(*, principal: Principal) -> TailnetContext:
     """Every fact HQ derives about the tailnet, derived once."""
 
-    principal.require(Capability.READ)
     with projection_scope():
         found = policy()
         found = replace(found, grants=grant_ports(found.grants))
