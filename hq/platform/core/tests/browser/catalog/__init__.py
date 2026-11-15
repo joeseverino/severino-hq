@@ -5,6 +5,7 @@ one entry in the module of its family under ``families/``, the prefix of its
 name (``part/``, ``table/``). A new family is a new module there and one
 import below."""
 
+import re
 from typing import override
 
 from django.template.loader import render_to_string
@@ -51,6 +52,10 @@ NAVIGATION = "partials/_page_navigation.html"
 NAME = "partials/_section_head.html"
 # The column an entry is drawn in on a page of its own.
 COLUMN = '<div class="content">{}</div>'
+# A control's autofocus, as a tag draws it. A part takes the focus of the page
+# it stands on; in the gallery that page is every part's, which the first
+# such part would scroll to on load, so the gallery draws none.
+AUTOFOCUS = re.compile(r"(<[a-zA-Z][^<>]*?)\s+autofocus(?:=(?:\"[^\"]*\"|'[^']*'|[^\s>]*))?(?=[\s/>])")
 
 
 def gallery_body() -> str:
@@ -63,7 +68,8 @@ def gallery_body() -> str:
     on its own page. Its ids, and what points at them (a label, a popover, a
     dialog, a button's form), are the part's alone there, so no example meets
     another or the page around it, and the page's scripts, which read the
-    document, never act on one."""
+    document, never act on one. Focus does cross a shadow root, so no part
+    keeps its autofocus (``AUTOFOCUS``)."""
 
     drawn: list[str] = []
     families: list[str] = []
@@ -76,7 +82,7 @@ def gallery_body() -> str:
             families.append(family)
             anchor = f' id="design-{family}"'
         heading = render_to_string(NAME, {"heading": escape(name)})
-        part = COLUMN.format(entry.part(name))
+        part = COLUMN.format(AUTOFOCUS.sub(r"\1", entry.part(name)))
         drawn.append(
             f'<div{anchor} role="region" aria-label="{escape(name)}"><div class="specimen-name">{heading}</div>'
             f'<div class="specimen"><template shadowrootmode="open">{sheets}{part}</template></div></div>'

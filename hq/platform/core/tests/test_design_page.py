@@ -85,6 +85,18 @@ class DesignPageTests(TestCase):
             [],
         )
 
+    def test_no_part_takes_the_page_s_focus(self):
+        # A part's autofocus would scroll the page to it on load, under the
+        # families' map, which stays at the top.
+        # A shadow root's markup is parsed as the page's own, as a browser
+        # parses it, rather than as a template's inert content.
+        def focused(html):
+            unwrapped = html.replace('<template shadowrootmode="open">', "")
+            return [element.tag for element in all_elements(unwrapped) if "autofocus" in element.attrs]
+
+        self.assertEqual(focused(catalog.CATALOG["form/filter-bar"].part("form/filter-bar")), ["input"])
+        self.assertEqual(focused(self.gallery), [])
+
     def test_a_signed_in_reader_is_drawn_what_the_build_drew_and_nothing_is_written(self):
         recorded = AuditLog.objects.count()
 
