@@ -1,0 +1,9 @@
+id: hand-drawn-empty-said-quietly
+valid:
+  - '{% include "partials/_empty_state.html" with message="No notes yet." %}'
+  - '{% muted element="p" %}Notes kept for a year.{% endmuted %}'
+  - '{% muted %}Nobody signed in.{% endmuted %}'
+invalid:
+  - '{% muted element="p" %}No notes yet.{% endmuted %}'
+  - '<td>{% muted %}None composed into this build{% endmuted %}</td>'
+  - '{% muted css="row-more" %}There are no rules.{% endmuted %}'

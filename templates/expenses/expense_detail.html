@@ -3,7 +3,7 @@
 <div class="section-flow">
 {% card label="Expense" %}{% facts %}
   {% fact "Cost" %}{{ expense.total_cost|money }}{% endfact %}
-  {% fact "Business use" %}{{ expense.business_use_percentage|breakable }}%{% endfact %}
+  {% fact "Business use" %}{{ expense.business_use_percentage|measured:"%" }}{% endfact %}
   {% fact "Deductible (est.)" %}{{ expense.estimated_deductible_amount|money }}{% endfact %}
   {% if expense.payment_method %}{% fact "Payment method" value=expense.get_payment_method_display %}{% endif %}
   {% if account %}{% fact "Paid from" %}{% entity account %}{% endfact %}{% endif %}

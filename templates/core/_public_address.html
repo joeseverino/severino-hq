@@ -6,25 +6,25 @@ region, found in the answer by its id.
 <div id="public-address" data-public-address data-fragment="{% url 'tool_public_address' %}" data-fragment-failure="The lookup could not be reached.">
 {% if reading %}
   {% facts %}
-    {% fact "Address" %}<code>{{ reading.address|breakable }}</code> <span class="muted">IPv{{ reading.version|breakable }}{% if reading.note %}{% dot %}{{ reading.note|breakable }}{% endif %}</span>{% endfact %}
+    {% fact "Address" %}<code>{{ reading.address|breakable }}</code> {% muted %}IPv{{ reading.version|breakable }}{% if reading.note %}{% dot %}{{ reading.note|breakable }}{% endif %}{% endmuted %}{% endfact %}
     {% if reading.hostnames %}{% fact "Reverse DNS" %}{% for hostname in reading.hostnames %}<code>{{ hostname|breakable }}</code> {% endfor %}{% endfact %}{% endif %}
     {% if reading.allocation.organization or reading.allocation.name %}
       {% fact "Allocation" %}{{ reading.allocation.organization|default:reading.allocation.name|breakable }}{% endfact %}
       {% if reading.allocation.prefixes %}
-        {% fact "Block" %}{% for prefix in reading.allocation.prefixes %}<code>{{ prefix|breakable }}</code> {% endfor %}{% if reading.allocation.country %}<span class="muted">{{ reading.allocation.country|breakable }}</span>{% endif %}{% endfact %}
+        {% fact "Block" %}{% for prefix in reading.allocation.prefixes %}<code>{{ prefix|breakable }}</code> {% endfor %}{% if reading.allocation.country %}{% muted %}{{ reading.allocation.country|breakable }}{% endmuted %}{% endif %}{% endfact %}
       {% endif %}
     {% endif %}
   {% endfacts %}
 {% elif failure %}
-  <p class="muted">{{ failure|breakable }}</p>
+  {% muted element="p" %}{{ failure|breakable }}{% endmuted %}
 {% else %}
-  <p class="muted">Not looked up yet. Looking it up asks reverse DNS and the address registry.</p>
+  {% muted element="p" %}Not looked up yet. Looking it up asks reverse DNS and the address registry.{% endmuted %}
 {% endif %}
 {% if not failure and not reading or reading.observed_at %}
   <p>
     {% url 'tool_public_address' as lookup_url %}
     {% if reading %}{% button "Look up again" lookup_url post=True name="address" value=address %}{% else %}{% button "Look up" lookup_url post=True name="address" value=address %}{% endif %}
-    {% if reading.observed_at %}<span class="muted">{% include "partials/_reading_age.html" with at=reading.observed_at only %}</span>{% endif %}
+    {% if reading.observed_at %}{% muted %}{% include "partials/_reading_age.html" with at=reading.observed_at only %}{% endmuted %}{% endif %}
   </p>
 {% endif %}
 </div>

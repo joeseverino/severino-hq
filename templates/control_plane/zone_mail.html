@@ -40,10 +40,10 @@ not designed. Adding or removing one is a record, through the domain's own
           <li>
             <code>{{ record.name|breakable }}</code>
             {% if section.null_mx %}
-              <span class="muted">Null MX: this domain receives no mail</span>
+              {% muted %}Null MX: this domain receives no mail{% endmuted %}
             {% else %}
               {% if record.priority is not None %}{% status "Priority" record.priority %}{% endif %}
-              <span class="muted">{{ record.content|breakable }}</span>
+              {% muted %}{{ record.content|breakable }}{% endmuted %}
             {% endif %}
             {% if record.resource_key %}
               {% if record.edit_url %}<a class="subtle-link" href="{{ record.edit_url|returning_to:request.get_full_path }}">Change</a>{% endif %}

@@ -37,7 +37,7 @@ The answer to the policy test. The tailnet page answers it alone as its
     one click away. It is not applied here: changing the tailnet's access
     policy is a decision, not a side effect of asking a question.
     {% endcomment %}
-    <p class="muted">Grant needed to allow it:</p>
+    {% muted element="p" %}Grant needed to allow it:{% endmuted %}
     {% table_region "Grant needed" %}
     <table class="data-table compact-table">
       <thead><tr>{% table_heading "From" "identifier" %}{% table_heading "To" "identifier" %}{% table_heading "Ports" "identifier" %}</tr></thead>

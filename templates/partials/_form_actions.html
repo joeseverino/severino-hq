@@ -22,10 +22,10 @@ the bottom of the screen once the form has changed (pages.css).
   {% endif %}
   {% if gap %}{% include "partials/_write_gap.html" with gap=gap only %}{% endif %}
   {% if cancel_url %}{% if in_place is True %}{% button "Cancel" cancel_url data_live_cancel=live|default:False data_fragment_target=True %}{% else %}{% button "Cancel" cancel_url data_live_cancel=live|default:False %}{% endif %}{% endif %}
-  {% if note %}<span class="muted form-actions-note">{{ note|breakable }}</span>{% endif %}
+  {% if note %}{% muted css="form-actions-note" %}{{ note|breakable }}{% endmuted %}{% endif %}
   {% if live %}
-    <span class="muted form-actions-note" data-fragment-status role="status"></span>
+    {% muted css="form-actions-note" data_fragment_status=True role="status" %}{% endmuted %}
   {% else %}
-    <span class="muted form-actions-note" data-submit-status hidden role="status">Working…</span>
+    {% muted css="form-actions-note" data_submit_status=True hidden=True role="status" %}Working…{% endmuted %}
   {% endif %}
 </div>

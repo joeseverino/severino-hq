@@ -7,7 +7,7 @@
       {% fact "Expires" %}{{ material.not_after|expiry }}{% endfact %}
       {% fact "Fingerprint" %}<code>{{ material.fingerprint_sha256|slice:":16"|breakable }}…</code>{% endfact %}
     {% endfacts %}
-    <p class="muted">Uploading again replaces it. The key is never shown.</p>
+    {% muted element="p" %}Uploading again replaces it. The key is never shown.{% endmuted %}
   {% endsection %}
 {% endif %}
 
@@ -24,9 +24,9 @@
   {% url 'control_plane:detail' resource.key as cancel_url %}
   {% include "partials/_form.html" with form=form verb="Upload" cancel_url=cancel_url %}
 
-  <p class="muted">
+  {% muted element="p" %}
     HQ checks that the certificate and key match and have not expired. The key
     is sealed so that only the controller that installs it can read it.
-  </p>
+  {% endmuted %}
 {% endif %}
 {% endblock %}

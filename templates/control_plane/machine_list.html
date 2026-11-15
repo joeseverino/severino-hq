@@ -7,7 +7,7 @@ one by hand would create a row that means nothing until one of those is true
 anyway, and would go on meaning nothing after it stopped being.
 {% endcomment %}
 
-{% if state_counts|length > 1 %}<p class="muted">{% for count, state in state_counts %}{{ count|breakable }} {{ state|breakable:forloop }}{% if not forloop.last %} {% endif %}{% endfor %}</p>{% endif %}
+{% if state_counts.1 %}{% muted element="p" %}{% for count, state in state_counts %}{{ count|breakable }} {{ state|breakable:forloop }}{% if not forloop.last %} {% endif %}{% endfor %}{% endmuted %}{% endif %}
 {% table_region "Machines" empty="No machines yet." remedy=page.remedy %}
   <table class="data-table">
     <thead>
@@ -24,30 +24,30 @@ anyway, and would go on meaning nothing after it stopped being.
         <tr>
           <td>
             <strong>{% entity machine.link %}</strong>{% for role in machine.roles %} {% status role.label chip=True title=role.detail %}{% endfor %}
-            {% if machine.role %}<br><span class="muted table-clamp" title="{{ machine.role }}">{{ machine.role|breakable }}</span>{% endif %}
+            {% if machine.role %}<br>{% muted css="table-clamp" title=machine.role %}{{ machine.role|breakable }}{% endmuted %}{% endif %}
           </td>
           <td>
-            {% for ref in machine.reached_by %}{% entity "connection"|entity_of:ref code=True %}{% if ref in machine.unanswered %} <span class="muted">not answering</span>{% endif %}{% if not forloop.last %}<br>{% endif %}{% empty %}{% empty_value %}{% endfor %}
+            {% for ref in machine.reached_by %}{% entity "connection"|entity_of:ref code=True %}{% if ref in machine.unanswered %} {% muted %}not answering{% endmuted %}{% endif %}{% if not forloop.last %}<br>{% endif %}{% empty %}{% empty_value %}{% endfor %}
           </td>
           <td>
             {% if machine.containers %}
               {{ machine.running|breakable }} of {{ machine.containers|length|measured:"running" }}
             {% elif not machine.containers_visible %}
-              <span class="muted" title="No connection reads containers.">Not visible</span>
+              {% muted title="No connection reads containers." %}Not visible{% endmuted %}
             {% endif %}
           </td>
           <td>
             {% if machine.runs_hq %}{{ hq_label|breakable }}{% if machine.hostnames %}<br>{% endif %}{% endif %}
             {% comment %}Two names and a count: a machine serving ten would make its row ten lines tall. Its page lists them all.{% endcomment %}
             {% for hostname in machine.hostnames|slice:":2" %}{% entity "service"|entity_of:hostname %}{% if not forloop.last %}<br>{% endif %}{% endfor %}
-            {% if machine.hostnames|length > 2 %}<br><a class="muted" href="{{ machine.link.url }}#names">+{{ machine.hostnames|length|add:"-2"|measured:"more" }}</a>{% endif %}
+            {% if machine.hostnames|length > 2 %}<br><a href="{{ machine.link.url }}#names">{% muted %}+{{ machine.hostnames|length|add:"-2"|measured:"more" }}{% endmuted %}</a>{% endif %}
           </td>
           <td>
             {% comment %}
             One state. Presence decides when the tailnet reports the machine;
             the connection that sees it is in "Read through".
             {% endcomment %}
-            {% status machine.state %}{% if machine.state_since %}<br><span class="muted cell-part">since {{ machine.state_since|breakable }}</span>{% endif %}
+            {% status machine.state %}{% if machine.state_since %}<br>{% muted css="cell-part" %}since {{ machine.state_since|breakable }}{% endmuted %}{% endif %}
           </td>
         </tr>
       {% endfor %}

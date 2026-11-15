@@ -715,14 +715,26 @@ def card_frame(name: str, given: dict) -> dict:
     return framed(name, given, CARD_ELEMENTS, "section", "card", named)
 
 
-# Words said in the muted voice: a line or a paragraph, its element a choice.
-MUTED_ELEMENTS = frozenset(("span", "p"))
+# Words said in the muted voice: a line, a paragraph, a block or a list of
+# them, its element a choice. A cell or a list item holds the tag.
+MUTED_ELEMENTS = frozenset(("span", "p", "div", "ul"))
 
 
 def muted_frame(name: str, given: dict) -> dict:
-    """Muted words' opening and closing tags."""
+    """Muted words' opening and closing tags. A ``tip`` is what a press or a
+    hover shows, as a status's tip is; ``hidden`` and ``role`` are for a line a
+    script shows and a reader hears."""
 
-    return framed(name, given, MUTED_ELEMENTS, "span", "muted", {"id": given.get("id"), "title": given.get("title")})
+    tip = given.get("tip")
+    named = {
+        "id": given.get("id"),
+        "title": given.get("title"),
+        "role": given.get("role"),
+        "hidden": True if given.get("hidden") else None,
+        "tabindex": "0" if tip else None,
+        "data-tip": tip,
+    }
+    return framed(name, given, MUTED_ELEMENTS, "span", "muted", named)
 
 
 # Words said quietly beside what they are about (a context line, a sentence
@@ -731,7 +743,7 @@ slotted(
     "muted",
     "partials/_muted.html",
     ("content",),
-    frozenset(("element", "css", "id", "title")),
+    frozenset(("element", "css", "id", "title", "tip", "hidden", "role")),
     shape=muted_frame,
 )
 

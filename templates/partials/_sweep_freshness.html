@@ -26,7 +26,7 @@ records. Each state is worded by `credential_sight.standing`: refused, unreadabl
 or out of date.
 {% endcomment %}{% if inventory %}{% if only_kind and inline %}{% for snapshot in inventory %}{% if snapshot.kind == only_kind %}{% dot %}{% if snapshot.reachable %}{% include "partials/_reading_age.html" with at=snapshot.observed_at only %}{% else %}<span title="{{ snapshot.error }}">{{ snapshot.state_label|lower|breakable }}</span>{% endif %}{% endif %}{% endfor %}
   {% elif only_kind %}
-    <p class="muted">
+    {% muted element="p" %}
       {% for snapshot in inventory %}
         {% if snapshot.kind == only_kind %}
           {% if snapshot.reachable %}
@@ -37,7 +37,7 @@ or out of date.
           {% endif %}
         {% endif %}
       {% endfor %}
-    </p>
+    {% endmuted %}
   {% else %}
     {% comment %}
     Folded, like every reference section: how old each reading is matters when

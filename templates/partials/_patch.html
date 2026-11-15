@@ -11,7 +11,7 @@ stand alone. `id` is the anchor a link to it names.
     {% button "Copy" look="compact ghost" data_copy=True %}
   </div>
   <pre tabindex="0"><code>{{ content|safe }}</code></pre>
-  {% if detail %}<p class="muted">{{ detail|safe }}</p>{% endif %}
+  {% if detail %}{% muted element="p" %}{{ detail|safe }}{% endmuted %}{% endif %}
   {% endif %}
   {% if notes %}{% stack_list %}{{ notes|safe }}{% endstack_list %}{% endif %}
 </div>

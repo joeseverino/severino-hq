@@ -20,7 +20,7 @@ agent's rule stands beneath the action it sets.
         {% for row in group.rows %}
           <tr>
             <th scope="row">{{ row.label|breakable }}{% if row.effect_label %} {% status row.effect_label tone=row.effect_tone pill=False %}{% endif %}</th>
-            <td class="muted">{{ row.default|breakable }}</td>
+            <td>{% muted %}{{ row.default|breakable }}{% endmuted %}</td>
             {% for cell in row.cells %}<td>{% include "core/_policy_setting.html" %}</td>{% endfor %}
           </tr>
         {% endfor %}

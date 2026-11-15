@@ -11,7 +11,7 @@ whole, as the last of the row's buttons.
   {% if entry.folded %}
     {% with family_row=prefix|add:"-"|add:entry.id|slugify %}{% if aside_url %}{% triage family=entry.id url=aside_url as away %}{% else %}{% triage sorts=False as away %}{% endif %}
     <tr id="{{ family_row }}" data-folds data-queue-family>
-      <td class="row-gutter"><div class="row-line"><span><strong>{{ entry.family|breakable }}</strong>&nbsp;<span class="count" data-queue-count>{{ entry.items|length }}</span></span> {% if entry.status == "serious" %}{% status entry.status|urgency tone=entry.status css="is-mark" tip=entry.status|urgency %}{% else %}{% status entry.status|urgency tone=entry.status css="is-mark visually-hidden" tip=entry.status|urgency %}{% endif %}</div><p class="muted cell-prose cell-whole" data-attention-detail>{{ entry.summary|breakable }}</p>{% include "partials/_row_fold.html" with label=entry.family only %}</td>
+      <td class="row-gutter"><div class="row-line"><span><strong>{{ entry.family|breakable }}</strong>&nbsp;<span class="count" data-queue-count>{{ entry.items|length }}</span></span> {% if entry.status == "serious" %}{% status entry.status|urgency tone=entry.status css="is-mark" tip=entry.status|urgency %}{% else %}{% status entry.status|urgency tone=entry.status css="is-mark visually-hidden" tip=entry.status|urgency %}{% endif %}</div>{% muted element="p" css="cell-prose cell-whole" data_attention_detail=True %}{{ entry.summary|breakable }}{% endmuted %}{% include "partials/_row_fold.html" with label=entry.family only %}</td>
       {% remedies entry.lead as offered %}{% row_actions offered put_away=away %}
     </tr>
     {% include "partials/_queue_rows.html" with items=entry.items folded=family_row %}

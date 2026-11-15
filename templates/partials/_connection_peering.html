@@ -56,7 +56,7 @@ internet, a lookup of the address it crosses from.
       <div data-fragment="{% url 'tool_public_address' %}?address={{ peering.address|urlencode }}"
            data-fragment-load
            data-fragment-failure="Lookup failed.">
-        <p class="muted">Loading…</p>
+        {% muted element="p" %}Loading…{% endmuted %}
       </div>
     </details>
   {% endif %}

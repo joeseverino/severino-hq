@@ -51,7 +51,7 @@ separate "Show all" under the heading reads as a control belonging to nothing.
                 {% elif cell.url %}
                   {% if cell.external %}{% entity cell.url|outside label=cell.text %}{% else %}<a href="{{ cell.url }}">{{ cell.text|breakable }}</a>{% endif %}
                 {% elif cell.muted %}
-                  <span class="muted">{{ cell.text|breakable }}</span>
+                  {% muted %}{{ cell.text|breakable }}{% endmuted %}
                 {% else %}
                   {{ cell.text|breakable }}
                 {% endif %}

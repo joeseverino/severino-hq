@@ -1,0 +1,17 @@
+# An empty line is the empty state part, or a section's {% empty %}, also
+# when it is said in the muted voice by the muted tag: the twin of
+# hand-drawn-empty-line, which reads the class written by hand. It is read by
+# its opening words, No, Nothing, None or There is no. No fix: the words may
+# hold values.
+id: hand-drawn-empty-said-quietly
+language: html
+severity: error
+message: An empty line drawn by hand, where the empty state part draws it.
+note: Write {% include "partials/_empty_state.html" with message="..." %}, or a {% section %}'s {% empty %}.
+files:
+  - "**/templates/**/*.html"
+rule:
+  kind: text
+  regex: '\{%\s*muted\b[^%]*%\}\s*(?:No|Nothing|None|There (?:is|are) no)\b'
+  not:
+    regex: '\{%\s*(?:end)?comment\b|\{#|#\}'

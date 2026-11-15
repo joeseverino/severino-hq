@@ -57,7 +57,7 @@ reading; nothing here calls GitHub.
         {% if repo.unrequired_checks %}<br>{% status "Run on pull requests but not required:" repo.unrequired_checks|join:", " tone="attention" pill=False %}{% endif %}
       {% endfact %}
     {% elif "branch_rules" in repo.refused %}
-      {% fact "Changes to "|add:repo.default_branch %}<span class="muted">GitHub does not offer branch rules for this repository's plan.</span>{% endfact %}
+      {% fact "Changes to "|add:repo.default_branch %}{% muted %}GitHub does not offer branch rules for this repository's plan.{% endmuted %}{% endfact %}
     {% endif %}
     {% if environment %}
       {% fact "Deploy rules" %}{% if environment.reviewers %}Approval from {{ environment.reviewers|join:", "|breakable }}{% else %}No approval{% endif %}{% if environment.wait_minutes %}, then a {{ environment.wait_minutes|counted:"minute" }} wait{% endif %}{% if environment.branches == "protected" %}, protected branches only{% elif environment.branches != "any" %}, chosen branches only{% endif %}{% endfact %}

@@ -9,7 +9,7 @@ heading links to. An unread check says what would read it.
   {% steps %}
     {% for result in posture.results %}
       {% step icon=result.icon tone=result.tone title=result.met|then:result.check.holds %}
-        <strong>{{ result.check.label|breakable }}</strong> <span class="muted">{% if result.reading.evidence %}{% if result.reading.fix %}{{ result.reading.evidence|breakable:":" }} {% if result.reading.fix_url %}<a href="{{ result.reading.fix_url }}">{{ result.reading.fix|breakable:"." }}</a>{% else %}{{ result.reading.fix|breakable:"." }}{% endif %}{% else %}{{ result.reading.evidence|breakable:"." }}{% endif %} {% endif %}Stops {{ result.check.why|breakable:"." }}</span>{% endstep %}
+        <strong>{{ result.check.label|breakable }}</strong> {% muted %}{% if result.reading.evidence %}{% if result.reading.fix %}{{ result.reading.evidence|breakable:":" }} {% if result.reading.fix_url %}<a href="{{ result.reading.fix_url }}">{{ result.reading.fix|breakable:"." }}</a>{% else %}{{ result.reading.fix|breakable:"." }}{% endif %}{% else %}{{ result.reading.evidence|breakable:"." }}{% endif %} {% endif %}Stops {{ result.check.why|breakable:"." }}{% endmuted %}{% endstep %}
     {% endfor %}
   {% endsteps %}
 {% aside %}<span class="count prose">{{ posture.count_line|breakable }}{% if guide %}{% dot %}{% entity guide|outside label="Checks guide" %}{% endif %}</span>

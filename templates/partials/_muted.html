@@ -2,9 +2,11 @@
 Words in the muted voice, drawn by {% muted %}:
 {% muted %}since the last read{% endmuted %} beside a value, or
 {% muted element="p" %}A sentence under it.{% endmuted %} as a paragraph of its own.
-A line among other words by default; element= "p" makes it a paragraph. css adds
+A line among other words by default; element= "p" makes it a paragraph, "div" a
+block and "ul" a list of its items. A cell or a list item holds the tag. css adds
 the classes of where it stands (narrow-more, row-more, cell-part), id and title
-are its attributes, and each data_* option is a data- attribute. The tags are
-built by value_tags.muted_frame.
+are its attributes, tip is what a press or a hover shows, hidden and role are
+for a line a script shows, and each data_* option is a data- attribute. The tags
+are built by value_tags.muted_frame.
 {% endcomment %}
 {{ opening|safe }}{{ content|safe }}{{ closing|safe }}

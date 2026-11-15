@@ -1,0 +1,13 @@
+id: muted-said-by-muted-tag
+valid:
+  - '{% muted %}since the last read{% endmuted %}'
+  - '{% muted element="p" css="narrow-more" %}A sentence.{% endmuted %}'
+  - '<td>{% muted %}none{% endmuted %}</td>'
+  - '<span class="muted-chip">a</span>'
+  - '<span class="code-muted">a</span>'
+invalid:
+  - '<span class="muted">since the last read</span>'
+  - '<p class="muted narrow-more">A sentence.</p>'
+  - '<td class="date-col muted">1 May</td>'
+  - '<span class="{% if quiet %}muted{% endif %}">a</span>'
+  - '<span class="cell-part {% if quiet %}row-more{% else %}muted{% endif %}">a</span>'

@@ -76,12 +76,12 @@ it is not blocked, since removal never lifts a block.
           <tr data-agent="{{ standing.subject }}" data-client="{{ identity.client_id }}"{% if identity.blocked_at %} data-blocked{% endif %}>
             <th scope="row">
               <code>{{ identity.client_id|breakable }}</code>{% if identity.blocked_at %} {% status "Blocked" tone="attention" %}{% endif %}
-              <ul class="dot-list muted">
+              {% muted element="ul" css="dot-list" %}
                 {% if identity.person %}<li data-person>For {{ identity.person.get_username|breakable:"," }} {% if standing.role %}{{ standing.role_label|lower|breakable }}{% else %}no role{% endif %}</li>{% endif %}
                 {% if identity.signs_in and not identity.person %}<li>Signs in {{ identity.get_signs_in_display|lower|breakable }}</li>{% endif %}
                 {% if identity.interfaces %}<li>Over {{ identity.interfaces|interface_label|breakable }}</li>{% endif %}
                 {% if standing.devices %}<li><a href="#devices-{{ identity.pk }}">From {{ standing.devices|length|counted:"device" }}</a></li>{% endif %}
-              </ul>
+              {% endmuted %}
               <div class="row-below">
                 {% if identity.blocked_at %}<p>Blocked {{ identity.blocked_at|when:"ago" }}{% if identity.blocked_by %} by {{ identity.blocked_by.get_username|breakable:"." }}{% else %}.{% endif %}</p>{% endif %}
                 {% if identity.person %}{% if standing.acts_for_nobody %}<p data-role="none">{{ identity.person.get_username|breakable }} holds no role, so its calls are refused.</p>{% else %}<p data-role="{{ standing.role }}">Role confirmed {{ standing.role_confirmed|when:"ago" }}.</p>{% endif %}{% endif %}
@@ -91,12 +91,12 @@ it is not blocked, since removal never lifts a block.
                 {% if standing.missing %}<p data-missing>Not granted: {% for name in standing.missing %}<code>{{ name|breakable }}</code> {% endfor %}</p><p data-missing>Grant {% if standing.missing|length == 1 %}it{% else %}them{% endif %} to <code>{{ identity.client_id|breakable }}</code> in your sign-in service, then sign it in again. {% entity client_setup|outside label="Client setup" %}</p>{% endif %}
               </div>
             </th>
-            <td data-sort="{{ standing.in_force|length }}">{{ standing.in_force|length|breakable }} of {{ identity.granted|length|breakable }}{% if standing.beyond_role %}<br><span class="muted">{{ standing.beyond_role|length|breakable }} beyond its person's role</span>{% endif %}{% if standing.missing %}<br>{% status standing.missing|length "not granted" tone="attention" pill=False %}{% endif %}</td>
+            <td data-sort="{{ standing.in_force|length }}">{{ standing.in_force|length|breakable }} of {{ identity.granted|length|breakable }}{% if standing.beyond_role %}<br>{% muted %}{{ standing.beyond_role|length|breakable }} beyond its person's role{% endmuted %}{% endif %}{% if standing.missing %}<br>{% status standing.missing|length "not granted" tone="attention" pill=False %}{% endif %}</td>
             <td>{{ identity.last_seen|when:"ago" }}</td>
             <td data-sort="{{ activity.changes }}">
               {{ activity.changes|counted:"change" }}
-              {% if activity.refused %}<br>{% status activity.refused|measured:"refused" tone="attention" pill=False %}{% if activity.limited == activity.refused %} <span class="muted">for calling too much</span>{% elif activity.limited %} <span class="muted">{{ activity.limited|breakable }} for calling too much</span>{% endif %}{% endif %}
-              {% with streams=standing.streams %}{% if streams.full %}<br>{% status streams.open "of" streams.cap|counted:"stream" "open" tone="attention" pill=False data_streams="full" %} <span class="muted">so another is refused</span>{% endif %}{% endwith %}
+              {% if activity.refused %}<br>{% status activity.refused|measured:"refused" tone="attention" pill=False %}{% if activity.limited == activity.refused %} {% muted %}for calling too much{% endmuted %}{% elif activity.limited %} {% muted %}{{ activity.limited|breakable }} for calling too much{% endmuted %}{% endif %}{% endif %}
+              {% with streams=standing.streams %}{% if streams.full %}<br>{% status streams.open "of" streams.cap|counted:"stream" "open" tone="attention" pill=False data_streams="full" %} {% muted %}so another is refused{% endmuted %}{% endif %}{% endwith %}
             </td>
             {% row_actions actions %}
           </tr>
@@ -113,7 +113,7 @@ is there, so a call no device sent is refused; or, with no socket, nowhere,
 and the client is the finest unit (agent_devices.placement_posture).
 {% endcomment %}
 {% if not placement %}
-  <p class="muted" data-placement="none">Calls aren't tied to a device: HQ has no tailscaled socket.</p>
+  {% muted element="p" data_placement="none" %}Calls aren't tied to a device: HQ has no tailscaled socket.{% endmuted %}
 {% endif %}
 {% endsection %}
 {% endwith %}{% endwith %}
@@ -134,12 +134,12 @@ this links to it only for how a provider's permission list is written.
 {% endcomment %}
 {% section "Setup" fold=True id="setup" open=setup_open %}
   {% steps %}
-    {% step icon="card" %}<strong>Public client</strong> <span class="muted">Register one public client per agent, with PKCE.</span>{% endstep %}
-    {% step icon="shield" %}<strong>Who signs in</strong> <span class="muted">Set the user groups allowed to sign it in.</span>{% endstep %}
-    {% step icon="lock" %}<strong>Permissions</strong> <span class="muted">Grant all {{ offered|counted:"permission" }} HQ offers, then narrow each agent with the rules below. {% entity client_setup|outside label="Client setup" %}</span>{% endstep %}
-    {% step icon="clock" %}<strong>Token life</strong> <span class="muted">Set its access token life to about an hour.</span>{% endstep %}
-    {% step icon="laptop" %}<strong>First sign-in</strong> <span class="muted">Sign it in once in a browser, then approve each device it calls from.</span>{% endstep %}
-    {% step icon="server" %}<strong>Unattended agents</strong> <span class="muted">Sign it in with a federated client assertion, granted only what its work needs.</span>{% endstep %}
+    {% step icon="card" %}<strong>Public client</strong> {% muted %}Register one public client per agent, with PKCE.{% endmuted %}{% endstep %}
+    {% step icon="shield" %}<strong>Who signs in</strong> {% muted %}Set the user groups allowed to sign it in.{% endmuted %}{% endstep %}
+    {% step icon="lock" %}<strong>Permissions</strong> {% muted %}Grant all {{ offered|counted:"permission" }} HQ offers, then narrow each agent with the rules below. {% entity client_setup|outside label="Client setup" %}{% endmuted %}{% endstep %}
+    {% step icon="clock" %}<strong>Token life</strong> {% muted %}Set its access token life to about an hour.{% endmuted %}{% endstep %}
+    {% step icon="laptop" %}<strong>First sign-in</strong> {% muted %}Sign it in once in a browser, then approve each device it calls from.{% endmuted %}{% endstep %}
+    {% step icon="server" %}<strong>Unattended agents</strong> {% muted %}Sign it in with a federated client assertion, granted only what its work needs.{% endmuted %}{% endstep %}
   {% endsteps %}
 {% endsection %}
 
@@ -171,10 +171,10 @@ approved, and a block stops that device alone.
             <tr id="{{ device.anchor }}" data-device-standing="{{ device.standing }}">
               <th scope="row">
                 {{ device.name|breakable }}
-                <ul class="dot-list muted">
+                {% muted element="ul" css="dot-list" %}
                   {% if device.os %}<li>{{ device.os|breakable }}</li>{% endif %}
                   {% if device.owner %}<li data-owner>Owned by {{ device.owner|breakable }}</li>{% elif device.record %}<li>Tagged</li>{% else %}<li data-unplaced>Not on the tailnet, so its calls are refused</li>{% endif %}
-                </ul>
+                {% endmuted %}
                 {% with record=device.record %}{% if record %}
                 <div class="row-below">
                     {% if record.person %}<p>Calls for {{ record.person.get_username|breakable:"," }} who approves it.</p>
@@ -184,7 +184,7 @@ approved, and a block stops that device alone.
                 </div>
                 {% endif %}{% endwith %}
               </th>
-              <td>{% status device.label tone=device.tone %}{% if device.waits_for %}<br><span class="muted">For {{ device.waits_for|breakable }}</span>{% endif %}</td>
+              <td>{% status device.label tone=device.tone %}{% if device.waits_for %}<br>{% muted %}For {{ device.waits_for|breakable }}{% endmuted %}{% endif %}</td>
               <td>{{ device.first_seen|when:"ago" }}</td>
               <td>{{ device.last_seen|when:"ago" }}</td>
               <td data-sort="{{ device.calls }}">{{ device.calls|counted:"call" }}{% if device.refused %}<br>{% status device.refused|measured:"refused" tone="attention" pill=False %}{% endif %}</td>
@@ -261,7 +261,7 @@ change. Asked for when opened: asking takes the server's SDK into the process.
             {% for item in offer.items %}
               <tr>
                 <th scope="row">
-                  <code>{{ item.name|breakable }}</code>{% if item.reads_only %}<br><span class="muted">Reads only</span>{% endif %}
+                  <code>{{ item.name|breakable }}</code>{% if item.reads_only %}<br>{% muted %}Reads only{% endmuted %}{% endif %}
                   {% for paragraph in item.more %}<p class="row-below">{{ paragraph|code_spans }}</p>{% endfor %}
                 </th>
                 <td class="cell-data">{% if item.title %}<strong>{{ item.title|breakable }}</strong> {% endif %}{{ item.summary|code_spans }}</td>
@@ -272,7 +272,7 @@ change. Asked for when opened: asking takes the server's SDK into the process.
       </table>
     {% endtable_region %}
   {% else %}
-    <p class="muted">Off: agents cannot connect until HQ's settings name the address their tokens are issued for.</p>
+    {% muted element="p" %}Off: agents cannot connect until HQ's settings name the address their tokens are issued for.{% endmuted %}
   {% endif %}
 </div>
 {% endpartialdef %}
@@ -281,7 +281,7 @@ change. Asked for when opened: asking takes the server's SDK into the process.
     {% partial mcp_endpoint %}
   {% else %}
     <div id="mcp-endpoint" data-fragment="" data-fragment-name="mcp_endpoint" data-fragment-load data-fragment-failure="HQ could not ask its MCP server." data-fragment-fallback="?endpoint=1#mcp">
-      <p class="muted">Asked of HQ's MCP server when you open this. <a href="?endpoint=1#mcp">Ask now</a></p>
+      {% muted element="p" %}Asked of HQ's MCP server when you open this. <a href="?endpoint=1#mcp">Ask now</a>{% endmuted %}
     </div>
   {% endif %}
 {% endsection %}

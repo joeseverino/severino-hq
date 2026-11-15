@@ -25,7 +25,7 @@ connected is in one place.
                 <p>Give it these permissions, and no others:</p>
                 <p><span class="code-list">{% for permission in setup.permissions %}<code>{{ permission|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</span></p>
               {% elif setup.credential == "coarse" %}
-                <p class="muted">This is the whole account: {{ setup.label|breakable }} offers nothing narrower, so make it for HQ alone.</p>
+                {% muted element="p" %}This is the whole account: {{ setup.label|breakable }} offers nothing narrower, so make it for HQ alone.{% endmuted %}
               {% endif %}
               {% if setup.mint %}
                 <p>Or have the script issue one with exactly these:</p>
@@ -42,8 +42,8 @@ connected is in one place.
                     {% for field in setup.fields %}
                       <tr>
                         <td><code>{{ field.name|breakable }}</code></td>
-                        <td>{% if field.value %}<code>{{ field.value|breakable }}</code>{% elif field.secret %}<span class="muted">the secret</span>{% else %}<span class="muted">yours</span>{% endif %}</td>
-                        <td class="optional-col muted">{{ field.note|breakable }}</td>
+                        <td>{% if field.value %}<code>{{ field.value|breakable }}</code>{% elif field.secret %}{% muted %}the secret{% endmuted %}{% else %}{% muted %}yours{% endmuted %}{% endif %}</td>
+                        <td class="optional-col">{% muted %}{{ field.note|breakable }}{% endmuted %}</td>
                       </tr>
                     {% endfor %}
                   </tbody>
@@ -60,7 +60,7 @@ connected is in one place.
     {% endfor %}
     {% for group in others %}
       {% section group.spec.label %}
-        <p class="muted">{{ group.spec.empty_message|breakable }}</p>
+        {% muted element="p" %}{{ group.spec.empty_message|breakable }}{% endmuted %}
       {% aside %}{% if group.spec.setup_route %}<a href="{% url group.spec.setup_route %}">Connect</a>{% elif group.spec.documentation_url %}{% entity group.spec.documentation_url|outside label="Docs" %}{% endif %}
       {% endsection %}
     {% endfor %}

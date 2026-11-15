@@ -24,21 +24,21 @@ wider, the Action column says it.
   {% elif row.burst %}
     {% with first=row.burst.0 %}
     <td class="cell-data">{% include "partials/_row_fold.html" with label=row.title only %}<strong>{% if row.url %}<a href="{{ row.url }}">{{ row.title|breakable }}</a>{% else %}{{ row.title|breakable }}{% endif %}</strong></td>
-    <td class="muted date-col">{{ row.at|when:"clock" }}</td>
+    <td class="date-col">{% muted %}{{ row.at|when:"clock" }}{% endmuted %}</td>
     {% if not hide_who %}<td>{{ first.actor|breakable }}</td>{% endif %}
     <td>{% status first.source %}</td>
-    <td class="muted cell-data">{{ first.detail|breakable }}</td>
+    <td class="cell-data">{% muted %}{{ first.detail|breakable }}{% endmuted %}</td>
     {% endwith %}
   {% elif row.moment %}
     <td class="cell-data"><strong>{% if row.moment.external %}{% entity row.moment.url|outside label=row.moment.title %}{% elif row.url %}<a href="{{ row.url }}">{{ row.moment.title|breakable }}</a>{% else %}{{ row.moment.title|breakable }}{% endif %}</strong></td>
-    <td class="muted date-col">{{ row.at|when:"clock" }}</td>
+    <td class="date-col">{% muted %}{{ row.at|when:"clock" }}{% endmuted %}</td>
     {% if not hide_who %}<td>{{ row.moment.actor|breakable }}</td>{% endif %}
     <td>{% status row.moment.source %}</td>
-    <td class="muted cell-data">{{ row.moment.detail|breakable }}</td>
+    <td class="cell-data">{% muted %}{{ row.moment.detail|breakable }}{% endmuted %}</td>
   {% else %}
-    <td>{% if row.grouped %}{% include "partials/_row_fold.html" with label=row.title only %}{% endif %}<a href="{{ row.url }}"><strong>{% if row.head %}{{ row.title|readout }}{% else %}{{ row.named.0|readout }}{{ row.named.1|breakable }}{% endif %}</strong></a>{% if row.grouped and row.head %} <span class="count">{{ row.total|breakable }}</span>{% endif %}{% if row.type_label %}<br><span class="muted">{{ row.type_label|breakable }}<span class="narrow-only">{% dot %}{{ row.action_label|breakable }}</span></span>{% else %}<span class="narrow-only"><br><span class="muted">{{ row.action_label|breakable }}</span></span>{% endif %}</td>
-    <td class="muted date-col">{{ row.at|when:"clock" }}</td>
+    <td>{% if row.grouped %}{% include "partials/_row_fold.html" with label=row.title only %}{% endif %}<a href="{{ row.url }}"><strong>{% if row.head %}{{ row.title|readout }}{% else %}{{ row.named.0|readout }}{{ row.named.1|breakable }}{% endif %}</strong></a>{% if row.grouped and row.head %} <span class="count">{{ row.total|breakable }}</span>{% endif %}{% if row.type_label %}<br>{% muted %}{{ row.type_label|breakable }}<span class="narrow-only">{% dot %}{{ row.action_label|breakable }}</span>{% endmuted %}{% else %}<span class="narrow-only"><br>{% muted %}{{ row.action_label|breakable }}{% endmuted %}</span>{% endif %}</td>
+    <td class="date-col">{% muted %}{{ row.at|when:"clock" }}{% endmuted %}</td>
     {% if not hide_who %}<td>{% cell_line row.who.words %}</td>{% endif %}
     <td>{% status row.state %}</td>
-    <td class="muted cell-data">{% if row.message %}{{ row.message|breakable }}{% endif %}</td>
+    <td class="cell-data">{% muted %}{% if row.message %}{{ row.message|breakable }}{% endif %}{% endmuted %}</td>
   {% endif %}

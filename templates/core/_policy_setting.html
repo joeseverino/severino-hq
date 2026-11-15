@@ -1,5 +1,5 @@
 {% if cell.unavailable %}
-  <span class="muted nowrap" data-unavailable>{{ cell.unavailable|breakable }}</span>
+  {% muted css="nowrap" data_unavailable=True %}{{ cell.unavailable|breakable }}{% endmuted %}
 {% else %}
   {% select cell.field cell.options chosen=cell.rule label=cell.label tone=cell.tone %}
 {% endif %}

@@ -46,12 +46,12 @@ is open.
   {% include "control_plane/_service_parts.html" %}
 {% empty %}
   {% if declared_parts %}{% with parts=declared_parts %}{% include "control_plane/_service_parts.html" %}{% endwith %}{% endif %}
-  <p class="muted">{% for gap in service.path.gaps %}{{ gap|capfirst|breakable }}{% if not forloop.last %}{% dot %}{% endif %}{% endfor %}</p>
+  {% muted element="p" %}{% for gap in service.path.gaps %}{{ gap|capfirst|breakable }}{% if not forloop.last %}{% dot %}{% endif %}{% endfor %}{% endmuted %}
   {% for hop in service.path.observed %}
-    <p>{{ hop.phrase|breakable:":" }} {% entity hop.link %}{% if hop.source %}<span class="muted">{% dot %}{{ hop.source.phrase|breakable }}{% if hop.source.observed_at %}{% dot %}{% include "partials/_reading_age.html" with at=hop.source.observed_at only %}{% endif %}</span>{% endif %}</p>
+    <p>{{ hop.phrase|breakable:":" }} {% entity hop.link %}{% if hop.source %}{% muted %}{% dot %}{{ hop.source.phrase|breakable }}{% if hop.source.observed_at %}{% dot %}{% include "partials/_reading_age.html" with at=hop.source.observed_at only %}{% endif %}{% endmuted %}{% endif %}</p>
   {% endfor %}
 {% endfor %}
-{% aside %}<span class="muted">{% if routes|length == 1 %}via {{ routes.0.via_phrase|breakable:"·" }}{% endif %}{% status exposure.label tone=exposure.tone pill=False data_exposure=exposure.level %}{% if exposure.worst.path_gates %}{% dot %}login only at {% for path in exposure.worst.path_gates %}<code>{{ path|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endif %}</span>{% if topology_url %} {% button "View on map" topology_url look="ghost compact" %}{% endif %}
+{% aside %}{% muted %}{% if routes|length == 1 %}via {{ routes.0.via_phrase|breakable:"·" }}{% endif %}{% status exposure.label tone=exposure.tone pill=False data_exposure=exposure.level %}{% if exposure.worst.path_gates %}{% dot %}login only at {% for path in exposure.worst.path_gates %}<code>{{ path|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endif %}{% endmuted %}{% if topology_url %} {% button "View on map" topology_url look="ghost compact" %}{% endif %}
 {% endsection %}
 
 {% if missing_facets or service.origin.parked or service.origin and not service.origin.external and not service.origin.known %}
@@ -209,13 +209,13 @@ card can say them: the name points at a documentation address where nothing
 answers, or at an address no known machine holds.
 {% endcomment %}
 {% if service.origin.parked and not service.provider_answers %}
-  <p class="muted">Parked. The name resolves to <code>{{ service.origin.address|breakable:"," }}</code> where nothing answers.</p>
+  {% muted element="p" %}Parked. The name resolves to <code>{{ service.origin.address|breakable:"," }}</code> where nothing answers.{% endmuted %}
 {% elif service.origin and not service.origin.external and not service.origin.known %}
-  <p class="muted">
+  {% muted element="p" %}
     {% if service.origin.routed %}The proxy forwards to{% else %}The name resolves to{% endif %}
     <code>{{ service.origin.address|breakable:"," }}</code> which <strong>matches no known machine</strong>.
     If it belongs to one, add it to that machine's addresses.
-  </p>
+  {% endmuted %}
 {% endif %}
 {% endsection %}
 {% endif %}
@@ -263,7 +263,7 @@ it is not what anyone opens this page to read.
         </tbody>
       </table>
     {% endtable_region %}
-{% aside %}<span class="muted">{{ service.alias_summary|breakable }}</span>
+{% aside %}{% muted %}{{ service.alias_summary|breakable }}{% endmuted %}
 {% endsection %}
 {% endif %}
 {% endblock %}

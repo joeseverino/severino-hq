@@ -1,0 +1,9 @@
+id: missing-value-marked-by-its-filter
+valid:
+  - '<td>{{ row.total_cost|money }}</td>'
+  - '<td>{% if rule.line %}line {{ rule.line|breakable }}{% else %}{% empty_value %}{% endif %}</td>'
+  - '<td>{% if row.read %}{{ row.records|breakable }}{% else %}{% empty_value %}{% endif %}</td>'
+invalid:
+  - '<td>{% if row.total_cost %}{{ row.total_cost|money }}{% else %}{% empty_value %}{% endif %}</td>'
+  - '<td>{% if job.last_run %}{{ job.last_run|when:"ago" }}{% else %}{% empty_value %}{% endif %}</td>'
+  - '<td>{% if row.duration %}{{ row.duration|seconds }}{% else %}{% empty_value %}{% endif %}</td>'

@@ -28,7 +28,7 @@ the fragment `group`. Scripts and tests find each piece by its
 {% partialdef results %}
 <div class="command-center-results" data-command-center-results data-fragment="{% url 'search' %}" data-fragment-name="palette" data-fragment-failure="Could not load results. Press Enter to search." aria-live="polite">
   {% if loading %}
-    <p class="command-center-loading muted">Loading…</p>
+    {% muted element="p" css="command-center-loading" %}Loading…{% endmuted %}
   {% elif palette_estate or palette_groups or palette_search_groups %}
     <div id="command-center-options" class="command-center-options" role="listbox" aria-label="Results">
       {% for group in palette_estate %}{% partial group %}{% endfor %}
@@ -45,7 +45,7 @@ the fragment `group`. Scripts and tests find each piece by its
                   <strong>{{ item.title|breakable }}</strong>
                   {% if item.badge %}<code>{{ item.badge|breakable }}</code>{% endif %}
                 </span>
-                {% if item.snippet %}<span class="muted">{% for text, hit in item.snippet %}{{ text|breakable }}{% endfor %}</span>{% endif %}
+                {% if item.snippet %}{% muted %}{% for text, hit in item.snippet %}{{ text|breakable }}{% endfor %}{% endmuted %}{% endif %}
               </span>
               <span class="command-center-evidence">
                 {% if item.timestamp %}<span class="command-center-destination">{{ item.timestamp|when }}</span>{% endif %}
@@ -58,12 +58,12 @@ the fragment `group`. Scripts and tests find each piece by its
       {% for group in palette_groups %}{% partial group %}{% endfor %}
     </div>
     {% if palette_total > palette_count %}
-      <p class="command-center-more muted">Showing {{ palette_count|breakable }} of {{ palette_total|counted:"match" }}. Press Enter to search all of HQ.</p>
+      {% muted element="p" css="command-center-more" %}Showing {{ palette_count|breakable }} of {{ palette_total|counted:"match" }}. Press Enter to search all of HQ.{% endmuted %}
     {% endif %}
   {% elif q %}
     <div class="command-center-empty">
       <strong>No page or command called “{{ q|breakable }}”.</strong>
-      <span class="muted">Press Enter to search everything.</span>
+      {% muted %}Press Enter to search everything.{% endmuted %}
     </div>
   {% else %}
     <div class="command-center-empty">
@@ -87,7 +87,7 @@ label and never a heading, which a listbox would not expose.
        aria-selected="false" tabindex="-1" data-command-center-option>
       <span class="command-center-copy">
         <span class="command-center-title"><strong>{{ item.label|breakable }}</strong></span>
-        {% if item.summary and group.key != "resources" %}<span class="muted">{{ item.summary|breakable }}</span>{% endif %}
+        {% if item.summary and group.key != "resources" %}{% muted %}{{ item.summary|breakable }}{% endmuted %}{% endif %}
       </span>
       <span class="command-center-evidence">
         {% if item.destination_label %}<span class="command-center-destination">{{ item.destination_label|breakable }}</span>{% endif %}

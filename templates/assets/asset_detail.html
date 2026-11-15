@@ -8,10 +8,10 @@
   {% fact "Purchased" %}{{ asset.purchase_date|when }}{% endfact %}
   {% if asset.total_cost %}
     {% fact "Cost" %}{{ asset.total_cost|money }}{% endfact %}
-    {% fact "Business use" %}{{ asset.business_use_percentage|breakable }}%{% endfact %}
+    {% fact "Business use" %}{{ asset.business_use_percentage|measured:"%" }}{% endfact %}
     {% fact "Deductible (est.)" %}{{ asset.estimated_deductible_amount|money }}{% endfact %}
   {% else %}
-    {% fact "Cost" %}<span class="muted">Not recorded</span>{% endfact %}
+    {% fact "Cost" %}{% muted %}Not recorded{% endmuted %}{% endfact %}
   {% endif %}
   {% if asset.payment_method %}{% fact "Payment method" value=asset.get_payment_method_display %}{% endif %}
   {% if asset.serial_number %}{% fact "Serial" %}<code>{{ asset.serial_number|breakable }}</code>{% endfact %}{% endif %}

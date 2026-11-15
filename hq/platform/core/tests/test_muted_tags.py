@@ -29,6 +29,25 @@ class MutedTests(SimpleTestCase):
         self.assertEqual(part.attrs.get("title"), "Example")
         self.assertEqual([found.attrs["data-tip"] for found in select(shown, "data-tip")], ["Why"])
 
+    def test_a_tip_is_reached_by_a_press_and_a_scripted_line_waits_hidden(self):
+        tipped = drawn("{% muted tip=note %}pinned{% endmuted %}", note="sha256:example")
+        waiting = drawn('{% muted hidden=True role="status" data_submit_status=True %}Working{% endmuted %}')
+
+        (tip,) = with_class(tipped, "muted")
+        self.assertEqual((tip.attrs.get("data-tip"), tip.attrs.get("tabindex")), ("sha256:example", "0"))
+        (line,) = with_class(waiting, "muted")
+        self.assertIn("hidden", line.attrs)
+        self.assertEqual(line.attrs.get("role"), "status")
+        self.assertEqual(len(select(waiting, "data-submit-status")), 1)
+
+    def test_a_block_or_a_list_of_words_is_muted_whole(self):
+        listed = drawn('{% muted element="ul" css="dot-list" %}<li>a</li><li>b</li>{% endmuted %}')
+        block = drawn('{% muted element="div" %}A description.{% endmuted %}')
+
+        self.assertEqual([part.tag for part in with_class(listed, "muted")], ["ul"])
+        self.assertEqual(len(elements(listed, "li")), 2)
+        self.assertEqual([part.tag for part in with_class(block, "muted")], ["div"])
+
     def test_the_words_are_escaped_as_the_page_writes_them(self):
         shown = drawn("{% muted %}{{ words }}{% endmuted %}", words="<b>x</b>")
 
@@ -37,7 +56,7 @@ class MutedTests(SimpleTestCase):
 
     def test_an_element_or_option_it_does_not_take_is_refused(self):
         for source in (
-            '{% muted element="div" %}x{% endmuted %}',
+            '{% muted element="td" %}x{% endmuted %}',
             '{% muted tone="good" %}x{% endmuted %}',
         ):
             with self.subTest(source=source), self.assertRaises(TemplateSyntaxError):

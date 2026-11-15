@@ -13,7 +13,7 @@ summary it is a span, as a summary holds only phrasing content.
 {% endcomment %}
 {% with level=level|default:2 %}
 {% if toggle %}<summary class="section-head">{% elif caption %}<figcaption class="section-head">{% else %}<header class="section-head">{% endif %}
-  {% if lede %}<hgroup>{% endif %}<h{{ level }}{% if id %} id="{{ id }}"{% endif %}>{{ heading|safe }}{% if moment %}{% if heading %} <span class="muted">{{ moment|when:when }}</span>{% else %}{{ moment|when:when }}{% endif %}{% endif %}{% if count is not None and count != "" %} <span class="count">{{ count|breakable }}</span>{% endif %}</h{{ level }}>{% if lede %}<p class="section-lede">{{ lede|breakable }}</p></hgroup>{% endif %}
+  {% if lede %}<hgroup>{% endif %}<h{{ level }}{% if id %} id="{{ id }}"{% endif %}>{{ heading|safe }}{% if moment %}{% if heading %} {% muted %}{{ moment|when:when }}{% endmuted %}{% else %}{{ moment|when:when }}{% endif %}{% endif %}{% if count is not None and count != "" %} <span class="count">{{ count|breakable }}</span>{% endif %}</h{{ level }}>{% if lede %}<p class="section-lede">{{ lede|breakable }}</p></hgroup>{% endif %}
   {% if aside %}{% if toggle %}<span class="section-aside">{{ aside|safe }}</span>{% else %}<div class="section-aside">{{ aside|safe }}</div>{% endif %}{% endif %}
 {% if toggle %}</summary>{% elif caption %}</figcaption>{% else %}</header>{% endif %}
 {% endwith %}

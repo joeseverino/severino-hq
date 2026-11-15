@@ -29,7 +29,7 @@
           {% if metric.percent is None %}
             {% fact label value="" detail="Not enough visits to measure" %}
           {% else %}
-            {% fact label tone=metric.passing|yesno:"good,attention" %}{{ metric.percent|floatformat:"-1" }}%{% detail %}{{ metric.good|breakable }} of {{ metric.total|measured:"good" }}{% endfact %}
+            {% fact label tone=metric.passing|yesno:"good,attention" %}{{ metric.percent|measured:"%,-1" }}{% detail %}{{ metric.good|breakable }} of {{ metric.total|measured:"good" }}{% endfact %}
           {% endif %}
         {% endfor %}
       {% endfacts %}

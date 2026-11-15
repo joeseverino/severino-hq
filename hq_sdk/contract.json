@@ -3592,7 +3592,10 @@
           "*",
           "css=",
           "element=",
+          "hidden=",
           "id=",
+          "role=",
+          "tip=",
           "title=",
           "**data"
         ],

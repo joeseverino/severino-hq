@@ -24,19 +24,19 @@ offers every type.
         <tr>
           <td>
             <strong>{% entity "resource"|entity_of:resource.key label=resource.shown_name %}</strong>
-            {% if resource.summary %}<br><span class="muted cell-data">{{ resource.summary|breakable }}</span>{% endif %}
+            {% if resource.summary %}<br>{% muted css="cell-data" %}{{ resource.summary|breakable }}{% endmuted %}{% endif %}
             {% comment %}
             Whose address a proxy forwards to, when HQ knows the machine.
             {% endcomment %}
-            {% if resource.origin_machine %}<br><span class="muted">on {% entity resource.origin_machine.link %}</span>{% endif %}
+            {% if resource.origin_machine %}<br>{% muted %}on {% entity resource.origin_machine.link %}{% endmuted %}{% endif %}
           </td>
           <td>
             {% with status=resource.record_status %}
               {% status status.label tone=status.tone title=status.detail %}
-              {% if status.since %}<br><span class="muted">{{ status.since|when:"ago" }}</span>{% endif %}
+              {% if status.since %}<br>{% muted %}{{ status.since|when:"ago" }}{% endmuted %}{% endif %}
             {% endwith %}
           </td>
-          <td class="muted date-col">{% include "partials/_reading_age.html" with at=resource.last_observed_at only %}</td>
+          <td class="date-col">{% muted %}{% include "partials/_reading_age.html" with at=resource.last_observed_at only %}{% endmuted %}</td>
         </tr>
       {% endfor %}
     </tbody>
@@ -60,7 +60,7 @@ is not a row, so an unchanged minute-by-minute result is one line.
           <td>{{ change.run.title|breakable }}</td>
           <td>{% status change.run.word tone=change.run.tone %} {{ change.run.note|truncatechars:120|breakable }}</td>
           <td>{{ change.run.by.words|or_empty }}</td>
-          <td class="muted date-col">{{ change.run.created_at|when }}</td>
+          <td class="date-col">{% muted %}{{ change.run.created_at|when }}{% endmuted %}</td>
         </tr>
       {% endfor %}
     </tbody>

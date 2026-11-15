@@ -12,4 +12,4 @@ in. The page's Update dependencies control refreshes this fact.
 {% elif project.dependency_updates %}
   <br><span data-updates-run="">Not run yet</span>
 {% endif %}
-{% if asked %}<br><span class="muted" data-run-requested>Run requested {{ asked|when:"ago" }}</span>{% endif %}
+{% if asked %}<br>{% muted data_run_requested=True %}Run requested {{ asked|when:"ago" }}{% endmuted %}{% endif %}

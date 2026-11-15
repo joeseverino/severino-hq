@@ -34,7 +34,7 @@ four domains behind a click and then need a second one to go anywhere.
       {% url 'zones:adopt' zone.zone as adopt_url %}
       <p>{% button "Manage domain" adopt_url post=True name="token" value=zone.adopt_token look="primary" %}</p>
     {% elif zone.observed_only %}
-      <p class="muted">HQ can read this domain, but the credential it reads with cannot change it.</p>
+      {% muted element="p" %}HQ can read this domain, but the credential it reads with cannot change it.{% endmuted %}
     {% endif %}
   {% title %}{{ zone.zone|breakable }} is not managed{% endnotice %}
 {% endif %}
@@ -79,7 +79,7 @@ the zone at the top of the page.
   {% include "control_plane/_zone_records.html" with routing=record_rows.routing policy=record_rows.policy zone=zone public_dns_enabled=public_dns_enabled %}
 {% aside %}
   {% comment %}How old the records' reading is, beside the one way to add one.{% endcomment %}
-  {% for snapshot in inventory %}{% if snapshot.kind == record_kind %}<span class="muted">{% if snapshot.reachable %}{% include "partials/_reading_age.html" with at=snapshot.observed_at only %}{% else %}<span title="{{ snapshot.error }}">{{ snapshot.state_label|breakable }}</span>{% endif %}</span>{% endif %}{% endfor %}
+  {% for snapshot in inventory %}{% if snapshot.kind == record_kind %}{% muted %}{% if snapshot.reachable %}{% include "partials/_reading_age.html" with at=snapshot.observed_at only %}{% else %}<span title="{{ snapshot.error }}">{{ snapshot.state_label|breakable }}</span>{% endif %}{% endmuted %}{% endif %}{% endfor %}
   {% comment %}
   No "adopt" button: the sweep adopts records in a managed domain
   (``zones.adopt_discovered_records``).
@@ -98,7 +98,7 @@ What it is read with is how HQ knows: the relationships card's last line.
 {% referenced_by "zone" zone.zone %}
 </div>
 {% if read_with and not relationships %}
-  <p class="muted relation-source">Read with {% for link in read_with %}{% entity link mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}</p>
+  {% muted element="p" css="relation-source" %}Read with {% for link in read_with %}{% entity link mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}{% endmuted %}
 {% endif %}
 {% comment %}Reads what is due from the public registries once the page is up.{% endcomment %}
 {% endblock %}

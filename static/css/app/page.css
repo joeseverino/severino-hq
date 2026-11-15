@@ -84,6 +84,8 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 
 .page-lede { color: var(--muted); font-size: var(--text-sm); margin: 0 0 var(--space-12); }
 .muted { color: var(--muted); }
+/* A link's muted words take the link's color when it is pressed, as a muted link would. */
+a:is(:hover, :focus-visible) > .muted { color: inherit; }
 
 /* One head at every width. The copy steps aside (`display: contents`) so its
    parts can be ordered: the trail on its own row, the title and the controls

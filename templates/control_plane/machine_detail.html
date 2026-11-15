@@ -11,7 +11,7 @@
     {% endfacts %}
   {% aside %}
     {% if machine.telemetry_observed_at %}
-      <span class="muted">{% include "partials/_reading_age.html" with at=machine.telemetry_observed_at only %}</span>
+      {% muted %}{% include "partials/_reading_age.html" with at=machine.telemetry_observed_at only %}{% endmuted %}
     {% endif %}
   {% endsection %}
 {% endif %}
@@ -42,7 +42,7 @@ last done to it is read before its parts.
       {% include "control_plane/_container_rows.html" with containers=machine.folded label="Hidden containers" %}
     {% endsection %}
   {% endif %}
-{% aside %}{% if docker %}<span class="muted">{% if docker.version %}Docker {{ docker.version|breakable }}{% else %}Docker{% endif %}{% if docker.status and docker.status != "up" %} {{ docker.status|breakable }}{% endif %}{% if docker.connection %}{% dot %}<span class="prose">read through {% entity docker.connection %}</span>{% endif %}</span>{% endif %}
+{% aside %}{% if docker %}{% muted %}{% if docker.version %}Docker {{ docker.version|breakable }}{% else %}Docker{% endif %}{% if docker.status and docker.status != "up" %} {{ docker.status|breakable }}{% endif %}{% if docker.connection %}{% dot %}<span class="prose">read through {% entity docker.connection %}</span>{% endif %}{% endmuted %}{% endif %}
 {% endsection %}
 {% endif %}
 

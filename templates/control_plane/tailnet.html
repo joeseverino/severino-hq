@@ -54,8 +54,8 @@
         {% for row in tailnet.tags %}
           <tr>
             <td><code>{{ row.tag.name|breakable }}</code></td>
-            <td><span class="muted">owned by</span> {{ row.tag.owners|join:", "|breakable }}</td>
-            <td>{% for link in row.devices %}{% entity link mark=forloop %}{% if not forloop.last %} {% endif %}{% empty %}{% if row.unworn %}<span class="muted">no device has this tag</span>{% else %}{% empty_value %}{% endif %}{% endfor %}</td>
+            <td>{% muted %}owned by{% endmuted %} {{ row.tag.owners|join:", "|breakable }}</td>
+            <td>{% for link in row.devices %}{% entity link mark=forloop %}{% if not forloop.last %} {% endif %}{% empty %}{% if row.unworn %}{% muted %}no device has this tag{% endmuted %}{% else %}{% empty_value %}{% endif %}{% endfor %}</td>
           </tr>
         {% endfor %}
       </tbody>
@@ -86,7 +86,7 @@
               <td><code>{{ service.name|breakable }}</code></td>
               <td>{% for address in service.addresses %}<code>{{ address|breakable }}</code>{% if not forloop.last %} {% endif %}{% empty %}{% empty_value %}{% endfor %}</td>
               <td>{{ service.ports|join:" "|or_empty }}</td>
-              <td class="muted">{{ service.comment|or_empty }}</td>
+              <td>{% muted %}{{ service.comment|or_empty }}{% endmuted %}</td>
             </tr>
           {% endfor %}
         </tbody>

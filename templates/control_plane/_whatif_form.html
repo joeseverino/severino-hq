@@ -17,6 +17,6 @@ start as that machine, which is the question most often being asked.
 {% endfilter_bar %}
 
 {% include "control_plane/_whatif_result.html" %}
-<p class="muted">
+{% muted element="p" %}
   Checks the policy only, not whether anything is listening.
-</p>
+{% endmuted %}

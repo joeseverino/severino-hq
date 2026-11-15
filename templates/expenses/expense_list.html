@@ -6,6 +6,6 @@
   <td>{{ row.item|or_empty }}</td>
   <td>{{ row.get_category_display|breakable }}</td>
   <td>{{ row.total_cost|money }}</td>
-  <td class="muted">{{ row.business_use_percentage|breakable }}%</td>
+  <td>{% muted %}{{ row.business_use_percentage|measured:"%" }}{% endmuted %}</td>
   <td>{{ row.estimated_deductible_amount|money }}</td>
 {% endblock %}

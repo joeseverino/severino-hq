@@ -1,4 +1,4 @@
 {% extends "confirm_page.html" %}
 {% block consequences %}
-<p class="muted">{{ submission.message|truncatechars:200|breakable }}</p>
+{% muted element="p" %}{{ submission.message|truncatechars:200|breakable }}{% endmuted %}
 {% endblock %}
