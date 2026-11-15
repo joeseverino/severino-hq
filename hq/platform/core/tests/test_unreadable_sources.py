@@ -39,6 +39,11 @@ def urgent(title):
     return Insight("serious", "Example", title, "1", "Look into it.", key=title)
 
 
+def good_source(domain: str) -> tuple[Insight, ...]:
+    # The docs section raises one item; every other host section raises none.
+    return (urgent("Good source item"),) if domain == "hq.docs" else ()
+
+
 def cards(name, count=3):
     return tuple(
         {"id": f"example-{name}-{n}", "label": f"{name} reading {n}", "value": n, "url": "/"} for n in range(count)
@@ -66,10 +71,10 @@ class UnreadableSourceTests(TestCase):
         self.assertIsNotNone(record.exc_info)
 
     def test_a_raising_host_section_is_one_item_and_the_rest_of_the_queue_renders(self):
-        def raised(domain):
+        def raised(domain: str) -> tuple[Insight, ...]:
             if domain == "hq.expenses":
                 raise RuntimeError("stored readings no longer parse")
-            return (urgent("Good source item"),) if domain == "hq.docs" else ()
+            return good_source(domain)
 
         self.enterContext(patch("hq.platform.application.attention.raised", side_effect=raised))
         self.assertTheQueueRenders("hq.expenses", "Expenses")
@@ -100,7 +105,7 @@ class UnreadableSourceTests(TestCase):
         self.assertEqual(labels[f"{label} could not be read"], "attention")
 
     def test_a_source_that_reads_again_is_asked_again_and_its_neighbors_are_not(self):
-        good = Mock(side_effect=lambda domain: (urgent("Good source item"),) if domain == "hq.docs" else ())
+        good = Mock(side_effect=good_source)
         self.enterContext(patch("hq.platform.application.attention.raised", good))
         failing = Mock(side_effect=RuntimeError("stored readings no longer parse"))
         self.composing(contributor("flaky", attention=failing))
