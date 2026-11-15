@@ -40,12 +40,9 @@ class MutedTests(SimpleTestCase):
         self.assertEqual(line.attrs.get("role"), "status")
         self.assertEqual(len(select(waiting, "data-submit-status")), 1)
 
-    def test_a_block_or_a_list_of_words_is_muted_whole(self):
-        listed = drawn('{% muted element="ul" css="dot-list" %}<li>a</li><li>b</li>{% endmuted %}')
+    def test_a_block_of_words_is_muted_whole(self):
         block = drawn('{% muted element="div" %}A description.{% endmuted %}')
 
-        self.assertEqual([part.tag for part in with_class(listed, "muted")], ["ul"])
-        self.assertEqual(len(elements(listed, "li")), 2)
         self.assertEqual([part.tag for part in with_class(block, "muted")], ["div"])
 
     def test_the_words_are_escaped_as_the_page_writes_them(self):
@@ -57,6 +54,7 @@ class MutedTests(SimpleTestCase):
     def test_an_element_or_option_it_does_not_take_is_refused(self):
         for source in (
             '{% muted element="td" %}x{% endmuted %}',
+            '{% muted element="ul" %}<li>x</li>{% endmuted %}',
             '{% muted tone="good" %}x{% endmuted %}',
         ):
             with self.subTest(source=source), self.assertRaises(TemplateSyntaxError):

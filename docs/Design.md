@@ -568,6 +568,11 @@ its icon would be, so its steps take no icon.
 A plain list read down (a row's notes, a record's statuses, a section's
 records) is `{% stack_list %}`. Its `<li>`s each run their parts inline a small
 gap apart, and an item that reads as a sentence is marked `.prose`.
+A run of whole parts read across one line (a fact's links, a row's context
+line, a band's details) is `{% dot_list %}`, each part an `<li>`, with
+`muted=True` for one said quietly. The stylesheet draws the dot in the gap
+before each part, so no template writes a separator and no line opens on one.
+*Gate:* `hand-drawn-dot-list`.
 `below="Label"` makes it a block the open row shows under that label.
 
 A block of code to paste somewhere else (a container's compose change) is `{%
@@ -1124,7 +1129,7 @@ A row of places to go (the dashboard's links, a saved copy's own pages) is
 `{% link_chips %}`, each item an `<li>` holding one link, `{% entity
 url|outside label=... %}` for a page outside HQ. Each link is a chip, a target
 by its frame and never underlined at rest, and an outside one's arrow sits
-quieter than its name. A run of names inside a line stays a `.dot-list`, and a
+quieter than its name. A run of names inside a line stays a `{% dot_list %}`, and a
 choice of the view's state is a `.scope-chip`.
 
 **A change is one primitive.** A value and the one it changes into (a running
@@ -1144,7 +1149,7 @@ refuses a generated string with no alternative, or a space before a mark.
 parts of a line is `{% dot %}` and a link's onward arrow `{% arrow %}`, each
 written straight after its part. A no-break space joins the mark to that
 part and a reader never hears it, so no line starts with a mark or holds one
-alone. A run of whole parts is a `.dot-list`; any other mark is the text of
+alone. A run of whole parts is `{% dot_list %}`; any other mark is the text of
 an `aria-hidden` element. Text built in Python joins its parts with
 `dotted(...)` (`hq_sdk.ui`), which holds each dot to the part before it, and
 `breakable` draws that dot as `{% dot %}` does; markup built in Python joins

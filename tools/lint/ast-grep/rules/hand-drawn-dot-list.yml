@@ -1,0 +1,26 @@
+# A run of whole parts on one line, a dot between each, is the dot list part,
+# so the separator, the wrap and the quiet voice have one owner. It is read in
+# both forms a page could write it: the class on an element, or the class
+# handed to another tag's css= (the muted tag's list). No fix: the part takes
+# its items as the page writes them.
+id: hand-drawn-dot-list
+language: html
+severity: error
+message: A dot list drawn by hand, where the dot list part draws it.
+note: Write {% dot_list %}<li>...</li>{% enddot_list %}, with muted=True for one said quietly.
+files:
+  - "**/templates/**/*.html"
+rule:
+  any:
+    - kind: element
+      has:
+        any:
+          - kind: start_tag
+          - kind: self_closing_tag
+        has:
+          kind: attribute
+          regex: '(?:^|\})class=["''](?:[^"'']*[\s}])?dot-list(?:[^\w-]|$)'
+    - kind: text
+      regex: '\{%[^%]*\bcss=["''](?:[^"'']*\s)?dot-list(?:[^\w-]|$)'
+      not:
+        regex: '\{%\s*(?:end)?comment\b|\{#|#\}'

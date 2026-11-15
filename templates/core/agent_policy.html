@@ -76,12 +76,12 @@ it is not blocked, since removal never lifts a block.
           <tr data-agent="{{ standing.subject }}" data-client="{{ identity.client_id }}"{% if identity.blocked_at %} data-blocked{% endif %}>
             <th scope="row">
               <code>{{ identity.client_id|breakable }}</code>{% if identity.blocked_at %} {% status "Blocked" tone="attention" %}{% endif %}
-              {% muted element="ul" css="dot-list" %}
+              {% dot_list muted=True %}
                 {% if identity.person %}<li data-person>For {{ identity.person.get_username|breakable:"," }} {% if standing.role %}{{ standing.role_label|lower|breakable }}{% else %}no role{% endif %}</li>{% endif %}
                 {% if identity.signs_in and not identity.person %}<li>Signs in {{ identity.get_signs_in_display|lower|breakable }}</li>{% endif %}
                 {% if identity.interfaces %}<li>Over {{ identity.interfaces|interface_label|breakable }}</li>{% endif %}
                 {% if standing.devices %}<li><a href="#devices-{{ identity.pk }}">From {{ standing.devices|length|counted:"device" }}</a></li>{% endif %}
-              {% endmuted %}
+              {% enddot_list %}
               <div class="row-below">
                 {% if identity.blocked_at %}<p>Blocked {{ identity.blocked_at|when:"ago" }}{% if identity.blocked_by %} by {{ identity.blocked_by.get_username|breakable:"." }}{% else %}.{% endif %}</p>{% endif %}
                 {% if identity.person %}{% if standing.acts_for_nobody %}<p data-role="none">{{ identity.person.get_username|breakable }} holds no role, so its calls are refused.</p>{% else %}<p data-role="{{ standing.role }}">Role confirmed {{ standing.role_confirmed|when:"ago" }}.</p>{% endif %}{% endif %}
@@ -171,10 +171,10 @@ approved, and a block stops that device alone.
             <tr id="{{ device.anchor }}" data-device-standing="{{ device.standing }}">
               <th scope="row">
                 {{ device.name|breakable }}
-                {% muted element="ul" css="dot-list" %}
+                {% dot_list muted=True %}
                   {% if device.os %}<li>{{ device.os|breakable }}</li>{% endif %}
                   {% if device.owner %}<li data-owner>Owned by {{ device.owner|breakable }}</li>{% elif device.record %}<li>Tagged</li>{% else %}<li data-unplaced>Not on the tailnet, so its calls are refused</li>{% endif %}
-                {% endmuted %}
+                {% enddot_list %}
                 {% with record=device.record %}{% if record %}
                 <div class="row-below">
                     {% if record.person %}<p>Calls for {{ record.person.get_username|breakable:"," }} who approves it.</p>

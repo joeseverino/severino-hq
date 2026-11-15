@@ -10,7 +10,7 @@ for: one band under the head, as a service's and HQ's own page open.
     {% with found=reached_links.0 %}{% if found.0.title %}{% entity found.0 %}{% else %}{% entity found.0 code=True %}{% endif %}{% endwith %}
   {% detail %}
     {% with found=reached_links.0 %}{% if found.1 %}<small>Not answering</small>{% endif %}{% endwith %}
-    {% if reached_links|length > 1 %}<ul class="dot-list">{% for link, unanswered in reached_links|slice:"1:" %}<li{% if unanswered %} class="prose"{% endif %}>{% entity link %}{% if unanswered %} not answering{% endif %}</li>{% endfor %}</ul>{% endif %}
+    {% if reached_links|length > 1 %}{% dot_list %}{% for link, unanswered in reached_links|slice:"1:" %}<li{% if unanswered %} class="prose"{% endif %}>{% entity link %}{% if unanswered %} not answering{% endif %}</li>{% endfor %}{% enddot_list %}{% endif %}
   {% endfact %}
   {% endif %}
   {% if machine.containers %}
@@ -31,7 +31,7 @@ for: one band under the head, as a service's and HQ's own page open.
     {% if names_listed %}
     {% if machine.roles %}<small>{% for role in machine.roles %}<span tabindex="0" data-tip="{{ role.detail }}">{{ role.label|breakable }}</span>{% if not forloop.last %}{% dot %}{% endif %}{% endfor %}</small>{% endif %}
     {% else %}
-    <ul class="dot-list">{% for link in serves_links %}<li>{% entity link %}{% if forloop.first and machine.runs_hq %} (<a href="{% url 'hq_self' %}">{{ hq_label|breakable:")" }}</a>{% endif %}</li>{% endfor %}{% for role in machine.roles %}<li><span tabindex="0" data-tip="{{ role.detail }}">{{ role.label|breakable }}</span></li>{% endfor %}</ul>
+    {% dot_list %}{% for link in serves_links %}<li>{% entity link %}{% if forloop.first and machine.runs_hq %} (<a href="{% url 'hq_self' %}">{{ hq_label|breakable:")" }}</a>{% endif %}</li>{% endfor %}{% for role in machine.roles %}<li><span tabindex="0" data-tip="{{ role.detail }}">{{ role.label|breakable }}</span></li>{% endfor %}{% enddot_list %}
     {% endif %}
   {% endfact %}
   {% endif %}

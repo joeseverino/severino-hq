@@ -89,6 +89,7 @@ TAGS = (
     "button_row",
     "card",
     "dot",
+    "dot_list",
     "empty_value",
     "entity",
     "fact",

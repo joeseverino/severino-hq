@@ -11,12 +11,12 @@ standard, with what it uses beside its limits. Each said once; the band above ha
     {% fact "To" icon="deploy" %}
       {% entity plan.release.url|outside label=plan.target_tag code=True %}
     {% detail %}
-      <ul class="dot-list"><li><small>{% if plan.target_digest %}<span tabindex="0" data-tip="{{ plan.target_digest }}">{{ plan.target_digest|slice:":19"|breakable }}…</span>{% else %}Exact build not read yet{% endif %}</small></li>{% if plan.release.published %}<li><small>released {{ plan.release.published|when_text:"ago" }}</small></li>{% endif %}</ul>
+      {% dot_list %}<li><small>{% if plan.target_digest %}<span tabindex="0" data-tip="{{ plan.target_digest }}">{{ plan.target_digest|slice:":19"|breakable }}…</span>{% else %}Exact build not read yet{% endif %}</small></li>{% if plan.release.published %}<li><small>released {{ plan.release.published|when_text:"ago" }}</small></li>{% endif %}{% enddot_list %}
     {% endfact %}
     {% fact "Fixes" icon="shield" tone=plan.fixes_tone %}
       {% if plan.fixes %}{{ plan.fixes|length|counted:"known vulnerability,known vulnerabilities" }}{% elif item.standing.source %}None known{% else %}Cannot check{% endif %}
     {% detail %}
-      {% if plan.fixes %}<ul class="dot-list">{% for advisory in plan.fixes|slice:":2" %}<li>{% entity advisory.url|outside label=advisory.id %}</li>{% endfor %}</ul>{% else %}<small>{% if item.standing.source %}Nothing known against the running version.{% else %}The image does not say where its source is.{% endif %}</small>{% endif %}
+      {% if plan.fixes %}{% dot_list %}{% for advisory in plan.fixes|slice:":2" %}<li>{% entity advisory.url|outside label=advisory.id %}</li>{% endfor %}{% enddot_list %}{% else %}<small>{% if item.standing.source %}Nothing known against the running version.{% else %}The image does not say where its source is.{% endif %}</small>{% endif %}
     {% endfact %}
     {% fact "Data" icon="layers" tone=plan.data_tone %}
       {% if plan.stateful %}{{ plan.data|length|counted:"mount,mounts" }} to snapshot first{% else %}Keeps no data{% endif %}

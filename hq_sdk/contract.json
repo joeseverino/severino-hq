@@ -3554,6 +3554,15 @@
         "parameters": [],
         "parts": []
       },
+      "dot_list": {
+        "classes": [],
+        "parameters": [
+          "*",
+          "muted=",
+          "**data"
+        ],
+        "parts": []
+      },
       "empty_value": {
         "classes": [],
         "parameters": [],

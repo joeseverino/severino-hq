@@ -42,11 +42,11 @@
   {% facts %}
     {% for group in relationships.groups %}
     {% with shared=group.shared %}
-    {% fact group.phrase %}<ul class="dot-list">
+    {% fact group.phrase %}{% dot_list %}
       {% for item in group.items %}
       <li{% if item.entity.detail or not shared and item.source or not shared and item.observed_at %} class="prose"{% endif %}>{% entity item.entity %}{% if item.entity.detail %} {% muted %}{{ item.entity.detail|breakable }}{% endmuted %}{% endif %}{% if not shared %}{% if item.source or item.observed_at %} {% muted %}({% if item.source %}through {% entity item.source %}{% endif %}{% if item.source and item.observed_at %}{% dot %}{% endif %}{% if item.observed_at %}{% include "partials/_reading_age.html" with at=item.observed_at only %}{% endif %}){% endmuted %}{% endif %}{% endif %}{% if item.stale %} {% status "Out of date" tone="attention" %}{% endif %}</li>
       {% endfor %}
-    </ul>{% detail %}{% if shared %}<small>From {% entity shared.source %}{% if shared.observed_at %}{% dot %}{% include "partials/_reading_age.html" with at=shared.observed_at only %}{% endif %}</small>{% endif %}{% endfact %}
+    {% enddot_list %}{% detail %}{% if shared %}<small>From {% entity shared.source %}{% if shared.observed_at %}{% dot %}{% include "partials/_reading_age.html" with at=shared.observed_at only %}{% endif %}</small>{% endif %}{% endfact %}
     {% endwith %}
     {% endfor %}
   {% endfacts %}

@@ -41,6 +41,7 @@ from hq.platform.application import host_work, outbound_work
 from hq.platform.application.capabilities import capability_registry, execute_capability
 from hq.platform.application.contracts import Effect
 from hq.platform.application.integration_specs import requested
+from hq.platform.application.markup_testing import elements
 from hq.platform.application.outbound_work import OutboundWork, capability_for, due, validate
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.plugins import PluginIntegration, clear_plugin_composition_cache
@@ -63,6 +64,14 @@ def calls_out(request):
 
     registry.read("first-note")
     return HttpResponse("never")
+
+
+def entries_shown(page) -> list[str]:
+    """The registry's entries as the example's page lists them, one item each."""
+
+    return [
+        item.words for item in elements(page.content.decode(), "li") if any(cell.tag == "td" for cell in item.ancestors)
+    ]
 
 
 urlpatterns = [
@@ -148,7 +157,7 @@ class AnExtensionActionAnswersAtOnceTests(ComposedExample):
         standing = self.client.get(reverse("jobs:status", args=[job.pk])).json()
         self.assertEqual((standing["state"], standing["note"]), ("done", "The registry lists 2 entries."))
         page = self.client.get(self.page)
-        self.assertContains(page, "alpha, beta")
+        self.assertEqual(entries_shown(page), ["alpha", "beta"])
         self.assertNotContains(page, "data-ask-status")
         ended = AuditLog.objects.filter(operation_id=str(job.pk), action=AuditLog.Action.DONE).get()
         self.assertEqual((ended.user, ended.metadata["operation"]), (self.user, example.LOOKUP))
@@ -190,7 +199,7 @@ class AnExtensionActionAnswersAtOnceTests(ComposedExample):
         self.assertEqual(failed.error, "The registry lists nothing for this note.")
         page = self.client.get(self.page)
         # The last good reading is still what the page shows, beside the reason.
-        self.assertContains(page, "alpha, beta")
+        self.assertEqual(entries_shown(page), ["alpha", "beta"])
         self.assertContains(page, "The registry lists nothing for this note.")
         self.assertEqual(ask(example.LOOKUP, "first-note").standing.state, "failed")
         self.assertEqual(ask(example.LOOKUP, "second-note").standing.state, "idle")

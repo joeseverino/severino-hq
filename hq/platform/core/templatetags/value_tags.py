@@ -115,7 +115,7 @@ def dot():
     after the first part. A no-break space holds it to that part and the line
     may break only after it, so no line starts with a dot or holds one alone;
     a reader hears the two parts. A run of whole parts that is a list of its
-    own is a ``.dot-list``; Python joins text as ``labels.dotted`` does."""
+    own is ``{% dot_list %}``; Python joins text as ``labels.dotted`` does."""
     return mark_safe(DOT_MARKUP)  # noqa: S308 - HQ's own literal markup
 
 
@@ -761,9 +761,10 @@ def card_frame(name: str, given: dict) -> dict:
     return framed(name, given, CARD_ELEMENTS, "section", "card", named)
 
 
-# Words said in the muted voice: a line, a paragraph, a block or a list of
-# them, its element a choice. A cell or a list item holds the tag.
-MUTED_ELEMENTS = frozenset(("span", "p", "div", "ul"))
+# Words said in the muted voice: a line, a paragraph or a block, its element a
+# choice. A cell or a list item holds the tag; a run of parts said quietly is
+# ``{% dot_list muted=True %}`` (stack_tags).
+MUTED_ELEMENTS = frozenset(("span", "p", "div"))
 
 
 def muted_frame(name: str, given: dict) -> dict:

@@ -545,24 +545,17 @@ the extension's own pages say which setting is missing and where its guide
 is. It is never a readiness failure, so an install without production's
 secrets, such as a development one, still answers ready.
 
-`PluginIntegration.attention` returns `hq_sdk.plugin.Finding`s, built with
-`opens` for the page the work is done on; HQ refuses anything else as an
-unreadable answer. HQ words each row from it (`attention.finding_insight`).
-No host rule words an extension's finding, so it says its own words. Supply
-the help the shared card shows ([Design](Design.md), "A card says what is
-wrong and holds what fixes it"):
+Supply the help the shared card shows ([Design](Design.md), "A card says what
+is wrong and holds what fixes it"):
 
 | Field | For |
 | --- | --- |
-| `Finding.primary` | the page the work is done on, as `opens(label, url)` (a short label; a sentence is shown as a sentence). The plugin check's `extension-finding-carries-help` fails a finding built with no help at all |
-| `Finding.workflow`, `Finding.steps` | commands and their check, or instructions in words |
-| `Finding.evidence` | what was read, as label and value pairs, shown in the row's open fold |
-| `Finding.since` | the moment it began, when that is known |
-| `Finding.why` | why it is as urgent as its severity says: what was read and what makes that this urgent, in one sentence. Required of every finding, never a restatement of its rating; the plugin check's `attention-item-says-why` fails one built without it, and `attention-why-restates-rating` one that closes on "which needs attention" or "which is urgent" |
-| `Finding.clears` | what clears a finding a threshold raises, worded from that same threshold as a clause after "Clears once" ("a balance newer than 3 days arrives"); the panel says it after the why. The plugin check's `threshold-says-what-clears-it` fails a why that names a constant without it |
-| `Finding.family` | the words that head a fold of several findings alike |
-| `Finding.count` | how many things it stands for, when it is a countable backlog; a row set aside returns when it changes |
-| `Finding.notice` | it reports something that happened, with nothing to do |
+| `Insight.actions` | what can be pressed |
+| `Insight.action` with `Insight.url` | the page the work is done on (a short label; a sentence is shown as a sentence) |
+| `Insight.workflow` | commands and their check |
+| `Insight.since` | the moment it began, when that is known |
+| `Insight.why` | why it is as urgent as its status says: what was read and what makes that this urgent, in one sentence. Required of every item the queue may show, never a restatement of its rating; the plugin check's `attention-item-says-why` fails an `Insight` built without it, and `attention-why-restates-rating` one that closes on "which needs attention" or "which is urgent" |
+| `Insight.clears` | what clears an item a threshold raises, worded from that same threshold as a clause after "Clears once" ("a balance newer than 3 days arrives"); the panel says it after the why. The plugin check's `threshold-says-what-clears-it` fails a why that names a constant without it |
 
 **Capabilities.** HQ validates every `CapabilitySpec` before describing or
 invoking the registry: name, required permissions, target kind and label,
@@ -1002,7 +995,7 @@ A test that posts a form without opening its page first sends
 | `partials/_timeline.html` | nothing | `timeline` | Chronological linked events, from `hq_sdk.ui.Timeline`. |
 | `partials/_week_plan.html` | `plan` | nothing | Which days of the week a thing is scheduled for, from `hq_sdk.ui.WeekPlan`. |
 
-Host tags: `{% arrow %}`, `{% button %}`, `{% button_row %}`, `{% card %}`, `{% dot %}`, `{% empty_value %}`, `{% entity %}`, `{% fact %}`, `{% facts %}`, `{% filter_bar %}`, `{% muted %}`, `{% notice %}`, `{% outside_link %}`, `{% present %}`, `{% reference %}`, `{% referenced_by %}`, `{% row_actions %}`, `{% row_editor %}`, `{% row_group %}`, `{% row_toggle %}`, `{% section %}`, `{% status %}`, `{% table_heading %}`, `{% table_region %}`, `{% words %}`, `{% write_token %}`. Host filters: `|breakable[:arg]`, `|counted:arg`, `|measured:arg`, `|money[:arg]`, `|or_empty`, `|outside`, `|readout`, `|record[:arg]`, `|span`, `|web_url`, `|when[:arg]`, `|when_text[:arg]`. Django's own tags and filters, and `{% load %}` of `static` or the extension's own libraries.
+Host tags: `{% arrow %}`, `{% button %}`, `{% button_row %}`, `{% card %}`, `{% dot %}`, `{% dot_list %}`, `{% empty_value %}`, `{% entity %}`, `{% fact %}`, `{% facts %}`, `{% filter_bar %}`, `{% muted %}`, `{% notice %}`, `{% outside_link %}`, `{% present %}`, `{% reference %}`, `{% referenced_by %}`, `{% row_actions %}`, `{% row_editor %}`, `{% row_group %}`, `{% row_toggle %}`, `{% section %}`, `{% status %}`, `{% table_heading %}`, `{% table_region %}`, `{% words %}`, `{% write_token %}`. Host filters: `|breakable[:arg]`, `|counted:arg`, `|measured:arg`, `|money[:arg]`, `|or_empty`, `|outside`, `|readout`, `|record[:arg]`, `|span`, `|web_url`, `|when[:arg]`, `|when_text[:arg]`. Django's own tags and filters, and `{% load %}` of `static` or the extension's own libraries.
 
 Classes: `actions-col`, `address-list`, `allocation`, `allocation-legend`, `cell-data`, `cell-part`, `cell-whole`, `chart-axis`, `chart-legend`, `code-list`, `compact`, `compact-table`, `count`, `danger`, `data-table`, `date-col`, `domain-charts`, `errors`, `eyebrow`, `finding`, `form`, `ghost`, `help`, `icon-link`, `inline`, `key-col`, `keyboard-only`, `list-rows`, `name-line`, `narrow-more`, `narrow-only`, `nowrap`, `one-line`, `optional-col`, `page-lede`, `primary`, `print-footer`, `print-only`, `prose-list`, `route-band-1`, `route-band-2`, `route-band-3`, `route-band-4`, `route-band-5`, `route-frame`, `route-line`, `route-map`, `route-marker`, `route-scale`, `route-swatch`, `row-actions`, `row-below`, `row-empty`, `row-group`, `row-gutter`, `row-less`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-flow`, `section-foot`, `split`, `stacked`, `subtle-link`, `table-clamp`, `table-scroll`, `tight-col`, `two-col`, `visually-hidden`, `whole`.
 
@@ -1013,6 +1006,7 @@ Script hooks: `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit
 | `hand-drawn-change-table` | A before-and-after table drawn by hand, where the change table part draws it. | Build an approval_review.ChangePreview and write `{% change_table preview %}`. |
 | `hand-drawn-chip` | A chip drawn by hand, where the status part draws a name as a chip and the switch part a choice. | Write `{% status name chip=True %}`, or `{% switch %}``{% choice url=... %}`name`{% endchoice %}``{% endswitch %}` for a choice of the view. |
 | `hand-drawn-control-label` | A control's label drawn by hand, where the control label part draws it. | Write `{% control_label "From" control="the-control-id" %}`. |
+| `hand-drawn-dot-list` | A dot list drawn by hand, where the dot list part draws it. | Write `{% dot_list %}``<li>`...`</li>``{% enddot_list %}`, with muted=True for one said quietly. |
 | `hand-drawn-empty-line` | An empty line drawn by hand, where the empty state part draws it. | Write `{% include "partials/_empty_state.html" with message="..." %}`, or a `{% section %}`'s `{% empty %}`. |
 | `hand-drawn-empty-said-quietly` | An empty line drawn by hand, where the empty state part draws it. | Write `{% include "partials/_empty_state.html" with message="..." %}`, or a `{% section %}`'s `{% empty %}`. |
 | `hand-drawn-empty-state` | An empty state drawn by hand, where the empty state part draws it. | Write `{% include "partials/_empty_state.html" with message="..." %}`. |
