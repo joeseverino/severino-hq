@@ -23,7 +23,7 @@ from .doors import approved_words
 from .freshness import PAGE_VISIT, freshness
 from .moments import expiry_words, moment
 from .posture import EDGE, FIREWALL, SIGN_IN, STANDARD, advanced
-from .request_channel import UNTRUSTED_FORWARDER, Channel, encryption
+from .request_channel import UNTRUSTED_FORWARDER, Channel, Forwarding, encryption
 from .request_identity import SSO_LINK, Identity
 from .standards import Check, Measurement, Reading, Standing, measure
 from .ui import counted, ended
@@ -60,10 +60,8 @@ class RequestFacts:
     identity: Identity
     host: str = ""
     secure: bool = False
-    # The socket peer, which is the forwarding proxy when one forwarded it.
-    peer: str = ""
-    forwarded: bool = False
-    forwarding_trusted: bool = False
+    # Who handed it to HQ, and which of them HQ trusts: decided once, read here.
+    forwarding: Forwarding = field(default_factory=Forwarding)
     # The tailnet as swept, read once for every question asked of it.
     known: dict[str, tailnet.Device] = field(default_factory=dict)
     device: tailnet.Device | None = None
@@ -87,8 +85,18 @@ class RequestFacts:
     firewall: Reading | None = None
 
     @property
+    def peer(self) -> str:
+        """The socket peer, which is the forwarding proxy when one forwarded it."""
+
+        return self.forwarding.peer
+
+    @property
+    def forwarded(self) -> bool:
+        return self.forwarding.forwarded
+
+    @property
     def untrusted_forwarding(self) -> bool:
-        return self.forwarded and not self.forwarding_trusted
+        return self.forwarding.untrusted
 
     @property
     def serves(self) -> tailnet.Device | None:
@@ -343,7 +351,7 @@ def _forwarding(facts: RequestFacts) -> bool:
 
 def _forwarder(facts: RequestFacts) -> Reading:
     device = facts.forwarder
-    if not facts.forwarding_trusted:
+    if not facts.forwarding.trusted:
         return Reading.unmet(facts.peer, detail=UNTRUSTED_FORWARDER)
     if device is None:
         return Reading.met(facts.peer, detail="A trusted proxy.")
@@ -360,7 +368,7 @@ def _forwarding_spec():
 
 
 def _proxy_headers_apply(facts: RequestFacts) -> bool:
-    return facts.forwarded and facts.forwarding_trusted and _forwarding_spec() is not None
+    return facts.forwarding.trusted and _forwarding_spec() is not None
 
 
 def _proxy_headers(facts: RequestFacts) -> Reading:

@@ -14,12 +14,11 @@ from typing import Any
 
 from django.conf import settings
 
-from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 from hq.domains.control_plane.names import normalized_hostname
 from hq.domains.control_plane.observations.host import FIREWALL_KIND
 from hq.domains.control_plane.provider_adapters.contracts import IngressPolicy
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_POLICY_KIND
-from hq.domains.control_plane.providers import PROVIDERS
+from hq.domains.control_plane.providers import PROVIDERS, operator_label
 from hq.platform.application.labels import dotted
 from hq.platform.core.network import split_host_port
 lazy from hq.domains.control_plane.models import ProviderInventory
@@ -34,7 +33,6 @@ from .ui import counted, ended
 lazy from . import tailnet
 lazy from .facts import stored_snapshots
 lazy from .moments import ago
-lazy from .request_path import address_chain
 
 # ----- The readings ------------------------------------------------------------------
 
@@ -55,14 +53,6 @@ def ingress_kinds() -> tuple[str, ...]:
     return tuple(kind for kind, spec in PROVIDERS.items() if spec.ingress_policy is not None)
 
 
-def _proxy_label(kind: str) -> str:
-    spec = PROVIDERS[kind]
-    return next(
-        (CONNECTION_LABELS[name] for name in spec.connection_providers if name in CONNECTION_LABELS),
-        spec.label,
-    )
-
-
 def _edge_reading(hostname: str, snapshots: Mapping[str, Any]) -> Reading:
     """The first ingress policy any proxy reports for ``hostname``, judged."""
 
@@ -81,7 +71,7 @@ def _edge_reading(hostname: str, snapshots: Mapping[str, Any]) -> Reading:
             None,
         )
         if policy is not None:
-            return _judged(policy, reachable=snapshot.reachable, proxy=_proxy_label(kind))
+            return _judged(policy, reachable=snapshot.reachable, proxy=operator_label(kind))
     return Reading.unavailable("Not read")
 
 
@@ -336,7 +326,7 @@ class ConnectionSecurityPosture:
     def trusted_proxy_count(self) -> int:
         if self.connection is None:
             return 0
-        return sum(item.role == "proxy" for item in address_chain(self.connection.facts.request))
+        return self.connection.facts.forwarding.proxies
 
     @property
     def check_summary(self) -> str:

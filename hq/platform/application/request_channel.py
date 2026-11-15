@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from hq.platform.core.network import client_ip, is_trusted_proxy, socket_peer, split_host_port
+from hq.platform.core.network import PROXY, client_ip, forwarded_hops, split_host_port
 
 from .reach import NETWORKS, network_of
 from .tone import Tone
@@ -85,38 +85,77 @@ def channel_of(address: str) -> Channel:
     }.get(network_of(address), ELSEWHERE_CHANNEL)
 
 
-def channel_for_request(request) -> Channel:
-    """The caller channel after applying the trusted-proxy decision once."""
+@dataclass(frozen=True, slots=True)
+class Forwarding:
+    """Who handed a request to HQ, each hop with the part HQ gave it.
 
-    channel = channel_of(client_ip(request))
-    return OPAQUE_CHANNEL if _chain_is_all_proxies(request) else channel
-
-
-def displayed_client_ip(request) -> str:
-    """The best caller address HQ may display without authorizing from it.
-
-    ``client_ip`` remains the sole source for admission. When an undeclared
-    proxy reports a caller, the rightmost forwarded hop may still be correlated
-    for explanatory UI; keeping this function explicitly presentation-only
-    prevents that useful knowledge from quietly becoming network authority.
+    The one trusted-proxy decision of a request's reading: everything that
+    asks whether a proxy forwarded it, whether HQ trusts that proxy or which
+    address it names reads this value, so no two of them can disagree.
     """
 
-    peer = socket_peer(request)
-    forwarded = forwarded_chain(request)
-    if forwarded and not is_trusted_proxy(peer):
-        return split_host_port(forwarded[-1])[0]
-    return client_ip(request)
+    # The address HQ judges and records, as ForwardedCaller resolved it.
+    client: str = ""
+    # ``(address, role)`` for each address that handled the request, in the
+    # order the hops occurred, the socket peer last.
+    hops: tuple[tuple[str, str], ...] = ()
+
+    @property
+    def peer(self) -> str:
+        """The address that opened the socket to HQ."""
+
+        return self.hops[-1][0] if self.hops else ""
+
+    @property
+    def forwarded(self) -> bool:
+        return len(self.hops) > 1
+
+    @property
+    def trusted(self) -> bool:
+        """A proxy forwarded the request, and HQ trusts it."""
+
+        return self.forwarded and self.hops[-1][1] == PROXY
+
+    @property
+    def untrusted(self) -> bool:
+        return self.forwarded and not self.trusted
+
+    @property
+    def opaque(self) -> bool:
+        """Every hop is a trusted proxy, so the chain never named the caller."""
+
+        return self.forwarded and all(role == PROXY for _, role in self.hops)
+
+    @property
+    def proxies(self) -> int:
+        return sum(role == PROXY for _, role in self.hops)
+
+    @property
+    def reported(self) -> str:
+        """The best caller address HQ may display without authorizing from it.
+
+        ``client`` remains the sole source for admission. When an undeclared
+        proxy reports a caller, the rightmost forwarded hop may still be
+        correlated for explanatory UI; this one is presentation only, so that
+        knowledge never quietly becomes network authority.
+        """
+
+        return split_host_port(self.hops[-2][0])[0] if self.untrusted else self.client
+
+    @property
+    def channel(self) -> Channel:
+        """The caller's channel; a chain that never named the caller is its own answer."""
+
+        return OPAQUE_CHANNEL if self.opaque else channel_of(self.client)
 
 
-def forwarded_chain(request) -> list[str]:
-    """The X-Forwarded-For entries, in the order the hops occurred."""
+def forwarding_of(request) -> Forwarding:
+    """How ``request`` was forwarded to HQ."""
 
-    return [hop.strip() for hop in str(request.META.get("HTTP_X_FORWARDED_FOR", "")).split(",") if hop.strip()]
+    return Forwarding(client_ip(request), forwarded_hops(request))
 
 
-def _chain_is_all_proxies(request) -> bool:
-    """Whether the forwarded chain identified anybody at all."""
+def channel_for_request(request) -> Channel:
+    """The caller's channel, for a page that reads nothing else of the request."""
 
-    peer = socket_peer(request)
-    forwarded = [split_host_port(hop)[0] for hop in forwarded_chain(request)]
-    return bool(forwarded) and is_trusted_proxy(peer) and all(is_trusted_proxy(hop) for hop in forwarded)
+    return forwarding_of(request).channel

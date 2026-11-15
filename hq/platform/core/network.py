@@ -114,8 +114,39 @@ def _within(value, cidrs: tuple[str, ...]) -> bool:
     return any(address in network for network in _networks(tuple(cidrs)))
 
 
-def is_trusted_proxy(value) -> bool:
+def _is_trusted_proxy(value) -> bool:
     return _within(value, tuple(settings.SEVERINO_TRUSTED_PROXIES))
+
+
+# The part a hop of the forwarded chain plays: a trusted proxy HQ takes the
+# next address from, the address HQ judges the caller by, or one it ignores,
+# since anyone can write the header past the first untrusted hop.
+PROXY = "proxy"
+JUDGED = "judged"
+IGNORED = "ignored"
+
+
+def forwarded_hops(request) -> tuple[tuple[str, str], ...]:
+    """``(address, role)`` for each address that handled ``request``, in the
+    order the hops occurred, the socket peer last.
+
+    HQ's one reading of which proxies it trusts, decided as ForwardedCaller
+    decides it, from the socket peer inward; the predicate stays private so
+    nothing asks the question a second way.
+    """
+
+    peer = socket_peer(request)
+    forwarded = [hop.strip() for hop in str(request.META.get("HTTP_X_FORWARDED_FOR", "")).split(",") if hop.strip()]
+    if not forwarded:
+        return ((peer, JUDGED),)
+    chain = [*forwarded, peer]
+    roles: list[str] = []
+    for address in reversed(chain):
+        if roles and roles[-1] != PROXY:
+            roles.append(IGNORED)
+        else:
+            roles.append(PROXY if _is_trusted_proxy(address) else JUDGED)
+    return tuple(zip(chain, reversed(roles), strict=True))
 
 
 def trusted_proxies() -> list[str]:

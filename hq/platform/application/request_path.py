@@ -17,14 +17,14 @@ from hq.domains.control_plane.names import is_hostname, normalized_hostname
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND
 from hq.domains.control_plane.providers import PROVIDERS, operator_label
 from hq.platform.application.labels import dotted
-from hq.platform.core.network import client_ip, is_trusted_proxy, socket_peer, split_host_port
+from hq.platform.core.network import IGNORED, JUDGED, PROXY, split_host_port
 
 from .entity_links import entity_link
 from .path_model import Hop, HopSource, Route, ServicePath, last_machine
 from .paths import hq_path, why_unread
 from .reach import NETWORKS, network_of
 from .request_addresses import Address, addresses_of, addresses_of_hq
-from .request_channel import UNTRUSTED_FORWARDER, forwarded_chain
+from .request_channel import UNTRUSTED_FORWARDER, Forwarding
 from .request_connection import Connection, connection
 from .request_headers import HEADERS_READ, RESPONSE_CHECKS, Header, ResponseCheck, headers_of, redacted
 from .request_standard import ADDRESS_HOST, PROXY_HEADERS, owned_by
@@ -51,9 +51,9 @@ _CHECK_LABELS = {
 
 # How each role in the forwarded chain was decided.
 _CHAIN_DETAIL = {
-    "proxy": "A trusted proxy. HQ takes your address from it.",
-    "judged": "Your address, as HQ sees it.",
-    "ignored": "Ignored: anyone can write this part of the header.",
+    PROXY: "A trusted proxy. HQ takes your address from it.",
+    JUDGED: "Your address, as HQ sees it.",
+    IGNORED: "Ignored: anyone can write this part of the header.",
 }
 
 
@@ -78,7 +78,7 @@ class HopCheck:
 
 
 # A forwarded hop's role as the tone its pill takes.
-_ROLE_TONES = {"judged": Tone.GOOD, "ignored": Tone.SERIOUS}
+_ROLE_TONES = {JUDGED: Tone.GOOD, IGNORED: Tone.SERIOUS}
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,52 +101,27 @@ class Evidence:
 # ----- The forwarded chain ----------------------------------------------------
 
 
-def address_chain(request) -> tuple[Evidence, ...]:
+def address_chain(forwarding: Forwarding) -> tuple[Evidence, ...]:
     """How HQ arrived at the address it judges this request by, hop by hop.
 
     Behind a proxy every request arrives from the proxy, and the caller's
     address is in a header anyone can write, so which hop HQ believes decides
     whether the network gate means anything. Read left to right, the order the
-    hops occurred in; decided right to left, from the socket peer.
+    hops occurred in, each in the part ``forwarding`` decided for it.
     """
 
-    peer = socket_peer(request)
-    forwarded = forwarded_chain(request)
-    if not forwarded or not is_trusted_proxy(peer):
-        return (
-            _address(
-                peer,
-                "judged",
-                UNTRUSTED_FORWARDER if forwarded else "Your address, as HQ sees it.",
-            ),
-        )
-    chain = [*forwarded, peer]
-    roles = _roles(chain)
-    found = [_address(value, roles[index], _CHAIN_DETAIL[roles[index]]) for index, value in enumerate(chain)]
-    if "judged" not in roles.values():
+    if not forwarding.trusted:
+        detail = UNTRUSTED_FORWARDER if forwarding.forwarded else "Your address, as HQ sees it."
+        return (_address(forwarding.peer, JUDGED, detail),)
+    found = [_address(value, role, _CHAIN_DETAIL[role]) for value, role in forwarding.hops]
+    if forwarding.opaque:
         # The first hop is the one the forwarded-header middleware takes then.
         found[0] = _address(
-            client_ip(request),
-            "judged",
+            forwarding.client,
+            JUDGED,
             "Every hop is a trusted proxy, so HQ uses the first one's address.",
         )
     return tuple(found)
-
-
-def _roles(chain: list[str]) -> dict[int, str]:
-    """Each chain position's role, walked from the socket peer inward."""
-
-    roles: dict[int, str] = {}
-    settled = False
-    for index in range(len(chain) - 1, -1, -1):
-        if settled:
-            roles[index] = "ignored"
-        elif is_trusted_proxy(chain[index]):
-            roles[index] = "proxy"
-        else:
-            roles[index] = "judged"
-            settled = True
-    return roles
 
 
 def _address(value: str, role: str, detail: str) -> Evidence:
@@ -321,8 +296,8 @@ def _with_leg(hop: Hop, found: Connection) -> Hop:
 
 def _device(_hop: Hop, context: _Context):
     found = context.found
-    chain = address_chain(context.request)
-    evidence = tuple(item for item in chain if item.role != "proxy")
+    chain = address_chain(found.facts.forwarding)
+    evidence = tuple(item for item in chain if item.role != PROXY)
     return evidence, _device_check(found)
 
 
@@ -449,21 +424,20 @@ def _machine(hop: Hop, context: _Context):
 
 
 def _ingress(hop: Hop, context: _Context):
-    request = context.request
-    peer = socket_peer(request)
-    forwarded = bool(forwarded_chain(request))
-    chain = tuple(item for item in address_chain(request) if item.role == "proxy")
+    forwarding = context.found.facts.forwarding
+    peer = forwarding.peer
+    chain = tuple(item for item in address_chain(forwarding) if item.role == PROXY)
     evidence = chain + _forwarding_headers(hop, context)
     if hop.unread:
         return evidence, HopCheck(Standing.UNAVAILABLE, ended(capfirst(hop.unread)))
     proxy = _proxy_name(hop)
-    if not forwarded:
+    if not forwarding.forwarded:
         return evidence, HopCheck(
             Standing.UNMET,
             ended(f"{proxy} is in front of {context.host}, but this request reached HQ straight from {peer}"),
             "Bind HQ to an address only the proxy can reach.",
         )
-    if not is_trusted_proxy(peer):
+    if not forwarding.trusted:
         return evidence, HopCheck(
             Standing.UNMET,
             f"{peer} forwarded this request but is not on HQ's list of trusted proxies.",
