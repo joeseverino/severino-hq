@@ -43,8 +43,8 @@ HERE = 75
 STAYS = {"open", "docs", "linux", "image", "fix"}
 # Arguments that name a commit: resolved here, since a branch there is not this one, and sent with the tree.
 REFS = {"base", "at"}
-# Tasks that run the composed suite themselves when their change calls for it (fast's extension suites).
-COMPOSING = {"fast"}
+# Tasks that compose the extension set: fast, whose change may call for the composed suite, and perf.
+COMPOSING = {"fast", "perf"}
 # What this run sets that changes what a gate does, handed to the run there.
 CARRIED = (
     *("HQ_BROWSER_CHANNEL", "HQ_BROWSER_ENGINE", "HQ_BROWSER_FACE", "HQ_BROWSER_SHARD", "HQ_GATE_OUTPUT"),
@@ -218,10 +218,12 @@ def sender() -> str:
 
 
 def composes(task: str, values: dict[str, str]) -> bool:
-    """Whether the run may compose the extension set: the composed suite, and fast, which runs it when a change
-    reaches the extensions."""
+    """Whether the run may compose the extension set: the composed suite, a composed look, fast, which runs the
+    suite when a change reaches the extensions, perf, and a look that runs perf after it (--perf, or --base
+    unless --no-perf)."""
 
-    return task in COMPOSING or values.get("composed") == "true"
+    measures = values.get("perf") == "true" or (bool(values.get("base")) and values.get("perf") != "false")
+    return task in COMPOSING or values.get("composed") == "true" or (task == "dev:look" and measures)
 
 
 def send(task: str, host: str, checkout: str, values: dict[str, str]) -> Sent:

@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from hq.platform.core.tests import task
+from tools.dev import extension_set
 from tools.perf import runs
 from tools.perf.mcp_probe import (
     ANSWERED,
@@ -102,20 +103,15 @@ def probe(tree: Path, env: dict[str, str]) -> dict[str, Any]:
         return json.loads(out.read_text(encoding="utf-8"))
 
 
-def environments() -> dict[str, dict[str, str]]:
-    """Each set's environment: no extension, and the ones mise.local.toml composes."""
+def environments(tree: Path) -> dict[str, dict[str, str]]:
+    """Each set's environment: no extension, and the ones mise.local.toml names as ``tree`` can load them."""
 
-    shared = os.environ | {
-        "DJANGO_SETTINGS_MODULE": "hq.config.settings",
-        "SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION": "0",
-    }
+    picked = extension_set.for_tree(tree)
+    print(f"audit:mcp: {tree}: {picked.said}", file=sys.stderr, flush=True)
+    shared = os.environ | {"DJANGO_SETTINGS_MODULE": "hq.config.settings", "SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION": "0"}
     return {
         "host alone": shared | {"SEVERINO_HQ_PLUGINS": "", "PYTHONPATH": ""},
-        "composed": shared
-        | {
-            "SEVERINO_HQ_PLUGINS": os.environ.get("HQ_LOCAL_PLUGINS", ""),
-            "PYTHONPATH": os.environ.get("HQ_LOCAL_PYTHONPATH", ""),
-        },
+        "composed": shared | picked.composed,
     }
 
 
@@ -289,7 +285,7 @@ def measured(tree: Path, commit: str, extra: dict[str, str] | None = None) -> di
     # Compiled first, so neither side's load is charged for compiling its source.
     subprocess.run([sys.executable, "-m", "compileall", "-q", "hq", "tools"], cwd=tree, check=True)
     sets = {}
-    for name, env in environments().items():
+    for name, env in environments(tree).items():
         result = probe(tree, env | (extra or {}))
         sets[name] = {"summary": summary(result), "result": result}
     return {"commit": commit, "sets": sets}
@@ -300,7 +296,7 @@ def main() -> int:
     base = usage.text("base")
     here = commit_of(ROOT)
     fields: dict[str, Any] = {
-        "extensions": [spec for spec in os.environ.get("HQ_LOCAL_PLUGINS", "").split(",") if spec],
+        "extensions": list(extension_set.for_tree(ROOT).plugins),
         "here": measured(ROOT, here),
     }
     if usage.switch("defer_build"):

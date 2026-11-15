@@ -93,6 +93,10 @@ lazy from hq.platform.core.example_estate.testing import as_production, sign_in
 # looks at every other page: it is read only for a name nothing else is.
 lazy from hq.platform.core.tests.browser import catalog
 
+# A composed look's base composes the set its commit can load, picked there.
+# ast-grep-ignore: tools-imported-only-by-tools
+lazy from tools.dev import extension_set
+
 # dev:look runs perf in its share, and perf declares what it draws.
 # ast-grep-ignore: tools-imported-only-by-tools
 lazy from tools.perf.report import tokens as perf_tokens
@@ -713,6 +717,10 @@ def look_at(ref: str, rule: str, clock_at: float) -> tuple[Found, Measured, Foun
             }
             if script := _asked().text("eval"):
                 env[f"{PREFIX}eval"] = str(Path(settings.BASE_DIR, script).resolve())
+            if _asked().switch("composed"):
+                picked = extension_set.at_commit(commit)
+                print(f"{ref}: {picked.said}", flush=True)
+                env |= picked.composed
             shell = ["uv", "run", "--group", "browser", "python", "manage.py", "shell", "--no-imports", "-v", "0"]
             if kept := kept_own(tree, commit, present, shell, env, taken=tuple(deleted)):
                 print(f"{ref}: {_its_own(kept)}", flush=True)

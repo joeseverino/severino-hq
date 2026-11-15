@@ -19,6 +19,7 @@ from pathlib import Path
 
 from hq.platform.application import http_read
 from hq.platform.core.tests.task import PREFIX, trusted_mise
+from tools.dev.extension_set import NAMED
 from tools.perf import parse
 lazy from hq.platform.core import seeds
 
@@ -142,21 +143,21 @@ def probe_counts(output: str) -> dict[str, dict[str, int] | None]:
 # Where a checkout names the extensions its scratch server composes: its
 # gitignored mise.local.toml, and the two variables that file sets.
 LOCAL = "mise.local.toml"
-_LOCAL_SET = ("HQ_LOCAL_PLUGINS", "HQ_LOCAL_PYTHONPATH")
 # Where mise keeps what a run in a worktree records, in the folder worktree() gives it beside the tree.
 MISE_STATE = "mise-state"
 
 
-def scratch_env(tree: Path, *, trusted: bool, alone: bool) -> dict[str, str]:
-    """What a tree's scratch tasks run under: alone, mise reads no mise.local.toml there and the
+def scratch_env(tree: Path, *, trusted: bool, alone: bool, named: dict[str, str] | None = None) -> dict[str, str]:
+    """What a tree's scratch tasks run under: the extension set ``named`` where one is (a base's, as
+    its commit can load it), else this run's; alone, mise reads no mise.local.toml there and the
     extension set it names is not inherited either, so the server composes the host alone."""
 
-    env = clean_env(**(trusted_mise(tree, tree.parent / MISE_STATE) if trusted else {}))
+    env = clean_env(**(trusted_mise(tree, tree.parent / MISE_STATE) if trusted else {}), **(named or {}))
     # dev:scratch runs with DEBUG on, which compiles every template on every request; perf measures
     # what production serves, so its servers cache templates as production does.
     env["DJANGO_TEMPLATE_CACHE"] = "1"
     if alone:
-        env = {name: value for name, value in env.items() if name not in _LOCAL_SET}
+        env = {name: value for name, value in env.items() if name not in NAMED}
         env["MISE_IGNORED_CONFIG_PATHS"] = str(tree / LOCAL)
     return env
 
@@ -186,13 +187,14 @@ def unloaded(tree: Path, env: dict[str, str]) -> str | None:
     return f"manage.py check exited {done.returncode}: {said.strip()[-400:]}"
 
 
-def set_refused(tree: Path, *, trusted: bool) -> str | None:
+def set_refused(tree: Path, *, trusted: bool, named: dict[str, str] | None = None) -> str | None:
     """Why ``tree``'s HQ cannot load the extension set where it loads the host alone, as the error
     loading the set stopped at; None where the set loads, or the host alone fails too, a failure
-    of the tree's own. Every way a tree's HQ can refuse the set (a plugin API it predates, an
-    extension importing what it lacks) is answered here, by what Django does with it."""
+    of the tree's own. The set is one at the tree's plugin API (tools/dev/extension_set.py), so
+    what is answered here is a refusal that API does not name: an extension importing what the
+    tree lacks."""
 
-    refused = unloaded(tree, scratch_env(tree, trusted=trusted, alone=False))
+    refused = unloaded(tree, scratch_env(tree, trusted=trusted, alone=False, named=named))
     if refused and unloaded(tree, scratch_env(tree, trusted=trusted, alone=True)) is None:
         return refused
     return None
@@ -203,9 +205,18 @@ class Scratch:
 
     measured = SCRATCH_MEMORY
 
-    def __init__(self, tree: Path, log: Path, seed: str, *, trusted: bool = False, alone: bool = False) -> None:
+    def __init__(
+        self,
+        tree: Path,
+        log: Path,
+        seed: str,
+        *,
+        trusted: bool = False,
+        alone: bool = False,
+        named: dict[str, str] | None = None,
+    ) -> None:
         self.tree, self.log, self.seed = tree, log, seed
-        self.env = scratch_env(tree, trusted=trusted, alone=alone)
+        self.env = scratch_env(tree, trusted=trusted, alone=alone, named=named)
         self.port = free_port()
         self.url = f"http://127.0.0.1:{self.port}"
         self.server: subprocess.Popen | None = None

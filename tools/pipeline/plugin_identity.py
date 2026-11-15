@@ -42,10 +42,19 @@ def manifest(source: str) -> ast.Call:
     raise SystemExit(f"plugin.py: no module-level `plugin = {MANIFEST}(...)`")
 
 
+def distribution_of(root: Path) -> str:
+    return tomllib.loads((root / "pyproject.toml").read_text())["project"]["name"]
+
+
+def manifest_file(root: Path) -> Path:
+    """Where the package at ``root`` declares its manifest."""
+    return root / "src" / distribution_of(root).replace("-", "_") / "plugin.py"
+
+
 def identity(root: Path, repository: str | None = None) -> dict[str, str]:
-    distribution = tomllib.loads((root / "pyproject.toml").read_text())["project"]["name"]
+    distribution = distribution_of(root)
     package = distribution.replace("-", "_")
-    source = root / "src" / package / "plugin.py"
+    source = manifest_file(root)
     if not source.is_file():
         raise SystemExit(f"{distribution}: expected its manifest at src/{package}/plugin.py")
     call = manifest(source.read_text())
@@ -69,10 +78,23 @@ def identity(root: Path, repository: str | None = None) -> dict[str, str]:
 
 def plugin_api_version(host: Path = HOST) -> str:
     """The PLUGIN_API_VERSION the host at ``host`` speaks, read without importing it."""
-    match = re.search(r"^PLUGIN_API_VERSION\s*=\s*(\d+)\s*$", (host / PLUGINS).read_text(), re.MULTILINE)
+    return spoken(PLUGINS.as_posix(), (host / PLUGINS).read_text())
+
+
+def spoken(where: str, source: str) -> str:
+    """The PLUGIN_API_VERSION ``source``, the host's plugins module as ``where`` holds it, defines."""
+    match = re.search(r"^PLUGIN_API_VERSION\s*=\s*(\d+)\s*$", source, re.MULTILINE)
     if not match:
-        raise SystemExit(f"{PLUGINS} does not define PLUGIN_API_VERSION")
+        raise SystemExit(f"{where} does not define PLUGIN_API_VERSION")
     return match.group(1)
+
+
+def required_api(source: str) -> int:
+    """The API a manifest's ``plugin.py`` source requires of its host, read without importing it."""
+    version = literal(manifest(source), "api_version")
+    if not isinstance(version, int):
+        raise SystemExit(f"plugin.py: api_version= must be a whole number, not {version!r}")
+    return version
 
 
 if __name__ == "__main__":

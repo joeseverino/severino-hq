@@ -17,7 +17,7 @@ for case in test-suite-coverage.sh:mise-tasks/test/suite test-composed.sh:mise-t
     copy="${work}/${suite}"
     mkdir -p "${copy}/tests" "${copy}/tools" "${copy}/$(dirname "${task}")"
     cp -R "${repo}/tests/shell" "${copy}/tests/"
-    cp -R "${repo}/tools/lib" "${repo}/tools/gate" "${repo}/tools/__init__.py" "${copy}/tools/"
+    cp -R "${repo}/tools/lib" "${repo}/tools/gate" "${repo}/tools/dev" "${repo}/tools/pipeline" "${repo}/tools/__init__.py" "${copy}/tools/"
     : >"${copy}/tools/lib/example.sh"
     cp "${repo}/${task}" "${copy}/${task}"
     awk '!planted && /^\. \.\/tools\/lib\// { print ". ./tools/lib/example.sh"; planted = 1 } { print }' \

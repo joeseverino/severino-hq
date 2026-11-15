@@ -656,10 +656,23 @@ HQ_LOCAL_PYTHONPATH=<worktree>/packages/<name>/src mise run test --composed
 HQ_LOCAL_PLUGINS=tests.fixtures.example_hq_plugin.plugin:plugin mise run dev:scratch
 ```
 
-Only the composed suite, the dev servers and `mise run dev:look --composed`
-load the set. The suite and the look load it through
-`tools/lib/extension-set.sh`, whose first line names the `src` each package is
-imported from, so a run says which tree it composed.
+Every step that composes the set (the composed suite, the dev servers and
+`manage --scratch`, perf and its base, `dev:look --composed` and its base,
+`image:compose`, `audit:mcp`, `audit:memory`, `audit:registry --composed` and
+`wire-pocket-id`) loads the set as one host tree can load it, picked in one
+place, `pick` in `tools/dev/extension_set.py`. A file task reaches it through
+`tools/lib/extension-set.sh`. Each package is asked the plugin API its
+manifest requires, beside the `PLUGIN_API_VERSION` of the host tree or commit
+the step runs:
+
+- every package requires it: the trees named are composed as they stand;
+- a repository's packages require another: its newest commit on HEAD whose
+  manifests all require the host's API is composed instead, unpacked once
+  per commit under `var/extensions/`;
+- no commit does: no extension is composed, and the step runs the host alone.
+
+The step's first line says which: the `src` each package is imported from, the
+commit picked and why, or why none is composed.
 
 `mise run test --composed` runs the suite as the image does: in a copy of only
 the files `Dockerfile.dockerignore` admits, less what the Dockerfile's
@@ -898,9 +911,10 @@ How a run goes (`tools/gate/remote.py`, and `tools/gate/remote-host.sh` there):
    a push to its forge, since these refs publish nothing. fast's default base is resolved here too, from this
    checkout's chain of passed trees, which is also synced there with its maps,
    so it selects what it would select here. A run that may compose (the
-   composed suite, fast) sends the extension checkout `HQ_LOCAL_PYTHONPATH`
-   names the same way, to the clone of the same name beside HQ's there, with
-   `HQ_LOCAL_PLUGINS`; one that cannot send it runs here.
+   composed suite, fast, perf, and a look that runs perf) sends the extension
+   checkout `HQ_LOCAL_PYTHONPATH` names the same way, to the clone of the same
+   name beside HQ's there, with `HQ_LOCAL_PLUGINS`, and the set is picked
+   there from what was sent; one that cannot send it runs here.
 2. There, the run takes the first free worktree of this checkout's under
    `~/.cache/hq-gates` (the checkout is keyed by its machine and path), held
    with `flock` until the run ends, so two runs at once never share one and
@@ -1402,11 +1416,14 @@ have been measured under a one-minute load average within 2 of the load the
 tip is measured under; a report that kept no load stands in for nothing. The
 closing line names both loads beside the run the base is kept from.
 
-A tree whose start fails where its HQ cannot load the extension set but loads
-the host alone (`manage.py check` run both ways), such as a base older than an
-extension's plugin API or an import it needs, makes the run measure the host
-alone on both sides, as `--host-alone` asks, so the extensions' cost is never
-counted as the change's. Its closing line names the error the set stopped at.
+Each side composes the extension set its own commit can load
+([The extension set](#the-extension-set)): a base at another plugin API
+composes the extensions' newest commit at that API. A base that can load no
+commit of them, or whose start fails where its HQ cannot load its set but
+loads the host alone (`manage.py check` run both ways), such as an import an
+extension needs that the base lacks, makes the run measure the host alone on
+both sides, as `--host-alone` asks, so the extensions' cost is never counted
+as the change's. Its closing line says why.
 
 With `--base`, one page takes about 40 s (under 30 with the base kept) and
 every page about two and a half minutes (two with the base kept).

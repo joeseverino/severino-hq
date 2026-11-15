@@ -273,13 +273,9 @@ HQ_DEV_PROFILE = "secure"
 DJANGO_DEBUG = "0"
 DJANGO_BEHIND_TLS_PROXY = "1"
 SEVERINO_OIDC_ENABLED = "1"
-# A checkout has no admitted wheels, and admission is required whenever DEBUG is off.
-SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION = "0"
 DJANGO_WHITENOISE_AUTOREFRESH = "1"
 SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS = "1"
 SEVERINO_LOG_LEVEL = "INFO"
-SEVERINO_HQ_PLUGINS = "{{ env.HQ_LOCAL_PLUGINS | default(value='') }}"
-PYTHONPATH = "{{ env.HQ_LOCAL_PYTHONPATH | default(value='') }}"
 SEVERINO_HQ_REVISION = "{{ exec(command='git rev-parse HEAD') }}"
 
 # Loopback, DEBUG on, a database of this checkout's own under var/dev/scratch,
@@ -297,11 +293,8 @@ DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,[::1]"
 SEVERINO_DATABASE_PATH = "{{ config_root }}/var/dev/scratch/db.sqlite3"
 SEVERINO_MEDIA_ROOT = "{{ config_root }}/var/dev/scratch/media"
 SEVERINO_EXPORTS_ROOT = "{{ config_root }}/var/dev/scratch/exports"
-SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION = "0"
 SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS = "1"
 SEVERINO_LOG_LEVEL = "INFO"
-SEVERINO_HQ_PLUGINS = "{{ env.HQ_LOCAL_PLUGINS | default(value='') }}"
-PYTHONPATH = "{{ env.HQ_LOCAL_PYTHONPATH | default(value='') }}"
 
 [tasks."dev:scratch"]
 extends = "dev:scratch-env"
@@ -326,7 +319,7 @@ hide = true
 description = "To reach the scratch server from a script: a signed-in session cookie for it"
 # A program reads the cookie, so stdout is the command's own, unlabeled.
 raw = true
-run = 'uv run python manage.py dev_session "$HQ_DEV_ACCOUNT"'
+run = '. ./tools/lib/extension-set.sh && compose_extensions && exec uv run python manage.py dev_session "$HQ_DEV_ACCOUNT"'
 
 # `mise run manage --scratch`: the env is the scratch server's, which mise
 # fixes per task, so the scratch half is a step of its own.
@@ -335,7 +328,7 @@ extends = "dev:scratch-env"
 hide = true
 raw = true
 description = "manage.py on this checkout's scratch database, extensions loaded: mise run manage --scratch"
-run = "uv run python manage.py"
+run = ". ./tools/lib/extension-set.sh && compose_extensions && exec uv run python manage.py"
 
 # ------------------------------------------------------------- aggregates
 # A task that runs gates runs them under tools.gate.verdict, which ends its
