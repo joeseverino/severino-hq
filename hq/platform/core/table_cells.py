@@ -18,13 +18,20 @@ _SECTIONS = ("thead", "tbody", "tfoot")
 # technology alone, and what the row keeps for its open line or shows only in
 # a narrow box.
 _OFF_LINE = frozenset({"visually-hidden", "row-below", "row-more", "narrow-only", "row-editor", "row-later"})
-# The characters of a line of a value past which it may run longer than the
-# few lines its cell holds it to: such a cell is clamped (`cell-clamp`,
-# cuts.css), and its row, opened in a narrow box, shows it whole.
+# The characters of a line of a value past which it is longer than a line of
+# words (`data-long`): it wraps, never to fewer than a line of words, and its
+# column shares the room whatever its kind (tables.css); one of a kind that
+# may be cut is held to a few lines (`cell-clamp`, cuts.css), and its row,
+# opened in a narrow box, shows it whole.
 LONG = 48
+# The characters of the longest value a column holds whole on its line, up to
+# its share (`data-short`, tables.css), counted generously: a proportional
+# face sets most letters narrower than `ch`. An address and its port, a host,
+# a mailbox or a project's name is no longer; a longer one wraps.
+SHORT = 32
 # The kinds whose values wrap and may be clamped, each saying its whole value
 # in its title; the others (a status, a figure, a control) keep their line,
-# and their column is as wide as it.
+# and their column is as wide as it, unless one of its values is long.
 _CUT_KINDS = frozenset({"name", "prose", "identifier"})
 _HELD_KINDS = frozenset({"status", "numeric", "control"})
 # What a cell holds that its row shows only on its open line: at any width
@@ -393,6 +400,9 @@ class Cells(HTMLParser):
         # values: no column names its rows.
         named = -1 if not heads and kinds.get(0) == "status" else _kept_naming_column(heads)
         empty = _empty_columns(heads, named, records)
+        longs = {
+            place for row in records for place, cell in _placed(row) if "colspan" not in cell.attrs and _long(cell)
+        }
         width = _width(heads, records)
         names, drops, gutter = _columns(heads[-1] if heads else [])
         # The columns that never leave, whatever rank their heading gives
@@ -430,6 +440,8 @@ class Cells(HTMLParser):
                 self._span(row, width)
                 continue
             self._mark_cells(row, kinds, named, empty, levels, leaving, names)
+            if row.section == "thead":
+                self._mark_long_heads(row, longs)
             self._name(row, kinds, named)
             if gutter is not None and row.section != "thead":
                 self._gutter(row, gutter)
@@ -496,15 +508,27 @@ class Cells(HTMLParser):
                         marks.append(f' data-label="{html.escape(label)}"')
             self.marks.setdefault(cell.start, []).extend(marks)
 
+    def _mark_long_heads(self, row: _Row, longs: set[int]) -> None:
+        """A heading over a column holding a long value says so: its column
+        shares the room, whatever its kind."""
+
+        for at, cell in _placed(row):
+            if at in longs and "colspan" not in cell.attrs:
+                self.marks.setdefault(cell.start, []).append(" data-long")
+
     def _body_marks(self, cell: _Cell, kind: str, *, body: bool) -> list[str]:
         """What a body cell says of itself under its column."""
 
         marks = [] if "data-kind" in cell.attrs else [f' data-kind="{kind}"']
+        if body and _long(cell):
+            marks.append(" data-long")
+        elif body and not cell.says_nothing and cell.longest <= SHORT:
+            marks.append(" data-short")
         if body and kind in _CUT_KINDS and not cell.says_nothing:
             said = " ".join("".join(cell.text).split())
             if said and "title" not in cell.attrs:
                 marks.append(f' title="{html.escape(said)}"')
-            if cell.longest > LONG and cell.closed:
+            if _long(cell) and cell.closed:
                 self.clamps.append((cell.opened, cell.value_end))
         return marks
 
@@ -569,6 +593,13 @@ class Cells(HTMLParser):
             if width and "colspan" not in cell.attrs:
                 marks.append(f' colspan="{width}"')
             self.marks.setdefault(cell.start, []).extend(marks)
+
+
+def _long(cell: _Cell) -> bool:
+    """Whether a line of the cell runs longer than a line of words
+    (``data-long``): what it says wraps, and its column shares the room."""
+
+    return cell.longest > LONG and not cell.says_nothing
 
 
 def without_ids(markup: str) -> str:

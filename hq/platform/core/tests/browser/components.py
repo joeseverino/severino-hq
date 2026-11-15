@@ -359,8 +359,17 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 opened = 0
                 for row in rows.all():
                     self.assertTrue(row.locator(SELECTORS["decision_title"]).is_visible())
-                    # One Dismiss is shown: at the row's end, or beneath its words in a narrow box.
-                    self.assertEqual(row.locator(f"{SELECTORS['decision_dismiss']} >> visible=true").count(), 1)
+                    # One Dismiss is shown: at the row's end, or in a narrow box
+                    # on the row's open line, a press away (tables.css).
+                    shown = row.locator(f"{SELECTORS['decision_dismiss']} >> visible=true").count()
+                    if width == PHONE_SCREEN[0]:
+                        self.assertEqual(shown, 0)
+                        line = row.locator("xpath=following-sibling::tr[1][@data-row-detail]")
+                        row.locator(SELECTORS["row_toggle"]).click()
+                        self.assertEqual(line.locator('.row-controls button[name="key"] >> visible=true').count(), 1)
+                        row.locator(SELECTORS["row_toggle"]).click()
+                    else:
+                        self.assertEqual(shown, 1)
                     # The row's steps are in its line beneath, drawn by the server.
                     if not row.evaluate(_HELD_BENEATH, SELECTORS["decision_steps"]):
                         continue
@@ -698,7 +707,8 @@ class ComponentLayoutTests(LayoutBrowserTests):
     @with_script
     def test_an_ask_among_a_rows_actions_keeps_them_on_one_line(self):
         """An ask before another of a row's actions leaves that action on the
-        row's first line beside it, and what the ask says once pressed comes
+        row's first line beside it, or on its open line in a narrow box, and
+        in a wide one what the ask says once pressed comes
         on the line the cell keeps under them, so the row grows no taller."""
 
         self.pages = {
@@ -720,10 +730,19 @@ class ComponentLayoutTests(LayoutBrowserTests):
         for width in (PHONE_SCREEN[0], WIDE):
             with self.subTest(width=width):
                 self.open("ask-actions-probe", width)
-                button = self.page.locator(f"{SELECTORS['row_ask']} [data-ask-button]")
+                narrow = width == PHONE_SCREEN[0]
+                if narrow:
+                    # In a narrow box the row's actions stand side by side on
+                    # its open line (tables.css), which wraps as it must.
+                    self.page.locator(SELECTORS["row_toggle"]).click()
+                    button = self.page.locator(".row-detail .row-controls [data-ask-button]")
+                else:
+                    button = self.page.locator(f"{SELECTORS['row_ask']} [data-ask-button]")
                 remove = self.page.get_by_role("link", name="Remove")
                 middles = [box["y"] + box["height"] / 2 for box in (button.bounding_box(), remove.bounding_box())]
                 self.assertLessEqual(abs(middles[0] - middles[1]), 1.5)
+                if narrow:
+                    continue
                 row = button.evaluate_handle("(button) => button.closest('tr')").as_element()
                 tall = row.bounding_box()["height"]
                 button.press("Enter")
@@ -825,11 +844,14 @@ class ComponentLayoutTests(LayoutBrowserTests):
             """() => [...document.querySelectorAll('main td')].map((cell) => {
               // The line under the row's name, and the cell of free text.
               const box = cell.querySelector('br')?.nextElementSibling ?? cell;
+              const first = document.createTreeWalker(box, NodeFilter.SHOW_TEXT, {
+                acceptNode: (node) => node.data.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP,
+              }).nextNode();
               const words = document.createRange();
-              words.selectNodeContents(box.firstChild);
+              words.selectNodeContents(first);
               const word = [...words.getClientRects()].find((r) => r.width);
-              const name = [...(box.querySelector('[data-entity]') ?? box.firstElementChild).getClientRects()].find((r) => r.width);
-              return [box.firstChild.data.trim(), Math.abs(word.top - name.top) < word.height / 2];
+              const name = [...box.querySelector('[data-entity], .token').getClientRects()].find((r) => r.width);
+              return [first.data.trim(), Math.abs(word.top - name.top) < word.height / 2];
             })"""
         )
         self.assertEqual(lines, [["on", True], ["Created", True]])
@@ -1482,8 +1504,9 @@ class ComponentLayoutTests(LayoutBrowserTests):
         the cell that names it, and shows it only while the row holds
         something back: a column that left a table wider than its box, with
         something in it, a part of a list it folds, a run of parts with a rest
-        past the ones that size its column, or a value longer than a line of
-        its column, as the server marks it. A dash in a dropped column says
+        past the ones that size its column, or in a narrow box a value longer
+        than a line of its column, as the server marks it, which a wide box
+        shows whole in its cell's title (cuts.css). A dash in a dropped column says
         nothing, screen-reader text is clipped to a pixel by design and a
         decoration is hidden from assistive technology: none is content a row
         withholds. Nothing is measured: the server and the region decide.
@@ -1492,7 +1515,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.pages = {**self.pages, "row-toggle-probe": probe(ROW_TOGGLE_TABLES, **ROW_TOGGLE_VALUES)}
         shown_at = {
             PHONE_SCREEN[0]: {"dropped", "cut", "folded", "cut-in-a-kept-gutter", "line-cut"},
-            1280: {"cut", "folded", "cut-in-a-kept-gutter", "line-cut"},
+            1280: {"folded", "line-cut"},
         }
         for width, expected in shown_at.items():
             with self.subTest(width=width):
@@ -1957,7 +1980,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
           for (const [name, hold] of [['example-held-name', 'nowrap'], ['example-free-name', 'normal']]) {
             const token = document.createElement('span');
             token.className = 'token';
-            token.setAttribute('data-short', '');
             token.style.whiteSpace = hold;
             const inner = document.createElement('span');
             inner.style.whiteSpace = 'normal';
@@ -1965,6 +1987,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
             token.append(inner);
             const cell = row.insertCell();
             cell.style.cssText = 'padding: 0; overflow-wrap: anywhere';
+            cell.setAttribute('data-short', '');
             cell.append(token);
           }
           document.querySelector('main').prepend(table);

@@ -151,8 +151,7 @@ def _token(word: str, *, sole: bool) -> str:
     """A word with a seam or a hyphen inside it, or too long to be a word, as
     a token. Any other word reads as a word, and stays plain text. A token
     that is the whole value (a name, never a word of a sentence) is marked
-    ``data-sole``, and one short enough to hold its line ``data-short``. A
-    figure among words reads as one of them."""
+    ``data-sole``. A figure among words reads as one of them."""
 
     if not (_INNER_SEAM.search(word) or _kept(word)) or (sole and _QUANTITY.fullmatch(unescape(word))):
         return word
@@ -172,16 +171,7 @@ def _token(word: str, *, sole: bool) -> str:
         # A word of a phrase: each part is cut on its own, at its cell's edge.
         return f'<span class="token">{_SEAM.join(_whole(part, boxed=True) for part in parts)}</span>'
     inside = _SEAM.join(_whole(part) for part in parts)
-    short = len(unescape(word)) <= _SHORT
-    opening = '<span class="token" data-sole data-short>' if short else '<span class="token" data-sole>'
-    return f'{opening}<span class="cut">{inside}</span></span>'
-
-
-# The longest name a table's column holds whole on its line (tables.css),
-# counted generously: a proportional face sets most letters narrower than
-# `ch`. An address and its port, a host or a mailbox is no longer; a longer
-# name is more than a column's share of a wide table, so it breaks anywhere.
-_SHORT = 32
+    return f'<span class="token" data-sole><span class="cut">{inside}</span></span>'
 
 
 # The tags that close a word's boxes, after its last letter.
