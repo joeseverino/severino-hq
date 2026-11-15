@@ -12,7 +12,7 @@ from hq.platform.core.tracing import note, span
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
 from .answer_fields import Permitted, Pinned, RequiredPermissions, SchemaVersion
-from .approvals import hold_for_approval
+from .approvals import Approved, approval, hold_for_approval
 from .call_envelope import read_call
 from .capability_policy import Rule, decide
 from .contracts import DOTTED_NAME, Effect
@@ -518,8 +518,8 @@ class Consented(Sealed):
 
     - Two places make one, both in this module: the runner's consent step
       (``_consent``), once operator policy and the default hold have let the
-      run through, and ``execute_approved``, once a person has approved the
-      held request (``approved``). Only this module holds its seal, so a path
+      run through, and ``execute_approved``, handed the ``approvals.Approved``
+      only a person's approval makes (``approved``). Only this module holds its seal, so a path
       that writes a declaration without passing either has no value to hand
       the writer, and ``consent`` refuses anything else.
     - The runner hands one only to a handler that names ``consented``, never
@@ -657,21 +657,22 @@ def _run(
     return dict(result)
 
 
-def execute_approved(
-    spec: CapabilitySpec,
-    command: Any,
-    target: str | int | None,
-    *,
-    principal: Principal,
-    sent: frozenset[str],
-) -> dict[str, Any]:
-    """Run a capability a person has just agreed to, held payload and all.
+def execute_approved(approved: Approved) -> dict[str, Any]:
+    """Run the change a person has just approved, held payload and all.
 
-    The approval gate is not consulted again: the decision that calls this
-    satisfied it. Takes a spec rather than a name, so nothing can route here by
-    sending a string, and raises rather than answering in an adapter's error
-    shape, so the person's page reports it and the transaction keeps the request.
+    The approval gate is not consulted again: the ``Approved`` only a
+    person's approval makes is its proof, and ``approval`` refuses anything
+    else. Raises rather than answering in an adapter's error shape, so the
+    person's page reports it and the transaction keeps the request.
     """
 
-    consented = _seal(Consent(principal, approved=True))
-    return _run(spec, command, consented=consented, target=target, expected_updated_at=None, sent=sent)
+    change = approval(approved)
+    consented = _seal(Consent(change.acting, approved=True))
+    return _run(
+        change.spec,
+        change.command,
+        consented=consented,
+        target=change.target,
+        expected_updated_at=None,
+        sent=change.sent,
+    )

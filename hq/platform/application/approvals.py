@@ -11,7 +11,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import timedelta
 from functools import wraps
-from typing import Annotated, Any, Final
+from typing import TYPE_CHECKING, Annotated, Any, Final, final
 
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -32,6 +32,7 @@ from .held_answer import HELD, ApprovalApplied, ApprovalRejected, HeldCall, seri
 from .record_errors import PolicyError, RecordNotFound
 from .refusal_status import refusal_of, refuse
 from .routes import reverse
+from .sealing import Sealed, sealer
 from .security import (
     INTERNAL_INTERFACE,
     OPERATOR_INTERFACES,
@@ -53,6 +54,9 @@ lazy from .resource_refusals import UnsupportedResourceOperation
 lazy from .resources import InvalidResourceInput
 lazy from .roles import Role
 lazy from .ui import counted
+
+if TYPE_CHECKING:
+    from .integration_specs import CapabilitySpec
 
 # How many outstanding requests one actor may hold. A caller that has already
 # asked for ten decisions and been answered none does not need an eleventh: it
@@ -803,6 +807,38 @@ def approve(command: ApproveCommand, *, principal: Principal) -> ApprovalApplied
         return _apply(held, principal)
 
 
+@final
+class Approved(Sealed):
+    """A held change a person has just approved, the only thing ``execute_approved`` runs (``sealing``).
+
+    - One place makes one: ``_apply``, once the approver may decide and the
+      change is still what was asked for. Only this module holds its seal, so
+      no other path has a value that makes a run approved.
+    - It carries the whole change (the spec, the validated command, its
+      target, the fields sent) and who acts, so what runs approved is what
+      the person saw, and nothing handed beside it can swap any part.
+    - ``execute_approved`` reads it only through ``approval``, which refuses
+      anything this module did not seal.
+    """
+
+    __slots__ = ()
+
+
+@dataclass(frozen=True, slots=True)
+class Approval:
+    """What an ``Approved`` carries: the change a person approved, and who it
+    runs as (its asker, with ``approved_by`` naming the person)."""
+
+    spec: CapabilitySpec
+    command: Any
+    target: str | int | None
+    acting: Principal
+    sent: frozenset[str]
+
+
+_seal, approval = sealer(Approved, Approval)
+
+
 def _apply(held: ApprovalRequest, principal: Principal) -> ApprovalApplied:
     require_decidable(principal, held, APPROVE)
     spec = capabilities.capability_spec(held.capability)
@@ -838,7 +874,7 @@ def _apply(held: ApprovalRequest, principal: Principal) -> ApprovalApplied:
         # operation: the approver agreed, and the change is the requester's.
         with own_operation(held, operation=spec.name, principal=acting, rebinds=True):
             result = execute_approved(
-                spec, command, locked.target or None, principal=acting, sent=frozenset(held.payload)
+                _seal(Approval(spec, command, locked.target or None, acting, frozenset(held.payload)))
             )
         _record(locked, ApprovalRequest.State.APPROVED, decider=principal, result=result)
     return {"ok": True, "approved": str(locked.id), "result": result, "message": "Approved and applied."}

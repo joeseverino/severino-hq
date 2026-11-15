@@ -1,7 +1,8 @@
 """Tokens only one module makes, which only that module's unsealer reads.
 
 A token stands for a decision its module made (the bridge admitted a
-controller, the runner consented to a run, a read of the sweep found a spec),
+controller, the runner consented to a run, a person approved a held change, a
+read of the sweep found a spec),
 handed to a writer that must not act without it. It is the sealer/unsealer
 pair of the E language's brands (Morris, "Protection in Programming
 Languages", 1973; Miller, "Robust Composition", 2006):

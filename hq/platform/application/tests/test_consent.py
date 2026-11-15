@@ -124,6 +124,57 @@ class ConsentTests(TestCase):
 
         self.assertEqual(self.policy(), wanted)
 
+    def test_running_a_change_approved_takes_a_persons_approval_not_a_principal(self):
+        import copy
+        import pickle
+        from unittest import mock
+
+        from .. import approvals
+        from ..capabilities import command_spec, execute_approved, validate_command
+
+        spec = command_spec("infrastructure.resource.update")
+        wanted = {"key": POLICY_KEY, "kind": GATED_KIND, "spec": amended().spec, "enabled": True}
+        payload = keyed(wanted)
+        command = validate_command(spec, wanted, POLICY_KEY)
+
+        with self.assertRaises(TypeError):
+            execute_approved(spec, command, POLICY_KEY, principal=TOKEN, sent=frozenset(payload))  # type: ignore[call-arg]
+        self.assertEqual(self.policy(), policy_document())
+
+        from ..approvals import Approval, Approved
+        from ..sealing import sealer
+
+        # A real one, as a person's approval hands it over, to copy and pickle.
+        asked = execute_capability(
+            "infrastructure.resource.update", payload, principal=mcp_principal(), target=POLICY_KEY
+        )
+        with mock.patch.object(approvals, "execute_approved", return_value={"ok": True}) as handed:
+            approve(ApproveCommand(asked["approval"]["id"]), principal=an_operator())
+        ((real,), _kwargs) = handed.call_args
+        fields = {
+            "spec": spec,
+            "command": command,
+            "target": POLICY_KEY,
+            "acting": replace(TOKEN, approved_by="operator"),
+            "sent": frozenset(payload),
+        }
+        seal, _unseal = sealer(Approved, Approval)
+        forged = {
+            "called": Approved,
+            "duck-typed": lambda: SimpleNamespace(**fields),
+            "bare": lambda: object.__new__(Approved),
+            "sealed elsewhere": lambda: seal(Approval(**fields)),
+            "copied": lambda: copy.copy(real),
+            "pickled": lambda: pickle.loads(pickle.dumps(real)),
+        }
+        for way, forge in forged.items():
+            with self.subTest(way=way), self.assertRaises(TypeError):
+                execute_approved(forge())
+        self.assertEqual(self.policy(), policy_document())
+
+        execute_approved(real)
+        self.assertEqual(self.policy(), amended().spec["document"])
+
 
 class AdoptedTests(TestCase):
     """Writing down what is live asks no consent, so only a read of the last sweep reaches it."""

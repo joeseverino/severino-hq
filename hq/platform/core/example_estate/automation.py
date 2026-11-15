@@ -16,7 +16,7 @@ are free to run.
 import hashlib
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import timedelta
 from itertools import count
 from typing import Any
@@ -35,13 +35,13 @@ from hq.domains.control_plane.models import (
 )
 from hq.domains.control_plane.provider_adapters.automation import OPERATION_KIND, SOURCE_KIND
 from hq.platform.application.agent_registry import observe
-from hq.platform.application.approvals import is_held
+from hq.platform.application.approvals import APPROVE, is_held
 from hq.platform.application.automation_adoption import ADOPT, catch_up
 from hq.platform.application.automation_manifest import OperationManifest
 from hq.platform.application.automation_runs import capability_name, operation_registry
 from hq.platform.application.automation_sources import REFRESH
 from hq.platform.application.cadence import AUTOMATION_HEARTBEAT, AUTOMATION_WORK, note_automation
-from hq.platform.application.capabilities import command_spec, execute_approved, run_capability, validate_command
+from hq.platform.application.capabilities import run_capability
 from hq.platform.application.controller import ControllerReport, claim_next_operation, renew_operation, report_operation
 from hq.platform.application.integration_specs import IDEMPOTENCY_FIELD
 from hq.platform.application.machines import machine_catalog
@@ -429,15 +429,16 @@ def runs(
     owner = owner or get_user_model().objects.order_by("pk").first()
     person = web_principal(owner) if owner is not None else cli_principal()
     agent = token_principal(CLAIMS, MCP_INTERFACE)
+    # Only a person approves an agent's held ask; the shell may not.
+    approver = person if owner is not None else None
     adopted(person)
     proposed(person)
     supplied = procedures()
     first, *others = supplied
-    approved = replace(agent, approved_by=person.actor)
     endings: tuple[tuple[Principal, Callable[[OperationRequest], None], str], ...] = (
         (person, _reported(DONE), ""),
         (person, _reported(FAILED), ""),
-        (approved, _reported(DONE), ""),
+        (agent, _reported(DONE), ""),
         (agent, _reported(DONE), CORRELATION),
         (person, _called_off(person), ""),
         (person, _outlived, ""),
@@ -446,13 +447,13 @@ def runs(
     for index in range(count):
         asker, carried_out, correlation = endings[index % len(endings)]
         ago = timedelta(days=2 + 3 * (count - 1 - index))
-        _asked(first, server, asker, ago, carried_out, correlation=correlation)
+        _asked(first, server, asker, ago, carried_out, approver=approver, correlation=correlation)
     if others:
-        _asked(others[0], read_on, person, timedelta(hours=5), _reported(REPORTED))
+        _asked(others[0], read_on, person, timedelta(hours=5), _reported(REPORTED), approver=approver)
     # Now: one run working on the server, one waiting.
-    _asked(first, server, person, timedelta(minutes=3), _working)
+    _asked(first, server, person, timedelta(minutes=3), _working, approver=approver)
     if len(others) > 1:
-        _asked(others[1], waiting_on, agent, timedelta(minutes=1), lambda _run: None)
+        _asked(others[1], waiting_on, agent, timedelta(minutes=1), lambda _run: None, approver=approver)
     changes = [manifest for manifest in supplied if manifest.effect.changes]
     if changes:
         _held(changes[-1], server, agent, owner)
@@ -480,27 +481,28 @@ def _held(manifest, host, agent, owner) -> None:
         raise RuntimeError(f"The agent's run was not held for a person: {answer}")
 
 
-def _asked(manifest, host, principal, ago, carried_out, *, correlation="") -> None:
-    """One run of ``manifest`` on ``host``, asked for ``ago``, then carried out,
-    with every audit row it writes dated to the moment it was asked."""
+def _asked(manifest, host, principal, ago, carried_out, *, approver: Principal | None, correlation="") -> None:
+    """One run of ``manifest`` on ``host``, asked for ``ago``, approved by
+    ``approver`` where the ask waits for a person (left waiting without
+    one), then carried out, with every audit row it writes dated to the
+    moment it was asked."""
 
     at = timezone.now() - ago
+    name = capability_name(manifest.id)
     # Each ask through its asker's own door, as the command page or the MCP server binds one.
-    door = (
-        doors.mcp()
-        if principal.interface == MCP_INTERFACE
-        else doors.request(f"/commands/{capability_name(manifest.id)}/")
-    )
-    spec = command_spec(capability_name(manifest.id))
-    payload = {"hosts": [host], "correlation": correlation}
+    door = doors.mcp() if principal.interface == MCP_INTERFACE else doors.request(f"/commands/{name}/")
+    key = f"example-run-{manifest.id}-{host}-{int(ago.total_seconds())}"
     with stamped(lambda *_: {"created_at": at}):
         with door:
-            # Past the consent an agent's ask waits on: the history this
-            # writes has settled it, by the asker or the person who approved.
-            queued = execute_approved(
-                spec, validate_command(spec, payload), None, principal=principal, sent=frozenset(payload)
-            )["operation"]
-        run = OperationRequest.objects.get(pk=queued["id"])
+            answer = _ran(name, {"hosts": [host], "correlation": correlation}, principal=principal, key=key)
+        if is_held(answer):
+            if approver is None:
+                # Nobody here may approve it, so it waits, as a real one would.
+                return
+            held = answer["approval"]["id"]
+            with doors.page("core:approval_entry", approval_id=held):
+                answer = _ran(APPROVE, {"approval_id": held}, principal=approver, key=f"{key}-approved")["result"]
+        run = OperationRequest.objects.get(pk=answer["operation"]["id"])
         OperationRequest.objects.filter(pk=run.pk).update(created_at=at, updated_at=at)
         carried_out(run)
     _dated(run.pk, at)

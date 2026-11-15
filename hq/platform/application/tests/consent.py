@@ -1,7 +1,7 @@
 """The runner's consent, for a test that calls a declaration writer directly.
 
 A writer takes a ``capabilities.Consented``, which only the runner makes, so a
-test reaches one the way a person's approval does (``consented``), or through
+test reaches one as an approved run holds it (``consented``), or through
 the runner itself, as a command of its own (``another_command_writing``).
 """
 
@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
 
-from ..capabilities import Consented, execute_approved
+from ..capabilities import Consent, Consented, _seal
 from ..contracts import Effect
 from ..integration_specs import CapabilitySpec
 from ..integration_testing import commands_registered
@@ -22,27 +22,10 @@ class _Nothing:
     """A command that takes nothing."""
 
 
-def _handed(_command: _Nothing, *, consented: Consented) -> dict[str, Any]:
-    return {"consented": consented}
-
-
-_HANDS_BACK = CapabilitySpec(
-    "example.consent",
-    "Hand a test the consent the runner gives a run.",
-    Effect.READ,
-    Capability.READ,
-    _Nothing,
-    _handed,
-)
-
-
 def consented(principal: Principal) -> Consented:
-    """The consent ``execute_approved`` hands a writer for ``principal``: an approved run's."""
+    """The consent an approved run hands a writer for ``principal``."""
 
-    handed = execute_approved(_HANDS_BACK, _Nothing(), None, principal=principal, sent=frozenset())["consented"]
-    if not isinstance(handed, Consented):
-        raise TypeError(handed)
-    return handed
+    return _seal(Consent(principal, approved=True))
 
 
 # The name of the command ``another_command_writing`` registers.

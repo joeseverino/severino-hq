@@ -1311,8 +1311,8 @@
       "getRunsV2OK": {
         "dataValue": {
           "data": {
-            "approved_by": "",
-            "by": "example-agent, over MCP",
+            "approved_by": "joe",
+            "by": "example-agent, over MCP\u00a0\u00b7 approved by joe",
             "capability": "automation.example.package_upgrade.run",
             "correlation": "",
             "created_at": "2026-01-15T09:29:00+00:00",
@@ -2839,21 +2839,21 @@
             "items": [
               {
                 "approved_by": "",
-                "by": "example-agent, over MCP",
-                "capability": "automation.example.package_upgrade.run",
+                "by": "joe, on the web",
+                "capability": "automation.example.cache_flush.run",
                 "correlation": "",
-                "created_at": "2026-01-15T09:29:00+00:00",
+                "created_at": "2026-01-15T09:27:00+00:00",
                 "duration_seconds": null,
                 "finished_at": null,
                 "headline": "",
                 "hosts": [
-                  "macbook-pro-16"
+                  "docker-host-01"
                 ],
-                "operation_id": "330b177e-3075-5811-9fba-835493beb091",
-                "playbook": "example.package_upgrade",
-                "started_at": null,
-                "state": "queued",
-                "state_label": "Waiting",
+                "operation_id": "69f54f70-cd66-5001-b486-bb8dbb36e914",
+                "playbook": "example.cache_flush",
+                "started_at": "2026-01-15T09:27:20+00:00",
+                "state": "running",
+                "state_label": "Running",
                 "stated": []
               }
             ],
@@ -3271,14 +3271,14 @@
               "capability": "project.create",
               "content_fingerprint": "6c9ba16f74000dd99ad2ac8841847ddd5d8537ac700937d8cae8327f35afbcfd",
               "expires_at": "2026-01-16T09:30:00+00:00",
-              "id": "69f54f70-cd66-5001-b486-bb8dbb36e914",
+              "id": "7b4ba536-2791-576a-bd31-b1b2e598a61c",
               "reason": "",
               "requested_actor": "example-automation",
               "requested_at": "2026-01-15T09:30:00+00:00",
               "requested_interface": "api",
               "resource_key": "",
               "resource_kind": "projects",
-              "review_url": "https://hq.example.com/audit/approval/69f54f70-cd66-5001-b486-bb8dbb36e914/",
+              "review_url": "https://hq.example.com/audit/approval/7b4ba536-2791-576a-bd31-b1b2e598a61c/",
               "state": "pending",
               "target": ""
             },
