@@ -163,6 +163,7 @@ def _ids(spec: dict[str, Any]) -> dict[str, str]:
 def _declare(spec: dict[str, Any], *, consented: Consented, said: str) -> None:
     """Write the declaration and queue the controller to apply it; ``said`` is what its audit row says."""
 
+    consented.require(inbox.DECLARATION)
     validated = validate_spec(inbox.DECLARATION, spec)
     require_writable(inbox.DECLARATION, validated)
     resource = ManagedResource.objects.select_for_update().filter(key=inbox.DECLARATION_KEY).first()

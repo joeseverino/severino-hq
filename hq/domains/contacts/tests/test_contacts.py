@@ -350,6 +350,40 @@ class QueuedChangeTests(TestCase):
         self.assertEqual((row["status"], row["pending"]), ("replied", True))
         self.assertEqual(inbox.current().waiting, 1)
 
+    def test_a_review_the_consent_refuses_writes_nothing_before_it_is_refused(self):
+        from dataclasses import replace
+
+        from django.db.models.signals import post_save
+
+        from hq.domains.control_plane.providers import PROVIDERS
+        from hq.platform.application.record_errors import PolicyError
+        from hq.platform.application.security import mcp_principal
+        from hq.platform.application.tests.consent import another_command_writing
+
+        saved = []
+        refused = []
+
+        def write(given):
+            try:
+                execute_contact_review(ContactReviewCommand(status="replied"), consented=given, current_id=2)
+            except PolicyError:
+                refused.append(True)
+
+        def noted(sender, instance, **kwargs):
+            saved.append(instance.kind)
+
+        post_save.connect(noted, sender=ManagedResource, weak=False)
+        self.addCleanup(post_save.disconnect, noted, sender=ManagedResource)
+        # Were the inbox a kind that waits for a person, an agent's review is
+        # refused before its declaration is written, not rolled back after.
+        gated = replace(PROVIDERS[inbox.DECLARATION], requires_approval=True)
+        with patch.dict(PROVIDERS, {inbox.DECLARATION: gated}), another_command_writing(write) as name:
+            answer = execute_capability(name, {"idempotency_key": "review-once"}, principal=mcp_principal())
+
+        self.assertTrue(answer["ok"], answer)
+        self.assertEqual(refused, [True])
+        self.assertNotIn(inbox.DECLARATION, saved)
+
     def test_a_change_the_reading_shows_leaves_the_declaration(self):
         execute_contact_review(ContactReviewCommand(status="replied"), consented=consented(OPERATOR), current_id=2)
         _read(_row(2, status="replied"), _row(1, status="read"))
