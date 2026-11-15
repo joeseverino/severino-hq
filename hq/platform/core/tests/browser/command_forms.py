@@ -20,7 +20,7 @@ from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import NONCE, ORIGIN
 
 # A page of HQ's sheets and app.js, after the fragment.js it builds on, with
-# the form a post_button posts.
+# the form a posting button posts.
 _PAGE = """{% load stylesheet_tags %}<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>{{ title }}</title>
 {% stylesheets %}<script defer src="{{ static }}js/fragment.js" nonce="{{ nonce }}"></script>
@@ -29,7 +29,7 @@ _PAGE = """{% load stylesheet_tags %}<!doctype html><html lang="en"><head><meta 
 <form id="hq-post" method="post" hidden></form></body></html>"""
 
 # A settings form as an extension draws one: a table of rows in a section's
-# frame, each with a select in a control cell and a row's own post_button,
+# frame, each with a select in a control cell and a row's own posting button,
 # then the closing row pinned once the form changes, and a part after the frame.
 _SETTINGS = (
     '{% section "Example settings" %}<form method="post" action="/example/settings/">'
@@ -39,7 +39,7 @@ _SETTINGS = (
     "{% for row in rows %}<tr><td>Example account {{ row }}</td>"
     '<td><select name="group-{{ row }}" aria-label="Group"><option>No example group</option>'
     "<option>Example</option></select></td>"
-    '<td>{% post_button "Remove" "/example/remove/" %}</td></tr>{% endfor %}'
+    '<td>{% button "Remove" "/example/remove/" post=True %}</td></tr>{% endfor %}'
     "</tbody></table>{% endtable_region %}"
     '{% include "partials/_form_actions.html" with verb="Save changes" bar=True only %}'
     "</form>{% endsection %}<p data-after>An example line after the settings.</p>"
@@ -144,7 +144,7 @@ class CommandFormBrowserTests(BrowserGate):
     @override
     def respond(self, route):
         if route.request.method == "POST" and route.request.url.endswith("/example/remove/"):
-            # A row's post_button answered with no page, so the one it was
+            # A row's posting button answered with no page, so the one it was
             # pressed on stays to be read.
             self.posted.append(parse_qs(route.request.post_data or ""))
             return route.fulfill(status=204)
@@ -200,7 +200,7 @@ class CommandFormBrowserTests(BrowserGate):
             self.page.evaluate(_GROUND_SHOWN, SELECTORS["save_bar"]), "a row in its place paints its ground"
         )
 
-    def test_a_rows_post_button_posts_its_own_form_and_marks_nothing(self):
+    def test_a_rows_posting_button_posts_its_own_form_and_marks_nothing(self):
         self.open_settings()
 
         with self.page.expect_response(lambda response: response.request.method == "POST"):

@@ -21,6 +21,6 @@
 {% endfilter_bar %}
 <div class="table-selection" data-table-selection aria-live="polite" hidden>
   <strong><span data-selection-count>0</span> selected</strong>
-  <button class="btn ghost" type="button" data-copy-selected>Copy IDs</button>
-  <button class="btn ghost" type="button" data-clear-selected>Clear selection</button>
+  {% button "Copy IDs" look="ghost" data_copy_selected=True %}
+  {% button "Clear selection" look="ghost" data_clear_selected=True %}
 </div>

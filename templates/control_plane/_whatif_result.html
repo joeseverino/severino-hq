@@ -50,7 +50,7 @@ The answer to the policy test. The tailnet page answers it alone as its
       </tbody>
     </table>
     {% endtable_region %}
-    <p><a class="btn" href="{{ policy_edit_url }}">Edit policy{% arrow %}</a></p>
+    <p>{% button "Edit policy" policy_edit_url arrow=True %}</p>
   {% endif %}
 {% endif %}
 </div>

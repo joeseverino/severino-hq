@@ -20,7 +20,7 @@ _PRE = re.compile(r"<pre(?![\w-])[^>]*>")
 _SUMMARY = re.compile(r"<summary\b[^>]*>(.*?)</summary>", re.DOTALL)
 # What draws a control: the element itself, or a tag that renders a link or a button.
 _CONTROL = re.compile(
-    r"<(?:a|button|input|select|textarea)\b|\btabindex=|\{%\s*(?:entity|post_button|cell_line|page_action)\b"
+    r"<(?:a|button|input|select|textarea)\b|\btabindex=|\{%\s*(?:entity|button|cell_line|page_action)\b"
 )
 
 

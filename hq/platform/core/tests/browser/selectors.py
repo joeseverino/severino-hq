@@ -86,7 +86,7 @@ SELECTORS = {
     "sort_link": "main a.table-sort-link",
     # The Filters control a filter bar folds its choices behind, where its
     # row has no room for them.
-    "filter_fold": "form.filter-bar .filter-bar-fold",
+    "filter_fold": "form.filter-bar [data-filter-bar-fold]",
     # The queue's own filter: a choice of urgency, applied by its button.
     "queue_urgency": "form.filter-bar select[name=status]",
     "queue_apply": "form.filter-bar button[type=submit]:not([inert] *)",

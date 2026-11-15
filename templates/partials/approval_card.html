@@ -21,8 +21,8 @@ carries stands above it. Decisions only while pending.
   {% if entry.held.state == 'pending' %}
     {% url 'control_plane:approval_decision' entry.held.id as decision_url %}
     <p class="form-actions">
-      {% post_button "Approve" decision_url name="decision" value="approve" css="btn primary" %}
-      {% post_button "Reject" decision_url name="decision" value="reject" %}
+      {% button "Approve" decision_url post=True name="decision" value="approve" look="primary" %}
+      {% button "Reject" decision_url post=True name="decision" value="reject" %}
     </p>
   {% endif %}
 {% aside %}

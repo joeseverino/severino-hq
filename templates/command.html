@@ -25,8 +25,8 @@ that work stands in its own row.
   {% include "partials/_page_sections.html" with sections=result_sections spans_row=False %}
   {% section "Raw JSON" fold=True open=result_json_open id="command-result-json" %}<pre tabindex="0"><code>{{ result_json|breakable }}</code></pre>{% endsection %}
 {% aside %}
-  {% if return_url %}<a class="btn compact" href="{{ return_url }}">Back</a>{% endif %}
-  {% if resource_url %}<a class="btn compact ghost" href="{{ resource_url }}">{{ resource_open|button_words }}</a>{% endif %}
+  {% if return_url %}{% button "Back" return_url look="compact" %}{% endif %}
+  {% if resource_url %}{% button resource_open resource_url look="compact ghost" %}{% endif %}
 {% endsection %}
 </div>
 {% endif %}

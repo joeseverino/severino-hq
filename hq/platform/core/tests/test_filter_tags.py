@@ -148,7 +148,7 @@ class FilterBarFoldTests(SimpleTestCase):
     def test_the_filters_control_opens_the_panel_that_holds_the_choices_and_sends_them(self):
         html = _render(self.SOURCE, states=self.STATES, kinds=self.KINDS, state="")
 
-        (fold,) = with_class(html, "filter-bar-fold")
+        (fold,) = select(html, "data-filter-bar-fold")
         self.assertEqual((fold.tag, fold.attrs["type"], fold.words), ("button", "button", "Filters"))
         (panel,) = select(html, "id", fold.attrs["popovertarget"])
         self.assertIn("popover", panel.attrs)
@@ -165,7 +165,7 @@ class FilterBarFoldTests(SimpleTestCase):
             '{% filter_bar verb="Check" %}{% choices %}<select name="to"><option>a</option></select>{% endfilter_bar %}'
         )
 
-        (fold,) = with_class(html, "filter-bar-fold")
+        (fold,) = select(html, "data-filter-bar-fold")
         (panel,) = select(html, "id", fold.attrs["popovertarget"])
         (button,) = [e for e in elements(html, "button") if e.attrs.get("type") == "submit"]
         self.assertIn(panel, button.ancestors)
@@ -177,11 +177,11 @@ class FilterBarFoldTests(SimpleTestCase):
 
         self.assertEqual(with_class(unset, "filter-count"), [])
         (count,) = with_class(chosen, "filter-count")
-        (fold,) = with_class(chosen, "filter-bar-fold")
+        (fold,) = select(chosen, "data-filter-bar-fold")
         self.assertIn(fold, count.ancestors)
         self.assertEqual(count.words, "1")
         self.assertEqual(
-            select(unset, "id", with_class(unset, "filter-bar-fold")[0].attrs["popovertarget"])[0].attrs["id"],
+            select(unset, "id", select(unset, "data-filter-bar-fold")[0].attrs["popovertarget"])[0].attrs["id"],
             select(chosen, "id", fold.attrs["popovertarget"])[0].attrs["id"],
             "the panel keeps its id across a choice, so the answer raises it again",
         )
@@ -193,7 +193,7 @@ class FilterBarFoldTests(SimpleTestCase):
         )
         html = _render(source) + _render(source, named="example-other")
 
-        folds = [fold.attrs["popovertarget"] for fold in with_class(html, "filter-bar-fold")]
+        folds = [fold.attrs["popovertarget"] for fold in select(html, "data-filter-bar-fold")]
         self.assertEqual(len(set(folds)), 2)
         for target in folds:
             (panel,) = select(html, "id", target)
@@ -269,7 +269,7 @@ class FilterBarFoldTests(SimpleTestCase):
     def test_a_bar_with_no_choices_draws_no_fold(self):
         html = _render('{% filter_bar %}<input type="search" name="q">{% endfilter_bar %}')
 
-        self.assertEqual(with_class(html, "filter-bar-fold"), [])
+        self.assertEqual(select(html, "data-filter-bar-fold"), [])
         self.assertEqual(select(html, "popover"), [])
 
 

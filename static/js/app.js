@@ -585,7 +585,7 @@ document.addEventListener("click", (event) => {
 
 // A long form's closing row is pinned to the screen once there is something
 // to save: the first edit marks the form, and a press that only posts
-// another form (a row's post_button) is no edit and marks nothing.
+// another form (a row's posting button) is no edit and marks nothing.
 document.addEventListener("input", (event) => {
   const form = event.target.form;
   if (form?.querySelector(".save-bar")) form.dataset.changed = "";

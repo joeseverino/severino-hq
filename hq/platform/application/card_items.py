@@ -237,7 +237,7 @@ class ListRow:
     # in HQ's time words as the day it fell on, the moment itself on hover.
     at: date | None = None
     # What can be done to the record from its row, last on the line, each a
-    # ``PageAction``: a link to a page, or a POST through ``post_button`` ("Move up", "Delete"). A
+    # ``PageAction``: a link to a page, or a POST through ``button`` ("Move up", "Delete"). A
     # glyph's ``title`` names it aloud.
     actions: tuple[RowAction, ...] = ()
     # The thing the row names, in place of ``title`` and ``url``: drawn as

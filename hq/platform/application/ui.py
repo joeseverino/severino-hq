@@ -39,6 +39,22 @@ SEVERITY_TONES = {
 }
 
 
+# What a button may look like beside a plain one. The button's own class is
+# written by ``button_classes`` alone, so a control that looks like a button
+# is drawn by the button tag (action_tags.button) or a Python part through it.
+BUTTON_LOOKS = frozenset({"primary", "ghost", "danger", "compact"})
+
+
+def button_classes(look: str = "") -> str:
+    """A button's classes, its looks (``"primary compact"``) after its own."""
+
+    words = look.split()
+    unknown = sorted(set(words) - BUTTON_LOOKS)
+    if unknown:
+        raise ValueError(f"A button looks {', '.join(sorted(BUTTON_LOOKS))}, never {', '.join(unknown)}.")
+    return " ".join(dict.fromkeys(("btn", *words)))
+
+
 def severity_tone(severity: object) -> str:
     """The tone an advisory's severity is drawn in."""
 

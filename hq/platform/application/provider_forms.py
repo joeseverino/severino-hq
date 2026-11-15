@@ -26,6 +26,7 @@ lazy from hq.platform.core.templatetags.value_tags import breakable
 from .forms import LinesField
 from .plugins import import_reference
 from .references import keeping_held
+from .ui import button_classes
 
 # Constraint attributes carried by annotated-types objects in a pydantic field's
 # metadata. Read by name rather than by isinstance so a constraint class this
@@ -91,12 +92,13 @@ class NameListWidget(forms.Widget):
             '<div class="name-list-row">'
             '<input type="text" name="{}" value="{}" spellcheck="false"'
             ' autocapitalize="off" autocorrect="off"{}>'
-            '<button type="button" class="btn ghost" data-name-list-remove'
+            '<button type="button" class="{}" data-name-list-remove'
             ' aria-label="Remove {}">Remove</button>'
             "</div>",
             name,
             item,
             named,
+            button_classes("ghost"),
             item,
         )
 
@@ -131,10 +133,11 @@ class NameListWidget(forms.Widget):
         )
         return format_html(
             '<div class="name-list" data-name-list>{}{}'
-            '<button type="button" class="btn name-list-add" data-name-list-add>'
+            '<button type="button" class="{} name-list-add" data-name-list-add>'
             "Add another</button></div>",
             rows,
             blank,
+            button_classes(),
         )
 
 

@@ -20,7 +20,7 @@ option says: docs/Design.md, "One filter bar".
   {% if choices %}{% with fold=choices|folded:named verb=applies %}<div class="filter-bar-query">
     <div class="filter-bar-fit">
       <div class="filter-bar-controls">{% partial search %}{{ content|safe }}
-        <button class="btn filter-bar-fold" type="button" popovertarget="{{ fold.id }}">Filters{% if fold.set %} <span class="filter-count">{{ fold.set|breakable }}</span>{% endif %}</button>
+        {% button "Filters" popovertarget=fold.id count=fold.set|default:"" data_filter_bar_fold=True %}
         <div class="filter-bar-choices" id="{{ fold.id }}" popover>{{ choices|safe }}{% partial send %}</div>
       </div>
     </div>
@@ -37,8 +37,8 @@ option says: docs/Design.md, "One filter bar".
 </form></search>
 
 {% partialdef send %}<div class="filter-bar-send">
-  <button class="btn" type="submit">{{ verb|breakable }}</button>
-  {% if clear %}<a class="btn ghost" href="{{ clear }}">Clear filters</a>{% endif %}
+  {% button verb submit=True %}
+  {% if clear %}{% button "Clear filters" clear look="ghost" %}{% endif %}
 </div>{% endpartialdef %}
 
 {% partialdef search %}{% if search %}<input type="search" name="q" value="{{ query }}" placeholder="{{ search }}" aria-label="{{ search }}"{% if autofocus %} autofocus{% endif %}>{% endif %}{% endpartialdef %}

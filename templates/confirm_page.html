@@ -11,8 +11,8 @@ the same two clicks either way.
 {% card %}
   {% block consequences %}{% endblock %}
   <p class="form-actions">
-    {% if confirm.gap %}{% include "partials/_write_gap.html" with gap=confirm.gap %}{% else %}{% post_button confirm.label confirm.url css="btn danger" %}{% endif %}
-    <a class="btn ghost" href="{{ confirm.cancel_url }}">Cancel</a>
+    {% if confirm.gap %}{% include "partials/_write_gap.html" with gap=confirm.gap %}{% else %}{% button confirm.label confirm.url post=True look="danger" %}{% endif %}
+    {% button "Cancel" confirm.cancel_url look="ghost" %}
   </p>
 {% endcard %}
 {% endblock %}

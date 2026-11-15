@@ -16,12 +16,12 @@ the bottom of the screen once the form has changed (pages.css).
 {% endcomment %}
 <div class="form-actions{% if bar %} save-bar{% endif %}">
   {% if choices %}
-    {% for value, words in choices %}<button class="btn{% if forloop.length == 1 %} primary{% endif %}" type="submit" name="{{ choice_field }}" value="{{ value }}">{{ words|button_words }}</button>{% endfor %}
+    {% for value, words in choices %}{% if forloop.length == 1 %}{% button words submit=True name=choice_field value=value look="primary" %}{% else %}{% button words submit=True name=choice_field value=value %}{% endif %}{% endfor %}
   {% else %}
-    <button class="btn primary" type="submit"{% if gap %} disabled{% endif %}>{{ verb|button_words }}</button>
+    {% button verb submit=True look="primary" disabled=gap|default:False %}
   {% endif %}
   {% if gap %}{% include "partials/_write_gap.html" with gap=gap only %}{% endif %}
-  {% if cancel_url %}<a class="btn" href="{{ cancel_url }}"{% if live %} data-live-cancel{% endif %}{% if in_place is True %} data-fragment-target=""{% endif %}>Cancel</a>{% endif %}
+  {% if cancel_url %}{% if in_place is True %}{% button "Cancel" cancel_url data_live_cancel=live|default:False data_fragment_target=True %}{% else %}{% button "Cancel" cancel_url data_live_cancel=live|default:False %}{% endif %}{% endif %}
   {% if note %}<span class="muted form-actions-note">{{ note|breakable }}</span>{% endif %}
   {% if live %}
     <span class="muted form-actions-note" data-fragment-status role="status"></span>

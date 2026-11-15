@@ -1,6 +1,6 @@
 {% comment %}
 What HQ holds of a public address, and the button that looks it up again. The
-button posts the page's one form (post_button) and is answered in this
+button posts the page's one form (a posting {% button %}) and is answered in this
 region, found in the answer by its id.
 {% endcomment %}
 <div id="public-address" data-public-address data-fragment="{% url 'tool_public_address' %}" data-fragment-failure="The lookup could not be reached.">
@@ -23,7 +23,7 @@ region, found in the answer by its id.
 {% if not failure and not reading or reading.observed_at %}
   <p>
     {% url 'tool_public_address' as lookup_url %}
-    {% if reading %}{% post_button "Look up again" lookup_url name="address" value=address %}{% else %}{% post_button "Look up" lookup_url name="address" value=address %}{% endif %}
+    {% if reading %}{% button "Look up again" lookup_url post=True name="address" value=address %}{% else %}{% button "Look up" lookup_url post=True name="address" value=address %}{% endif %}
     {% if reading.observed_at %}<span class="muted">{% include "partials/_reading_age.html" with at=reading.observed_at only %}</span>{% endif %}
   </p>
 {% endif %}

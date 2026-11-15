@@ -5,7 +5,7 @@ id: hand-drawn-form
 language: html
 severity: error
 message: A form that writes drawn by hand, where the form part draws it.
-note: Write {% include "partials/_form.html" %}, or {% post_button %} for a single verb.
+note: Write {% include "partials/_form.html" %}, or {% button ... post=True %} for a single verb.
 files:
   - "**/templates/**/*.html"
 rule:

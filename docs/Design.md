@@ -617,7 +617,7 @@ verb can't be pressed because its connection can't make the change passes
 `gap`; the closing row draws the verb unusable and what it needs beside it. A
 form a script or test finds names its `data-` attributes as `hooks`. A form
 answered in another region's place gives that region's id as `in_place`. A
-toggle that posts is a `post_button` with `pressed`; the calendar's sources are
+toggle that posts is a `{% button %}` with `post` and `pressed`; the calendar's sources are
 a list of them, each in its series color (`partials/_calendar_sources.html`,
 *Catalog:* `part/calendar-sources`). *Catalog:* `form/write-gap`. *Gate:*
 `lint:ast-grep` (`hand-drawn-form.yml`), which holds every form that writes to
@@ -650,7 +650,7 @@ control's name and id are its own. A row moved between two drawings still posts
 its own value, where a formset's names follow each row's place. Each row's cell
 draws its field with `partials/_row_field.html`: the control, its label for a
 screen reader alone (the column's heading names it on the page), and its errors
-under it. A row's own buttons are `post_button`s, which post the page's own
+under it. A row's own buttons are posting `{% button %}`s, which post the page's own
 form, so they sit in this one.
 
 **Nothing empty takes space.** A panel with nothing to show is not drawn: the
@@ -1167,8 +1167,13 @@ fill, `--muted` on a surface, `--code-muted` beside code.
 **Buttons.** Primary for the one thing a page is for; default for the rest;
 `ghost` for link-like actions that sit inline; `danger` in red text on the same
 surface as its neighbors, loud only in its confirmation; `compact` for one
-that stands in a row, a list or a head, a line tall. The push button is
-`.btn`, and a `<button>` with no class of its own; a button with a class (a
+that stands in a row, a list or a head, a line tall. Every control that
+looks like a button is `{% button label url look="primary compact" %}`, the one
+writer of `.btn` (`ui.button_classes` for Python's parts): a link, with
+`post=True` one that posts, with `submit=True` its form's own, and with neither
+and no url one a script acts on (`data_*`, `popovertarget`, `command`). Its
+words may open with an `icon`, close with a `count` or end with an `arrow`.
+The push button is `.btn`, and a `<button>` with no class of its own; a button with a class (a
 menu row, a toggle, a close mark) starts from nothing painted (`base.css`)
 and draws itself, so no rule takes the push button's look back off. A label
 keeps its line, from the button rule alone (`page.css`); only a tight table
@@ -1298,7 +1303,7 @@ filled` in the layout survey.
 A row of a record list (`.list-rows`) reads as one line: its meta follows its
 name a gap after, never at the row's far side across an empty middle. What can
 be done to the record ends its line: `ListRow.actions`, each a `PageAction`,
-drawn as compact controls, a POST through `post_button`, a glyph named aloud by
+drawn as compact controls, a POST through `{% button %}`, a glyph named aloud by
 its `title`, and one that cannot be pressed as `disabled`. A row that names a
 thing HQ links (a related record, a project) is given its `link`, an
 `EntityLink`, in place of a `title` and a `url`, and draws it as every mention
@@ -1702,7 +1707,7 @@ page and fails on one that writes.
 CSS px (`--target-min`, WCAG 2.5.8 Target Size Minimum). That counts the area
 its `::before` or `::after` hangs over the space beside it. A control drawn
 smaller asks for that area in its own partial with `data-hit` (`hit=True` on
-`{% post_button %}`), or with `data-hit="coarse"` where it is packed too close
+`{% button %}`), or with `data-hit="coarse"` where it is packed too close
 to its neighbors for one under a mouse; page.css hangs it, and the quiet link
 (`.subtle-link`) always has one. A smaller target passes only through one of
 the criterion's exceptions:

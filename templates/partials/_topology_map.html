@@ -28,7 +28,7 @@ drawn from it, and a page of one map takes the topology page's own.
     {% choices %}
     {% select "lens" topology_views chosen=topology_view label="View" %}
     {% include "partials/_toggle_set.html" with legend="Show" set="kind" toggles=topology_kinds only %}
-    <button class="btn ghost compact" type="button" data-topology-reset hidden>Clear selection</button>
+    {% button "Clear selection" look="ghost compact" data_topology_reset=True hidden=True %}
   {% endfilter_bar %}
 
   <div class="topology-workspace">

@@ -31,7 +31,7 @@
 //                             answer belongs in; empty for the region it is
 //                             inside
 //
-// A button that posts a form from outside it (`post_button`) needs none of
+// A button that posts a form from outside it (`{% button %}` with `post`) needs none of
 // these: it is answered in the region it sits in, and a page's content is one
 // (base.html's `main`), so every such press keeps the page.
 //
@@ -304,7 +304,7 @@ const hqFragment = (() => {
 
   const focusKey = (element) => {
     if (element.id) return `#${CSS.escape(element.id)}`;
-    // A button that posts on its own (`post_button`) is told apart by where
+    // A button that posts on its own (`{% button %}` with `post`) is told apart by where
     // it posts and what it says there, which no other button on the page shares.
     const posts = element.getAttribute("formaction");
     if (posts) {
@@ -669,7 +669,7 @@ const hqFragment = (() => {
   // another page, or one that is not this page's, shows that page, as the
   // post would have without this file.
   //
-  // A button that names its form from outside it (`post_button`, which posts
+  // A button that names its form from outside it (a posting `{% button %}`, which posts
   // the one form base.html draws) is answered in the region it sits in, and
   // the keyboard stays where it pressed.
   const submit = async (form, submitter, region) => {

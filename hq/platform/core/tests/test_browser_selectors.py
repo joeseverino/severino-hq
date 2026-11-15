@@ -16,6 +16,7 @@ from django.test import SimpleTestCase, tag
 
 from hq.platform.application.page_parts import SectionPart
 from hq.platform.application.tests.reads import reads
+from hq.platform.application.ui import BUTTON_LOOKS, button_classes
 from hq.platform.core.stylesheets import stylesheet
 from hq.platform.core.templatetags.part_tags import SectionNode
 from hq.platform.core.tests.browser.selectors import SELECTORS
@@ -81,13 +82,15 @@ def _template_markup(source: str, classes: set[str], ids: set[str], text: list[s
         classes.update(re.sub(r"\{%.*?%\}|\{\{.*?\}\}", " ", value).split())
     ids.update(re.findall(r'\bid="([^"{}]+)"', source))
     ids.update(generated_ids(source))
-    # A tag's css= option is the class it draws (a post_button's, a part's).
+    # A tag's css= option is the class it draws (a button's, a part's).
     for options in re.findall(r"\{%\s*\w+\s([^%]*)%\}", source):
         classes.update(" ".join(re.findall(r'\bcss="([^"]*)"', options)).split())
-    # A card's, a filter bar's, a section's or a status's class, id and data-
-    # attributes are its tag's options.
-    for part, options in re.findall(r"\{%\s*(card|filter_bar|section|status)\s([^%]*)%\}", source):
-        classes.add(part.replace("_", "-"))
+    # A button's, a card's, a filter bar's, a section's or a status's id and
+    # data- attributes are its tag's options, and so is each part's class but
+    # the button's, which `button_classes` draws.
+    for part, options in re.findall(r"\{%\s*(button|card|filter_bar|section|status)\s([^%]*)%\}", source):
+        if part != "button":
+            classes.add(part.replace("_", "-"))
         ids.update(re.findall(r'\bid="([^"{}]+)"', options))
         drawn = (name.replace("_", "-") for name in re.findall(r"\b(data_\w+)=", options))
         text.append(f"<div {' '.join(drawn)}>")
@@ -126,6 +129,8 @@ def markup() -> tuple[set[str], set[str], str]:
         # `classes`), its interpolations aside.
         for value in re.findall(r'\bclasses = f?"([\w\s{}-]*)"', source):
             classes.update(re.sub(r"\{\w*\}", " ", value).split())
+    # A button's class and looks are written in code: each one it can draw.
+    classes.update(button_classes(" ".join(BUTTON_LOOKS)).split())
     # A table's marks are written in code too: each attribute `table_cells`
     # adds to a row, a cell or what a cell holds.
     marks = re.findall(r'" (data-[a-z-]+)', TABLE_MARKS.read_text(encoding="utf-8"))

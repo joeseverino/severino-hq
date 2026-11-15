@@ -3,7 +3,7 @@
 A view says what its page is (a title, a lede, the actions it offers) and
 ``templates/page.html`` draws it the same way on every page, host or extension.
 A page template fills only ``{% block page %}``, so it never writes its own head
-or a form for one button (a ``post_button``). Class-based views mix in
+or a form for one button (a posting ``button``). Class-based views mix in
 ``PageMixin``; function views pass ``page_context`` to ``render``.
 
 Every page also reads under one capability, checked before its view runs
@@ -25,7 +25,7 @@ from django.utils.functional import Promise
 
 from .asks import Ask
 from .fragments import FragmentMixin
-from .ui import PageNavigation
+from .ui import PageNavigation, button_classes
 lazy from .page_reads import remedy
 lazy from .refusal_status import Refusal, refusal_of
 lazy from .request_context import current as current_request
@@ -66,7 +66,7 @@ class PageAction:
     A GET action is a link, and may open a dialog (``modal``) while still
     pointing at a page that does the same job: a ``PageDialog`` the page draws,
     or the id of one the host already draws on every page. A POST action is a
-    ``post_button``, so it needs no form of its own.
+    a posting ``button``, so it needs no form of its own.
     """
 
     label: str
@@ -110,16 +110,21 @@ class PageAction:
         return self.modal.id if isinstance(self.modal, PageDialog) else self.modal
 
     @property
-    def css(self) -> str:
+    def look(self) -> str:
+        """How its button looks (``ui.BUTTON_LOOKS``)."""
+
         return " ".join(
             (
-                "btn",
                 *(("primary",) if self.primary else ()),
                 # Quiet: a head's destructive action is the rarest thing on the
                 # page and should not be its loudest. Its confirmation is loud.
                 *(("ghost", "danger") if self.danger else ()),
             )
         )
+
+    @property
+    def css(self) -> str:
+        return button_classes(self.look)
 
 
 @dataclass(frozen=True, slots=True)

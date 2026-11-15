@@ -111,7 +111,7 @@ last done to it is read before its parts.
         {% endcomment %}
         {% if machine.presence.unapproved_routes and route_approval %}
           {% url 'control_plane:approve_routes' machine.route_approval_key as approve_url %}
-          {% post_button "Approve routes" approve_url title=route_approval.reason disabled=route_approval_off %}
+          {% button "Approve routes" approve_url post=True title=route_approval.reason disabled=route_approval_off %}
         {% endif %}
       {% endfact %}
     {% endif %}
@@ -132,7 +132,7 @@ last done to it is read before its parts.
   heading of its own, because it is asked about this machine.
   {% endcomment %}
   {% if device_names %}
-    <a class="btn" href="{% url 'control_plane:tailnet' %}?source={{ asked.source|urlencode }}&amp;target={{ asked.target|urlencode }}" data-modal-open="whatif">Policy test</a>
+    {% url 'control_plane:tailnet' as tailnet_url %}{% with source=asked.source|urlencode target=asked.target|urlencode %}{% button "Policy test" tailnet_url|add:"?source="|add:source|add:"&target="|add:target modal="whatif" %}{% endwith %}
   {% endif %}
 {% endsection %}
 </div>

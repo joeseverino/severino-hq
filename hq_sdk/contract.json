@@ -1,5 +1,5 @@
 {
-  "api_version": 15,
+  "api_version": 16,
   "modules": {
     "audit": {
       "AuditAction": {
@@ -950,6 +950,9 @@
             "kind": "property"
           },
           "dialog": {
+            "kind": "property"
+          },
+          "look": {
             "kind": "property"
           },
           "modal_id": {
@@ -2791,7 +2794,6 @@
       "address-list",
       "allocation",
       "allocation-legend",
-      "btn",
       "cell-data",
       "cell-part",
       "cell-whole",
@@ -3278,6 +3280,34 @@
         "parameters": [],
         "parts": []
       },
+      "button": {
+        "classes": [
+          "css"
+        ],
+        "parameters": [
+          "label",
+          "url=",
+          "*",
+          "post=",
+          "submit=",
+          "look=",
+          "css=",
+          "title=",
+          "disabled=",
+          "current=",
+          "name=",
+          "value=",
+          "pressed=",
+          "hit=",
+          "fields=",
+          "modal=",
+          "icon=",
+          "count=",
+          "arrow=",
+          "**attributes"
+        ],
+        "parts": []
+      },
       "card": {
         "classes": [
           "css"
@@ -3397,25 +3427,6 @@
           "title=",
           "tone=",
           "url="
-        ],
-        "parts": []
-      },
-      "post_button": {
-        "classes": [
-          "css"
-        ],
-        "parameters": [
-          "label",
-          "url",
-          "*",
-          "name=",
-          "value=",
-          "css=",
-          "title=",
-          "disabled=",
-          "pressed=",
-          "hit=",
-          "fields="
         ],
         "parts": []
       },

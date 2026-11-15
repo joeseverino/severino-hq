@@ -185,7 +185,7 @@ class InterfaceTextTests(SimpleTestCase):
 
 
 class PostButtonTests(SimpleTestCase):
-    """A post_button submits the one shared form, so it needs none of its own."""
+    """A posting button submits the one shared form, so it needs none of its own."""
 
     def render(self, source, **context):
         from django.template import Context, Template
@@ -193,7 +193,7 @@ class PostButtonTests(SimpleTestCase):
         return Template(source).render(Context(context))
 
     def test_it_targets_the_shared_form_with_its_own_action(self):
-        html = self.render('{% post_button "↑" "/things/7/" value="up" title="Move up" %}')
+        html = self.render('{% button "↑" "/things/7/" post=True value="up" title="Move up" %}')
         self.assertIn('form="hq-post"', html)
         self.assertIn('formaction="/things/7/"', html)
         self.assertIn('name="action" value="up"', html)
@@ -201,16 +201,18 @@ class PostButtonTests(SimpleTestCase):
         self.assertNotIn("disabled", html)
 
     def test_a_button_of_words_is_named_by_them(self):
-        html = self.render('{% post_button "Check again" "/check/" title="Read the record again, then check it" %}')
+        html = self.render(
+            '{% button "Check again" "/check/" post=True title="Read the record again, then check it" %}'
+        )
         self.assertIn('title="Read the record again, then check it"', html)
         self.assertNotIn("aria-label", html)
 
     def test_it_can_be_disabled(self):
-        html = self.render('{% post_button "Refresh" "/sync/" disabled=True %}')
+        html = self.render('{% button "Refresh" "/sync/" post=True disabled=True %}')
         self.assertIn(" disabled>", html)
 
     def test_its_label_is_escaped(self):
-        html = self.render("{% post_button label '/x/' %}", label="<b>")
+        html = self.render("{% button label '/x/' post=True %}", label="<b>")
         self.assertIn("&lt;b&gt;", html)
 
 

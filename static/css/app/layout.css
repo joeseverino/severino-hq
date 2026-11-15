@@ -266,7 +266,7 @@
 /* A source's color alone (partials/_calendar_sources.html#swatch). */
 .calendar-swatch { display: inline-block; width: 8px; height: 8px; border-radius: 2px; background: var(--source); }
 .calendar-sources { display: grid; gap: var(--space-1); }
-/* A source is a toggle ({% post_button %} with `pressed`): the whole line is
+/* A source is a toggle ({% button %} with `post` and `pressed`): the whole line is
    the button, its box drawn before the name and filled in its color when
    checked, both at the line's start where a button would center them. What
    it shows and how it failed stand under the name, past the box. */

@@ -8,7 +8,7 @@ stand alone. `id` is the anchor a link to it names.
   {% if content %}
   <div class="patch-head">
     <strong>{{ title|safe }}</strong>
-    <button class="btn compact ghost" type="button" data-copy>Copy</button>
+    {% button "Copy" look="compact ghost" data_copy=True %}
   </div>
   <pre tabindex="0"><code>{{ content|safe }}</code></pre>
   {% if detail %}<p class="muted">{{ detail|safe }}</p>{% endif %}
