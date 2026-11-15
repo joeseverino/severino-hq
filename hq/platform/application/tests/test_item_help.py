@@ -9,13 +9,14 @@ from decimal import Decimal
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
-from hq.platform.application.contracts import Effect
+from hq.platform.application.action_links import read_link
+from hq.platform.application.tests.links import example_command
 
 from ..card_items import Insight
 from ..finding_model import Finding, FindingRemedy, FindingRule, OperatorStep
 from ..findings import RULES, _no_help_reason
 from ..item_help import CANNOT, DO, REMEDY, RUN, cannot_help, commands, finding_plan, instructions
-from ..workflow_contracts import ActionLink, WorkflowPlan
+from ..workflow_contracts import WorkflowPlan
 
 # The kinds of help an item can carry, as ``item_help`` names them.
 COMMAND = "command"
@@ -129,8 +130,8 @@ def _item(**fields) -> Insight:
 
 class ItemHelpTests(SimpleTestCase):
     def test_each_kind_of_help_is_recognized(self):
-        remedy = ActionLink("remedy", "Fix", "remote_write", "/fix/", capability="example.fix")
-        posted = ActionLink("approve", "Approve", "remote_write", "/approve/", method="POST")
+        remedy = example_command("remedy", "Fix", "remote_write", "/fix/", capability="example.fix")
+        posted = example_command("approve", "Approve", "remote_write", "/approve/", method="POST")
 
         self.assertEqual(item_help(_item(actions=(remedy,))), REMEDY)
         self.assertEqual(item_help(_item(actions=(posted,))), REMEDY)
@@ -140,7 +141,7 @@ class ItemHelpTests(SimpleTestCase):
         self.assertEqual(item_help(_item(action="Fill in details", url="/assets/")), PLACE)
 
     def test_a_link_to_look_at_or_an_empty_reason_is_not_help(self):
-        look = ActionLink("subject", "Open", Effect.READ, "/thing/")
+        look = read_link("subject", "Open", "/thing/")
 
         self.assertEqual(item_help(_item(actions=(look,))), "")
         self.assertEqual(item_help(_item(workflow=cannot_help("k", " "))), "")

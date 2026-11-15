@@ -12,12 +12,12 @@ from django.utils import timezone
 from mcp import Client
 
 from hq.domains.control_plane.models import ManagedResource
-from hq.platform.application.action_links import ActionLink
 from hq.platform.application.capabilities import capability_registry
 from hq.platform.application.finding_model import Finding, FindingRemedy
 from hq.platform.application.findings import RULES, derive_findings
 from hq.platform.application.security import Capability, Principal
 from hq.platform.application.tests.inventory_records import kind_read
+from hq.platform.application.tests.links import example_command
 from hq.platform.application.tone import Tone
 from hq.platform.application.topology_model import Topology, TopologyEdge, TopologyNode
 from hq.platform.core import seeds
@@ -205,7 +205,7 @@ CONTROLLER_STALE = Topology(
             "Example",
             "Controller",
             actions=(
-                ActionLink(
+                example_command(
                     "command",
                     "Refresh",
                     "infrastructure_change",

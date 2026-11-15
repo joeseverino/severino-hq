@@ -29,13 +29,13 @@ from .action_links import (
     capability_action_link,
     command_action,
     connection_action_links,
+    read_link,
     topology_url,
 )
 from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
 from .conditions import DRIFTED, holding
 from .connection_catalog import ConnectionGroup, connection_catalog
 from .connections import ConnectionLink, ConnectionSpec
-from .contracts import Effect
 from .contradiction_findings import add_contradiction_facts
 from .derivations import derivation
 from .derived_inputs import ESTATE_READS, estate_variant
@@ -92,14 +92,7 @@ def _resource_actions(
     resource: ManagedResource, principal: Principal, *, removal_pending: bool, manages
 ) -> tuple[TopologyAction, ...]:
     key = resource.key
-    actions = [
-        TopologyAction(
-            "open",
-            "Open",
-            Effect.READ,
-            resource.get_absolute_url(),
-        )
-    ]
+    actions = [read_link("open", "Open", resource.get_absolute_url())]
     if not principal.permits(Capability.MANAGE_INFRASTRUCTURE) or removal_pending:
         return tuple(actions)
     capabilities = resource_capabilities(resource, running=(), removal_pending=removal_pending, manages=manages)
@@ -138,7 +131,7 @@ def _link_node(
         label=link.label,
         subtitle=reached if kind == "target" else "Not read yet",
         url=link.url,
-        actions=((TopologyAction("open", "Open", Effect.READ, link.url),) if link.url else ()),
+        actions=((read_link("open", "Open", link.url),) if link.url else ()),
         read_capabilities=read_capabilities,
     )
 
@@ -185,7 +178,7 @@ def _ability_actions(ability, ability_id: str, principal: Principal) -> tuple[To
     the graph acquiring a way to run it.
     """
 
-    actions = [TopologyAction("focus", "Show links", Effect.READ, _focus_url(ability_id))]
+    actions = [read_link("focus", "Show links", _focus_url(ability_id))]
     command = capability_action_link(ability.capability, principal=principal)
     if command is not None:
         actions.append(command)
@@ -250,7 +243,7 @@ def _merge_controller_node(
     Its observed time is the newest of the connections it reports.
     """
 
-    action = TopologyAction("open", f"Open {group_label}", Effect.READ, url) if url else None
+    action = read_link("open", f"Open {group_label}", url) if url else None
     refresh = capability_action_link(READ_NOW_CAPABILITY, principal=principal)
     emitted = tuple(item for item in (action, refresh) if item is not None)
     current = nodes.get(node_id)

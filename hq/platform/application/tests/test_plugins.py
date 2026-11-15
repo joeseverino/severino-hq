@@ -15,7 +15,9 @@ from django.template.loader import render_to_string
 from django.test import SimpleTestCase, TestCase as DatabaseTestCase, tag
 from django.utils import timezone
 
+from hq.platform.application.action_links import read_link
 from hq.platform.application.markup_testing import hrefs, text, with_class
+from hq.platform.application.tests.links import example_command
 
 from ..card_items import Kpi
 from ..domains import domain_navigation
@@ -817,11 +819,12 @@ class AttentionOrderTests(SimpleTestCase):
         return {"finding": finding, "source": source, "source_id": "example"}
 
     def test_within_one_urgency_what_hq_fixes_in_one_press_comes_first(self):
-        from ..workflow_contracts import ActionLink
 
         def press(name="remedy", *, capability="example.fix", refusal=""):
-            link = ActionLink(name, "Fix", "remote_write", "/example/fix/", capability=capability, refusal=refusal)
-            return (replace(link, recommended=True),)
+            link = example_command(
+                name, "Fix", "remote_write", "/example/fix/", capability=capability, refusal=refusal, recommended=True
+            )
+            return (link if capability else read_link(name, "Fix", "/example/fix/", recommended=True),)
 
         old = timezone.now() - timedelta(days=30)
         entries = [

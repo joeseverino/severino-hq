@@ -7,9 +7,9 @@ from django.utils import timezone
 from pydantic import ValidationError
 
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
-from hq.platform.application.contracts import Effect
+from hq.platform.application.action_links import read_link
+from hq.platform.application.tests.links import example_command
 
-from ..action_links import ActionLink
 from ..cadence import ControllerSweepCommand
 from ..findings import FINDINGS_SCHEMA_VERSION, derive_findings, finding_rules, findings, rule_for
 from ..security import Capability, Principal
@@ -276,20 +276,15 @@ class FindingsTests(SentinelMixin, TestCase):
                     "HQ dev",
                     "Controller",
                     actions=(
-                        ActionLink("open", "Open connections", Effect.READ, "/connections/"),
-                        ActionLink(
+                        read_link("open", "Open connections", "/connections/"),
+                        example_command(
                             "command",
                             "Request fresh sweep",
                             "infrastructure_change",
                             "/commands/infrastructure.controller.refresh/",
                             capability="infrastructure.controller.refresh",
                         ),
-                        ActionLink(
-                            "change",
-                            "Unsafe shortcut",
-                            "infrastructure_change",
-                            "/change/",
-                        ),
+                        example_command("change", "Unsafe shortcut", "infrastructure_change", "/change/"),
                     ),
                 ),
                 TopologyNode("connection:one", "connection", "Provider", "Connection"),

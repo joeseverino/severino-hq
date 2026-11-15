@@ -1,7 +1,7 @@
 """Contracts shared by workflow and presentation projections."""
 
 from dataclasses import dataclass
-from typing import Annotated
+from typing import Annotated, Never
 
 from .describe import Describe
 from .effects import Effect
@@ -38,11 +38,14 @@ type StepState = Annotated[
 ]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, init=False)
 class ActionLink:
     """One safe route from observed state to an existing HQ use case."""
 
     __pydantic_config__ = _OWN_CONFIG
+
+    def __init__(self, _factory: Never) -> None:
+        raise TypeError("Build a link through read_link or command_action.")
 
     name: Annotated[
         str,

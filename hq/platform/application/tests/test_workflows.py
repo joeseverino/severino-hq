@@ -3,13 +3,13 @@
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase
 
+from hq.platform.application.action_links import read_link
 from hq.platform.application.markup_testing import actions, hrefs
+from hq.platform.application.tests.links import example_command
 
-from ..action_links import ActionLink
-from ..effects import Effect
 from ..workflows import claim_identity, claim_resolution_plan, serialize_workflow
 
-REMEDY = ActionLink(
+REMEDY = example_command(
     "remedy",
     "Request fresh sweep",
     "infrastructure_change",
@@ -17,7 +17,7 @@ REMEDY = ActionLink(
     capability="infrastructure.controller.refresh",
     recommended=True,
 )
-VERIFY = ActionLink("verify", "Recheck", Effect.READ, "/recheck/")
+VERIFY = read_link("verify", "Recheck", "/recheck/")
 
 
 def plan_of(remedies=(REMEDY,), verification=VERIFY):

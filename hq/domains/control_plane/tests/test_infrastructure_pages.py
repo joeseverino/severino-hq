@@ -10,9 +10,8 @@ from django.urls import reverse
 from django.utils import timezone
 from pydantic import ValidationError
 
-from hq.platform.application.action_links import ActionLink
+from hq.platform.application.action_links import read_link
 from hq.platform.application.adoption_testing import managing_everything
-from hq.platform.application.contracts import Effect
 from hq.platform.application.controller import ControllerReport, report_operation
 from hq.platform.application.finding_model import Finding
 from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
@@ -249,8 +248,8 @@ class InfrastructureViewsTests(TestCase):
             "HQ dev stopped confirming two kinds",
             "serious",
             "The graph proves one shared cause.",
-            offers=(ActionLink("open", "Open connections", Effect.READ, "/connections/"),),
-            investigations=(ActionLink("impact", "Trace impact", Effect.READ, "/topology/?trace"),),
+            offers=(read_link("open", "Open connections", "/connections/"),),
+            investigations=(read_link("impact", "Trace impact", "/topology/?trace"),),
         )
         with patch("hq.domains.control_plane.finding_views.estate_findings", return_value=(finding,)):
             response = self.client.get(reverse("control_plane:findings"))

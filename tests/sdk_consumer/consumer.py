@@ -511,12 +511,11 @@ def a_page() -> None:
     pages.page_context("Example", reads=1)  # type: ignore[arg-type]
 
 
-def a_refused_action() -> None:
+def a_refused_action(link: workflows.ActionLink) -> None:
     # A link the command would refuse now says why, and is drawn unusable.
-    link = workflows.ActionLink("run", "Run", capabilities.Effect.REMOTE_WRITE, "/run/", refusal="Not now.")
     assert_type(link.refusal, str)
 
-    workflows.ActionLink("run", "Run", "remote_write", "/run/", refusal=True)  # type: ignore[arg-type]
+    workflows.ActionLink()  # type: ignore[call-arg]
 
 
 def a_read_link() -> None:

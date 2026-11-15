@@ -7,15 +7,16 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from hq.platform.application import cadence
+from hq.platform.application.action_links import read_link
 from hq.platform.application.contracts import Effect
 from hq.platform.application.dashboard import work_queue
 from hq.platform.application.derivation_testing import uncached
 from hq.platform.application.finding_model import Finding, OperatorStep, opens
 from hq.platform.application.markup_testing import hrefs, select, with_class, within
 from hq.platform.application.plugins import gather_attention
+from hq.platform.application.tests.links import example_command
 from hq.platform.application.tests.test_decisions import row_hrefs
 from hq.platform.application.ui import DomainOverview
-from hq.platform.application.workflow_contracts import ActionLink
 from hq.platform.application.workflows import claim_identity, claim_resolution_plan
 from hq_sdk.testing import plain
 
@@ -29,8 +30,8 @@ class DashboardQueueTests(TestCase):
         self.client.force_login(self.user)
         plan = claim_resolution_plan(
             identity=claim_identity("example.utility", "changed:account:one"),
-            remedies=(ActionLink("remedy", "Inspect evidence", Effect.READ, "/example/evidence/", recommended=True),),
-            verification=ActionLink(
+            remedies=(read_link("remedy", "Inspect evidence", "/example/evidence/", recommended=True),),
+            verification=example_command(
                 "verify",
                 "Recheck facts",
                 Effect.REMOTE_WRITE,

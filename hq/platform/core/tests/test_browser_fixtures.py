@@ -22,6 +22,7 @@ from hq.platform.application.contracts import Effect
 from hq.platform.application.drawings import Dot, Dots
 from hq.platform.application.report_testing import report_connections
 from hq.platform.application.services import CONTAINER_KIND
+from hq.platform.application.tests.links import example_command
 from hq.platform.application.ui import ActivityCalendar, CalendarDay, ChartSeries, DomainOverview, stacked_bar_chart
 from hq.platform.core import seeds
 from hq.platform.core.network import SOCKET_PEER
@@ -519,7 +520,6 @@ def _urgent_dashboard():
     from hq.platform.application.approvals import DECISIONS, _decision_link
     from hq.platform.application.dashboard import finding_rows
     from hq.platform.application.finding_model import Finding, opens
-    from hq.platform.application.workflow_contracts import ActionLink
 
     held = UUID(int=1)
     approval = Finding(
@@ -543,7 +543,7 @@ def _urgent_dashboard():
     # (``approvals.offers``), the finding's own remedy.
     offered = (
         [_decision_link(held, decision) for decision in DECISIONS],
-        [ActionLink("renew", "Renew certificate", "remote_write", "/example/renew/", method="POST")],
+        [example_command("renew", "Renew certificate", "remote_write", "/example/renew/", method="POST")],
     )
     queue = [
         {**row, "actions": [asdict(action) for action in actions], "aside": False}
@@ -567,7 +567,6 @@ def _rechecks(*, populated):
 
     from hq.platform.application.dashboard import finding_rows
     from hq.platform.application.finding_model import CHECK_AGAIN, Finding
-    from hq.platform.application.workflow_contracts import ActionLink
 
     titles = (
         (
@@ -584,7 +583,7 @@ def _rechecks(*, populated):
         {
             **row,
             "actions": [
-                asdict(ActionLink("verify", CHECK_AGAIN, Effect.READ, f"/example/check/{place}/", method="POST"))
+                asdict(example_command("verify", CHECK_AGAIN, Effect.READ, f"/example/check/{place}/", method="POST"))
             ],
             "aside": False,
         }

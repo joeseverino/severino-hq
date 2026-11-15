@@ -19,10 +19,9 @@ from hq.domains.control_plane.providers import PROVIDERS, record_spec
 lazy from hq.domains.control_plane.observations.contract import container_key
 lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
-from .action_links import ActionLink as TopologyAction
+from .action_links import ActionLink as TopologyAction, read_link
 from .connection_lifecycle import UNREPORTED_NODE, Lifecycle
 from .connections import machines_once
-from .contracts import Effect
 from .entity_links import entity_link
 from .facts import Joined, Subject, inventory_records, readings
 from .inventory import record_identity
@@ -130,7 +129,7 @@ def _observed(nodes, edges, estate: _Estate) -> None:
 
 
 def _open(url: str) -> tuple[TopologyAction, ...]:
-    return (TopologyAction("open", "Open", Effect.READ, url),) if url else ()
+    return (read_link("open", "Open", url),) if url else ()
 
 
 def _declared_by(edges, node_id: str, resource_id: str, nodes) -> None:

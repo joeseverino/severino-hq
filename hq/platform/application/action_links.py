@@ -8,8 +8,8 @@ a projection never advertises authority its principal does not hold.
 """
 
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, replace
-from typing import Protocol
+from dataclasses import MISSING, dataclass, fields
+from typing import Any, Protocol
 from urllib.parse import urlencode
 
 from django.urls import NoReverseMatch
@@ -56,14 +56,26 @@ def connection_action_links(spec: ConnectionLinkSpec) -> tuple[ActionLink, ...]:
     return tuple(actions)
 
 
-def read_link(name: str, label: str, url: str, *, reason: str = "") -> ActionLink:
+def read_link(name: str, label: str, url: str, *, reason: str = "", recommended: bool = False) -> ActionLink:
     """A link that only opens a page: a read, by GET, that runs no command.
 
     The way every offer that is no command's is built, so only
     ``command_action`` gives one an effect, a method or a capability.
     """
 
-    return ActionLink(name, label, Effect.READ, url, reason=reason)
+    return _built(name=name, label=label, effect=Effect.READ, url=url, reason=reason, recommended=recommended)
+
+
+def _built(**values: Any) -> ActionLink:
+    """The link whose fields the page or command factory has derived."""
+
+    link = object.__new__(ActionLink)
+    for field in fields(ActionLink):
+        value = values.get(field.name, field.default)
+        if value is MISSING:
+            raise TypeError(f"Missing link field: {field.name}")
+        object.__setattr__(link, field.name, value)
+    return link
 
 
 # The route of every command's own page, by its name.
@@ -128,14 +140,14 @@ def command_action(
         method = "GET" if answers_get else "POST"
         if url and query:
             url = f"{url}{'&' if '?' in url else '?'}{urlencode(query)}"
-    return ActionLink(
-        name,
+    return _built(
+        name=name,
         # ``variant`` picks one of the words the command declares for its
         # modes; ``intent`` is a remedy's own words for what this press does
         # ("Add an access list"), where the command's would not.
-        intent or spec.words(variant),
-        spec.effect,
-        url,
+        label=intent or spec.words(variant),
+        effect=spec.effect,
+        url=url,
         method=method or "GET",
         capability=capability,
         target=subject,
@@ -300,8 +312,8 @@ def action_with_return(action: ActionLink, route_name: str) -> ActionLink:
     if not destination or not action.url:
         return action
     separator = "&" if "?" in action.url else "?"
-    return replace(
-        action,
+    return _built(
+        **{field.name: getattr(action, field.name) for field in fields(action) if field.name != "url"},
         url=f"{action.url}{separator}{urlencode({'next': destination})}",
     )
 
@@ -346,5 +358,17 @@ def recommend_connection_action(
         return actions
 
     return tuple(
-        replace(item, label=label, reason=reason, recommended=True) if item is preferred else item for item in actions
+        _built(
+            **{
+                field.name: getattr(item, field.name)
+                for field in fields(item)
+                if field.name not in {"label", "reason", "recommended"}
+            },
+            label=label,
+            reason=reason,
+            recommended=True,
+        )
+        if item is preferred
+        else item
+        for item in actions
     )
