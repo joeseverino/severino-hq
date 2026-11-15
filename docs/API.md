@@ -180,7 +180,7 @@ carried, and lists at `/v2/resources/runs/` by `playbook`, `machine`,
 `correlation` and `state`.
 
 - Each is a read under the caller's own `read` grant.
-- A hold is its asker's alone (`approvals.asked_by`, as a task is): another
+- A hold is its asker's alone (`approvals.own_held_request`, as a task is): another
   caller's id answers `not_found`, as an id nothing holds does.
 - A run shows what Jobs shows of it: its machines, who asked and approved it,
   its worker while one runs it, and each task's host, name, outcome and

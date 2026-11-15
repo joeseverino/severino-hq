@@ -435,7 +435,7 @@ def _awaiting(held: ApprovalRequest, *, repeated: bool) -> HeldCall:
     }
 
 
-def asked_by(approval_id: str, *, principal: Principal) -> ApprovalRequest | None:
+def own_held_request(approval_id: str, *, principal: Principal) -> ApprovalRequest | None:
     """The held request ``principal`` itself asked for, by its id, or None.
 
     None as much for another caller's request as for an id nothing holds, so
@@ -876,12 +876,12 @@ def withdraw(command: WithdrawCommand, *, principal: Principal) -> ApprovalWithd
     """Take back a held request its asker no longer wants, before anybody decides it.
 
     Only the caller that asked may: another caller's request reads as one
-    nothing holds (``asked_by``). Withdrawn, it applies nothing, no person is
+    nothing holds (``own_held_request``). Withdrawn, it applies nothing, no person is
     asked to decide it, and it no longer counts against its asker's
     ``MAX_PENDING_PER_ACTOR``.
     """
 
-    held = asked_by(command.approval_id, principal=principal)
+    held = own_held_request(command.approval_id, principal=principal)
     if held is None:
         raise RecordNotFound("No held request of yours has that id.")
     held = _decidable(str(held.pk), principal)

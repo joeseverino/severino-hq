@@ -116,8 +116,7 @@ class OneListTests(WorkRunsTestCase):
         from hq.domains.jobs.runner import AUDIT_TYPE, run as run_job
         from hq.platform.core.models import AuditLog
 
-        from ..history import who_did
-        from ..resource_operations import asked_by
+        from ..history import asked_by, who_did
 
         asked = self.run_of(APP)
         person = get_user_model().objects.create_user("example-person", password="x" * 14)
@@ -127,7 +126,7 @@ class OneListTests(WorkRunsTestCase):
             rows = {row.source: row for row in self.listed()}
 
         self.assertEqual(rows[JOB].by, who_did((AUDIT_TYPE,), [job.pk])[str(job.pk)])
-        self.assertEqual(rows[RUN].by, asked_by([asked])[str(asked.pk)])
+        self.assertEqual(rows[RUN].by, asked_by(OperationRequest, [asked])[str(asked.pk)])
         self.assertNotEqual(rows[JOB].by, rows[RUN].by)
         self.assertEqual(len([query for query in sent if AuditLog._meta.db_table in query["sql"]]), 1)
 

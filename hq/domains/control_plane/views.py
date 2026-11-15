@@ -8,12 +8,12 @@ from django.views import View
 from django.views.generic import DetailView, ListView
 
 from hq.platform.application.action_links import READ_NOW_CAPABILITY, command_url
-from hq.platform.application.approval_review import asked_by
-from hq.platform.application.approvals import DESTRUCTIVE_EFFECT
+from hq.platform.application.approvals import AUDIT_LABELS, DESTRUCTIVE_EFFECT
 from hq.platform.application.capabilities import capability_words, command_spec
 from hq.platform.application.conditions import DRIFTED, holding
 from hq.platform.application.doors import NOBODY
 from hq.platform.application.entity_links import kind_label, record_name, web_url
+from hq.platform.application.history import asked_by
 from hq.platform.application.infrastructure import (
     declared_machines,
     delivery_targets,
@@ -53,7 +53,7 @@ from hq.platform.application.work_runs import run_rows
 from hq.platform.core.templatetags.nav_tags import returning_to
 lazy from hq.platform.application.page_relations import for_container
 
-from .models import ManagedResource, OperationRequest
+from .models import ApprovalRequest, ManagedResource, OperationRequest
 from .provider_adapters.portainer import CONTAINER_KIND
 from .provider_adapters.tls import CERTIFICATE_KIND
 from .providers import PROVIDERS, describe_providers, read_spec, readout_rows, shown_spec
@@ -464,7 +464,7 @@ class InfrastructureDetailView(PageMixin, DetailView):
         # A change a credential asked for that nobody has answered, said on the
         # page an operator opens when a declaration has not moved.
         # Each said as who asked for it, from the audit row that opened it.
-        asked = asked_by(derived.awaiting_approval)
+        asked = asked_by(ApprovalRequest, derived.awaiting_approval, formerly=AUDIT_LABELS)
         context["awaiting_approval"] = tuple(asked.get(str(held.pk), NOBODY) for held in derived.awaiting_approval)
         # Nothing for a container: its panel is the sweep's answer and a
         # container declares identity and nothing else.

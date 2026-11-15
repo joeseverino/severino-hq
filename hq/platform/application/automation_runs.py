@@ -40,8 +40,8 @@ from .security import Capability, Principal
 from .tone import Tone
 lazy from . import approvals, automation_adoption, pages
 lazy from .action_links import command_url
-lazy from .approval_review import ChangePreview, asked_by
-lazy from .approvals import ApprovalSubject, every_call, measured_by, waits_for_a_person
+lazy from .approval_review import ChangePreview
+lazy from .approvals import AUDIT_LABELS, ApprovalSubject, every_call, measured_by, waits_for_a_person
 lazy from .automation_sources import PLAYBOOKS, SHORT_REVISION
 lazy from .cadence import ask, automation_standing
 lazy from .capabilities import capability_words
@@ -50,6 +50,7 @@ lazy from .doors import NOBODY
 lazy from .entity_links import entity_link, kind_label
 lazy from .finding_model import FindingRemedy
 lazy from .findings import rule_for
+lazy from .history import asked_by
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
 lazy from .json_schemas import fields as whole_fields, json_schema
 lazy from .labels import effect_label, lower_first
@@ -697,7 +698,7 @@ def _held_runs(manifest: OperationManifest, principal: Principal) -> ServiceSect
     when none waits."""
 
     waiting = approvals.pending(principal=principal, capability=capability_name(manifest.id))
-    who = asked_by(waiting)
+    who = asked_by(ApprovalRequest, waiting, formerly=AUDIT_LABELS)
     records = tuple(
         (
             machines_cell([str(host) for host in held.baseline.get("hosts") or ()]),

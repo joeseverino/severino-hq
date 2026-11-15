@@ -18,8 +18,6 @@ from hq.domains.control_plane.desired_state import advance_dependents
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND
 from hq.domains.control_plane.providers import PROVIDERS, controller_action_policy
-from hq.platform.core.audit import audited_labels
-lazy from hq.platform.core.models import AuditLog
 
 from .adoption import NOTHING_LIVE_CHANGED, keep_out_declaration, observes_only, require_writable
 from .answer_fields import CallMessage
@@ -28,7 +26,7 @@ from .cadence import ask, swept
 from .command_fields import Describe
 from .conditions import DRIFTED, PROBLEMS, holding
 from .default_hold import consent_gap
-from .doors import NOBODY, Attribution
+from .doors import NOBODY
 from .expiry import certificate_expiry, days_until, renewal_opens_at, renewal_window
 from .infrastructure import (
     ManagedResourceCommand,
@@ -55,7 +53,7 @@ from .security import CONTROLLER_INTERFACE, Principal
 from .ui import counted, ended
 lazy from . import tailnet
 lazy from .containers import Running
-lazy from .history import Acts, who_did_each
+lazy from .history import asked_by
 lazy from .integration_specs import requested
 lazy from .inventory import live_spec
 lazy from .machines import Machine, container_context
@@ -158,7 +156,7 @@ class ObservedAccepted(ResourceSaved):
 
 
 def serialize_operation(operation: OperationRequest) -> OperationItem:
-    who = asked_by((operation,)).get(str(operation.pk), NOBODY)
+    who = asked_by(OperationRequest, (operation,)).get(str(operation.pk), NOBODY)
     return {
         "id": str(operation.id),
         "resource": operation.resource.key,
@@ -181,25 +179,6 @@ def serialize_operation(operation: OperationRequest) -> OperationItem:
 # and how many of those a record's history shows.
 HISTORY_WINDOW = 200
 HISTORY_ROWS = 20
-
-
-def asked_by(operations: Iterable[OperationRequest]) -> dict[str, Attribution]:
-    """Who asked for each of ``operations``, by id, from the audit row that
-    queued it (``history.who_did``); nobody for one no row records."""
-
-    (found,) = who_did_each(asking(operations))
-    return found
-
-
-def asking(operations: Iterable[OperationRequest]) -> Acts:
-    """The audit rows that say who asked for each of ``operations``, read
-    with others' by ``history.who_did_each``."""
-
-    return Acts(
-        (audited_labels()[OperationRequest],),
-        [operation.pk for operation in operations],
-        action=AuditLog.Action.CREATED,
-    )
 
 
 def operation_summary(run: WorkRun, operation: OperationRequest) -> OperationSummary:

@@ -30,13 +30,12 @@ from .asks import DONE, FAILED, QUEUED, RUNNING, Standing
 from .automation_runs import capability_name, resource_key, run_title
 from .conditions import PROBLEMS, holding
 from .doors import NOBODY, Attribution
-from .resource_operations import asked_by, asking
 from .routes import reverse
 from .tone import Tone
 lazy from .automation_adoption import playbook_titles
 lazy from .automation_sources import REFRESH, SOURCE_KEY, capability_specs
 lazy from .cadence import automation_standing
-lazy from .history import Acts, who_did_each
+lazy from .history import Acts, asked_by, asking, who_did_each
 lazy from .outbound_work import job_names
 
 type Source = Literal["job", "run"]
@@ -458,7 +457,7 @@ def run_rows(operations: Iterable[OperationRequest], now: datetime | None = None
     draws, who asked for each read in one query."""
 
     found = list(operations)
-    who = asked_by(found)
+    who = asked_by(OperationRequest, found)
     now = now or timezone.now()
     # Only a run or a scan waits on the playbook worker; the controller takes the rest.
     said = _untaken_of(JobState(operation.seen) for operation in found if operation.action in _LISTED)
@@ -484,7 +483,7 @@ def run_of(operation_id: str, now: datetime | None = None) -> tuple[WorkRun, Ope
     found = seen_as_runs(listed, now).first()
     if found is None:
         return None
-    who = asked_by((found,)).get(str(found.pk), NOBODY)
+    who = asked_by(OperationRequest, (found,)).get(str(found.pk), NOBODY)
     seen = JobState(found.seen)
     return _run_row(found, seen, found.title, now, who, untaken=_untaken_of((seen,))), found
 
@@ -511,7 +510,13 @@ def hydrated(rows: Iterable[Sequence[Any]]) -> list[WorkRun]:
     jobs = Job.objects.in_bulk(ids[JOB]) if ids[JOB] else {}
     runs = OperationRequest.objects.select_related("resource").in_bulk(ids[RUN]) if ids[RUN] else {}
     # Who started each, from the audit row each wrote first, both kinds in one read.
-    who = dict(zip((JOB, RUN), who_did_each(Acts((JOB_AUDIT_TYPE,), ids[JOB]), asking(runs.values())), strict=True))
+    who = dict(
+        zip(
+            (JOB, RUN),
+            who_did_each(Acts((JOB_AUDIT_TYPE,), ids[JOB]), asking(OperationRequest, runs.values())),
+            strict=True,
+        )
+    )
     now = timezone.now()
     said = _untaken_of(JobState(seen) for source, _pk, seen, *_rest in page if source == RUN)
     built: list[WorkRun] = []

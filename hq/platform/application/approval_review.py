@@ -11,10 +11,9 @@ from typing import Any
 
 from hq.domains.control_plane.models import ApprovalRequest, ManagedResource, OperationRequest
 lazy from hq.domains.control_plane.providers import PROVIDERS
-lazy from hq.platform.core.models import AuditLog
 
 from .approvals import AUDIT_LABELS, COMPARED, DECLARATIONS, DESTRUCTIVE_EFFECT, NO_OFFER, WARNINGS, offers, shown_by
-from .doors import NOBODY, Attribution
+from .doors import NOBODY
 from .payload_words import STEP, ChangeRow, changed_words, document, field_words, value_words
 from .security import Principal
 from .tone import Tone
@@ -22,7 +21,7 @@ lazy from . import capabilities
 lazy from .command_forms import switch_field
 lazy from .command_targets import item_name
 lazy from .entity_links import entity_link, kind_label, record_name
-lazy from .history import who_did
+lazy from .history import asked_by
 lazy from .integration_specs import TARGET, capability_fields
 lazy from .labels import human_label, lower_first
 lazy from .resource_capabilities import LIFECYCLE_VERBS
@@ -400,19 +399,13 @@ def _one_move(shown: ChangePreview) -> ChangeRow | None:
     return row
 
 
-def asked_by(held_requests: Any) -> dict[str, Attribution]:
-    """Who asked for each held request, by id, from the audit row that opened it (``history.who_did``)."""
-
-    return who_did(AUDIT_LABELS, (held.pk for held in held_requests), action=AuditLog.Action.CREATED)
-
-
 def review(held: ApprovalRequest, principal: Principal) -> dict[str, Any]:
     """What the decision card shows ``principal``: ``tone`` marks one still
     waiting for a decision, ``who`` who asked for it, and ``offer`` the
     decisions it offers them (``approvals.offers``)."""
 
     shown, warnings = marked(preview(held), _warnings(held))
-    who = asked_by((held,)).get(str(held.pk), NOBODY)
+    who = asked_by(ApprovalRequest, (held,), formerly=AUDIT_LABELS).get(str(held.pk), NOBODY)
     # Its heading names whoever its audit row says asked.
     sentence = replace(asked(held, shown), actor=who.actor) if who else asked(held, shown)
     found = ManagedResource.objects.filter(key=held.resource_key).first() if held.resource_kind else None
