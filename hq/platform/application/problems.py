@@ -105,7 +105,12 @@ def problems_by_part(parts: Mapping[str, About], principal: Principal) -> tuple[
     a page, each with the first part it is about, in the queue's order."""
 
     tests = [_Part.of(name, about) for name, about in parts.items()]
-    entries = [(entry, queue_item(entry["source_id"], entry["source"], entry["item"])) for entry in _host_entries()]
+    # A held request is about no part of a page: it is decided on its own.
+    entries = [
+        (entry, queue_item(entry["source_id"], entry["source"], entry["item"]))
+        for entry in _host_entries()
+        if not entry["item"].held
+    ]
     told = {id(item) for item in readable_by(principal, [item for _, item in entries])}
     found = []
     for entry, item in entries:

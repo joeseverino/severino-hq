@@ -314,7 +314,7 @@ class AuditLogDetailView(PageMixin, DetailView):
         """The approval this event opened, reviewed, if it opened one."""
 
         held = approvals.for_audit_event(self.object)
-        return approval_review.review(held) if held is not None else None
+        return approval_review.review(held, web_principal(self.request.user)) if held is not None else None
 
     @cached_property
     def scan(self):

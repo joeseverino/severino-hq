@@ -24,7 +24,6 @@ from .moments import moment
 from .projection import projection_scope
 from .security import Principal, person
 lazy from . import dashboard
-lazy from .attention import readable_by
 lazy from .decisions import decision
 lazy from .domains import attention_urls
 lazy from .findings import rule_of
@@ -348,7 +347,7 @@ def set_items_aside(command: SetAsideCommand, *, principal: Principal) -> ItemsA
         dismiss_rows(user, command.rows)
         if command.keys:
             with projection_scope():
-                set_aside(user, command.keys, aside=True, current=readable_by(principal, dashboard.work_queue()))
+                set_aside(user, command.keys, aside=True, current=dashboard.readable_queue(principal))
         count = len(command.rows) + len(command.keys)
         _audit(user, "Set items aside.", count)
     return {"ok": True, "count": count}

@@ -1,13 +1,15 @@
 {% comment %}
 Expects `entry` from approvals.review(). Its heading is what was asked, the
 aside when and how, and what it acts on. A warning no row of the change
-carries stands above it. Decisions only while pending.
+carries stands above it. Its buttons are the decisions its reader may take
+(`entry.offer`), and a decision withheld from them says why.
 {% endcomment %}
 {% section entry.asked|stringformat:"s" edge=entry.tone data_approval=entry.held.state more_label=entry.resource_label more_url=entry.resource_url %}
-  {% if entry.held.reason or entry.held.decision_note %}
+  {% if entry.held.reason or entry.held.decision_note or entry.offer.withheld %}
     {% facts %}
       {% if entry.held.reason %}{% fact "Reason" value=entry.held.reason|breakable %}{% endif %}
       {% if entry.held.decision_note %}{% fact "Decision note" value=entry.held.decision_note|breakable %}{% endif %}
+      {% if entry.offer.withheld %}{% fact "Decision" value=entry.offer.withheld|breakable %}{% endif %}
     {% endfacts %}
   {% endif %}
 
@@ -18,11 +20,10 @@ carries stands above it. Decisions only while pending.
   {% endif %}
   {% change_table entry.preview %}
 
-  {% if entry.held.state == 'pending' %}
-    {% url 'control_plane:approval_decision' entry.held.id as decision_url %}
+  {% if entry.offer.actions %}
+    {% remedies entry.offer.actions as shown %}
     <p class="form-actions">
-      {% button "Approve" decision_url post=True name="decision" value="approve" look="primary" %}
-      {% button "Reject" decision_url post=True name="decision" value="reject" %}
+      {% for action in shown %}{% include "partials/_page_action.html" with action=action only %}{% endfor %}
     </p>
   {% endif %}
 {% aside %}

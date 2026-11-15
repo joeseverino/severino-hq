@@ -14,7 +14,7 @@ from django.utils import timezone
 from . import sections
 from .attention import readable_by
 from .derivations import derivation
-from .derived_inputs import DASHBOARD_READS, QUEUE_READS, composed_variant
+from .derived_inputs import DASHBOARD_READS, QUEUE_READS, READER_QUEUE_READS, composed_variant
 from .domains import (
     all_domains,
     domain_attention_items,
@@ -88,15 +88,29 @@ def work_queue() -> list[QueueItem]:
     return [queue_item(entry["source_id"], entry["source"], entry["item"]) for entry in domain_attention_items()]
 
 
+def _reader(principal: Principal) -> tuple[Any, ...]:
+    # Who, as well as what they may read: a credential reads only its own person's held requests,
+    # and a held request is never offered to its asker.
+    return (principal.actor, principal.interface, principal.person_key, *reader_variant(principal))
+
+
+@derivation("attention.readable", reads=READER_QUEUE_READS, vary=_reader)
+def readable_queue(principal: Principal) -> list[QueueItem]:
+    """The composed queue as ``principal`` may read it (``attention.readable_by``),
+    derived once per change, the one way each door reads it."""
+
+    return readable_by(principal, work_queue())
+
+
 def _count_variant(principal: Principal, user_pk: int) -> tuple[Any, ...]:
-    return (user_pk, principal.actor, principal.interface, *reader_variant(principal))
+    return (user_pk, *_reader(principal))
 
 
-@derivation("attention.count", reads=(*QUEUE_READS, "core.ActionItemRead"), vary=_count_variant)
+@derivation("attention.count", reads=(*READER_QUEUE_READS, "core.ActionItemRead"), vary=_count_variant)
 def waiting(principal: Principal, user_pk: int) -> int:
     """How many items wait on one person: the queue as they may read it, less what they set aside."""
 
-    return waiting_count(readable_by(principal, work_queue()), user_pk)
+    return waiting_count(readable_queue(principal), user_pk)
 
 
 class QueueItem(TypedDict):
@@ -232,6 +246,8 @@ def _snapshot_variant(principal) -> tuple[Any, ...]:
     return (
         principal.actor,
         principal.interface,
+        # Whose held requests its queue holds (``readable_queue``).
+        principal.person_key,
         tuple(sorted(str(item) for item in principal.capabilities)),
         *composed_variant(),
     )
@@ -242,7 +258,7 @@ def _snapshot_variant(principal) -> tuple[Any, ...]:
 _SNAPSHOT_READS: tuple[str, ...] = tuple(
     dict.fromkeys(
         (
-            *QUEUE_READS,
+            *READER_QUEUE_READS,
             *DASHBOARD_READS,
             "content.ContentItem_related_projects",
             "core.AuditLog",
@@ -258,7 +274,7 @@ def _operating_snapshot(principal) -> _Snapshot:
     content = sections.content_reading()
     documentation = sections.documentation_reading()
     expenses = sections.expenses_reading()
-    priority = readable_by(principal, work_queue())
+    priority = readable_queue(principal)
 
     return {
         "upstreams": {"contacts": contacts_status},

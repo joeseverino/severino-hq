@@ -6,7 +6,8 @@ a person. Each is the ``Insight`` shape an extension emits.
 """
 
 from collections.abc import Iterable, Mapping
-from typing import Any
+from dataclasses import asdict
+from typing import Any, cast
 
 from django.core.exceptions import ImproperlyConfigured
 
@@ -21,9 +22,8 @@ from .labels import lower_first
 from .projection import read_once
 from .security import cli_principal, internal_principal
 from .ui import counted, ended
-from .workflow_contracts import ActionLink
 lazy from .approval_review import asked, preview
-lazy from .approvals import pending, reads_every_hold
+lazy from .approvals import Offer, offers, pending, reads_every_hold
 lazy from .domains import host_domains
 
 # The section that raises a finding about the estate, which its subject gates.
@@ -189,20 +189,6 @@ def waiting_for_approval() -> tuple[Insight, ...]:
                 url=_approval_entry(held),
                 since=held.created_at,
                 held=True,
-                actions=tuple(
-                    ActionLink(
-                        name=f"approval.{decision}",
-                        label=label,
-                        effect="remote_write",
-                        url=reverse(
-                            "control_plane:approval_decide",
-                            kwargs={"approval_id": held.id, "decision": decision},
-                        ),
-                        method="POST",
-                        recommended=decision == "approve",
-                    )
-                    for decision, label in (("approve", "Approve"), ("reject", "Reject"))
-                ),
             )
         )
     return tuple(items)
@@ -215,19 +201,27 @@ def readable_by[Item: Mapping[str, Any]](principal, items: list[Item]) -> list[I
     each door it leaves through to one reader takes out here what that reader
     may not be told: an item about what only some capabilities may read
     (``read_capabilities``), and, for a reader that sees only its own held
-    requests (``approvals.reads_every_hold``), every other caller's.
+    requests (``approvals.reads_every_hold``), every other caller's. A held
+    request is composed with no decision on it, and gains here what
+    ``approvals.offers`` offers this reader.
     """
 
     items = [item for item in items if principal.permits(*item.get("read_capabilities", ()))]
-    if reads_every_hold(principal):
+    if not any(item.get("held") for item in items):
         return items
-    own = {held.pk for held in pending(principal=principal, limit=None)}
-    hidden = {
-        _approval_entry(held)
-        for held in pending(principal=internal_principal("action-queue"), limit=None)
-        if held.pk not in own
-    }
-    return [item for item in items if item.get("url") not in hidden]
+    held = {_approval_entry(row): row for row in pending(principal=internal_principal("action-queue"), limit=None)}
+    if not reads_every_hold(principal):
+        own = {row.pk for row in pending(principal=principal, limit=None)}
+        items = [item for item in items if item.get("url") not in held or held[item["url"]].pk in own]
+    offered = offers(principal, (held[item["url"]] for item in items if item.get("url") in held))
+    return [_offering(item, offered[held[item["url"]].pk]) if item.get("url") in held else item for item in items]
+
+
+def _offering[Item: Mapping[str, Any]](item: Item, offer: Offer) -> Item:
+    """A held request's item with the decisions its reader may take, and why any other is withheld."""
+
+    facts = [*item.get("facts", ()), *([["Decision", offer.withheld]] if offer.withheld else [])]
+    return cast(Item, {**item, "actions": [*item.get("actions", ()), *map(asdict, offer.actions)], "facts": facts})
 
 
 def _asked_change(shown) -> str:

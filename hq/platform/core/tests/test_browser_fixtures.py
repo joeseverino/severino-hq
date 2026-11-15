@@ -516,22 +516,13 @@ def _urgent_dashboard():
 
     from uuid import UUID
 
-    from hq.platform.application.approvals import APPROVE, REJECT
+    from hq.platform.application.approvals import DECISIONS, _decision_link
     from hq.platform.application.dashboard import queue_item
     from hq.platform.application.workflow_contracts import ActionLink
 
     held = UUID(int=1)
-    decide = (
-        ActionLink(
-            name,
-            label,
-            "remote_write",
-            reverse("control_plane:approval_decide", kwargs={"approval_id": held, "decision": decision}),
-            method="POST",
-            recommended=decision == "approve",
-        )
-        for name, label, decision in ((APPROVE, "Approve", "approve"), (REJECT, "Reject", "reject"))
-    )
+    # As an operator is offered it (``approvals.offers``).
+    decide = (_decision_link(held, decision) for decision in DECISIONS)
     approval = Insight(
         "serious",
         "Approval",
@@ -540,6 +531,7 @@ def _urgent_dashboard():
         "DNS rewrite photos-example: answer from 192.0.2.10 to 198.51.100.20, and 2 more fields.",
         key=f"approval:{held}",
         url=reverse("core:approval_entry", kwargs={"approval_id": held}),
+        held=True,
         actions=tuple(decide),
     )
     finding = Insight(

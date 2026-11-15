@@ -11,7 +11,6 @@ import hashlib
 from dataclasses import asdict, is_dataclass
 from typing import Any
 
-lazy from .approvals import APPROVE, REJECT
 lazy from .entity_links import web_url
 lazy from .findings import rule_origin
 lazy from .freshness import cadence, freshness
@@ -114,13 +113,6 @@ def _next_step(item: dict[str, Any], taken: set[tuple[str, str]]) -> tuple[list[
     return [link], ""
 
 
-def _decided_here(actions: list[dict[str, Any]]) -> bool:
-    """Whether the card's own buttons decide what its meaning describes, as an
-    approval's do: the page that shows it whole is then its request's own."""
-
-    return any(_plain(action).get("name") in (APPROVE, REJECT) for action in actions)
-
-
 def _late(item: dict[str, Any]) -> dict[str, Any] | None:
     """The reading a row is drawn from, said on the row only once it is out
     of date for its kind, with how often that kind is read."""
@@ -184,13 +176,14 @@ def _digest(key: str) -> str:
     return hashlib.sha256(key.encode()).hexdigest()[:12]
 
 
-def _own_page(item: dict[str, Any], subject: dict[str, Any], actions: list[dict[str, Any]], anchor: str) -> str:
+def _own_page(item: dict[str, Any], subject: dict[str, Any], anchor: str) -> str:
     """The page that shows an item's whole card: the thing it is about, the
-    request its buttons decide, or the queue with its card in view."""
+    held request it describes (``Insight.held``), or the queue with its card
+    in view."""
 
     if subject.get("url"):
         return subject["url"]
-    if item.get("url") and _decided_here(actions):
+    if item.get("url") and item.get("held"):
         return item["url"]
     return f"{reverse('action_items')}#{anchor}"
 
@@ -215,7 +208,7 @@ def decision(item: dict[str, Any]) -> dict[str, Any]:
         **item,
         "href": subject.get("url") or item.get("url") or "",
         "anchor": anchor,
-        "page": _own_page(item, subject, actions, anchor),
+        "page": _own_page(item, subject, anchor),
         "urgency": NOTICE if item.get("notice") else urgency(item.get("status", "")),
         # A check again waits behind the owner's named page, so the two that
         # stand on the row are the fix and where it is done.

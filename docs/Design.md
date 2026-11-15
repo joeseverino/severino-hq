@@ -1405,7 +1405,10 @@ grows, or is raised again after clearing (its `since` after the dismissal). The 
 dashboard count what waits; a dashboard with only dismissed items says so and
 links to them, and never claims all is clear. A held request
 (`Insight(held=True)`) is decided by its Approve or Reject, never dismissed:
-its row has no Dismiss and no mark hides it (`action_items.sortable`).
+its row has no Dismiss and no mark hides it (`action_items.sortable`). It is
+composed with no decision on it: each reader is offered only the decisions
+the rule that refuses them lets that reader take (`approvals.offers`), and a
+decision withheld says why among the row's facts.
 
 **A family folds.** An owner names what kind of matter an item is
 (`Insight(family="Image advisories")`), in the words it would head a list

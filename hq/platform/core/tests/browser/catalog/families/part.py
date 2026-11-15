@@ -19,6 +19,7 @@ from hq.domains.jobs.models import Job, JobState
 from hq.platform.application import calendar
 from hq.platform.application.appearance import Theme
 from hq.platform.application.approval_review import SUMMARY, Asked, ChangePreview, compare, grouped
+from hq.platform.application.approvals import DECISIONS, NO_OFFER, Offer, _decision_link
 from hq.platform.application.asks import DONE, FAILED, QUEUED, RUNNING, WAITING, Ask, Standing
 from hq.platform.application.calendar import CalendarEvent, CalendarSource, SourceView, calendar_month
 from hq.platform.application.capability_policy import RULE_LABELS, Column, Group, PolicyCell, Row
@@ -319,6 +320,10 @@ def _approval(state, **decided):
             "resource_url": "/example/",
             "resource_label": "Playbooks",
             "resource_open": "Open Playbooks",
+            # As an operator is offered it: both decisions while it waits.
+            "offer": Offer(tuple(_decision_link(held.id, decision) for decision in DECISIONS), "")
+            if pending
+            else NO_OFFER,
         }
     }
 

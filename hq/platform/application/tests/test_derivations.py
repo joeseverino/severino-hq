@@ -478,6 +478,7 @@ SAMPLES = {
     "attention.by_subject": lambda s: _of("problems", "_by_subject")(),
     "attention.work": lambda s: _of("dashboard", "work_queue")(),
     "attention.count": lambda s: _of("dashboard", "waiting")(web_principal(s.user), s.user.pk),
+    "attention.readable": lambda s: _of("dashboard", "readable_queue")(web_principal(s.user)),
     "dashboard.sections": lambda s: _of("domains", "domain_dashboard_sections")(web_principal(s.user)),
     "dashboard.highlights": lambda s: _of("dashboard", "dashboard_highlights")(web_principal(s.user)),
     "dashboard.snapshot": lambda s: _of("dashboard", "_operating_snapshot")(web_principal(s.user)),

@@ -8,8 +8,7 @@ from django.urls import reverse
 from django.views.generic import TemplateView, View
 
 from hq.platform.application import action_items as queue_state, fragments
-from hq.platform.application.attention import readable_by
-from hq.platform.application.dashboard import waiting, work_queue
+from hq.platform.application.dashboard import readable_queue, waiting
 from hq.platform.application.decisions import urgency
 from hq.platform.application.pages import PageMixin
 from hq.platform.application.projection import projection_scope
@@ -26,7 +25,7 @@ def _action_items(request, current=None):
 
     if current is None:
         with projection_scope():
-            current = readable_by(web_principal(request.user), work_queue())
+            current = readable_queue(web_principal(request.user))
     all_items = queue_state.with_aside_state(current, request.user)
     items = queue_state.filter_items(
         all_items,

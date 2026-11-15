@@ -23,7 +23,6 @@ from .record_errors import RecordNotFound
 from .security import Principal
 lazy from . import connections, dashboard, estate, machines, request_context
 lazy from .action_items import filter_items
-lazy from .attention import readable_by
 lazy from .command_center import estate_search
 lazy from .credential_sight import credential_sight, sight
 lazy from .entity_links import entity_link
@@ -98,7 +97,7 @@ def list_action_items(
     """The composed action queue as ``principal`` may read it, filtered the way the action items page filters it."""
 
     with projection_scope():
-        queue = readable_by(principal, dashboard.work_queue())
+        queue = dashboard.readable_queue(principal)
         items = filter_items(queue, query=query, status=status or "", source=source or "")
     return _collection(items, limit)
 

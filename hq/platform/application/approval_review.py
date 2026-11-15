@@ -13,9 +13,10 @@ from hq.domains.control_plane.models import ApprovalRequest, ManagedResource, Op
 lazy from hq.domains.control_plane.providers import PROVIDERS
 lazy from hq.platform.core.models import AuditLog
 
-from .approvals import AUDIT_LABELS, COMPARED, DECLARATIONS, DESTRUCTIVE_EFFECT, WARNINGS, shown_by
+from .approvals import AUDIT_LABELS, COMPARED, DECLARATIONS, DESTRUCTIVE_EFFECT, NO_OFFER, WARNINGS, offers, shown_by
 from .doors import NOBODY, Attribution
 from .payload_words import STEP, ChangeRow, changed_words, document, field_words, value_words
+from .security import Principal
 lazy from . import capabilities
 lazy from .command_forms import switch_field
 lazy from .command_targets import item_name
@@ -404,9 +405,10 @@ def asked_by(held_requests: Any) -> dict[str, Attribution]:
     return who_did(AUDIT_LABELS, (held.pk for held in held_requests), action=AuditLog.Action.CREATED)
 
 
-def review(held: ApprovalRequest) -> dict[str, Any]:
-    """What the decision card shows: ``tone`` marks one still waiting for a
-    decision, and ``who`` who asked for it."""
+def review(held: ApprovalRequest, principal: Principal) -> dict[str, Any]:
+    """What the decision card shows ``principal``: ``tone`` marks one still
+    waiting for a decision, ``who`` who asked for it, and ``offer`` the
+    decisions it offers them (``approvals.offers``)."""
 
     shown, warnings = marked(preview(held), _warnings(held))
     who = asked_by((held,)).get(str(held.pk), NOBODY)
@@ -419,6 +421,8 @@ def review(held: ApprovalRequest) -> dict[str, Any]:
         "held": held,
         "who": who,
         "tone": "attention" if held.state == ApprovalRequest.State.PENDING else "",
+        # A settled request offers nothing, and its aside says how it ended.
+        "offer": offers(principal, (held,))[held.pk] if held.state == ApprovalRequest.State.PENDING else NO_OFFER,
         "asked": sentence,
         "preview": shown,
         "warnings": warnings,

@@ -212,11 +212,10 @@ class PageTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user("op", password="x" * 20)
         self.client.force_login(self.user)
-        # The page asks for the queue; the header's count derives from it.
-        for name in ("hq.platform.core.action_item_views", "hq.platform.application.dashboard"):
-            patcher = mock.patch(f"{name}.work_queue", return_value=[ITEM, OTHER])
-            patcher.start()
-            self.addCleanup(patcher.stop)
+        # The page and the header's count both read the queue through it.
+        patcher = mock.patch("hq.platform.application.dashboard.work_queue", return_value=[ITEM, OTHER])
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def shown(self, page, name="action_groups"):
         return [item["label"] for group in page.context[name] for item in group["items"]]
@@ -259,7 +258,7 @@ class PageTests(TestCase):
 
     def test_a_held_requests_row_offers_no_dismiss_and_any_other_row_does(self):
         held = {**OTHER, "held": True}
-        with mock.patch("hq.platform.core.action_item_views.work_queue", return_value=[ITEM, held]):
+        with mock.patch("hq.platform.application.dashboard.work_queue", return_value=[ITEM, held]):
             page = self.client.get(reverse("action_items"))
 
         dismissed = [
@@ -269,7 +268,7 @@ class PageTests(TestCase):
         self.assertNotIn(row_value(held), dismissed)
 
     def test_one_row_is_dismissed_without_composing_the_queue(self):
-        with mock.patch("hq.platform.core.action_item_views.work_queue", side_effect=AssertionError("composed")):
+        with mock.patch("hq.platform.application.dashboard.work_queue", side_effect=AssertionError("composed")):
             reply = self.client.post(
                 reverse("action_items_set_aside"),
                 form_keyed({"key": row_value(ITEM)}),
@@ -299,7 +298,6 @@ class PageTests(TestCase):
             for n in range(3)
         ]
         with (
-            mock.patch("hq.platform.core.action_item_views.work_queue", return_value=[*family, OTHER]),
             mock.patch("hq.platform.application.dashboard.work_queue", return_value=[*family, OTHER]),
         ):
             page = self.client.get(reverse("action_items"))
@@ -340,7 +338,6 @@ class PageTests(TestCase):
     def test_a_notice_is_kept_apart_from_what_needs_doing_and_out_of_that_count(self):
         told = {**ITEM, "key": "example:run", "label": "A run drifted", "notice": True}
         with (
-            mock.patch("hq.platform.core.action_item_views.work_queue", return_value=[ITEM, told]),
             mock.patch("hq.platform.application.dashboard.work_queue", return_value=[ITEM, told]),
         ):
             page = self.client.get(reverse("action_items"))
@@ -450,10 +447,9 @@ class AsideCapabilityTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user("op", password="x" * 20)
         self.client.force_login(self.user)
-        for name in ("hq.platform.core.action_item_views", "hq.platform.application.dashboard"):
-            patcher = mock.patch(f"{name}.work_queue", return_value=[ITEM, OTHER])
-            patcher.start()
-            self.addCleanup(patcher.stop)
+        patcher = mock.patch("hq.platform.application.dashboard.work_queue", return_value=[ITEM, OTHER])
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def test_setting_aside_and_bringing_back_are_audited_as_the_person(self):
         self.client.post(reverse("action_items_set_aside"), form_keyed({"key": row_value(ITEM)}))

@@ -820,8 +820,8 @@ class SurfaceTests(TestCase):
 
     def test_approving_from_the_page_applies_it(self):
         response = self.client.post(
-            reverse("control_plane:approval_decision", kwargs={"approval_id": self.held.id}),
-            form_keyed({"decision": "approve"}),
+            reverse("control_plane:approval_decide", kwargs={"approval_id": self.held.id, "decision": "approve"}),
+            form_keyed({}),
         )
 
         self.assertRedirects(response, f"{reverse('core:audit_list')}?awaiting=1")
@@ -834,8 +834,8 @@ class SurfaceTests(TestCase):
 
     def test_the_decision_is_audited_under_whoever_decided(self):
         self.client.post(
-            reverse("control_plane:approval_decision", kwargs={"approval_id": self.held.id}),
-            form_keyed({"decision": "approve"}),
+            reverse("control_plane:approval_decide", kwargs={"approval_id": self.held.id, "decision": "approve"}),
+            form_keyed({}),
         )
 
         decided = AuditLog.objects.get(object_type="Approval", object_id=str(self.held.id), metadata__operation=APPROVE)
@@ -846,12 +846,12 @@ class SurfaceTests(TestCase):
         reject(RejectCommand(str(self.held.id)), principal=web_principal(self.user))
 
         response = self.client.post(
-            reverse("control_plane:approval_decision", kwargs={"approval_id": self.held.id}),
-            form_keyed({"decision": "approve"}),
+            reverse("control_plane:approval_decide", kwargs={"approval_id": self.held.id, "decision": "approve"}),
+            form_keyed({}),
         )
 
         said = [str(message) for message in get_messages(response.wsgi_request)]
-        self.assertEqual(said, ["That request is already rejected."])
+        self.assertEqual(said, ["That request is already rejected, so nothing was written."])
 
     def test_a_token_is_refused_the_decision_whatever_it_holds_before_anything_moves(self):
         omnipotent = frozenset(Capability)

@@ -230,7 +230,7 @@ class ExampleEstateTests(TestCase):
             with self.subTest(capability=held.capability):
                 page = client.get(reverse("core:approval_entry", args=[held.pk]), follow=True)
 
-                record = approval_review.review(held)["resource_url"]
+                record = approval_review.review(held, cli_principal())["resource_url"]
                 self.assertEqual(page.status_code, 200)
                 self.assertTrue(record, "every held request the estate seeds acts on a record")
                 self.assertTrue(

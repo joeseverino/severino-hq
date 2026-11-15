@@ -211,6 +211,7 @@ class ProcedurePageTests(TestCase):
         from hq.platform.application.approval_review import review
         from hq.platform.application.automation_adoption import playbook_titles
         from hq.platform.application.automation_runs import operation_registry
+        from hq.platform.application.security import cli_principal
 
         held = ApprovalRequest.objects.filter(
             state=ApprovalRequest.State.PENDING, capability__startswith="automation.", capability__endswith=".run"
@@ -220,7 +221,7 @@ class ProcedurePageTests(TestCase):
             with self.subTest(capability=request.capability):
                 operation = request.baseline["spec"]["operation"]
                 manifest = operation_registry()[operation]
-                card = review(request)
+                card = review(request, cli_principal())
                 self.assertIn(f"“{playbook_titles()[operation]}”", str(card["asked"]))
                 shown = {row.label: row.after for row in card["preview"].rows}
                 for host in request.baseline["hosts"]:

@@ -44,7 +44,6 @@ class PageTests(TestCase):
 
     def page(self, *items):
         with (
-            mock.patch("hq.platform.core.action_item_views.work_queue", return_value=list(items)),
             mock.patch("hq.platform.application.dashboard.work_queue", return_value=list(items)),
         ):
             return self.client.get(reverse("action_items"))

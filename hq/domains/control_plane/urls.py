@@ -41,11 +41,6 @@ urlpatterns = [
     # Before <slug:key>, like the rest: an open page asking for its own readings.
     path("visit/", visit_views.VisitRefreshView.as_view(), name="visit"),
     path(
-        "approvals/<uuid:approval_id>/",
-        approval_views.ApprovalDecisionView.as_view(),
-        name="approval_decision",
-    ),
-    path(
         "approvals/<uuid:approval_id>/<str:decision>/",
         approval_views.ApprovalDecisionView.as_view(),
         name="approval_decide",

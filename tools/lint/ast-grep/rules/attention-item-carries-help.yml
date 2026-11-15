@@ -2,6 +2,9 @@
 # its actions=, a command, instruction or reason in its workflow=, or the
 # page the work is done on (action= with url=). An Insight the host builds
 # with none of those, and no ** that could carry one, is a problem alone.
+# A held request (held=) is the exception: its help is what each reader may
+# decide of it, or why they may not, which attention.readable_by adds as
+# the queue leaves for that reader.
 # application/item_help names the kinds; test_item_help's gauge reads them.
 id: attention-item-carries-help
 language: python
@@ -32,6 +35,15 @@ rule:
             has:
               field: name
               regex: ^(workflow|actions)$
+        - has:
+            kind: keyword_argument
+            all:
+              - has:
+                  field: name
+                  regex: ^held$
+              - has:
+                  field: value
+                  regex: ^True$
         - all:
             - has:
                 kind: keyword_argument

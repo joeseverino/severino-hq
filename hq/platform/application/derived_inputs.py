@@ -51,6 +51,11 @@ FINDINGS_READS: tuple[str, ...] = (
 # The composed queue: the findings, and the held requests.
 QUEUE_READS: tuple[str, ...] = FINDINGS_READS
 
+# The queue as one reader reads it (``attention.readable_by``): the composed
+# queue, and whether each held request's asker is paused or blocked, which
+# decides whether it is offered for approval (``approvals.refusals``).
+READER_QUEUE_READS: tuple[str, ...] = (*QUEUE_READS, "core.AgentAccess", "core.AgentIdentity", "core.AgentDevice")
+
 
 # The dashboard's cards and overviews: the estate, and each record domain's
 # headline reading.
