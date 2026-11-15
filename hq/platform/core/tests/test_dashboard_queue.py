@@ -16,7 +16,7 @@ from hq.platform.application.tests.markup import hrefs, select, with_class, with
 from hq.platform.application.tests.test_decisions import row_hrefs
 from hq.platform.application.ui import DomainOverview
 from hq.platform.application.workflow_contracts import ActionLink
-from hq.platform.application.workflows import claim_resolution_plan
+from hq.platform.application.workflows import claim_identity, claim_resolution_plan
 from hq_sdk.testing import plain
 
 
@@ -28,10 +28,7 @@ class DashboardQueueTests(TestCase):
     def setUp(self):
         self.client.force_login(self.user)
         plan = claim_resolution_plan(
-            namespace="example.utility",
-            rule="changed",
-            subject="account:one",
-            scope="",
+            identity=claim_identity("example.utility", "changed:account:one"),
             remedies=(ActionLink("remedy", "Inspect evidence", "read", "/example/evidence/", recommended=True),),
             verification=ActionLink("verify", "Recheck facts", "write", "/dashboard/glance/", method="POST"),
         )

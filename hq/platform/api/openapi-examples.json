@@ -259,7 +259,7 @@
               "affected_scopes": [],
               "evidence": [],
               "explanation": "Expires Feb\u00a08\u00a0\u00b7 24 days. Renewal has not run; renew it.",
-              "id": "claim:008164bedbed1fcb",
+              "id": "claim:864a7bc7f7125608",
               "investigations": [
                 {
                   "capability": "",
@@ -304,10 +304,10 @@
               "subject": "resource:wildcard-example-com",
               "title": "wildcard-example-com expires in 24 days",
               "workflow": {
-                "id": "resolve:claim:008164bedbed1fcb",
+                "id": "resolve:claim:864a7bc7f7125608",
                 "label": "Next steps",
                 "outcome": {
-                  "claim_id": "claim:008164bedbed1fcb",
+                  "claim_id": "claim:864a7bc7f7125608",
                   "kind": "claim_absent",
                   "label": ""
                 },
@@ -3008,7 +3008,7 @@
                     }
                   ],
                   "explanation": "HQ accepts requests from every address in the range. You can narrow the trusted networks in HQ's settings to the addresses the tailnet uses.",
-                  "id": "claim:d3cadf1809bee399",
+                  "id": "claim:31be84447cd15b63",
                   "investigations": [
                     {
                       "capability": "",
@@ -3055,10 +3055,10 @@
                   "subject": "connection:infrastructure.controllers:docker-host-01:tailscale",
                   "title": "HQ trusts all of 100.64.0.0/10, fd7a:115c:a1e0::/48, and the tailnet uses 6 device addresses and 1 subnet route",
                   "workflow": {
-                    "id": "resolve:claim:d3cadf1809bee399",
+                    "id": "resolve:claim:31be84447cd15b63",
                     "label": "Next steps",
                     "outcome": {
-                      "claim_id": "claim:d3cadf1809bee399",
+                      "claim_id": "claim:31be84447cd15b63",
                       "kind": "claim_absent",
                       "label": ""
                     },

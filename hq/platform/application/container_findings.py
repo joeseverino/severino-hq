@@ -1,8 +1,9 @@
 """Findings about what each container runs, each with the help HQ derived.
 
-One per container on its machine for an image version with a known advisory,
-for a newer release (an update is a chore to schedule, not a fire), and for
-each serious check of the standard it fails, offering its compose change
+One per image version on its machine, naming every container that runs it,
+for a known advisory, for a newer release (an update is a chore to schedule,
+not a fire) and for being run by tag alone; and one per container for the
+serious checks of the standard it fails, offering its compose change
 (``application.container_hardening``) or, for the Docker socket, the
 declaration that holding it is the container's job. Worded as the topology is
 derived, from the container readings and what reaches each container, and
@@ -20,7 +21,7 @@ from hq.platform.application.routes import reverse
 
 from .action_links import command_action, command_url
 from .containers import VULNERABLE, Container, ImageStanding, containers
-from .exposure import OPEN, UNKNOWN, exposure_of_container, status_at
+from .exposure import LEVELS, OPEN, UNKNOWN, exposure_of_container, status_at
 from .finding_model import (
     CANNOT_EDIT_COMPOSE,
     CONTAINERS_CARD,
@@ -46,30 +47,42 @@ BY_HAND = "HQ cannot apply an update itself yet."
 UPDATE_CAPABILITY = "infrastructure.resource.update"
 ADVISORY = "container-image-advisory"
 UPDATE = "container-image-update"
+UNPINNED = "container-image-unpinned"
 HARDENING = "container-hardening"
 
 
 def add(nodes, machine: Callable[[Any], str]) -> None:
-    """Each container's findings, on the machine it runs on."""
+    """Each image's findings and each container's, on the machine they run on."""
 
-    carry(nodes, (finding for item in containers() if (at := machine(item.machine.name)) for finding in _of(item, at)))
+    images: dict[tuple[str, str], list[Container]] = {}
+    found: list[Finding] = []
+    for item in containers():
+        if at := machine(item.machine.name):
+            images.setdefault((at, item.standing.label), []).append(item)
+            found.extend(_hardening(item, at))
+    carry(nodes, (finding for (at, _label), running in images.items() for finding in _of(running, at)))
+    carry(nodes, found)
 
 
-def _of(item: Container, subject: str) -> Iterator[Finding]:
-    standing = item.standing
+def _of(running: list[Container], subject: str) -> Iterator[Finding]:
+    """What one image at one version asks of the machine that runs it, said
+    once however many of its containers run it."""
+
+    standing = running[0].standing
     if standing.state == VULNERABLE:
-        if needs_you(standing, [item]):
-            yield _advisory(item, subject)
+        if needs_you(standing, running):
+            yield _advisory(running, subject)
     elif standing.newer:
         yield _found(
-            item,
+            running,
             subject,
             rule=UPDATE,
             severity="attention",
-            title=f"{_where(item)} has an update",
-            explanation=ended(f"{standing.label} to {standing.latest}") + _brings(item),
+            title=f"{standing.label} has an update",
+            explanation=ended(f"{standing.label} to {standing.latest}") + _running_as(running) + _brings(running),
         )
-    yield from _hardening(item, subject)
+    if by_tag := [item for item in running if _unpinned(item.standing)]:
+        yield _unpinned_finding(by_tag, subject)
 
 
 def needs_you(standing: ImageStanding, running: list[Container]) -> bool:
@@ -80,22 +93,34 @@ def needs_you(standing: ImageStanding, running: list[Container]) -> bool:
     return bool(standing.newer) or any(exposure_of_container(item).level in (OPEN, UNKNOWN) for item in running)
 
 
-def _where(item: Container) -> str:
-    return f"{item.running.name} on {item.machine.name}"
+def _names(running: list[Container]) -> str:
+    return ", ".join(item.running.name for item in running)
 
 
-def _found(item: Container, subject: str, **said: Any) -> Finding:
-    """A finding about one container: how to update it by hand, where its
-    upgrade is planned, and the containers page, which helps whatever the card
-    leads with."""
+def _running_as(running: list[Container]) -> str:
+    return " " + ended(f"Running as {_names(running)} on {running[0].machine.name}")
 
-    primary = said.pop("primary", None) or _plan(item)
+
+def _lead(running: list[Container]) -> Container:
+    """The container whose page plans the image's upgrade: the first HQ watches."""
+
+    return next((item for item in running if item.running.watcher), running[0])
+
+
+def _found(running: list[Container], subject: str, **said: Any) -> Finding:
+    """A finding about one image on one machine: each container that runs it,
+    how to update them by hand, where the upgrade is planned, and the
+    containers page, which helps whatever the card leads with."""
+
+    primary = said.pop("primary", None) or _plan(_lead(running))
+    steps = said.pop("steps", None) or _by_hand(running)
     containers = _containers()
     return Finding(
         subject=subject,
-        part=item.running.name,
-        steps=_by_hand(item),
-        **_read(item),
+        part=running[0].standing.label,
+        steps=steps,
+        evidence=(*(("Container", item.running.name) for item in running), *said.pop("evidence", ())),
+        **_read(running),
         primary=primary,
         offers=() if primary.url == containers.url else (containers,),
         **said,
@@ -106,19 +131,21 @@ def _containers() -> ActionLink:
     return opens("Open containers", reverse("control_plane:containers"))
 
 
-def _read(item: Container, *, standing: bool = True) -> dict[str, Any]:
-    """The oldest reading a finding about ``item`` is drawn from, and its
-    kind: where it runs, and, for what its image stands at, the registry's."""
+def _read(running: list[Container], *, standing: bool = True) -> dict[str, Any]:
+    """The oldest reading a finding about ``running`` is drawn from, and its
+    kind: where each runs, and, for what its image stands at, the registry's."""
 
-    found = [(item.running.observed_at, RUNTIME_KIND), (item.standing.read_at if standing else None, IMAGE_KIND)]
+    found = [(item.running.observed_at, RUNTIME_KIND) for item in running]
+    found.append((running[0].standing.read_at if standing else None, IMAGE_KIND))
     at, kind = min(((at, kind) for at, kind in found if at is not None), default=(None, ""))
     return {"observed_at": at, "reads": kind}
 
 
-def _upgrade_action(item: Container) -> ActionLink:
+def _upgrade_action(running: list[Container]) -> ActionLink:
     """What an advisory card leads with: the upgrade its plan names, on the
     page that plans it, or that no release fixes it yet."""
 
+    item = _lead(running)
     plan = plan_for(item)
     if plan is None:
         return opens("No fixed release to upgrade to yet", reverse("control_plane:containers"))
@@ -131,70 +158,117 @@ def _upgrade_action(item: Container) -> ActionLink:
     return opens(label, f"{item.url}#upgrade" if item.running.watcher else reverse("control_plane:containers"))
 
 
-def _advisory(item: Container, subject: str) -> Finding:
+def _advisory(running: list[Container], subject: str) -> Finding:
     """One upgrade however many advisories; none yet if no release fixes them."""
 
-    standing = item.standing
+    standing = running[0].standing
     fixed = _fixed_in(standing)
     waiting = not standing.newer
-    level, reached = _reach(item)
+    level, reached = _reach(running)
     fixed_in = f" {ended(f'Fixed in {fixed}')}" if fixed else ""
     return _found(
-        item,
+        running,
         subject,
         rule=ADVISORY,
-        primary=_upgrade_action(item),
+        primary=_upgrade_action(running),
         severity=status_at("serious" if standing.serious and not waiting else "attention", level),
         title=f"{standing.label} has {standing.summary}" + (", and no release fixes it yet" if waiting else ""),
-        explanation=f"Worst severity: {ended(standing.worst)} {ended(f'Running as {_where(item)}')}{fixed_in}"
-        + _brings(item)
+        explanation=f"Worst severity: {ended(standing.worst)}{_running_as(running)}{fixed_in}"
+        + _brings(running)
         + reached,
     )
 
 
-def _brings(item: Container) -> str:
+def _unpinned(standing: ImageStanding) -> bool:
+    """Started by tag alone from an image a registry was read to hold, so a
+    digest names a build anyone can pull. An image the registry does not
+    answer for, such as one built on its machine, has no pin to name."""
+
+    return bool(not standing.pinned and standing.digest and standing.read_at and not standing.unread)
+
+
+def _pin(item: Container) -> str:
+    return f"{item.running.image}@{item.standing.digest}"
+
+
+def _unpinned_finding(running: list[Container], subject: str) -> Finding:
+    """A tag can later name a different build, so the next pull may run one
+    nobody chose; a digest always names the same one."""
+
+    pins = tuple(dict.fromkeys(_pin(item) for item in running))
+    return _found(
+        running,
+        subject,
+        rule=UNPINNED,
+        severity="attention",
+        title=f"{running[0].running.image} runs by tag alone",
+        explanation=f"A tag can later name a different build. Pin it by digest.{_running_as(running)}",
+        evidence=tuple(("Pin it as", pin) for pin in pins),
+        steps=_compose_steps(running, _pin),
+        primary=_containers(),
+    )
+
+
+def _brings(running: list[Container]) -> str:
     """What a new version would bring that is worth knowing before moving to it."""
 
-    plan = plan_for(item)
+    plan = plan_for(_lead(running))
     return f" {plan.target_tag} has a known vulnerability of its own." if plan is not None and plan.introduces else ""
 
 
-def _by_hand(item: Container) -> tuple[OperatorStep, ...]:
-    """How it is updated today, on its machine: the image to set and the file
-    that sets it, with the command that recreates the container when HQ read
-    the compose project it belongs to. Without that, only what to set."""
+def _by_hand(running: list[Container]) -> tuple[OperatorStep, ...]:
+    """How the image is updated today, on its machine: one step for each
+    compose project that runs it."""
 
-    plan = plan_for(item)
+    plan = plan_for(_lead(running))
     if plan is None:
         return ()
-    name, machine = item.running.name, item.machine.name
-    if item.standing.repository is not None:
-        return (OperatorStep(label=f"{name} on {machine} is HQ's own image. Its release pipeline deploys it."),)
-    wanted = f"{item.standing.image.name}:{plan.target_tag}"
-    files = tuple(item.compose_files)
-    service = str((item.runtime or {}).get("service", "") or "")
-    command = (
-        on_machine(
-            machine,
-            "docker compose "
-            + " ".join(f"-f {shlex.quote(path)}" for path in files)
-            + f" up -d {shlex.quote(service)}",
-        )
-        if files and service
-        else ""
-    )
-    if not command:
+    standing = running[0].standing
+    if standing.repository is not None:
         return (
             OperatorStep(
-                label=f"On {machine}, set the image of {name} to {wanted} where it is defined, then start it again."
+                label=f"{_names(running)} on {running[0].machine.name} is HQ's own image. Its release pipeline deploys it."
             ),
         )
-    return (
-        OperatorStep(
-            label=f"On {machine}, set the image of {name} to {wanted} in {_sets_image(files)}, then run",
-            command=command,
-        ),
-    )
+    wanted = f"{standing.image.name}:{plan.target_tag}"
+    return _compose_steps(running, lambda _item: wanted)
+
+
+def _compose_steps(running: list[Container], image: Callable[[Container], str]) -> tuple[OperatorStep, ...]:
+    """For each compose project among ``running``, the image to set and the
+    file that sets it, with the command that recreates its containers when HQ
+    read the project. Without that, only what to set."""
+
+    projects: dict[tuple[str, str], list[Container]] = {}
+    for item in running:
+        projects.setdefault((item.running.stack or item.running.name, image(item)), []).append(item)
+    steps = []
+    for (_project, wanted), members in projects.items():
+        machine, names = members[0].machine.name, _names(members)
+        files = tuple(members[0].compose_files)
+        services = [str((item.runtime or {}).get("service", "") or "") for item in members]
+        command = (
+            on_machine(
+                machine,
+                "docker compose "
+                + " ".join(f"-f {shlex.quote(path)}" for path in files)
+                + " up -d "
+                + " ".join(shlex.quote(service) for service in services),
+            )
+            if files and all(services)
+            else ""
+        )
+        steps.append(
+            OperatorStep(
+                label=f"On {machine}, set the image of {names} to {wanted} in {_sets_image(files)}, then run",
+                command=command,
+            )
+            if command
+            else OperatorStep(
+                label=f"On {machine}, set the image of {names} to {wanted} where it is defined, then start it again."
+            )
+        )
+    return tuple(steps)
 
 
 def _sets_image(files: tuple[str, ...]) -> str:
@@ -226,32 +300,36 @@ def _adopt(item: Container, intent: str) -> FindingRemedy:
 
 
 def _hardening(item: Container, subject: str) -> Iterator[Finding]:
-    """Each serious check the container fails. Hardening waits on its page; reach over a machine does not."""
+    """The serious checks the container fails, as one finding about it.
+    Hardening waits on its page; reach over a machine does not."""
 
-    for check in STANDARD:
-        if check.serious and item.posture.state_of(check.id) == UNMET:
-            level, reached = _reach(item)
-            yield Finding(
-                rule=HARDENING,
-                subject=subject,
-                part=item.running.name,
-                severity=status_at("serious", level),
-                title=f"{_where(item)} {lower_first(check.unmet)}",
-                explanation=f"{check.why} {check.fix} {_help(check.id)}{reached}",
-                **_read(item, standing=False),
-                primary=_containers(),
-                **_posture_help(check.id, item),
-            )
+    failed = [check for check in STANDARD if check.serious and item.posture.state_of(check.id) == UNMET]
+    if not failed:
+        return
+    level, reached = _reach([item])
+    helped = [_posture_help(check.id, item) for check in failed]
+    yield Finding(
+        rule=HARDENING,
+        subject=subject,
+        part=item.running.name,
+        severity=status_at("serious", level),
+        title=f"{item.running.name} on {item.machine.name} " + ", ".join(lower_first(check.unmet) for check in failed),
+        explanation=" ".join(f"{check.why} {check.fix} {_help(check.id)}" for check in failed) + reached,
+        **_read([item], standing=False),
+        primary=_containers(),
+        remedies=tuple(dict.fromkeys(remedy for said in helped for remedy in said.get("remedies", ()))),
+        offers=tuple(dict.fromkeys(offer for said in helped for offer in said.get("offers", ()))),
+    )
 
 
-def _reach(item: Container) -> tuple[str, str]:
-    """What reaches the container, and the sentence that says so.
+def _reach(running: list[Container]) -> tuple[str, str]:
+    """What reaches the most exposed of ``running``, and the sentence that says so.
 
     What ranks a finding: the same problem is urgent where the internet
     reaches it and information where nothing routes to it.
     """
 
-    exposure = exposure_of_container(item)
+    exposure = min((exposure_of_container(item) for item in running), key=lambda found: LEVELS.index(found.level))
     return exposure.level, ended(f" {exposure.sentence}")
 
 
@@ -350,6 +428,16 @@ RULES: tuple[FindingRule, ...] = (
             "attention": "a newer release of a container's image is out",
             "neutral": "nothing routes to the container",
         },
+    ),
+    FindingRule(
+        UNPINNED,
+        "Image run by tag alone",
+        "attention",
+        carried(UNPINNED),
+        operator_action="Pin the image by digest in the compose file that runs it and recreate its containers.",
+        no_help_reason=CANNOT_EDIT_COMPOSE,
+        card=CONTAINERS_CARD,
+        bars={"attention": "an image a registry holds is run by its tag, with no digest"},
     ),
     FindingRule(
         HARDENING,

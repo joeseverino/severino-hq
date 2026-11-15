@@ -61,9 +61,10 @@ class About:
     urls: Iterable[str] = ()
     keys: Iterable[str] = ()
     under: Iterable[str] = ()
-    # The one thing among its subject's many the part is about, such as a
-    # container on its machine: an item about another of them is not its.
-    part: str = ""
+    # The things among its subject's many the part is about, such as a
+    # container on its machine and the image it runs: an item about another
+    # of them is not its.
+    parts: Iterable[str] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,7 +75,7 @@ class _Part:
     pages: frozenset[str]
     keys: frozenset[str]
     roots: tuple[str, ...]
-    part: str
+    parts: frozenset[str]
 
     @classmethod
     def of(cls, name: str, about: About) -> _Part:
@@ -83,13 +84,13 @@ class _Part:
             frozenset(filter(None, about.urls)),
             frozenset(filter(None, about.keys)),
             tuple(root.rstrip("/") for root in about.under if root),
-            about.part,
+            frozenset(filter(None, about.parts)),
         )
 
     def holds(self, entry: Mapping[str, Any], item: Mapping[str, Any]) -> bool:
         """Whether the queue's ``item``, drawn from ``entry``, is about this part."""
 
-        if self.part and entry["item"].part and entry["item"].part != self.part:
+        if self.parts and entry["item"].part and entry["item"].part not in self.parts:
             return False
         link = str(item["url"] or "")
         return (

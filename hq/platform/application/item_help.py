@@ -30,7 +30,7 @@ _NAMESPACE = "attention"
 
 
 def _plan(key: str, steps: tuple[WorkflowStep, ...]) -> WorkflowPlan:
-    identity = claim_identity(_NAMESPACE, key, "")
+    identity = claim_identity(_NAMESPACE, key)
     return WorkflowPlan(
         id=f"help:{identity}",
         label="Next steps",

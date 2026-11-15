@@ -126,12 +126,19 @@ def _problems(
     return problems_by_part(
         {
             RELEASE: About(under=(repository.url,) if repository is not None else ()),
-            WHERE: About(urls=urls if reached else urls + names, part=container.running.name if container else ""),
+            WHERE: About(urls=urls if reached else urls + names, parts=_parts(container)),
             REACH: About(urls=names if reached else ()),
             SIGHT: About(keys=keys),
         },
         principal,
     )
+
+
+def _parts(container: Any) -> tuple[str, ...]:
+    """What an item about HQ's own container may be about: the container, or
+    the image it runs, which a finding about the image names."""
+
+    return (container.running.name, container.standing.label) if container is not None else ()
 
 
 def _status(problems: Iterable[Mapping[str, Any]]) -> tuple[str, str]:

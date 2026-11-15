@@ -578,9 +578,18 @@ Findings from these readings:
 - `container-image-behind`: the machine's own tag now names a different image
   than the container runs; no registry is asked.
 - `container-image-untagged`.
-- `container-image-unpinned`: started by a tag alone when the machine holds the
-  registry digest it could be pinned to, which the finding names. An image built
-  on the machine has none and is not claimed.
+- `container-image-unpinned`: an image started by a tag alone, when the
+  machine holds its digest and the registry it names was read, so the pin the
+  finding names is one anyone can pull. An image built on the machine has a
+  digest in Docker's containerd store too, but no registry answers for it, so
+  it is not claimed.
+
+An image's findings (`container-image-advisory`, `container-image-update`,
+`container-image-unpinned`) are one per image version per machine, naming each
+container that runs it, with one step for each compose project
+(`hq/platform/application/container_findings.py`). A finding's id is the hash
+of its queue key (`findings.finding_id`), so two findings a page tells apart
+never share one.
 - `certificate-expiring`: any certificate-facet reading within 21 days of
   expiry, by `expiry.days_until`, on the connection that read it
   (`hq/platform/application/certificate_expiry.py`), and a certificate HQ

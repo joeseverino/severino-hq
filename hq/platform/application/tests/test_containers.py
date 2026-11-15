@@ -146,18 +146,24 @@ class StandingTests(TestCase):
 
         self.assertEqual(self.standings()["web"].state, UNKNOWN)
 
-    def test_an_advisory_and_an_update_are_each_one_item_about_their_container(self):
+    def test_an_advisory_and_an_update_are_each_one_item_about_their_image(self):
         estate(advisories=[HIGH])
 
         with exposed(OPEN):
             (advisory,) = queued(ADVISORY)
             (update,) = queued(UPDATE)
 
-        self.assertEqual((advisory.part, advisory.subject.label, advisory.status), ("app", "example-box", "serious"))
+        self.assertEqual(
+            (advisory.part, advisory.subject.label, advisory.status),
+            ("ghcr.io/example/app:v1.2.0", "example-box", "serious"),
+        )
+        self.assertIn(("Container", "app"), advisory.facts)
         self.assertIn("Fixed in 1.2.1", advisory.body)
         # The body is the images. What to do is a step, and why HQ does not
         # do it is one sentence that names no machine.
-        self.assertEqual((update.part, update.body), ("kuma", "example/kuma:1 to 2."))
+        self.assertEqual(update.part, "example/kuma:1")
+        self.assertIn("example/kuma:1 to 2.", update.body)
+        self.assertIn(("Container", "kuma"), update.facts)
         # A card says how old its reading is, and leads with the containers' page.
         self.assertIsNotNone(update.observed_at)
         self.assertEqual((update.action, update.url), ("Open containers", reverse("control_plane:containers")))
@@ -202,7 +208,7 @@ class StandingTests(TestCase):
             ],
         )
 
-        (item,) = [item for item in queued(UPDATE) if item.part == "kuma"]
+        (item,) = [item for item in queued(UPDATE) if item.part == "example/kuma:1"]
 
         (step,) = [step for step in item.workflow.steps if step.phase == "run"]
         self.assertEqual(
@@ -527,7 +533,9 @@ class PageTests(TestCase):
             response = self.client.get(reverse("control_plane:machine", args=["example-box"]))
 
         drawn = {part: [item["key"] for item in items] for part, items in response.context["problems_in"].items()}
-        (update,) = [key for keys in drawn.values() for key in keys if key.endswith(":kuma") and "update" in key]
+        (update,) = [
+            key for keys in drawn.values() for key in keys if key.endswith(":example/kuma:1") and "update" in key
+        ]
         self.assertIn(update, drawn["containers"])
 
     def test_a_container_running_an_image_by_id_stays_listed_and_says_why(self):

@@ -361,10 +361,7 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
     )
     verification, read_now = _verification(finding, principal, subject)
     workflow = claim_resolution_plan(
-        namespace=_CLAIM_NAMESPACE,
-        rule=finding.rule,
-        subject=finding.subject,
-        scope=finding.scope,
+        identity=finding_id(finding),
         remedies=remedy_actions,
         verification=verification,
     )
@@ -632,6 +629,12 @@ def finding_key(finding: Finding) -> str:
     return f"{about}:{finding.part}" if finding.part else about
 
 
+def finding_id(finding: Finding) -> str:
+    """A finding's id where an answer names it, derived from its key alone."""
+
+    return claim_identity(_CLAIM_NAMESPACE, finding_key(finding))
+
+
 def rule_of(item_key: str) -> str:
     """The rule a queue item's key names when the item is a finding, read
     back from ``finding_key`` behind its source; empty for any other item."""
@@ -726,7 +729,7 @@ class SerializedFinding(FindingFacts):
 
 def finding_facts(finding: Finding) -> FindingFacts:
     return {
-        "id": claim_identity(_CLAIM_NAMESPACE, finding.rule, finding.subject, finding.scope),
+        "id": finding_id(finding),
         "rule": finding.rule,
         "subject": finding.subject or None,
         "scope": finding.scope or None,

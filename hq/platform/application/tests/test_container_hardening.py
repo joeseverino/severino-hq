@@ -257,8 +257,16 @@ class FindingHelpTests(TestCase):
     """Each container finding carries its help: a button, a read link, or the steps by hand."""
 
     def items(self):
+        """Each item by its rule and each container it names: its part, or
+        for an image's item every container that runs it."""
+
         with uncached():
-            return {(rule_of(item.key), item.part): item for item in infrastructure() if rule_of(item.key)}
+            return {
+                (rule_of(item.key), name): item
+                for item in infrastructure()
+                if rule_of(item.key)
+                for name in [value for label, value in item.facts if label == "Container"] or [item.part]
+            }
 
     def remedies(self, item):
         return [action for step in item.workflow.steps for action in step.actions if action.name == "remedy"]

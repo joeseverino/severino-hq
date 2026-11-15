@@ -21,10 +21,7 @@ VERIFY = ActionLink("verify", "Recheck", "read", "/recheck/")
 
 def plan_of(remedies=(REMEDY,), verification=VERIFY):
     return claim_resolution_plan(
-        namespace="example.claim",
-        rule="controller-sweep-stale",
-        subject="controller:one",
-        scope="",
+        identity=claim_identity("example.claim", "controller-sweep-stale:controller:one"),
         remedies=remedies,
         verification=verification,
     )
@@ -41,7 +38,7 @@ class FindingResolutionWorkflowTests(SimpleTestCase):
         self.assertEqual(plan.outcome.kind, "claim_absent")
         self.assertEqual(
             plan.outcome.claim_id,
-            claim_identity("example.claim", "controller-sweep-stale", "controller:one"),
+            claim_identity("example.claim", "controller-sweep-stale:controller:one"),
         )
 
     def test_a_remedy_listed_twice_is_offered_once(self):

@@ -12,10 +12,12 @@ WrittenWorkflow = Annotated[dict[str, Any], Written(WorkflowPlan)]
 WrittenAction = Annotated[dict[str, Any], Written(ActionLink)]
 
 
-def claim_identity(namespace: str, rule: str, subject: str, scope: str = "") -> str:
-    """Stable identity for any domain claim across repeated derivations."""
+def claim_identity(namespace: str, key: str) -> str:
+    """Stable identity for any domain claim across repeated derivations: the
+    hash of the one key its source knows it by, so two claims a source tells
+    apart never share an id."""
 
-    digest = sha256(f"{namespace}\0{rule}\0{subject}\0{scope}".encode()).hexdigest()[:16]
+    digest = sha256(f"{namespace}\0{key}".encode()).hexdigest()[:16]
     return f"claim:{digest}"
 
 
@@ -33,10 +35,7 @@ def _dedupe(actions: tuple[ActionLink, ...]) -> tuple[ActionLink, ...]:
 
 def claim_resolution_plan(
     *,
-    namespace: str,
-    rule: str,
-    subject: str,
-    scope: str,
+    identity: str,
     remedies: tuple[ActionLink, ...],
     verification: ActionLink | None,
 ) -> WorkflowPlan | None:
@@ -59,7 +58,6 @@ def claim_resolution_plan(
             )
         )
 
-    identity = claim_identity(namespace, rule, subject, scope)
     return WorkflowPlan(
         id=f"resolve:{identity}",
         label="Next steps",
