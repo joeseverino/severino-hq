@@ -8,7 +8,7 @@ able to make carries the error mypy reports for it. ``warn_unused_ignores``
 fails the gate the day one of those stops being an error.
 """
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -59,6 +59,26 @@ def the_clock(moment: datetime) -> None:
     reads.reached("2026-01-01")  # type: ignore[arg-type]
     reads.whole(moment)  # type: ignore[call-arg]
     reads.day_span(date(2026, 1, 1), last=3)  # type: ignore[arg-type]
+
+
+def a_kinds_cadence(moment: datetime) -> None:
+    # An extension declares how old a reading of its kind may get, and reads
+    # it back through the host's one freshness.
+    def weekly() -> reads.ReadCadence:
+        return reads.ReadCadence(timedelta(days=1), timedelta(days=7))
+
+    integration = plugin.PluginIntegration(cadences=lambda: {"example.readings": weekly})
+    assert_type(integration.cadences, Callable[[], Mapping[str, Callable[[], reads.ReadCadence]]] | None)
+    found = reads.freshness("example.readings", moment)
+    assert_type(found, reads.Freshness)
+    assert_type(found.stale, bool)
+    assert_type(found.due, bool)
+    assert_type(found.stale_after, timedelta)
+    assert_type(reads.freshness("example.readings", None, moment).label, str)
+
+    reads.freshness("example.readings", "2026-01-01")  # type: ignore[arg-type]
+    reads.ReadCadence(timedelta(days=1), 7)  # type: ignore[arg-type]
+    plugin.PluginIntegration(cadences=lambda: {"example.readings": weekly()})  # type: ignore[dict-item]
 
 
 def a_held_clock(moment: datetime) -> None:

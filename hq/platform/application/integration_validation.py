@@ -278,9 +278,6 @@ def validate_connection_spec(spec: ConnectionSpec) -> None:
             raise ImproperlyConfigured(f"Connection {spec.name!r} has invalid route {route!r}.")
     if spec.documentation_url and not link_url(spec.documentation_url):
         raise ImproperlyConfigured(f"Connection {spec.name!r} has an invalid documentation URL.")
-    # A bool is an int to the type checker, and no number of hours.
-    if isinstance(spec.stale_after_hours, bool) or spec.stale_after_hours <= 0:
-        raise ImproperlyConfigured(f"Connection {spec.name!r} must declare a positive staleness window.")
     for ability in spec.abilities:
         _validate_ability(spec, ability)
     names = [ability.name for ability in spec.abilities]

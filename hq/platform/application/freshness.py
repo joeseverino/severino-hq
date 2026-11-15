@@ -6,13 +6,18 @@ and *stale* once the tolerance has passed with no newer reading, so a surface
 says it is out of date.
 """
 
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from functools import cache
+
+lazy from django.core.exceptions import ImproperlyConfigured
 
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
 
 from .derivations import reached
 from .moments import ago
+lazy from . import plugins
 lazy from .cadence import slowest_sweep_interval, ssh_probe_interval
 lazy from .public_registry import read_every
 
@@ -49,33 +54,98 @@ VISIT_EVERY = timedelta(minutes=2)
 
 @dataclass(frozen=True, slots=True)
 class ReadCadence:
-    """How often a kind is read, and how many of those may pass unread."""
+    """How often a kind is read, and how old a reading may get before it is stale.
+
+    An extension declares its kinds' in ``PluginIntegration.cadences``.
+    """
 
     every: timedelta
-    missed: int = 1
+    stale_after: timedelta
 
-    @property
-    def stale_after(self) -> timedelta:
-        return self.every * self.missed
+    def __post_init__(self) -> None:
+        if self.every <= timedelta(0) or self.stale_after <= timedelta(0):
+            raise ValueError("A read cadence's every and stale_after are positive.")
+
+
+# The kinds the host names itself; an observation kind is the host's too.
+NAMED_KINDS = (DASHBOARD_GLANCE, SSH_PROBE, PAGE_VISIT)
+
+
+def host_kind(kind: str) -> bool:
+    """Whether the host declares ``kind``'s cadence, which no extension may."""
+
+    return kind in NAMED_KINDS or kind in OBSERVATIONS
+
+
+def _missing(every: timedelta, missed: int) -> ReadCadence:
+    return ReadCadence(every, every * missed)
+
+
+@cache
+def _extension_cadences() -> dict[str, Callable[[], object]]:
+    """Each extension kind's cadence, refused whole when a kind is the host's,
+    is declared twice, or is answered by no callable."""
+
+    found: dict[str, Callable[[], object]] = {}
+    owner: dict[str, str] = {}
+    refused: list[str] = []
+    for plugin, integration in plugins.installed_integrations():
+        if integration.cadences is None:
+            continue
+        # What an extension returned, which its annotation does not hold it to.
+        answers: Mapping[str, object] = integration.cadences()
+        for kind, declared in answers.items():
+            if not kind.strip():
+                refused.append(f"{plugin.id} declares a cadence for no kind")
+            elif not callable(declared):
+                refused.append(f"{plugin.id} declares {kind!r} with no callable")
+            elif host_kind(kind):
+                refused.append(f"{plugin.id} declares {kind!r}, whose cadence the host declares")
+            elif kind in owner:
+                refused.append(f"{plugin.id} and {owner[kind]} both declare {kind!r}")
+            else:
+                owner[kind] = plugin.id
+                found[kind] = declared
+    if refused:
+        raise ImproperlyConfigured(f"Extension read cadences refused: {'; '.join(refused)}.")
+    return found
+
+
+def forget_extension_cadences() -> None:
+    """Forget which extension declares each kind, as the composition changes."""
+
+    _extension_cadences.cache_clear()
+
+
+def _extension_cadence(kind: str) -> ReadCadence | None:
+    declared = _extension_cadences().get(kind)
+    if declared is None:
+        return None
+    found = declared()
+    if not isinstance(found, ReadCadence):
+        raise ImproperlyConfigured(f"The cadence declared for {kind!r} is no ReadCadence: {found!r}.")
+    return found
 
 
 def cadence(kind: str = "") -> ReadCadence:
     """The cadence one kind of reading is taken on."""
 
     if kind == DASHBOARD_GLANCE:
-        return ReadCadence(GLANCE_EVERY, missed=3)
+        return _missing(GLANCE_EVERY, 3)
     if kind == PAGE_VISIT:
-        return ReadCadence(VISIT_EVERY, missed=3)
+        return _missing(VISIT_EVERY, 3)
     if kind == SSH_PROBE:
-        return ReadCadence(ssh_probe_interval(), missed=2)
+        return _missing(ssh_probe_interval(), 2)
     spec = OBSERVATIONS.get(kind)
     if spec is not None and spec.read_by == "hq":
-        return ReadCadence(read_every(kind), missed=2)
+        return _missing(read_every(kind), 2)
     if spec is not None and spec.every is not None:
-        return ReadCadence(spec.every, missed=2)
+        return _missing(spec.every, 2)
+    if spec is None and kind and (declared := _extension_cadence(kind)) is not None:
+        return declared
     # A controller reads on the sweep, whose slowest interval is the idle one;
     # a reading is stale once it has missed a whole sweep, not when one is due.
-    return ReadCadence(slowest_sweep_interval(), missed=2)
+    return _missing(slowest_sweep_interval(), 2)
 
 
 def stale_after(kind: str = "") -> timedelta:

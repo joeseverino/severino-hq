@@ -11,12 +11,12 @@ import re
 import time
 import weakref
 from collections import Counter
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import asdict, dataclass, fields, is_dataclass, replace
 from functools import cache, lru_cache, partial
 from importlib import import_module
 from types import CodeType
-from typing import Any, get_args, get_origin
+from typing import TYPE_CHECKING, Any, get_args, get_origin
 
 from django.core.exceptions import ImproperlyConfigured
 
@@ -26,6 +26,7 @@ from .card_items import Insight
 from .demo import showing_demo
 from .derivations import derivation, forget, holds_until, present
 from .ui import STATUS_VALUES, DomainOverview
+lazy from . import freshness
 lazy from .action_items import item_key
 lazy from .automation_runs import clear_operation_registry_cache
 lazy from .domains import NAVIGATION_GROUPS
@@ -34,6 +35,9 @@ lazy from .item_help import instructions
 lazy from .outbound_work import clear_outbound_work_cache
 lazy from .plugin_admission import enforce_plugin_admission
 lazy from .security import host_capabilities
+
+if TYPE_CHECKING:
+    from .freshness import ReadCadence
 
 logger = logging.getLogger("severino.composition")
 
@@ -183,6 +187,11 @@ class PluginIntegration:
     # Work that reaches outside the process: each an ``OutboundWork``. HQ
     # derives its job, capability, route, control and audit entries.
     outbound: Callable[[], Iterable[Any]] | None = None
+    # How old a reading of each of the extension's kinds may get, by kind:
+    # ``hq_sdk.reads.freshness`` and the Connections page judge it by this.
+    # Each kind's is asked only as that kind is judged, so it may follow a
+    # setting without the host reading it for any other kind.
+    cadences: Callable[[], Mapping[str, Callable[[], ReadCadence]]] | None = None
     # The extension's demo records, written for the user it is given into a
     # database the example estate was just written to, by the showcase and
     # standard data sets alone (``hq.platform.core.seeds``). Its dates sit
@@ -378,6 +387,7 @@ def clear_plugin_composition_cache() -> None:
     """Forget plugin identity and every graph derived from that identity."""
 
     _installed_plugins.cache_clear()
+    freshness.forget_extension_cadences()
     # A question asked of the composition that was is not asked of this one.
     forget()
 

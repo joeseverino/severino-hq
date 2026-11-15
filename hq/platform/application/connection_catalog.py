@@ -5,7 +5,7 @@ behind each ability. The API serializes the same view.
 """
 
 from dataclasses import KW_ONLY, asdict, dataclass, replace
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from django.core.exceptions import ImproperlyConfigured
 from django.utils import timezone
@@ -30,8 +30,8 @@ from .connection_contracts import (
 )
 from .connection_lifecycle import WORKING, Lifecycle, standing
 from .contracts import SCOPE_NAME, endpoint_has_private_parts
-from .derivations import passed, present
-from .freshness import last_read
+from .derivations import present
+from .freshness import freshness, last_read
 from .integrations import held_graph
 from .moments import ago
 from .projection import read_once
@@ -153,7 +153,6 @@ def connection_lifecycle(
     instance: ConnectionInstance,
     authority: str,
     *,
-    stale_after_hours: int,
     now: datetime,
 ) -> Lifecycle:
     """One state from the observation, its age, reachability and authority.
@@ -166,20 +165,19 @@ def connection_lifecycle(
     """
 
     return standing(
-        _observed_lifecycle(instance, authority, stale_after_hours=stale_after_hours, now=now),
+        _observed_lifecycle(instance, authority, now=now),
         refused=instance.credential_model == "rejected",
     )
 
 
-def _observed_lifecycle(
-    instance: ConnectionInstance, authority: str, *, stale_after_hours: int, now: datetime
-) -> Lifecycle:
+def _observed_lifecycle(instance: ConnectionInstance, authority: str, *, now: datetime) -> Lifecycle:
     observed = instance.observed_at
     if observed is None:
         return Lifecycle.CONFIGURED
     if timezone.is_naive(observed):
         observed = timezone.make_aware(observed)
-    if passed(observed + timedelta(hours=stale_after_hours), now=now):
+    # How old it may get is its kind's cadence, an extension's own included.
+    if freshness(instance.kind, observed, now).stale:
         return Lifecycle.STALE
     if authority == "missing":
         return Lifecycle.UNAUTHORIZED
@@ -468,7 +466,6 @@ def _connection_view(
     lifecycle = connection_lifecycle(
         instance,
         authority,
-        stale_after_hours=spec.stale_after_hours,
         now=present(),
     )
     return ConnectionView(

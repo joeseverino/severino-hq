@@ -174,7 +174,7 @@ class OneStateModelTests(TestCase):
         self.assertEqual(AUTHORITY_LABELS[authority], "Credential has full account access")
         observed = replace(view.instance, observed_at=timezone.now())
         self.assertEqual(
-            connection_lifecycle(observed, authority, stale_after_hours=24, now=timezone.now()),
+            connection_lifecycle(observed, authority, now=timezone.now()),
             "ready",
         )
 

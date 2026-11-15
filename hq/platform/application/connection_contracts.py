@@ -146,10 +146,6 @@ class ConnectionSpec(Requires):
     setup_route: str = ""
     documentation_url: str = ""
     secret_store: str = ""
-    # How old an observation may be before this family's connections are
-    # reported stale rather than ready. A sweep-fed family refreshes in minutes;
-    # one read on request can be honest for far longer.
-    stale_after_hours: int = 24
     # What this family's emptiness means, in its own words. The default suits a
     # family that emits from configuration; one fed by controller reports
     # overrides it to say so.

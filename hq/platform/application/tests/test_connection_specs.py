@@ -6,7 +6,7 @@ from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ImproperlyConfigured
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ProviderConnection
@@ -666,13 +666,14 @@ class GrantEvidenceTests(TestCase):
         now = timezone.now()
         fresh = self.instance(observed_at=now - timedelta(minutes=5))
         old = self.instance(observed_at=now - timedelta(hours=30))
-        life = lambda instance, authority, hours=24: connection_lifecycle(  # noqa: E731
-            instance, authority, stale_after_hours=hours, now=now
-        )
+        life = lambda instance, authority: connection_lifecycle(instance, authority, now=now)  # noqa: E731
         self.assertEqual(life(self.instance(credential_model="rejected"), "proven"), "revoked")
         self.assertEqual(life(self.instance(), "proven"), "configured")
-        self.assertEqual(life(old, "proven"), "stale")
-        self.assertEqual(life(old, "proven", hours=48), "ready")
+        with override_settings(SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS=12 * 60 * 60):
+            self.assertEqual(life(old, "proven"), "stale")
+        # How old a reading may get is its kind's cadence: a public registry's
+        # stands for days.
+        self.assertEqual(life(replace(old, kind="registry.domain"), "proven"), "ready")
         self.assertEqual(life(fresh, "missing"), "unauthorized")
         self.assertEqual(life(self.instance(status="serious", observed_at=now), "proven"), "unreachable")
         self.assertEqual(life(self.instance(status="neutral", observed_at=now), "proven"), "configured")
@@ -699,8 +700,6 @@ class GrantEvidenceTests(TestCase):
             validate_connection_spec(spec(self.ability(grant="scoped")))
         with self.assertRaisesRegex(ImproperlyConfigured, "lists required scopes"):
             validate_connection_spec(spec(self.ability(grant="none", required_scopes=("a:read",))))
-        with self.assertRaisesRegex(ImproperlyConfigured, "staleness window"):
-            validate_connection_spec(replace(spec(self.ability(grant="none")), stale_after_hours=0))
         validate_connection_spec(spec(self.ability(grant="scoped", required_scopes=("a:read",))))
 
     def test_a_keyless_instance_cannot_also_report_grants(self):

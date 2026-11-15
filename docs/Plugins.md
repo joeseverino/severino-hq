@@ -493,7 +493,7 @@ stay in their package even when the host would be their only consumer.
 An integration provider returns one frozen `PluginIntegration` of lazy, typed
 callables for every runtime contribution: capabilities, resources,
 connections, dashboard cards, overview, attention, search, calendars, outbound
-work, health and [demo data](#demo-data). HQ calls only the one a surface needs. The manifest carries
+work, [read cadences](#how-old-a-reading-may-get), health and [demo data](#demo-data). HQ calls only the one a surface needs. The manifest carries
 static install, routing, navigation and authority metadata plus exactly one
 executable entry point; an extension never registers a surface on its own. How
 the host compiles these into one graph is in
@@ -749,7 +749,8 @@ HQ derives one evidence state per ability and instance:
 | `missing`, `revoked` | is closed; only these two close it |
 
 The same derivation gives each connection's lifecycle (configured, reachable,
-ready, unauthorized, stale, revoked) against the family's `stale_after_hours`.
+ready, unauthorized, stale, revoked), stale by the cadence of the instance's
+`kind` ([How old a reading may get](#how-old-a-reading-may-get)).
 
 An ability may set `subject_resource` to the resource it governs and list its
 provider kinds in `governs_kinds`. Command Center then offers the registered
@@ -1276,6 +1277,34 @@ extension check refuses `django.core.cache` in its source.
 
 A test of an answer that turns on the day holds the clock those reads ask with
 `with hq_sdk.testing.frozen(moment):`. Patching `timezone.now` misses it.
+
+### How old a reading may get
+
+A kind of reading has one `ReadCadence`: how often it is read (`every`) and
+how old it may get before it is out of date (`stale_after`). The host declares
+its own kinds; an extension declares its kinds in `PluginIntegration.cadences`,
+each kind with the function that answers its cadence, and keeps no staleness
+constant of its own. Every surface judges a
+reading with `hq_sdk.reads.freshness(kind, observed_at)`: current, due once
+`every` has passed, stale once `stale_after` has, or never read. A connection
+instance's `kind` is judged the same way on the Connections page.
+
+```python
+def readings() -> ReadCadence:
+    return ReadCadence(timedelta(days=1), timedelta(days=4))
+
+
+def cadences():
+    return {"example.readings": readings}
+
+
+reading = freshness("example.readings", latest)
+```
+
+A kind's function is called only as that kind is judged, so a cadence may
+follow a setting a person changes, and no other kind's judgment reads it.
+Composition refuses a kind the host declares, a kind two extensions declare,
+and an answer that is not a `ReadCadence`.
 
 ## References
 

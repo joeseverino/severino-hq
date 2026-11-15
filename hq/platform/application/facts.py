@@ -20,9 +20,8 @@ from hq.domains.control_plane.providers import PROVIDERS, read_record
 from hq.domains.control_plane.reading_parts import PartRefusal, refused_parts
 lazy from hq.domains.control_plane.models import ProviderInventory
 
-from .derivations import passed
 from .entity_links import kind_label
-from .freshness import stale_after
+from .freshness import freshness
 from .locate import host_of
 from .moments import moment
 from .projection import read_once
@@ -143,9 +142,7 @@ class Joined:
 
     @property
     def stale(self) -> bool:
-        if self.observed_at is None:
-            return False
-        return passed(self.observed_at + stale_after(self.kind))
+        return freshness(self.kind, self.observed_at).stale
 
     @property
     def unread(self) -> str:

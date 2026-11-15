@@ -600,7 +600,6 @@
           "setup_route=",
           "documentation_url=",
           "secret_store=",
-          "stale_after_hours=",
           "empty_message="
         ],
         "fields": [],
@@ -1108,6 +1107,7 @@
           "health=",
           "calendars=",
           "outbound=",
+          "cadences=",
           "demo_seed=",
           "demo_pages="
         ],
@@ -1157,6 +1157,37 @@
       }
     },
     "reads": {
+      "Freshness": {
+        "bases": [],
+        "constructor": [
+          "state",
+          "observed_at",
+          "stale_after"
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {
+          "due": {
+            "kind": "property"
+          },
+          "label": {
+            "kind": "property"
+          },
+          "stale": {
+            "kind": "property"
+          }
+        }
+      },
+      "ReadCadence": {
+        "bases": [],
+        "constructor": [
+          "every",
+          "stale_after"
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
       "day_span": {
         "kind": "function",
         "parameters": [
@@ -1171,6 +1202,14 @@
           "*",
           "reads",
           "vary="
+        ]
+      },
+      "freshness": {
+        "kind": "function",
+        "parameters": [
+          "kind",
+          "observed_at",
+          "now="
         ]
       },
       "passed": {
