@@ -3,6 +3,7 @@
 import math
 
 from .money import signed
+lazy from .ui import measured
 
 # Round numbers an axis may end on. The intermediate steps keep the labels
 # round while landing close to the data, so bars fill the plot rather than half
@@ -45,27 +46,21 @@ def fitted_range(values: list[float], minimum: float | None, maximum: float | No
     return padded_low, padded_high
 
 
-def _format_tooltip_value(value: float) -> str:
-    """The exact reading, not the axis abbreviation.
-
-    An axis tick is glanced at and can be rounded; a tooltip is the reason
-    someone pointed at the bar, so it keeps the precision the axis dropped.
-    """
-    if abs(value) >= 1000:
-        return f"{value:,.0f}"
-    return f"{value:.0f}" if float(value).is_integer() else f"{value:.1f}"
-
-
 # Units written before the number, as money is. Every other unit follows it.
 _CURRENCY = frozenset("$€£")
 
 
 def _format_reading(value: float, unit: str) -> str:
-    """One reading with its unit, as a tooltip says it: "52 bpm", "$1,250"."""
+    """One reading with its unit, as a tooltip says it: "52 bpm", "$1,250".
+
+    An axis tick is glanced at and can be rounded; a tooltip is the reason
+    someone pointed at the bar, so it keeps the precision the axis dropped: a
+    decimal below a thousand when the reading is not whole.
+    """
     if unit in _CURRENCY:
         # Whole units and a true minus sign, as ``money`` writes a figure that is scanned.
         return signed(f"{unit}{abs(value):,.0f}", negative=value < 0)
-    return f"{_format_tooltip_value(value)} {unit}".rstrip()
+    return measured(value, unit, 0 if abs(value) >= 1000 else -1)
 
 
 def _format_table_value(value: float, unit: str) -> str:
@@ -74,9 +69,7 @@ def _format_table_value(value: float, unit: str) -> str:
     A column heading carries a unit that follows its numbers, so the cell is
     the number alone. Money carries its own sign in every cell.
     """
-    if unit in _CURRENCY:
-        return _format_reading(value, unit)
-    return _format_tooltip_value(value)
+    return _format_reading(value, unit if unit in _CURRENCY else "")
 
 
 def _table_heading(label: str, unit: str) -> str:

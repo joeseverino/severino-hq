@@ -19,7 +19,7 @@ from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
 from hq.platform.application.labels import dotted
 from hq.platform.application.money import money
-from hq.platform.application.ui import MISSING
+from hq.platform.application.ui import MISSING, measured
 
 # ---------- CSV ----------------------------------------------------------------
 
@@ -417,7 +417,7 @@ def _asset_line(a) -> str:
     return "- " + dotted(
         f"**{a['item_name']}** (`{a['slug']}`, {a['category']}, {a['status']})",
         f"{money(a['total_cost'])} on {a['purchase_date'] or MISSING} "
-        f"({a['business_use_percentage']}% business, "
+        f"({measured(a['business_use_percentage'], '%')} business, "
         f"{money(a['estimated_deductible_amount'])} deductible)",
     )
 

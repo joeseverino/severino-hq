@@ -91,7 +91,8 @@ def counted(count: int, one: str, many: str | None = None) -> str:
 
 
 def measured(value: Decimal | float | str | None, unit: str, places: int | None = None, *, plus: bool = False) -> str:
-    """A figure and its unit: "4.25 mi", "1,250 ft", "12%", "3 more".
+    """A figure and its unit: "4.25 mi", "1,250 ft", "12%", "72°", "3 more", or
+    with no unit the figure alone.
 
     ``places`` rounds the figure half away from zero, as ``floatformat`` does:
     that many decimals, or with a negative count that many only when the figure
@@ -104,13 +105,19 @@ def measured(value: Decimal | float | str | None, unit: str, places: int | None 
 
     if value is None or value == "":
         return MISSING
-    joint = "" if unit == "%" else " "
+    joint = "" if unit in ("%", "°", "") else " "
     number = _figure(value)
     if number is None:
         return f"{value}{joint}{unit}"
 
+    # Decimals are settled by the figure before it is signed, so zero is
+    # written to the same decimals and a figure that rounds to it reads as zero.
+    decimals = _decimals(number, places)
+
     def written(magnitude: Decimal) -> str:
-        return f"{_places(magnitude, places):,f}{joint}{unit}"
+        if decimals is not None:
+            magnitude = magnitude.quantize(Decimal(1).scaleb(-decimals), rounding=ROUND_HALF_UP)
+        return f"{magnitude:,f}{joint}{unit}"
 
     return signed_number(number, written, plus=plus)
 
@@ -128,14 +135,12 @@ def _figure(value: object) -> Decimal | None:
     return number if number is not None and number.is_finite() else None
 
 
-def _places(number: Decimal, places: int | None) -> Decimal:
-    """``number`` rounded as ``measured`` says ``places`` asks."""
+def _decimals(number: Decimal, places: int | None) -> int | None:
+    """How many decimals ``measured`` writes ``number`` to; None, as it came."""
 
     if places is None:
-        return number
-    if places < 0 and number == number.to_integral_value():
-        places = 0
-    return number.quantize(Decimal(1).scaleb(-abs(places)), rounding=ROUND_HALF_UP)
+        return None
+    return 0 if places < 0 and number == number.to_integral_value() else abs(places)
 
 
 def counted_forms(one: str, many: str | None = None) -> tuple[str, str]:

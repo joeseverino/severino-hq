@@ -38,10 +38,19 @@ class MeasuredTests(SimpleTestCase):
     def test_a_percent_stands_against_its_figure(self):
         self.assertEqual(drawn('{{ x|measured:"%,-1" }}', x=12.5), "12.5%")
 
+    def test_a_figure_with_no_unit_is_the_figure_alone(self):
+        from hq.platform.application.ui import measured
+
+        self.assertEqual(measured(152, ""), "152")
+        self.assertEqual(measured(1234.5, "", 0), "1,235")
+        self.assertEqual(drawn('{{ x|measured:",1" }}', x=0.52), "0.5")
+
     def test_a_figure_that_rounds_to_zero_carries_no_sign(self):
         from hq.platform.application.ui import measured
 
         self.assertEqual(measured(-0.04, "min", 1), "0.0 min")
+        # A negative count of decimals rounds zero to the decimals it gives the figure.
+        self.assertEqual(measured(-0.04, "mi", -1), "0.0 mi")
         self.assertEqual(measured(-3.2, "bpm", 0), "−⁠3 bpm")
         self.assertEqual(measured(1.25, "min", 1, plus=True), "+⁠1.3 min")
 

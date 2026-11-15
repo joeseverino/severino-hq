@@ -10,6 +10,7 @@ from typing import ClassVar, Literal
 
 from .display_words import display
 from .tone import Tone
+lazy from .ui import measured
 
 
 @display
@@ -196,7 +197,7 @@ class AllocationBar:
         """Each part with a value, and its share of the whole as a percent."""
 
         whole = sum(part.value for part in self.parts)
-        return tuple((part, f"{part.value / whole:.0%}") for part in self.parts if part.value > 0)
+        return tuple((part, measured(part.value * 100 / whole, "%", 0)) for part in self.parts if part.value > 0)
 
     @property
     def links(self) -> bool:

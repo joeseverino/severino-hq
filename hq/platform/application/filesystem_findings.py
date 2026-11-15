@@ -18,7 +18,7 @@ from .labels import human_bytes
 from .reading_facts import FactRow, OnEachMachine, rows_of, state_on_controller
 from .tone import Tone
 from .topology_model import TopologyNode
-from .ui import counted
+from .ui import counted, measured
 
 FILESYSTEM_SPACE = "filesystem-space"
 
@@ -91,7 +91,7 @@ def add(nodes: dict[str, TopologyNode], machine: Callable[[Any], str]) -> None:
 
 
 def _share(filesystem: FilesystemSpace) -> str:
-    return f"{filesystem.free / filesystem.total:.1%}"
+    return measured(filesystem.free * 100 / filesystem.total, "%", 1)
 
 
 def _steps(node: TopologyNode, row: FilesystemSpace) -> tuple[OperatorStep, ...]:
@@ -141,9 +141,9 @@ RULES: tuple[FindingRule, ...] = (
         operator_action="On the machine, free space on the mount, then check again.",
         no_help_reason=cannot_run_commands(),
         bars={
-            Tone.SERIOUS: f"free space is under {human_bytes(SERIOUS_FREE)} and {SERIOUS_SHARE:.0%} of the disk",
-            Tone.ATTENTION: f"free space is under {human_bytes(ATTENTION_FREE)} and {ATTENTION_SHARE:.0%} of the disk",
+            Tone.SERIOUS: f"free space is under {human_bytes(SERIOUS_FREE)} and {measured(SERIOUS_SHARE * 100, '%', 0)} of the disk",
+            Tone.ATTENTION: f"free space is under {human_bytes(ATTENTION_FREE)} and {measured(ATTENTION_SHARE * 100, '%', 0)} of the disk",
         },
-        clears=f"free space is back above {human_bytes(ATTENTION_FREE)} or {ATTENTION_SHARE:.0%} of the disk",
+        clears=f"free space is back above {human_bytes(ATTENTION_FREE)} or {measured(ATTENTION_SHARE * 100, '%', 0)} of the disk",
     ),
 )

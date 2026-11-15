@@ -34,7 +34,7 @@ from .moments import moment, when_hour
 from .record_errors import InputError, PolicyError
 from .security import Capability, Principal
 from .tone import Tone
-from .ui import MISSING, counted, severity_tone
+from .ui import MISSING, counted, measured, severity_tone
 lazy from .capabilities import capability_words, command_spec
 lazy from .projection import read_once
 
@@ -350,7 +350,7 @@ def _metric(label: str, value: str, detail: str = "") -> dict[str, str]:
 
 
 def _used(part: int, whole: int) -> str:
-    return f"{part / whole:.0%}" if whole else "0%"
+    return measured(part * 100 / whole if whole else 0, "%", 0)
 
 
 def _failed(failure: str) -> dict[str, Any]:
@@ -372,9 +372,9 @@ def machine_words(machine: Machine) -> dict[str, Any]:
     if host := machine.host:
         return {
             "status": Tone.GOOD,
-            "summary": f"Host load {host.load_1m:.2f}",
+            "summary": f"Host load {measured(host.load_1m, '', 2)}",
             "metrics": [
-                _metric("CPU", f"{host.cpu_percent:.0f}%", counted(host.cores, "core")),
+                _metric("CPU", measured(host.cpu_percent, "%", 0), counted(host.cores, "core")),
                 _metric(
                     "Memory",
                     _used(host.memory_used, host.memory_total),
@@ -394,7 +394,7 @@ def machine_words(machine: Machine) -> dict[str, Any]:
             "summary": dotted(counted(docker.cores, "core"), f"{human_bytes(docker.memory_total)} memory"),
             "metrics": [
                 _metric("Containers", str(docker.containers), "running"),
-                _metric("CPU", f"{docker.cpu_percent:.0f}%", f"of {counted(docker.cores, 'core')}"),
+                _metric("CPU", measured(docker.cpu_percent, "%", 0), f"of {counted(docker.cores, 'core')}"),
                 _metric(
                     "Memory",
                     _used(docker.memory_used, docker.memory_total),
@@ -418,7 +418,7 @@ RAIN_CHANCE = 30
 
 
 def _degrees(hour: Hour) -> str:
-    return MISSING if hour.temperature is None else f"{hour.temperature:g}°"
+    return measured(hour.temperature, "°", -1)
 
 
 def _alert_tone(weather: Weather) -> Tone:
@@ -442,12 +442,20 @@ def weather_words(weather: Weather) -> dict[str, Any]:
             metrics.append(_metric("Temperature", _degrees(now) + (now.temperature_unit or "F")))
     if temperatures := [hour.temperature for hour in hours if hour.temperature is not None]:
         metrics.append(
-            _metric("Range", f"{min(temperatures):g}–{max(temperatures):g}°", f"next {counted(len(hours), 'hour')}")
+            _metric(
+                "Range",
+                f"{measured(min(temperatures), '', -1)}–{measured(max(temperatures), '°', -1)}",
+                f"next {counted(len(hours), 'hour')}",
+            )
         )
     if rain := next(((index, hour) for index, hour in enumerate(hours) if hour.chance >= RAIN_CHANCE), None):
         index, hour = rain
         metrics.append(
-            _metric("Rain", dotted("Now" if index == 0 else when_hour(hour.start), f"{hour.chance}%"), hour.forecast)
+            _metric(
+                "Rain",
+                dotted("Now" if index == 0 else when_hour(hour.start), measured(hour.chance, "%")),
+                hour.forecast,
+            )
         )
     if hours and (wind := f"{hours[0].wind_direction} {hours[0].wind_speed}".strip()):
         metrics.append(_metric("Wind", wind, "NWS hourly forecast"))
@@ -462,7 +470,10 @@ def weather_words(weather: Weather) -> dict[str, Any]:
         # there is one.
         "hours": tuple(
             StripTile(
-                when_hour(hour.start), _degrees(hour), note=f"{hour.chance}%" if hour.chance else "", tip=hour.forecast
+                when_hour(hour.start),
+                _degrees(hour),
+                note=measured(hour.chance, "%") if hour.chance else "",
+                tip=hour.forecast,
             )
             for hour in hours
         ),

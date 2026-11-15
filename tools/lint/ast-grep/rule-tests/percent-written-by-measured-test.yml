@@ -1,0 +1,11 @@
+id: percent-written-by-measured
+valid:
+  - 'measured(share * 100, "%", 0)'
+  - 'f"{count} of {total}"'
+  - 'f"{measured(free, \"%\", 1)} free"'
+  - 'f"{load:.2f}"'
+invalid:
+  - 'f"{share:.0%}"'
+  - 'f"{free / total:.1%} free"'
+  - 'f"{cpu:.0f}%"'
+  - 'f"Rain {chance}% likely"'

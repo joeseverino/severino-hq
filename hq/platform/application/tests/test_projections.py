@@ -400,7 +400,8 @@ class ChartDataTableTests(TestCase):
 
         table = self.table("partials/_chart.html", chart)
 
-        self.assertIn("52.2", table)
+        # Half away from zero, as measured rounds every figure.
+        self.assertIn("52.3", table)
         self.assertIn("1,250", table)
         self.assertNotIn("52.25", table)
         self.assertIn("Resting heart rate (bpm)", table)
