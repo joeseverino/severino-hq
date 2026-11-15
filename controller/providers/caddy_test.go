@@ -237,7 +237,7 @@ func TestCaddyRouteCertificates(t *testing.T) {
 		{"a target with neither says it must be redeployed", &sshHost{answers: map[string]string{"routes": caddyLoading(1, "app.example.com")}, exits: map[string]int{"certificates": 127, "certificate": 127}},
 			"app.example.com", "", caddyNoCertificateOperation, false},
 		{"one of two reported names the other unread", &sshHost{answers: map[string]string{"routes": caddyLoading(2, "app.example.com", "other.example.org"), "certificate": exact}, exits: map[string]int{"certificates": 127}},
-			"other.example.org", "", "the edge loads 2 certificates from files and its target reports 1; redeploy it at version " + edge.Version + " or later", false},
+			"other.example.org", "", "the edge loads 2 certificates from files and its target reports 1; " + edge.Redeploy, false},
 		{"a certificate that does not parse is said so", &sshHost{answers: map[string]string{"routes": caddyLoading(1, "app.example.com"), "certificates": "-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n"}},
 			"app.example.com", "", "its certificate did not parse", false},
 	} {

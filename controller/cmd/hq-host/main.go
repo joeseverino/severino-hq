@@ -16,6 +16,7 @@
 //	hq-host upgrade ARGS     move one compose service to a pinned image (package upgrade)
 //	hq-host unit --serve     stop, start or restart the unit a container names (package unit)
 //	hq-host check            the deploy host's half of a preflight, as any account
+//	hq-host edge-receiver    the tree's edge receiver, for an edge, as any account
 //	hq-host dry-run          read what a unit's run reads of the host, and nothing else
 package main
 
@@ -45,7 +46,7 @@ import (
 	"github.com/joeseverino/severino-hq/controller/secrets/install"
 )
 
-const usage = "usage: hq-host run-web | controller [--apply | --glance] | renovate | automation | install | deploy IMAGE | release [--stage DIR] IMAGE | sync IMAGE | verify | bootstrap | backup | upgrade ARGS | unit --serve | check --release DIR --main DIR | dry-run"
+const usage = "usage: hq-host run-web | controller [--apply | --glance] | renovate | automation | install | deploy IMAGE | release [--stage DIR] IMAGE | sync IMAGE | verify | bootstrap | backup | upgrade ARGS | unit --serve | check --release DIR --main DIR | edge-receiver | dry-run"
 
 // passes are the controller passes `hq-host controller` launches, by flag.
 var passes = map[string]host.Pass{"": host.Plan, "--apply": host.Apply, "--glance": host.Glance}
@@ -80,6 +81,9 @@ func run(ctx context.Context, args []string, getenv func(string) string, euid in
 	// A preflight runs its check as the operator's own account.
 	if args[0] == "check" {
 		return check(ctx, args[1:], stdout, stderr)
+	}
+	if args[0] == "edge-receiver" {
+		return edgeReceiver(ctx, args[1:], stdout, stderr)
 	}
 	if euid != 0 {
 		fmt.Fprintln(stderr, "hq-host must run as root.")
@@ -208,13 +212,36 @@ func check(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, usage)
 		return 2
 	}
-	checker := &host.Checker{
-		Lib: host.Lib, Systemd: "/etc/systemd/system", RootUID: 0,
-		Release: *release, Main: *main,
-		FreeBytes: host.DeployFreeBytes, Free: host.Free,
-		Command: hostcore.Command, Out: stdout,
-	}
+	checker := hostChecker(stdout)
+	checker.Release, checker.Main = *release, *main
 	return checker.Check(ctx)
+}
+
+func hostChecker(out io.Writer) *host.Checker {
+	return &host.Checker{
+		Lib: host.Lib, Systemd: "/etc/systemd/system", RootUID: 0,
+		FreeBytes: host.DeployFreeBytes, Free: host.Free,
+		Command: hostcore.Command, Out: out,
+	}
+}
+
+// edgeReceiver writes the tree's edge receiver to stdout, which is never a
+// terminal: it is a tar for the edge to unpack. The verdicts behind it go
+// to stderr.
+func edgeReceiver(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	if len(args) != 0 {
+		fmt.Fprintln(stderr, usage)
+		return 2
+	}
+	if terminal(stdout) {
+		fmt.Fprintln(stderr, "hq-host edge-receiver writes a tar; pipe it to the edge (docs/Deployment.md, Remote targets).")
+		return 2
+	}
+	if err := hostChecker(stderr).EdgeReceiver(ctx, stdout); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	return 0
 }
 
 func release(ctx context.Context, args []string, stdout io.Writer) error {
@@ -372,10 +399,18 @@ func deployer(stdout io.Writer) *host.Deployer {
 // piped is stdin when something was piped to it: the deploy job writes the
 // registry credential there, and a person at a terminal has none to give.
 func piped(stdin io.Reader) io.Reader {
-	if file, ok := stdin.(*os.File); ok {
-		if info, err := file.Stat(); err == nil && info.Mode()&os.ModeCharDevice != 0 {
-			return nil
-		}
+	if terminal(stdin) {
+		return nil
 	}
 	return stdin
+}
+
+// terminal is whether stream is a terminal.
+func terminal(stream any) bool {
+	file, ok := stream.(*os.File)
+	if !ok {
+		return false
+	}
+	info, err := file.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }

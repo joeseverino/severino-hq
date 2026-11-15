@@ -69,7 +69,8 @@ func (c *Checker) skip(format string, args ...any) {
 func (c *Checker) Check(ctx context.Context) int {
 	c.verified(ctx)
 	c.egress(ctx)
-	c.rootsAlone(hostRelative)
+	c.rootsAlone(hostRelative, "a sudo rule runs %s as root")
+	c.rootsAlone(edgeRelative, "an edge installs %s as its root receiver")
 	c.units()
 	c.room()
 	switch {
@@ -86,8 +87,12 @@ func (c *Checker) output(ctx context.Context, name string, args ...string) (stri
 	return strings.TrimSpace(string(out)), err
 }
 
-// hostRelative is HostProgram's path in the tree.
-var hostRelative = strings.TrimPrefix(HostProgram, Lib+"/")
+// hostRelative and edgeRelative are HostProgram's and EdgeProgram's paths in
+// the tree.
+var (
+	hostRelative = strings.TrimPrefix(HostProgram, Lib+"/")
+	edgeRelative = strings.TrimPrefix(EdgeProgram, Lib+"/")
+)
 
 // verified: the host is the release it runs, the tree, the units, the
 // runner's sudo rules and nothing else. hq-host verify runs as root, the one
@@ -180,11 +185,12 @@ func (c *Checker) egress(ctx context.Context) {
 	}
 }
 
-// rootsAlone: a program a sudo rule runs as root is root's, and so is every
+// rootsAlone: a program that runs as root is root's, and so is every
 // directory above it in the tree, none a link and none writable by anyone
-// else.
-func (c *Checker) rootsAlone(relative string) {
+// else. runs says where it runs as root, with the program's path for %s.
+func (c *Checker) rootsAlone(relative, runs string) {
 	program := filepath.Join(c.Lib, relative)
+	why := fmt.Sprintf(runs, program)
 	alone := true
 	path := c.Lib
 	for _, part := range append([]string{""}, strings.Split(relative, "/")...) {
@@ -192,13 +198,13 @@ func (c *Checker) rootsAlone(relative string) {
 		info, err := os.Lstat(path)
 		switch {
 		case err != nil:
-			c.bad("%s cannot be read; a sudo rule runs %s as root", path, program)
+			c.bad("%s cannot be read; %s", path, why)
 		case info.Mode()&os.ModeSymlink != 0:
-			c.bad("%s is a symlink; a sudo rule runs %s as root", path, program)
+			c.bad("%s is a symlink; %s", path, why)
 		case info.Sys().(*syscall.Stat_t).Uid != c.RootUID:
-			c.bad("%s is not owned by root; a sudo rule runs %s as root", path, program)
+			c.bad("%s is not owned by root; %s", path, why)
 		case info.Mode().Perm()&0o022 != 0:
-			c.bad("%s is writable by its group or others; a sudo rule runs %s as root", path, program)
+			c.bad("%s is writable by its group or others; %s", path, why)
 		default:
 			continue
 		}

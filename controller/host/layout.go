@@ -58,6 +58,9 @@ const (
 	Lib = "/usr/local/lib/severino-hq"
 	// HostProgram is this program, in the tree.
 	HostProgram = Lib + "/deploy/bin/hq-host"
+	// EdgeProgram is the edge receiver, in the tree, which `hq-host
+	// edge-receiver` hands an administrator to install on an edge.
+	EdgeProgram = Lib + "/deploy/bin/hq-edge"
 
 	// WebSecretDir holds the application environment the web container binds.
 	WebSecretDir = hostcore.SecretDir + "/web"

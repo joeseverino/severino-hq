@@ -316,7 +316,8 @@ from the tree, and every unit and the deploy call it.
 | `backup` | snapshots and archives HQ's volumes, where docker says they are ([Backup](Backup.md)) |
 | `upgrade ARGS` | moves one compose service to a pinned image, through its own sudo rule ([Container upgrades](#container-upgrades)) |
 | `unit --serve` | answers one request on the unit socket: stops, starts or restarts the systemd unit a container names in its `severino-hq.unit` label, once that unit's own start commands are found to run the container ([Architecture](Architecture.md#a-container-its-unit-runs)) |
-| `check` | the host's half of `mise run check --release`, as any account and read-only. It runs `verify`, and with it the runner's sudo rules (or, where sudo asks for a password, the drift unit's run since the release was installed). It checks the established units, free disk, and that every program a sudo rule names is root's alone. Where sudo lets it read nftables, it checks that a loaded Renovate egress table is the one `hq-host` renders (an absent one waits for the next run, which loads it). `mise run check:host`, which `check --release` runs, builds it from HEAD for the host's platform and runs it from a temporary directory over SSH on `SEVERINO_HQ_DEPLOY_HOST`, so the release being checked is the one checking. Exits 0 ready, 1 a fault, 3 unverified |
+| `edge-receiver` | as any account, writes to a pipe a tar of the tree's `hq-edge` and its `SHA256SUMS` line, for an administrator to install on an edge, once the tree is proven to be the release ([Remote targets](#remote-targets)) |
+| `check` | the host's half of `mise run check --release`, as any account and read-only. It runs `verify`, and with it the runner's sudo rules (or, where sudo asks for a password, the drift unit's run since the release was installed). It checks the established units, free disk, and that every program a sudo rule names, and the edge receiver, is root's alone. Where sudo lets it read nftables, it checks that a loaded Renovate egress table is the one `hq-host` renders (an absent one waits for the next run, which loads it). `mise run check:host`, which `check --release` runs, builds it from HEAD for the host's platform and runs it from a temporary directory over SSH on `SEVERINO_HQ_DEPLOY_HOST`, so the release being checked is the one checking. Exits 0 ready, 1 a fault, 3 unverified |
 
 ### Units
 
@@ -618,19 +619,43 @@ a deploy cannot rewrite its own remote authorization.
   [`deploy/targets/severino-hq-cpanel-controller`](../deploy/targets/severino-hq-cpanel-controller),
   installed as that account, with its key forced to the script.
 
-`hq-edge` ships in the composed image at `/app/deploy/bin/hq-edge`. To install
-or update it, run this on the edge as an account that may use Docker and sudo,
-with `image` set to the digest-pinned composition HQ runs (the one in
-`/var/lib/severino-hq/release` on HQ's host). It needs cosign and read access
-to the image, verifies the compose workflow's signature, and stops if the
-image is built for another platform than the edge's:
+`hq-edge` ships in the composed image at `/app/deploy/bin/hq-edge`, and so in
+HQ's host tree at `/usr/local/lib/severino-hq/deploy/bin/hq-edge`. The HQ
+host already holds it verified, so the edge needs nothing but the account
+that installed it: SSH, `sudo`, `tar` and coreutils. To install or update it,
+run this from a machine with SSH to both, as an account on HQ's host and an
+administrator on the edge, with `hq` and `edge` set to those two:
 
 ```sh
-image=ghcr.io/OWNER/REPO/composition@sha256:DIGEST && cosign verify --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity-regexp '^https://github\.com/OWNER/REPO/\.github/workflows/compose\.yml@refs/heads/main$' "$image" >/dev/null && docker pull -q "$image" >/dev/null && built="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$image")" && here="$(docker version --format '{{.Server.Os}}/{{.Server.Arch}}')" && { [ "$built" = "$here" ] || { echo "hq-edge in this release is built for $built; this edge runs $here" >&2; false; }; } && container="$(docker create --pull never "$image")" && docker cp "$container:/app/deploy/bin/hq-edge" ./hq-edge && docker rm "$container" >/dev/null && sudo install -o root -g root -m 0755 ./hq-edge /usr/local/sbin/severino-hq-edge-controller && rm ./hq-edge && sudo /usr/local/sbin/severino-hq-edge-controller version
+hq=admin@hq.example.com && edge=admin@edge.example.com && ssh "$hq" /usr/local/lib/severino-hq/deploy/bin/hq-host edge-receiver | ssh "$edge" 'rm -rf hq-edge.new && mkdir -m 0700 hq-edge.new && tar -x -C hq-edge.new' && ssh -t "$edge" 'cd hq-edge.new && sha256sum -c SHA256SUMS && ./hq-edge version && sudo install -o root -g root -m 0755 hq-edge /usr/local/sbin/severino-hq-edge-controller && cd && rm -r hq-edge.new && sudo /usr/local/sbin/severino-hq-edge-controller version'
 ```
 
-It prints the receiver's version last. The dispatcher and the sudo rule name
-the same path, so neither changes.
+`hq-host edge-receiver` writes a tar of `hq-edge` and its `SHA256SUMS` line,
+and only when the two verdicts `hq-host check` reports for it hold: the tree
+is the release HQ runs, and the receiver is root's alone. A check that fails
+either names what is wrong; `edge-receiver` prints the same finding and writes
+nothing. On the edge, `sha256sum -c` refuses bytes that are not the ones the
+tree holds, a partial or missing transfer included, and running the
+unpacked receiver's `version` unprivileged stops a binary built for another
+platform before `sudo` installs it. The line prints the version it unpacked,
+then the version installed. The dispatcher and the sudo rule name the same
+path, so neither changes.
+
+What the edge trusts, and what proves the binary is the image's:
+
+- The edge trusts its administrator's SSH and the HQ host's tree, nothing
+  more. It needs no Docker, cosign, registry sign-in or credential it did not
+  already have, and the controller's key still reaches only the receiver's
+  operations, so no deploy can replace the receiver.
+- The deploy verifies the image's signature against the compose workflow's
+  identity before it pulls it, and `hq-host verify` holds the tree to that
+  image byte for byte. `edge-receiver` reads that verdict through `sudo -n`,
+  or, where sudo asks for a password, from the drift unit's run since the
+  release was installed, as `check` does.
+- The receiver in the tree is root's and writable by no one else, nor is any
+  directory above it, so the bytes `edge-receiver` reads are the bytes verify
+  compared. The `SHA256SUMS` line is their digest, and the edge installs only
+  bytes that match it, from a directory only the administrator can write.
 
 ## Container upgrades
 

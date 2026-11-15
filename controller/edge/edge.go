@@ -53,6 +53,10 @@ import (
 // version, so a stale edge reads as one.
 const Version = "5"
 
+// Redeploy is what to do about an edge older than Version, worded once for
+// every finding that names one.
+const Redeploy = "redeploy it at version " + Version + " or later with hq-host edge-receiver"
+
 // The operations an edge answers.
 const (
 	OperationVersion   = "version"
