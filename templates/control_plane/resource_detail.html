@@ -165,7 +165,7 @@ where it is saved and how it relates follow, short cards sharing rows.
     {% if readout_rows %}
       {% facts %}
         {% for row_label, desired, observed, links in readout_rows %}
-          {% fact row_label %}{% if links %}{% for link in links %}{% entity link code=True %}{% if not forloop.last %} {% endif %}{% endfor %}{% else %}{% with value=observed|default:desired %}{% if value is None or value == "" %}{% empty_value %}{% else %}{{ value|readout }}{% endif %}{% endwith %}{% endif %}{% if desired and observed and desired != observed %} {% status "HQ expects" desired tone="serious" %}{% endif %}{% endfact %}
+          {% fact row_label %}{% if links %}{% for link in links %}{% entity link code=True %}{% if not forloop.last %} {% endif %}{% endfor %}{% else %}{% with value=observed|default:desired %}{% present value %}{{ value|readout }}{% endpresent %}{% endwith %}{% endif %}{% if desired and observed and desired != observed %} {% status "HQ expects" desired tone="serious" %}{% endif %}{% endfact %}
         {% endfor %}
       {% endfacts %}
     {% endif %}

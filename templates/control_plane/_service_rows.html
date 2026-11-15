@@ -54,7 +54,10 @@ alphabetical is the order and there is nothing to move.
                   {% for line in facet.reading_lines %}
                     <span title="{{ line.hint }}">{{ line.label|breakable }}{% if line.detail %}{% muted %}{% dot %}{{ line.detail|breakable }}{% endmuted %}{% endif %}</span>{% if not forloop.last %}<br>{% endif %}
                   {% endfor %}
-                  {% if not facet.claims and not facet.readings %}{% if service.is_observed and facet.id == dns_facet and service.path.gaps %}{% include "partials/_empty_state.html" with message="No record" inline=True only %}{% else %}{% empty_value %}{% endif %}{% endif %}
+                  {% if not facet.claims and not facet.readings %}{% comment %}
+                  a facet with nothing to show, said as No record where the DNS path has a gap
+                  <!-- ast-grep-ignore: hand-drawn-missing-value -->
+                  {% endcomment %}{% if service.is_observed and facet.id == dns_facet and service.path.gaps %}{% include "partials/_empty_state.html" with message="No record" inline=True only %}{% else %}{% empty_value %}{% endif %}{% endif %}
                 {% endif %}
               </td>
             {% endif %}
@@ -76,13 +79,11 @@ alphabetical is the order and there is nothing to move.
               {% if service.origin.qualifier %}{% muted %}{{ service.origin.qualifier|breakable }}{% endmuted %}{% endif %}
             {% elif service.served_by %}
               {% for name in service.served_by %}{% cell_line name %}{% if not forloop.last %}<br>{% endif %}{% endfor %}
-            {% elif service.path.machine %}
-              {% entity "machine"|entity_of:service.path.machine %}
             {% else %}
-              {% empty_value %}
+              {% present service.path.machine %}{% entity "machine"|entity_of:service.path.machine %}{% endpresent %}
             {% endif %}
           </td>
-          {% if show_service_projects %}<td>{% if service.project %}{% entity "project"|entity_of:service.project.slug label=service.project.name %}{% else %}{% empty_value %}{% endif %}</td>{% endif %}
+          {% if show_service_projects %}<td>{% present service.project %}{% entity "project"|entity_of:service.project.slug label=service.project.name %}{% endpresent %}</td>{% endif %}
           <td>{% status service.status_label tone=service.tone title=service.health.detail %}</td>
         </tr>
       {% endfor %}

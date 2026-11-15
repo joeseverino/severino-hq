@@ -20,7 +20,7 @@ The answer to the policy test. The tailnet page answers it alone as its
       <tbody>
         {% for rule in verdict.rules %}
           <tr>
-            <td>{% if rule.line %}line {{ rule.line|breakable }}{% else %}{% empty_value %}{% endif %}</td>
+            <td>{% present rule.line %}line {{ rule.line|breakable }}{% endpresent %}</td>
             <td>{% for who in rule.who %}<code>{{ who|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
             <td>{% for to in rule.to %}<code>{{ to|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
           </tr>

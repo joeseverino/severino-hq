@@ -49,12 +49,12 @@ part's heading shows only when there is more than one.
               tall. Opened, the row shows them all, and what the credential
               lets HQ change runs beneath it.
               {% endcomment %}
-              {% if row.reads %}
-                {% line_list row.reads as read list="dot-list" %}{% include "control_plane/_connection_read.html" %}{% endline_list %}
-              {% elif row.changes_only %}
+              {% if row.changes_only %}
                 {% muted %}Changes only:{% endmuted %}
                 {% line_list row.changes as state list="dot-list" %}{% include "control_plane/_connection_ability.html" %}{% endline_list %}
-              {% else %}{% empty_value %}{% endif %}
+              {% else %}
+                {% present row.reads %}{% line_list row.reads as read list="dot-list" %}{% include "control_plane/_connection_read.html" %}{% endline_list %}{% endpresent %}
+              {% endif %}
               {% if row.changes and not row.changes_only %}<div class="row-below" data-label="Changes">{% line_list row.changes as state list="dot-list" %}{% include "control_plane/_connection_ability.html" %}{% endline_list %}</div>{% endif %}
             </td>
             {% comment %}
