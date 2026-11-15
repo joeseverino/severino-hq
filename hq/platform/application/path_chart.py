@@ -1,12 +1,11 @@
 """A drawing in its own coordinate system, rendered by the shared chart frame."""
 
-from dataclasses import dataclass
 from typing import ClassVar
 
 from .display_words import display
 
 
-@dataclass(frozen=True, slots=True)
+@display
 class PathSegment:
     """One path, with its place in an ordered color scale and its reading."""
 

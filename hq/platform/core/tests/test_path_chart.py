@@ -1,251 +1,52 @@
-"""The catalog's charts: lines, bars, calendars and cadences, empty and filled."""
+"""Spatial drawings share the chart frame, legend and empty state."""
 
-from datetime import date, timedelta
+from django.template import Context, Template
+from django.template.loader import render_to_string
+from django.test import SimpleTestCase
 
-from hq.platform.application.cadence_chart import Cadence, CadenceMatrix, CadenceRow, CadenceWeek
+from hq.platform.application.markup_testing import elements, text, with_class
 from hq.platform.application.path_chart import PathChart, PathMarker, PathScale, PathSegment
-from hq.platform.application.ui import (
-    ActivityCalendar,
-    CalendarDay,
-    ChartSeries,
-    PlannedDay,
-    PlanNote,
-    WeekPlan,
-    line_chart,
-    stacked_bar_chart,
-)
-from hq.platform.core.tests.browser.catalog.common import Entry
-
-_WEEK = date(2026, 1, 5)
 
 
-def _readings(title, lede, *names, unit="min", marks=()):
-    """A line chart of a week's readings, one line for each name."""
-
-    return line_chart(
-        title,
-        lede,
-        tuple(
-            (name, tuple((_WEEK + timedelta(days=day), float((day * slot) % 5 + slot)) for day in range(7)), slot)
-            for slot, name in enumerate(names, 1)
-        ),
-        unit=unit,
-        marks=marks,
-    )
-
-
-def _weeks(title, lede):
-    """A stacked bar chart of four weeks, two kinds in each."""
-
-    return stacked_bar_chart(
-        title,
-        lede,
-        ("Week 1", "Week 2", "Week 3", "Week 4"),
-        (ChartSeries("Running", (3, 4, 2, 5), 1), ChartSeries("Strength", (1, 2, 2, 1), 2)),
-        unit="min",
-    )
-
-
-def _month():
-    """A month of plan against what was done, paged, with its period."""
-
-    return ActivityCalendar(
-        "Example training",
-        "Planned days against what was done.",
-        tuple(
-            tuple(
-                CalendarDay(_WEEK + timedelta(days=week * 7 + day), "done", slots=(1,), planned=True)
-                if day in (0, 2)
-                else CalendarDay(_WEEK + timedelta(days=week * 7 + day), "missed", planned=True)
-                if day == 4
-                else CalendarDay(_WEEK + timedelta(days=week * 7 + day))
-                for day in range(7)
-            )
-            for week in range(4)
-        ),
-        series=(ChartSeries("Example running", (), 1),),
-        period_label="January 2026",
-        previous_url="/example/?month=2025-12",
-        next_url="/example/?month=2026-02",
-        current_url="/example/",
-    )
-
-
-def _matrix():
-    """Three things over the same six weeks, one a link with a line about it."""
-
-    def weeks(*marks):
-        return tuple(
-            CadenceWeek(label, hit=mark == "x", no_data=mark == "?", detail=f"Week of {label}")
-            for label, mark in zip(("Jan 5", "Jan 12", "Jan 19", "Jan 26", "Feb 2", "Feb 9"), marks, strict=True)
+class PathChartTests(SimpleTestCase):
+    def test_geometry_and_readings_stay_in_the_shared_frame(self):
+        tooltip = 'An "example" & reading.'
+        chart = PathChart(
+            title="Example path",
+            description="The example path.",
+            segments=(PathSegment("M 1 2 L 3 4", 2, tooltip),),
+            markers=(PathMarker(1, 2, "Start"),),
+            scale=PathScale(10.5, 20.5, 30.5, "100 m"),
+            legend=((2, "An ordered band"),),
+            width=400,
+            height=200,
+            note="An example reading.",
         )
+        html = render_to_string("partials/_chart.html", {"chart": chart})
+        (drawing,) = elements(html, "svg")
+        self.assertEqual(drawing.attrs["viewbox"], "0 0 400 200")
+        self.assertEqual(drawing.attrs["aria-label"], chart.description)
+        (path,) = elements(html, "path")
+        self.assertEqual(path.attrs["d"], chart.segments[0].path)
+        self.assertEqual(path.attrs["data-tip"], tooltip)
+        (scale,) = elements(html, "line")
+        self.assertEqual(scale.attrs["x2"], "41.0")
+        self.assertEqual(len(with_class(html, "chart-legend")), 1)
+        self.assertIn("An ordered band", text(html))
+        self.assertIn(chart.note, text(html))
 
-    return CadenceMatrix(
-        ("Jan 5", "Jan 12", "Jan 19", "Jan 26", "Feb 2", "Feb 9"),
-        (
-            CadenceRow("Example run", weeks("x", "x", "-", "x", "x", "x"), url="/example/run/", detail="3 a week"),
-            CadenceRow("Example lift", weeks("x", "-", "?", "x", "-", "x")),
-            CadenceRow("An example habit with a name long enough to wrap", weeks("-", "-", "x", "x", "x", "-")),
-        ),
-    )
+    def test_an_empty_path_has_one_empty_state(self):
+        chart = PathChart(title="Example path", description="The example path.", segments=(), width=400, height=200)
+        html = render_to_string("partials/_chart.html", {"chart": chart})
+        self.assertEqual(elements(html, "svg"), [])
+        self.assertEqual(text(html).count("No path recorded."), 1)
 
-
-ENTRIES = {
-    "chart/path": Entry(
-        '{% include "partials/_chart.html" %}',
-        {
-            "chart": PathChart(
-                title="Example path",
-                description="A path colored by its reading.",
-                segments=(
-                    PathSegment("M 20 40 L 150 120 L 280 30", 1, "First reading"),
-                    PathSegment("M 280 30 L 360 160 L 20 40", 5, "Last reading"),
-                ),
-                markers=(PathMarker(20, 40, "Start"), PathMarker(150, 120, "Finish")),
-                scale=PathScale(20, 180, 80, "100 m"),
-                legend=((1, "Lower"), (5, "Higher")),
-                width=400,
-                height=220,
-                note="An example reading.",
-            )
-        },
-    ),
-    "chart/path-empty": Entry(
-        '{% include "partials/_chart.html" %}',
-        {"chart": PathChart(title="Example path", description="A path.", segments=(), width=400, height=220)},
-    ),
-    # Each chart partial, its head a section's: the heading, the line under
-    # it, and its legend or a month's controls beside them; its data a folded
-    # section in its frame.
-    "chart/line": Entry(
-        '{% include "partials/_chart.html" %}',
-        {"chart": _readings("Example pace", "Example readings over a week, two of them.", "Easy", "Hard")},
-    ),
-    # A rule at a day something began, its label over the rule.
-    "chart/line-marked": Entry(
-        '{% include "partials/_chart.html" %}',
-        {"chart": _readings("Example pace", "", "Easy", marks=((_WEEK + timedelta(days=3), "Example start"),))},
-    ),
-    # Two years of readings, so each label carries its year and the last one,
-    # the longest an axis draws, ends at the plot's right edge.
-    "chart/line-years": Entry(
-        '{% include "partials/_chart.html" %}',
-        {
-            "chart": line_chart(
-                "Example weight",
-                "",
-                (
-                    (
-                        "Weight",
-                        tuple((_WEEK + timedelta(days=36 * step), float(70 + step % 4)) for step in range(21)),
-                        1,
-                    ),
-                ),
-                unit="kg",
-            )
-        },
-    ),
-    "chart/line-empty": Entry(
-        '{% include "partials/_chart.html" %}',
-        {"chart": line_chart("Example pace", "Too few readings to draw.", (), unit="example")},
-    ),
-    "chart/stacked-bar": Entry(
-        '{% include "partials/_chart.html" %}',
-        {"chart": _weeks("Example sessions", "Each week's sessions by kind.")},
-    ),
-    "chart/activity-calendar": Entry('{% include "partials/_activity_calendar.html" %}', {"calendar": _month()}),
-    "chart/tabs": Entry(
-        '{% include "partials/_chart_tabs.html" with group="example" %}',
-        {"charts": (_readings("Example pace", "A week of pace.", "Pace"), _weeks("Example load", "Load by week."))},
-    ),
-    # Two charts in a pair, one line under each heading longer than the other's,
-    # and a chart beside a section of prose: each pair's frames start together.
-    "chart/pair": Entry(
-        '<div class="two-col">{% include "partials/_chart.html" with chart=first %}'
-        '{% include "partials/_chart.html" with chart=second %}</div>',
-        {
-            "first": _readings(
-                "Example pace",
-                "An example line under the heading long enough to take two lines beside its neighbor.",
-                "Pace",
-            ),
-            "second": _weeks("Example sessions", "Each week's sessions."),
-        },
-    ),
-    "chart/beside-section": Entry(
-        '<div class="two-col">{% include "partials/_chart.html" %}'
-        '{% section "Example notes" %}<p>An example line of prose in the frame.</p>{% endsection %}</div>',
-        {"chart": _readings("Example pace", "Example readings over a week.", "Pace")},
-    ),
-    # Whether a thing happened, week by week: hits, a miss, a week counted
-    # more than once, one nothing is known of, and a run up to now.
-    "chart/cadence": Entry(
-        '{% section "Example habits" %}{% include "partials/_cadence.html" %}{% endsection %}',
-        {
-            "cadence": Cadence(
-                "Example stretching",
-                "Each week it happened at least once.",
-                (
-                    CadenceWeek("Jan 5", hit=True, detail="Week of Jan 5: once"),
-                    CadenceWeek("Jan 12", hit=False, detail="Week of Jan 12: not done"),
-                    CadenceWeek("Jan 19", hit=False, no_data=True),
-                    CadenceWeek("Jan 26", hit=True, count=3, detail="Week of Jan 26: 3 times"),
-                    CadenceWeek("Feb 2", hit=True, detail="Week of Feb 2: once"),
-                    CadenceWeek("Feb 9", hit=True, count=2, detail="Week of Feb 9: twice"),
-                ),
-            )
-        },
-    ),
-    # Several things over the same weeks, one a link with a line about it.
-    "chart/cadence-matrix": Entry(
-        '{% section "Example habits 2" %}{% include "partials/_cadence_matrix.html" %}{% endsection %}',
-        {"matrix": _matrix()},
-    ),
-    # The same, sharing a row with a chart.
-    "chart/cadence-matrix-compact": Entry(
-        '<div class="two-col">{% section "Example habits 3" %}'
-        '{% include "partials/_cadence_matrix.html" with compact=True label="Example habit" %}{% endsection %}'
-        '{% include "partials/_chart.html" %}</div>',
-        {"matrix": _matrix(), "chart": _readings("Example minutes", "Minutes each day.", "Example run")},
-    ),
-    # The days of a week a thing is planned for: two on one day, a day with
-    # its note, the notes under the week and the link that changes it.
-    "chart/week-plan": Entry(
-        '{% include "partials/_week_plan.html" %}',
-        {
-            "plan": WeekPlan(
-                "Example week",
-                (
-                    PlannedDay("M", "Monday", (1,), detail="Example run"),
-                    PlannedDay("T", "Tuesday"),
-                    PlannedDay("W", "Wednesday", (1, 2), note="Long", detail="Example run and example lift"),
-                    PlannedDay("T", "Thursday"),
-                    PlannedDay("F", "Friday", (2,), detail="Example lift"),
-                    PlannedDay("S", "Saturday", (1,), note="Easy", detail="Example run"),
-                    PlannedDay("S", "Sunday"),
-                ),
-                notes=(PlanNote("Example runs", "3 a week"), PlanNote("Example lifts", "2 a week")),
-                url="/example/plan/",
-            )
-        },
-    ),
-    # Shares of the largest, ranked, in a flow of sections: a whole row, a
-    # sliver, and a label long enough to be cut on a phone.
-    "chart/share-list": Entry(
-        '<div class="section-flow">{% section "Example pages" %}{% include "partials/_share_list.html" %}'
-        '{% endsection %}{% section "Example sources" %}{% include "partials/_share_list.html" with rows=few %}'
-        "{% endsection %}</div>",
-        {
-            "rows": (
-                {"label": "/", "figure": "1,204", "share": 100},
-                {
-                    "label": "/example/articles/an-example-article-with-a-path-long-enough-to-cut/",
-                    "figure": "312",
-                    "share": 25.9,
-                },
-                {"label": "/example/about/", "figure": "4", "share": 0.3},
-            ),
-            "few": ({"label": "example.org", "figure": "48", "share": 100},),
-        },
-    ),
-}
+    def test_the_page_frame_owns_the_printed_footer(self):
+        html = Template(
+            "{% page_main %}<p>An example page.</p>{% print_footer %}Printed example.{% endpage_main %}"
+        ).render(Context())
+        (main,) = elements(html, "main")
+        (footer,) = with_class(html, "page-print-footer")
+        self.assertEqual(footer.tag, "footer")
+        self.assertEqual(footer.words, "Printed example.")
+        self.assertIn(main, footer.ancestors)

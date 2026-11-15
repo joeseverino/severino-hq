@@ -340,6 +340,7 @@ class TableTagTests(SimpleTestCase):
         )
         cells = [cell.attrs.get("data-label") for cell in elements(_render(source), "td")]
         self.assertEqual(cells, [None, "example-agent", None, None, "example-agent", None])
+        self.assertIn("Not granted", [box.words for box in with_class(_render(source), "cell-short")])
 
     def test_a_rows_actions_are_its_controls_under_any_heading(self):
         """A row's actions keep one line as controls whatever their heading

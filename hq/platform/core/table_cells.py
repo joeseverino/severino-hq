@@ -530,7 +530,8 @@ class Cells(HTMLParser):
         marks = [] if "data-kind" in cell.attrs else [f' data-kind="{kind}"']
         if body and _long(cell):
             marks.append(" data-long")
-        if body and kind in _CUT_KINDS and not cell.says_nothing:
+        words = kind in _CUT_KINDS or (kind == "control" and not cell.controls)
+        if body and words and not cell.says_nothing:
             said = " ".join("".join(cell.text).split())
             if said and "title" not in cell.attrs:
                 marks.append(f' title="{html.escape(said)}"')
