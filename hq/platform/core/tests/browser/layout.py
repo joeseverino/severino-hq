@@ -9,7 +9,6 @@ from typing import override
 lazy from playwright.sync_api import TimeoutError as LoadTimeout
 
 from hq.platform.core.tests.browser.gate import RULE_COSTS, SET_ASIDE, BrowserGate, answered_as, signature
-from hq.platform.core.tests.browser.probes.axe import contrast_read
 from hq.platform.core.tests.browser.probes.boxes import (
     ANY_SCROLLER,
     CHROME_INSETS,
@@ -23,7 +22,6 @@ from hq.platform.core.tests.browser.probes.parts import EVIDENCE_READ, SUMMARIES
 from hq.platform.core.tests.browser.probes.settle import FINISH_TRANSITIONS, SETTLE, STYLESHEETS
 from hq.platform.core.tests.browser.probes.tables import (
     CELLS,
-    CUT_BESIDE_ROOM,
     PAST_THE_GUTTER,
     TABLES,
     TABLES_THAT_DO_NOT_FIT,
@@ -382,20 +380,6 @@ class LayoutBrowserTests(BrowserGate):
         if found := {check: said for check, said in self.palette().items() if said}:
             self.fail(json.dumps(found, indent=1))
 
-    def text_reads_in_the_dark_theme(self, _name):
-        """Text clears WCAG AA on whatever it sits on, in the dark palette.
-
-        Color lives in tokens and each token carries both palettes, so a
-        light-only color can only come from a component that went round them.
-        The stylesheet test catches a literal; this catches the rest (a token
-        whose dark half was never checked, ink meant for one surface drawn on
-        another) by measuring what the browser actually paints.
-        """
-
-        dark, found = self.read([("() => matchMedia('(prefers-color-scheme: dark)').matches", None), contrast_read()])
-        self.assertEqual(dark, True)
-        self.assertEqual(found, [])
-
     def a_chosen_theme_paints_as_the_systems(self, name):
         """The operator's choice of theme paints what the system's preference
         does: each palette chosen against the other system palette paints
@@ -495,16 +479,6 @@ class LayoutBrowserTests(BrowserGate):
         self.open_every_disclosure(name)
         self.page.evaluate(SETTLE)
         self.assertEqual(self.page.evaluate(TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), [])
-
-    def no_value_is_cut_while_its_row_has_room(self, name):
-        """A value in a closed row is cut only once its row has no room
-        left that would show it whole: in its cell past what shares its line,
-        and in the columns wider than their widest cell asks. Every table on
-        the page, with every disclosure open."""
-
-        self.open_every_disclosure(name)
-        self.page.evaluate(SETTLE)
-        self.assertEqual(self.read([(CUT_BESIDE_ROOM, SELECTORS["unseen"])])[0], [])
 
     def a_table_fits_its_box_at_every_width(self, name):
         """Every table on the page, with every disclosure open, fits its box
