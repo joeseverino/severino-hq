@@ -18,7 +18,7 @@ from django.test.runner import RemoteTestResult, RemoteTestRunner
 
 from hq.platform.core import stalls
 from hq.platform.core.coverage_contexts import ModuleContexts
-from hq.platform.core.isolation_testing import CompositionIsolation
+from hq.platform.core.isolation_testing import CompositionIsolation, fresh
 from hq.platform.core.stalls import StallMarks
 
 # A gate names a folder here, and the run writes each test that failed into
@@ -220,9 +220,9 @@ class CompositionRemoteRunner(RemoteTestRunner):
 
 
 class ClassTimedSuite(ModuleContexts):
-    """A suite that tells its result how long each class took, from its
-    ``setUpClass`` to the end of its ``tearDownClass``, and keeps the stall
-    watch on while it runs.
+    """A suite that sets each class up on a fresh process (``isolation_testing.fresh``),
+    tells its result how long each class took, from its ``setUpClass`` to the
+    end of its ``tearDownClass``, and keeps the stall watch on while it runs.
 
     Django partitions a suite into suites of its own type, so under
     ``--parallel`` both happen in the worker the class ran in.
@@ -237,6 +237,7 @@ class ClassTimedSuite(ModuleContexts):
 
     def _handleClassSetUp(self, test, result):
         if type(test) is not getattr(result, "_previousTestClass", None):
+            fresh()
             stalls.stall_watch.mark(f"{unittest.util.strclass(type(test))} setUpClass")
             self._timing = (test, monotonic())
         super()._handleClassSetUp(test, result)

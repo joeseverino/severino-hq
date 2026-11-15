@@ -164,15 +164,33 @@ def _hold_markers(held: dict[str, tuple[bytes, int]]) -> None:
         os.utime(path, ns=(mtime, mtime))
 
 
+def fresh() -> None:
+    """Leave this process as a new one starts: the composition read again, no
+    catalog adopted, a new set of agent limits and no controller's markers.
+
+    The suite calls it before each class sets up (``run_report.ClassTimedSuite``),
+    the one point every class passes whatever the class before it did: its
+    tests may never have started (a setup that stopped, a skip) or its
+    teardown may have written. A new set of limits rather than an emptied
+    one: a call a test left running gives its slot back to the set it took it
+    from.
+    """
+
+    plugins.clear_plugin_composition_cache()
+    automation_adoption.forget()
+    agent_limits.LIMITS = agent_limits.Limits()
+    _hold_markers({})
+
+
 class CompositionIsolation:
     """Make process caches, and the agent limits and the controller's markers
     every request shares, obey the same per-test isolation as the database.
 
     The limits and markers are isolated as ``setUpTestData`` rows are: each
-    class sets up on a new set, and each of its tests gets a copy of what that
-    setup left, so a stream an estate opens or a heartbeat it writes in
-    ``setUpClass`` reaches every test of the class and nothing one test takes
-    or writes reaches the next.
+    class sets up on a fresh process (``fresh``), and each of its tests gets a
+    copy of what that setup left, so a stream an estate opens or a heartbeat it
+    writes in ``setUpClass`` reaches every test of the class and nothing one
+    test takes or writes reaches the next.
     """
 
     _class: type | None = None
@@ -190,17 +208,6 @@ class CompositionIsolation:
             _hold_markers(self._class_markers or {})
         agent_limits.LIMITS = _copied(self._class_limits)
         return super().startTest(test)
-
-    def stopTest(self, test):
-        # The next class sets up on a new set. A new set rather than an
-        # emptied one: a call a test left running gives its slot back to the
-        # set it took it from.
-        agent_limits.LIMITS = agent_limits.Limits()
-        _hold_markers({})
-        # A catalog a test adopted is rolled back with its database, so the
-        # next class's setUpClass builds from none, as its tests do.
-        automation_adoption.forget()
-        return super().stopTest(test)
 
 
 def _copied(limits: agent_limits.Limits) -> agent_limits.Limits:
