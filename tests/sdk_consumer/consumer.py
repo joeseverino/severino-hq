@@ -628,6 +628,31 @@ def the_deployment() -> None:
     testing.plain(2)  # type: ignore[arg-type]
 
 
+def reading_a_page(response: HttpResponse) -> None:
+    # An extension's test reads what a page says through the host's reader,
+    # from a response or the markup a template rendered.
+    assert_type(testing.text(response), str)
+    assert_type(testing.text("<p>Due</p>"), str)
+    assert_type(testing.texts(response, "h2"), list[str])
+    assert_type(testing.links(response), list[tuple[str, str]])
+    assert_type(testing.hrefs(response), list[str])
+    found = testing.elements(response, "a")
+    assert_type(found, list[testing.Element])
+    assert_type(testing.select(response, "data-row-key", "example"), list[testing.Element])
+    assert_type(testing.within(response, "data-fragment"), list[testing.Element])
+    assert_type(testing.all_elements(response), list[testing.Element])
+    assert_type(testing.with_class("<span class=band></span>", "band"), list[testing.Element])
+    assert_type(found[0].attrs, dict[str, str])
+    assert_type(found[0].words, str)
+
+    assert_type(testing.text(response.content), str)
+    testing.text(3)  # type: ignore[arg-type]
+    testing.select(response, "data-row-key", 3)  # type: ignore[arg-type]
+    testing.elements(response)  # type: ignore[call-arg]
+    testing.all_elements(response, "a")  # type: ignore[call-arg]
+    testing.with_class(response)  # type: ignore[call-arg]
+
+
 def saving(command: Any, *, principal: Any) -> dict[str, Any]:
     return {"ok": True, "message": "Saved."}
 

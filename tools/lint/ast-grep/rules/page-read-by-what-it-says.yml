@@ -17,14 +17,17 @@
 # over template source (test_template_*.py, test_architecture_*.py), the
 # shared markup, table, row, form and print gate tests, and the table
 # contract an extension's check runs. cell-read-by-its-text is the narrower
-# rule for an extension's tests and these ignores.
+# rule for these ignores. An extension's check runs this rule over its
+# package's tests, which read a page through the same reader, exported from
+# hq_sdk.testing.
 id: page-read-by-what-it-says
 language: python
 severity: error
 message: A test reads a page by a shared part's markup (a tag or a class), which breaks when the part changes though the page says the same thing.
 note: >-
-  Read what the page says through hq/platform/application/markup_testing.py
-  (text, texts, links, hrefs, elements, select, within), or the data- hook
+  Read what the page says through the markup reader (text, texts, links,
+  hrefs, elements, select, within), hq_sdk.testing's in an extension and
+  hq/platform/application/markup_testing.py's in the host, or the data- hook
   the page carries. A test of how a part draws belongs in that part's own
   tests or its catalog entry.
 files:

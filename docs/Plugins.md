@@ -122,15 +122,16 @@ holds the boundary with Ruff's `banned-api` over the package's source
 (`tools/pipeline/extension-imports.toml`), which also refuses
 `django.core.cache`: a cache the host cannot see serves a stale answer, so a
 derived read is kept with `hq_sdk.reads.derivation` ([Derived
-reads](#derived-reads)). The check refuses three habits, the first two by the
-host's `cell-read-by-its-text` and `absent-text-read-from-the-text` rules
-(`tools/lint/ast-grep/rules`) and the last by `python -m hq_sdk.validation
-src`:
+reads](#derived-reads)). The check refuses four habits, the first three by the
+host's `cell-read-by-its-text`, `absent-text-read-from-the-text` and
+`page-read-by-what-it-says` rules (`tools/lint/ast-grep/rules`) and the last
+by `python -m hq_sdk.validation src`:
 
 | Refused | Why | Instead |
 | --- | --- | --- |
 | A test whose `assertContains`, `assertNotContains`, `assertIn` or `assertNotIn` looks for text ending on `</td>` or `</th>` | the host may wrap what a cell says | read the cell's text |
 | A test whose `assertNotContains` or `assertNotIn` over a response's markup says a short word (one to seven letters, digits, `_` or `-`) is absent | a CSRF token, nonce or retry key on the page can hold it by chance | `assertNotContains(response, word, html=True)`, which reads the text between the tags |
+| A test that asserts on, or searches a page for, a literal holding a tag or a `class=` attribute | a shared part's markup changes though the page says the same thing | read the page through `hq_sdk.testing`'s reader (`text`, `texts`, `links`, `hrefs`, `elements`, `select`, `within`), or its `data-` hook |
 | A page sentence that closes on a value with a period written by hand (`f"Renews through {registrar}."`) | a value HQ did not write can end in its own period | close it through `hq_sdk.ui.ended(f"... {value}")`, which adds the full stop only when the text has none |
 
 The host's own code is held to the same rule, and an extension to the refusal
@@ -1044,7 +1045,10 @@ contract.
 An extension's test asserts what it composed from them
 (`f"Due in {span(days)}"`), or reads a page through `hq_sdk.testing.plain`,
 which reads the host's no-break spaces as spaces. It never writes the host's
-words or markup out itself. Text that names the deployment reads
+words or markup out itself: what a page says and links to is read through the
+host's markup reader in `hq_sdk.testing` (`text`, `texts`, `links`, `hrefs`,
+`elements`, `select`, `within`, `with_class`, `all_elements`, and the
+`Element` each returns), which reads a page as a browser does. Text that names the deployment reads
 `hq_sdk.site.host()`, never a setting.
 
 An amount is written by `{{ amount|money }}` in a template and
