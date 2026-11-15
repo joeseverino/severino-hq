@@ -157,8 +157,9 @@
 /* Words that open a tip are a box of their own a target tall, no wider than the cell, and in a closed row the box that cuts them. */
 .data-table > tbody > tr > td > :is(span, code)[data-tip][tabindex]:not(.pill) { display: inline-block; max-inline-size: 100%; line-height: var(--target-min); vertical-align: top; }
 @container style(--opens: 1) { .data-table > tbody > tr:not(.is-expanded) > [data-kind="identifier"] > :is(span, code)[data-tip][tabindex] { display: inline-block; max-inline-size: 100%; overflow: hidden; text-overflow: ellipsis; } }
-/* An identifier's link stays text of its line, a target tall by its padding as a name's is. */
-.data-table > tbody > tr > [data-kind="identifier"] > a[href] { padding-block: calc((var(--target-min) - 1.25em) / 2); }
+/* An identifier's link, or a link alone in its cell, stays text of its line, a target tall by its padding as a name's is. */
+.data-table > tbody > tr > [data-kind="identifier"] > a[href],
+.data-table > tbody > tr > td > a[href]:only-child { padding-block: calc((var(--target-min) - 1.25em) / 2); }
 /* A fact on one line (`{% cell_line lines=1 %}`). */
 .data-table > tbody > tr > td .cell-line[data-lines="1"] { display: block; }
 .data-table > tbody > tr > td .cell-line[data-lines="1"] :is(.token, .whole, .part) { display: inline; max-inline-size: none; }
@@ -166,9 +167,11 @@
 @container style(--opens: 1) {
 .data-table > tbody > tr:not(.is-expanded) > :is([data-kind="name"], [data-kind="prose"]) :is(.tag, .pill, code:not(.cell-whole), .token[data-sole]:not(code *)),
 .data-table > tbody > tr:not(.is-expanded) > [data-kind="identifier"],
-.data-table > tbody > tr:not(.is-expanded) > :is([data-kind="name"], [data-kind="prose"]) .name-line > :not(button, form),
 .data-table > tbody > tr:not(.is-expanded) > :is([data-kind="name"], [data-kind="prose"], [data-kind="identifier"]) .cell-line[data-lines="1"] { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 }
+/* Closed, a name set among its controls (`name-line`) is cut at its end, and the box that cuts it is a target tall, as its link is, so the cut never clips the link's hit area. */
+@container style(--opens: 1) { .data-table > tbody > tr:not(.is-expanded) > :is([data-kind="name"], [data-kind="prose"]) .name-line > :not(button, form) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-block: calc((var(--target-min) - 1.25em) / 2); } }
+.data-table > tbody > tr > td .name-line > :not(button, form) > a[href]:only-child { padding-block: calc((var(--target-min) - 1.25em) / 2); }
 /* A control's label is the control's to cut, as one line at its end: its words (`button_words`, one box) are cut where the control ends, a part among them text of that line so the cut lands inside it; a part alone, longer than the control, is held to it and cut there, set on the line by its top since a box that clips takes its bottom edge as its baseline. */
 .data-table td .btn > .button-words { min-width: 0; overflow: hidden; text-overflow: ellipsis; & .whole { display: contents; } }
 .data-table td .btn > .token:not([data-sole]) {
