@@ -33,12 +33,13 @@ def _run(*tests: unittest.TestCase, **options: bool) -> unittest.TestResult:
 
     runner = SeverinoTestRunner(verbosity=0, **options)
     suite = runner.test_suite(tests)
+    text = unittest.TextTestRunner(stream=io.StringIO(), resultclass=runner.get_resultclass(), verbosity=0)
     # Django's debug_sql result sets its logger to DEBUG for good; the
     # process this runs in keeps its own level.
     queries = logging.getLogger("django.db.backends")
     level = queries.level
     try:
-        return unittest.TextTestRunner(stream=io.StringIO(), resultclass=runner.get_resultclass(), verbosity=0).run(suite)
+        return text.run(suite)
     finally:
         queries.setLevel(level)
 
@@ -126,7 +127,9 @@ class ClassSetupStartsFreshTests(TestCase):
 
         class Narrows(unittest.TestCase):
             def test_reads_its_commands_without_the_records(self):
-                with unittest.mock.patch("hq.platform.application.integrations.record_capability_specs", return_value=()):
+                with unittest.mock.patch(
+                    "hq.platform.application.integrations.record_capability_specs", return_value=()
+                ):
                     capability_registry()
 
         class Reads(unittest.TestCase):
