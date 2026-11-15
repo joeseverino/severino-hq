@@ -201,7 +201,7 @@ SELECTORS = {
     # cell marks with its role (the row's own name, what a row means, free
     # text, a context line), a preview, a chip that wraps, a control, a
     # value among the words of a phrase, which wraps at its seams as they
-    # do, a name in a cell too long to hold its line (`data-short`), a value set after
+    # do, a name outside a short value's box (`cell-short`), a value set after
     # words on its line, and a panel the cell shows,
     # which is laid out as a page.
     "cell_token": "main .data-table > tbody > tr > td .token",
@@ -212,7 +212,7 @@ SELECTORS = {
     "breaks_anywhere": '[data-cell~="name"]',
     "wraps_in_a_cell": (
         "tr.row-detail, .row-gutter, [data-cell], .table-clamp, code.cell-whole, .btn,"
-        " td:not([data-short]) .token, [popover]"
+        " .token:not(.cell-short *), [popover]"
     ),
     # Words said to a reader and never drawn.
     "unseen": ".visually-hidden",

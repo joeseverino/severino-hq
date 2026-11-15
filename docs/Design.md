@@ -406,12 +406,13 @@ A long value in a cell (a line past `table_cells.LONG`) wraps and is held to
 its third line by a clamp with its mark (`.cell-clamp`, cuts.css), its whole
 value in its cell's title (written by the server). Only words are held: each
 part of words in it (`data-cell`) is clamped on its own, so a pill or a
-toggle beside them stays whole. A value of 32 characters at most
+toggle beside them stays whole. A value of words of 32 characters at most
 (`table_cells.SHORT`: an address and its port, a host, a project's name) is
-marked `data-short`, and one box of it (a link alone in its cell, a chip) is
-as wide as the value up to its column's share, so its column holds it whole
-while the table is laid out as one, and past its share it breaks at its seams
-inside its box; a longer identifier and a row's own name break
+one box (`cell-short`) as wide as the value up to its column's share, and as
+wide as its column where that is more, so its column holds it whole while the
+table is laid out as one, and past its share it wraps inside its box; a longer
+one wraps at its words in a line of `--row-words`, or its share where that is
+less, as a long one does; a longer identifier and a row's own name break
 anywhere their column lacks room; a pill and prose break only inside a word
 wider than their column, a pill longer than its column wrapping inside its
 one box. A status, a figure, a date or a control is never cut: its column is
