@@ -140,8 +140,8 @@ func (w *Worker) glance(ctx context.Context) (bool, error) {
 		w.logger().Warn("glance read failed", slog.Any("error", err))
 		return false, nil
 	}
-	for _, observation := range result {
-		observation["as_of"] = plan.AsOf
+	for i := range result {
+		result[i].AsOf = plan.AsOf
 	}
 	err = w.Bridge.Glance(ctx, w.ID, result)
 	w.post("glance", err)

@@ -30,6 +30,7 @@ from hq.platform.application.routes import reverse
 lazy from hq.platform.application.expiry import days_until
 lazy from hq.platform.application.moments import moment
 
+from .glance_shapes import GlanceObservation
 from .names import in_zone
 from .observations.contract import ReadingPart
 from .permissions import Permission
@@ -212,6 +213,14 @@ SHARED = (
         ControllerVerification,
         "How long the controller keeps checking that an applied change is actually served, "
         "declared by the action it belongs to.",
+    ),
+    SharedValue(
+        "GlanceObservation",
+        GlanceObservation,
+        "One dashboard panel the controller read (record_dashboard_observations), carrying the as_of "
+        "of the plan it answers. Numbers, instants and states only: HQ words them.",
+        mode="validation",
+        refs=(("panel_id", "GlancePanelID"),),
     ),
 )
 

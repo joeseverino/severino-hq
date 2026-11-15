@@ -28,6 +28,7 @@ from ..entity_links import entity_link
 from ..machines import machine, machine_catalog
 from ..resource_capabilities import UPDATE_CAPABILITY
 from ..services import CONTAINER_KIND
+from .glance_readings import HOST, reported_machine
 from .markup import all_elements, text
 
 
@@ -227,13 +228,13 @@ class DeclaredMachineTests(TestCase):
         observed = timezone.now()
         readings.record(
             readings.machine_telemetry("a-laptop"),
-            {"status": "good", "metrics": [{"label": "CPU", "value": "8%"}]},
+            reported_machine("a-laptop", host=HOST),
             observed_at=observed,
         )
 
         found = self.machine()
 
-        self.assertEqual(found.telemetry["metrics"][0]["value"], "8%")
+        self.assertEqual(found.telemetry, reported_machine("a-laptop", host=HOST))
         self.assertEqual(found.telemetry_observed_at, observed)
 
     def test_a_machine_nobody_declared_links_nothing(self):

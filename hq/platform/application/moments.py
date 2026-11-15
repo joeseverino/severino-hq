@@ -125,6 +125,7 @@ DAY_FORMAT = "M\xa0j"
 DAY_YEAR_FORMAT = "M\xa0j,\xa0Y"
 CLOCK_FORMAT = "g:i\xa0A"
 CLOCK_EXACT_FORMAT = "g:i:s\xa0A"
+HOUR_FORMAT = "g\xa0A"
 MOMENT_YEAR_FORMAT = f"{DAY_YEAR_FORMAT}, {CLOCK_FORMAT}"
 WEEKDAY_FORMAT = "l"
 WEEKDAY_SHORT_FORMAT = "D"
@@ -179,6 +180,15 @@ def when_clock(value: date) -> str:
         return when_day(value)
     value = _local(value)
     return f"{when_day(value)}, {_written(value, CLOCK_EXACT_FORMAT)}"
+
+
+def when_hour(value: datetime) -> str:
+    """The hour a moment starts, in the timezone HQ is read in: "2 PM".
+
+    What a row of hours says of each, where the day is the row's.
+    """
+
+    return _written(_local(value), HOUR_FORMAT)
 
 
 def when_exact(value: date) -> str:

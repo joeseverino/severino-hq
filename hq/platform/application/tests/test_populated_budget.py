@@ -20,6 +20,7 @@ from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 from .. import readings
 from ..dashboard import dashboard_highlights, operating_snapshot
 from ..projection import projection_scope
+from .glance_readings import reported_hour, reported_weather
 
 
 def _store(kind, records, **extra):
@@ -151,7 +152,7 @@ def populate(size: int = 8) -> None:
     DashboardConfiguration.objects.create(pk=1, weather_point="41.8781,-87.6298")
     readings.record(
         readings.weather("41.8781,-87.6298"),
-        {"metrics": [{"label": "Now", "value": "Clear"}]},
+        reported_weather("41.8781,-87.6298", reported_hour("2026-07-01T13:00:00-05:00", forecast="Clear")),
         observed_at=now,
     )
 

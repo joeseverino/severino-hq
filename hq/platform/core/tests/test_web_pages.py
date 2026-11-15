@@ -29,6 +29,7 @@ from hq.platform.application.dashboard import operating_snapshot
 from hq.platform.application.labels import DOT
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.security import cli_principal
+from hq.platform.application.tests.glance_readings import HOST, reported_machine
 from hq.platform.application.tests.host_only import host_only
 from hq.platform.application.tests.markup import elements, hrefs, select, text
 from hq_sdk.testing import plain
@@ -242,11 +243,7 @@ class DashboardWorkflowTests(_AuthedTestCase):
         )
         readings.record(
             readings.machine_telemetry("example-host"),
-            {
-                "status": "good",
-                "summary": "Host load 0.30",
-                "metrics": [{"label": "CPU", "value": "9%", "detail": "8 cores"}],
-            },
+            reported_machine("example-host", host=HOST),
             observed_at=observed,
         )
         DashboardMachine.objects.create(machine=machine)

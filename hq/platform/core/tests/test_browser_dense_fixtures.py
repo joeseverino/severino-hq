@@ -419,26 +419,38 @@ def _glance():
         readings.record(
             readings.machine_telemetry(key),
             {
-                "status": "good",
-                "summary": "Host load 0.42",
-                "metrics": [
-                    {"label": "Container CPU", "value": "37%", "detail": ""},
-                    {"label": "Container memory", "value": "81%", "detail": ""},
-                    {"label": "Docker storage", "value": "64%", "detail": ""},
-                ],
+                "key": key,
+                "docker": {
+                    "containers": 14,
+                    "cpu_percent": 37.0,
+                    "cores": 8,
+                    "memory_used": 13_900_000_000,
+                    "memory_total": 17_179_869_184,
+                    "storage": 64_000_000_000,
+                },
             },
             observed_at=now,
         )
     readings.record(
         readings.weather("41.0000,-87.0000"),
         {
-            "status": "serious",
-            "summary": "Example City, EX",
-            "metrics": [
-                {"label": "Now", "value": "Partly Sunny", "detail": "This Afternoon"},
-                {"label": "Temperature", "value": "73°F", "detail": ""},
-                {"label": "Wind", "value": "SW 10 mph", "detail": "NWS hourly forecast"},
-                {"label": "Alerts", "value": "2", "detail": "active for this point"},
+            "point": "41.0000,-87.0000",
+            "city": "Example City",
+            "state": "EX",
+            "hours": [
+                {
+                    "start": now.isoformat(),
+                    "name": "This Afternoon",
+                    "temperature": 73,
+                    "temperature_unit": "F",
+                    "forecast": "Partly Sunny",
+                    "wind_speed": "10 mph",
+                    "wind_direction": "SW",
+                }
+            ],
+            "alerts": [
+                {"event": "Heat Advisory", "headline": "Heat Advisory until evening", "severity": "Severe"},
+                {"event": "Air Quality Alert", "severity": "Moderate"},
             ],
         },
         observed_at=now,

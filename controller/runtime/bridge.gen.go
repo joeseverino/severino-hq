@@ -1726,8 +1726,86 @@ type GlanceMachineTarget struct {
 	RequestID   string   `json:"request_id"`
 }
 
+// GlanceObservation One dashboard panel the controller read (record_dashboard_observations), carrying the as_of of the plan it answers. Numbers, instants and states only: HQ words them.
+type GlanceObservation struct {
+	AsOf     string                     `json:"as_of"`
+	Machines []GlanceObservationMachine `json:"machines,omitempty"`
+
+	// PanelID A dashboard panel the glance plan can ask the controller to read.
+	PanelID GlancePanelID `json:"panel_id"`
+
+	// Weather The forecast at the configured point: the hours ahead, the first of
+	// them now, and the alerts in force.
+	Weather *GlanceObservationWeather `json:"weather,omitempty"`
+}
+
+// GlanceObservationAlert One active Weather Service alert for the point.
+type GlanceObservationAlert struct {
+	Event    string `json:"event,omitempty"`
+	Headline string `json:"headline,omitempty"`
+	Severity string `json:"severity,omitempty"`
+}
+
+// GlanceObservationDocker A machine read through its Docker environment: what its running
+// containers take of it. “cpu_percent“ is a share of the whole machine.
+type GlanceObservationDocker struct {
+	Containers  int     `json:"containers"`
+	Cores       int     `json:"cores"`
+	CPUPercent  float64 `json:"cpu_percent"`
+	MemoryTotal int     `json:"memory_total"`
+	MemoryUsed  int     `json:"memory_used"`
+	Storage     int     `json:"storage"`
+}
+
+// GlanceObservationHost A machine read over SSH, as the controller's host script prints it.
+type GlanceObservationHost struct {
+	Cores        int     `json:"cores"`
+	CPUPercent   float64 `json:"cpu_percent"`
+	Load1M       float64 `json:"load_1m"`
+	MemoryTotal  int     `json:"memory_total"`
+	MemoryUsed   int     `json:"memory_used"`
+	StorageTotal int     `json:"storage_total"`
+	StorageUsed  int     `json:"storage_used"`
+}
+
+// GlanceObservationHour One hour of the Weather Service's hourly forecast.
+type GlanceObservationHour struct {
+	Chance          int       `json:"chance,omitempty"`
+	Forecast        string    `json:"forecast,omitempty"`
+	Name            string    `json:"name,omitempty"`
+	Start           time.Time `json:"start"`
+	Temperature     *float64  `json:"temperature,omitempty"`
+	TemperatureUnit string    `json:"temperature_unit,omitempty"`
+	WindDirection   string    `json:"wind_direction,omitempty"`
+	WindSpeed       string    `json:"wind_speed,omitempty"`
+}
+
+// GlanceObservationMachine One machine on the infrastructure panel. A machine with neither part
+// and no failure is one the controller had no way to read.
+type GlanceObservationMachine struct {
+	// Docker A machine read through its Docker environment: what its running
+	// containers take of it. ``cpu_percent`` is a share of the whole machine.
+	Docker *GlanceObservationDocker `json:"docker,omitempty"`
+
+	// Host A machine read over SSH, as the controller's host script prints it.
+	Host          *GlanceObservationHost `json:"host,omitempty"`
+	Key           string                 `json:"key"`
+	RefreshFailed string                 `json:"refresh_failed,omitempty"`
+}
+
+// GlanceObservationWeather The forecast at the configured point: the hours ahead, the first of
+// them now, and the alerts in force.
+type GlanceObservationWeather struct {
+	Alerts        []GlanceObservationAlert `json:"alerts,omitempty"`
+	City          string                   `json:"city,omitempty"`
+	Hours         []GlanceObservationHour  `json:"hours,omitempty"`
+	Point         string                   `json:"point"`
+	RefreshFailed string                   `json:"refresh_failed,omitempty"`
+	State         string                   `json:"state,omitempty"`
+}
+
 // GlanceObservations defines model for GlanceObservations.
-type GlanceObservations = []map[string]interface{}
+type GlanceObservations = []GlanceObservation
 
 // GlancePanelID A dashboard panel the glance plan can ask the controller to read.
 type GlancePanelID string

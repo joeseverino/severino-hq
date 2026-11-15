@@ -27,8 +27,16 @@ from .labels import dotted, plural
 STATUS_VALUES = frozenset({"good", "attention", "serious", "neutral"})
 
 # An advisory's severity as the tone it is drawn in, wherever one is listed:
-# critical and high serious, medium attention, the rest neutral.
-SEVERITY_TONES = {"critical": "serious", "high": "serious", "medium": "attention", "moderate": "attention"}
+# critical and high serious, medium attention, the rest neutral. A weather
+# alert's severity (extreme, severe, moderate, minor) reads the same way.
+SEVERITY_TONES = {
+    "critical": "serious",
+    "extreme": "serious",
+    "high": "serious",
+    "severe": "serious",
+    "medium": "attention",
+    "moderate": "attention",
+}
 
 
 def severity_tone(severity: object) -> str:

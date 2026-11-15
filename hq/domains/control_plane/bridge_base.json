@@ -1651,9 +1651,7 @@
       "GlanceObservations": {
         "type": "array",
         "items": {
-          "type": "object",
-          "additionalProperties": true,
-          "description": "One dashboard panel observation (record_dashboard_observations), carrying the as_of of the plan it answers."
+          "$ref": "#/components/schemas/GlanceObservation"
         }
       },
       "ForcedRead": {

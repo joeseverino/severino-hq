@@ -17,6 +17,7 @@ from ..field_masks import WHOLE_RECORD
 from ..integrations import integration_graph
 from ..resources import list_resource
 from ..security import Capability, Principal
+from .glance_readings import reported_weather
 from .writers import keyed
 
 OPERATOR = Principal(
@@ -65,7 +66,7 @@ class GatewayConnectionTests(TestCase):
         )
         readings.record(
             readings.weather("41.8781,-87.6298"),
-            {"summary": "Chicago, IL", "metrics": []},
+            reported_weather("41.8781,-87.6298", city="Chicago", state="IL"),
             observed_at=timezone.now(),
         )
 

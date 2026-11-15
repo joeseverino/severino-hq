@@ -11,6 +11,7 @@ from django.views.generic import TemplateView
 
 from hq.platform.application.capabilities import capability_words
 from hq.platform.application.connections import machines_once
+from hq.platform.application.glance import machine_metrics
 from hq.platform.application.hq_self import LABEL as HQ_LABEL
 from hq.platform.application.machine_context import (
     header_addresses,
@@ -267,7 +268,7 @@ class MachineDetailView(PageMixin, TemplateView):
         # page states one count, the container list's, so the two cannot differ.
         context["load_metrics"] = [
             metric
-            for metric in found.telemetry.get("metrics") or ()
+            for metric in machine_metrics(found.telemetry)
             if not (found.containers and metric.get("label") == "Containers")
         ]
         context.update(machine_links(found, whole))

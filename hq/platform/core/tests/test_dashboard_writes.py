@@ -20,6 +20,7 @@ from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.glance import DASHBOARD_REFRESH, DASHBOARD_REFRESH_STALE, DASHBOARD_SETTINGS
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal
+from hq.platform.application.tests.glance_readings import HOST
 from hq.platform.application.tests.markup import text
 from hq.platform.core.models import AuditLog
 
@@ -109,7 +110,7 @@ class DashboardRefreshTests(TestCase):
         DashboardMachine.objects.create(machine=machine)
         readings.record(
             readings.machine_telemetry(machine.key),
-            {"metrics": [{"label": "CPU", "value": "4%"}]},
+            {"key": machine.key, "host": HOST},
             observed_at=timezone.now() - timedelta(hours=1),
         )
         self.panel = f"machine-{machine.pk}"

@@ -33,6 +33,7 @@ from ..projection import projection_scope
 from ..public_registry import wanted_addresses
 from ..security import Capability, Principal
 from ..tailnet_presence import tailnet_presence
+from .glance_readings import HOST, reported_hour, reported_machine, reported_weather
 from .host_only import host_only
 from .markup import elements, hrefs, text
 
@@ -472,12 +473,12 @@ class StaleGlanceTests(TestCase):
         DashboardMachine.objects.create(machine=machine_spec, position=0)
         readings.record(
             readings.machine_telemetry("example-host"),
-            {"metrics": [{"label": "CPU", "value": "4%"}]},
+            reported_machine("example-host", host=HOST),
             observed_at=timezone.now() - timedelta(days=26),
         )
         readings.record(
             readings.weather("41.8781,-87.6298"),
-            {"metrics": [{"label": "Now", "value": "Clear"}]},
+            reported_weather("41.8781,-87.6298", reported_hour("2026-07-01T13:00:00-05:00", forecast="Clear")),
             observed_at=timezone.now() - timedelta(minutes=1),
         )
 
@@ -496,7 +497,7 @@ class StaleGlanceTests(TestCase):
         DashboardConfiguration.objects.create(pk=1, weather_point="41.8781,-87.6298")
         readings.record(
             readings.weather("41.8781,-87.6298"),
-            {"metrics": [{"label": "Now", "value": "Clear"}]},
+            reported_weather("41.8781,-87.6298", reported_hour("2026-07-01T13:00:00-05:00", forecast="Clear")),
             observed_at=timezone.now() - stale_after(DASHBOARD_GLANCE) + timedelta(minutes=1),
         )
 
@@ -510,7 +511,7 @@ class OldGlanceTests(TestCase):
         DashboardConfiguration.objects.create(pk=1, weather_point="41.8781,-87.6298")
         readings.record(
             readings.weather("41.8781,-87.6298"),
-            {"metrics": [{"label": "Now", "value": "Clear"}]},
+            reported_weather("41.8781,-87.6298", reported_hour("2026-07-01T13:00:00-05:00", forecast="Clear")),
             observed_at=timezone.now() - timedelta(days=20),
         )
         weather = next(panel for panel in dashboard_panels() if panel["id"] == "weather")

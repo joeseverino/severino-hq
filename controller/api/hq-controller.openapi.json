@@ -1651,9 +1651,7 @@
       "GlanceObservations": {
         "type": "array",
         "items": {
-          "type": "object",
-          "additionalProperties": true,
-          "description": "One dashboard panel observation (record_dashboard_observations), carrying the as_of of the plan it answers."
+          "$ref": "#/components/schemas/GlanceObservation"
         }
       },
       "ForcedRead": {
@@ -4192,6 +4190,248 @@
             "default": null
           }
         },
+        "type": "object"
+      },
+      "GlanceObservation": {
+        "additionalProperties": false,
+        "description": "One dashboard panel the controller read (record_dashboard_observations), carrying the as_of of the plan it answers. Numbers, instants and states only: HQ words them.",
+        "properties": {
+          "panel_id": {
+            "$ref": "#/components/schemas/GlancePanelID"
+          },
+          "as_of": {
+            "type": "string"
+          },
+          "machines": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GlanceObservationMachine"
+            },
+            "type": "array"
+          },
+          "weather": {
+            "$ref": "#/components/schemas/GlanceObservationWeather",
+            "default": null,
+            "x-go-type-skip-optional-pointer": false
+          }
+        },
+        "required": [
+          "panel_id",
+          "as_of"
+        ],
+        "type": "object"
+      },
+      "GlanceObservationAlert": {
+        "additionalProperties": false,
+        "description": "One active Weather Service alert for the point.",
+        "properties": {
+          "event": {
+            "default": "",
+            "type": "string"
+          },
+          "headline": {
+            "default": "",
+            "type": "string"
+          },
+          "severity": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "GlanceObservationDocker": {
+        "additionalProperties": false,
+        "description": "A machine read through its Docker environment: what its running\ncontainers take of it. ``cpu_percent`` is a share of the whole machine.",
+        "properties": {
+          "containers": {
+            "type": "integer"
+          },
+          "cpu_percent": {
+            "format": "double",
+            "type": "number"
+          },
+          "cores": {
+            "type": "integer"
+          },
+          "memory_used": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "memory_total": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "storage": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "containers",
+          "cpu_percent",
+          "cores",
+          "memory_used",
+          "memory_total",
+          "storage"
+        ],
+        "type": "object"
+      },
+      "GlanceObservationHost": {
+        "additionalProperties": false,
+        "description": "A machine read over SSH, as the controller's host script prints it.",
+        "properties": {
+          "cpu_percent": {
+            "format": "double",
+            "type": "number"
+          },
+          "cores": {
+            "type": "integer"
+          },
+          "load_1m": {
+            "format": "double",
+            "type": "number"
+          },
+          "memory_used": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "memory_total": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "storage_used": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "storage_total": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cpu_percent",
+          "cores",
+          "load_1m",
+          "memory_used",
+          "memory_total",
+          "storage_used",
+          "storage_total"
+        ],
+        "type": "object"
+      },
+      "GlanceObservationHour": {
+        "additionalProperties": false,
+        "description": "One hour of the Weather Service's hourly forecast.",
+        "properties": {
+          "start": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "type": "string"
+          },
+          "temperature": {
+            "default": null,
+            "format": "double",
+            "type": "number",
+            "x-go-type-skip-optional-pointer": false
+          },
+          "temperature_unit": {
+            "default": "",
+            "type": "string"
+          },
+          "forecast": {
+            "default": "",
+            "type": "string"
+          },
+          "chance": {
+            "default": 0,
+            "type": "integer"
+          },
+          "wind_speed": {
+            "default": "",
+            "type": "string"
+          },
+          "wind_direction": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start"
+        ],
+        "type": "object"
+      },
+      "GlanceObservationMachine": {
+        "additionalProperties": false,
+        "description": "One machine on the infrastructure panel. A machine with neither part\nand no failure is one the controller had no way to read.",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "host": {
+            "$ref": "#/components/schemas/GlanceObservationHost",
+            "default": null,
+            "x-go-type-skip-optional-pointer": false
+          },
+          "docker": {
+            "$ref": "#/components/schemas/GlanceObservationDocker",
+            "default": null,
+            "x-go-type-skip-optional-pointer": false
+          },
+          "refresh_failed": {
+            "default": "",
+            "maxLength": 60,
+            "type": "string"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "type": "object"
+      },
+      "GlanceObservationWeather": {
+        "additionalProperties": false,
+        "description": "The forecast at the configured point: the hours ahead, the first of\nthem now, and the alerts in force.",
+        "properties": {
+          "point": {
+            "type": "string"
+          },
+          "city": {
+            "default": "",
+            "type": "string"
+          },
+          "state": {
+            "default": "",
+            "type": "string"
+          },
+          "hours": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GlanceObservationHour"
+            },
+            "maxItems": 12,
+            "type": "array"
+          },
+          "alerts": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GlanceObservationAlert"
+            },
+            "maxItems": 20,
+            "type": "array"
+          },
+          "refresh_failed": {
+            "default": "",
+            "maxLength": 60,
+            "type": "string"
+          }
+        },
+        "required": [
+          "point"
+        ],
         "type": "object"
       },
       "HostEdgeRebootRecord": {

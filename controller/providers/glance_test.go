@@ -46,14 +46,15 @@ func TestEnvironmentGlanceMeasuresRunningContainers(t *testing.T) {
 	if err != nil || len(machines) != 1 {
 		t.Fatalf("%+v %v", machines, err)
 	}
-	want := GlanceMachine{Key: "hq-node", Status: "good", Summary: "4 cores · 8.0 GB memory", Metrics: []GlanceMetric{
-		{Label: "Containers", Value: "2", Detail: "running"},
-		{Label: "CPU", Value: "50%", Detail: "of 4 cores"},
-		{Label: "Memory", Value: "4%", Detail: "292 MB of 8.0 GB"},
-		{Label: "Docker storage", Value: "3.0 GB", Detail: "layers, volumes and build cache"},
-	}}
-	if !reflect.DeepEqual(machines[0], want) {
-		t.Errorf("got  %+v\nwant %+v", machines[0], want)
+	// Two cores busy of four is half the machine; the storage is the layers,
+	// the measured volume and the build cache.
+	read := machines[0].Docker
+	if machines[0].Key != "hq-node" || read == nil || machines[0].Host != nil {
+		t.Fatalf("%+v", machines[0])
+	}
+	if read.Containers != 2 || read.Cores != 4 || read.CPUPercent != 50 || read.MemoryTotal != 8589934592 ||
+		read.MemoryUsed <= 0 || read.Storage != 3*1073741824 {
+		t.Errorf("%+v", *read)
 	}
 }
 
@@ -83,9 +84,9 @@ func TestGlanceFailedPanelCarriesItsClass(t *testing.T) {
 	if err != nil || len(observations) != 1 {
 		t.Fatalf("%v %v", observations, err)
 	}
-	machine := observations[0]["machines"].([]any)[0].(map[string]any)
-	if machine["refresh_failed"] != "credential" || machine["summary"] != "Refresh failed (credential)." || machine["key"] != "hq-node" {
-		t.Fatalf("%v", machine)
+	machine := observations[0].Machines[0]
+	if machine != (runtime.GlanceObservationMachine{Key: "hq-node", RefreshFailed: "credential"}) {
+		t.Fatalf("%+v", machine)
 	}
 }
 
@@ -103,10 +104,9 @@ func hostGlanceRegistry(t *testing.T, stdout string) *Registry {
 func TestHostGlanceReadsTheTypedReading(t *testing.T) {
 	r := hostGlanceRegistry(t, `{"cpu_percent":12.6,"cores":8,"load_1m":0.42,"memory_used":4294967296,"memory_total":17179869184,"storage_used":53687091200,"storage_total":107374182400}`)
 	machine, err := r.hostGlance(t.Context(), "srv-box", "srv")
-	want := GlanceMachine{Key: "srv-box", Status: "good", Summary: "Host load 0.42", Metrics: []GlanceMetric{
-		{Label: "CPU", Value: "13%", Detail: "8 cores"},
-		{Label: "Memory", Value: "25%", Detail: "4.0 GB of 16.0 GB used"},
-		{Label: "Storage", Value: "50%", Detail: "50.0 GB of 100.0 GB used on /"},
+	want := runtime.GlanceObservationMachine{Key: "srv-box", Host: &runtime.GlanceObservationHost{
+		CPUPercent: 12.6, Cores: 8, Load1M: 0.42, MemoryUsed: 4294967296, MemoryTotal: 17179869184,
+		StorageUsed: 53687091200, StorageTotal: 107374182400,
 	}}
 	if err != nil || !reflect.DeepEqual(machine, want) {
 		t.Fatalf("got  %+v %v\nwant %+v", machine, err, want)
@@ -124,7 +124,7 @@ func TestWeatherGlance(t *testing.T) {
 	api.routes = map[string]string{
 		"/points/40.0000,-75.0000": `{"properties":{"forecastHourly":"` + "SERVER" + `/gridpoints/PHI/1,1/forecast/hourly",
 			"relativeLocation":{"properties":{"city":"Example","state":"PA"}}}}`,
-		"/alerts/active?point=40.0000,-75.0000": `{"features":[{"properties":{"event":"Heat Advisory","headline":"Hot"}},{"properties":{"event":"Other"}}]}`,
+		"/alerts/active?point=40.0000,-75.0000": `{"features":[{"properties":{"event":"Heat Advisory","headline":"Hot","severity":"Moderate"}},{"properties":{"event":"Other"}}]}`,
 	}
 	forecast := `{"properties":{"periods":[
 		{"name":"This Afternoon","startTime":"2026-07-01T13:00:00-04:00","temperature":88,"temperatureUnit":"F","windSpeed":"5 mph","windDirection":"SW","shortForecast":"Sunny","probabilityOfPrecipitation":{"value":10}},
@@ -139,19 +139,24 @@ func TestWeatherGlance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []GlanceMetric{
-		{Label: "Now", Value: "Sunny", Detail: "This Afternoon"},
-		{Label: "Temperature", Value: "88°F"},
-		{Label: "Range", Value: "70.5–91°", Detail: "next 3 hours"},
-		{Label: "Rain", Value: "2 PM · 60%", Detail: "Storms"},
-		{Label: "Wind", Value: "SW 5 mph", Detail: "NWS hourly forecast"},
-		{Label: "Alerts", Value: "Heat Advisory +1", Detail: "Hot"},
-	}
-	if panel.Status != "serious" || panel.Summary != "Example, PA" || panel.Point != "40.0000,-75.0000" || !reflect.DeepEqual(panel.Metrics, want) {
+	if panel.City != "Example" || panel.State != "PA" || panel.Point != "40.0000,-75.0000" || len(panel.Hours) != 3 {
 		t.Fatalf("%+v", panel)
 	}
-	if got := panel.Hours[2]; got != (GlanceHour{Time: "12 AM", Temperature: "70.5°", Precipitation: "0%"}) {
-		t.Errorf("%+v", got)
+	first := panel.Hours[0]
+	if first.Name != "This Afternoon" || *first.Temperature != 88 || first.TemperatureUnit != "F" || first.WindSpeed != "5 mph" ||
+		first.WindDirection != "SW" || first.Forecast != "Sunny" || first.Chance != 10 {
+		t.Errorf("%+v", first)
+	}
+	// The hour is the instant the Weather Service names, in its own offset.
+	if start := panel.Hours[1].Start; !start.Equal(time.Date(2026, 7, 1, 18, 0, 0, 0, time.UTC)) {
+		t.Errorf("%v", start)
+	}
+	if last := panel.Hours[2]; *last.Temperature != 70.5 || last.Chance != 0 {
+		t.Errorf("%+v", last)
+	}
+	want := []runtime.GlanceObservationAlert{{Event: "Heat Advisory", Headline: "Hot", Severity: "Moderate"}, {Event: "Other"}}
+	if !reflect.DeepEqual(panel.Alerts, want) {
+		t.Errorf("%+v", panel.Alerts)
 	}
 
 	for point, want := range map[string]string{
@@ -225,19 +230,25 @@ func glanceSite(t *testing.T) (*Registry, runtime.GlancePlan) {
 	return r, plan
 }
 
-// glanceMachines is each machine's summary in the infrastructure panel.
+// glanceMachines is how each machine in the infrastructure panel was read.
 func glanceMachines(t *testing.T, observations runtime.GlanceObservations) map[string]string {
 	t.Helper()
 	for _, observation := range observations {
-		if observation["panel_id"] != string(runtime.GlancePanelIDInfrastructure) {
+		if observation.PanelID != runtime.GlancePanelIDInfrastructure {
 			continue
 		}
-		summaries := map[string]string{}
-		for _, machine := range observation["machines"].([]any) {
-			fields := machine.(map[string]any)
-			summaries[fields["key"].(string)] = fields["summary"].(string)
+		read := map[string]string{}
+		for _, machine := range observation.Machines {
+			switch {
+			case machine.Host != nil:
+				read[machine.Key] = "host"
+			case machine.Docker != nil:
+				read[machine.Key] = "docker"
+			default:
+				read[machine.Key] = "unread " + machine.RefreshFailed
+			}
 		}
-		return summaries
+		return read
 	}
 	t.Fatal("no infrastructure panel")
 	return nil
@@ -254,7 +265,7 @@ func TestGlanceReadsOnlyTheEnvironmentsItNeeds(t *testing.T) {
 		t.Fatalf("%v %v", observations, err)
 	}
 	got := glanceMachines(t, observations)
-	want := map[string]string{"edge-vps": "Host load 0.10", "hq-node": "2 cores · 4.0 GB memory"}
+	want := map[string]string{"edge-vps": "host", "hq-node": "docker"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
@@ -323,12 +334,12 @@ func TestGlanceReadsAtOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, observation := range observations {
-		if observation["refresh_failed"] != nil {
-			t.Fatalf("weather was not read with the rest: %v", observation)
+		if observation.Weather != nil && observation.Weather.RefreshFailed != "" {
+			t.Fatalf("weather was not read with the rest: %+v", observation.Weather)
 		}
 	}
 	got := glanceMachines(t, observations)
-	if got["hq-node"] != "2 cores · 4.0 GB memory" || got["edge-vps"] != "Host load 0.10" {
+	if got["hq-node"] != "docker" || got["edge-vps"] != "host" {
 		t.Fatalf("machines were not read with the rest: %v", got)
 	}
 }
