@@ -45,7 +45,7 @@ func Mounts(table []byte) []string {
 		if len(fields) < 3 {
 			continue
 		}
-		entries = append(entries, mounted{unescape(fields[0]), unescape(fields[1]), fields[2]})
+		entries = append(entries, mounted{Unescape(fields[0]), Unescape(fields[1]), fields[2]})
 	}
 	var points []string
 	seen := map[string]bool{}
@@ -69,9 +69,10 @@ func covered(point string, later []mounted) bool {
 	return false
 }
 
-// unescape undoes the octal escapes the kernel writes in a mount table for a
-// space, tab, newline or backslash in a name (\040, \011, \012, \134).
-func unescape(field string) string {
+// Unescape undoes the octal escapes the kernel writes in a mount table and in
+// mountinfo for a space, tab, newline or backslash in a name (\040, \011,
+// \012, \134).
+func Unescape(field string) string {
 	if !strings.Contains(field, `\`) {
 		return field
 	}
