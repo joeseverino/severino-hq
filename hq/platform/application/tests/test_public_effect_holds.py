@@ -11,7 +11,7 @@ from django.test import TestCase, override_settings
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.providers import PROVIDERS, describe_providers
-from hq.platform.application.consent_testing import another_command_writing, consented
+from hq.platform.application.tests.consent import another_command_writing, consented
 
 from ..adoption import ADOPT, ADOPT_SERVICE
 from ..capabilities import NEEDS_APPROVAL, capability_registry, execute_capability

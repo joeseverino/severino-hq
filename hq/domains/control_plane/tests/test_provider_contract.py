@@ -4,7 +4,6 @@ from django.test import TestCase
 
 from hq.platform.application.adoption_testing import managing_everything
 from hq.platform.application.capabilities import execute_capability
-from hq.platform.application.consent_testing import consented
 from hq.platform.application.infrastructure import (
     ManagedResourceCommand,
     controller_contract,
@@ -14,6 +13,7 @@ from hq.platform.application.infrastructure import (
 )
 from hq.platform.application.record_errors import PolicyError
 from hq.platform.application.security import cli_principal
+from hq.platform.application.tests.consent import consented
 
 from ..desired_state import advance_dependents
 from ..models import ManagedResource

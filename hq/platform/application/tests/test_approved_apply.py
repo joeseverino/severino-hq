@@ -8,7 +8,7 @@ since the approval as the copy the change replaced.
 from django.test import TestCase
 
 from hq.domains.control_plane.models import ApprovalRequest, ManagedResource, OperationRequest
-from hq.platform.application.consent_testing import consented
+from hq.platform.application.tests.consent import consented
 
 from ..approvals import ApproveCommand, RejectCommand, approve, reject
 from ..capabilities import execute_capability

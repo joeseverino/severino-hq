@@ -15,7 +15,7 @@ from pydantic import ValidationError
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_adapters.cloudflare import DNS_RECORD_TYPES, DNS_RECORD_TYPES_BY_ID
 from hq.domains.control_plane.providers import PROVIDERS, validate_spec
-from hq.platform.application.consent_testing import consented
+from hq.platform.application.tests.consent import consented
 
 from ..adoption import AdoptCommand, adopt, unmanaged, unmanaged_services
 from ..adoption_testing import managing_everything

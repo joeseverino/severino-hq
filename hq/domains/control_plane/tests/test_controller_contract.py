@@ -18,7 +18,6 @@ from referencing.jsonschema import DRAFT202012
 from hq.domains.control_plane.bridge_actions import ACTIONS
 from hq.domains.control_plane.bridge_contract import contract, limit
 from hq.domains.control_plane.models import DashboardConfiguration, ManagedResource, OperationRequest
-from hq.platform.application.consent_testing import consented
 from hq.platform.application.glance import panel_specs
 from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
 from hq.platform.application.resource_operations import (
@@ -27,6 +26,7 @@ from hq.platform.application.resource_operations import (
     request_reconcile,
 )
 from hq.platform.application.security import cli_principal
+from hq.platform.application.tests.consent import consented
 
 from . import bridge_client
 from .certificate_cases import certificate_spec, declare_targets

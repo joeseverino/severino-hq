@@ -16,7 +16,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ApprovalRequest, ManagedResource, OperationRequest
 from hq.domains.control_plane.providers import PROVIDERS
-from hq.platform.application.consent_testing import consented
+from hq.platform.application.tests.consent import consented
 from hq.platform.core.models import AuditLog
 
 from ..approval_review import compare, preview

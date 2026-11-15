@@ -25,7 +25,7 @@ from hq.domains.control_plane.models import (
     ProviderInventory,
     ReadRequest,
 )
-from hq.platform.application.consent_testing import consented
+from hq.platform.application.tests.consent import consented
 from hq.platform.core.models import AuditLog
 
 from .. import cadence, readings

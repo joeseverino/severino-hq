@@ -32,11 +32,11 @@ from hq.domains.control_plane.models import (
 )
 from hq.platform.application import cadence
 from hq.platform.application.capabilities import execute_capability
-from hq.platform.application.consent_testing import consented
 from hq.platform.application.glance import DASHBOARD_REFRESH
 from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
 from hq.platform.application.resource_operations import OperationCommand, request_reconcile
 from hq.platform.application.security import cli_principal
+from hq.platform.application.tests.consent import consented
 from hq.platform.core.tests.unix_serving import post, served, socket_directory
 
 from .certificate_cases import certificate_spec, declare_targets

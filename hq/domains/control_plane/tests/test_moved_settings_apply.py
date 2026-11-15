@@ -20,10 +20,10 @@ from hq.platform.application import cadence
 from hq.platform.application.adoption_testing import managing_everything
 from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.certificates import UploadCertificateCommand, store_certificate
-from hq.platform.application.consent_testing import consented
 from hq.platform.application.controller import schedule_automatic_operations
 from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
 from hq.platform.application.security import cli_principal
+from hq.platform.application.tests.consent import consented
 from hq.platform.application.tests.test_certificates import SEAL_PUBLIC_KEY, a_certificate
 
 from ..models import ManagedResource, OperationRequest, ProviderInventory

@@ -10,7 +10,6 @@ from django.utils import timezone
 
 from hq.platform.application.adoption_testing import managing_everything
 from hq.platform.application.capabilities import execute_capability
-from hq.platform.application.consent_testing import consented
 from hq.platform.application.controller import claim_next_operation, schedule_automatic_operations
 from hq.platform.application.derivation_testing import frozen
 from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
@@ -23,6 +22,7 @@ from hq.platform.application.resource_operations import (
     request_removal,
 )
 from hq.platform.application.security import MCP_INTERFACE, agent_principal, cli_principal
+from hq.platform.application.tests.consent import consented
 
 from ..models import ManagedResource, OperationRequest
 from ..providers import PROVIDERS

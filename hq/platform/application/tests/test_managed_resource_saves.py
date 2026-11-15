@@ -4,7 +4,7 @@ and as that caller last read it."""
 from django.test import TestCase
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
-from hq.platform.application.consent_testing import consented
+from hq.platform.application.tests.consent import consented
 
 from ..adoption_testing import managing_everything
 from ..capabilities import execute_capability

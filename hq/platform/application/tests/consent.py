@@ -10,10 +10,10 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
 
-from .capabilities import Consented, execute_approved
-from .integration_specs import CapabilitySpec
-from .integration_testing import commands_registered
-from .security import Capability, Principal
+from ..capabilities import Consented, execute_approved
+from ..integration_specs import CapabilitySpec
+from ..integration_testing import commands_registered
+from ..security import Capability, Principal
 
 
 @dataclass(frozen=True, slots=True)

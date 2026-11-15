@@ -9,7 +9,7 @@ from django.test import TestCase, override_settings
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
-from hq.platform.application.consent_testing import consented
+from hq.platform.application.tests.consent import consented
 from hq_sdk.testing import plain
 
 from ..capabilities import execute_capability

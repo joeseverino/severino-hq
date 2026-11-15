@@ -9,7 +9,7 @@ from django.core.management.base import CommandError
 from django.test import TestCase
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
-from hq.platform.application.consent_testing import consented
+from hq.platform.application.tests.consent import consented
 from hq.platform.mcp import services
 from hq.platform.mcp.identity import set_principal
 

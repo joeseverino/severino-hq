@@ -65,7 +65,7 @@ class ConsentTests(TestCase):
         self.assertFalse(OperationRequest.objects.exists())
 
     def test_only_the_runner_makes_a_consent(self):
-        from hq.platform.application.consent_testing import consented
+        from hq.platform.application.tests.consent import consented
 
         from ..capabilities import Consented
 
@@ -81,7 +81,7 @@ class ConsentTests(TestCase):
             given.approved = True  # type: ignore[misc]
 
     def test_a_command_about_something_else_writing_a_gated_kind_as_an_agent_is_refused(self):
-        from hq.platform.application.consent_testing import another_command_writing
+        from hq.platform.application.tests.consent import another_command_writing
 
         from ..capabilities import NEEDS_APPROVAL
 
@@ -96,7 +96,7 @@ class ConsentTests(TestCase):
         self.assertEqual(self.policy(), policy_document())
 
     def test_the_same_command_run_by_a_person_writes(self):
-        from hq.platform.application.consent_testing import another_command_writing
+        from hq.platform.application.tests.consent import another_command_writing
 
         def write(consented):
             save_managed_resource(amended(), consented=consented, current_key=POLICY_KEY)

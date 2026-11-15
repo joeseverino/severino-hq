@@ -12,12 +12,12 @@ from pydantic import ValidationError
 
 from hq.platform.application.action_links import ActionLink
 from hq.platform.application.adoption_testing import managing_everything
-from hq.platform.application.consent_testing import consented
 from hq.platform.application.controller import ControllerReport, report_operation
 from hq.platform.application.finding_model import Finding
 from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.security import cli_principal
+from hq.platform.application.tests.consent import consented
 from hq.platform.application.tests.markup import actions, hrefs, select, text
 from hq.platform.application.topology_model import TopologyNode
 

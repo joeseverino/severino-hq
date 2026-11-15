@@ -13,7 +13,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.providers import registry_label
-from hq.platform.application.consent_testing import consented
+from hq.platform.application.tests.consent import consented
 from hq.platform.core.models import AuditLog
 
 from ..adoption_testing import managing_everything

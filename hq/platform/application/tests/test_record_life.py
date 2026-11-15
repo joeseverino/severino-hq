@@ -17,7 +17,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest, ProviderInventory
-from hq.platform.application.consent_testing import consented
+from hq.platform.application.tests.consent import consented
 
 from ..adoption import AdoptCommand, adopt
 from ..adoption_testing import managing_everything
