@@ -46,7 +46,7 @@ this page in the same commit as the rule.
 
 | Do | Enforced by |
 |---|---|
-| Views never call `.save()`, `.delete()` or a manager's or queryset's bulk write. They reach a domain write only through `run_posted` (or `execute_posted`, its answer alone), and none takes `ServiceWriteMixin` or `CommandFormMixin`, which run a service that is no capability outside the runner. The rule reads the module of every routed view and its bases, whatever the module is called | `hq/platform/application/tests/test_view_writes.py` |
+| Views never call `.save()`, `.delete()` or a manager's or queryset's bulk write. They reach a domain write only through `run_posted` (or `execute_posted`, its answer alone), an installed extension's as the host's. The rule reads the module of every routed view and its bases, whatever the module is called | `hq/platform/application/tests/test_view_writes.py` |
 | A view with `paginate_by` takes `TableListMixin` | `DeliveryAdapterArchitectureTests.test_paginated_list_views_use_the_shared_table_engine` |
 | `hq/platform/mcp/services.py` stays free of models and `.objects`; expose reads through `hq/platform/application/resources.py` and read models | `lint:ast-grep` (`tools/lint/ast-grep/rules/mcp-services-reach-no-model.yml`) |
 | Keep the workflow layering: `workflow_contracts.py` imports nothing of HQ, `ui.py` never reaches `workflows`, `workflows.py` never reaches `action_links` | `lint:imports`, the contracts in `pyproject.toml`'s `[tool.importlinter]` |

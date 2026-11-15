@@ -659,23 +659,47 @@ def reading_a_page(response: HttpResponse) -> None:
     testing.with_class(response)  # type: ignore[call-arg]
 
 
-def saving(command: Any, *, principal: Any) -> dict[str, Any]:
-    return {"ok": True, "message": "Saved."}
+class Submitted(writes.CapabilityCommandMixin):
+    """A command view names the capability its form submits, and may shape
+    what the form sends it; the runner alone writes."""
+
+    submits = "example.notes.adjust"
+    success_url_name = "example_notes:list"
+
+    @override
+    def payload(self, form: Any) -> dict[str, Any]:
+        return {"note": "x"}
+
+    @override
+    def target(self) -> str | int | None:
+        return "a-note"
+
+    @override
+    def capability(self, form: Any) -> str:
+        return self.submits
 
 
-class Saved(writes.CommandFormMixin):
-    """A command view names its service as a staticmethod, which the declaration
-    takes; what the write says is the service's answer's ``message``."""
-
-    service = staticmethod(saving)
+class Unnamed(writes.CapabilityCommandMixin):
+    submits = 3  # type: ignore[assignment]
 
 
-class Unserviced(writes.CommandFormMixin):
-    service = "saving"  # type: ignore[assignment]
+class NoteForm(writes.CapabilityFormMixin):
+    creates = "example.notes.create"
+    updates = "example.notes.update"
+    result_key = "note"
+    identity_attr = "slug"
+
+
+class NoteDelete(writes.CapabilityDeleteMixin):
+    deletes = "example.notes.delete"
+    result_key = "note"
+    identity_attr = "slug"
 
 
 def announcements() -> None:
-    assert_type(writes.ServiceWriteMixin.identity_result_key, str)
+    assert_type(Submitted().runs, tuple[str, ...])
+    assert_type(NoteForm.identity_result_key, str)
+    assert_type(NoteDelete().runs, tuple[str, ...])
 
 
 def a_manifest() -> None:

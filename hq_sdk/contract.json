@@ -2825,27 +2825,19 @@
       }
     },
     "writes": {
-      "CommandFormMixin": {
+      "CapabilityCommandMixin": {
         "bases": [
           "PostedOnce"
         ],
         "constructor": [],
         "kind": "class",
         "members": {
-          "build_command": {
+          "capability": {
             "kind": "method",
             "parameters": [
               "self",
               "form"
             ]
-          },
-          "command": {
-            "kind": "attribute",
-            "type": "NoneType"
-          },
-          "domain_errors": {
-            "kind": "attribute",
-            "type": "tuple"
           },
           "form_valid": {
             "kind": "method",
@@ -2860,46 +2852,43 @@
               "self"
             ]
           },
-          "run": {
-            "kind": "method",
-            "parameters": [
-              "self",
-              "command"
-            ]
-          },
-          "service": {
-            "kind": "attribute",
-            "type": "NoneType"
-          },
-          "success_url_name": {
-            "kind": "attribute",
-            "type": "str"
-          }
-        }
-      },
-      "ServiceCreateMixin": {
-        "bases": [
-          "ServiceWriteMixin"
-        ],
-        "constructor": [],
-        "kind": "class",
-        "members": {
-          "form_valid": {
+          "payload": {
             "kind": "method",
             "parameters": [
               "self",
               "form"
             ]
+          },
+          "runs": {
+            "kind": "property"
+          },
+          "submits": {
+            "kind": "attribute",
+            "type": "str"
+          },
+          "success_url_name": {
+            "kind": "attribute",
+            "type": "str"
+          },
+          "target": {
+            "kind": "method",
+            "parameters": [
+              "self"
+            ]
           }
         }
       },
-      "ServiceDeleteMixin": {
+      "CapabilityDeleteMixin": {
         "bases": [
-          "ServiceWriteMixin"
+          "_RecordWrite"
         ],
         "constructor": [],
         "kind": "class",
         "members": {
+          "deletes": {
+            "kind": "attribute",
+            "type": "str"
+          },
           "form_valid": {
             "kind": "method",
             "parameters": [
@@ -2913,61 +2902,46 @@
               "self",
               "**kwargs"
             ]
+          },
+          "runs": {
+            "kind": "property"
           }
         }
       },
-      "ServiceUpdateMixin": {
+      "CapabilityFormMixin": {
         "bases": [
-          "ServiceWriteMixin"
+          "_RecordWrite"
         ],
         "constructor": [],
         "kind": "class",
         "members": {
+          "adding": {
+            "kind": "property"
+          },
+          "capability": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "form"
+            ]
+          },
+          "creates": {
+            "kind": "attribute",
+            "type": "str"
+          },
           "form_valid": {
             "kind": "method",
             "parameters": [
               "self",
               "form"
             ]
-          }
-        }
-      },
-      "ServiceWriteMixin": {
-        "bases": [
-          "PostedOnce"
-        ],
-        "constructor": [],
-        "kind": "class",
-        "members": {
-          "REQUIRED": {
-            "kind": "attribute",
-            "type": "tuple"
-          },
-          "current_identity": {
-            "kind": "method",
-            "parameters": [
-              "self"
-            ]
-          },
-          "identity_result_key": {
-            "kind": "attribute",
-            "type": "str"
-          },
-          "reload": {
-            "kind": "method",
-            "parameters": [
-              "self",
-              "result"
-            ]
           },
           "runs": {
             "kind": "property"
           },
-          "write_principal": {
-            "kind": "method",
-            "parameters": [
-              "self"
-            ]
+          "updates": {
+            "kind": "attribute",
+            "type": "str"
           }
         }
       }

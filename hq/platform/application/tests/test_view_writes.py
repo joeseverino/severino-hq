@@ -19,7 +19,7 @@ from hq.platform.core.test_runner import plugin_test_modules
 
 from ..routes import routed
 from .source import source_files
-from .writers import DECLARED_SERVICE, DIRECT, OUTSIDE, UNFOLLOWED, view_writes
+from .writers import DECLARED_SERVICE, DIRECT, UNFOLLOWED, view_writes
 
 ROOT = Path(settings.BASE_DIR).resolve()
 EXAMPLE_URLS = "tests.fixtures.example_hq_plugin.urls"
@@ -127,9 +127,10 @@ class ThingView:
 }
 
 
-# Form mixins as ``writes`` declares them: a capability through the runner, a
-# write outside it that the one named way runs, and a write of the view's own;
-# beside them a host view writing outside the runner two ways.
+# Form mixins: one running a capability through the runner, and ways around
+# it (a helper that runs the view's own hook under the posted key, a
+# declared service, a record saved by hand); beside them host views writing
+# outside the runner, by hand and through those ways.
 PLANTED_FORMS = {
     "hq/platform/application/records.py": """
 def save_record(form, *, principal):
@@ -194,9 +195,9 @@ class ThingDelete:
 
 
 # An extension, installed outside the checkout, reaching the host through
-# hq_sdk's re-exports: a capability, a form mixin's hook it overrides, an
-# audit row, a helper of a routed host module its hook calls, and a service
-# of its own.
+# hq_sdk's re-exports: a capability, an audit row, and services of its own,
+# one called by hand and one from the hook of a published mixin that runs it
+# under the posted key.
 PLANTED_SDK = {
     "hq/example/guard.py": """
 def refuse(reason):
@@ -294,7 +295,7 @@ class ViewWriteTests(SimpleTestCase):
         self.assertEqual(
             sorted((write.path, write.function, write.service) for write in found),
             [
-                ("hq.example.forms", "ThingCommand.run", OUTSIDE),
+                ("hq.example.forms", "ThingCommand.run", "hq.example.services.save_thing"),
                 ("hq.example.forms", "ThingDelete.form_valid", UNFOLLOWED),
                 ("hq.example.forms", "ThingForm.form_valid", "hq.example.services.save_thing"),
                 ("hq.example.forms", "ThingForm.form_valid", "hq.platform.application.web_writes.write_once"),
@@ -304,37 +305,17 @@ class ViewWriteTests(SimpleTestCase):
                     "BareRecord.form_valid",
                     "hq.platform.application.records.save_record",
                 ),
-                # The hook the way around the runner runs, called outside it.
+                ("hq.platform.application.writes", "KeyedCommand.run", DECLARED_SERVICE),
+                # The way around the runner is a write of its own.
                 (
                     "hq.platform.application.writes",
-                    "KeyedCommand.form_invalid",
-                    "hq.platform.application.writes.KeyedCommand.run",
+                    "outside_the_runner",
+                    "hq.platform.application.web_writes.write_once",
                 ),
             ],
         )
 
-    def test_no_view_of_the_hosts_takes_a_published_form_mixin(self):
-        """Those mixins run a service that is no capability outside the runner;
-        the host's own views name their capabilities."""
-
-        from ..writes import CommandFormMixin, ServiceWriteMixin
-
-        views = {
-            route.view for route in routed() if isinstance(route.view, type) and route.view.__module__.startswith("hq.")
-        }
-        self.assertTrue(views, "the walk found no routed views")
-        self.assertEqual(
-            sorted(
-                f"{view.__module__}.{view.__qualname__}"
-                for view in views
-                if issubclass(view, (CommandFormMixin, ServiceWriteMixin))
-            ),
-            [],
-            "Name the view's capabilities and run them through run_posted: "
-            "writes.CapabilityFormMixin, writes.CapabilityDeleteMixin, or execute_posted in its form_valid.",
-        )
-
-    def test_an_installed_extension_is_read_through_hq_sdk_and_held_as_the_host_is(self):
+    def test_an_installed_extensions_view_writing_outside_the_runner_is_caught_as_the_hosts_is(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory, "host")
             package = Path(directory, "site", "example_extension")
@@ -345,5 +326,9 @@ class ViewWriteTests(SimpleTestCase):
 
         self.assertEqual(
             [(write.path, write.function, write.service) for write in found],
-            [("example_extension.views", "OtherView.put", "example_extension.services.save_other")],
+            [
+                # A published mixin's hook is the extension's own write, held as the host's is.
+                ("example_extension.views", "OtherForm._saved", "example_extension.services.save_other"),
+                ("example_extension.views", "OtherView.put", "example_extension.services.save_other"),
+            ],
         )

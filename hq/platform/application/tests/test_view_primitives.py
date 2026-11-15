@@ -1,6 +1,5 @@
 """The shared pieces a write or list view is built from: file fields, rows, totals and the write spine."""
 
-from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase, TestCase
 
 
@@ -311,58 +310,3 @@ class ProjectedListTests(TestCase):
         view.setup(RequestFactory().get("/example/"))
 
         self.assertEqual(view.get_queryset().count(), 5)
-
-
-class WriteSpineContractTests(TestCase):
-    """What a write view must declare, enforced where the fix is obvious.
-
-    Both guards exist because the failure they replace is quiet. A service left
-    as a plain function binds as a method and passes the view where the command
-    belongs; a missing result key redirects to a record it cannot find.
-    """
-
-    def _view(self, **attributes):
-        from ..writes import ServiceCreateMixin
-
-        return type("AView", (ServiceCreateMixin,), attributes)
-
-    def test_a_service_that_is_not_a_staticmethod_is_refused(self):
-        with self.assertRaises(ImproperlyConfigured) as caught:
-            self._view(service=lambda command, **kwargs: None)
-
-        self.assertIn("staticmethod", str(caught.exception))
-
-    def test_a_view_that_writes_must_say_what_it_writes(self):
-        with self.assertRaises(ImproperlyConfigured) as caught:
-            self._view(service=staticmethod(lambda command, **kwargs: None))
-
-        self.assertIn("result_key", str(caught.exception))
-        self.assertIn("identity_attr", str(caught.exception))
-
-    def test_a_complete_view_is_accepted(self):
-        view = self._view(
-            service=staticmethod(lambda command, **kwargs: None),
-            result_key="thing",
-            identity_attr="slug",
-        )
-
-        self.assertEqual(view.result_key, "thing")
-
-    def test_a_mixin_that_supplies_no_service_is_not_a_view(self):
-        """Intermediate layers declare part of the contract and finish none of
-        it, so completeness is asked of the class that supplies the service."""
-
-        from ..writes import ServiceCreateMixin
-
-        layer = type("PartialLayer", (ServiceCreateMixin,), {"result_key": "thing"})
-
-        self.assertEqual(layer.result_key, "thing")
-
-    def test_the_base_declares_no_noun_to_collide_with(self):
-        """A placeholder value that is never correct still wins or loses by base
-        order, so which one applies depends on how the bases were written."""
-
-        from ..writes import ServiceWriteMixin
-
-        for name in ("result_key", "identity_attr"):
-            self.assertNotIn(name, vars(ServiceWriteMixin))

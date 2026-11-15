@@ -47,22 +47,6 @@ def request_fingerprint(name: str, envelope: dict[str, Any]) -> str:
     return digest({"api_version": CURRENT_API_VERSION, "capability": name, "request": envelope})
 
 
-def execute_form_once(
-    *, actor: str, key: str, write: str, form: dict[str, Any], operation: Callable[[], dict[str, Any]]
-) -> tuple[dict[str, Any], bool]:
-    """``execute_once`` for an extension's form write that is no capability
-    (``writes.outside_the_runner``), the one keyed write outside the runner.
-
-    ``write`` names the write, as a capability's name does, so the same key
-    and body sent to another form is a conflict, never that form's answer;
-    ``form`` is the post as its fingerprint reads it.
-    """
-
-    return execute_once(
-        actor=actor, key=key, request_sha256=request_fingerprint(f"form:{write}", form), operation=operation
-    )
-
-
 def answered(*, actor: str, key: str) -> dict[str, Any] | None:
     """The answer ``actor``'s ``key`` committed, or None while it has none.
 

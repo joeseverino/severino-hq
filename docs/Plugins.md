@@ -946,8 +946,17 @@ answer, form=form)`. It puts the answer on the form drawn again (each detail
 beside its field) or, without a form, on the next page's messages. It returns
 the refusal, whose `status` the view answers with, or None when the write ran.
 A post no page is drawn for answers `refusal_response(answer)`: the refusal's
-sentence at its status. A form view whose write is a service call of
-its own inherits `hq_sdk.writes`' mixins, which run it once under the same key.
+sentence at its status. A form view whose whole job is one capability
+inherits one of `hq_sdk.writes`' mixins, each naming the capability it runs:
+`CapabilityFormMixin` (`creates`, `updates`) for a record's `ModelForm`,
+`CapabilityDeleteMixin` (`deletes`) for its confirmation, and
+`CapabilityCommandMixin` (`submits`, `success_url_name`, with `payload`,
+`target` and `capability` where a view shapes what a post sends, on which
+record, through which command) for a plain form that shows its page again. A
+write reaches the domain only through the runner: `PLUGIN_API_VERSION` 16
+retires `ServiceCreateMixin`, `ServiceUpdateMixin`, `ServiceDeleteMixin`,
+`ServiceWriteMixin` and `CommandFormMixin`, which ran a service that was no
+capability outside it, so such a service is declared a capability first.
 A service refuses in words the person reads by raising
 `hq_sdk.capabilities.InputError(sentence)`, a sentence the extension wrote
 (`PLUGIN_API_VERSION` 13); any other exception's text stays in the log, and
