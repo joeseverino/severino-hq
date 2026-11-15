@@ -137,7 +137,30 @@ User=%s
 	if err := m.sudoRule(ctx, config.Runner.User); err != nil {
 		return err
 	}
-	return m.run(ctx, "systemctl", "daemon-reload")
+	if err := m.run(ctx, "systemctl", "daemon-reload"); err != nil {
+		return err
+	}
+	return m.startAutomation(ctx, config)
+}
+
+// startAutomation starts the automation worker on a host whose configuration
+// names its entry, for whatever was queued while it named none: the doorbell
+// that announced that work started a worker that took nothing, and nothing
+// rings it again. The worker claims whatever waits, however it was asked,
+// and ends at once when nothing does, so the start needs no knowledge of the
+// queue. Not blocking: the unit is a oneshot that runs as long as its work. A
+// new host bootstraps before its first deploy installs the unit, and that
+// first worker starts from its timer.
+func (m *Machine) startAutomation(ctx context.Context, config Config) error {
+	if config.Automation == nil {
+		return nil
+	}
+	if _, err := os.Stat(filepath.Join(m.Systemd, AutomationUnit)); errors.Is(err, fs.ErrNotExist) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	return m.run(ctx, "systemctl", "start", "--no-block", AutomationUnit)
 }
 
 // sudoRule lets the runner's account deploy and nothing else. The image it

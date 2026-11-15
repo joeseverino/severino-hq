@@ -227,6 +227,9 @@ repository's contents:
 "automation": {"repository": "example/playbooks", "grant": "automation-projects"}
 ```
 
+`hq-host bootstrap` after adding the entry starts the worker, which takes
+whatever was queued before the host had one.
+
 `hq-host controller` reads the grants on every pass, so a grant added there
 takes effect on the next pass with no other step. Install the app on each
 repository a grant names. Until then, each applying pass reports
@@ -309,7 +312,7 @@ from the tree, and every unit and the deploy call it.
 | `install` | installs every shipped unit, renders secrets, preflights the controller and the content index, enables every timer and path |
 | `sync IMAGE` | replaces the tree with the image's, refusing a unit that names a path the tree lacks |
 | `verify` | reports where the host differs from its release: tree, units, anything retired, and the Actions runner's sudo rules. It holds them to one runner unit, not root, with its NOPASSWD rule for `hq-host deploy *`, no unrestricted rule, and no command `sudo -l` lists that HQ does not render. A failure names the command and the grep that finds its file. Root alone can list another account's rules, so the rules are checked here (`severino-hq-script-drift.timer`, daily) |
-| `bootstrap` | renders the drop-ins and sudo rule `host.json` decides |
+| `bootstrap` | renders the drop-ins and sudo rule `host.json` decides, then, when `host.json` has an `automation` entry and a deploy has installed the worker's unit, starts `severino-hq-automation.service` without waiting on it, so a run or scan queued while the host had no entry is taken then |
 | `backup` | snapshots and archives HQ's volumes, where docker says they are ([Backup](Backup.md)) |
 | `upgrade ARGS` | moves one compose service to a pinned image, through its own sudo rule ([Container upgrades](#container-upgrades)) |
 | `unit --serve` | answers one request on the unit socket: stops, starts or restarts the systemd unit a container names in its `severino-hq.unit` label, once that unit's own start commands are found to run the container ([Architecture](Architecture.md#a-container-its-unit-runs)) |
@@ -332,7 +335,7 @@ host adds beside a shipped one is the host's, and `verify` does not compare it.
 | `severino-hq-job@.service` | one scheduled job inside the web container (`hq-controller job NAME`) |
 | `severino-hq-due.timer` | hourly, asks for `due`: every piece of scheduled work, the host's and the extensions', whose cadence (`every=`) has come round |
 | `severino-hq-renovate.service` / `.path` | `hq-host renovate`, when a handoff reaches the spool |
-| `severino-hq-automation.service` / `.timer` / `.path` | `hq-host automation`, when HQ creates the automation doorbell (a run or a Refresh queued), else 15 minutes after each worker ends. The worker removes the doorbell before it claims; one created while it works still stands when it ends, and the path unit starts it again |
+| `severino-hq-automation.service` / `.timer` / `.path` | `hq-host automation`, when HQ creates the automation doorbell (a run or a Refresh queued), at `hq-host bootstrap` on a host with an `automation` entry, else 15 minutes after each worker ends. The worker removes the doorbell before it claims; one created while it works still stands when it ends, and the path unit starts it again |
 | `severino-hq-backup.service` / `.timer` | `hq-host backup`, nightly ([Backup](Backup.md)) |
 | `severino-hq-script-drift.service` / `.timer` | `hq-host verify`, daily |
 | `severino-hq-unit.socket` / `severino-hq-unit@.service` | `hq-host unit --serve`, one instance per connection from the controller |

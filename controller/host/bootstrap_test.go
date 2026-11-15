@@ -106,6 +106,41 @@ func TestBootstrapWritesWhatOnlyTheHostKnows(t *testing.T) {
 	f.before(t, "visudo -c -q -f", "systemctl daemon-reload")
 }
 
+// Work queued while the host named no automation entry is taken once
+// bootstrap reads one, without waiting for the worker's timer.
+func TestBootstrapStartsTheWorkerOnceTheHostNamesItsEntry(t *testing.T) {
+	start := "systemctl start --no-block " + AutomationUnit
+	for name, c := range map[string]struct {
+		entry, installed, starts bool
+	}{
+		"an entry and the unit":      {entry: true, installed: true, starts: true},
+		"no entry":                   {installed: true},
+		"an entry before any deploy": {entry: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newFakeHost(t)
+			config, _ := ReadConfig([]byte(hostJSON))
+			if c.entry {
+				config.Automation = &AutomationConfig{Repository: "example/playbooks"}
+			}
+			if c.installed {
+				if err := os.WriteFile(filepath.Join(f.machine.Systemd, AutomationUnit), []byte("[Service]\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := f.machine.Bootstrap(context.Background(), config); err != nil {
+				t.Fatal(err)
+			}
+			if f.called(start) != c.starts {
+				t.Errorf("worker started: %v, want %v:\n%s", f.called(start), c.starts, strings.Join(f.calls(), "\n"))
+			}
+			if c.starts {
+				f.before(t, "systemctl daemon-reload", start)
+			}
+		})
+	}
+}
+
 func TestARuleVisudoRefusesIsNotInstalled(t *testing.T) {
 	f := newFakeHost(t)
 	f.fail = []string{"visudo"}
