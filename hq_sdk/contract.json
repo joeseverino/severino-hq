@@ -900,6 +900,9 @@
             "kind": "attribute",
             "type": "bool"
           },
+          "look": {
+            "kind": "property"
+          },
           "method": {
             "kind": "attribute",
             "type": "str"

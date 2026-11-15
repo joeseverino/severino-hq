@@ -394,11 +394,10 @@ select.toned:not(.toned-neutral) { border-color: currentColor; }
 /* A command and its copy button, which sits in its corner rather than on a
    line of its own; the command leaves room for it. */
 .command { position: relative; width: fit-content; max-width: 100%; min-width: 0; }
-.command > [data-copy] { position: absolute; inset-block: 0; margin-block: auto; height: fit-content; inset-inline-end: var(--space-2); }
-/* The button stands on the code's dark ground in either palette, so its
-   colors are the code's in every state, and these two rules alone set them:
-   a button's own hover fill is a light one. */
-.command > [data-copy], .command > [data-copy]:hover { color: var(--code-muted); background: transparent; border-color: transparent; box-shadow: none; }
+/* It is a ghost, and stands on the code's dark ground in either palette, so
+   its colors are the code's in every state: a ghost's own hover fill is a
+   light one. */
+.command > [data-copy] { position: absolute; inset-block: 0; margin-block: auto; height: fit-content; inset-inline-end: var(--space-2); color: var(--code-muted); }
 .command > [data-copy]:is(:hover, :focus-visible, :active) { color: var(--code-ink); background: color-mix(in srgb, var(--code-ink) 16%, transparent); }
 .command > .operator-command { margin: 0; padding-inline-end: 4.5rem; }
 /* A command wraps rather than scrolling: selecting it copies it whole. It

@@ -387,7 +387,7 @@ def ask_button(ask, extra=""):
         '<button type="submit" form="{}" formaction="{}" class="{}" data-ask-button{}{}>{}</button>',
         POST_FORM_ID,
         ask.url,
-        " ".join(part for part in (ask.css, extra) if part),
+        button_classes(f"{ask.look} {extra}"),
         format_html_join("", ' {}="{}"', ((key, val) for key, val in attributes.items() if val)),
         mark_safe(" disabled") if ask.disabled else "",
         button_words(ask.label),

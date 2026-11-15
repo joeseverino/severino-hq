@@ -36,7 +36,10 @@ SEVERITY_TONES = {
 # What a button may look like beside a plain one. The button's own class is
 # written by ``button_classes`` alone, so a control that looks like a button
 # is drawn by the button tag (action_tags.button) or a Python part through it.
-BUTTON_LOOKS = frozenset({"primary", "ghost", "danger", "compact"})
+BUTTON_LOOKS = frozenset({"primary", "ghost", "danger", "compact", "link", "menu"})
+# The looks that paint a button's box, which a row of a menu or a link among
+# words is drawn without, so no rule takes that paint back off.
+_PAINTED = frozenset({"primary", "ghost"})
 
 
 def button_classes(look: str = "") -> str:
@@ -46,6 +49,8 @@ def button_classes(look: str = "") -> str:
     unknown = sorted(set(words) - BUTTON_LOOKS)
     if unknown:
         raise ValueError(f"A button looks {', '.join(sorted(BUTTON_LOOKS))}, never {', '.join(unknown)}.")
+    if {"link", "menu"} & set(words):
+        words = [word for word in words if word not in _PAINTED]
     return " ".join(dict.fromkeys(("btn", *words)))
 
 
