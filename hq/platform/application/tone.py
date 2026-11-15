@@ -7,6 +7,8 @@ a field by it; ``ui`` and ``hq_sdk.ui`` export it.
 from collections.abc import Iterable
 from enum import StrEnum
 
+from django.db.models.enums import TextChoices
+
 
 class Tone(StrEnum):
     """How a thing stands, most severe first.
@@ -70,6 +72,15 @@ class Toned(StrEnum):
         """The words it is said in."""
 
         return self.value
+
+
+class TonedChoices(TextChoices, Toned):
+    """A model field's stored states, each declared with its tone between its
+    value and its label, ``ARCHIVED = "archived", Tone.NEUTRAL, "Archived"``,
+    so the column's choices and the color its pill takes are one declaration.
+
+    Its ``label`` is the field's display, which ``{% status %}`` says.
+    """
 
 
 _ORDER = tuple(Tone)

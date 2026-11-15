@@ -5,63 +5,49 @@
 @layer components {
 
 /* ── Tone assignment ─────────────────────────────────────────────────
-   The one place a status name maps to a tone, for every component that has
-   statuses. Grouped by tone rather than by component, so `published`,
-   `done` and `success` cannot become three different greens.
+   The one place a tone maps to its colors, for every component that draws
+   one. A pill takes one of the four tones (`Tone`), never a word of its
+   own: a subject's states declare theirs (`Toned`), so `published`, `done`
+   and `success` cannot become three different greens.
 
    A component decides which fill level it reads (`--tone-bg` for a chip,
    `--tone-wash` for a banner);
-   this section decides only what the tone *is*. Adding a status means adding
-   its class to one of these lists. Adding a component means reading the
-   contract, not restating the colors. */
+   this section decides only what the tone *is*. A notice keeps the four
+   levels Django's messages carry. */
 
-.pill-active, .pill-published, .pill-created, .pill-uploaded, .pill-public, .pill-done,
-.pill-replied, .pill-good, .notice-success, .tone-good {
+.pill-good, .notice-success, .tone-good {
   --tone-bg: var(--tone-positive-bg);
   --tone-wash: var(--tone-positive-wash);
   --tone-ink: var(--tone-positive-ink);
   --tone-line: var(--tone-positive-line);
 }
-.pill-paused, .pill-internal, .pill-attention, .notice-warning, .tone-attention {
+.pill-attention, .notice-warning, .tone-attention {
   --tone-bg: var(--tone-caution-bg);
   --tone-wash: var(--tone-caution-wash);
   --tone-ink: var(--tone-caution-ink);
   --tone-line: var(--tone-caution-line);
 }
-.pill-archived, .pill-deprecated, .pill-retired, .pill-sold, .pill-returned,
-.pill-replaced, .pill-deleted, .pill-login_failed, .pill-denied, .pill-spam,
 .notice-error {
   --tone-bg: var(--tone-critical-bg);
   --tone-wash: var(--tone-critical-wash);
   --tone-ink: var(--tone-critical-ink);
   --tone-line: var(--tone-critical-line);
 }
-.pill-idea, .pill-draft, .pill-viewed, .notice-info {
+.notice-info {
   --tone-bg: var(--tone-info-bg);
   --tone-wash: var(--tone-info-wash);
   --tone-ink: var(--tone-info-ink);
   --tone-line: var(--tone-info-line);
 }
-.pill-completed, .pill-unread {
-  --tone-bg: var(--tone-notable-bg);
-  --tone-ink: var(--tone-notable-ink);
-  --tone-line: var(--tone-notable-line);
-}
-.pill-sensitive, .pill-restricted, .pill-serious, .tone-serious {
+.pill-serious, .tone-serious {
   --tone-bg: var(--tone-severe-bg);
   --tone-ink: var(--tone-severe-ink);
   --tone-line: var(--tone-severe-line);
 }
-.pill-imported, .pill-exported {
-  --tone-bg: var(--tone-special-bg);
-  --tone-ink: var(--tone-special-ink);
-  --tone-line: var(--tone-special-line);
-}
-/* Neutral is already every component's fallback, so these assign nothing.
-   They are still named: a status with no rule and a status deliberately
-   neutral look identical and are not the same claim, and the class has to
-   exist for the template check to find it. */
-.pill-read, .pill-neutral {
+/* Neutral is already every component's fallback, so this assigns nothing.
+   It is still named: a pill with no tone and a pill deliberately neutral
+   look identical and are not the same claim. */
+.pill-neutral {
   --tone-bg: var(--tone-neutral-bg);
   --tone-ink: var(--tone-neutral-ink);
   --tone-line: var(--tone-neutral-line);

@@ -352,8 +352,16 @@ class HistoryLine:
         return actions.pop() if len(actions) == 1 else self.events[0].action
 
     @property
+    def state(self) -> AuditLog.Action | str:
+        """Its action as the member its pill is drawn from; an action HQ no
+        longer names stays its word, drawn in no tone."""
+
+        return AuditLog.Action(self.action) if self.action in AuditLog.Action.values else self.action
+
+    @property
     def action_label(self) -> str:
-        return AuditLog.Action(self.action).label if self.action in AuditLog.Action.values else self.action
+        state = self.state
+        return state.label if isinstance(state, AuditLog.Action) else state
 
     @property
     def message(self) -> str:

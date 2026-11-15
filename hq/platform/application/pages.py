@@ -25,6 +25,7 @@ from django.utils.functional import Promise
 
 from .asks import Ask
 from .fragments import FragmentMixin
+from .tone import Tone
 from .ui import PageNavigation, button_classes
 lazy from .page_reads import remedy
 lazy from .refusal_status import Refusal, refusal_of
@@ -132,7 +133,7 @@ class PageBadge:
     """A short fact beside a page's title: its reach, that it is read-only."""
 
     label: str
-    tone: str = ""
+    tone: Tone | None = None
     title: str = ""
 
 

@@ -5,6 +5,7 @@ from typing import override
 from django.db import models
 from django.urls import reverse
 
+from hq.platform.application.tone import Tone, TonedChoices
 from hq.platform.core.models import TimestampedModel, free_slug
 
 
@@ -20,10 +21,10 @@ class ContentItem(TimestampedModel):
         CASE_STUDY = "case_study", "Case study"
         PAGE = "page", "Page"
 
-    class Status(models.TextChoices):
-        DRAFT = "draft", "Draft"
-        PUBLISHED = "published", "Published"
-        ARCHIVED = "archived", "Archived"
+    class Status(TonedChoices):
+        DRAFT = "draft", Tone.NEUTRAL, "Draft"
+        PUBLISHED = "published", Tone.GOOD, "Published"
+        ARCHIVED = "archived", Tone.NEUTRAL, "Archived"
 
     title = models.CharField(max_length=200)
     slug = models.SlugField(max_length=220, unique=True, blank=True)
@@ -68,6 +69,12 @@ class ContentItem(TimestampedModel):
 
     def get_absolute_url(self) -> str:
         return reverse("content:detail", args=[self.slug])
+
+    @property
+    def state(self) -> ContentItem.Status:
+        """Its status as the member its pill is drawn from, in its words and tone."""
+
+        return self.Status(self.status)
 
     @property
     def tag_list(self) -> list[str]:

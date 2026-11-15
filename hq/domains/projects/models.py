@@ -6,6 +6,7 @@ from django.db import models
 from django.urls import reverse
 
 from hq.platform.application.references import Referable
+from hq.platform.application.tone import Tone, TonedChoices
 from hq.platform.core.models import TimestampedModel, free_slug
 
 PROJECT_CATEGORY_CHOICES = [
@@ -54,13 +55,13 @@ class ProjectQuerySet(models.QuerySet["Project"]):
 
 
 class Project(TimestampedModel):
-    class Status(models.TextChoices):
-        IDEA = "idea", "Idea"
-        ACTIVE = "active", "Active"
-        PAUSED = "paused", "Paused"
-        COMPLETED = "completed", "Completed"
-        PUBLISHED = "published", "Published"
-        ARCHIVED = "archived", "Archived"
+    class Status(TonedChoices):
+        IDEA = "idea", Tone.NEUTRAL, "Idea"
+        ACTIVE = "active", Tone.GOOD, "Active"
+        PAUSED = "paused", Tone.ATTENTION, "Paused"
+        COMPLETED = "completed", Tone.GOOD, "Completed"
+        PUBLISHED = "published", Tone.GOOD, "Published"
+        ARCHIVED = "archived", Tone.NEUTRAL, "Archived"
 
     name = models.CharField(max_length=160)
     slug = models.SlugField(max_length=180, unique=True, blank=True)
@@ -109,6 +110,12 @@ class Project(TimestampedModel):
 
     def get_absolute_url(self) -> str:
         return reverse("projects:detail", args=[self.slug])
+
+    @property
+    def state(self) -> Project.Status:
+        """Its status as the member its pill is drawn from, in its words and tone."""
+
+        return self.Status(self.status)
 
     @property
     def tech_list(self) -> list[str]:

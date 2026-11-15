@@ -841,15 +841,17 @@ the title, what happened and what to do, and the one way back to the dashboard.
 offers the search field. *Catalog:* `part/error-page`,
 `part/error-page-request`.
 
-**A state is a pill drawn by `{% status %}`.** `{% status
-row.get_status_display tone=row.status %}` (`status_tags.py`;
-`hq_sdk.ui.status_pill` from Python) says the state in sentence case
-(`labels.sentence`), whatever its source wrote: Docker's "exited" reads
-"Exited" beside a model's "Done". Its `tone` names its color (`good`,
-`attention`, `serious`, `neutral`, or a status the stylesheet colors), and a
-declared resource's health state ("healthy", "drifted") takes the tone every
-page draws it in. Several parts are one label (`{% status "HQ expects" desired
-tone="serious" %}`); `href`, `title`, `tip`, `css` and `data_*` say the rest.
+**A state is a pill drawn by `{% status %}`.** `{% status row.state %}`
+(`status_tags.py`; `hq_sdk.ui.status_pill` from Python) says the state in
+sentence case (`labels.sentence`), whatever its source wrote: Docker's
+"exited" reads "Exited" beside a model's "Done". Its color is one of the four
+tones (`good`, `attention`, `serious`, `neutral`), never a word of its own:
+`tone` takes a `Tone`, and a subject's state is a `Toned` member that carries
+its words and its tone (a machine's `MachineState`, a model's stored status
+declared as `TonedChoices`, `ARCHIVED = "archived", Tone.NEUTRAL,
+"Archived"`). Any other word is refused where it is drawn. Several parts are
+one label (`{% status "HQ expects" desired tone="serious" %}`); `href`,
+`title`, `tip`, `css` and `data_*` say the rest.
 No template or module writes a pill by hand. With `chip=True` it is one of a
 record's names (a technology, a domain, a role) as a neutral chip, said as
 written and taking no tone, so no template writes a `.tag` by hand. With

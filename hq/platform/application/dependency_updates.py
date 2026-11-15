@@ -24,11 +24,11 @@ from .freshness import RETRY_AFTER, freshness
 from .projection import iso, read_once
 from .refusal_status import RefusalEnvelope, refuse
 from .security import Principal
+from .tone import Tone
 lazy from .cadence import ask, asked_at as read_asked_at
 lazy from .capabilities import command_spec
 lazy from .moments import moment
 lazy from .projects import repository_key
-lazy from .work_runs import TONES
 
 RUN_NOW = "project.dependency_updates.run"
 # Each outcome a run reports, as the job state every page words and tones.
@@ -74,8 +74,8 @@ class Run:
         return SEEN.get(self.outcome, JobState.FAILED)
 
     @property
-    def tone(self) -> str:
-        return TONES[self.seen]
+    def tone(self) -> Tone:
+        return self.seen.tone
 
     def as_record(self) -> dict[str, Any]:
         return {"outcome": self.outcome, "started_at": iso(self.started_at), "finished_at": iso(self.finished_at)}

@@ -126,7 +126,7 @@ close every one.
       What differs per facet is what is not needed, and each facet already
       says that: its own providers are the things it would otherwise want.
       {% endcomment %}
-      {% fact facet.label %}{% status "Not needed" tone="unknown" pill=False %}{% detail %}
+      {% fact facet.label %}{% status "Not needed" tone="neutral" pill=False %}{% detail %}
         {% for kind, label in facet.declarable %}<small>No {{ label|breakable }} needed.</small>{% endfor %}
         {% if facet.id == runtime_facet and not service.provider_answers %}<small>Served by <strong>{{ service.origin.headline|breakable }}</strong> from <code>{{ service.origin.address|breakable }}</code></small>{% endif %}
         {% partial reading_lines %}
@@ -175,12 +175,12 @@ close every one.
       {% comment %}HQ's own service: derived, never declared, never offered anything.{% endcomment %}
       {% fact facet.label %}{{ hq_label|breakable }}{% detail %}<small>Runs on {% entity hq_machine %}</small>{% partial reading_lines %}{% endfact %}
     {% elif facet.not_visible and not facet.reading_lines %}
-      {% fact facet.label %}{% status "Not visible" tone="unknown" pill=False %}{% detail %}
-        <small>{% status facet.not_visible tone="unknown" pill=False %}</small>
+      {% fact facet.label %}{% status "Not visible" tone="neutral" pill=False %}{% detail %}
+        <small>{% status facet.not_visible tone="neutral" pill=False %}</small>
         {% if not read_only %}{% for kind, label in facet.declarable %}<small><a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Add {{ label|breakable }}{% arrow %}</a></small>{% endfor %}{% endif %}
       {% endfact %}
     {% elif read_only %}
-      {% fact facet.label %}{% status "Not set up" tone="unknown" pill=False %}{% detail %}{% partial reading_lines %}{% endfact %}
+      {% fact facet.label %}{% status "Not set up" tone="neutral" pill=False %}{% detail %}{% partial reading_lines %}{% endfact %}
     {% else %}
       {% comment %}
       Each offer is named by the provider's own label. The bare kind reads as
@@ -193,8 +193,8 @@ close every one.
       sentence turns it into an answer, and each one names the alternative
       that does work.
       {% endcomment %}
-      {% fact facet.label %}{% status "Not set up" tone="unknown" pill=False %}{% detail %}
-        <small>{% status "HQ has none for" service.hostname|add:"." tone="unknown" pill=False %}</small>
+      {% fact facet.label %}{% status "Not set up" tone="neutral" pill=False %}{% detail %}
+        <small>{% status "HQ has none for" service.hostname|add:"." tone="neutral" pill=False %}</small>
         {% for kind, label in facet.declarable %}<small><a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Add {{ label|breakable }}{% arrow %}</a></small>{% endfor %}
         {% for label, reason in facet.unavailable %}<small>{{ label|breakable }} {{ reason|breakable }}</small>{% endfor %}
         {% partial reading_lines %}

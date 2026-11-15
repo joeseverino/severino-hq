@@ -14,7 +14,6 @@ import json
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from enum import StrEnum
 from typing import Any, Literal
 
 from django.db.models import Case, CharField, Exists, F, IntegerField, OuterRef, Q, QuerySet, Value, When
@@ -32,7 +31,7 @@ from .automation_runs import capability_name, resource_key, run_title
 from .conditions import PROBLEMS, holding
 from .doors import NOBODY, Attribution
 from .routes import reverse
-from .tone import Tone
+from .tone import Tone, Toned
 lazy from .automation_adoption import playbook_titles
 lazy from .automation_sources import REFRESH, SOURCE_KEY, capability_specs
 lazy from .cadence import automation_standing
@@ -43,37 +42,18 @@ type Source = Literal["job", "run"]
 JOB: Source = "job"
 RUN: Source = "run"
 
-# Each state's tone, the same for a job and a run on every page that says
-# one: work waiting its turn is paused, work under way active.
-TONES = {
-    JobState.QUEUED: "paused",
-    JobState.RUNNING: "active",
-    JobState.SUCCEEDED: Tone.GOOD,
-    JobState.FAILED: Tone.SERIOUS,
-    # Stopped early: a process or a worker that vanished, a restart to look at
-    # rather than a fault to read.
-    JobState.LOST: Tone.ATTENTION,
-}
+
+class TaskOutcome(Toned):
+    """What a run's task did on one host (the bridge's ``RunEvent``), in the
+    tone a run's state takes for the same news."""
+
+    OK = "ok", Tone.GOOD
+    CHANGED = "changed", Tone.GOOD
+    SKIPPED = "skipped", Tone.NEUTRAL
+    FAILED = "failed", Tone.SERIOUS
+    UNREACHABLE = "unreachable", Tone.SERIOUS
 
 
-class TaskOutcome(StrEnum):
-    """What a run's task did on one host (the bridge's ``RunEvent``)."""
-
-    OK = "ok"
-    CHANGED = "changed"
-    SKIPPED = "skipped"
-    FAILED = "failed"
-    UNREACHABLE = "unreachable"
-
-
-# Each task outcome in the same vocabulary as the run's state.
-OUTCOME_TONES = {
-    TaskOutcome.OK: Tone.GOOD,
-    TaskOutcome.CHANGED: "active",
-    TaskOutcome.SKIPPED: "paused",
-    TaskOutcome.FAILED: Tone.SERIOUS,
-    TaskOutcome.UNREACHABLE: Tone.SERIOUS,
-}
 # The outcomes a run's audit trail records one row each: what changed a
 # machine or went wrong. Every outcome stays in the run's result.
 AUDITED_OUTCOMES = frozenset({TaskOutcome.CHANGED, TaskOutcome.FAILED, TaskOutcome.UNREACHABLE})
@@ -177,7 +157,7 @@ class WorkRun:
     # Its state as seen (``JobState``'s value), in words and as a tone.
     state: str
     word: str
-    tone: str
+    tone: Tone
     # What it is doing or how it ended, in a sentence.
     note: str
     # Who asked for it, through which door, and who approved it, from its audit row.
@@ -557,7 +537,7 @@ def job_run(job: Job, title: str = "", by: Attribution = NOBODY) -> WorkRun:
         kind=job.kind,
         state=seen.value,
         word=seen.label,
-        tone=TONES[seen],
+        tone=seen.tone,
         note=job.seen_error if seen in ENDED_BADLY else job.note,
         by=by,
         created_at=job.created_at,
@@ -581,7 +561,13 @@ def standing_tone(state: str, word: str) -> str:
 
     seen = next((seen for seen in JobState if seen.label == word), None)
     seen = seen or next((seen for seen, stands in STANDS.items() if stands == state), None)
-    return TONES[seen] if seen else ""
+    return seen.tone if seen else ""
+
+
+def outcome_tone(outcome: str) -> str:
+    """A task outcome's tone; "" for one the bridge names that HQ does not."""
+
+    return next((each.tone for each in TaskOutcome if each == outcome), "")
 
 
 def standing_word(state: str) -> str:
@@ -608,7 +594,7 @@ def _run_row(
         if stuck
         else (PROBLEM_FOUND, PROBLEM_TONE)
         if problem
-        else (seen.label, TONES[seen])
+        else (seen.label, seen.tone)
     )
     started, finished = operation.claimed_at, operation.completed_at
     return WorkRun(
@@ -641,8 +627,7 @@ def _run_row(
             lease_until=operation.lease_expires_at if claimed else None,
             attempts=operation.attempt_count,
             events=tuple(
-                {**event, "tone": OUTCOME_TONES.get(event.get("outcome", ""), "")}
-                for event in result.get("events") or ()
+                {**event, "tone": outcome_tone(event.get("outcome", ""))} for event in result.get("events") or ()
             ),
             stated=stated_kinds(result),
             expected=str(status.get("expected_fingerprint_sha256") or ""),

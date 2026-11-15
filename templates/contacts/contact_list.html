@@ -42,7 +42,7 @@
           <div class="muted">{% cell_line s.email %}</div>
         </td>
         <td>{% url 'contacts:detail' s.id as message_url %}{% cell_line s.message_preview message_url %}</td>
-        <td>{% status s.status tone=s.status %}{% if s.pending %} {% status "Waiting" tone="attention" %}{% endif %}</td>
+        <td>{% status s.state %}{% if s.pending %} {% status "Waiting" tone="attention" %}{% endif %}</td>
         <td class="muted">{{ s.country|or_empty }}</td>
         {% row_actions s.actions gap=gap %}
       </tr>

@@ -40,23 +40,51 @@ class StatusPillTests(SimpleTestCase):
         """A record's "drifted" or "healthy" is a state, not a class the
         stylesheet colors, so it is said as its tone."""
 
-        for state, tone in (("healthy", "good"), ("drifted", "serious"), ("pending", "attention")):
+        from hq.platform.application.infrastructure import ResourceState
+
+        for state in ResourceState:
             with self.subTest(state):
                 pill = elements(_drawn("{% status label tone=state %}", label="Working", state=state), "span")[0]
-                self.assertIn(f"pill-{tone}", pill.attrs["class"].split())
+                self.assertEqual(pill.attrs["class"].split(), ["pill", f"pill-{state.tone}"])
 
     def test_a_subjects_state_is_drawn_in_its_own_words_and_tone(self):
-        """A machine's or a container's state carries both, so a page names
-        neither, and its pill is colored by its tone, never by its word."""
+        """Every subject's states carry both (a machine's, a container's, a
+        model's stored status), so a page names neither, and its pill is
+        colored by its tone, never by its word."""
 
         from hq.platform.application.container_state import ContainerState
         from hq.platform.application.machines import MachineState
+        from hq.platform.application.tone import Toned
 
-        for state in (*MachineState, *ContainerState):
-            with self.subTest(state):
+        def subjects(kind):
+            for each in kind.__subclasses__():
+                yield each
+                yield from subjects(each)
+
+        states = {*MachineState, *ContainerState, *(state for kind in subjects(Toned) for state in kind)}
+        for state in states:
+            with self.subTest(f"{type(state).__qualname__}.{state.name}"):
                 pill = elements(_drawn("{% status state %}", state=state), "span")[0]
                 self.assertEqual(pill.attrs["class"].split(), ["pill", f"pill-{state.tone}"])
-                self.assertEqual(pill.words.lower(), state.label)
+                self.assertEqual(pill.words.lower(), state.label.lower())
+
+    def test_a_models_stored_states_each_take_one_of_the_four_tones(self):
+        """A stored status (an asset's "retired", a message's "unread") is
+        declared with its tone, and its pill says it in the model's label."""
+
+        from hq.domains.assets.models import Asset
+        from hq.domains.contacts.forms import SubmissionStatus
+        from hq.platform.core.models import AuditLog
+
+        for state, label, tone in (
+            (Asset.Status.RETIRED, "Retired", "neutral"),
+            (SubmissionStatus.UNREAD, "Unread", "attention"),
+            (AuditLog.Action.LOGIN_FAILED, "Login failed", "serious"),
+        ):
+            with self.subTest(state):
+                pill = elements(_drawn("{% status state %}", state=state), "span")[0]
+                self.assertEqual(pill.words, label)
+                self.assertEqual(pill.attrs["class"].split(), ["pill", f"pill-{tone}"])
 
     def test_several_parts_are_one_label_only_the_first_cased(self):
         pill = elements(_drawn('{% status record_type "not managed" %}', record_type="cname"), "span")[0]
@@ -87,7 +115,7 @@ class StatusPillTests(SimpleTestCase):
         """A figure that says which way it went keeps its words and its tone,
         with no pill around it; no tone is neutral."""
 
-        for tone, shown in (("good", "good"), ("drifted", "serious"), ("", "neutral")):
+        for tone, shown in (("good", "good"), ("attention", "attention"), ("", "neutral")):
             with self.subTest(tone):
                 drawn = elements(_drawn('{% status "+3 bpm" tone=tone pill=False %}', tone=tone), "span")[0]
                 self.assertEqual(drawn.words, "+3 bpm")
@@ -181,16 +209,20 @@ class StatusPillTests(SimpleTestCase):
                 self.assertIn(frame, drawn.classes)
 
     def test_a_word_that_is_no_tone_is_refused_wherever_a_tone_colors_words(self):
-        """A misspelled tone fails where it is drawn, never drawn as neutral."""
+        """A misspelled tone fails where it is drawn, never drawn as neutral,
+        and a pill is never colored by a word of its own (a model's "archived",
+        a resource's "drifted"): only a Tone or a subject's Toned state."""
 
         for source in (
             "{{ tone|tone_class }}",
+            '{% status "Example" tone=tone %}',
             '{% status "Example" tone=tone dot=True %}',
             '{% status "Example" tone=tone pill=False %}',
             '{% status "Example" tone=tone icon="shield" pill=False %}',
         ):
-            with self.subTest(source), self.assertRaises(ValueError):
-                _drawn(source, tone="goood")
+            for word in ("goood", "archived", "drifted"):
+                with self.subTest(source, word=word), self.assertRaises(ValueError):
+                    _drawn(source, tone=word)
 
 
 # A class a status draws, which a template writing it by hand would spell itself,

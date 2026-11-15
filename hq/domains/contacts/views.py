@@ -29,7 +29,7 @@ from hq.platform.application.ui import counted
 from hq.platform.application.web_writes import execute_posted, refused
 
 from . import inbox
-from .forms import STATUS_CHOICES, ContactReviewForm
+from .forms import STATUS_CHOICES, ContactReviewForm, submission_state
 
 STATUS_LABELS = dict(STATUS_CHOICES)
 GONE = "That message was not found."
@@ -95,7 +95,12 @@ def contact_list(request):
         {
             "not_read": current.state == inbox.NOT_READ,
             "submissions": [
-                {**each, "unread": each.get("status") == "unread", "actions": _row_actions(each)}
+                {
+                    **each,
+                    "state": submission_state(each),
+                    "unread": each.get("status") == "unread",
+                    "actions": _row_actions(each),
+                }
                 for each in submissions
             ],
             "status_tabs": status_tabs,
@@ -151,6 +156,7 @@ def contact_detail(request, pk: int):
         "contacts/contact_detail.html",
         {
             "submission": submission,
+            "state": submission_state(submission),
             "reply_href": reply,
             "form": form,
             "gap": change_gap(),

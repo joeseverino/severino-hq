@@ -385,7 +385,7 @@ def service_summary(service) -> tuple[SummaryItem, ...]:
                 "Health",
                 service.health.label,
                 detail=_health_detail(service),
-                tone=service.status,
+                tone=service.tone,
                 icon="activity",
             ),
             # Where it runs only when there is no path to show it: the path

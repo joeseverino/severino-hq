@@ -57,7 +57,7 @@ lazy from hq.platform.application.github_estate import Repository
 lazy from hq.platform.application.github_posture import posture_of
 lazy from hq.platform.application.path_model import Certificate, Hop, Route
 lazy from hq.platform.application.request_path import CONTRADICTED, PROVEN, HopCheck
-lazy from hq.platform.application.work_runs import RunEvidence
+lazy from hq.platform.application.work_runs import RunEvidence, outcome_tone
 
 # The fields of an example record, as a change sets them and as two records hold them.
 _CHANGED_AFTER = {
@@ -636,10 +636,10 @@ def _palette():
     }
 
 
-def _event(task: str, outcome: str, tone: str, *, host: str = "example-01", message: str = "") -> dict:
+def _event(task: str, outcome: str, *, host: str = "example-01", message: str = "") -> dict:
     """A task's outcome as a run reports it (the bridge's ``RunEvent``), with its tone."""
 
-    return {"host": host, "task": task, "outcome": outcome, "message": message, "tone": tone}
+    return {"host": host, "task": task, "outcome": outcome, "message": message, "tone": outcome_tone(outcome)}
 
 
 _LONG_HOST = "example-machine-with-a-long-name-01.example.com"
@@ -647,7 +647,7 @@ _EXAMPLE_RUNS = (
     (
         "Run example.cache_flush",
         "Running",
-        "active",
+        JobState.RUNNING.tone,
         "Applying the example playbook.",
         RunEvidence(
             hosts=("example-01", "example-02"),
@@ -655,16 +655,16 @@ _EXAMPLE_RUNS = (
             worker="example-automation-worker",
             lease_until=datetime(2026, 3, 2, 9, 35, tzinfo=UTC),
             events=(
-                _event("Flush the example cache", "changed", "active"),
-                _event("Check the example cache", "ok", "good", host="example-02"),
+                _event("Flush the example cache", "changed"),
+                _event("Check the example cache", "ok", host="example-02"),
             ),
         ),
     ),
-    ("Refresh playbooks", "Queued", "paused", "Waiting for HQ to start it.", RunEvidence()),
+    ("Refresh playbooks", "Queued", JobState.QUEUED.tone, "Waiting for HQ to start it.", RunEvidence()),
     (
         "Run example.package_upgrade",
         "Failed",
-        "serious",
+        JobState.FAILED.tone,
         "The example upgrade failed on one machine.",
         RunEvidence(
             hosts=(_LONG_HOST,),
@@ -673,7 +673,6 @@ _EXAMPLE_RUNS = (
                 _event(
                     "Upgrade every example package to the release the example repository pins",
                     "failed",
-                    "serious",
                     host=_LONG_HOST,
                     message="example-package-with-a-long-name 2.0.1 conflicts with "
                     "example-other-package-with-a-long-name 1.4.0, which the example machine also holds.",
@@ -684,17 +683,14 @@ _EXAMPLE_RUNS = (
     (
         "Run example.disk_report",
         "Done",
-        "good",
+        JobState.SUCCEEDED.tone,
         "Reported every example disk.",
         RunEvidence(
             hosts=("example-01",),
             stated=("example.filesystem", "example.reading_with_a_longer_name"),
             events=tuple(
-                _event(f"Example task {number}", outcome, tone)
-                for number, (outcome, tone) in enumerate(
-                    (("ok", "good"), ("changed", "active"), ("skipped", "paused"), ("unreachable", "serious")) * 3,
-                    start=1,
-                )
+                _event(f"Example task {number}", outcome)
+                for number, outcome in enumerate(("ok", "changed", "skipped", "unreachable") * 3, start=1)
             ),
         ),
     ),

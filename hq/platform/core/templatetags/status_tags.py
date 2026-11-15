@@ -26,7 +26,6 @@ from hq.platform.application.labels import sentence
 from hq.platform.application.page_parts import html_attributes
 from hq.platform.application.tone import Tone, Toned
 from hq.platform.core.templatetags.value_tags import breakable
-lazy from hq.platform.application.infrastructure import ResourceState
 lazy from hq.platform.application.ui import ended, severity_tone as _severity_tone
 
 register = template.Library()
@@ -37,14 +36,22 @@ INKS = frozenset(get_args(Ink))
 
 
 def _tone(tone: str | Toned) -> str:
-    """The tone class a state is drawn in. A subject's state (``Toned``: a
-    machine's, a declared resource's) is said as its tone, a resource health
-    word ("healthy", "drifted") as ``ResourceState``'s; any other word names
-    its own pill (`pill-attention`, `pill-archived`)."""
+    """The tone a state is drawn in: a subject's state (``Toned``: a
+    machine's, a declared resource's) its own, else a ``Tone`` by its value,
+    else none. A word that is neither (a model's "archived") is refused, so a
+    pill's color is only ever one of the four tones."""
 
     if isinstance(tone, Toned):
         return tone.tone
-    return ResourceState(tone).tone if tone in ResourceState else tone
+    if not tone:
+        return ""
+    try:
+        return Tone(tone)
+    except ValueError:
+        raise ValueError(
+            f"A status is drawn in a Tone ({', '.join(Tone)}) or a Toned state; got {tone!r}. "
+            "Declare its subject's states as a Toned enum (TonedChoices for a model's) and pass the member."
+        ) from None
 
 
 def _toned(tone_class: str) -> Tone:
@@ -65,7 +72,7 @@ def _form(tone_class: str, *, pill: bool, chip: bool, dot: bool, ink: Ink) -> st
     "context"), or a pill."""
 
     # Each assigned whole to `classes`, so the stylesheet's usage check and the
-    # browser gate's selector check read the `toned-` and `pill-` families.
+    # browser gate's selector check read the `toned-` family.
     if chip:
         classes = "tag"
     elif dot and ink == "context":
@@ -77,8 +84,20 @@ def _form(tone_class: str, *, pill: bool, chip: bool, dot: bool, ink: Ink) -> st
     elif not pill:
         classes = f"toned toned-{_toned(tone_class)}"
     else:
-        classes = f"pill pill-{tone_class}" if tone_class else "pill"
+        classes = "pill"
+        if tone_class:
+            classes = f"{classes} {_PILL_TONES[Tone(tone_class)]}"
     return classes
+
+
+# Each written whole, so a pill is colored by one of the four tones and the
+# stylesheet's usage check reads any other `pill-` rule as one nothing draws.
+_PILL_TONES = {
+    Tone.GOOD: "pill-good",
+    Tone.ATTENTION: "pill-attention",
+    Tone.SERIOUS: "pill-serious",
+    Tone.NEUTRAL: "pill-neutral",
+}
 
 
 def _refuse_mixed(*, tone: str, pill: bool, chip: bool, dot: bool, ink: str, icon: str) -> None:
@@ -131,7 +150,7 @@ def status_pill(
     if not tone and parts and isinstance(parts[0], Toned):
         tone = parts[0]
     _refuse_mixed(tone=tone, pill=pill, chip=chip, dot=dot, ink=ink, icon=icon)
-    words = [str(part) for part in parts if part not in (None, "")]
+    words = [str(part.label if isinstance(part, Toned) else part) for part in parts if part not in (None, "")]
     if words and not chip:
         words[0] = sentence(words[0])
     label = mark_safe(" ".join(str(breakable(word)) for word in words))  # noqa: S308 - each word is escaped by breakable
@@ -191,7 +210,7 @@ def _field(thing, name: str) -> str:
 def urgency_tone(item):
     """A queue item's tone: a notice reads as news, the rest as how urgent."""
 
-    return "idea" if _field(item, "notice") not in ("", "False") else _field(item, "status")
+    return Tone.NEUTRAL if _field(item, "notice") not in ("", "False") else _field(item, "status")
 
 
 @register.filter
@@ -214,7 +233,7 @@ def drift_tip(reading):
 def status(
     *parts, tone="", css="", href="", title="", tip="", pill=True, chip=False, dot=False, ink="tone", icon="", **data
 ):
-    """``{% status row.get_status_display tone=row.status %}``: a state as a pill,
+    """``{% status "Blocked" tone="attention" %}``: a state as a pill in a Tone,
     a subject's state in its own words and tone (``{% status machine.state %}``),
     or with ``pill=False`` as its words in its tone (``{% status change tone="good" pill=False %}``),
     or with ``dot=True`` as those words after a steady dot (``{% status "Allowed" tone="good" dot=True %}``),
