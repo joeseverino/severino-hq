@@ -150,8 +150,9 @@ STRAYS_OPENING_A_LINE = (
     + PAINTED_PART
     + TEXT_SHOWN
     + r"""
-  // A middle dot, a bullet, a bar, a slash, an en or an em dash.
-  const SEPARATOR = /^[·•|\/\u2013\u2014]/;
+  // A middle dot, a bullet, a bar, an en or an em dash, or a slash standing
+  // alone: one a word follows ("/api") is a path.
+  const SEPARATOR = /^(?:[·•|\u2013\u2014]|\/(?!\S))/;
   const MARKS_ONLY = /^[^\p{L}\p{N}]*$/u;
   const TYPED = 'textarea, input:not([type=checkbox], [type=radio], [type=image], [type=range], [type=color], [type=file])';
   const range = document.createRange();
@@ -550,7 +551,9 @@ CUT_DECISIONS = (
 # (tables.css) rather than break the name. A table in a narrow box has none
 # left, a line past a clamp is not drawn, and what wraps by design (`wraps`,
 # figures.css: a row's own name, free text, a context line) and an opened row
-# are not counted.
+# are not counted. A short name (`data-short`) holds its line only where its
+# table is wide enough to say so (`nowrap`, tables.css), and breaks at its
+# seams elsewhere.
 BROKEN_TOKENS = (
     "([tokens, wraps]) => {"
     + DESCRIBE
@@ -562,6 +565,8 @@ BROKEN_TOKENS = (
     const table = token.closest('table');
     const narrow = narrowBox(table);
     if (narrow || token.closest(wraps) || token.closest('tr:has(> * > [aria-expanded="true"])')) continue;
+    const style = getComputedStyle(token);
+    if (!style.whiteSpace.startsWith('nowrap') && style.textWrapMode !== 'nowrap') continue;
     const lines = [];
     const walker = document.createTreeWalker(token, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {

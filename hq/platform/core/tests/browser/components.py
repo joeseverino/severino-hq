@@ -75,6 +75,7 @@ from hq.platform.core.tests.browser.probes.text import (
     IDENTIFIER,
     LINES_SHORT_OF_THEIR_ROOM,
     OVERLAPPING_TEXT,
+    STRAYS_OPENING_A_LINE,
     TOUCHING_TEXT,
 )
 from hq.platform.core.tests.browser.reading import probe
@@ -935,6 +936,23 @@ class ComponentLayoutTests(LayoutBrowserTests):
         ]
         planted = [line.split(" breaks before ")[1][:5] for line in found]
         self.assertEqual([start for start in planted if start in {'"aaaa', '"cccc', '"eeee', '"exam'}], ['"exam'])
+
+    def test_a_slash_alone_opening_a_line_is_a_stray_and_a_path_is_not(self):
+        """A slash standing between two words reads as a separator when a
+        line opens on it; a path ("/api") opening a line is a value."""
+
+        self.open(next(iter(PAGES)), WIDE)
+        self.page.evaluate("""() => {
+          for (const words of ['example aaaa / bbbb', 'example cccc /dddd']) {
+            const dd = document.createElement('dd');
+            dd.textContent = words;
+            dd.style.cssText = 'margin: 0; padding: 0; font: 16px/1.5 monospace; inline-size: 13ch; text-wrap: wrap';
+            document.querySelector('main').prepend(dd);
+          }
+        }""")
+        found = self.page.evaluate(STRAYS_OPENING_A_LINE, [SELECTORS["unseen"], IDENTIFIER])
+        planted = [line.split(": ", 1)[1] for line in found if '"/' in line]
+        self.assertEqual(planted, ['"/ bbbb"'])
 
     def test_an_identifier_split_at_its_seams_is_one_run_and_a_plain_word_is_not(self):
         """An identifier wider than its line breaks at its seam and then
@@ -1924,6 +1942,37 @@ class ComponentLayoutTests(LayoutBrowserTests):
             self.assertEqual(self.page.evaluate(region, name), ["visible", None])
         self.assertEqual(self.page.evaluate(TABLE_PROMISES, SELECTORS["table_scroll"]), [])
         self.assertEqual(self.page.evaluate(SIDEWAYS, SELECTORS["sideways"]), [])
+
+    def test_a_short_name_is_broken_only_where_its_table_holds_it(self):
+        """A short name its table holds on its line (`nowrap`) and something
+        inside breaks anyway is found; one its table lets break at its seams,
+        in a box too narrow to hold it, is not."""
+
+        self.open(next(iter(PAGES)), WIDE)
+        self.page.evaluate("""() => {
+          const table = document.createElement('table');
+          table.className = 'data-table';
+          table.style.cssText = 'table-layout: fixed; inline-size: 12ch';
+          const row = table.createTBody().insertRow();
+          for (const [name, hold] of [['example-held-name', 'nowrap'], ['example-free-name', 'normal']]) {
+            const token = document.createElement('span');
+            token.className = 'token';
+            token.setAttribute('data-short', '');
+            token.style.whiteSpace = hold;
+            const inner = document.createElement('span');
+            inner.style.whiteSpace = 'normal';
+            inner.textContent = name;
+            token.append(inner);
+            const cell = row.insertCell();
+            cell.style.cssText = 'padding: 0; overflow-wrap: anywhere';
+            cell.append(token);
+          }
+          document.querySelector('main').prepend(table);
+        }""")
+        found = self.page.evaluate(
+            BROKEN_TOKENS, ["table:not(.table-scroll *) td .token", SELECTORS["wraps_in_a_cell"]]
+        )
+        self.assertEqual([line.split(" breaks ")[1] for line in found], ['"example-held-name"'])
 
     @with_script
     def test_an_identifier_in_a_table_is_whole_while_a_column_can_leave(self):
