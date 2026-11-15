@@ -208,11 +208,6 @@ def _cut(markup: str, start: int, end: int, cuts: list[tuple[int, int]]) -> str:
     return "".join(parts)
 
 
-# The values an extension's region still passes as ``room``, which says
-# nothing to a table laid out by the browser.
-_ROOMS = frozenset({"", "shared", "snug"})
-
-
 def _region(
     label: str,
     *,
@@ -220,7 +215,6 @@ def _region(
     chart: bool = False,
     pane: bool = False,
     compare: bool = False,
-    room: str = "",
     empty: str = "",
     remedy: Any = None,
     action_url: str = "",
@@ -231,7 +225,7 @@ def _region(
     """The region a table sits in: the box it fits, named by ``label``.
 
     A table fits its region by letting ranked columns go (docs/Design.md, A
-    table fits its box); ``room`` is accepted and draws nothing. A
+    table fits its box). A
     ``compare`` table sets two values side by side in each row, after the
     row's name. Only a ``pane`` (a box of its own height) and a ``chart``'s
     table scroll in it, and each is a stop for the keyboard. A chart's table
@@ -245,8 +239,6 @@ def _region(
     ``clear``.
     """
 
-    if room not in _ROOMS:
-        raise ValueError(f"A region's room is one of {sorted(_ROOMS)}, not {room!r}.")
     classes = [
         *([css] if css else []),
         *(["is-pane"] if pane else []),

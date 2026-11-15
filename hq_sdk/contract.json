@@ -1753,10 +1753,6 @@
               "self"
             ]
           },
-          "table_room": {
-            "kind": "attribute",
-            "type": "str"
-          },
           "table_search_fields": {
             "kind": "attribute",
             "type": "tuple"
@@ -3610,7 +3606,6 @@
           "chart=",
           "pane=",
           "compare=",
-          "room=",
           "empty=",
           "remedy=",
           "action_url=",

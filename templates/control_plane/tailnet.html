@@ -40,7 +40,7 @@
 
   {% section "Groups and tags" count=tailnet.group_rows %}
   {% if tailnet.group_rows %}
-  {% table_region "Groups and tags" room="snug" %}
+  {% table_region "Groups and tags" %}
     <table class="data-table">
       <thead><tr>{% table_heading "Name" "identifier" gutter=True local_sort=True %}{% table_heading "Members" "identifier" local_sort=True %}{% table_heading "Devices" drop=1 local_sort=True %}</tr></thead>
       <tbody>
@@ -77,7 +77,7 @@
   {% endcomment %}
   {% if tailnet.policy.services %}
     {% section "Services" count=tailnet.policy.services|length %}
-    {% table_region "Tailnet services" room="snug" %}
+    {% table_region "Tailnet services" %}
       <table class="data-table">
         <thead><tr>{% table_heading "Service" "identifier" gutter=True local_sort=True %}{% table_heading "Answers at" "identifier" local_sort=True %}{% table_heading "Ports" "identifier" drop=2 local_sort=True %}{% table_heading "Note" drop=1 local_sort=True %}</tr></thead>
         <tbody>
@@ -103,7 +103,7 @@
     they are not.
     {% endcomment %}
     {% section "Shell access" count=tailnet.ssh_rules|length %}
-    {% table_region "Shell access" room="snug" %}
+    {% table_region "Shell access" %}
       <table class="data-table">
         <thead><tr>{% table_heading "From" gutter=True local_sort=True %}{% table_heading "To" local_sort=True %}{% table_heading "As" "identifier" drop=2 local_sort=True %}{% table_heading "Re-authenticate" "status" drop=1 local_sort=True %}</tr></thead>
         <tbody>

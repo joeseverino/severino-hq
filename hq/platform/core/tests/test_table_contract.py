@@ -167,7 +167,6 @@ class TableTagTests(SimpleTestCase):
 
         for options, stop in (
             ("", False),
-            (' room="shared"', False),
             (" compare=True", False),
             (" pane=True", True),
             (" chart=True", True),
@@ -275,16 +274,6 @@ class TableTagTests(SimpleTestCase):
         self.assertEqual((words.startswith("Add a run"), href), (True, "/runs/new/"))
         self.assertEqual(asked, [True])
 
-    def test_a_region_still_takes_the_room_an_extension_names(self):
-        """The browser sizes every column, so a room changes nothing; an
-        extension's region still names one."""
-
-        for room in ("shared", "snug"):
-            with self.subTest(room):
-                source = '{% table_region "Services" room="' + room + '" %}{% endtable_region %}'
-                (region,) = with_class(_render(source), "table-scroll")
-                self.assertFalse({"is-shared", "is-snug"} & set(region.classes))
-
     def test_a_compare_region_says_so(self):
         (region,) = with_class(
             _render('{% table_region "Changes" compare=True %}{% endtable_region %}'), "table-scroll"
@@ -292,10 +281,6 @@ class TableTagTests(SimpleTestCase):
         self.assertIn("is-compare", region.classes)
         (plain,) = with_class(_render('{% table_region "Changes" %}{% endtable_region %}'), "table-scroll")
         self.assertNotIn("is-compare", plain.classes)
-
-    def test_a_room_no_share_is_named_for_is_refused(self):
-        with self.assertRaises(ValueError):
-            _render('{% table_region "Services" room="wide" %}{% endtable_region %}')
 
     def test_a_chart_region_says_so(self):
         html = _render('{% table_region "Runs" chart=True %}{% endtable_region %}')

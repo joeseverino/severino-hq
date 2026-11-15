@@ -66,7 +66,6 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
     # Off until asked for: an ask for a fresh reading changes nothing.
     table_toggles = (TableToggle(READS, "Read requests"), TableToggle(ROUTINE, "Routine work"))
     # The Message column is prose, so what a row names gets what it leaves.
-    table_room = "shared"
     # The columns every table of history draws, each sorted here by its field.
     table_columns = tuple(
         TableColumn(label, field, ascending, descending, css=css)

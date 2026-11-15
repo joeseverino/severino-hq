@@ -481,8 +481,6 @@ class Things(tables.TableListMixin, pages.PageMixin):
     )
     table_search_fields = ("name",)
     table_default_sort = "name"
-    # An identifier beside a wide prose column takes what it leaves.
-    table_room = "shared"
 
 
 class Projections(tables.TableListMixin):
@@ -550,7 +548,6 @@ def a_trail(page: AThing) -> None:
 class WronglyDeclared(tables.TableListMixin):
     table_empty = None  # type: ignore[assignment]
     table_columns = ("Name",)  # type: ignore[assignment]
-    table_room = "wide"  # type: ignore[assignment]
 
 
 def a_column() -> None:

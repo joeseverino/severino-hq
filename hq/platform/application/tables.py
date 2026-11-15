@@ -3,7 +3,7 @@
 import shlex
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, replace
-from typing import Any, Literal, override
+from typing import Any, override
 
 from django.core.exceptions import FieldDoesNotExist
 from django.core.paginator import EmptyPage, Page, Paginator
@@ -232,10 +232,6 @@ class TableListMixin:
     table_search_scope = ""
     table_filters: tuple[TableFilter, ...] = ()
     table_columns: tuple[TableColumn, ...] = ()
-    # How much of a row an identifier in it may take: `{% table_region %}`'s
-    # ``room`` ("shared" beside a wide prose column, "snug" beside other
-    # identifiers).
-    table_room: Literal["", "shared", "snug"] = ""
     # A checkbox per row, for copying the selected rows' ids.
     table_selectable = False
     table_sorts: tuple[TableSort, ...] = ()
@@ -412,7 +408,6 @@ class TableListMixin:
             ),
             "toggles": toggles,
             "columns": ranked(typed(self.table_columns, self.model)),
-            "room": self.table_room,
             "selectable": self.table_selectable,
             "active_count": active_count,
             "empty": self.get_table_empty(),

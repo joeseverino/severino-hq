@@ -894,6 +894,8 @@ dataclass or a TypedDict, and a bound on a field (a length, a range) is an
 `Annotated[..., Field(...)]` HQ applies as it validates.
 `PLUGIN_API_VERSION` 16 retires `{% post_button %}` and the `btn` class:
 `{% button %}` draws every control that looks like a button.
+It also retires a region's `room=` and a list's `table_room`: the browser
+sizes every column.
 
 A notice is `{% notice tone=... title=... %}body{% endnotice %}`, with a
 title the page composes as its `{% title %}` part after the body
@@ -901,8 +903,7 @@ title the page composes as its `{% title %}` part after the body
 `hq plugin check` refuses one written by hand.
 
 A `TableListMixin` list declares the same through `TableColumn(kind=)`, its
-ranks derived from the columns unless one says `drop=`, and its region's
-`room=` as `table_room`.
+ranks derived from the columns unless one says `drop=`.
 
 A list whose rows come from a projection rather than a model's queryset
 overrides `get_table_rows(query)`. It is handed the address's filters,
