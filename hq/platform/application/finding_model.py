@@ -16,9 +16,8 @@ from pydantic import ConfigDict, with_config
 
 from hq.domains.control_plane.providers import PROVIDERS
 
-from .action_links import ActionLink
+from .action_links import ActionLink, read_link
 from .command_fields import Describe
-from .contracts import Effect
 from .core_capabilities import CONTROLLER_REFRESH
 from .display_words import as_members
 from .moments import moment
@@ -365,9 +364,7 @@ def _decoded(value: str) -> Finding:
         steps=tuple(
             OperatorStep(label=label, command=command, notes=tuple(notes)) for label, command, notes in item["steps"]
         ),
-        offers=tuple(
-            ActionLink(name, label, Effect.READ, url, reason=reason) for name, label, url, reason in item["offers"]
-        ),
+        offers=tuple(read_link(name, label, url, reason=reason) for name, label, url, reason in item["offers"]),
         observed_at=moment(item["observed_at"]),
         reads=item["reads"],
         primary=opens(*item["primary"]) if item["primary"] else None,
@@ -377,7 +374,7 @@ def _decoded(value: str) -> Finding:
 def opens(label: str, url: str) -> ActionLink:
     """The page a finding's card leads with, under ``label``."""
 
-    return ActionLink("open", label, Effect.READ, url)
+    return read_link("open", label, url)
 
 
 def carried(rule: str) -> Callable[[FindingEstate], tuple[Finding, ...]]:

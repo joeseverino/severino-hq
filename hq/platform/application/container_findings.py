@@ -19,9 +19,8 @@ from hq.domains.control_plane.observations.public_registry import IMAGE_KIND
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.platform.application.routes import reverse
 
-from .action_links import command_action, command_url
+from .action_links import command_action, command_url, read_link
 from .containers import VULNERABLE, Container, ImageStanding, containers
-from .contracts import Effect
 from .exposure import LEVELS, OPEN, UNKNOWN, exposure_of_container, status_at
 from .finding_model import (
     CANNOT_EDIT_COMPOSE,
@@ -364,10 +363,9 @@ def _posture_help(check_id: str, item: Container) -> dict[str, Any]:
         }
     return {
         "offers": (
-            ActionLink(
+            read_link(
                 "compose-change",
                 f"Compose change for {name}",
-                Effect.READ,
                 f"{item.url}#hardening",
                 reason="The lines to add to its compose file, and what each can break.",
             ),
@@ -385,7 +383,6 @@ def socket_holder_link(item: Container) -> ActionLink:
     return command_action(
         "mark-socket-holder",
         UPDATE_CAPABILITY,
-        command_url(UPDATE_CAPABILITY, key),
         target=key,
         intent=SOCKET_HOLDER_INTENT,
         reason="This container is meant to control Docker. Stop warning about it.",

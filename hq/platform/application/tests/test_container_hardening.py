@@ -14,6 +14,7 @@ from ..containers import containers
 from ..derivation_testing import uncached
 from ..exposure import OPEN, PRIVATE
 from ..findings import rule_of
+from ..pages import command_reach
 from .test_container_standard import KEPT, runtime
 from .test_containers import HIGH, estate, exposed, inventory
 
@@ -241,7 +242,7 @@ class PageTests(TestCase):
         self.assertTrue(select(page, "id", "hardening"))
         self.assertIn("/opt/example/web/docker-compose.yml", text(page))
         self.assertIn('user: "1000:1000"', text(page))
-        self.assertContains(page, command_url("infrastructure.resource.update", "example-box-web"))
+        self.assertContains(page, command_reach("infrastructure.resource.update", "example-box-web")[0])
 
     def test_a_container_meeting_every_check_has_no_block(self):
         estate()

@@ -17,9 +17,8 @@ lazy from django.template.loader import render_to_string
 
 from hq.domains.projects.github import github_repository
 from hq.platform.application import related
-from hq.platform.application.action_links import capability_action_link
+from hq.platform.application.action_links import capability_action_link, read_link
 from hq.platform.application.capabilities import capability_words
-from hq.platform.application.contracts import Effect
 from hq.platform.application.documentation import related_documents
 from hq.platform.application.entity_links import web_url
 from hq.platform.application.moments import moment
@@ -54,7 +53,6 @@ lazy from hq.platform.application.linked_accounts import GITHUB, linked_login
 lazy from hq.platform.application.outbound_work import ask
 lazy from hq.platform.application.page_reads import Remedy
 lazy from hq.platform.application.standards import unmet_finding
-lazy from hq.platform.application.workflow_contracts import ActionLink
 
 from .forms import ProjectForm
 from .models import PROJECT_CATEGORY_CHOICES, Project
@@ -436,10 +434,7 @@ class PostureView(PageMixin, TemplateView):
                     evidence=(
                         ("Repositories", f"{len(failing)} of {held} {'repository' if held == 1 else 'repositories'}"),
                     ),
-                    offers=tuple(
-                        ActionLink(name="open", label=repo.short, effect=Effect.READ, url=f"{repo.url}/settings")
-                        for repo in failing
-                    ),
+                    offers=tuple(read_link("open", repo.short, f"{repo.url}/settings") for repo in failing),
                 )
                 for check, failing, held in unmet
             ),

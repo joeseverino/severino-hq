@@ -56,6 +56,7 @@ from .action_links import (
     ActionLink,
     action_with_return,
     command_action,
+    read_link,
     read_now_link,
     topology_investigation_links,
 )
@@ -387,9 +388,7 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
         workflow=workflow,
         steps=finding_steps(finding),
         no_help_reason=_no_help_reason(finding),
-        subject_link=ActionLink("subject", subject.label, Effect.READ, subject.url)
-        if subject and subject.url
-        else None,
+        subject_link=read_link("subject", subject.label, subject.url) if subject and subject.url else None,
         read_capabilities=_held_to(finding, subject, principal),
         read_now=read_now,
         # Where no one reading dates it, its subject's last read does.
@@ -501,13 +500,7 @@ def _verification(
             reason="Reads it now, then checks again.",
         )
         return verify, wanted
-    verify = ActionLink(
-        "verify",
-        CHECK_AGAIN,
-        Effect.READ,
-        again,
-        reason="Runs this check against current data.",
-    )
+    verify = read_link("verify", CHECK_AGAIN, again, reason="Runs this check against current data.")
     return verify, None
 
 
