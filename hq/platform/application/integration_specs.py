@@ -294,17 +294,12 @@ class CapabilitySpec(Requires):
 
     def __post_init__(self) -> None:
         # A type with a config of its own keeps it over the one
-        # ``command_adapter`` closes a command with, so one that does not
-        # forbid extra fields would take fields it does not name.
+        # ``command_adapter`` closes a command with, so a command has none.
         command = self.command_type
-        if issubclass(command, BaseModel):
-            own: Mapping[str, Any] | None = command.model_config
-        else:
-            own = getattr(command, "__dict__", {}).get("__pydantic_config__")
-        if own is not None and own.get("extra") != "forbid":
+        if issubclass(command, BaseModel) or "__pydantic_config__" in vars(command):
             raise TypeError(
-                f"Capability {self.name!r} command {command.__name__} keeps a Pydantic config of its own that "
-                "takes fields it does not name; declare it a frozen dataclass or a TypedDict, which HQ closes."
+                f"Capability {self.name!r} command {command.__name__} keeps a Pydantic config of its own; "
+                "declare it a frozen dataclass or a TypedDict, which HQ closes."
             )
 
     @property

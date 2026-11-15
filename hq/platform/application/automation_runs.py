@@ -8,7 +8,7 @@ docs/Architecture.md, "Running a playbook".
 
 import secrets
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, make_dataclass, replace
 from functools import lru_cache, partial
 from typing import TYPE_CHECKING, Annotated, Any
 from urllib.parse import urlencode
@@ -17,7 +17,7 @@ from django.core.exceptions import ImproperlyConfigured, ValidationError as Djan
 from django.db import transaction
 from django.utils import timezone
 from django.utils.text import get_text_list
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StrictStr, create_model
+from pydantic import AfterValidator, Field, StrictStr
 
 from hq.domains.control_plane.names import is_hostname, normalized_hostname
 from hq.platform.core.digests import digest
@@ -35,7 +35,7 @@ lazy from hq.platform.core.templatetags.value_tags import seconds
 
 from .automation_manifest import OperationManifest, OperationRegistry, sorted_unique
 from .command_fields import Among, AmongNow, Describe, ForAgents, Names
-from .integration_specs import IDEMPOTENCY_FIELD, CapabilitySpec, CommandAbout, CommandFact
+from .integration_specs import IDEMPOTENCY_FIELD, CapabilitySpec, CommandAbout, CommandFact, command_adapter
 from .record_errors import PolicyError, RecordNotFound
 from .security import Capability, Principal
 lazy from . import approvals, automation_adoption, pages
@@ -149,7 +149,8 @@ type Reason = Annotated[
 ]
 
 
-class RunCommand(BaseModel):
+@dataclass(frozen=True, kw_only=True)
+class RunCommand:
     """What every run takes beside its playbook's own parameters.
 
     Closed like every command, so a playbook path, an inventory, extra-vars or
@@ -157,11 +158,9 @@ class RunCommand(BaseModel):
     input type refuses one sent inside them (``automation_manifest._closed``).
     """
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
     hosts: Annotated[Hosts, MACHINES]
     # Each procedure's own input type, which ``command_type`` declares.
-    parameters: BaseModel
+    parameters: Any
     correlation: Correlation = ""
     reason: Reason = ""
 
@@ -171,31 +170,34 @@ def command_type(manifest: OperationManifest) -> type[RunCommand]:
     parameters as its manifest's input type, and the retry key of a change."""
 
     parameters = manifest.input_type
-    takes_none = not any(field.is_required() for field in parameters.model_fields.values())
+    takes_none = not any(each.is_required() for each in parameters.model_fields.values())
     # Offered as a person's choices, the machines a run can reach now
     # (``reachable``); ``reached`` refuses any other however it is asked.
     now = AmongNow(partial(reachable, manifest))
-    fields: dict[str, Any] = {"hosts": (Annotated[Hosts, now, MACHINES], ...)}
+    hosts: Any = Annotated[Hosts, now, MACHINES]
     if manifest.hosts or MACHINE_KIND not in manifest.target_kinds:
         # What ``resolved_hosts`` admits, published as the only choices.
         admitted = manifest.hosts if MACHINE_KIND in manifest.target_kinds else ()
-        fields["hosts"] = (Annotated[Hosts, Among(admitted), now, MACHINES], ...)
-    fields |= {
-        "parameters": (
+        hosts = Annotated[Hosts, Among(admitted), now, MACHINES]
+    fields: list[tuple[str, Any, Any]] = [
+        ("hosts", hosts, field()),
+        (
+            "parameters",
             Annotated[parameters, Describe("The playbook's own inputs, as its manifest lists them.")],
-            Field(default_factory=parameters) if takes_none else ...,
+            field(default_factory=parameters) if takes_none else field(),
         ),
-    }
+    ]
     if manifest.effect != "read":
         # Filled by the capability runner with the caller's key, or a fresh one.
-        fields[IDEMPOTENCY_FIELD] = (StrictStr, ...)
-    model: type[RunCommand] = create_model(
+        fields.append((IDEMPOTENCY_FIELD, StrictStr, field()))
+    return make_dataclass(
         f"Run{''.join(part.title() for part in manifest.id.replace('.', '_').split('_'))}",
-        __base__=RunCommand,
-        __module__=__name__,
-        **fields,
+        fields,
+        bases=(RunCommand,),
+        frozen=True,
+        kw_only=True,
+        module=__name__,
     )
-    return model
 
 
 def pinned(manifest: OperationManifest) -> dict[str, Any]:
@@ -311,7 +313,7 @@ def _bound(manifest: OperationManifest, command: RunCommand) -> dict[str, Any]:
     return {
         "operation": manifest.id,
         "revision": manifest.revision,
-        "parameters": command.parameters.model_dump(mode="json"),
+        "parameters": command_adapter(type(command)).dump_python(command, mode="json")["parameters"],
         "hosts": list(hosts),
         "correlation": command.correlation,
     }

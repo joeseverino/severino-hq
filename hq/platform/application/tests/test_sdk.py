@@ -88,9 +88,9 @@ class SdkContractTests(SimpleTestCase):
         self.assertIs(SdkNavigationItem, NavigationItem)
         self.assertIs(SdkPluginManifest, PluginManifest)
 
-    def test_a_command_whose_own_pydantic_config_leaves_it_open_is_refused_where_it_is_declared(self):
-        """Such a config holds over the one HQ closes a command with, so the
-        command would take fields it does not name."""
+    def test_a_command_with_a_pydantic_config_of_its_own_is_refused_where_it_is_declared(self):
+        """Such a config holds over the one HQ closes a command with, so even
+        one closed today is a command a later edit of its config opens."""
 
         from typing import TypedDict
 
@@ -99,11 +99,19 @@ class SdkContractTests(SimpleTestCase):
         class ExampleModel(BaseModel):
             value: int
 
+        class ExampleClosedModel(BaseModel):
+            model_config = ConfigDict(extra="forbid", frozen=True)
+            value: int
+
         @with_config(ConfigDict(extra="allow"))
         class ExampleOpen(TypedDict):
             value: int
 
-        for command in (ExampleModel, ExampleOpen):
+        @with_config(ConfigDict(extra="forbid"))
+        class ExampleClosed(TypedDict):
+            value: int
+
+        for command in (ExampleModel, ExampleClosedModel, ExampleOpen, ExampleClosed):
             with self.subTest(command.__name__), self.assertRaises(TypeError):
                 CapabilitySpec("example.open", "Open it.", "local_write", "example.write", command, dict)
 

@@ -154,8 +154,9 @@ there; an annotation that slides to `Any` fails it.
 
 A capability's command is a frozen dataclass or a TypedDict, which HQ closes
 at every depth, so an unknown JSON key fails at the boundary instead of being
-dropped. `CapabilitySpec` refuses a command whose own Pydantic config (a
-`BaseModel`'s) would hold over HQ's and take fields it does not name.
+dropped. `CapabilitySpec` refuses a command that carries a Pydantic config
+of its own (a `BaseModel`, or a type under `with_config`), which would hold
+over HQ's.
 Class-based views inherit
 `CapabilityRequiredMixin` and declare `required_capability`; function views use
 `@capability_required(...)`. Either only names the capability. The host's page
