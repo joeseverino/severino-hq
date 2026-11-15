@@ -1,0 +1,9 @@
+id: hand-drawn-steps
+valid:
+  - '{% steps numbered=True %}{% step %}<strong>Start it</strong>{% endstep %}{% endsteps %}'
+  - '<ol class="step-list-note"></ol>'
+  - '<ol class="timeline-list"></ol>'
+invalid:
+  - '<ol class="resolution-workflow"><li>Start it</li></ol>'
+  - '<ol class="step-list is-numbered"><li>Start it</li></ol>'
+  - '<ul class="tight {% if on %}resolution-workflow{% endif %}"></ul>'

@@ -17,8 +17,8 @@ connected is in one place.
     {% for setup in setups %}
         {% if opened == setup.provider %}{% firstof "open" as shown %}{% else %}{% firstof "" as shown %}{% endif %}
         {% section setup.label lede=setup.gives fold=True open=shown id="setup-"|add:setup.provider %}
-          <ol class="resolution-workflow">
-            <li>
+          {% steps numbered=True %}
+            {% step %}
               <strong>Create</strong>
               <p>{{ setup.create|breakable }}{% if setup.create_url|web_url %} {% entity setup.create_url|outside label="Setup page" %}{% endif %}</p>
               {% if setup.permissions %}
@@ -31,8 +31,8 @@ connected is in one place.
                 <p>Or have the script issue one with exactly these:</p>
                 {% include "partials/_command.html" with command=setup.mint only %}
               {% endif %}
-            </li>
-            <li>
+            {% endstep %}
+            {% step %}
               <strong>Store it</strong>
               <p>In the vault HQ reads, as {{ setup.item|breakable }} with these fields:</p>
               {% table_region setup.label|add:" fields" %}
@@ -49,13 +49,13 @@ connected is in one place.
                   </tbody>
                 </table>
               {% endtable_region %}
-            </li>
-            <li>
+            {% endstep %}
+            {% step %}
               <strong>Then</strong>
               <p>HQ's host reads the vault every hour; the connection then appears above. To read the vault now:</p>
               {% include "partials/_command.html" with command="sudo systemctl start severino-hq-secrets.service" only %}
-            </li>
-          </ol>
+            {% endstep %}
+          {% endsteps %}
         {% endsection %}
     {% endfor %}
     {% for group in others %}
