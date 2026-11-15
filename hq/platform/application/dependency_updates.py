@@ -27,7 +27,7 @@ from .command_fields import Describe
 from .projection import iso, read_once
 from .refusal_status import RefusalEnvelope, refuse
 from .security import Principal
-lazy from .cadence import asked_at as read_asked_at, request_reads
+lazy from .cadence import ask, asked_at as read_asked_at
 lazy from .moments import moment
 lazy from .projects import repository_key
 lazy from .work_runs import TONES
@@ -168,6 +168,6 @@ def request_run(_command: DependencyRunCommand, *, principal: Principal) -> RunR
     del principal
     if not owners():
         return refuse("precondition", "No project is opted in to dependency updates.")
-    request_reads((KIND,))
+    ask(reads=(KIND,), activity=True)
     asked = asked_at() or timezone.now()
     return {"ok": True, "requested": True, "asked_at": asked.isoformat()}

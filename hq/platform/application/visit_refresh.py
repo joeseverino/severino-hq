@@ -4,7 +4,7 @@ Whoever opened a page about one machine, service or record is looking at its
 readings now, so it asks for what it is assembled from (docs/Design.md, "A page
 about one thing asks"). It names only its subject, never a connection or a kind, so this
 cannot become a way to make HQ call its providers. This decides when to ask and
-for what; ``cadence.request_reads`` asks and ``asks.read_standing`` follows.
+for what; ``cadence.ask`` asks and ``asks.read_standing`` follows.
 """
 
 from collections.abc import Callable
@@ -23,7 +23,7 @@ lazy from hq.domains.control_plane.observations import OBSERVATIONS
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
 from .asks import Standing, StandingAnswer, read_standing, read_status_url
-from .cadence import controller_standing, forced_reads, request_reads, swept
+from .cadence import ask, controller_standing, forced_reads, swept
 from .command_fields import Describe
 from .freshness import PAGE_VISIT, freshness
 from .pages import PageVisit
@@ -240,5 +240,7 @@ def request_visit_refresh(command: VisitRefreshCommand, *, principal: Principal)
         raise RecordNotFound("HQ has no such page.")
     if not controller_standing().takes_reads:
         return {"ok": True, **_answer([], ())}
-    requested = list(request_reads(_due(reads.kinds, timezone.now())))
+    requested = _due(reads.kinds, timezone.now())
+    if requested:
+        ask(reads=requested, activity=True)
     return {"ok": True, **_answer(requested, reads.kinds)}

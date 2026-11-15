@@ -695,7 +695,7 @@ class GlanceEndpointTests(TestCase):
         )
 
     def test_a_get_on_a_stale_glance_requests_nothing(self):
-        with patch("hq.platform.application.glance.ring_glance_doorbell") as doorbell:
+        with patch("hq.platform.application.cadence._ring") as doorbell:
             response = self.client.get(reverse("dashboard_glance"))
 
         self.assertEqual(response.status_code, 200)
@@ -704,7 +704,7 @@ class GlanceEndpointTests(TestCase):
         doorbell.assert_not_called()
 
     def test_the_dashboard_page_requests_nothing(self):
-        with patch("hq.platform.application.glance.ring_glance_doorbell"):
+        with patch("hq.platform.application.cadence._ring"):
             self.client.get(reverse("dashboard"))
 
         self.assertFalse(DashboardRefreshRequest.objects.exists())

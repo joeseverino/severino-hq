@@ -22,7 +22,7 @@ lazy from hq.platform.application.routes import reverse
 from . import readings
 from .answer_fields import CallMessage
 from .asks import FAILED, QUEUED, REFRESHING, RUNNING, Ask, Standing, Took
-from .cadence import ring_glance_doorbell
+from .cadence import ask
 from .command_fields import Describe
 from .connections import ConnectionAbility, ConnectionInstance, ConnectionLink, ConnectionSpec, machines_once
 from .drawings import StripTile
@@ -676,17 +676,11 @@ def _panel_names(ids: list[str]) -> list[str]:
 def _ask_for(ids: list[str], *, why: str) -> str:
     """Queue a reading of each panel in ``ids``, recorded once; when it was asked."""
 
-    now = timezone.now()
-    asked = DashboardRefreshRequest.objects.select_for_update().in_bulk(ids, field_name="panel_id")
+    if not ids:
+        return timezone.now().isoformat()
     # Each panel by the name its head shows.
-    for panel_id, name in zip(ids, _panel_names(ids), strict=True):
-        request = asked.get(panel_id) or DashboardRefreshRequest(panel_id=panel_id)
-        request.requested_at, request.completed_at = now, None
-        request.audit_said = f"Asked for {why}: {name}"
-        request.save()
-    if ids:
-        transaction.on_commit(ring_glance_doorbell)
-    return now.isoformat()
+    said = {panel_id: f"Asked for {why}: {name}" for panel_id, name in zip(ids, _panel_names(ids), strict=True)}
+    return ask(panels=said, doorbell="glance").isoformat()
 
 
 class PanelsRefreshRequested(TypedDict):

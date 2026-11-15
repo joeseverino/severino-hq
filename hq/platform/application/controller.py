@@ -36,7 +36,7 @@ from .inventory import read_as, read_since, strike_removed
 from .plugin_admission import admitted_sources
 from .resource_operations import REPLACES, enqueue, serialize_operation
 lazy from .automation_sources import propose
-lazy from .cadence import request_reading, swept
+lazy from .cadence import ask, swept
 lazy from .dependency_updates import plan as dependency_updates
 lazy from .derivations import present
 lazy from .expiry import certificate_expiry, renewal_opens_at, renewal_window
@@ -588,7 +588,7 @@ def _read_back_lifecycle(operation: OperationRequest) -> None:
 
     kind = operation.resource.kind
     if operation.action in LIFECYCLE_VERBS and swept(kind):
-        transaction.on_commit(lambda: request_reading(kind))
+        ask(reads=(kind,))
 
 
 def report_operation(

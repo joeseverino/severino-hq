@@ -22,7 +22,7 @@ from .command_fields import Describe
 from .linked_accounts import GITHUB
 from .record_errors import RecordNotFound
 from .security import Principal
-lazy from .cadence import asked_at, request_reads
+lazy from .cadence import ask, asked_at
 lazy from .moments import moment
 
 # GitHub's allowance is by the hour, so a read that failed is tried again after one.
@@ -149,5 +149,5 @@ def request_read(command: ProfileReadCommand, *, principal: Principal) -> Profil
     del principal
     if command.login not in accounts():
         raise RecordNotFound("No sign-in names that GitHub account.")
-    request_reads((KIND,))
+    ask(reads=(KIND,), activity=True)
     return {"ok": True, "login": command.login, "asked_at": (asked_at(KIND) or timezone.now()).isoformat()}

@@ -10,7 +10,7 @@ fixture.
 import copy
 import json
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 from django.test import TestCase, tag
 
@@ -28,7 +28,8 @@ OPERATOR = Principal("example-operator", "web", frozenset({Capability.READ, Capa
 READER = Principal("example-reader", "web", frozenset({Capability.READ}))
 WORKER = "example-worker"
 SCANS = ["automation.source:scan"]
-DOORBELL = "hq.platform.application.automation_sources.ring_automation_doorbell"
+# The file touch every doorbell rings through, which says which doorbell.
+DOORBELL = "hq.platform.application.cadence._ring"
 
 # A catalog in the contract's shape, small enough to read at a glance.
 CATALOG = {
@@ -72,7 +73,7 @@ class RefreshTestCase(TestCase):
         self.claim()
 
     def refresh(self, principal: Principal = OPERATOR, key: str = "example-refresh") -> dict:
-        with self.captureOnCommitCallbacks(execute=True), patch(DOORBELL) as self.rung:
+        with patch(DOORBELL) as self.rung, self.captureOnCommitCallbacks(execute=True):
             return run_capability(REFRESH, {}, principal=principal, idempotency_key=key).answer
 
     def claim(self) -> dict:
@@ -109,7 +110,7 @@ class RefreshTests(RefreshTestCase):
         self.assertTrue(answer.get("queued"), answer)
         operation = OperationRequest.objects.get(pk=answer["operation"]["id"])
         self.assertEqual((operation.resource.kind, operation.action), ("automation.source", "scan"))
-        self.rung.assert_called_once()
+        self.assertEqual(self.rung.call_args_list.count(call("automation")), 1)
 
     def test_a_second_refresh_while_one_waits_is_answered_that_one(self):
         first = self.refresh()
@@ -117,7 +118,7 @@ class RefreshTests(RefreshTestCase):
 
         self.assertFalse(second["queued"])
         self.assertEqual(second["operation"]["id"], first["operation"]["id"])
-        self.rung.assert_not_called()
+        self.assertNotIn(call("automation"), self.rung.call_args_list)
 
     def test_a_refresh_is_refused_to_someone_who_cannot_manage_infrastructure(self):
         answer = self.refresh(READER)

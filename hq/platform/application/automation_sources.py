@@ -45,7 +45,7 @@ lazy from . import asks, automation_adoption, pages
 lazy from .action_links import capability_action_link, command_url
 lazy from .approval_review import grouped, marked
 lazy from .automation_runs import access_words, anywhere, capability_name
-lazy from .cadence import automation_standing, ring_automation_doorbell
+lazy from .cadence import ask, automation_standing
 lazy from .capabilities import capability_words
 lazy from .findings import rule_for
 lazy from .idempotency import IdempotencyConflict
@@ -233,7 +233,7 @@ def refresh(command: RefreshCommand, *, principal: Principal) -> OperationQueued
     if created:
         # The worker pulls the scan over the bridge; the ring only says one
         # waits, and only once it is stored for the claim to find.
-        transaction.on_commit(ring_automation_doorbell)
+        ask(doorbell="automation")
     return {"ok": True, "queued": created, "operation": serialize_operation(operation)}
 
 

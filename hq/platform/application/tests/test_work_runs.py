@@ -42,7 +42,7 @@ WORKER = "example-worker"
 CLAIMS = (("automation.operation", "run"),)
 # What asks the automation worker for a scan, and what it rings on commit.
 REFRESH = "automation.source.refresh"
-DOORBELL = "hq.platform.application.automation_sources.ring_automation_doorbell"
+DOORBELL = "hq.platform.application.cadence._ring"
 
 
 class WorkRunsTestCase(TestCase):
@@ -408,7 +408,7 @@ class ScanTests(WorkRunsTestCase):
 
     def scanned(self):
         principal = Principal("example-operator", "web", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
-        with self.captureOnCommitCallbacks(execute=True), mock.patch(DOORBELL):
+        with mock.patch(DOORBELL), self.captureOnCommitCallbacks(execute=True):
             answer = run_capability(REFRESH, {}, principal=principal, idempotency_key="example-refresh").answer
         self.assertTrue(answer["ok"], answer)
         return OperationRequest.objects.get(pk=answer["operation"]["id"])

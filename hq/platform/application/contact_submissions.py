@@ -23,7 +23,7 @@ from hq.domains.control_plane.providers import validate_spec
 
 from .adoption import WriteGap, require_writable, write_gap
 from .answer_fields import CallMessage
-from .cadence import request_reading
+from .cadence import ask
 from .command_fields import Choices, Describe
 from .integration_specs import Kept, keeps
 from .projection import window
@@ -179,7 +179,7 @@ def _declare(spec: dict[str, Any], *, principal: Principal, said: str) -> None:
     resource.audit_said = said
     resource.save()
     queue_reconcile(resource, principal=principal, reason="A contact message was changed.")
-    transaction.on_commit(lambda: request_reading(inbox.READING))
+    ask(reads=(inbox.READING,))
 
 
 def _review_of(submission: dict[str, Any]) -> dict[str, Any]:

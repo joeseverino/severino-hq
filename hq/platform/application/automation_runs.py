@@ -43,7 +43,7 @@ lazy from .action_links import command_url
 lazy from .approval_review import ChangePreview, asked_by
 lazy from .approvals import ApprovalSubject, every_call, measured_by, waits_for_a_person
 lazy from .automation_sources import PLAYBOOKS, SHORT_REVISION
-lazy from .cadence import automation_standing, ring_automation_doorbell
+lazy from .cadence import ask, automation_standing
 lazy from .capabilities import capability_words
 lazy from .controller import release_lapsed
 lazy from .doors import NOBODY
@@ -492,7 +492,7 @@ def request_run(
     OperationHost.objects.bulk_create(OperationHost(operation=operation, host=host) for host in bound["hosts"])
     # The worker pulls the run over the bridge; the ring only says one waits,
     # and only once it is stored for the claim to find.
-    transaction.on_commit(ring_automation_doorbell)
+    ask(doorbell="automation")
     return {"ok": True, "queued": True, "operation": serialize_operation(operation)}
 
 

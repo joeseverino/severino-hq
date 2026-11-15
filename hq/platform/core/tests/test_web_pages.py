@@ -5,7 +5,7 @@ import tempfile
 import time
 from datetime import timedelta
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
@@ -272,8 +272,8 @@ class DashboardWorkflowTests(_AuthedTestCase):
         )
 
         with (
+            patch("hq.platform.application.cadence._ring") as ring,
             self.captureOnCommitCallbacks(execute=True),
-            patch("hq.platform.application.glance.ring_glance_doorbell") as ring,
         ):
             response = self.client.post(
                 "/dashboard/glance/", form_keyed(), headers={"X-Requested-With": "XMLHttpRequest"}
@@ -285,7 +285,7 @@ class DashboardWorkflowTests(_AuthedTestCase):
             list(DashboardRefreshRequest.objects.values_list("panel_id", flat=True)),
             [f"machine-{machine.pk}"],
         )
-        ring.assert_called_once_with()
+        self.assertEqual(ring.call_args_list.count(call("glance")), 1)
 
     def test_dashboard_weather_settings_are_managed_in_the_ui(self):
         response = self.client.post(

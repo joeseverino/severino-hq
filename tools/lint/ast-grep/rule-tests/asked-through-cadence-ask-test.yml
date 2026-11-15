@@ -1,0 +1,11 @@
+id: asked-through-cadence-ask
+valid:
+  - 'ReadRequest.objects.filter(kind="example.kind")'
+  - 'DashboardRefreshRequest.objects.filter(panel_id=panel_id).update(completed_at=now)'
+  - 'cadence.ask(reads=("example.kind",))'
+  - 'Other.objects.create()'
+invalid:
+  - 'ReadRequest.objects.update_or_create(connection_ref="", kind="example.kind", defaults={})'
+  - 'ReadRequest.objects.create(kind="example.kind")'
+  - 'DashboardRefreshRequest.objects.bulk_create(rows)'
+  - 'DashboardRefreshRequest(panel_id="weather")'

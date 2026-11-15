@@ -5,13 +5,11 @@ from collections.abc import Callable
 from dataclasses import replace
 from typing import Annotated, Any, Literal, NamedTuple, TypedDict
 
-from django.db import transaction
 from pydantic import ConfigDict, with_config
 
 from hq.platform.core.audit import audit_connection, audit_operation, record_event, tallied
 from hq.platform.core.models import AuditLog
 from hq.platform.core.tracing import note, span
-lazy from hq.platform.core.doorbell import ask_soon
 
 from .answer_fields import Permitted, Pinned, RequiredPermissions, SchemaVersion
 from .approvals import hold_for_approval
@@ -56,6 +54,7 @@ from .security import (
 )
 from .ui import ended
 lazy from . import agent_registry, automation_runs
+lazy from .cadence import ringing
 
 
 def capability_title(name: str) -> str:
@@ -567,6 +566,7 @@ def _run(
         audit_operation(operation=spec.name, principal=principal),
         audit_connection(getattr(command, "connection_ref", "") or ""),
         tallied() as written,
+        ringing() as asked,
     ):
         result = spec.handler(command, principal=principal, **arguments)
         if spec.effect != "read" and not written:
@@ -578,14 +578,13 @@ def _run(
                 message=str(result.get("message") or ""),
                 required=True,
             )
-    if spec.effect != "read":
-        # Every write a person or credential makes passes here, so this is the
-        # one place that starts the controller at once rather than at the next
-        # minute's ask; whether a pass is due is still `pass_due`'s alone, asked
-        # on the doorbell's thread so the request pays for none of it.
-        # Robust: a write that committed does not fail for a hint that could
-        # not be given.
-        transaction.on_commit(ask_soon, robust=True)
+        if spec.effect != "read":
+            # Every write a person or credential makes passes here, so this is
+            # the one place that starts the controller at once rather than at
+            # the next minute's ask; whether a pass is due is still
+            # `pass_due`'s alone, asked on the doorbell's thread so the request
+            # pays for none of it.
+            asked.add("controller")
     if Capability.GOVERN_AGENTS in spec.required_capabilities:
         # Every brake a person sets on an agent is such a capability, so a
         # stream held back an event while its agent was refused hears of it

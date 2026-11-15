@@ -116,7 +116,7 @@ class DashboardRefreshTests(TestCase):
         self.panel = f"machine-{machine.pk}"
 
     def refresh(self, **fields):
-        with patch("hq.platform.application.glance.ring_glance_doorbell"):
+        with patch("hq.platform.application.cadence._ring"):
             return self.client.post(
                 reverse("dashboard_glance"), form_keyed(fields), headers={"X-Requested-With": "XMLHttpRequest"}
             )

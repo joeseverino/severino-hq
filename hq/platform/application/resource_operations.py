@@ -22,7 +22,7 @@ lazy from hq.platform.core.models import AuditLog
 
 from .adoption import NOTHING_LIVE_CHANGED, keep_out_declaration, observes_only, require_writable
 from .answer_fields import CallMessage
-from .cadence import request_reading, ring_doorbell, swept
+from .cadence import ask, swept
 from .command_fields import Describe
 from .conditions import DRIFTED, PROBLEMS, holding
 from .default_hold import consent_gap
@@ -378,11 +378,10 @@ def _queue_operation(
     said = requested(verb_words(action), resource.key, again=not queued)
     if not queued:
         return {"ok": True, "queued": False, "operation": serialize_operation(operation), "message": said}
-    # Every operation a person or credential asks for is created here, so this
-    # is the one place that has to ring. The controller still pulls the work;
-    # this only says there is some, which is what removes the wait between
-    # pressing Save and anything happening.
-    transaction.on_commit(ring_doorbell)
+    # Every operation a person or credential asks for is created here, a
+    # capability's or not, so this rings for all of them; with the runner's
+    # ring in the same commit it is one ring.
+    ask()
     return {"ok": True, "queued": True, "operation": serialize_operation(operation), "message": said}
 
 
@@ -512,8 +511,7 @@ def _request_lifecycle(
     # state up until the cadence comes round. Only a kind the sweep reads:
     # nothing would answer a request for any other.
     if result["queued"] and swept(resource.kind):
-        kind = resource.kind
-        transaction.on_commit(lambda: request_reading(kind))
+        ask(reads=(resource.kind,))
     return result
 
 

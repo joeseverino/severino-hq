@@ -502,9 +502,12 @@ work that reaches a network, starts a process or sleeps runs where waiting
 costs nobody:
 
 - **A reading of the outside world is the controller's.** It holds the
-  credentials and the egress, and reads concurrently. The web side stores a
-  read request (`hq.platform.application.cadence.request_reads`), rings the
-  doorbell and answers; the reading arrives through the sweep's ingest. A
+  credentials and the egress, and reads concurrently. The web side asks
+  through `hq.platform.application.cadence.ask`, the one way HQ asks a worker
+  outside its process: it stores the read request and rings the doorbell
+  once the write commits, and the capability runner rings each doorbell its
+  handler asked for once (`cadence.ringing`). The reading arrives through the
+  sweep's ingest. A
   reading whose provider rations calls keeps its own clock
   (`ObservationSpec.every`): HQ tells the controller when it is due.
   `github.profile` is the example (`hq/domains/control_plane/observations/github.py`); a reading's
@@ -1453,7 +1456,7 @@ machines, the inputs by their form's labels, what it does, its access and the
 adopted commit, so a person approves what applying it runs.
 
 A queued run is stored, then announced: once its transaction commits, HQ
-rings the automation worker's doorbell (`cadence.ring_automation_doorbell`),
+rings the automation worker's doorbell (`cadence.ask(doorbell="automation")`),
 a file named `automation-doorbell` beside the controller's, which starts the
 worker on the host. It says only that a run waits; the worker claims it over
 the bridge, so a forged or replayed ring starts a worker that finds nothing.

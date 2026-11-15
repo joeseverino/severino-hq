@@ -28,7 +28,7 @@ lazy from hq.platform.core.models import AuditLog
 from .ui import counted
 lazy from . import approvals, outbound_work
 lazy from .automation_adoption import prune_proposals
-lazy from .cadence import request_reading
+lazy from .cadence import ask
 lazy from .outbound_work import run_now
 lazy from .public_registry import refresh
 lazy from .security import cli_principal, internal_principal
@@ -93,7 +93,8 @@ def _unit_state(_progress: Any) -> dict[str, Any]:
     The failed unit is not named and need not be. The reading says which.
     """
 
-    return {"asked": UNIT_KIND, "rung": request_reading(UNIT_KIND)}
+    ask(reads=(UNIT_KIND,))
+    return {"asked": UNIT_KIND}
 
 
 def _due(_progress: Any = None) -> dict[str, Any]:

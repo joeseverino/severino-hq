@@ -39,7 +39,7 @@ class SavingADeclarationAppliesItTests(TestCase):
             target="example-proxy",
         )
 
-    @patch("hq.platform.application.resource_operations.ring_doorbell")
+    @patch("hq.platform.application.cadence._ring")
     def test_an_update_queues_the_reconcile_of_its_new_generation(self, doorbell):
         with self.captureOnCommitCallbacks(execute=True):
             result = self._update(forward_port=8080)
@@ -52,7 +52,7 @@ class SavingADeclarationAppliesItTests(TestCase):
         self.assertEqual(operation.input["generation"], resource.generation)
         self.assertEqual(operation.requested_interface, "cli")
         self.assertEqual(result["applying"]["id"], str(operation.id))
-        doorbell.assert_called_once()
+        doorbell.assert_called_once_with("controller")
 
     def test_a_save_that_changes_nothing_queues_nothing(self):
         result = self._update()

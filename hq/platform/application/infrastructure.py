@@ -37,7 +37,7 @@ from .record_errors import PolicyError
 from .record_saves import Held, as_sent, found, held, written
 from .security import Principal
 lazy from .asks import APPLIES_SHORTLY
-lazy from .cadence import request_reading, swept
+lazy from .cadence import ask, swept
 lazy from .delivery_progress import deploying_label
 lazy from .locate import names_by_connection
 lazy from .resource_capabilities import kind_converges
@@ -522,5 +522,5 @@ def _apply_saved(resource: ManagedResource, replaced: dict[str, Any], *, princip
     if not swept(resource.kind):
         # Nothing reads it live, so nothing could show the apply stays within the change.
         return None
-    transaction.on_commit(lambda: request_reading(resource.kind))
+    ask(reads=(resource.kind,))
     return queue_reconcile(resource, principal=principal, reason=SAVED_REASON, replaces=replaced)["operation"]

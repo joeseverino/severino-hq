@@ -36,7 +36,6 @@ from ..cadence import (
     recently_used,
     request_boot_reads,
     request_controller_sweep,
-    ring_doorbell,
     sweep_due,
     sweep_interval,
 )
@@ -194,13 +193,13 @@ class DoorbellTests(TestCase):
         cause is a controller run that finds nothing to do.
         """
 
-        ring_doorbell()
+        cadence._ring("controller")
 
         self.assertEqual((self.directory / "doorbell").read_bytes(), b"")
 
     def test_ringing_twice_leaves_one_doorbell(self):
-        ring_doorbell()
-        ring_doorbell()
+        cadence._ring("controller")
+        cadence._ring("controller")
 
         self.assertEqual([path.name for path in self.directory.iterdir()], ["doorbell"])
 
@@ -211,16 +210,12 @@ class DoorbellTests(TestCase):
     def test_an_operator_can_request_a_due_sweep_without_provider_authority(self):
         swept(age_seconds=600)
 
-        result = request_controller_sweep(ControllerSweepCommand(), principal=cli_principal())
+        with self.captureOnCommitCallbacks(execute=True):
+            result = request_controller_sweep(ControllerSweepCommand(), principal=cli_principal())
 
         self.assertTrue(result["requested"])
         self.assertTrue(result["due"])
         self.assertTrue((self.directory / "doorbell").exists())
-
-    @override_settings(SEVERINO_CONTROLLER_DOORBELL="/proc/nonexistent/doorbell")
-    def test_an_explicit_sweep_request_reports_an_unreachable_doorbell(self):
-        with self.assertRaisesRegex(ValueError, "could not reach the controller"):
-            request_controller_sweep(ControllerSweepCommand(), principal=cli_principal())
 
     @override_settings(SEVERINO_CONTROLLER_DOORBELL="/proc/nonexistent/doorbell")
     def test_a_doorbell_it_cannot_write_does_not_fail_the_write(self):
@@ -430,7 +425,8 @@ class BootTests(TestCase):
         self.hold("github.delivery")
         self.booted()
 
-        self.assertEqual(request_boot_reads(), ("github.delivery",))
+        with self.captureOnCommitCallbacks(execute=True):
+            self.assertEqual(request_boot_reads(), ("github.delivery",))
         self.assertTrue(ReadRequest.objects.filter(kind="github.delivery").exists())
         self.assertTrue((self.directory / "doorbell").exists())
         # A boot is not a person using HQ: the idle cadence stands.
@@ -445,7 +441,8 @@ class BootTests(TestCase):
         self.hold("github.repository", "host.firewall")
         self.booted(moved=["github.repository"])
 
-        self.assertEqual(request_boot_reads(), ("github.repository",))
+        with self.captureOnCommitCallbacks(execute=True):
+            self.assertEqual(request_boot_reads(), ("github.repository",))
         self.assertEqual(list(ReadRequest.objects.values_list("connection_ref", "kind")), [("", "github.repository")])
         self.assertTrue((self.directory / "doorbell").exists())
         self.assertFalse(recently_used())
@@ -640,13 +637,13 @@ class ControllerTimerTests(SimpleTestCase):
 
         controller = watched("severino-hq-controller.path", "PathChanged")
         for ring, unit, key in (
-            (cadence.ring_doorbell, "severino-hq-controller.path", "PathChanged"),
-            (cadence.ring_glance_doorbell, "severino-hq-glance.path", "PathExists"),
-            (cadence.ring_automation_doorbell, "severino-hq-automation.path", "PathExists"),
+            ("controller", "severino-hq-controller.path", "PathChanged"),
+            ("glance", "severino-hq-glance.path", "PathExists"),
+            ("automation", "severino-hq-automation.path", "PathExists"),
         ):
             with self.subTest(unit=unit), tempfile.TemporaryDirectory() as directory:
                 with override_settings(SEVERINO_CONTROLLER_DOORBELL=str(Path(directory) / controller.name)):
-                    self.assertTrue(ring())
+                    self.assertTrue(cadence._ring(ring))
                 (rung,) = Path(directory).iterdir()
                 self.assertEqual(controller.with_name(rung.name), watched(unit, key))
 

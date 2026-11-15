@@ -116,13 +116,16 @@ class UnitFailureTests(TestCase):
 
         from .. import cadence
 
-        with mock.patch.object(cadence, "ring_doorbell", return_value=True) as doorbell:
+        with (
+            mock.patch.object(cadence, "_ring", return_value=True) as doorbell,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             answer = scheduled_work.run("units.read")
 
         self.assertEqual(answer["state"], "succeeded")
-        doorbell.assert_called_once_with()
+        doorbell.assert_called_once_with("controller")
         self.assertEqual(list(ReadRequest.objects.values_list("connection_ref", "kind")), [("", UNIT_KIND)])
-        self.assertEqual(Job.objects.get(pk=answer["job"]).result, {"asked": UNIT_KIND, "rung": True})
+        self.assertEqual(Job.objects.get(pk=answer["job"]).result, {"asked": UNIT_KIND})
         # The sweep it causes reads that kind alone, whatever the cadence says.
         with mock.patch.object(cadence, "sweep_interval", return_value=cadence.slowest_sweep_interval()):
             from hq.platform.application.inventory_testing import store
@@ -136,7 +139,7 @@ class UnitFailureTests(TestCase):
 
         from .. import cadence
 
-        with mock.patch.object(cadence, "ring_doorbell", return_value=False):
+        with mock.patch.object(cadence, "_ring", return_value=False), self.captureOnCommitCallbacks(execute=True):
             answer = scheduled_work.run("units.read")
 
         self.assertEqual(answer["state"], "succeeded")

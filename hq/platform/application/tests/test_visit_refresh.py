@@ -61,6 +61,17 @@ def asked() -> set[str]:
     return set(ReadRequest.objects.values_list("kind", flat=True))
 
 
+def rings():
+    """Watches the doorbells' files; ``rung(watch)`` counts the controller's
+    rings, whichever function rang it."""
+
+    return patch.object(cadence, "_touch", wraps=cadence._touch)
+
+
+def rung(watch) -> int:
+    return [touched.args[0].name for touched in watch.call_args_list].count("doorbell")
+
+
 def page(*kinds: str):
     """One page, ``example``, assembled from ``kinds``."""
 
@@ -91,13 +102,27 @@ class VisitRefreshTests(TestCase):
     def test_a_reading_older_than_its_cadence_is_asked_for(self):
         store(FAST, age=OLD)
 
-        with page(FAST), self.captureOnCommitCallbacks(execute=True) as rung:
+        with page(FAST), rings() as watch, self.captureOnCommitCallbacks(execute=True):
             result = self.ask()
 
         self.assertEqual(result["requested"], [FAST])
         self.assertTrue(result["live"])
         self.assertEqual(asked(), {FAST})
-        self.assertEqual(rung.count(cadence.ring_doorbell), 1)
+        self.assertEqual(rung(watch), 1)
+
+    def test_an_open_page_asked_through_its_capability_rings_once(self):
+        """The ask and the runner both want the controller rung as the write
+        commits, and it is rung once."""
+
+        store(FAST, age=OLD)
+
+        with page(FAST), rings() as watch, self.captureOnCommitCallbacks(execute=True):
+            result = execute_capability(
+                VISIT_REFRESH, {"subject": "example", "name": "known"}, principal=cli_principal()
+            )
+
+        self.assertEqual(result["requested"], [FAST])
+        self.assertEqual(rung(watch), 1)
 
     def test_a_fresh_reading_is_left_alone_however_often_the_page_is_opened(self):
         store(FAST, age=VISIT_EVERY - timedelta(seconds=5))
@@ -125,11 +150,11 @@ class VisitRefreshTests(TestCase):
         for kind in kinds:
             store(kind, age=OLD)
 
-        with page(*kinds), self.captureOnCommitCallbacks(execute=True) as rung:
+        with page(*kinds), rings() as watch, self.captureOnCommitCallbacks(execute=True):
             result = self.ask()
 
         self.assertEqual(sorted(result["requested"]), sorted(kinds))
-        self.assertEqual(rung.count(cadence.ring_doorbell), 1)
+        self.assertEqual(rung(watch), 1)
 
     def test_opening_the_dashboard_asks_again_for_what_its_queue_says_github_holds(self):
         store(REPOSITORY_KIND, age=OLD)
@@ -580,7 +605,7 @@ class VisitRefreshViewTests(TestCase):
     def test_a_refusal_is_failed_work_in_its_own_sentence(self):
         self.client.force_login(self.user)
 
-        with page(FAST), patch.object(visit_refresh, "request_reads", side_effect=PolicyError("The example is busy.")):
+        with page(FAST), patch.object(visit_refresh, "ask", side_effect=PolicyError("The example is busy.")):
             found = self.post().json()
 
         self.assertEqual((found["state"], found["note"]), ("failed", "The example is busy."))
