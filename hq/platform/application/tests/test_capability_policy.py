@@ -300,15 +300,26 @@ class SettingTests(PolicyTestCase):
         self.set()
         self.set(rule=None)
 
-        messages = list(
-            AuditLog.objects.filter(object_type="Capability policy").order_by("id").values_list("message", flat=True)
+        rows = list(
+            AuditLog.objects.filter(object_type="Capability policy")
+            .order_by("id")
+            .values_list("object_repr", "message")
         )
         before, after = "Default", RULE_LABELS[Rule.APPROVE]
-        self.assertEqual(len(messages), 2)
-        for message, (old, new) in zip(messages, ((before, after), (after, before)), strict=True):
-            self.assertIn("project.delete", message)
+        self.assertEqual(len(rows), 2)
+        for (title, message), (old, new) in zip(rows, ((before, after), (after, before)), strict=True):
+            self.assertIn(spec("project.delete").title, title)
             self.assertLess(message.index(old), message.index(new))
         self.assertFalse(CapabilityRule.objects.exists())
+
+    def test_a_rule_is_said_once_in_the_words_the_policy_page_gives_it(self):
+        self.set()
+
+        title, message = AuditLog.objects.values_list("object_repr", "message").get(object_type="Capability policy")
+        said = f"{title} {message}"
+        self.assertEqual(said.count(RULE_LABELS[Rule.APPROVE]), 1, said)
+        named = {label for label in (*RULE_LABELS.values(), *CapabilityRule.Rule.labels) if label in said}
+        self.assertEqual(named, {RULE_LABELS[Rule.APPROVE]}, said)
 
     def test_setting_what_already_holds_changes_and_records_nothing(self):
         self.set()

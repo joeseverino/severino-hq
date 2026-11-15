@@ -131,7 +131,7 @@ def set_rule(
         before = existing.rule if existing else None
         if before == rule:
             return False
-        said = dotted(subject, f"{spec.name}: from {_name(before)} to {_name(rule)}")
+        said = f"From {_name(before)} to {_name(rule)}"
         if rule is None:
             existing.audit_gone = said
             existing.delete()
@@ -169,7 +169,7 @@ def _usable_by(spec, identity: AgentIdentity) -> bool:
 
 
 # What a rule is called on the page, beside "Default". The stored values keep their names.
-RULE_LABELS = {Rule.ALLOW: "On", Rule.APPROVE: "Ask me first", Rule.DENY: "Off"}
+RULE_LABELS = {rule: rule.label for rule in Rule}
 # The status tone a rule is drawn in; the default is neutral.
 RULE_TONES = {Rule.ALLOW: "good", Rule.APPROVE: "attention", Rule.DENY: "serious"}
 

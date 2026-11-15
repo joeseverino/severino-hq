@@ -784,9 +784,11 @@ class CapabilityRule(models.Model):
     """
 
     class Rule(models.TextChoices):
-        ALLOW = "allow", "Allow"
-        APPROVE = "approve", "Require approval"
-        DENY = "deny", "Deny"
+        """Each rule as the policy page and its audit rows call it, beside "Default"."""
+
+        ALLOW = "allow", "On"
+        APPROVE = "approve", "Ask me first"
+        DENY = "deny", "Off"
 
     # An agent subject (``security.agent_subject``): a client id of up to 160 and its person's key.
     subject = models.CharField(max_length=255)
@@ -807,4 +809,5 @@ class CapabilityRule(models.Model):
 
     @override
     def __str__(self) -> str:
-        return f"{self.get_rule_display()} “{capability_title(self.capability)}” for {subject_parts(self.subject)[0]}"
+        # The rule itself is the audit row's change, from one to the other.
+        return f"“{capability_title(self.capability)}” for {subject_parts(self.subject)[0]}"
