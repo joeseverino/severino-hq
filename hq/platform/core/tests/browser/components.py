@@ -20,6 +20,7 @@ from hq.platform.application.asks import Ask, Standing
 from hq.platform.application.money import money
 from hq.platform.application.ui import ActivityCalendar, CalendarDay, ChartSeries, line_chart
 from hq.platform.core.stylesheets import DIRECTORY, stylesheet
+from hq.platform.core.test_runner import browser_engine
 from hq.platform.core.tests.browser.gate import add_css, served_sheet, tab_key, unfold, with_script
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
 from hq.platform.core.tests.browser.probes.boxes import MAP, SIDEWAYS, SMALL_TARGETS
@@ -31,7 +32,13 @@ from hq.platform.core.tests.browser.probes.parts import (
     WRAPPED,
     reading_problems,
 )
-from hq.platform.core.tests.browser.probes.settle import KEPT_SELECTORS, PRESS_EVERY_SHOWN, SETTLE, UNSUPPORTED
+from hq.platform.core.tests.browser.probes.settle import (
+    FONTS_READY,
+    KEPT_SELECTORS,
+    PRESS_EVERY_SHOWN,
+    SETTLE,
+    UNSUPPORTED,
+)
 from hq.platform.core.tests.browser.probes.shifts import CLS_LIMIT, LAYOUT_SHIFTS
 from hq.platform.core.tests.browser.probes.tables import (
     BLANK_TABLE,
@@ -72,7 +79,7 @@ from hq.platform.core.tests.browser.reading import probe
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import ORIGIN
 from hq.platform.core.tests.browser.stress import ALL_PAGES
-from hq.platform.core.tests.browser.widths import NARROWEST, PHONE_SCREEN, TARGET_MIN, WIDE, WIDTHS
+from hq.platform.core.tests.browser.widths import NARROWEST, PHONE_SCREEN, TARGET_MIN, WIDE, WIDTHS, viewport
 from hq.platform.core.tests.test_browser_fixtures import PAGES
 
 
@@ -1620,6 +1627,46 @@ class ComponentLayoutTests(LayoutBrowserTests):
                         self.settle()
                     self.assertTrue(self.page.locator(rows + '[aria-expanded="true"]').count())
                     self.assertEqual(self.page.evaluate(LAYOUT_SHIFTS, read), [])
+
+    @with_script
+    def test_the_face_arriving_late_is_the_gates_move_under_a_fixed_clock(self):
+        """The gates draw text in Inter once it arrives (`serving.in_the_face`),
+        where a reader's browser draws it from the first paint or never, so the
+        move its arrival makes is left out of the score however late it lands,
+        under the fixed clock `dev:look` reads every page by too."""
+
+        self.pages = {
+            **self.pages,
+            "late-face-probe": probe(
+                "<h1>"
+                + "An example heading that wraps in either face " * 3
+                + "</h1>"
+                + '<div class="card"><p>'
+                + "An example sentence below it. " * 30
+                + "</p></div>"
+            ),
+        }
+        if browser_engine() != "chromium":
+            self.skipTest("only Chromium keeps a record of layout shifts")
+        held = []
+
+        def hold(route):
+            # Playwright marks its handler, which a list's bound method refuses.
+            held.append(route)
+
+        self.page.route("**/*.woff2", hold)
+        self.page.clock.set_fixed_time(1_800_000_000)
+        self.page.set_viewport_size(viewport(NARROWEST))
+        self.page.goto(f"{ORIGIN}/late-face-probe/", wait_until="domcontentloaded")
+        # Drawn in the next face for well past the margin the face is given.
+        self.page.wait_for_function("() => document.timeline.currentTime > 300")
+        if not held:
+            self.skipTest("Inter is withheld (HQ_BROWSER_FACE=fallback)")
+        for route in held:
+            route.fallback()
+        self.page.evaluate(FONTS_READY)
+        self.settle()
+        self.assertEqual(self.page.evaluate(LAYOUT_SHIFTS, [SELECTORS["vendored"], 0]), [])
 
     @with_script
     def test_a_fragment_that_is_not_percent_encoding_breaks_no_table(self):
