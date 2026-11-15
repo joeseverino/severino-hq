@@ -105,7 +105,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
   {% section "Path to HQ" data_connection_layers=True %}
     {% check_ladder route=True %}
       {% for hop in request_path.hops %}
-        {% check_rung state=hop.check.standing kind=hop.label open=hop.check.contradicted data_connection_hop=hop.step %}
+        {% check_rung state=hop.check.state kind=hop.label open=hop.check.contradicted data_connection_hop=hop.step %}
           {% if hop.link and hop.link.url %}{{ hop.link.label|breakable }}{% elif hop.name %}{{ hop.name|breakable }}{% elif hop.detail %}{{ hop.detail|breakable }}{% else %}{% empty_value %}{% endif %}
         {% detail %}
           {% if hop.name and hop.detail and hop.detail != hop.name and hop.detail != hop.link.label %}{{ hop.detail|breakable }}{% elif hop.link.url and hop.name and hop.name != hop.link.label %}{{ hop.name|breakable }}{% endif %}

@@ -2772,7 +2772,7 @@
               "check": {
                 "detail": "No reading names the device at 127.0.0.1.",
                 "label": "Not confirmed",
-                "state": "unproven",
+                "state": "unavailable",
                 "step": ""
               },
               "detail": "127.0.0.1",

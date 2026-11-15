@@ -262,7 +262,15 @@ class OverlayPart(TypedDict):
 
 
 class HopCheckPart(TypedDict):
-    state: Annotated[str, Describe("Whether the request agrees with the readings at the hop, in one word.")]
+    state: Annotated[
+        str,
+        Describe(
+            ended(
+                f"Whether the request agrees with the readings at the hop: {listed(Standing)}, "
+                "the last when the request does not show it"
+            )
+        ),
+    ]
     label: Annotated[str, Describe("That, in the words the hop shows.")]
     detail: Annotated[str, Describe("What the request showed beside what was read.")]
     step: Annotated[str, Describe("What you do to settle a disagreement; empty for none.")]

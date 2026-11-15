@@ -43,17 +43,12 @@ lazy from .item_help import instructions
 lazy from .locate import index_of
 lazy from .projection import complete, iso
 
-PROVEN = "proven"
-CONTRADICTED = "contradicted"
-UNPROVEN = "unproven"
-
+# A hop's check in the words the hop shows.
 _CHECK_LABELS = {
-    PROVEN: "Confirmed by this request",
-    CONTRADICTED: "This request disagrees",
-    UNPROVEN: "Not confirmed",
+    Standing.MET: "Confirmed by this request",
+    Standing.UNMET: "This request disagrees",
+    Standing.UNAVAILABLE: "Not confirmed",
 }
-# The standing each check state is drawn with.
-_CHECK_STATES = {PROVEN: Standing.MET, CONTRADICTED: Standing.UNMET, UNPROVEN: Standing.UNAVAILABLE}
 
 # How each role in the forwarded chain was decided.
 _CHAIN_DETAIL = {
@@ -67,7 +62,7 @@ _CHAIN_DETAIL = {
 class HopCheck:
     """Whether the request agrees with what the readings say about one hop."""
 
-    state: str
+    state: Standing
     detail: str
     # The operator step that resolves a contradiction.
     step: str = ""
@@ -77,14 +72,10 @@ class HopCheck:
         return _CHECK_LABELS[self.state]
 
     @property
-    def standing(self) -> Standing:
-        return _CHECK_STATES[self.state]
-
-    @property
     def contradicted(self) -> bool:
         """The request disagrees with the readings here, so the hop is shown opened."""
 
-        return self.state == CONTRADICTED
+        return self.state is Standing.UNMET
 
 
 # A forwarded hop's role as the tone its pill takes.
@@ -340,13 +331,13 @@ def _device_check(found: Connection) -> HopCheck:
     channel = found.channel.id
     if found.untrusted_forwarding:
         return HopCheck(
-            CONTRADICTED,
+            Standing.UNMET,
             f"{found.address} forwarded this request and is not a trusted proxy.",
             "If it is your proxy, add it to HQ's trusted proxies.",
         )
     if channel == "opaque":
         return HopCheck(
-            CONTRADICTED,
+            Standing.UNMET,
             "Every hop is a trusted proxy, so HQ has no address for you.",
             "Have the proxy pass the client's address in X-Forwarded-For.",
         )
@@ -355,15 +346,15 @@ def _device_check(found: Connection) -> HopCheck:
     if channel in {"network", "loopback"}:
         if found.machine_name:
             return HopCheck(
-                PROVEN,
+                Standing.MET,
                 f"HQ knows {found.machine_name} at {found.address}, the address this request came from.",
             )
         return HopCheck(
-            UNPROVEN,
+            Standing.UNAVAILABLE,
             f"No reading names the device at {ended(found.address)}",
         )
     return HopCheck(
-        CONTRADICTED,
+        Standing.UNMET,
         f"{found.address} is in none of the ranges HQ accepts.",
         "Turn on the trusted-network check in HQ's settings so HQ refuses other networks.",
     )
@@ -373,21 +364,21 @@ def _tailnet_device_check(found: Connection) -> HopCheck:
     device = found.caller_device
     if device is not None:
         return HopCheck(
-            PROVEN,
+            Standing.MET,
             f"The tailnet lists {device.label} at {found.address}, the address this request came from.",
         )
     gap = why_unread(TAILNET_KIND)
     if gap:
-        return HopCheck(UNPROVEN, ended(capfirst(gap)))
+        return HopCheck(Standing.UNAVAILABLE, ended(capfirst(gap)))
     # A device that joined or moved since an old reading is missing from it:
     # that is the reading's age, not a disagreement, until a current one says so.
     if not found.tailnet_current:
         return HopCheck(
-            UNPROVEN,
+            Standing.UNAVAILABLE,
             f"The last tailnet read has no device at {ended(found.address)}",
         )
     return HopCheck(
-        CONTRADICTED,
+        Standing.UNMET,
         f"No tailnet device holds {ended(found.address)}",
         "Refresh the tailnet. A device shared in from another tailnet never appears.",
     )
@@ -396,9 +387,9 @@ def _tailnet_device_check(found: Connection) -> HopCheck:
 def _dns(hop: Hop, context: _Context):
     evidence = (Evidence("Host", context.host, "The name this request asked for."),)
     if not is_hostname(context.host):
-        return evidence, HopCheck(UNPROVEN, ADDRESS_HOST)
+        return evidence, HopCheck(Standing.UNAVAILABLE, ADDRESS_HOST)
     return evidence, HopCheck(
-        PROVEN,
+        Standing.MET,
         f"This request asked for {normalized_hostname(context.host)}, which resolves to "
         f"{ended(hop.name or 'an address')}",
     )
@@ -412,15 +403,15 @@ def _network(hop: Hop, context: _Context):
     here = NETWORKS.get(expected, expected).lower()
     evidence = (Evidence("Arrived from", found.address, found.channel.label),)
     if arrived not in NETWORKS:
-        return evidence, HopCheck(UNPROVEN, "HQ has no address for you.")
+        return evidence, HopCheck(Standing.UNAVAILABLE, "HQ has no address for you.")
     if arrived == expected:
         return evidence, HopCheck(
-            PROVEN,
+            Standing.MET,
             f"The name points to the {here}, and this request came from {ended(found.address)}",
         )
     came = NETWORKS[arrived].lower()
     return evidence, HopCheck(
-        CONTRADICTED,
+        Standing.UNMET,
         ended(
             f"The name points to {hop.detail} on the {here}, but this request came from {found.address} on the {came}"
         ),
@@ -431,7 +422,7 @@ def _network(hop: Hop, context: _Context):
 def _machine(hop: Hop, context: _Context):
     own = context.answered_on
     if hop.unread:
-        return (), HopCheck(UNPROVEN, ended(capfirst(hop.unread)))
+        return (), HopCheck(Standing.UNAVAILABLE, ended(capfirst(hop.unread)))
 
     served = ", ".join(served_at(context.request))
     port = served_port(context.request)
@@ -441,17 +432,19 @@ def _machine(hop: Hop, context: _Context):
         else ()
     )
     if own and hop.name == own:
-        return evidence, HopCheck(PROVEN, ended(f"HQ answered this request on {own}"))
+        return evidence, HopCheck(Standing.MET, ended(f"HQ answered this request on {own}"))
     if own and hop.name == context.last_machine:
         return evidence, HopCheck(
-            CONTRADICTED,
+            Standing.UNMET,
             ended(f"HQ's records put it behind {hop.name}, but HQ answered this request on {own}"),
             "Correct the proxy host's forward address, or the machine HQ is recorded on.",
         )
     if own:
-        return evidence, HopCheck(UNPROVEN, "A request does not show which machines it passed before reaching HQ's.")
+        return evidence, HopCheck(
+            Standing.UNAVAILABLE, "A request does not show which machines it passed before reaching HQ's."
+        )
     return evidence, HopCheck(
-        UNPROVEN,
+        Standing.UNAVAILABLE,
         "No known machine holds the address HQ answered on.",
     )
 
@@ -463,17 +456,17 @@ def _ingress(hop: Hop, context: _Context):
     chain = tuple(item for item in address_chain(request) if item.role == "proxy")
     evidence = chain + _forwarding_headers(hop, context)
     if hop.unread:
-        return evidence, HopCheck(UNPROVEN, ended(capfirst(hop.unread)))
+        return evidence, HopCheck(Standing.UNAVAILABLE, ended(capfirst(hop.unread)))
     proxy = _proxy_name(hop)
     if not forwarded:
         return evidence, HopCheck(
-            CONTRADICTED,
+            Standing.UNMET,
             ended(f"{proxy} is in front of {context.host}, but this request reached HQ straight from {peer}"),
             "Bind HQ to an address only the proxy can reach.",
         )
     if not is_trusted_proxy(peer):
         return evidence, HopCheck(
-            CONTRADICTED,
+            Standing.UNMET,
             f"{peer} forwarded this request but is not on HQ's list of trusted proxies.",
             f"If {peer} is {proxy}, add it to the trusted proxies in HQ's settings.",
         )
@@ -483,21 +476,21 @@ def _ingress(hop: Hop, context: _Context):
 def _forwarder_check(hop: Hop, context: _Context, peer: str, proxy: str) -> HopCheck:
     headers = _declared_headers(hop)
     if not headers:
-        return HopCheck(PROVEN, f"A trusted proxy at {peer} forwarded this request.")
+        return HopCheck(Standing.MET, f"A trusted proxy at {peer} forwarded this request.")
     agrees = next((result for result in context.found.checks.results if result.check is PROXY_HEADERS), None)
     if agrees is None or agrees.state == Standing.UNAVAILABLE:
         return HopCheck(
-            UNPROVEN,
+            Standing.UNAVAILABLE,
             f"A trusted proxy at {peer} forwarded this request without {proxy}'s {' and '.join(headers)} headers.",
         )
     if not agrees.met:
         return HopCheck(
-            CONTRADICTED,
+            Standing.UNMET,
             f"{proxy}'s own headers differ from the address HQ used.",
             "Check the proxy host's forwarding settings.",
         )
     return HopCheck(
-        PROVEN,
+        Standing.MET,
         f"{peer} forwarded this request with {proxy}'s own headers, and they match the address HQ used.",
     )
 
@@ -530,17 +523,17 @@ def _forwarding_headers(hop: Hop, context: _Context) -> tuple[Evidence, ...]:
 def _edge(_hop: Hop, context: _Context):
     headers = _access_headers(context.host)
     if not headers:
-        return (), HopCheck(UNPROVEN, "The edge adds no header HQ reads.")
+        return (), HopCheck(Standing.UNAVAILABLE, "The edge adds no header HQ reads.")
     present = [name for name in headers if context.header(name)]
     evidence = tuple(Evidence(name, redacted(context.header(name)), "Never shown.") for name in present)
     if not present:
         return evidence, HopCheck(
-            CONTRADICTED,
+            Standing.UNMET,
             f"Access protects {context.host}, and this request has no Access header.",
             "Check that the name is proxied through the edge and that HQ cannot be reached around it.",
         )
     return evidence, HopCheck(
-        UNPROVEN,
+        Standing.UNAVAILABLE,
         "The Access header arrived. HQ does not check its signature.",
     )
 
@@ -584,15 +577,15 @@ def _container(hop: Hop, _context: _Context):
         if running.name == hop.name and running.id
     }
     if not known:
-        return (), HopCheck(UNPROVEN, "No container ID to compare with.")
+        return (), HopCheck(Standing.UNAVAILABLE, "No container ID to compare with.")
     here = own_container_id()
     if not here:
-        return (), HopCheck(UNPROVEN, "HQ is not running in a container it can name.")
+        return (), HopCheck(Standing.UNAVAILABLE, "HQ is not running in a container it can name.")
     evidence = (Evidence("Answered by", here, "Read from HQ's own mounts."),)
     if here in known:
-        return evidence, HopCheck(PROVEN, ended(f"HQ answered this request from inside {hop.name}"))
+        return evidence, HopCheck(Standing.MET, ended(f"HQ answered this request from inside {hop.name}"))
     return evidence, HopCheck(
-        UNPROVEN,
+        Standing.UNAVAILABLE,
         f"The last container read lists another container as {ended(hop.name)}",
     )
 
@@ -606,7 +599,7 @@ def _hq(_hop: Hop, context: _Context):
             "Whether this request arrived encrypted.",
         ),
     )
-    return evidence, HopCheck(PROVEN, ended(f"This request reached HQ at {context.host}"))
+    return evidence, HopCheck(Standing.MET, ended(f"This request reached HQ at {context.host}"))
 
 
 _JUDGES = {
@@ -664,7 +657,7 @@ class RequestPath:
 
     @property
     def findings(self) -> tuple[Hop, ...]:
-        return tuple(hop for hop in self.hops if hop.check is not None and hop.check.state == CONTRADICTED)
+        return tuple(hop for hop in self.hops if hop.check is not None and hop.check.contradicted)
 
     @property
     def finding_rows(self) -> tuple[dict[str, Any], ...]:
@@ -694,7 +687,7 @@ class RequestPath:
     @property
     def proof(self) -> str:
         checked = [hop for hop in self.hops if hop.check is not None]
-        proven = sum(hop.check.state == PROVEN for hop in checked)
+        proven = sum(hop.check.state is Standing.MET for hop in checked)
         if checked and proven == len(checked):
             return f"All {len(checked)} steps confirmed by this request"
         text = f"{proven} of {len(checked)} steps confirmed by this request"

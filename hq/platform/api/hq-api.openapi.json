@@ -2789,7 +2789,7 @@
                 "check": {
                   "detail": "No reading names the device at 127.0.0.1.",
                   "label": "Not confirmed",
-                  "state": "unproven",
+                  "state": "unavailable",
                   "step": ""
                 },
                 "detail": "127.0.0.1",
@@ -11446,7 +11446,7 @@
             "type": "string"
           },
           "state": {
-            "description": "Whether the request agrees with the readings at the hop, in one word.",
+            "description": "Whether the request agrees with the readings at the hop: `met`, `unmet` or `unavailable`, the last when the request does not show it.",
             "type": "string"
           },
           "step": {

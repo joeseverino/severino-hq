@@ -17,7 +17,8 @@ from hq.platform.core.tests.forwarding import arrived
 
 from .. import cadence
 from ..request_connection import connection
-from ..request_path import CONTRADICTED, UNPROVEN, request_path
+from ..request_path import request_path
+from ..standards import Standing
 from .connection_requests import A_TAILNET_ADDRESS, a_device, a_request, a_tailnet
 from .markup import select
 
@@ -88,8 +89,8 @@ class AsLastReadTests(TestCase):
         read(HQ_HOST)
         current = device_check(a_request())
 
-        self.assertEqual(old.state, UNPROVEN)
-        self.assertEqual(current.state, CONTRADICTED)
+        self.assertEqual(old.state, Standing.UNAVAILABLE)
+        self.assertEqual(current.state, Standing.UNMET)
 
 
 class PanelTests(TestCase):

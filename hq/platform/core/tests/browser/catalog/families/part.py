@@ -39,7 +39,7 @@ from hq.platform.application.request_connection import Connection, Peering
 from hq.platform.application.request_identity import Identity
 from hq.platform.application.request_standard import RequestFacts, ServingDeviceResolution
 from hq.platform.application.security import MCP_INTERFACE
-from hq.platform.application.standards import Check, Reading, measure
+from hq.platform.application.standards import Check, Reading, Standing as CheckStanding, measure
 from hq.platform.application.tables import TableSort
 from hq.platform.application.tailnet import Device
 from hq.platform.application.tailnet_presence import Presence
@@ -56,7 +56,7 @@ lazy from hq.platform.application.dashboard import queue_item
 lazy from hq.platform.application.github_estate import Repository
 lazy from hq.platform.application.github_posture import posture_of
 lazy from hq.platform.application.path_model import Certificate, Hop, Route
-lazy from hq.platform.application.request_path import CONTRADICTED, PROVEN, HopCheck
+lazy from hq.platform.application.request_path import HopCheck
 lazy from hq.platform.application.work_runs import RunEvidence, outcome_tone
 
 # The fields of an example record, as a change sets them and as two records hold them.
@@ -331,14 +331,24 @@ def _route():
     return Route(
         via="example record",
         hops=(
-            Hop("device", "Your device", name="example-laptop", check=HopCheck(PROVEN, "Example address 192.0.2.10.")),
-            Hop("dns", "Internal DNS", name="app.example.com", check=HopCheck(PROVEN, "Example answer 192.0.2.20.")),
+            Hop(
+                "device",
+                "Your device",
+                name="example-laptop",
+                check=HopCheck(CheckStanding.MET, "Example address 192.0.2.10."),
+            ),
+            Hop(
+                "dns",
+                "Internal DNS",
+                name="app.example.com",
+                check=HopCheck(CheckStanding.MET, "Example answer 192.0.2.20."),
+            ),
             Hop(
                 "ingress",
                 "Proxy",
                 name="example-proxy-host-with-a-long-name.example.com",
                 certificate=Certificate("Proxy", name="app.example.com", issuer="Example CA"),
-                check=HopCheck(CONTRADICTED, "The example request came another way."),
+                check=HopCheck(CheckStanding.UNMET, "The example request came another way."),
             ),
             Hop(
                 "machine",

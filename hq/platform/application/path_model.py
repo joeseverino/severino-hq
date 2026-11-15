@@ -6,7 +6,7 @@ and where each fact came from.
 
 from dataclasses import dataclass, field, replace
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from django.utils.text import capfirst
 
@@ -19,6 +19,7 @@ lazy from .freshness import Freshness, freshness as reading_freshness
 lazy from .moments import ago
 
 if TYPE_CHECKING:
+    from .request_path import Evidence, HopCheck
     from .standards import CheckResult
 
 
@@ -157,8 +158,8 @@ class Hop:
     # itself carried here, whether it agrees with the readings, and the
     # checks of the request standard decided at this hop (each its
     # ``Check.hop``). See ``application.request_path``.
-    evidence: tuple[Any, ...] = ()
-    check: Any = None
+    evidence: tuple[Evidence, ...] = ()
+    check: HopCheck | None = None
     checks: tuple[CheckResult, ...] = ()
     # ``(text, url)`` lines under the name: what a container is running.
     facts: tuple[tuple[str, str], ...] = ()
