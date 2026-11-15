@@ -45,6 +45,7 @@ from hq.platform.application.approvals import entry_event, is_held
 from hq.platform.application.asks import REFRESHING
 from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
+from hq.platform.application.payload_words import changed_words
 from hq.platform.application.pins import SERVICE as PINNED_SERVICE, toggle
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.report_testing import report_connections
@@ -844,6 +845,9 @@ def _audit_trail(user):
         return AuditLog.objects.create(action=action, message=message, **(defaults | fields))
 
     operation = "an-example-operation-0123456789abcdef"
+    # Two locations of its advanced config, each known by its path.
+    root, api = {"path": "/", "allowed_sources": ["group:example"]}, {"path": "/api", "forward_host": ""}
+    moved = [{**root, "allowed_sources": ["group:example", "group:elsewhere"]}, {**api, "forward_host": "203.0.113.30"}]
     for index in range(3):
         logged(
             AuditLog.Action.UPDATED,
@@ -863,10 +867,10 @@ def _audit_trail(user):
                 "forward_host": [ADDRESS, EDGE_ADDRESS],
                 "domain_names": [[_hostname(0)], [_hostname(0), _hostname(1)]],
                 "certificate": ["an-example-wildcard-certificate", "an-example-certificate-with-a-long-name"],
-                # A record field, as each value in it that moved, by where it is.
+                # A record field, as each value in it that moved, by where it is, as the log writes it.
                 "advanced_config": {
-                    "Locations › Entry 2 › Forward host": ["", EDGE_ADDRESS],
-                    "Locations › Entry 1 › Allowed sources": ["group:example", "group:example, group:elsewhere"],
+                    row.label: [row.before, row.after]
+                    for row in changed_words({"locations": [root, api]}, {"locations": moved})
                 },
             },
             "requested_from": SERVICE,

@@ -67,7 +67,7 @@ class HeldRequestWordsTests(TestCase):
         (item,) = waiting_for_approval()
 
         self.assertEqual(dumped(item.body), [], item.body)
-        self.assertIn("docs set to 4 entries", item.body)
+        self.assertIn("docs set to rb-example-0, rb-example-1", item.body)
         self.assertIn("confirm the delete set to yes", item.body)
 
     def test_a_command_on_no_record_is_not_said_to_create_one(self):
@@ -87,7 +87,7 @@ class HeldRequestWordsTests(TestCase):
         entry = self.client.get(reverse("core:approval_entry", kwargs={"approval_id": self.held.id}), follow=True)
 
         shown = text(entry)
-        self.assertIn("4 entries", shown)
+        self.assertIn("rb-example-0, rb-example-1", shown)
         self.assertNotIn("{'doc_id'", shown)
         self.assertNotIn("True", shown)
 

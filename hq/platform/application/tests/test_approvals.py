@@ -49,7 +49,7 @@ POLICY_KEY = "access-policy"
 GATED_KIND = "tailscale.policy"
 UNGATED_KIND = "adguard.rewrite"
 # Where the one grant's sources are in the policy, as a reader is shown it.
-GRANT_SOURCES = "Document › Grants › Entry 1 › Src"
+GRANT_SOURCES = "Document › Grants › group:example › Src"
 
 
 def policy_document(who: str = "group:example") -> str:
@@ -659,9 +659,9 @@ class PreviewTests(TestCase):
 
         said = {row.label: (row.change, row.before, row.after) for row in shown.rows}
         self.assertEqual(
-            said["Document › Grants › Entry 1 › Dst"], ("changed", "tag:example", "tag:example, tag:other")
+            said["Document › Grants › group:example › Dst"], ("changed", "tag:example", "tag:example, tag:other")
         )
-        change, _, gained = said["Document › Grants › Entry 2"]
+        change, _, gained = said["Document › Grants › group:example, group:other"]
         self.assertEqual(change, "added")
         self.assertIn("group:example, group:other", gained)
         self.assertEqual(len(said), 2)
@@ -715,7 +715,7 @@ class PreviewTests(TestCase):
         shown = preview(ApprovalRequest.objects.get())
 
         said = {row.label: (row.before, row.after) for row in shown.rows}
-        self.assertEqual(said[GRANT_SOURCES], ("group:live", "group:example"))
+        self.assertEqual(said["Document › Grants › group:live › Src"], ("group:live", "group:example"))
 
 
 class SurfaceTests(TestCase):

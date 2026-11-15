@@ -15,7 +15,7 @@ class ValueWordsTests(SimpleTestCase):
     def test_each_shape_reads_as_words(self):
         self.assertEqual(value_words(True), "yes")
         self.assertEqual(value_words(["a.example", "b.example"]), "a.example, b.example")
-        self.assertEqual(value_words([{"doc_id": "one"}, {"doc_id": "two"}]), "2 entries")
+        self.assertEqual(value_words([{"enabled": True}, {"enabled": False}]), "2 entries")
         self.assertEqual(value_words({"created": 3, "dns_name": "a.example"}), "created 3, DNS name a.example")
         self.assertEqual(value_words({"spec": {"a": 1}}), "1 field")
         self.assertEqual(value_words(None), "")
@@ -66,8 +66,8 @@ class ChangedWordsTests(SimpleTestCase):
 
         said = self.changes({"grants": grants}, {"grants": inserted})
 
-        self.assertEqual(list(said), ["Grants › Entry 5"])
-        change, before, after = said["Grants › Entry 5"]
+        self.assertEqual(list(said), ["Grants › group:admins"])
+        change, before, after = said["Grants › group:admins"]
         self.assertEqual((change, before), ("added", ""))
         self.assertIn("group:admins", after)
 
@@ -76,7 +76,7 @@ class ChangedWordsTests(SimpleTestCase):
 
         said = self.changes({"grants": grants}, {"grants": [*grants[:2], *grants[3:]]})
 
-        self.assertEqual([(label, row[0]) for label, row in said.items()], [("Grants › Entry 3", "removed")])
+        self.assertEqual([(label, row[0]) for label, row in said.items()], [("Grants › group:example-2", "removed")])
 
     def test_an_entry_edited_beside_an_insert_is_said_field_by_field_where_it_now_stands(self):
         tests = [{"src": f"user@example-{index}.com", "accept": ["tag:example:443"]} for index in range(4)]
@@ -85,9 +85,10 @@ class ChangedWordsTests(SimpleTestCase):
 
         said = self.changes({"tests": tests}, {"tests": edited})
 
-        self.assertEqual(said["Tests › Entry 2"][0], "added")
+        self.assertEqual(said["Tests › group:admins"][0], "added")
         self.assertEqual(
-            said["Tests › Entry 4 › Accept"], ("changed", "tag:example:443", "tag:example:443, tag:example:80")
+            said["Tests › user@example-2.com › Accept"],
+            ("changed", "tag:example:443", "tag:example:443, tag:example:80"),
         )
         self.assertEqual(len(said), 2)
 
@@ -106,4 +107,35 @@ class ChangedWordsTests(SimpleTestCase):
 
         said = self.changes({"grants": grants}, {"grants": [_grant("group:admins"), *grants]})
 
-        self.assertEqual([(label, row[0]) for label, row in said.items()], [("Grants › Entry 1", "added")])
+        self.assertEqual([(label, row[0]) for label, row in said.items()], [("Grants › group:admins", "added")])
+
+    def test_an_entry_is_named_by_its_first_field_that_holds_text(self):
+        locations = [
+            {"forward_port": 80, "path": "/", "forward_host": "192.0.2.10"},
+            {"forward_port": 80, "path": "/api", "forward_host": "192.0.2.11"},
+        ]
+        moved = [locations[0], {**locations[1], "forward_host": "203.0.113.5"}]
+
+        said = self.changes({"locations": locations}, {"locations": moved})
+
+        self.assertEqual(said, {"Locations › /api › Forward host": ("changed", "192.0.2.11", "203.0.113.5")})
+
+    def test_entries_that_share_a_name_are_named_by_where_they_stand(self):
+        grants = [_grant("group:example"), _grant("group:example")]
+        moved = [grants[0], {**grants[1], "dst": ["tag:example", "tag:other"]}]
+
+        said = self.changes({"grants": grants}, {"grants": moved})
+
+        self.assertEqual(list(said), ["Grants › Entry 2 › Dst"])
+
+
+class ListWordsTests(SimpleTestCase):
+    def test_a_list_of_records_is_said_by_its_first_names_and_a_count_of_the_rest(self):
+        docs = [{"doc_id": f"rb-example-{index}", "title": "An example runbook"} for index in range(12)]
+
+        said = value_words(docs)
+
+        self.assertTrue(said.startswith("rb-example-0, rb-example-1"), said)
+        self.assertIn("9 more", said)
+        self.assertNotIn("rb-example-11", said)
+        self.assertEqual(value_words(docs[:2]), "rb-example-0, rb-example-1")
