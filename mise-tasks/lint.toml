@@ -311,6 +311,7 @@ sources = [
   "static/js/**",
   "tools/lint/eslint-suppressions.json",
   "tools/lint/*.mjs",
+  "tools/lint/ast-grep/rules/markup-drawn-by-templates.yml",
   "tools/lint/package*.json",
   "pyproject.toml",
   "uv.lock",

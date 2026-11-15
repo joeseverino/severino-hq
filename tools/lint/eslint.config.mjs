@@ -7,6 +7,7 @@
 import js from "@eslint/js";
 import noUnsanitized from "eslint-plugin-no-unsanitized";
 import globals from "globals";
+import { readFileSync } from "node:fs";
 
 // What reads layout, or watches it change. Layout is the stylesheet's: a
 // script reads it only where a disable comment says why CSS cannot answer
@@ -74,9 +75,17 @@ const primitiveSyntax = [
 // refused for a primitive's class or one of its tones (`msg-error`).
 // Today's instances are counted in eslint-suppressions.json beside it,
 // which ESLint fails on once one no longer occurs.
-// Python strings are refused the same names by markup-drawn-by-templates
-// (tools/lint/ast-grep), which MarkupRuleTests holds to this list.
-const primitiveClass = String.raw`/(^|\s)(notice(-attention)?|msg(-(error|info|success|warning))?|btn|pill(-[\w-]+)?|row-detail|row-columns)(\s|$)/`;
+// The names are markup-drawn-by-templates' (tools/lint/ast-grep), which
+// refuses them in a Python string, read from its one class= regex so both
+// tools refuse one list.
+const markupRule = readFileSync(new URL("ast-grep/rules/markup-drawn-by-templates.yml", import.meta.url), "utf8");
+const [before, after] = [String.raw`([^"']*\s)?`, String.raw`(\s|`];
+const classRegex = markupRule.split("\n").filter((line) => line.includes("regex: class=") && line.includes(before));
+if (classRegex.length !== 1 || !classRegex[0].includes(after)) {
+  throw new Error("markup-drawn-by-templates.yml names the primitives' classes in one regex, class=...([^\"']*\\s)?(names)(\\s|...");
+}
+const primitiveNames = classRegex[0].slice(classRegex[0].indexOf(before) + before.length, classRegex[0].lastIndexOf(after));
+const primitiveClass = String.raw`/(^|\s)${primitiveNames}(\s|$)/`;
 const drawnMarkup = [
   `AssignmentExpression[left.property.name='className'] Literal[value=${primitiveClass}]`,
   `AssignmentExpression[left.property.name='className'] TemplateElement[value.raw=${primitiveClass}]`,
