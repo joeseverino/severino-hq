@@ -1233,7 +1233,7 @@ ENTRIES = {
     # A stack list ({% stack_list %}): a status with its words, one whose
     # link stands alone, and a note; then in a table, a row's notes under its name and a list
     # the open row shows under its label. A new option of the tag comes with
-    # an entry here (test_stack_tags).
+    # an entry here (CatalogTests in test_part_tags).
     "part/stack-list": Entry(
         '{% section "Example advisories" %}{% stack_list data_example="example" %}'
         '<li class="prose">{% status "High" tone="serious" %} <a href="/example/advisory/">EXAMPLE-2026-0001</a> '
@@ -1337,7 +1337,7 @@ ENTRIES = {
         },
     ),
     # Facts ({% facts %}) in each layout and with each option; a new layout
-    # or option of the tags comes with an entry here (test_facts_tags). A
+    # or option of the tags comes with an entry here (CatalogTests in test_part_tags). A
     # zero beside a linked count stands on its value's line, as the Agents
     # card's counts do.
     "part/facts-band": Entry(
@@ -1513,7 +1513,8 @@ ENTRIES = {
         },
     ),
     # The notice ({% notice %}) in each tone and with each option; a new tone
-    # or option of the tag comes with an entry here (test_notice_tags).
+    # or option of the tag comes with an entry here (test_notice_tags for
+    # a tone, CatalogTests in test_part_tags for an option).
     "part/notice-neutral": Entry(
         '{% notice css="example" data_example="example" %}An example line that needs saying first, '
         'with <a href="/example/">an example link</a>.{% endnotice %}'
@@ -1744,7 +1745,7 @@ ENTRIES = {
     "part/command-center-empty": Entry('{% include "partials/_command_center.html#results" %}', {"q": "example-none"}),
     # A control label ({% control_label %}) with no control, naming the answer
     # that follows it; the filter bar above draws it for its controls
-    # (test_label_tags).
+    # (CatalogTests in test_part_tags).
     "part/control-label": Entry(
         '{% card element="article" label="Example stage" %}{% control_label "Example receiving" %}'
         "<p><strong>Example provider</strong></p>{% endcard %}"
@@ -2190,7 +2191,7 @@ ENTRIES = {
     # The facts on a title's line ({% title_meta %}): a list of parts with a
     # dot between each, long enough to wrap under the title on a phone, each
     # part wrapping whole, a state as a pill and as words among them. A new option of the tag comes with an entry here
-    # (test_title_tags).
+    # (CatalogTests in test_part_tags).
     "part/title-meta": Entry(
         '{% include "partials/_page_head.html" %}{% section "Example section 3" %}<p>An example line.</p>{% endsection %}',
         {
