@@ -40,12 +40,12 @@ OUTSIDE = {
     ),
     "templates/example/markup.html": (
         '<div class="compact invented {% if on %}pill-good{% endif %} pill-{{ tone }}">\n<p data-secret>x</p><svg data-chart></svg></div>\n'
-        '<span class="muted" style="--part: {{ width }}">x</span>'
+        '<span class="nowrap" style="--part: {{ width }}">x</span>'
     ),
     "templates/example/parts.html": (
         '{% card %}{% section "A" %}B{% aside %}C{% endsection %}{% aside %}C{% endcard %}\n'
         "{% aside %}D\n"
-        '{% card css="muted invented-card" %}{% endcard %}{% card css=chosen %}{% endcard %}\n'
+        '{% card css="nowrap invented-card" %}{% endcard %}{% card css=chosen %}{% endcard %}\n'
         '{% button "Go" url post=True css="invented-button" %}\n{% table_heading "A" css="invented-note" %}\n'
         '{% facts %}{% fact "A" value=n %}{% detail %}B{% endfacts %}'
     ),
