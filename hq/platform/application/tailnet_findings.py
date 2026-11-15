@@ -19,6 +19,7 @@ from .finding_model import (
     per_connection,
 )
 from .tailnet_loopback import GRANT_REACHES_ONLY_LOOPBACK, LoopbackGrant, LoopbackPort
+from .tone import Tone
 from .ui import counted, counted_forms, ended
 
 
@@ -30,7 +31,7 @@ def _devices_join_without_approval(estate: FindingEstate) -> tuple[Finding, ...]
             rule="devices-join-without-approval",
             subject=node.id,
             title="New devices join the tailnet without approval",
-            severity="attention",
+            severity=Tone.ATTENTION,
             explanation="Any valid auth key adds a device with no review.",
             evidence=(("Device approval", "Off"),),
         )
@@ -67,7 +68,7 @@ class _GrantedToNobody:
             estate,
             self.rule,
             rule=self.rule,
-            severity="neutral",
+            severity=Tone.NEUTRAL,
             shown_as=self.shown_as,
             says=lambda _node, names: self._said(names, remedies),
         )
@@ -156,7 +157,7 @@ def _tailnet_dns_off_tailnet(estate: FindingEstate) -> tuple[Finding, ...]:
         estate,
         "tailnet-dns-off-tailnet",
         rule="tailnet-dns-off-tailnet",
-        severity="attention",
+        severity=Tone.ATTENTION,
         shown_as="DNS server",
         says=lambda _node, resolvers: {
             "title": (
@@ -188,7 +189,7 @@ def _loopback_finding(node, grants: tuple[LoopbackGrant, ...]) -> Finding:
     return Finding(
         rule=GRANT_REACHES_ONLY_LOOPBACK,
         subject=node.id,
-        severity="neutral",
+        severity=Tone.NEUTRAL,
         title=_loopback_title(grants),
         explanation=" ".join(_loopback_why(item, port) for item in grants for port in item.ports),
         evidence=tuple(
@@ -255,65 +256,65 @@ RULES: tuple[FindingRule, ...] = (
     FindingRule(
         "tag-granted-to-nobody",
         "A tag in the policy that no device has",
-        "neutral",
+        Tone.NEUTRAL,
         _tag_granted_to_nobody,
         operator_action="Remove the tag from the rules that name it, or tag the devices it was meant for.",
         no_help_reason="HQ cannot tell whether the rule or the devices are wrong.",
-        bars={"neutral": "the policy grants a tag that no device carries"},
+        bars={Tone.NEUTRAL: "the policy grants a tag that no device carries"},
     ),
     FindingRule(
         "tailnet-dns-off-tailnet",
         "Tailnet DNS is not a tailnet address",
-        "attention",
+        Tone.ATTENTION,
         _tailnet_dns_off_tailnet,
         operator_action=(
             "In the Tailscale admin console, open DNS and set the nameserver to the DNS server's tailnet address."
         ),
         no_help_reason=("HQ cannot change the tailnet's DNS settings."),
-        bars={"attention": "the tailnet's nameserver is not a tailnet address"},
+        bars={Tone.ATTENTION: "the tailnet's nameserver is not a tailnet address"},
     ),
     FindingRule(
         "devices-join-without-approval",
         "New devices join without approval",
-        "attention",
+        Tone.ATTENTION,
         _devices_join_without_approval,
         operator_action=(
             "In the Tailscale admin console, open Settings, then Device management, and turn on Device approval."
         ),
         no_help_reason=("HQ cannot change this setting."),
-        bars={"attention": "a new device can join the tailnet without anyone approving it"},
+        bars={Tone.ATTENTION: "a new device can join the tailnet without anyone approving it"},
     ),
     FindingRule(
         "empty-group-granted",
         "Empty group still granted access",
-        "neutral",
+        Tone.NEUTRAL,
         _empty_group_granted,
         operator_action=(
             "Remove the group from the policy's groups and from every rule that names it, or add its members."
         ),
         no_help_reason=("HQ can only edit the policy once the policy is managed in HQ."),
-        bars={"neutral": "the policy grants access to a group with no members"},
+        bars={Tone.NEUTRAL: "the policy grants access to a group with no members"},
     ),
     FindingRule(
         GRANT_REACHES_ONLY_LOOPBACK,
         "A grant opens a port bound only to loopback",
-        "neutral",
+        Tone.NEUTRAL,
         _grant_reaches_only_loopback,
         operator_action=(
             "In Tailscale's admin console, remove the port from the grant and deny it in the test that accepts it."
         ),
         no_help_reason="HQ cannot edit the tailnet policy in Tailscale's admin console.",
-        bars={"neutral": "a grant opens a port that only answers on the machine itself"},
+        bars={Tone.NEUTRAL: "a grant opens a port that only answers on the machine itself"},
     ),
     FindingRule(
         "trusted-wider-than-tailnet",
         "Trusted networks wider than the tailnet",
-        "neutral",
+        Tone.NEUTRAL,
         trusted_networks.wider_than_tailnet,
         operator_action=(
             "Narrow the trusted networks in HQ's settings to the addresses and routes the tailnet uses, then restart HQ."
         ),
         no_help_reason=("HQ cannot change its own deploy settings."),
-        bars={"neutral": "HQ trusts addresses beyond the tailnet's"},
+        bars={Tone.NEUTRAL: "HQ trusts addresses beyond the tailnet's"},
     ),
 )

@@ -16,6 +16,7 @@ from django.urls import reverse
 from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
 
+from hq.platform.application.tone import Tone
 lazy from hq.platform.application import action_items, asks, decisions
 lazy from hq.platform.application.asks import Ask
 lazy from hq.platform.application.capabilities import capability_words
@@ -78,7 +79,7 @@ def decision(item):
 def urgency(status):
     """``{{ item.status|urgency }}``: how urgent, in the words every pill says."""
 
-    return decisions.urgency(status)
+    return Tone(status).urgency
 
 
 @register.filter

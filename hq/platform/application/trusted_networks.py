@@ -14,6 +14,7 @@ from hq.platform.core.network import parse_ip
 from .finding_model import Finding, FindingEstate, OperatorStep
 from .reach import TAILNET
 from .tailnet import HQ_ADMITS_ONLY_NAMED
+from .tone import Tone
 from .ui import counted
 
 
@@ -45,7 +46,7 @@ def wider_than_tailnet(estate: FindingEstate) -> tuple[Finding, ...]:
                 rule="trusted-wider-than-tailnet",
                 subject=node.id,
                 title=f"HQ trusts all of {', '.join(map(str, wide))}, and the tailnet uses {uses}",
-                severity="neutral",
+                severity=Tone.NEUTRAL,
                 explanation=(
                     "HQ accepts requests from every address in the range. "
                     "You can narrow the trusted networks in HQ's settings to "

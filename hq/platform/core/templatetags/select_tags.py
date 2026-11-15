@@ -15,7 +15,7 @@ changes, for a bar whose one choice is the whole query.
 
 from django import template
 
-from hq.platform.application.ui import STATUS_VALUES
+from hq.platform.application.tone import Tone
 
 register = template.Library()
 
@@ -27,8 +27,10 @@ def select(name, options, chosen=None, label="", id="", tone="", every="", submi
     """A choice of one: its field's name, each option with whether it is the
     chosen one, and the tone's classes."""
 
-    if tone not in {"", *STATUS_VALUES}:
-        raise template.TemplateSyntaxError(f"select tone= is one of {', '.join(sorted(STATUS_VALUES))}")
+    try:
+        tone = Tone(tone) if tone else ""
+    except ValueError:
+        raise template.TemplateSyntaxError(f"select tone= is one of {', '.join(Tone)}") from None
     if not name:
         raise template.TemplateSyntaxError("select takes the name its form posts the choice as")
     # None chooses the option with no value, as a field left at its default does.

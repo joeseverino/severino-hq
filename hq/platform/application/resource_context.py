@@ -19,13 +19,23 @@ from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND
 from hq.domains.control_plane.providers import PROVIDERS, controller_capability_registry, read_spec, readout_rows
 
 from .asks import APPLIES_SHORTLY
+from .display_words import as_members
 from .entity_links import entity_link
 from .expiry import certificate_expiry, days_until, renewal_opens_at, renewal_window
 from .freshness import behind
-from .infrastructure import controller_contract, enabled_resources, resolved_spec, resource_health, serialize_resource
+from .infrastructure import (
+    RecordState,
+    ResourceState,
+    controller_contract,
+    enabled_resources,
+    resolved_spec,
+    resource_health,
+    serialize_resource,
+)
 from .record_errors import RecordNotFound
 from .resource_capabilities import ResourceCapabilities, resource_capabilities
 from .resource_operations import resource_history
+from .tone import Tone
 lazy from . import machines
 lazy from .approvals import pending
 lazy from .conditions import DEGRADED, DRIFTED, held_since
@@ -125,13 +135,19 @@ class RecordStatus:
     never disagree side by side.
     """
 
-    state: str
-    # The ``{% status %}`` tone the label and its ``detail`` are drawn in.
-    tone: str
+    # Its tone (``RecordState.tone``) draws the label and its ``detail``.
+    state: RecordState
     label: str
     detail: str = ""
     since: datetime | None = None
     read_at: datetime | None = None
+
+    def __post_init__(self) -> None:
+        as_members(self)
+
+    @property
+    def tone(self) -> Tone:
+        return self.state.tone
 
 
 def _reconciles(kind: str) -> tuple[bool, bool]:
@@ -148,29 +164,26 @@ def _fault_status(resource, health: dict[str, str]) -> RecordStatus | None:
 
     read_at = resource.last_observed_at
     if not resource.enabled:
-        return RecordStatus("off", "neutral", "Switched off in HQ", "HQ does not apply or check it.", None, read_at)
-    if health["state"] == "drifted":
+        return RecordStatus(RecordState.OFF, "Switched off in HQ", "HQ does not apply or check it.", None, read_at)
+    if health["state"] == ResourceState.DRIFTED:
         return RecordStatus(
-            "drifted",
-            "drifted",
+            RecordState.DRIFTED,
             health["label"],
             f"{health['message']} Keep the live version, or restore HQ's version.".strip(),
             held_since(resource.conditions, DRIFTED),
             read_at,
         )
-    if health["state"] == "deploying":
+    if health["state"] == ResourceState.DEPLOYING:
         return RecordStatus(
-            "deploying",
-            "pending",
+            RecordState.DEPLOYING,
             health["label"],
             health["message"],
             held_since(resource.conditions, DEGRADED),
             read_at,
         )
-    if health["state"] == "degraded":
+    if health["state"] == ResourceState.DEGRADED:
         return RecordStatus(
-            "degraded",
-            "degraded",
+            RecordState.DEGRADED,
             health["label"],
             health["message"],
             held_since(resource.conditions, DEGRADED),
@@ -191,8 +204,7 @@ def record_status(resource, *, health: dict[str, str] | None = None, newest: dat
     applies, automatically = _reconciles(resource.kind)
     if applies and resource.observed_generation != resource.generation:
         return RecordStatus(
-            "pending",
-            "pending",
+            RecordState.PENDING,
             "Change waiting to apply",
             APPLIES_SHORTLY if automatically else f"Press {OperationRequest.Action.RECONCILE.label} to apply it.",
             None,
@@ -200,17 +212,15 @@ def record_status(resource, *, health: dict[str, str] | None = None, newest: dat
         )
     if behind(read_at, newest):
         return RecordStatus(
-            "unseen",
-            "unknown",
+            RecordState.UNSEEN,
             "Not found lately",
             "The others of its type have been read since.",
             None,
             read_at,
         )
-    if health["state"] == "healthy":
+    if health["state"] == ResourceState.HEALTHY:
         return RecordStatus(
-            "working",
-            "healthy",
+            RecordState.WORKING,
             health["label"],
             "Matches HQ's config." if applies else "",
             None,
@@ -218,9 +228,9 @@ def record_status(resource, *, health: dict[str, str] | None = None, newest: dat
         )
     if not applies:
         return RecordStatus(
-            "recorded", "neutral", "Recorded only", "HQ only records this. Nothing is applied.", None, read_at
+            RecordState.RECORDED, "Recorded only", "HQ only records this. Nothing is applied.", None, read_at
         )
-    return RecordStatus("unread", "unknown", health["label"], health["message"], None, read_at)
+    return RecordStatus(RecordState.UNREAD, health["label"], health["message"], None, read_at)
 
 
 def newest_reading(kind: str) -> datetime | None:
@@ -420,7 +430,6 @@ class ControllerSummary:
     """What the controller will do for a resource, said once."""
 
     headline: str
-    tone: str
     lines: tuple[str, ...]
     # The reasons already given, so a card beside this one need not repeat them.
     reasons: frozenset[str]
@@ -440,18 +449,13 @@ def controller_summary(actions, labels) -> ControllerSummary | None:
     # Each reason is a whole sentence about the record, so it stands alone.
     lines = tuple(off)
     if off and sum(len(names) for names in off.values()) == len(actions):
-        return ControllerSummary("HQ does not change this", "declared", lines, frozenset(off))
+        return ControllerSummary("HQ does not change this", lines, frozenset(off))
     automatic = any(allowed.automatic for allowed in actions.values())
     return ControllerSummary(
         "Applied automatically" if automatic else f"Applied when you press {OperationRequest.Action.RECONCILE.label}",
-        "good",
         lines,
         frozenset(off),
     )
-
-
-# The tones a row is drawn in when nothing about it needs looking at.
-SETTLED_TONES = frozenset({"healthy", "declared"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -506,8 +510,9 @@ def _grouped(rows: list[Any]) -> tuple[RecordGroup, ...]:
         found.setdefault(row.kind, []).append(row)
     groups = []
     for kind, members in found.items():
-        unsettled = [row for row in members if row.record_status.tone not in SETTLED_TONES]
-        settled = [row for row in members if row.record_status.tone in SETTLED_TONES]
+        # A working record is the only one with nothing to look at.
+        unsettled = [row for row in members if row.record_status.tone is not Tone.GOOD]
+        settled = [row for row in members if row.record_status.tone is Tone.GOOD]
         groups.append(RecordGroup(kind, members[0].kind_label, tuple(unsettled + settled), len(unsettled)))
     # A type with something to look at leads; the rest by name.
     return tuple(sorted(groups, key=lambda group: (not group.unsettled, group.label.casefold())))

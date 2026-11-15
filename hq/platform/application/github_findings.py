@@ -11,6 +11,7 @@ from hq.domains.control_plane.observations.github import OTHERS_SPENT, OTHERS_SP
 
 from .finding_model import Finding, FindingEstate, FindingRule, OperatorStep, connections_carrying
 from .moments import moment, when
+from .tone import Tone
 
 RULE = "github-others-spent"
 
@@ -68,7 +69,7 @@ def others_spent(estate: FindingEstate) -> tuple[Finding, ...]:
                     subject=node.id,
                     scope=account,
                     title=f"Something besides HQ spent {spent} GitHub requests{on}",
-                    severity="attention",
+                    severity=Tone.ATTENTION,
                     explanation=(
                         f"The App's installation{on} answered {spent} requests {between} that HQ did not "
                         "make. Its key or a token may have leaked, or another program shares the App."
@@ -89,10 +90,10 @@ RULES: tuple[FindingRule, ...] = (
     FindingRule(
         RULE,
         "Something besides HQ spends its App's hourly allowance",
-        "attention",
+        Tone.ATTENTION,
         others_spent,
         operator_action=("Delete every App key on GitHub that is not HQ's, then rotate HQ's."),
         no_help_reason="HQ cannot see or delete the App's keys: GitHub lists them only on the App's settings page.",
-        bars={"attention": "something besides HQ spends the App's requests in an hour"},
+        bars={Tone.ATTENTION: "something besides HQ spends the App's requests in an hour"},
     ),
 )

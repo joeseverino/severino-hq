@@ -27,6 +27,7 @@ from .connection_catalog import ConnectionGroup
 from .connection_lifecycle import ATTENTION, WORKING, Lifecycle
 from .reach import TAILNET
 from .request_channel import channel_for_request
+from .tone import Tone
 from .ui import counted, ended
 lazy from .facts import stored_snapshots
 lazy from .moments import ago
@@ -39,11 +40,11 @@ FIREWALL_LABEL = "Arrived on the tailnet interface"
 TAILNET_POLICY_LABEL = "HQ has read the tailnet policy"
 # The word the page answers each state with.
 ANSWERS = {
-    "good": "Yes",
-    "serious": "No",
+    Tone.GOOD: "Yes",
+    Tone.SERIOUS: "No",
     "bad": "No",
-    "attention": "Check",
-    "neutral": "Unknown",
+    Tone.ATTENTION: "Check",
+    Tone.NEUTRAL: "Unknown",
 }
 
 
@@ -59,7 +60,7 @@ class SecurityControl:
 
     @property
     def answer(self) -> str:
-        return ANSWERS.get(self.state, ANSWERS["neutral"])
+        return ANSWERS.get(self.state, ANSWERS[Tone.NEUTRAL])
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,7 +116,7 @@ def _unattested_edge() -> SecurityControl:
     return SecurityControl(
         "edge",
         EDGE_LABEL,
-        "neutral",
+        Tone.NEUTRAL,
         "Not read",
         "HQ has no reading of an access list for this name.",
     )
@@ -125,7 +126,7 @@ def _unattested_firewall() -> SecurityControl:
     return SecurityControl(
         "host-firewall",
         FIREWALL_LABEL,
-        "neutral",
+        Tone.NEUTRAL,
         "Not read",
         "HQ has no firewall reading for this machine.",
     )
@@ -135,7 +136,7 @@ def _unattested_tailnet_policy() -> SecurityControl:
     return SecurityControl(
         "tailnet-policy",
         TAILNET_POLICY_LABEL,
-        "neutral",
+        Tone.NEUTRAL,
         "Not read",
         "HQ has no reading of the tailnet policy.",
     )
@@ -192,7 +193,7 @@ def _judged(policy: IngressPolicy, *, reachable: bool, proxy: str) -> SecurityCo
         return SecurityControl(
             "edge",
             EDGE_LABEL,
-            "neutral",
+            Tone.NEUTRAL,
             "Last reading is out of date",
             f"{proxy} is not answering, so this is from the last time HQ read it.",
         )
@@ -200,7 +201,7 @@ def _judged(policy: IngressPolicy, *, reachable: bool, proxy: str) -> SecurityCo
         return SecurityControl(
             "edge",
             EDGE_LABEL,
-            "serious",
+            Tone.SERIOUS,
             "No access list",
             f"{proxy} has no access list on this name.",
         )
@@ -208,7 +209,7 @@ def _judged(policy: IngressPolicy, *, reachable: bool, proxy: str) -> SecurityCo
         return SecurityControl(
             "edge",
             EDGE_LABEL,
-            "neutral",
+            Tone.NEUTRAL,
             "Rules not read yet",
             f"{proxy} has an access list on this name, and HQ has not read its rules.",
         )
@@ -216,7 +217,7 @@ def _judged(policy: IngressPolicy, *, reachable: bool, proxy: str) -> SecurityCo
         return SecurityControl(
             "edge",
             EDGE_LABEL,
-            "serious",
+            Tone.SERIOUS,
             "Other sources allowed",
             f"The {proxy} access list on this name allows more than the two tailnet address ranges.",
         )
@@ -224,7 +225,7 @@ def _judged(policy: IngressPolicy, *, reachable: bool, proxy: str) -> SecurityCo
     return SecurityControl(
         "edge",
         EDGE_LABEL,
-        "good",
+        Tone.GOOD,
         dotted("Tailnet ranges", f"{'implicit ' if implicit else ''}deny all"),
         f"{proxy} allows tailnet IPv4 and IPv6 addresses for this name and refuses every other source.",
     )
@@ -237,7 +238,7 @@ def _tailnet_policy_control(snapshot) -> SecurityControl:
         return SecurityControl(
             "tailnet-policy",
             TAILNET_POLICY_LABEL,
-            "neutral",
+            Tone.NEUTRAL,
             "Last reading is out of date",
             "Tailscale is not answering, so this is from the last time HQ read it.",
         )
@@ -252,7 +253,7 @@ def _tailnet_policy_control(snapshot) -> SecurityControl:
     return SecurityControl(
         "tailnet-policy",
         TAILNET_POLICY_LABEL,
-        "good",
+        Tone.GOOD,
         dotted(counted(len(grants), "grant"), counted(len(tests), "test")),
         "HQ read the policy that is active on the tailnet.",
     )
@@ -283,7 +284,7 @@ def host_firewall_control(snapshot) -> SecurityControl:
         return SecurityControl(
             "host-firewall",
             FIREWALL_LABEL,
-            "good",
+            Tone.GOOD,
             f"Required on {interface}",
             f"The firewall accepts this port only on {interface}, and drops a "
             "tailnet address that arrives on any other interface.",
@@ -292,7 +293,7 @@ def host_firewall_control(snapshot) -> SecurityControl:
         return SecurityControl(
             "host-firewall",
             FIREWALL_LABEL,
-            "good",
+            Tone.GOOD,
             f"Required on {interface}",
             f"The firewall accepts this port only on {ended(interface)} It has no rule "
             "that drops a tailnet address arriving on another interface.",
@@ -369,7 +370,7 @@ def _admission(request, *, gate: bool) -> _Admission:
         network=SecurityControl(
             "network",
             "Only your networks can open HQ",
-            "good" if gate and channel.private else "serious",
+            Tone.GOOD if gate and channel.private else Tone.SERIOUS,
             dotted(channel.label, "enforced" if gate else "not enforced"),
             "HQ refuses any address outside its private ranges."
             if gate
@@ -378,14 +379,14 @@ def _admission(request, *, gate: bool) -> _Admission:
         transport=SecurityControl(
             "transport",
             "This request was encrypted",
-            "good" if secure else "attention",
+            Tone.GOOD if secure else Tone.ATTENTION,
             ("TLS inside WireGuard" if channel.id == "tailnet" else "TLS") if secure else "Plain HTTP",
             "This request arrived over TLS." if secure else "This request did not arrive over TLS.",
         ),
         proxy=SecurityControl(
             "proxy",
             "Your address comes from a proxy HQ trusts",
-            "good" if trusted_proxies else "neutral",
+            Tone.GOOD if trusted_proxies else Tone.NEUTRAL,
             (
                 counted(trusted_proxies, "trusted proxy", "trusted proxies")
                 if trusted_proxies
@@ -421,10 +422,10 @@ def _posture_state(
     if (
         (admission is not None and not admission.holds)
         or wrong
-        or any(control.state == "serious" for control in attested)
+        or any(control.state == Tone.SERIOUS for control in attested)
     ):
-        return "serious"
-    return "neutral" if unvouched else "good"
+        return Tone.SERIOUS
+    return Tone.NEUTRAL if unvouched else Tone.GOOD
 
 
 def _headline(admission: _Admission | None) -> str:
@@ -450,7 +451,7 @@ def _custody_control(groups: tuple[ConnectionGroup, ...]) -> SecurityControl:
     return SecurityControl(
         "credentials",
         "Keys are kept in a vault",
-        "good" if connections else "neutral",
+        Tone.GOOD if connections else Tone.NEUTRAL,
         dotted(
             *(f"{count} in {store}" for store, count in sorted(stores.items())),
             f"{keyless} need no key" if keyless else "",
@@ -485,13 +486,13 @@ def _scope_control(evidence: Counter, connections: tuple) -> SecurityControl:
         }
     )
     if missing:
-        state, detail = "serious", "A credential lacks a permission HQ needs."
+        state, detail = Tone.SERIOUS, "A credential lacks a permission HQ needs."
     elif unchecked or unknown:
-        state, detail = "attention", "HQ cannot confirm these credentials are limited to what it needs."
+        state, detail = Tone.ATTENTION, "HQ cannot confirm these credentials are limited to what it needs."
     elif whole:
-        state, detail = "neutral", "These services offer nothing narrower than full account access."
+        state, detail = Tone.NEUTRAL, "These services offer nothing narrower than full account access."
     else:
-        state, detail = "good", "Each service confirmed the permissions HQ needs."
+        state, detail = Tone.GOOD, "Each service confirmed the permissions HQ needs."
     if whole:
         detail = ended(f"{detail} Full account access: {', '.join(whole)}")
     return SecurityControl(
@@ -533,7 +534,7 @@ def _freshness_control(connections: tuple) -> SecurityControl:
     return SecurityControl(
         "freshness",
         "Connections have been read",
-        "attention" if unread else "good" if connections else "neutral",
+        Tone.ATTENTION if unread else Tone.GOOD if connections else Tone.NEUTRAL,
         (f"Oldest reading {ago(oldest.instance.observed_at)}" if oldest is not None else "Nothing read yet"),
         f"{counted(unread, 'connection has', 'connections have')} no reading."
         if unread

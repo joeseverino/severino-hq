@@ -27,6 +27,7 @@ from .display_words import display
 from .entity_links import EntityLink, entity_link, kind_label
 from .moments import ago
 from .published_sites import projects_by_hostname
+from .tone import Tone
 from .ui import MISSING, PAGE_SECTION_ID, counted, ended
 lazy from . import history, machines
 lazy from .action_links import command_url
@@ -34,7 +35,7 @@ lazy from .automation_runs import listed_with_actions
 lazy from .containers import standings_on
 lazy from .github_estate import repository_for
 lazy from .history import HistoryGroup
-lazy from .infrastructure import RESOURCE_TONES
+lazy from .infrastructure import ResourceState
 lazy from .npm_sections import access
 lazy from .pages import PageBadge, principal_opens
 lazy from .path_dependencies import consequence_of
@@ -384,7 +385,7 @@ def service_summary(service) -> tuple[SummaryItem, ...]:
                 "Health",
                 service.health.label,
                 detail=_health_detail(service),
-                tone=service.health.state,
+                tone=service.status,
                 icon="activity",
             ),
             # Where it runs only when there is no path to show it: the path
@@ -567,12 +568,12 @@ class PartRow:
 
         found: tuple[str, str] | None
         if self.claim is not None:
-            tone = RESOURCE_TONES.get(self.claim.health["state"], "neutral")
+            tone = ResourceState(self.claim.health["state"]).tone
             found = (self.claim.health["label"], _PILL_TONES[tone])
         else:
             found = self.observed_health
         if found is not None and self.read_from is not None and self.read_from.stale:
-            return (f"{found[0]} when last read", _PILL_TONES["neutral"])
+            return (f"{found[0]} when last read", _PILL_TONES[Tone.NEUTRAL])
         return found
 
 

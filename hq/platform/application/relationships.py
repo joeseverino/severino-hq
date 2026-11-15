@@ -18,6 +18,7 @@ from .entity_links import EntityLink, entity_link, node_link
 from .facts import readings, unreadable_labels
 from .moments import moment
 from .security import Principal
+from .tone import Tone
 from .topology import relation_graph
 from .topology_model import RELATIONS, TopologyEdge, relation_rank
 lazy from .action_links import topology_url
@@ -111,7 +112,7 @@ def _rows(edge: TopologyEdge, node_id: str, nodes: dict[str, Any]):
     outbound = edge.source == node_id
     other = nodes[edge.target if outbound else edge.source]
     observed = moment(edge.observed_at, naive="keep")
-    stale = edge.status == "attention"
+    stale = edge.status == Tone.ATTENTION
     if edge.kind == "reading":
         if outbound:
             yield RELATIONS["reading"].inverse, Relationship(node_link(other), None, observed, stale)

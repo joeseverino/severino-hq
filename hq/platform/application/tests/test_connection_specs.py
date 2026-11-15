@@ -495,7 +495,6 @@ class ConnectionRegistrationTests(TestCase):
         cases = (
             ("non-ConnectionInstance", object()),
             ("incomplete instance", replace(good, kind=" ")),
-            ("invalid status", replace(good, status="fine")),
             ("no status label", replace(good, status_label=" ")),
             ("invalid granted scopes", replace(good, granted_scopes=("accounts:read", "accounts:read"))),
             ("invalid granted scopes", replace(good, granted_scopes=("accounts read",))),
@@ -511,6 +510,11 @@ class ConnectionRegistrationTests(TestCase):
                 self.assertRaisesRegex(ImproperlyConfigured, refusal),
             ):
                 connection_catalog(principal=FINANCE)
+
+    def test_a_connection_read_in_a_word_that_is_no_tone_is_refused_as_it_is_made(self):
+        good = _finance_spec().instance_provider()[0]
+        with self.assertRaisesRegex(ValueError, "status"):
+            replace(good, status="fine")
 
     def test_documentation_urls_are_restricted_to_safe_destinations(self):
         spec = replace(_finance_spec(), documentation_url="javascript:alert(1)")

@@ -287,7 +287,7 @@ class EstateCardTests(TestCase):
             (figure,) = (
                 kpi for kpi in overview(principal=cli_principal()).kpis if kpi.url == reverse("control_plane:services")
             )
-        unread = [service for service in services if service.health.state == "unknown"]
+        unread = [service for service in services if service.health.state is None]
 
         self.assertTrue(unread, "the estate has no service without a health reading")
         self.assertEqual(len(figure.drawing.dots), len(services) - len(unread))

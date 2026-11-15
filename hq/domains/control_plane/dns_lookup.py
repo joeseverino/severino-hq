@@ -21,6 +21,7 @@ from hq.platform.application.connection_contracts import (
 from hq.platform.application.http_read import UNREACHABLE, fetch, redirect_target
 from hq.platform.application.reach import public_host
 from hq.platform.application.security import Capability
+from hq.platform.application.tone import Tone
 from hq.platform.core.errors import UpstreamUnavailable
 lazy from hq.platform.application.entity_links import https_url
 
@@ -36,7 +37,7 @@ def connection_specs():
             id=identifier,
             label=label,
             kind=kind,
-            status="good",
+            status=Tone.GOOD,
             status_label="configured",
             detail="Needs no key. Checked only when a lookup runs.",
             endpoint=f"https://{parsed.netloc}",

@@ -18,24 +18,21 @@ from .chart_numbers import (
 )
 from .display_words import display
 from .labels import dotted, plural
+from .tone import Tone
 
-# The one status vocabulary. Every surface that shows state (dashboard cards,
-# insight panels, extension-provided projections) draws from this set, so a
-# state means the same thing and looks the same wherever it is rendered.
-# Reserved: these never double as categorical series colors, and each is always
-# rendered with its own text so state is never carried by color alone.
-STATUS_VALUES = frozenset({"good", "attention", "serious", "neutral"})
+# The tone words, for value_tags' `tone=` check alone.
+STATUS_VALUES = frozenset(Tone)
 
 # An advisory's severity as the tone it is drawn in, wherever one is listed:
 # critical and high serious, medium attention, the rest neutral. A weather
 # alert's severity (extreme, severe, moderate, minor) reads the same way.
 SEVERITY_TONES = {
-    "critical": "serious",
-    "extreme": "serious",
-    "high": "serious",
-    "severe": "serious",
-    "medium": "attention",
-    "moderate": "attention",
+    "critical": Tone.SERIOUS,
+    "extreme": Tone.SERIOUS,
+    "high": Tone.SERIOUS,
+    "severe": Tone.SERIOUS,
+    "medium": Tone.ATTENTION,
+    "moderate": Tone.ATTENTION,
 }
 
 
@@ -55,10 +52,10 @@ def button_classes(look: str = "") -> str:
     return " ".join(dict.fromkeys(("btn", *words)))
 
 
-def severity_tone(severity: object) -> str:
+def severity_tone(severity: object) -> Tone:
     """The tone an advisory's severity is drawn in."""
 
-    return SEVERITY_TONES.get(str(severity or "").lower(), "neutral")
+    return SEVERITY_TONES.get(str(severity or "").lower(), Tone.NEUTRAL)
 
 
 def _one_of(name: str, value: str, allowed: frozenset[str], *, or_empty: bool = False) -> None:

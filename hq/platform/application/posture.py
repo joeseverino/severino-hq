@@ -18,6 +18,7 @@ lazy from hq.domains.control_plane.providers import PROVIDERS, registry_label
 
 from .connection_contracts import UNKNOWN_CREDENTIAL
 from .standards import Check, Measurement, Reading, Standing, measure
+from .tone import Tone
 from .ui import counted
 lazy from . import cadence, tailnet
 lazy from .connection_security import host_firewall_control, ingress_kinds, observed_connection_controls
@@ -48,9 +49,9 @@ class Inputs:
 def _from_control(control, kinds: tuple[str, ...]) -> Reading:
     """Evidence only when unmet: a met check's label says it."""
 
-    if control.state == "good":
+    if control.state == Tone.GOOD:
         return Reading.met()
-    if control.state in {"neutral", "attention"}:
+    if control.state in {Tone.NEUTRAL, Tone.ATTENTION}:
         return _not_read(kinds, held=control.detail)
     return Reading.unmet(control.evidence)
 

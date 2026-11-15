@@ -9,8 +9,9 @@ from django.template.loader import render_to_string
 from django.test import SimpleTestCase
 from django.utils import timezone
 
-from hq.platform.application.decisions import decision, urgency, workflow_parts
+from hq.platform.application.decisions import decision, workflow_parts
 from hq.platform.application.item_help import cannot_step, commands, do_step, run_step
+from hq.platform.application.tone import Tone
 from hq.platform.application.workflow_contracts import ActionLink, WorkflowOutcome, WorkflowPlan, WorkflowStep
 
 from .markup import all_elements, elements, hrefs, select, text, texts, with_class
@@ -242,7 +243,7 @@ class DecisionTests(SimpleTestCase):
         self.assertNotIn("Restore the example", text(html))
 
     def test_urgency_is_said_in_one_set_of_words(self):
-        self.assertEqual((urgency("serious"), urgency("attention")), ("Urgent", "Needs attention"))
+        self.assertEqual((Tone.SERIOUS.urgency, Tone.ATTENTION.urgency), ("Urgent", "Needs attention"))
         for item, said in ((self.item(status="serious"), "Urgent"), (self.item(notice=True), "Notice")):
             (pill,) = select(card(item), "data-origin")
             self.assertEqual(pill.words, said)

@@ -18,6 +18,7 @@ from hq.platform.application.moments import (
     when_range,
 )
 from hq.platform.application.page_parts import SectionPart
+from hq.platform.application.tone import Tone
 from hq.platform.application.ui import (
     MISSING,
     ActivityCalendar,
@@ -66,6 +67,7 @@ __all__ = [
     "StackedBarChart",
     "Timeline",
     "TimelineItem",
+    "Tone",
     "Trend",
     "WeekPlan",
     "ago",

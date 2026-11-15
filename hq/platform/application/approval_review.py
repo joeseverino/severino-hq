@@ -17,6 +17,7 @@ from .approvals import AUDIT_LABELS, COMPARED, DECLARATIONS, DESTRUCTIVE_EFFECT,
 from .doors import NOBODY, Attribution
 from .payload_words import STEP, ChangeRow, changed_words, document, field_words, value_words
 from .security import Principal
+from .tone import Tone
 lazy from . import capabilities
 lazy from .command_forms import switch_field
 lazy from .command_targets import item_name
@@ -420,7 +421,7 @@ def review(held: ApprovalRequest, principal: Principal) -> dict[str, Any]:
     return {
         "held": held,
         "who": who,
-        "tone": "attention" if held.state == ApprovalRequest.State.PENDING else "",
+        "tone": Tone.ATTENTION if held.state == ApprovalRequest.State.PENDING else "",
         # A settled request offers nothing, and its aside says how it ended.
         "offer": offers(principal, (held,))[held.pk] if held.state == ApprovalRequest.State.PENDING else NO_OFFER,
         "asked": sentence,

@@ -14,6 +14,7 @@ from django.utils.text import capfirst, get_text_list
 from hq.platform.application.labels import dotted
 
 from .projection import read_once
+from .tone import Tone
 from .ui import counted, ended
 lazy from . import connections
 lazy from .findings import estate_findings
@@ -22,23 +23,19 @@ lazy from .moments import ago
 lazy from .security import INTERNAL_INTERFACE, Capability, Principal
 lazy from .whereabouts import reads_containers_on
 
-GOOD = "good"
-ATTENTION = "attention"
-SERIOUS = "serious"
-UNKNOWN = "unknown"
-
 
 @dataclass(frozen=True, slots=True)
 class Health:
-    state: str
+    # None when nothing reads its health.
+    state: Tone | None
     label: str
     detail: str = ""
 
     @property
-    def tone(self) -> str:
-        """The state as a tone: "unknown" is no health reading, so neutral."""
+    def tone(self) -> Tone:
+        """The state as a tone: no health reading is neutral."""
 
-        return self.state if self.state in (GOOD, ATTENTION, SERIOUS) else "neutral"
+        return self.state or Tone.NEUTRAL
 
 
 def service_health(service: Any, *, own_findings: bool = True) -> Health:
@@ -51,7 +48,7 @@ def service_health(service: Any, *, own_findings: bool = True) -> Health:
     if service.declared_claims:
         found = _as_last_read(_declared(service), service)
     elif service.is_hq:
-        found = Health(GOOD, "Up", "Answering this request.")
+        found = Health(Tone.GOOD, "Up", "Answering this request.")
     else:
         return _undeclared(service)
     return _with_own_findings(found) if service.is_hq and own_findings else found
@@ -66,14 +63,14 @@ def _declared(service: Any) -> Health:
 
     faults = counted(len(service.faults), "setup problem", "setup problems") if service.faults else ""
     states = {facet.state for facet in service.facets}
-    if SERIOUS in states:
-        return Health(SERIOUS, "Has a problem", faults)
+    if Tone.SERIOUS in states:
+        return Health(Tone.SERIOUS, "Has a problem", faults)
     if service.faults:
-        return Health(ATTENTION, "Incomplete", faults)
-    if ATTENTION in states:
+        return Health(Tone.ATTENTION, "Incomplete", faults)
+    if Tone.ATTENTION in states:
         # Which parts, so the word comes with the thing to go and look at.
-        waiting = [facet.label for facet in service.facets if facet.state == ATTENTION]
-        return Health(ATTENTION, "Not checked yet", f"Not checked yet: {', '.join(waiting)}")
+        waiting = [facet.label for facet in service.facets if facet.state == Tone.ATTENTION]
+        return Health(Tone.ATTENTION, "Not checked yet", f"Not checked yet: {', '.join(waiting)}")
     return _in_place(service)
 
 
@@ -98,21 +95,21 @@ def _in_place(service: Any) -> Health:
     checked = f"{get_text_list(parts, 'and')} {'is' if len(parts) == 1 else 'are'} in place" if parts else ""
     checked = capfirst(checked)
     if parts == [_PART_NOUNS["dns"]]:
-        return Health(UNKNOWN, "DNS record only", "A DNS record is in place. Nothing HQ set up answers at it.")
+        return Health(None, "DNS record only", "A DNS record is in place. Nothing HQ set up answers at it.")
     behind = _behind_the_proxy(service)
     if behind is None:
-        return Health(UNKNOWN, "In place", ended(checked))
+        return Health(None, "In place", ended(checked))
     address, machine, container, reads_containers = behind
     if container:
         return _running(service.container, ended(f"{checked} and forward to {container} on {machine}"))
     if reads_containers:
         return Health(
-            ATTENTION,
+            Tone.ATTENTION,
             "Nothing on that port",
             f"{ended(checked)} The proxy forwards to {address}, and no container on {machine} publishes that port.",
         )
     return Health(
-        UNKNOWN,
+        None,
         "In place",
         f"{ended(checked)} The proxy forwards to {ended(address)} HQ does not read what runs there.",
     )
@@ -124,12 +121,12 @@ def _running(running: Any, detail: str) -> Health:
 
     check = running.check if running is not None else ""
     if check == "health check passing":
-        return Health(GOOD, "Health check passing", detail)
+        return Health(Tone.GOOD, "Health check passing", detail)
     if check:
-        return Health(ATTENTION, capfirst(check), detail)
+        return Health(Tone.ATTENTION, capfirst(check), detail)
     if running is not None and running.healthy:
-        return Health(GOOD, "Running", detail)
-    return Health(UNKNOWN, "In place", detail)
+        return Health(Tone.GOOD, "Running", detail)
+    return Health(None, "In place", detail)
 
 
 def _as_last_read(found: Health, service: Any) -> Health:
@@ -138,11 +135,11 @@ def _as_last_read(found: Health, service: Any) -> Health:
 
     route = service.path.primary
     stale = route.stale_reading if route is not None else None
-    if stale is None or found.state == UNKNOWN:
+    if stale is None or found.state is None:
         return found
     said = f"{found.label} when last read, {ago(stale.observed_at)}."
     return Health(
-        SERIOUS if found.state == SERIOUS else ATTENTION,
+        Tone.SERIOUS if found.state == Tone.SERIOUS else Tone.ATTENTION,
         "Out of date",
         " ".join(part for part in (said, found.detail) if part),
     )
@@ -170,11 +167,11 @@ def _undeclared(service: Any) -> Health:
 
     path = service.path
     if not path.observed_line:
-        return Health(UNKNOWN, "Nothing set up in HQ")
+        return Health(None, "Nothing set up in HQ")
     said = [path.observed_line]
     if not path.routes and path.gaps:
         said.append(_dns_state(path.gaps[0]))
-    return Health(UNKNOWN, "Read only", dotted(*said))
+    return Health(None, "Read only", dotted(*said))
 
 
 def _dns_state(gap: str) -> str:
@@ -191,10 +188,10 @@ def _with_own_findings(found: Health) -> Health:
     own = hq_findings()
     if not own:
         return found
-    if found.state in (ATTENTION, SERIOUS):
+    if found.state in (Tone.ATTENTION, Tone.SERIOUS):
         about = counted(len(own), "open problem is about HQ", "open problems are about HQ")
         return Health(found.state, found.label, " ".join(part for part in (found.detail, ended(about)) if part))
-    return Health(ATTENTION, counted(len(own), "open problem", "open problems"), found.detail)
+    return Health(Tone.ATTENTION, counted(len(own), "open problem", "open problems"), found.detail)
 
 
 def hq_findings() -> tuple[Any, ...]:

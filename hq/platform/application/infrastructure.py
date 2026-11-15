@@ -1,6 +1,7 @@
 """Infrastructure desired state and policy-gated operation requests."""
 
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Annotated, Any
 
 from django.conf import settings
@@ -37,6 +38,7 @@ from .projection import keyset_page, read_once
 from .record_errors import PolicyError
 from .record_saves import Held, as_sent, found, held, written
 from .security import Principal
+from .tone import Tone
 lazy from .asks import APPLIES_SHORTLY
 lazy from .cadence import ask, swept
 lazy from .delivery_progress import deploying_label
@@ -236,15 +238,68 @@ def serialize_public_status(status: dict[str, Any]) -> dict[str, Any]:
     return public_status
 
 
-# Each declared-resource health state as the tone every page draws it in.
-RESOURCE_TONES = {
-    "healthy": "good",
-    "declared": "good",
-    "pending": "attention",
-    "drifted": "serious",
-    "degraded": "serious",
+class ResourceState(StrEnum):
+    """A declared record's health in one word, as the API answers it."""
+
+    HEALTHY = "healthy"
+    # Nothing converges its kind, so it is as declared.
+    DECLARED = "declared"
+    PENDING = "pending"
+    DRIFTED = "drifted"
+    DEGRADED = "degraded"
     # A deploy on its way to production is not a fault (delivery_progress).
-    "deploying": "neutral",
+    DEPLOYING = "deploying"
+    UNKNOWN = "unknown"
+
+    @property
+    def tone(self) -> Tone:
+        """The tone every page draws it in."""
+
+        return _RESOURCE_TONES[self]
+
+
+_RESOURCE_TONES = {
+    ResourceState.HEALTHY: Tone.GOOD,
+    ResourceState.DECLARED: Tone.GOOD,
+    ResourceState.PENDING: Tone.ATTENTION,
+    ResourceState.DRIFTED: Tone.SERIOUS,
+    ResourceState.DEGRADED: Tone.SERIOUS,
+    ResourceState.DEPLOYING: Tone.NEUTRAL,
+    ResourceState.UNKNOWN: Tone.NEUTRAL,
+}
+
+
+class RecordState(StrEnum):
+    """Where one record stands on its page and its row
+    (``resource_context.record_status``), in the word ``data-record-status`` says."""
+
+    OFF = "off"
+    DRIFTED = "drifted"
+    DEPLOYING = "deploying"
+    DEGRADED = "degraded"
+    PENDING = "pending"
+    UNSEEN = "unseen"
+    WORKING = "working"
+    RECORDED = "recorded"
+    UNREAD = "unread"
+
+    @property
+    def tone(self) -> Tone:
+        """The tone its label and detail are drawn in."""
+
+        return _RECORD_TONES[self]
+
+
+_RECORD_TONES = {
+    RecordState.OFF: Tone.NEUTRAL,
+    RecordState.DRIFTED: Tone.SERIOUS,
+    RecordState.DEPLOYING: Tone.ATTENTION,
+    RecordState.DEGRADED: Tone.SERIOUS,
+    RecordState.PENDING: Tone.ATTENTION,
+    RecordState.UNSEEN: Tone.NEUTRAL,
+    RecordState.WORKING: Tone.GOOD,
+    RecordState.RECORDED: Tone.NEUTRAL,
+    RecordState.UNREAD: Tone.NEUTRAL,
 }
 
 
@@ -259,15 +314,15 @@ NOT_READ_LABEL = "Not read yet"
 def resource_health(resource: ManagedResource) -> HealthPart:
     active = {condition.get("type"): condition for condition in holding(resource.conditions)}
     for condition_type, state, label in (
-        (DRIFTED, "drifted", DRIFT_LABEL),
-        (DEGRADED, "degraded", "Has a problem"),
-        (READY, "healthy", "Working"),
+        (DRIFTED, ResourceState.DRIFTED, DRIFT_LABEL),
+        (DEGRADED, ResourceState.DEGRADED, "Has a problem"),
+        (READY, ResourceState.HEALTHY, "Working"),
     ):
         if condition_type in active:
             condition = active[condition_type]
-            deploying = deploying_label(resource) if state == "degraded" else ""
+            deploying = deploying_label(resource) if state is ResourceState.DEGRADED else ""
             return {
-                "state": "deploying" if deploying else state,
+                "state": ResourceState.DEPLOYING if deploying else state,
                 "label": deploying or label,
                 "reason": condition.get("reason", ""),
                 "message": condition.get("message", ""),
@@ -275,7 +330,7 @@ def resource_health(resource: ManagedResource) -> HealthPart:
     # Nothing converges this kind, so "not reported" would never change.
     if not kind_converges(resource.kind):
         return {
-            "state": "declared",
+            "state": ResourceState.DECLARED,
             "label": "Not checked",
             "reason": "",
             "message": "",
@@ -285,13 +340,13 @@ def resource_health(resource: ManagedResource) -> HealthPart:
     # not a fault: the model already says so by carrying two generations.
     if resource.observed_generation != resource.generation:
         return {
-            "state": "pending",
+            "state": ResourceState.PENDING,
             "label": "Change waiting to apply",
             "reason": "",
             "message": "",
         }
     return {
-        "state": "unknown",
+        "state": ResourceState.UNKNOWN,
         "label": NOT_READ_LABEL,
         "reason": "",
         "message": "HQ has not read it yet.",

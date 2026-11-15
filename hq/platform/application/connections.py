@@ -40,6 +40,7 @@ from .integration_validation import required_capability_names
 from .integrations import held_graph
 from .moments import ago
 from .security import Capability, Principal
+from .tone import Tone
 from .ui import ended
 lazy from . import machines
 lazy from .infrastructure import enabled_resources
@@ -363,7 +364,7 @@ def _controller_instances(
                 id=f"{reading.controller_id}:{reading.connection_ref}",
                 label=reading.connection_ref,
                 kind=reading.provider or "unclassified",
-                status=("serious" if not reading.reachable else "good" if reading.probed else "neutral"),
+                status=(Tone.SERIOUS if not reading.reachable else Tone.GOOD if reading.probed else Tone.NEUTRAL),
                 status_label=reading.status_label,
                 detail=reading.detail,
                 endpoint=reading.endpoint,

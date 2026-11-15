@@ -38,9 +38,8 @@ from .entity_links import EntityLink
 from .json_schemas import Written
 from .plugins import ATTENTION_ORDER
 from .record_fields import Notes, PublishedAt
-from .service_health import ATTENTION, GOOD, SERIOUS, UNKNOWN
 from .services import HQ_MARK, OBSERVED_MARK
-from .topology_model import STANDINGS
+from .tone import Tone
 from .ui import ended
 from .upgrades import HIGH, LOW, MAJOR, MEDIUM, MINOR, PATCH, UNKNOWN_CHANGE
 from .workflows import WrittenAction
@@ -194,7 +193,7 @@ class ServiceRow(TypedDict):
     status: Annotated[
         str,
         Describe(
-            f"How the service stands by its health rule: {listed((GOOD, ATTENTION, SERIOUS, UNKNOWN))}, "
+            f"How the service stands by its health rule: {listed((Tone.GOOD, Tone.ATTENTION, Tone.SERIOUS, 'unknown'))}, "
             "the last when nothing reads its health."
         ),
     ]
@@ -211,7 +210,7 @@ class FacetPart(TypedDict):
     state: Annotated[
         str,
         Describe(
-            f"How the records behind it stand: {listed((GOOD, ATTENTION, SERIOUS))}; empty when none supplies it."
+            f"How the records behind it stand: {listed((Tone.GOOD, Tone.ATTENTION, Tone.SERIOUS))}; empty when none supplies it."
         ),
     ]
     resources: Annotated[list[str], Describe("The keys of HQ's records that supply it.")]
@@ -688,7 +687,7 @@ class UpgradeRecord(UpgradeRow):
 
 class ZoneMemberPart(TypedDict):
     hostname: Annotated[str, Describe("The hostname of a service under the domain.")]
-    status: Annotated[str, Describe(ended(f"How that service stands: {listed(STANDINGS)}"))]
+    status: Annotated[str, Describe(ended(f"How that service stands: {listed(Tone)}"))]
 
 
 class Registration(TypedDict):

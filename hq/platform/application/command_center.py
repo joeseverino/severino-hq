@@ -12,7 +12,6 @@ from .command_targets import starting_page
 from .connection_catalog import connection_catalog
 from .connections import ConnectionAbility, ConnectionSpec
 from .contracts import route_url
-from .decisions import urgency
 from .entity_links import entity_link
 from .facts import in_zone
 from .findings import finding_rules
@@ -527,7 +526,7 @@ def _questions(principal: Principal) -> tuple[tuple[DiscoveryItem, ...], tuple[D
             summary="",
             url=_finding_url(rule.name),
             destination_label="",
-            badges=(urgency(rule.severity),),
+            badges=(rule.severity.urgency,),
         )
         for rule in finding_rules()
     )

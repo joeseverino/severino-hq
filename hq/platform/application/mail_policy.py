@@ -12,6 +12,7 @@ from typing import Any
 
 from .card_items import Insight
 from .entity_links import entity_link
+from .tone import Tone
 from .ui import counted, ended
 
 DMARC_VERSION = "DMARC1"
@@ -375,7 +376,7 @@ class MailOverview:
 
         return tuple(
             Insight(
-                "attention" if section.concern else "neutral",
+                Tone.ATTENTION if section.concern else Tone.NEUTRAL,
                 section.label,
                 section.question,
                 section.answer,

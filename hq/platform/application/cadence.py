@@ -50,6 +50,7 @@ from .integration_specs import requested
 from .moments import duration
 from .record_errors import Sentence
 from .security import Principal
+from .tone import Tone
 from .ui import ended
 lazy from .action_links import READ_NOW_CAPABILITY
 lazy from .adoption import manages_through, observes_only
@@ -184,8 +185,8 @@ class WorkerStanding:
         where it has never run, which is known to be neither."""
 
         if self.silent:
-            return "attention"
-        return "good" if self.known else "neutral"
+            return Tone.ATTENTION
+        return Tone.GOOD if self.known else Tone.NEUTRAL
 
     @property
     def takes_reads(self) -> bool:

@@ -11,6 +11,7 @@ from typing import Any
 
 from .projection import projection_scope, window
 from .record_errors import RecordNotFound
+from .tone import Tone
 lazy from .containers import containers
 lazy from .upgrades import plans
 
@@ -58,7 +59,7 @@ def _posture(posture: Any) -> dict[str, Any]:
             {
                 "id": result.check.id,
                 "label": result.check.label,
-                "serious": result.check.serious,
+                Tone.SERIOUS: result.check.serious,
                 "why": result.check.why,
                 "fix": result.check.fix,
             }

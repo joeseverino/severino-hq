@@ -26,6 +26,7 @@ from .cadence import (
 from .entity_links import kind_label
 from .freshness import Freshness, freshness
 from .moments import duration
+from .tone import Tone
 lazy from .facts import every_snapshot
 
 
@@ -75,20 +76,20 @@ class ControllerPage:
         """Whether it is arriving, as a tone: none before it ever has."""
 
         if self.standing.silent:
-            return "serious"
-        return "good" if self.standing.known else ""
+            return Tone.SERIOUS
+        return Tone.GOOD if self.standing.known else ""
 
     @property
     def failing_tone(self) -> str:
-        return "attention" if self.failing else ""
+        return Tone.ATTENTION if self.failing else ""
 
     @property
     def overdue_tone(self) -> str:
-        return "serious" if self.overdue else ""
+        return Tone.SERIOUS if self.overdue else ""
 
     @property
     def queue_tone(self) -> str:
-        return "attention" if self.queue else ""
+        return Tone.ATTENTION if self.queue else ""
 
 
 def _reading(row: ProviderInventory) -> KindReading:

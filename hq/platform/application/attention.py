@@ -16,11 +16,12 @@ from hq.platform.application.routes import reverse
 from .card_items import Insight
 from .finding_model import Finding, FindingRule
 from .findings import estate_findings, finding_key, finding_rules, rule_for
-from .infrastructure import enabled_resources, resource_health
+from .infrastructure import ResourceState, enabled_resources, resource_health
 from .item_help import finding_plan
 from .labels import lower_first
 from .projection import read_once
 from .security import cli_principal, internal_principal
+from .tone import Tone
 from .ui import counted, ended
 lazy from .approval_review import asked, preview
 lazy from .approvals import Offer, offers, pending, reads_every_hold
@@ -30,10 +31,8 @@ lazy from .domains import host_domains
 INFRASTRUCTURE = "hq.infrastructure"
 # The section that raises each change an agent asked for, held for a person.
 APPROVALS = "hq.approvals"
-# A neutral finding is context, which the queue leaves out.
-_FINDING_STATUS = {"serious": "serious", "attention": "attention", "neutral": "neutral"}
 # How a finding's severity reads before the bar its rule declares for it.
-_RATED = {"serious": "urgent once", "attention": "worth attention once", "neutral": "a note when"}
+_RATED = {Tone.SERIOUS: "urgent once", Tone.ATTENTION: "worth attention once", Tone.NEUTRAL: "a note when"}
 # The evidence a why quotes before the bar; the panel's facts hold the rest.
 _WHY_EVIDENCE = 2
 
@@ -49,7 +48,7 @@ def finding_why(finding: Finding, rule: FindingRule | None) -> str:
     if more:
         read += f" (and {more} more)"
     bar = rule.bars.get(finding.severity, "") if rule is not None else ""
-    return ended(f"{read}; {_RATED.get(finding.severity, _RATED['attention'])} {bar}" if bar else read)
+    return ended(f"{read}; {_RATED.get(finding.severity, _RATED[Tone.ATTENTION])} {bar}" if bar else read)
 
 
 def raising_domains() -> frozenset[str]:
@@ -93,7 +92,9 @@ def _findings_to_raise(resources, health_by_key: dict[str, dict[str, str]]) -> t
     """The estate's findings whose subject HQ can speak for now."""
 
     actionable_keys = {
-        resource.key for resource in resources if health_by_key[resource.key]["state"] not in {"pending", "declared"}
+        resource.key
+        for resource in resources
+        if health_by_key[resource.key]["state"] not in {ResourceState.PENDING, ResourceState.DECLARED}
     }
     actionable_kinds = {resource.kind for resource in resources if resource.key in actionable_keys}
     return tuple(
@@ -121,10 +122,9 @@ def finding_insight(finding: Any, findings_url: str) -> Insight:
     """A finding as the queue's card carries it, wherever it is drawn: what
     was read that shows it, its plan, and the pages that help look into it."""
 
-    status = _FINDING_STATUS.get(finding.severity, "attention")
     rule = rule_for(finding.rule)
     return Insight(
-        status=status,
+        status=finding.severity,
         eyebrow="Finding",
         # A rule's findings are one kind of matter, named as the rule names itself.
         family=rule.title if rule is not None else "",
@@ -179,7 +179,7 @@ def waiting_for_approval() -> tuple[Insight, ...]:
         sentence = asked(held, shown)
         items.append(
             Insight(
-                status="attention",
+                status=Tone.ATTENTION,
                 eyebrow="Approval",
                 key=f"approval:{held.id}",
                 title=str(sentence),

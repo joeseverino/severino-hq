@@ -15,6 +15,7 @@ from typing import Any
 from .finding_model import Finding, FindingEstate, FindingRule, OperatorStep
 from .moments import ago
 from .security import Capability, Principal
+from .tone import Tone
 lazy from .problems import About, problems_by_part
 
 RULE = "automation-worker-absent"
@@ -67,7 +68,7 @@ def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
                 subject="",
                 read_capabilities=_READ,
                 title="HQ's playbook worker is not set up",
-                severity="attention",
+                severity=Tone.ATTENTION,
                 explanation="Refresh and playbook runs are refused until it is set up on HQ's machine.",
                 evidence=(("Last seen", "never"),),
                 steps=(_ENTRY, _START),
@@ -79,7 +80,7 @@ def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
             subject="",
             read_capabilities=_READ,
             title="HQ's playbook worker has stopped reporting",
-            severity="serious",
+            severity=Tone.SERIOUS,
             explanation="Refresh and playbook runs are refused until it reports again; start it on HQ's machine.",
             evidence=(("Last seen", ago(worker.seen_at, now=estate.now)),),
             steps=(_START, _LOG),
@@ -92,15 +93,15 @@ RULES: tuple[FindingRule, ...] = (
     FindingRule(
         RULE,
         "HQ's playbook worker is not reporting",
-        "attention",
+        Tone.ATTENTION,
         _absent,
         operator_action=(
             f"On HQ's machine, add an automation entry to {HOST_CONFIGURATION}, then run {HQ_HOST} automation as root."
         ),
         no_help_reason="HQ cannot change its machine's configuration or start its worker.",
         bars={
-            "serious": "the playbook worker has stopped reporting, so refresh and playbook runs are refused",
-            "attention": "the playbook worker is not set up, so refresh and playbook runs are refused",
+            Tone.SERIOUS: "the playbook worker has stopped reporting, so refresh and playbook runs are refused",
+            Tone.ATTENTION: "the playbook worker is not set up, so refresh and playbook runs are refused",
         },
     ),
 )

@@ -22,6 +22,7 @@ from .finding_model import TAILNET_CARD, Finding, FindingEstate, FindingRemedy, 
 from .images import compare, version
 from .moments import moment, when_day
 from .reading_facts import onto_machine
+from .tone import Tone
 from .topology_model import TopologyNode
 from .ui import counted, ended
 lazy from .tailnet import policy
@@ -148,7 +149,7 @@ def _key_expiring(estate: FindingEstate) -> tuple[Finding, ...]:
         return Finding(
             rule="tailnet-key-expiring",
             subject=node.id,
-            severity="serious" if days <= KEY_EXPIRY_SERIOUS_DAYS else "attention",
+            severity=Tone.SERIOUS if days <= KEY_EXPIRY_SERIOUS_DAYS else Tone.ATTENTION,
             title=f"{name} leaves the tailnet in {counted(days, 'day')}"
             if days > 0
             else f"{name} has left the tailnet",
@@ -194,7 +195,7 @@ def _locked_out(estate: FindingEstate) -> tuple[Finding, ...]:
         Finding(
             rule="tailnet-device-locked-out",
             subject=node.id,
-            severity="serious",
+            severity=Tone.SERIOUS,
             title=f"{node.label} is locked out of the tailnet",
             explanation=(
                 f"Other machines ignore {node.label} because its key is not signed. Its own status still shows healthy."
@@ -215,7 +216,7 @@ def _unauthorized(estate: FindingEstate) -> tuple[Finding, ...]:
             Finding(
                 rule="tailnet-device-unapproved",
                 subject=node.id,
-                severity="serious",
+                severity=Tone.SERIOUS,
                 title=f"{node.label} is waiting for tailnet approval",
                 explanation="It cannot reach anything yet.",
                 steps=(
@@ -239,7 +240,7 @@ def _lock_unsigned(estate: FindingEstate) -> tuple[Finding, ...]:
             Finding(
                 rule="tailnet-lock-unsigned",
                 subject=node.id,
-                severity="serious",
+                severity=Tone.SERIOUS,
                 title=f"{node.label} is not signed for tailnet lock",
                 explanation=(
                     f"Other machines ignore {node.label} because its key is not signed. "
@@ -261,7 +262,7 @@ def _server_signs(estate: FindingEstate) -> tuple[Finding, ...]:
         Finding(
             rule="tailnet-lock-server-signs",
             subject=node.id,
-            severity="serious",
+            severity=Tone.SERIOUS,
             title=f"{node.label} can sign devices onto the tailnet",
             explanation=f"Whoever takes over {node.label} can add devices to the tailnet.",
             steps=tuple(
@@ -294,7 +295,7 @@ def _client_update(estate: FindingEstate) -> tuple[Finding, ...]:
             Finding(
                 rule="tailnet-client-update",
                 subject=node.id,
-                severity="attention",
+                severity=Tone.ATTENTION,
                 title=f"Tailscale update available for {node.label}",
                 explanation=_update_said(row),
                 steps=(OperatorStep(label=f"On {node.label}, as an administrator", command="tailscale update"),),
@@ -318,7 +319,7 @@ def _routes_unapproved(estate: FindingEstate) -> tuple[Finding, ...]:
         return Finding(
             rule="tailnet-routes-unapproved",
             subject=node.id,
-            severity="attention",
+            severity=Tone.ATTENTION,
             title=f"{node.label} offers "
             + counted(len(unapproved), "route that is not approved yet", "routes that are not approved yet"),
             explanation=(
@@ -339,7 +340,7 @@ RULES: tuple[FindingRule, ...] = (
     FindingRule(
         "tailnet-key-expiring",
         "A tailnet key runs out soon",
-        "attention",
+        Tone.ATTENTION,
         _key_expiring,
         operator_action=(
             "Sign in to Tailscale again on the machine, or turn off key expiry for it in the Tailscale admin console."
@@ -347,69 +348,69 @@ RULES: tuple[FindingRule, ...] = (
         no_help_reason="HQ cannot sign a machine in to the tailnet.",
         card=TAILNET_CARD,
         bars={
-            "serious": f"a machine's tailnet key runs out within {KEY_EXPIRY_SERIOUS_DAYS} days",
-            "attention": f"a machine's tailnet key runs out within {KEY_EXPIRY_ATTENTION_DAYS} days",
+            Tone.SERIOUS: f"a machine's tailnet key runs out within {KEY_EXPIRY_SERIOUS_DAYS} days",
+            Tone.ATTENTION: f"a machine's tailnet key runs out within {KEY_EXPIRY_ATTENTION_DAYS} days",
         },
         clears=f"the key runs more than {KEY_EXPIRY_ATTENTION_DAYS} days out, or key expiry is off",
     ),
     FindingRule(
         "tailnet-device-locked-out",
         "A device locked out by tailnet lock",
-        "serious",
+        Tone.SERIOUS,
         _locked_out,
         operator_action="On a machine that can sign, run tailscale lock sign with the machine's key.",
         no_help_reason="Only a machine holding a tailnet lock key can sign.",
         card=TAILNET_CARD,
-        bars={"serious": "tailnet lock keeps a device off the tailnet"},
+        bars={Tone.SERIOUS: "tailnet lock keeps a device off the tailnet"},
     ),
     FindingRule(
         "tailnet-device-unapproved",
         "A device waiting for tailnet approval",
-        "serious",
+        Tone.SERIOUS,
         _unauthorized,
         operator_action="Approve it in the Tailscale admin console, under Machines.",
         no_help_reason="HQ cannot approve a device on the tailnet.",
         card=TAILNET_CARD,
-        bars={"serious": "a device waits for approval to join the tailnet"},
+        bars={Tone.SERIOUS: "a device waits for approval to join the tailnet"},
     ),
     FindingRule(
         "tailnet-lock-unsigned",
         "A device not signed for tailnet lock",
-        "serious",
+        Tone.SERIOUS,
         _lock_unsigned,
         operator_action="On a machine that can sign, run tailscale lock sign with the machine's key.",
         no_help_reason="Only a machine holding a tailnet lock key can sign.",
         card=TAILNET_CARD,
-        bars={"serious": "a device has no tailnet lock signature"},
+        bars={Tone.SERIOUS: "a device has no tailnet lock signature"},
     ),
     FindingRule(
         "tailnet-lock-server-signs",
         "A server can sign for tailnet lock",
-        "serious",
+        Tone.SERIOUS,
         _server_signs,
         operator_action="On a signing device other than the server, run tailscale lock remove with the server's key.",
         no_help_reason="Only a device that can sign changes the keys tailnet lock trusts.",
         card=TAILNET_CARD,
-        bars={"serious": "tailnet lock trusts a server's key to sign"},
+        bars={Tone.SERIOUS: "tailnet lock trusts a server's key to sign"},
     ),
     FindingRule(
         "tailnet-client-update",
         "A tailnet client update is available",
-        "attention",
+        Tone.ATTENTION,
         _client_update,
         operator_action="Run tailscale update on the machine, as an administrator.",
         no_help_reason="HQ cannot run commands on the machine.",
         card=TAILNET_CARD,
-        bars={"attention": "a newer Tailscale client is out for a device"},
+        bars={Tone.ATTENTION: "a newer Tailscale client is out for a device"},
     ),
     FindingRule(
         "tailnet-routes-unapproved",
         "Routes offered but not approved",
-        "attention",
+        Tone.ATTENTION,
         _routes_unapproved,
         operator_action="Approve the routes you want on the machine's page, and stop offering the rest.",
         no_help_reason="HQ approves only the routes a machine already offers, and a person decides which.",
         card=TAILNET_CARD,
-        bars={"attention": "a machine offers routes nobody has approved"},
+        bars={Tone.ATTENTION: "a machine offers routes nobody has approved"},
     ),
 )

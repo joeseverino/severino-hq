@@ -73,11 +73,11 @@ class WordTests(SimpleTestCase):
 
     def test_a_state_is_drawn_good_only_while_it_works_and_never_neutral_once_it_needs_a_person(self):
         from ..connection_lifecycle import WORKING
-        from ..ui import STATUS_VALUES
+        from ..tone import Tone
 
         for state in Lifecycle:
             with self.subTest(state):
-                self.assertIn(state.tone, STATUS_VALUES)
+                self.assertIsInstance(state.tone, Tone)
                 self.assertEqual(state.tone == "good", state in WORKING)
                 if state.needs_attention:
                     self.assertIn(state.tone, {"attention", "serious"})

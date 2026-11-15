@@ -30,6 +30,7 @@ from .expiry import days_until
 from .freshness import Freshness, freshness
 from .moments import ago, moment
 from .projection import read_once
+from .tone import Tone
 from .ui import severity_tone
 from .workflow_contracts import ActionLink
 lazy from .facts import record_read_at, snapshots_of
@@ -60,9 +61,9 @@ ALERT_PAGES: Mapping[ReadingPart, str] = {
     LEAKED_CREDENTIALS: "secret-scanning",
 }
 # The tone of the head's combined check state.
-_CHECKS_TONES = {"failure": "serious", "success": "good", "pending": "attention"}
+_CHECKS_TONES = {"failure": Tone.SERIOUS, "success": Tone.GOOD, "pending": Tone.ATTENTION}
 # The tone of a deployment's state; any other state of one is still going.
-_DEPLOY_TONES = {"success": "good", "failure": "serious", "error": "serious"}
+_DEPLOY_TONES = {"success": Tone.GOOD, "failure": Tone.SERIOUS, "error": Tone.SERIOUS}
 # The branches Renovate opens its pull requests from.
 UPDATE_BRANCH = "renovate/"
 
@@ -74,13 +75,13 @@ def workflow_run(run: Mapping[str, Any]) -> ListRow:
 
     conclusion, status = str(run.get("conclusion") or ""), str(run.get("status") or "")
     if conclusion == "success":
-        tone = "good"
+        tone = Tone.GOOD
     elif conclusion in ("failure", "timed_out"):
-        tone = "serious"
+        tone = Tone.SERIOUS
     elif status != "completed":
-        tone = "attention"
+        tone = Tone.ATTENTION
     else:
-        tone = "neutral"
+        tone = Tone.NEUTRAL
     state = (conclusion or status).replace("_", " ").capitalize()
     return ListRow(
         str(run.get("name") or "Workflow"),
@@ -115,9 +116,9 @@ def _pull_row(pull: Mapping[str, Any], *details: str, meta: str = "", badge: str
 
 # A pull request's checks as its update row says them, by the combined state.
 _PULL_CHECKS = {
-    "failure": ("Checks failing", "serious"),
-    "pending": ("Checks running", "attention"),
-    "success": ("Checks passing", "good"),
+    "failure": ("Checks failing", Tone.SERIOUS),
+    "pending": ("Checks running", Tone.ATTENTION),
+    "success": ("Checks passing", Tone.GOOD),
 }
 
 
@@ -209,10 +210,10 @@ class Repository:
         """The open alerts as a tone: none where GitHub offers no alerts."""
 
         if self.serious_alerts:
-            return "serious"
+            return Tone.SERIOUS
         if self.open_alerts:
-            return "attention"
-        return "good" if self.record.get("alerts") else ""
+            return Tone.ATTENTION
+        return Tone.GOOD if self.record.get("alerts") else ""
 
     @property
     def update_pulls(self) -> list[dict[str, Any]]:
@@ -261,7 +262,7 @@ class Repository:
         rows = []
         for pull in self.update_pulls:
             checks = pull.get("checks") or {}
-            badge, tone = _PULL_CHECKS.get(checks.get("state"), ("No checks", "neutral"))
+            badge, tone = _PULL_CHECKS.get(checks.get("state"), ("No checks", Tone.NEUTRAL))
             failing = ", ".join(checks.get("failing") or ()) if checks.get("state") == "failure" else ""
             opened = f"opened {ago(pull['opened'])}" if pull["opened"] else ""
             rows.append(_pull_row(pull, failing, meta=opened, badge=badge, status=tone))
@@ -373,16 +374,16 @@ class Repository:
 
         if not self.production:
             return ""
-        tone = _DEPLOY_TONES.get(self.production.get("state"), "attention")
+        tone = _DEPLOY_TONES.get(self.production.get("state"), Tone.ATTENTION)
         # Live, with a check after the deploy failed: the controller reads it
         # from the outcome the deployment's status declares.
-        return "attention" if tone == "good" and self.production.get("check_failed") else tone
+        return Tone.ATTENTION if tone == Tone.GOOD and self.production.get("check_failed") else tone
 
     @property
     def verified_tone(self) -> str:
         """``production_verified`` as a tone: none where the deploy ran no check."""
 
-        return {True: "good", False: "serious"}.get(self.production_verified, "")
+        return {True: Tone.GOOD, False: Tone.SERIOUS}.get(self.production_verified, "")
 
     @property
     def deployed_cleanly(self) -> bool:

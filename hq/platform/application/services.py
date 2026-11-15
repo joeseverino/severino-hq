@@ -32,6 +32,7 @@ from .published_sites import published_projects
 from .reach import is_documentation
 from .service_declarations import Claim, declarations, runtime_claim
 from .service_facets import CERTIFICATE_FACET, DNS_FACET, RUNTIME_FACET, ServiceFacet
+from .tone import Tone
 from .whereabouts import Origin, Whereabouts, locate, machine_for, whereabouts
 lazy from .exposure import exposure_of_name
 lazy from .paths import path_to
@@ -193,12 +194,13 @@ class Service:
 
     @property
     def status(self) -> str:
-        """``good``, ``attention``, ``serious``, or ``unknown`` for no health reading."""
+        """Its health's tone, or ``unknown`` for no health reading: the word
+        the API answers and the stylesheet keys its pill on."""
 
-        return self.health.state
+        return self.health.state or "unknown"
 
     @property
-    def tone(self) -> str:
+    def tone(self) -> Tone:
         return self.health.tone
 
     @property
@@ -215,7 +217,7 @@ class Service:
         alone, cannot be forgotten by one of them.
         """
 
-        return tuple(ListRow(title=fault, status="attention", badge="Setup") for fault in self.faults)
+        return tuple(ListRow(title=fault, status=Tone.ATTENTION, badge="Setup") for fault in self.faults)
 
 
 def _certificates_in_use() -> dict[str, dict[str, Any]]:

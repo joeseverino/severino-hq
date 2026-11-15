@@ -35,6 +35,7 @@ from .security import (
     subject_of,
     web_principal,
 )
+from .tone import Tone
 
 # How far back the page reads, and how many of an agent's latest events it shows.
 RECENT = timedelta(days=7)
@@ -59,10 +60,10 @@ def agent_name(identity: AgentIdentity) -> str:
 
 # What each standing is called on the page, and its pill's tone.
 _STANDING_WORDS = {
-    DeviceStanding.APPROVED: ("Approved", "good"),
-    DeviceStanding.AWAITING: ("Needs approval", "attention"),
-    DeviceStanding.BLOCKED: ("Blocked", "serious"),
-    DeviceStanding.UNPLACEABLE: ("Refused", "attention"),
+    DeviceStanding.APPROVED: ("Approved", Tone.GOOD),
+    DeviceStanding.AWAITING: ("Needs approval", Tone.ATTENTION),
+    DeviceStanding.BLOCKED: ("Blocked", Tone.SERIOUS),
+    DeviceStanding.UNPLACEABLE: ("Refused", Tone.ATTENTION),
 }
 
 

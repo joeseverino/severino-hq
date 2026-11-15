@@ -6,10 +6,8 @@ from django.template import engines
 from django.template.autoreload import get_template_directories
 from django.test import SimpleTestCase, tag
 
-from hq.platform.application.infrastructure import RESOURCE_TONES
 from hq.platform.application.tests.markup import elements
 from hq.platform.application.tests.reads import reads
-from hq.platform.application.ui import STATUS_VALUES
 from hq.platform.core.templatetags.status_tags import severity_tone, status_pill
 
 
@@ -74,9 +72,9 @@ class StatusPillTests(SimpleTestCase):
 
     def test_a_state_drawn_without_its_pill_is_its_words_in_its_tone(self):
         """A figure that says which way it went keeps its words and its tone,
-        with no pill around it; a tone with no color of its own is neutral."""
+        with no pill around it; no tone is neutral."""
 
-        for tone, shown in (("good", "good"), ("drifted", "serious"), ("archived", "neutral"), ("", "neutral")):
+        for tone, shown in (("good", "good"), ("drifted", "serious"), ("", "neutral")):
             with self.subTest(tone):
                 drawn = elements(_drawn('{% status "+3 bpm" tone=tone pill=False %}', tone=tone), "span")[0]
                 self.assertEqual(drawn.words, "+3 bpm")
@@ -98,7 +96,7 @@ class StatusPillTests(SimpleTestCase):
         """ "Allowed" or "Paused" reads as its words, no pill, led by a dot the
         stylesheet draws in the words' own tone."""
 
-        for tone, shown in (("good", "good"), ("attention", "attention"), ("archived", "neutral")):
+        for tone, shown in (("good", "good"), ("attention", "attention"), ("", "neutral")):
             with self.subTest(tone):
                 drawn = elements(_drawn('{% status "allowed" tone=tone dot=True %}', tone=tone), "span")[0]
                 self.assertEqual(drawn.words, "Allowed")
@@ -161,17 +159,37 @@ class StatusPillTests(SimpleTestCase):
                 status_pill("django", chip=True, **options)
 
     def test_a_frame_in_a_tone_takes_the_class_its_status_is_colored_by(self):
-        for tone in (*sorted(STATUS_VALUES), "example-unknown"):
+        from hq.platform.application.tone import Tone
+
+        for tone in (*Tone, ""):
             with self.subTest(tone):
                 frame = _drawn("{{ tone|tone_class }}", tone=tone)
                 (drawn,) = elements(_drawn('{% status "Example" tone=tone dot=True %}', tone=tone), "span")
                 self.assertIn(frame, drawn.classes)
 
+    def test_a_word_that_is_no_tone_is_refused_wherever_a_tone_colors_words(self):
+        """A misspelled tone fails where it is drawn, never drawn as neutral."""
+
+        for source in (
+            "{{ tone|tone_class }}",
+            '{% status "Example" tone=tone dot=True %}',
+            '{% status "Example" tone=tone pill=False %}',
+            '{% status "Example" tone=tone icon="shield" pill=False %}',
+        ):
+            with self.subTest(source), self.assertRaises(ValueError):
+                _drawn(source, tone="goood")
+
 
 # A class a status draws, which a template writing it by hand would spell itself,
 # and a state's tone spelled as a `control-` class: a state, a tone, or one filled in.
-_TONE_WORDS = "|".join(sorted({*RESOURCE_TONES, *STATUS_VALUES, "unknown"}))
-_STATUS_CLASS = re.compile(rf"^(pill|toned|worth)(-|$)|^control-(\{{\{{|({_TONE_WORDS})$)")
+def _status_class() -> re.Pattern[str]:
+    from hq.platform.application.infrastructure import ResourceState
+    from hq.platform.application.tone import Tone
+
+    words = "|".join(sorted({*ResourceState, *Tone}))
+    return re.compile(r"^(pill|toned|worth)(-|$)|^control-(\{\{|(" + words + r")$)")
+
+
 _CLASS = re.compile(r"""\bclass\s*=\s*(["'])(.*?)\1""", re.DOTALL)
 # A class's words, a word chosen inside `{% if %}` among them.
 _CLASS_WORDS = re.compile(r"\s+|\{%|%\}")
@@ -185,12 +203,13 @@ class StatusDrawnByTheTagTests(SimpleTestCase):
         `{% status %}`'s to draw, in the host and in every installed
         extension, so each says its state one way."""
 
+        status_class = _status_class()
         found = [
             f"{path.relative_to(root)}: {word}"
             for root in sorted(get_template_directories())
             for path in sorted(root.rglob("*.html"))
             for match in _CLASS.finditer(path.read_text(encoding="utf-8"))
             for word in _CLASS_WORDS.split(match.group(2))
-            if _STATUS_CLASS.match(word)
+            if status_class.match(word)
         ]
         self.assertEqual(found, [], "Draw these with {% status ... %} (pill=False for a toned figure).")

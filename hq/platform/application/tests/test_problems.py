@@ -270,7 +270,7 @@ class DeployInProgressTests(TestCase):
         self.assertNotIn("serious", {item.status for item in self.items()})
         resource = ManagedResource.objects.get(key="delivery")
         self.assertEqual(resource_health(resource)["label"], "Deploy running")
-        self.assertEqual(record_status(resource).tone, "pending")
+        self.assertEqual(record_status(resource).tone, "attention")
 
     def test_a_run_waiting_for_approval_is_something_to_do(self):
         self.delivery("Deploy run 9 is waiting for approval")

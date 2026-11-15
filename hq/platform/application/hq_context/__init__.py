@@ -13,12 +13,12 @@ from typing import Any
 from hq.platform.application.labels import dotted
 
 from ..projection import complete, projection_scope
+from ..tone import Tone
+from .band import Tile
 from .release_part import Release, release, release_json, release_tile, repository as repository_of
 from .sight_part import KEYLESS, HqSight, Sees, sight, sight_json, sight_tile
-from .tones import ATTENTION, GOOD, NEUTRAL, SERIOUS, Tile
 from .work_part import Renderer, Work, WorkUnit, work, work_json
 lazy from .. import hq_self, request_context, service_health
-lazy from ..decisions import urgency
 lazy from ..entity_links import entity_link
 lazy from ..findings import finding_key
 lazy from ..hq_self import hq_hostnames, own_machine, serving, site_label
@@ -99,8 +99,6 @@ def _context(request: Any, principal: Principal) -> HQContext:
 
 
 RELEASE, WHERE, REACH, SIGHT = "release", "where", "reach", "sight"
-# Worst first: the order a summary counts in and a tone escalates by.
-_SEVERITY = (SERIOUS, ATTENTION, NEUTRAL)
 
 
 def _problems(
@@ -141,22 +139,21 @@ def _parts(container: Any) -> tuple[str, ...]:
     return (container.running.name, container.standing.label) if container is not None else ()
 
 
-def _status(problems: Iterable[Mapping[str, Any]]) -> tuple[str, str]:
+def _status(problems: Iterable[Mapping[str, Any]]) -> tuple[Tone, str]:
     """How HQ is doing, in the tone of its worst problem, with how many of each
     kind are open: "1 urgent · 1 needs attention"."""
 
-    states = [str(item.get("status", "")) for item in problems]
-    if not states:
-        return GOOD, "Running"
-    counts = [(state, states.count(state)) for state in _SEVERITY if state in states]
-    summary = dotted(*(f"{count} {urgency(state).lower()}" for state, count in counts))
-    return counts[0][0] if counts else ATTENTION, summary or "Needs attention"
+    tones = [Tone(item["status"]) for item in problems]
+    if not tones:
+        return Tone.GOOD, "Running"
+    counts = [(tone, tones.count(tone)) for tone in Tone if tone is not Tone.GOOD and tone in tones]
+    summary = dotted(*(f"{count} {tone.urgency.lower()}" for tone, count in counts))
+    return counts[0][0] if counts else Tone.ATTENTION, summary or "Needs attention"
 
 
 def _worse(tile: Tile, problems: Iterable[Mapping[str, Any]]) -> Tile:
-    states = {tile.tone, *(str(item.get("status", "")) for item in problems)}
-    worst = next((state for state in _SEVERITY[:2] if state in states), tile.tone)
-    return replace(tile, tone=worst)
+    acted_on = (tone for item in problems if (tone := Tone(item["status"])).acted_on)
+    return replace(tile, tone=Tone.worst((tile.tone, *acted_on)))
 
 
 def _runs_tile(found: HQContext) -> Tile:
@@ -165,7 +162,9 @@ def _runs_tile(found: HQContext) -> Tile:
     container = found.container
     detail = dotted(container.running.name, container.uptime) if container is not None else "Its container is not known"
     healthy = container is not None and container.running.healthy
-    return Tile("Runs on", found.machine.name, detail, found.machine.url, GOOD if healthy else ATTENTION, "server")
+    return Tile(
+        "Runs on", found.machine.name, detail, found.machine.url, Tone.GOOD if healthy else Tone.ATTENTION, "server"
+    )
 
 
 def _reach_tile(found: HQContext) -> Tile | None:
@@ -177,7 +176,7 @@ def _reach_tile(found: HQContext) -> Tile | None:
         "Reached through",
         path.connection.channel.label,
         path.proof,
-        tone=ATTENTION if contradicted else GOOD,
+        tone=Tone.ATTENTION if contradicted else Tone.GOOD,
         icon="network",
     )
 

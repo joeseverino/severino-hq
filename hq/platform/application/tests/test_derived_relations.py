@@ -102,7 +102,7 @@ def _row(key, kind, label, tone="healthy", **extra):
         shown_name=key,
         summary=extra.get("summary", ""),
         record_status=RecordStatus(
-            "working" if tone == "healthy" else "degraded", tone, "Working" if tone == "healthy" else "Has a problem"
+            "working" if tone == "healthy" else "degraded", "Working" if tone == "healthy" else "Has a problem"
         ),
     )
 

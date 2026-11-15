@@ -11,6 +11,7 @@ import hashlib
 from dataclasses import asdict, is_dataclass
 from typing import Any
 
+from .tone import Tone
 lazy from .entity_links import web_url
 lazy from .findings import rule_origin
 lazy from .freshness import cadence, freshness
@@ -18,18 +19,12 @@ lazy from .moments import duration, moment
 lazy from .routes import reverse
 lazy from .ui import ended
 
-# How urgent, in the words a card's pill says.
-URGENCY = {"serious": "Urgent", "attention": "Needs attention", "neutral": "Note", "good": "Fine"}
 NOTICE = "Notice"
 # A step a person reads without scrolling: past either, the steps fold.
 _SHORT_STEP = 120
 _SHORT_STEPS = 2
 # A next step said as a label is a link; said as a sentence it is advice.
 _LABEL_LENGTH = 40
-
-
-def urgency(status: str) -> str:
-    return URGENCY.get(status, URGENCY["attention"])
 
 
 def _plain(value: Any) -> Any:
@@ -209,7 +204,7 @@ def decision(item: dict[str, Any]) -> dict[str, Any]:
         "href": subject.get("url") or item.get("url") or "",
         "anchor": anchor,
         "page": _own_page(item, subject, anchor),
-        "urgency": NOTICE if item.get("notice") else urgency(item.get("status", "")),
+        "urgency": NOTICE if item.get("notice") else Tone(item["status"]).urgency,
         # A check again waits behind the owner's named page, so the two that
         # stand on the row are the fix and where it is done.
         "actions": _one_primary(

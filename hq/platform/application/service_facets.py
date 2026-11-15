@@ -17,6 +17,7 @@ from .labels import dotted, lower_first
 from .moments import moment
 from .projection import read_once
 from .service_declarations import Claim
+from .tone import Tone
 lazy from .connections import connection_rows
 lazy from .naming import public_zones_declared
 
@@ -211,8 +212,8 @@ class ServiceFacet:
             return ""
         states = {claim.health["state"] for claim in self.claims}
         if "degraded" in states:
-            return "serious"
-        return "attention" if states - {"healthy"} else "good"
+            return Tone.SERIOUS
+        return Tone.ATTENTION if states - {"healthy"} else Tone.GOOD
 
 
 def zone_holding(hostname: str, zones) -> str:

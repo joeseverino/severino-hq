@@ -32,6 +32,7 @@ from .conditions import PROBLEMS, holding
 from .doors import NOBODY, Attribution
 from .resource_operations import asked_by, asking
 from .routes import reverse
+from .tone import Tone
 lazy from .automation_adoption import playbook_titles
 lazy from .automation_sources import REFRESH, SOURCE_KEY, capability_specs
 lazy from .cadence import automation_standing
@@ -47,19 +48,19 @@ RUN: Source = "run"
 TONES = {
     JobState.QUEUED: "paused",
     JobState.RUNNING: "active",
-    JobState.SUCCEEDED: "good",
-    JobState.FAILED: "serious",
+    JobState.SUCCEEDED: Tone.GOOD,
+    JobState.FAILED: Tone.SERIOUS,
     # Stopped early: a process or a worker that vanished, a restart to look at
     # rather than a fault to read.
-    JobState.LOST: "attention",
+    JobState.LOST: Tone.ATTENTION,
 }
 # Each task outcome a run reports (the bridge's ``RunEvent``), in the same vocabulary.
 OUTCOME_TONES = {
-    "ok": "good",
+    "ok": Tone.GOOD,
     "changed": "active",
     "skipped": "paused",
-    "failed": "serious",
-    "unreachable": "serious",
+    "failed": Tone.SERIOUS,
+    "unreachable": Tone.SERIOUS,
 }
 # How work in each state stands for a control that follows it (``asks.Standing``).
 STANDS = {
@@ -72,13 +73,13 @@ STANDS = {
 # What an operation that ended and found something wrong (a ``Degraded`` or
 # ``Drifted`` condition) says, so it never reads as done.
 PROBLEM_FOUND = "Problem found"
-PROBLEM_TONE = "attention"
+PROBLEM_TONE = Tone.ATTENTION
 # What a claimed run whose lease ran out says until the next claim ends it.
 LAPSED = "The run stopped reporting, so HQ can't tell whether it finished."
 # What a run or scan that waits says while no worker will take it, in the
 # tone of something to look at: it is neither under way nor waiting its turn.
 NOT_STARTED = "Not started"
-NOT_STARTED_TONE = "attention"
+NOT_STARTED_TONE = Tone.ATTENTION
 # The states of a run that has no outcome to say yet.
 UNENDED = frozenset({OperationState.QUEUED, OperationState.CLAIMED})
 # A kind of work whose latest run ended so is one to look at.

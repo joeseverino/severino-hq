@@ -22,7 +22,7 @@ from .credential_sight import STATE_LABELS
 from .describe import Describe, listed
 from .json_schemas import Written
 from .resource_records import WrittenLink
-from .topology_model import STANDINGS
+from .tone import Tone
 from .ui import ended
 from .workflows import WrittenAction
 
@@ -220,7 +220,7 @@ class ConnectionStandingRow(TypedDict):
         str,
         Describe("The connection type's name, such as `infrastructure.controllers`; `family_label` says it in words."),
     ]
-    status: Annotated[str, Describe(ended(f"How the connection stands: {listed(STANDINGS)}"))]
+    status: Annotated[str, Describe(ended(f"How the connection stands: {listed(Tone)}"))]
     status_label: Annotated[str, Describe("How the connection stands, in the words its row shows.")]
     detail: Annotated[
         str, Describe("A line on what it last reported, such as how much it holds; empty when there is nothing to add.")

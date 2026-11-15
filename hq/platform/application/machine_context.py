@@ -23,6 +23,7 @@ from .entity_links import entity_link, kind_label
 from .projection import projection_scope
 from .security import Principal
 from .service_context import Cell, ServiceSection, recent_changes, recent_work
+from .tone import Tone
 from .ui import MISSING
 lazy from . import connections, services
 lazy from .cadence import connection_providers
@@ -275,7 +276,7 @@ def problems_by_part(machine: Machine, principal: Principal) -> dict[str, tuple[
     found: dict[str, list[dict]] = {"page": [], CONTAINERS_CARD: [], TAILNET_CARD: []}
     for item in problems_about(machine.url, principal):
         rule = rule_for(rule_of(item["key"]))
-        card = rule.card if rule is not None and item.get("status") != "serious" else ""
+        card = rule.card if rule is not None and item.get("status") != Tone.SERIOUS else ""
         found[card if drawn.get(card) else "page"].append(item)
     return {part: tuple(items) for part, items in found.items()}
 

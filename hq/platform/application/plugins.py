@@ -25,7 +25,8 @@ from hq.platform.application.routes import reverse
 from .card_items import Insight
 from .demo import showing_demo
 from .derivations import derivation, forget, holds_until, present
-from .ui import STATUS_VALUES, DomainOverview
+from .tone import Tone
+from .ui import DomainOverview
 lazy from . import freshness
 lazy from .action_items import item_key
 lazy from .automation_runs import clear_operation_registry_cache
@@ -627,7 +628,7 @@ def source_attention(
         lambda: distinct_attention(source_id, checked_attention(source_id, tuple(provider()))),
         lambda: (
             Insight(
-                status="attention",
+                status=Tone.ATTENTION,
                 eyebrow="HQ",
                 title=f"{label} could not be read",
                 value="",
@@ -660,7 +661,7 @@ def source_cards(
                 "value": "Unreadable",
                 "url": url,
                 "detail": "Could not be read",
-                "status": "attention",
+                "status": Tone.ATTENTION,
             },
         ),
     )
@@ -678,12 +679,8 @@ def source_overview(source_id: str, provider: Callable[[], Any]) -> DomainOvervi
 # extension kit names it (``plugin_testing.providers_derived_again``).
 def checked_attention(source_id: str, items: tuple[Any, ...]) -> tuple[Any, ...]:
     for item in items:
-        status = getattr(item, "status", None)
-        if status not in STATUS_VALUES:
-            raise ImproperlyConfigured(
-                f"{source_id!r} produced an attention item with status "
-                f"{status!r}; expected one of {', '.join(sorted(STATUS_VALUES))}."
-            )
+        if not isinstance(item, Insight):
+            raise ImproperlyConfigured(f"{source_id!r} produced an attention item that is not an Insight: {item!r}.")
     return items
 
 
@@ -721,8 +718,7 @@ def distinct_attention(source_id: str, items: tuple[Any, ...]) -> tuple[Any, ...
 
 
 def _urgency(item: Insight) -> tuple[int, bool]:
-    rank = ATTENTION_ORDER.index(item.status) if item.status in ATTENTION_ORDER else len(ATTENTION_ORDER)
-    return rank, item.notice
+    return item.status.rank, item.notice
 
 
 def _refused_attention(source_id: str, items: tuple[Any, ...]) -> tuple[Any, ...]:
@@ -760,9 +756,6 @@ SOURCE_CHECKS: dict[str, Callable[[str, Any], Any]] = {
 # once, so a card must be cheap to produce and safe to show beside any other.
 CARD_REQUIRED_KEYS = frozenset({"id", "label", "value", "url"})
 CARD_OPTIONAL_KEYS = frozenset({"detail", "status", "trend"})
-# Imported, not restated: one status vocabulary serves every surface that shows
-# state, so a card and an insight cannot drift apart on what "attention" means.
-CARD_STATUS_VALUES = STATUS_VALUES
 # Direction of travel, not a judgment: whether "up" is good is the domain's
 # business, which is what `status` is for.
 CARD_TREND_VALUES = frozenset({"up", "down", "flat"})
@@ -825,10 +818,8 @@ def _validate_dashboard_cards(cards: Iterable[object]) -> None:
         if unknown:
             raise ImproperlyConfigured(f"Unknown dashboard card keys: {', '.join(sorted(unknown))}.")
         status = card.get("status")
-        if status is not None and status not in CARD_STATUS_VALUES:
-            raise ImproperlyConfigured(
-                f"Dashboard card status must be one of {', '.join(sorted(CARD_STATUS_VALUES))}; got {status!r}."
-            )
+        if status is not None and status not in Tone:
+            raise ImproperlyConfigured(f"Dashboard card status must be one of {', '.join(Tone)}; got {status!r}.")
         trend = card.get("trend")
         if trend is not None and trend not in CARD_TREND_VALUES:
             raise ImproperlyConfigured(
@@ -836,10 +827,9 @@ def _validate_dashboard_cards(cards: Iterable[object]) -> None:
             )
 
 
-# Most urgent first. An operator scanning this list top-down should hit the
-# thing that will hurt soonest; "neutral" is context, not a call to action, and
-# is excluded from attention entirely.
-ATTENTION_ORDER = ("serious", "attention")
+# The tones someone has to act on, most urgent first: a neutral item is
+# context, never a call to action, and is left out of attention entirely.
+ATTENTION_ORDER = tuple(tone for tone in Tone if tone.acted_on)
 
 
 def gather_attention(
@@ -863,7 +853,7 @@ def gather_attention(
         for item in source_attention(source_id, label, provider, read_capabilities):
             # Only what someone can act on now: never context, and never what
             # waits on a fix that does not exist yet.
-            if item.status not in ATTENTION_ORDER or item.awaiting_fix:
+            if not item.status.acted_on or item.awaiting_fix:
                 continue
             gathered.append({"item": item, "source": label, "source_id": source_id})
     return ordered_attention(gathered)
@@ -878,7 +868,7 @@ def ordered_attention(entries: Iterable[dict[str, Any]]) -> tuple[dict[str, Any]
         item = entry["item"]
         since = item.since
         return (
-            ATTENTION_ORDER.index(item.status),
+            item.status.rank,
             item.notice,
             since is None,
             since.timestamp() if since is not None else 0.0,

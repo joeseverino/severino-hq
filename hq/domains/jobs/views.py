@@ -10,6 +10,7 @@ from django.views.generic import DetailView, ListView, TemplateView, View
 from hq.platform.application.pages import PageAction, PageBadge, PageMixin
 from hq.platform.application.security import web_principal
 from hq.platform.application.tables import Projected, TableColumn, TableFilter, TableListMixin, TableQuery, TableSort
+from hq.platform.application.tone import Tone
 lazy from hq.platform.application import outbound_work, work_runs
 lazy from hq.platform.application.asks import AskMixin
 lazy from hq.platform.application.automation_runs import cancel_action, listed_with_actions, run_here_url
@@ -21,7 +22,7 @@ lazy from hq.platform.application.run_pages import run_context
 from .models import Job, JobState
 
 # A run's tone (``work_runs.TONES``) in the notice's own names for it.
-NOTICE_TONES = {"serious": "error", "attention": "warning"}
+NOTICE_TONES = {Tone.SERIOUS: "error", Tone.ATTENTION: "warning"}
 
 
 class JobListView(PageMixin, TableListMixin, ListView):

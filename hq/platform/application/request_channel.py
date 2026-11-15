@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from hq.platform.core.network import client_ip, is_trusted_proxy, socket_peer, split_host_port
 
 from .reach import NETWORKS, network_of
+from .tone import Tone
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,10 +29,10 @@ class Channel:
         """The tone of the network a caller is on: the tailnet the private way
         in, a private network the one to notice, any other the exposed one."""
 
-        return _TONES.get(self.id, "serious")
+        return _TONES.get(self.id, Tone.SERIOUS)
 
 
-_TONES = {"tailnet": "good", "network": "attention", "loopback": "attention"}
+_TONES = {"tailnet": Tone.GOOD, "network": Tone.ATTENTION, "loopback": Tone.ATTENTION}
 
 
 TAILNET_CHANNEL = Channel(

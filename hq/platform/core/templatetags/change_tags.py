@@ -16,6 +16,7 @@ from django.utils.safestring import SafeString
 from django.utils.text import slugify
 
 from hq.platform.application.payload_words import ChangeRow
+from hq.platform.application.tone import Tone
 from hq.platform.core.templatetags.status_tags import status_pill
 
 register = template.Library()
@@ -25,7 +26,7 @@ _WHOLE_WORDS = {"added": "New", "removed": "Removed"}
 
 # What a row's kind of change is called in its Status column, and its tone:
 # what comes is good news, what moves asks attention, what goes is serious.
-_KINDS = {"added": ("New", "good"), "changed": ("Changed", "attention"), "removed": ("Removed", "serious")}
+_KINDS = {"added": ("New", Tone.GOOD), "changed": ("Changed", Tone.ATTENTION), "removed": ("Removed", Tone.SERIOUS)}
 
 
 @register.simple_tag

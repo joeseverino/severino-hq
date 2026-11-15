@@ -2,8 +2,10 @@
 
 from dataclasses import dataclass
 
+from .tone import Tone
+
 # What HQ did with a header, as the tone its pill takes.
-_STATE_TONES = {"read": "good", "declined": "attention", "ignored": "neutral"}
+_STATE_TONES = {"read": Tone.GOOD, "declined": Tone.ATTENTION, "ignored": Tone.NEUTRAL}
 
 
 @dataclass(frozen=True, slots=True)

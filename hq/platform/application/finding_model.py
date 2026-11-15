@@ -19,7 +19,9 @@ from hq.domains.control_plane.providers import PROVIDERS
 from .action_links import ActionLink
 from .command_fields import Describe
 from .core_capabilities import CONTROLLER_REFRESH
+from .display_words import as_members
 from .moments import moment
+from .tone import Tone
 from .topology_model import Topology, TopologyNode
 from .ui import ended
 from .workflows import WorkflowPlan
@@ -64,7 +66,7 @@ class Finding:
     rule: str
     subject: str
     title: str
-    severity: str
+    severity: Tone
     explanation: str
     evidence: tuple[tuple[str, str], ...] = ()
     remedies: tuple[FindingRemedy, ...] = ()
@@ -122,6 +124,9 @@ class Finding:
     # it stays a finding, and the queue leaves it out until one does.
     awaiting_fix: bool = False
 
+    def __post_init__(self) -> None:
+        as_members(self)
+
 
 @dataclass(frozen=True, slots=True)
 class FindingRule:
@@ -134,7 +139,7 @@ class FindingRule:
 
     name: str
     title: str
-    severity: str
+    severity: Tone
     detect: Callable[[FindingEstate], tuple[Finding, ...]]
     # The precise action that resolves a finding of this rule by hand. Required:
     # a finding either offers an operation through the gated queue or says
@@ -170,6 +175,7 @@ class FindingRule:
     gathered: bool = False
 
     def __post_init__(self) -> None:
+        as_members(self)
         if not self.operator_action.strip():
             raise ValueError(f"Finding rule {self.name!r} must say how it is resolved.")
         if not self.no_help_reason.strip():
@@ -274,7 +280,7 @@ def per_connection(
     key: str,
     *,
     rule: str,
-    severity: str,
+    severity: Tone,
     shown_as: str,
     says: Callable[[TopologyNode, tuple[str, ...]], Said],
 ) -> tuple[Finding, ...]:

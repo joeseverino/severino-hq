@@ -42,6 +42,7 @@ from hq.platform.application.standards import Check, Reading, measure
 from hq.platform.application.tables import TableSort
 from hq.platform.application.tailnet import Device
 from hq.platform.application.tailnet_presence import Presence
+from hq.platform.application.tone import Tone
 from hq.platform.application.ui import (
     PageNavigation,
     PageSection,
@@ -896,7 +897,7 @@ ENTRIES = {
                 (
                     Share("Cash", 4200, 1, url="/example/?type=cash", detail="$4,200.00"),
                     Share("Investments", 12800, 3, url="/example/?type=investment", detail="$12,800.00"),
-                    Share("Owed", 1500, 2, url="/example/?type=owed", detail="-$1,500.00", tone="attention"),
+                    Share("Owed", 1500, 2, url="/example/?type=owed", detail="-$1,500.00", tone=Tone.ATTENTION),
                 ),
             )
         },
@@ -1015,19 +1016,19 @@ ENTRIES = {
                     "$15,500.00",
                     "+$1,240.00 in the last 30 days",
                     url="/example/accounts/",
-                    detail_tone="good",
+                    detail_tone=Tone.GOOD,
                     drawing=AllocationBar(
                         "Example assets by kind",
                         (
                             Share("Cash", 4200, 1, url="/example/?type=cash", detail="$4,200.00"),
                             Share("Investments", 12800, 3, url="/example/?type=investment", detail="$12,800.00"),
-                            Share("Owed", 1500, 2, url="/example/?type=owed", detail="-$1,500.00", tone="attention"),
+                            Share("Owed", 1500, 2, url="/example/?type=owed", detail="-$1,500.00", tone=Tone.ATTENTION),
                         ),
                     ),
                 ),
-                Kpi("Since yesterday", "+$120.00", tone="good"),
-                Kpi("Available credit", "$8,000.00", tone="neutral"),
-                Kpi("Unrealized gain", "−$40.00", tone="attention"),
+                Kpi("Since yesterday", "+$120.00", tone=Tone.GOOD),
+                Kpi("Available credit", "$8,000.00", tone=Tone.NEUTRAL),
+                Kpi("Unrealized gain", "−$40.00", tone=Tone.ATTENTION),
             ]
         },
     ),
@@ -1063,7 +1064,7 @@ ENTRIES = {
                 ListRow(
                     "Example checking",
                     url="/example/checking/",
-                    status="attention",
+                    status=Tone.ATTENTION,
                     badge="Needs review",
                     meta="2 example accounts",
                     at=date(2026, 11, 2),
@@ -1916,7 +1917,7 @@ ENTRIES = {
         {
             "items": [
                 Insight(
-                    "attention",
+                    Tone.ATTENTION,
                     "Example readiness",
                     "Example records missing a category",
                     "12",
@@ -1924,15 +1925,15 @@ ENTRIES = {
                     action="Give each one a category.",
                     url="/example/records/",
                 ),
-                Insight("good", "Example pace", "Example pace this month", "On track", "Ahead of the example plan."),
+                Insight(Tone.GOOD, "Example pace", "Example pace this month", "On track", "Ahead of the example plan."),
                 Insight(
-                    "serious",
+                    Tone.SERIOUS,
                     "Example spend",
                     "An example reading with a title long enough to wrap on a phone",
                     "$1,204.50",
                     "Spent past the example budget by a margin worth reading about.",
                 ),
-                Insight("neutral", "", "An example reading with nothing to show", "", "An example interpretation."),
+                Insight(Tone.NEUTRAL, "", "An example reading with nothing to show", "", "An example interpretation."),
             ]
         },
     ),
@@ -1944,14 +1945,14 @@ ENTRIES = {
         {
             "items": [
                 Insight(
-                    "neutral",
+                    Tone.NEUTRAL,
                     "Example receiving",
                     "Who accepts example mail?",
                     "mx1.example.com, mx2.example.com, mx3.example.com",
                     "Three example servers, tried in priority order.",
                 ),
                 Insight(
-                    "attention",
+                    Tone.ATTENTION,
                     "Example enforcing",
                     "What happens to failing example mail?",
                     "Delivered anyway",
@@ -2259,11 +2260,11 @@ ENTRIES = {
                         date(2026, 1, 19),
                         "Example certificate with a name long enough to wrap",
                         detail="example-host-01.example.com",
-                        status="attention",
+                        status=Tone.ATTENTION,
                         badge="Due soon",
                     ),
-                    TimelineItem(date(2026, 2, 2), "Example review", detail="Every quarter", status="good"),
-                    TimelineItem(date(2026, 3, 16), "Example payment", status="serious", badge="Overdue"),
+                    TimelineItem(date(2026, 2, 2), "Example review", detail="Every quarter", status=Tone.GOOD),
+                    TimelineItem(date(2026, 3, 16), "Example payment", status=Tone.SERIOUS, badge="Overdue"),
                 ),
             )
         },

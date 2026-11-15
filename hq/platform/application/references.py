@@ -24,6 +24,7 @@ from django.utils.text import capfirst
 
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
+from .tone import Tone
 lazy from . import entity_links, security
 lazy from .card_items import Insight, ListRow
 lazy from .demo import showing_demo
@@ -813,7 +814,7 @@ def _dangling_item(found: Dangling) -> Insight:
     """The queue's item for one row whose reference names nothing."""
 
     return Insight(
-        status="attention",
+        status=Tone.ATTENTION,
         eyebrow="Records",
         title=found.title,
         value="",

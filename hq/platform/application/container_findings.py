@@ -36,6 +36,7 @@ from .finding_model import (
 )
 from .images import version
 from .labels import lower_first
+from .tone import Tone
 from .ui import ended
 from .workflow_contracts import ActionLink
 lazy from .container_standard import STANDARD
@@ -77,7 +78,7 @@ def _of(running: list[Container], subject: str) -> Iterator[Finding]:
             running,
             subject,
             rule=UPDATE,
-            severity="attention",
+            severity=Tone.ATTENTION,
             title=f"{standing.label} has an update",
             explanation=ended(f"{standing.label} to {standing.latest}") + _running_as(running) + _brings(running),
         )
@@ -171,7 +172,7 @@ def _advisory(running: list[Container], subject: str) -> Finding:
         subject,
         rule=ADVISORY,
         primary=_upgrade_action(running),
-        severity=status_at("serious" if standing.serious and not waiting else "attention", level),
+        severity=status_at(Tone.SERIOUS if standing.serious and not waiting else Tone.ATTENTION, level),
         title=f"{standing.label} has {standing.summary}" + (", and no release fixes it yet" if waiting else ""),
         explanation=f"Worst severity: {ended(standing.worst)}{_running_as(running)}{fixed_in}"
         + _brings(running)
@@ -200,7 +201,7 @@ def _unpinned_finding(running: list[Container], subject: str) -> Finding:
         running,
         subject,
         rule=UNPINNED,
-        severity="attention",
+        severity=Tone.ATTENTION,
         title=f"{running[0].running.image} runs by tag alone",
         explanation=f"A tag can later name a different build. Pin it by digest.{_running_as(running)}",
         evidence=tuple(("Pin it as", pin) for pin in pins),
@@ -312,7 +313,7 @@ def _hardening(item: Container, subject: str) -> Iterator[Finding]:
         rule=HARDENING,
         subject=subject,
         part=item.running.name,
-        severity=status_at("serious", level),
+        severity=status_at(Tone.SERIOUS, level),
         title=f"{item.running.name} on {item.machine.name} " + ", ".join(lower_first(check.unmet) for check in failed),
         explanation=" ".join(f"{check.why} {check.fix} {_help(check.id)}" for check in failed) + reached,
         **_read([item], standing=False),
@@ -405,52 +406,52 @@ RULES: tuple[FindingRule, ...] = (
     FindingRule(
         ADVISORY,
         "Image advisories",
-        "attention",
+        Tone.ATTENTION,
         carried(ADVISORY),
         operator_action="Move the container to a release that fixes it, once one does.",
         no_help_reason=BY_HAND,
         card=CONTAINERS_CARD,
         bars={
-            "serious": "a container anyone may reach has a serious advisory a release fixes",
-            "attention": "a container has an advisory, or only a login or the tailnet stands in front of it",
-            "neutral": "nothing routes to the container",
+            Tone.SERIOUS: "a container anyone may reach has a serious advisory a release fixes",
+            Tone.ATTENTION: "a container has an advisory, or only a login or the tailnet stands in front of it",
+            Tone.NEUTRAL: "nothing routes to the container",
         },
     ),
     FindingRule(
         UPDATE,
         "Image updates",
-        "attention",
+        Tone.ATTENTION,
         carried(UPDATE),
         operator_action="Move the container to the newer release.",
         no_help_reason=BY_HAND,
         card=CONTAINERS_CARD,
         bars={
-            "attention": "a newer release of a container's image is out",
-            "neutral": "nothing routes to the container",
+            Tone.ATTENTION: "a newer release of a container's image is out",
+            Tone.NEUTRAL: "nothing routes to the container",
         },
     ),
     FindingRule(
         UNPINNED,
         "Image run by tag alone",
-        "attention",
+        Tone.ATTENTION,
         carried(UNPINNED),
         operator_action="Pin the image by digest in the compose file that runs it and recreate its containers.",
         no_help_reason=CANNOT_EDIT_COMPOSE,
         card=CONTAINERS_CARD,
-        bars={"attention": "an image a registry holds is run by its tag, with no digest"},
+        bars={Tone.ATTENTION: "an image a registry holds is run by its tag, with no digest"},
     ),
     FindingRule(
         HARDENING,
         "Container hardening",
-        "serious",
+        Tone.SERIOUS,
         carried(HARDENING),
         operator_action="Make the compose change on the container's page.",
         no_help_reason=CANNOT_EDIT_COMPOSE,
         card=CONTAINERS_CARD,
         bars={
-            "serious": "a container anyone may reach fails a serious hardening check",
-            "attention": "a container behind a login or on the tailnet fails a serious hardening check",
-            "neutral": "nothing routes to the container",
+            Tone.SERIOUS: "a container anyone may reach fails a serious hardening check",
+            Tone.ATTENTION: "a container behind a login or on the tailnet fails a serious hardening check",
+            Tone.NEUTRAL: "nothing routes to the container",
         },
     ),
 )

@@ -28,6 +28,7 @@ from .posture import SIGN_IN, STANDARD, advanced
 from .request_channel import UNTRUSTED_FORWARDER, Channel, encryption
 from .request_identity import SSO_LINK, Identity
 from .standards import Check, Measurement, Reading, Standing, measure
+from .tone import Tone
 from .ui import counted, ended
 lazy from .zones import public_answers_for
 
@@ -131,9 +132,9 @@ def _control(control) -> Reading:
     """A shared provider control, as the request reads it: "neutral" is the
     reading that never came, which is neither a pass nor a denial."""
 
-    if control.state == "good":
+    if control.state == Tone.GOOD:
         return Reading.met(control.evidence, detail=control.detail)
-    if control.state == "neutral":
+    if control.state == Tone.NEUTRAL:
         return Reading.unavailable(control.evidence, detail=control.detail)
     return Reading.unmet(control.evidence, detail=control.detail)
 

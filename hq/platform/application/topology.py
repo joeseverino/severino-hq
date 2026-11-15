@@ -40,12 +40,13 @@ from .contradiction_findings import add_contradiction_facts
 from .derivations import derivation
 from .derived_inputs import ESTATE_READS, estate_variant
 from .entity_links import entity_link, kind_label, node_name, record_name
-from .infrastructure import RESOURCE_TONES, resource_health
+from .infrastructure import ResourceState, resource_health
 from .integration_validation import required_capability_names
 from .projection import QUERY, QueryRefusal, projection_scope
 from .resource_capabilities import REMOVAL_CAPABILITY, removals_pending, resource_capabilities
 from .resource_context import record_summary, shared_names
 from .security import Capability, Principal
+from .tone import Tone
 from .topology_answer import TOPOLOGY_SCHEMA_VERSION, TopologyAnswer, TopologySummary
 from .topology_facts import add_connection_facts, add_observed_facts
 from .topology_lenses import (
@@ -80,13 +81,11 @@ def _focus_url(node_id: str) -> str:
     return topology_url(node_id)
 
 
-def _resource_status(resource: ManagedResource) -> tuple[str, str, str]:
+def _resource_status(resource: ManagedResource) -> tuple[Tone, str, str]:
     if not resource.enabled:
-        return "neutral", "Switched off in HQ", ""
+        return Tone.NEUTRAL, "Switched off in HQ", ""
     health = resource_health(resource)
-
-    state = RESOURCE_TONES.get(health["state"], "neutral")
-    return state, health["label"], health["message"]
+    return ResourceState(health["state"]).tone, health["label"], health["message"]
 
 
 def _resource_actions(
@@ -430,7 +429,7 @@ def _dependency_edges(instance, connection, nodes, edges) -> None:
 def _ability_edges(group, connection, connection_id, edges) -> None:
     for state in connection.abilities:
         ability_id = f"ability:{group.spec.name}:{state.ability.name}"
-        available = "good" if state.available is True else "serious" if state.available is False else "neutral"
+        available = Tone.GOOD if state.available is True else Tone.SERIOUS if state.available is False else Tone.NEUTRAL
         relation = edge_between(connection_id, ability_id, "enables", status=available)
         edges[relation.id] = relation
 

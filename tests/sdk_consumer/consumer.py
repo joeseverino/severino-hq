@@ -13,7 +13,7 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import Decimal
-from typing import Annotated, Any, assert_type, override
+from typing import Annotated, Any, Literal, assert_type, override
 
 from django import forms
 from django.db import models
@@ -152,7 +152,11 @@ def sentences(registrar: str) -> None:
     ui.status_pill("1 serious", pill=False, icon=True)  # type: ignore[arg-type]
     assert_type(ui.status_pill("django", chip=True), SafeString)
     ui.status_pill("django", chip="yes")  # type: ignore[arg-type]
-    assert_type(ui.Kpi("Net worth", "$1.00", "+$1.00", tone="good", detail_url="/x/").holds_links, bool)
+    assert_type(ui.Kpi("Net worth", "$1.00", "+$1.00", tone=ui.Tone.GOOD, detail_url="/x/").holds_links, bool)
+    # A tone is a member of ui.Tone, the one vocabulary of how a thing stands.
+    assert_type(ui.Tone.worst((ui.Tone.GOOD, ui.Tone.SERIOUS)), ui.Tone)
+    assert_type(ui.Tone.SERIOUS.urgency, str)
+    ui.Kpi("Net worth", "$1.00", tone="goood")  # type: ignore[arg-type]
     ui.ListRow("Group", actions=("Up",))  # type: ignore[arg-type]
     # A search hit's snippet is runs of the record's text, each with whether it matched.
     ui.ListRow("Backup host", snippet=(("nightly ", False), ("backup", True)))
@@ -292,11 +296,13 @@ def catalogs(principal: capabilities.Principal) -> None:
 
 def a_connection() -> None:
     # A connection says what kind of credential it holds, a keyless one included.
-    keyless = connections.ConnectionInstance("example", "Example", "example", "good", "Read", credential_model="none")
+    keyless = connections.ConnectionInstance(
+        "example", "Example", "example", ui.Tone.GOOD, "Read", credential_model="none"
+    )
     assert_type(keyless.credential_model, str)
     assert_type(keyless.keyless, bool)
 
-    connections.ConnectionInstance("example", "Example", "example", "good", "Read")  # type: ignore[call-arg]
+    connections.ConnectionInstance("example", "Example", "example", ui.Tone.GOOD, "Read")  # type: ignore[call-arg]
 
 
 def looking_up(progress: jobs.Progress, *, subject: str, principal: capabilities.Principal) -> dict[str, Any]:
@@ -634,27 +640,29 @@ def a_demo() -> None:
 def a_gated_insight() -> None:
     # An item about what only some capabilities may read names them; left
     # out, every reader of the queue is shown it.
-    gated = ui.Insight("attention", "Finding", "Example is not answering", "", "", read_capabilities=("example.read",))
+    gated = ui.Insight(
+        ui.Tone.ATTENTION, "Finding", "Example is not answering", "", "", read_capabilities=("example.read",)
+    )
     assert_type(gated.read_capabilities, tuple[str, ...])
-    ui.Insight("attention", "Finding", "Example", "", "", read_capabilities="example.read")  # type: ignore[arg-type]
+    ui.Insight(ui.Tone.ATTENTION, "Finding", "Example", "", "", read_capabilities="example.read")  # type: ignore[arg-type]
 
 
 def an_insight_about_one_part() -> None:
     # An item about one of its subject's many things names that thing, so a
     # page about it alone leaves out its neighbors' items.
-    about = ui.Insight("attention", "Finding", "Example is restarting", "", "", part="example-web")
+    about = ui.Insight(ui.Tone.ATTENTION, "Finding", "Example is restarting", "", "", part="example-web")
     assert_type(about.part, str)
-    ui.Insight("attention", "Finding", "Example", "", "", part=("example-web",))  # type: ignore[arg-type]
+    ui.Insight(ui.Tone.ATTENTION, "Finding", "Example", "", "", part=("example-web",))  # type: ignore[arg-type]
 
 
 def an_insight_that_says_why() -> None:
     # An item says why it is as urgent as it is, which the panel behind its
     # urgency leads with.
-    said = ui.Insight("serious", "Renewals", "Passport expires", "", "", why="It expires in 20 days.")
+    said = ui.Insight(ui.Tone.SERIOUS, "Renewals", "Passport expires", "", "", why="It expires in 20 days.")
     assert_type(said.why, str)
-    ui.Insight("serious", "Renewals", "Passport", "", "", why=("It expires.",))  # type: ignore[arg-type]
+    ui.Insight(ui.Tone.SERIOUS, "Renewals", "Passport", "", "", why=("It expires.",))  # type: ignore[arg-type]
     # One a threshold raises says what clears it.
-    held = ui.Insight("attention", "Renewals", "Passport", "", "", why="Under 90 days.", clears="it is renewed")
+    held = ui.Insight(ui.Tone.ATTENTION, "Renewals", "Passport", "", "", why="Under 90 days.", clears="it is renewed")
     assert_type(held.clears, str)
 
 
@@ -692,10 +700,10 @@ def an_allocation(cash: Decimal, owed: Decimal) -> None:
     ui.AllocationBar("Assets by kind", [ui.Share("Cash", 1.0, 1)])  # type: ignore[arg-type]
     ui.Share("Cash", 1.0, "one")  # type: ignore[arg-type]
     # A part its legend links onward, with its amount as the page says it.
-    owing = ui.Share("Owed", float(owed), 2, url="/example/?type=owed", detail=f"-${owed}", tone="attention")
+    owing = ui.Share("Owed", float(owed), 2, url="/example/?type=owed", detail=f"-${owed}", tone=ui.Tone.ATTENTION)
     assert_type(owing.url, str)
     assert_type(owing.detail, str)
-    assert_type(owing.tone, str)
+    assert_type(owing.tone, ui.Tone | Literal[""])
     assert_type(bar.legend, tuple[tuple[ui.Share, str], ...])
     ui.Share("Cash", 1.0, 1, url=None)  # type: ignore[arg-type]
 

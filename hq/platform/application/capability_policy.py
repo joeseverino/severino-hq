@@ -36,6 +36,7 @@ from .security import (
     person,
     subject_of,
 )
+from .tone import Tone
 lazy from . import capabilities
 lazy from .agent_registry import identity_of
 lazy from .entity_links import kind_label
@@ -171,7 +172,7 @@ def _usable_by(spec, identity: AgentIdentity) -> bool:
 # What a rule is called on the page, beside "Default". The stored values keep their names.
 RULE_LABELS = {rule: rule.label for rule in Rule}
 # The status tone a rule is drawn in; the default is neutral.
-RULE_TONES = {Rule.ALLOW: "good", Rule.APPROVE: "attention", Rule.DENY: "serious"}
+RULE_TONES = {Rule.ALLOW: Tone.GOOD, Rule.APPROVE: Tone.ATTENTION, Rule.DENY: Tone.SERIOUS}
 
 
 def _name(rule: str | None) -> str:
@@ -192,7 +193,7 @@ EFFECTS = {
 _EFFECT_ORDER = tuple(EFFECTS)
 # The tone each effect is said in beside its action: one that removes
 # serious, one that changes infrastructure attention, any other neutral.
-_EFFECT_TONES = {"destructive": "serious", "infrastructure_change": "attention"}
+_EFFECT_TONES = {"destructive": Tone.SERIOUS, "infrastructure_change": Tone.ATTENTION}
 
 
 def field_name(subject: str, capability: str) -> str:
@@ -240,7 +241,7 @@ class PolicyCell:
 
     @property
     def tone(self) -> str:
-        return RULE_TONES.get(self.rule, "neutral")
+        return RULE_TONES.get(self.rule, Tone.NEUTRAL)
 
 
 @dataclass(frozen=True, slots=True)
@@ -254,7 +255,7 @@ class Row:
 
     @property
     def effect_tone(self) -> str:
-        return _EFFECT_TONES.get(self.effect, "neutral")
+        return _EFFECT_TONES.get(self.effect, Tone.NEUTRAL)
 
     @property
     def overrides(self) -> tuple[PolicyCell, ...]:

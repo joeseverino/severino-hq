@@ -55,6 +55,7 @@ from .record_errors import RecordNotFound
 from .request_path import joined
 from .security import Principal
 from .standards import Measurement
+from .tone import Tone
 from .ui import counted
 from .workflow_contracts import ActionLink
 lazy from . import domains
@@ -193,7 +194,7 @@ class ConnectionRow:
         """The tone of ``state_line``: a fault when a permission is missing,
         else none, and the line reads as context."""
 
-        return "serious" if self._permissions_missing or self.connection.authority == "missing" else ""
+        return Tone.SERIOUS if self._permissions_missing or self.connection.authority == "missing" else ""
 
     def as_dict(self) -> dict[str, Any]:
         # Every ability and every sight is under ``reads`` or ``changes``, the
@@ -358,7 +359,7 @@ class ConnectionsContext:
             **complete(items),
             "summary": {
                 "connections": estate.connection_count,
-                "attention": estate.attention_count,
+                Tone.ATTENTION: estate.attention_count,
                 "healthy": estate.healthy_count,
                 "unverified": estate.unverified_count,
                 "externally_custodied": estate.external_custody_count,

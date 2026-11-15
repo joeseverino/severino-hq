@@ -31,9 +31,9 @@ from .labels import dotted, human_bytes
 from .moments import moment, when_hour
 from .record_errors import InputError, PolicyError
 from .security import Capability, Principal
+from .tone import Tone
 from .ui import MISSING, counted, severity_tone
 lazy from .capabilities import capability_words, command_spec
-lazy from .infrastructure import RESOURCE_TONES
 lazy from .projection import read_once
 
 # The National Weather Service API. The connection shows it and the glance plan
@@ -50,7 +50,7 @@ def connection_specs():
                 id="national-weather-service",
                 label="National Weather Service",
                 kind="nws",
-                status="good",
+                status=Tone.GOOD,
                 status_label="keyless",
                 detail="Weather for the dashboard. Public, no key needed.",
                 endpoint=NWS_API,
@@ -355,7 +355,7 @@ def _failed(failure: str) -> dict[str, Any]:
     """A panel whose last reading failed and had nothing before it to keep."""
 
     return {
-        "status": RESOURCE_TONES["degraded"],
+        "status": Tone.SERIOUS,
         "summary": f"Refresh failed ({failure}).",
         "metrics": [],
         "refresh_failed": failure,
@@ -369,7 +369,7 @@ def machine_words(machine: Machine) -> dict[str, Any]:
     failed = {"refresh_failed": machine.refresh_failed} if machine.refresh_failed else {}
     if host := machine.host:
         return {
-            "status": RESOURCE_TONES["healthy"],
+            "status": Tone.GOOD,
             "summary": f"Host load {host.load_1m:.2f}",
             "metrics": [
                 _metric("CPU", f"{host.cpu_percent:.0f}%", counted(host.cores, "core")),
@@ -388,7 +388,7 @@ def machine_words(machine: Machine) -> dict[str, Any]:
         }
     if docker := machine.docker:
         return {
-            "status": RESOURCE_TONES["healthy"],
+            "status": Tone.GOOD,
             "summary": dotted(counted(docker.cores, "core"), f"{human_bytes(docker.memory_total)} memory"),
             "metrics": [
                 _metric("Containers", str(docker.containers), "running"),
@@ -405,7 +405,7 @@ def machine_words(machine: Machine) -> dict[str, Any]:
     if failed:
         return _failed(machine.refresh_failed)
     return {
-        "status": RESOURCE_TONES["pending"],
+        "status": Tone.ATTENTION,
         "summary": "No host telemetry connection is available.",
         "metrics": [],
     }
@@ -419,11 +419,10 @@ def _degrees(hour: Hour) -> str:
     return MISSING if hour.temperature is None else f"{hour.temperature:g}°"
 
 
-def _alert_tone(weather: Weather) -> str:
+def _alert_tone(weather: Weather) -> Tone:
     """The most severe tone among the alerts in force."""
 
-    tones = {severity_tone(alert.severity.lower()) for alert in weather.alerts}
-    return next((tone for tone in ("serious", "attention") if tone in tones), "neutral")
+    return Tone.worst((severity_tone(alert.severity.lower()) for alert in weather.alerts), default=Tone.NEUTRAL)
 
 
 def weather_words(weather: Weather) -> dict[str, Any]:
@@ -454,7 +453,7 @@ def weather_words(weather: Weather) -> dict[str, Any]:
         more = f" +{len(alerts) - 1}" if len(alerts) > 1 else ""
         metrics.append(_metric("Alerts", (alerts[0].event or "Weather alert") + more, alerts[0].headline))
     words = {
-        "status": _alert_tone(weather) if alerts else RESOURCE_TONES["healthy"],
+        "status": _alert_tone(weather) if alerts else Tone.GOOD,
         "summary": ", ".join(part for part in (weather.city, weather.state) if part) or "National Weather Service",
         "metrics": metrics,
         # Each hour's time and temperature, and a chance of rain said only when

@@ -29,6 +29,7 @@ from .conditions import READY, stamped
 from .inventory import record_identity, record_token, service_hostnames
 from .record_errors import PolicyError, RecordNotFound, Sentence
 from .security import Principal
+from .tone import Tone
 lazy from .connection_catalog import EVIDENCE_DETAILS, PROVEN_EVIDENCE, grant_evidence
 lazy from .connection_contracts import ConnectionAbility, ConnectionInstance
 lazy from .connection_setup import MANAGES_FIELD
@@ -186,7 +187,7 @@ def _write_evidence(kind: str, provider: str, permissions: tuple[str, ...], conn
         id=connection_ref or provider,
         label=connection_ref or provider,
         kind=provider,
-        status="neutral",
+        status=Tone.NEUTRAL,
         status_label="",
         credential_model=connection_credential(provider),
     )

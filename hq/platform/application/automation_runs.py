@@ -37,6 +37,7 @@ from .command_fields import Among, AmongNow, Describe, ForAgents, Names
 from .integration_specs import CapabilitySpec, CommandAbout, CommandFact, command_adapter
 from .record_errors import PolicyError, RecordNotFound
 from .security import Capability, Principal
+from .tone import Tone
 lazy from . import approvals, automation_adoption, pages
 lazy from .action_links import command_url
 lazy from .approval_review import ChangePreview, asked_by
@@ -703,7 +704,7 @@ def _held_runs(manifest: OperationManifest, principal: Principal) -> ServiceSect
             Cell(
                 "Waiting for approval",
                 reverse("core:approval_entry", kwargs={"approval_id": held.id}),
-                tone="attention",
+                tone=Tone.ATTENTION,
             ),
             Cell(ago(held.created_at), muted=True),
             Cell(who.get(str(held.pk), NOBODY).words),

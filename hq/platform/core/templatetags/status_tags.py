@@ -24,9 +24,10 @@ from django.utils.safestring import SafeString, mark_safe
 
 from hq.platform.application.labels import sentence
 from hq.platform.application.page_parts import html_attributes
+from hq.platform.application.tone import Tone
 from hq.platform.core.templatetags.value_tags import breakable
-lazy from hq.platform.application.infrastructure import RESOURCE_TONES
-lazy from hq.platform.application.ui import STATUS_VALUES, ended, severity_tone as _severity_tone
+lazy from hq.platform.application.infrastructure import ResourceState
+lazy from hq.platform.application.ui import ended, severity_tone as _severity_tone
 
 register = template.Library()
 
@@ -37,11 +38,22 @@ INKS = frozenset(get_args(Ink))
 
 def _tone(tone: str) -> str:
     """The tone class a state is drawn in. A declared resource's health state
-    ("healthy", "drifted") is said as the tone every page draws it in; any
-    other word names its own class (`pill-attention`, `pill-archived`), and
-    one the stylesheet does not color is neutral."""
+    ("healthy", "drifted") is said as its tone (``ResourceState.tone``); any
+    other word names its own pill (`pill-attention`, `pill-archived`)."""
 
-    return RESOURCE_TONES.get(tone, tone)
+    return ResourceState(tone).tone if tone in ResourceState else tone
+
+
+def _toned(tone_class: str) -> Tone:
+    """The tone a state's words take without their pill: no tone is neutral,
+    and a word that is no tone is refused."""
+
+    try:
+        return Tone(tone_class or Tone.NEUTRAL)
+    except ValueError:
+        raise ValueError(
+            f"A status without its pill is drawn in a tone, one of {', '.join(Tone)}; got {tone_class!r}."
+        ) from None
 
 
 def _form(tone_class: str, *, pill: bool, chip: bool, dot: bool, ink: Ink) -> str:
@@ -54,14 +66,13 @@ def _form(tone_class: str, *, pill: bool, chip: bool, dot: bool, ink: Ink) -> st
     if chip:
         classes = "tag"
     elif dot and ink == "context":
-        classes = f"toned toned-{tone_class if tone_class in STATUS_VALUES else 'neutral'} toned-dot toned-ink-context"
+        classes = f"toned toned-{_toned(tone_class)} toned-dot toned-ink-context"
     elif dot:
-        classes = f"toned toned-{tone_class if tone_class in STATUS_VALUES else 'neutral'} toned-dot"
+        classes = f"toned toned-{_toned(tone_class)} toned-dot"
     elif ink == "context":
-        classes = f"toned toned-{tone_class if tone_class in STATUS_VALUES else 'neutral'} toned-ink-context"
+        classes = f"toned toned-{_toned(tone_class)} toned-ink-context"
     elif not pill:
-        # The status vocabulary's tones are the only ones words alone take.
-        classes = f"toned toned-{tone_class if tone_class in STATUS_VALUES else 'neutral'}"
+        classes = f"toned toned-{_toned(tone_class)}"
     else:
         classes = f"pill pill-{tone_class}" if tone_class else "pill"
     return classes
@@ -146,10 +157,10 @@ def severity_tone(severity):
 
 # Each written whole, so the stylesheet's usage check finds it.
 _TONE_CLASSES = {
-    "good": "toned-good",
-    "attention": "toned-attention",
-    "serious": "toned-serious",
-    "neutral": "toned-neutral",
+    Tone.GOOD: "toned-good",
+    Tone.ATTENTION: "toned-attention",
+    Tone.SERIOUS: "toned-serious",
+    Tone.NEUTRAL: "toned-neutral",
 }
 
 
@@ -157,10 +168,10 @@ _TONE_CLASSES = {
 def tone_class(tone):
     """``class="frame {{ tone|tone_class }}"``: the class that sets a part's
     ``--toned`` to a state's tone, for a frame or a line drawn in the color the
-    state's `{% status %}` takes. A tone outside the status vocabulary is
-    neutral, as a status's is."""
+    state's `{% status %}` takes: no tone is neutral, and a word that is no
+    tone is refused, as a status's is."""
 
-    return _TONE_CLASSES.get(tone, "toned-neutral")
+    return _TONE_CLASSES[_toned(str(tone or ""))]
 
 
 def _field(thing, name: str) -> str:

@@ -14,6 +14,7 @@ from .finding_model import (
     reconcile_remedy,
 )
 from .moments import elapsed
+from .tone import Tone
 from .ui import ended
 
 
@@ -27,7 +28,7 @@ def _connection_not_answering(estate: FindingEstate) -> tuple[Finding, ...]:
             continue
         refusal = next((value for key, value in node.facts if key == "credential-refused"), None)
         refused = refusal is not None
-        if node.status != "serious" and not refused:
+        if node.status != Tone.SERIOUS and not refused:
             continue
         reason = refusal or node.detail
         failure = credential_findings.failure_of_node(node)
@@ -42,7 +43,7 @@ def _connection_not_answering(estate: FindingEstate) -> tuple[Finding, ...]:
                     if failure == ADDRESS_FAILURE
                     else f"{node.label} is not answering"
                 ),
-                severity="attention",
+                severity=Tone.ATTENTION,
                 explanation=(
                     (f"{ended(reason)} " if reason else "")
                     + "HQ cannot read anything through it, so what it shows from "
@@ -95,7 +96,7 @@ def _unreachable_consumer(estate: FindingEstate) -> tuple[Finding, ...]:
                     if len(names) == 1
                     else f"Could not check {node.label} on {len(names)} of the places it is installed"
                 ),
-                severity="serious",
+                severity=Tone.SERIOUS,
                 explanation=(
                     "The other places answered. "
                     + (
@@ -120,22 +121,22 @@ RULES: tuple[FindingRule, ...] = (
     FindingRule(
         "connection-not-answering",
         "A connection is not answering",
-        "attention",
+        Tone.ATTENTION,
         _connection_not_answering,
         operator_action=(f"Open the connection and fix what its error says. {THEN_CHECK_AGAIN}"),
         no_help_reason=("HQ cannot change 1Password or your network."),
-        bars={"attention": "a connection fails its check"},
+        bars={Tone.ATTENTION: "a connection fails its check"},
     ),
     FindingRule(
         "unreachable-consumer",
         "Could not check a certificate where it is installed",
-        "serious",
+        Tone.SERIOUS,
         _unreachable_consumer,
         operator_action=(f"Make it reachable from the controller's machine. {THEN_CHECK_AGAIN}"),
         no_help_reason=("HQ cannot reach it any other way."),
         # Says the same thing with the name of the consumer in it. The generic
         # rule would otherwise put this in front of an operator twice.
         subsumes=("reporting-a-fault",),
-        bars={"serious": "HQ cannot reach where a certificate is installed to check it"},
+        bars={Tone.SERIOUS: "HQ cannot reach where a certificate is installed to check it"},
     ),
 )

@@ -21,6 +21,7 @@ from .services import (
     prospects,
     service_catalog,
 )
+from .tone import Tone
 lazy from . import connections, zones
 lazy from .derived_reads import serialize_path
 lazy from .facts import readings
@@ -127,7 +128,7 @@ class ZoneMember:
 
     hostname: str
     url: str
-    status: str = "neutral"
+    status: str = Tone.NEUTRAL
     status_label: str = ""
     service: Service | None = None
 

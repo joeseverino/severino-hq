@@ -2431,6 +2431,15 @@
         "kind": "dataclass",
         "members": {}
       },
+      "Tone": {
+        "kind": "enum",
+        "members": [
+          "SERIOUS",
+          "ATTENTION",
+          "NEUTRAL",
+          "GOOD"
+        ]
+      },
       "Trend": {
         "bases": [],
         "constructor": [

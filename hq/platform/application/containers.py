@@ -33,6 +33,7 @@ from .github_public import github_repository
 from .images import ImageRef, affected, compare, newer, version
 from .moments import moment
 from .projection import projection_scope, read_once
+from .tone import Tone
 from .ui import counted
 lazy from . import connections
 lazy from .attestations import github_source
@@ -196,7 +197,7 @@ class Running:
 
     @property
     def state_tone(self) -> str:
-        return "good" if self.healthy else "serious"
+        return Tone.GOOD if self.healthy else Tone.SERIOUS
 
     @property
     def uptime(self) -> str:
@@ -444,18 +445,18 @@ class ImageStanding(ImageStandingWords):
         """What is known against it as a tone: none where nothing could be checked."""
 
         if self.serious:
-            return "serious"
+            return Tone.SERIOUS
         if self.state == VULNERABLE:
-            return "attention"
-        return "good" if self.checkable else ""
+            return Tone.ATTENTION
+        return Tone.GOOD if self.checkable else ""
 
     @property
     def update_tone(self) -> str:
         """Whether a newer version is out as a tone: none while that is unknown."""
 
         if self.newer:
-            return "attention"
-        return "good" if self.update_state == UP_TO_DATE else ""
+            return Tone.ATTENTION
+        return Tone.GOOD if self.update_state == UP_TO_DATE else ""
 
     @property
     def alerts_tone(self) -> str:
@@ -464,8 +465,8 @@ class ImageStanding(ImageStandingWords):
         if self.repository is None:
             return ""
         if self.repository.serious_alerts:
-            return "serious"
-        return "attention" if self.repository.open_alerts else "good"
+            return Tone.SERIOUS
+        return Tone.ATTENTION if self.repository.open_alerts else Tone.GOOD
 
     @property
     def latest(self) -> str:
@@ -641,27 +642,27 @@ class Tally:
 
     @property
     def vulnerable_tone(self) -> str:
-        return "serious" if self.vulnerable else "good"
+        return Tone.SERIOUS if self.vulnerable else Tone.GOOD
 
     @property
     def updates_tone(self) -> str:
         """Updates as a tone: none until every one is known up to date."""
 
         if self.update_available:
-            return "attention"
-        return "good" if self.up_to_date == self.running else ""
+            return Tone.ATTENTION
+        return Tone.GOOD if self.up_to_date == self.running else ""
 
     @property
     def pinned_tone(self) -> str:
-        return "good" if self.pinned == self.running else ""
+        return Tone.GOOD if self.pinned == self.running else ""
 
     @property
     def tone(self) -> str:
         """All of it in one tone, as a machine's band says it."""
 
         if self.vulnerable or self.stopped:
-            return "serious"
-        return "attention" if self.update_available else "good"
+            return Tone.SERIOUS
+        return Tone.ATTENTION if self.update_available else Tone.GOOD
 
 
 def tally(found: list[Container]) -> Tally:
