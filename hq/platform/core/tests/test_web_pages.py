@@ -23,7 +23,7 @@ from hq.platform.application import readings
 from hq.platform.application.action_links import command_url
 from hq.platform.application.cadence_testing import controller_arrived
 from hq.platform.application.labels import DOT
-from hq.platform.application.markup_testing import elements, hrefs, select, text
+from hq.platform.application.markup_testing import elements, hrefs, select, text, with_class
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.glance_readings import HOST, reported_machine
 from hq.platform.application.tests.host_only import host_only
@@ -69,6 +69,14 @@ class SearchPageTests(_AuthedTestCase):
         self.assertIn("An example machine", shown)
         self.assertIn("Running", shown)
         self.assertNotIn("What the example page lists", shown)
+
+    def test_a_machine_found_carries_its_state_as_a_chip(self):
+        ManagedResource.objects.create(key="example-host", kind="machine", spec={"name": "example-host"})
+
+        response = self.client.get("/search/", {"q": "example-host"})
+
+        self.assertIn("/infrastructure/machines/example-host/", hrefs(response))
+        self.assertIn("not monitored", [chip.words for chip in with_class(response, "tag")])
 
     def test_query_filters_commands_as_well_as_records(self):
         response = self.client.get("/search/", {"q": "certificate.renew"})

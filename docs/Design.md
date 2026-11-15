@@ -1355,7 +1355,7 @@ the one field not held to words. Search draws every group of results this way,
 the count in its filter bar, a way to each group in the page navigation over
 them, and the hint before a search as a notice. A row's `chips` are the words a
 place is known by besides its name (a machine's state, the abilities a search
-matched), each a `.scope-chip` after its line. A list of places to go, as
+matched), each a chip (`{% status chip=True %}`) after its line. A list of places to go, as
 search draws the machines, pages and commands it found, is included `with
 whole_rows=True`. Each row is its title's link, stretched over the row, so the
 row is one target and its markup stays a link around a name.

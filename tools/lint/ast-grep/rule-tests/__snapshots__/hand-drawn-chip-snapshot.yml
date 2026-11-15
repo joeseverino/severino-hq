@@ -1,0 +1,58 @@
+id: hand-drawn-chip
+snapshots:
+  <a class="scope-chip is-current" href="/">example.com</a>:
+    labels:
+    - source: <a class="scope-chip is-current" href="/">example.com</a>
+      style: primary
+      start: 0
+      end: 57
+    - source: class="scope-chip is-current"
+      style: secondary
+      start: 3
+      end: 32
+    - source: <a class="scope-chip is-current" href="/">
+      style: secondary
+      start: 0
+      end: 42
+  "<li><span class=\"row {% if on %}scope-chip{% endif %}\">x</span></li>":
+    labels:
+    - source: <span class="row {% if on %}scope-chip{% endif %}">x</span>
+      style: primary
+      start: 4
+      end: 63
+    - source: class="row {% if on %}scope-chip{% endif %}"
+      style: secondary
+      start: 10
+      end: 54
+    - source: <span class="row {% if on %}scope-chip{% endif %}">
+      style: secondary
+      start: 4
+      end: 55
+  <span class="chip">django</span>:
+    labels:
+    - source: <span class="chip">django</span>
+      style: primary
+      start: 0
+      end: 32
+    - source: class="chip"
+      style: secondary
+      start: 6
+      end: 18
+    - source: <span class="chip">
+      style: secondary
+      start: 0
+      end: 19
+  <span class="scope-chip">django</span>:
+    labels:
+    - source: <span class="scope-chip">django</span>
+      style: primary
+      start: 0
+      end: 38
+    - source: class="scope-chip"
+      style: secondary
+      start: 6
+      end: 24
+    - source: <span class="scope-chip">
+      style: secondary
+      start: 0
+      end: 25

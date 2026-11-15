@@ -1004,6 +1004,7 @@ Script hooks: `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit
 | Rule | Drawn by hand | Write instead |
 | --- | --- | --- |
 | `hand-drawn-change-table` | A before-and-after table drawn by hand, where the change table part draws it. | Build an approval_review.ChangePreview and write `{% change_table preview %}`. |
+| `hand-drawn-chip` | A chip drawn by hand, where the status part draws a name as a chip and the switch part a choice. | Write `{% status name chip=True %}`, or `{% switch %}``{% choice url=... %}`name`{% endchoice %}``{% endswitch %}` for a choice of the view. |
 | `hand-drawn-control-label` | A control's label drawn by hand, where the control label part draws it. | Write `{% control_label "From" control="the-control-id" %}`. |
 | `hand-drawn-empty-line` | An empty line drawn by hand, where the empty state part draws it. | Write `{% include "partials/_empty_state.html" with message="..." %}`, or a `{% section %}`'s `{% empty %}`. |
 | `hand-drawn-empty-said-quietly` | An empty line drawn by hand, where the empty state part draws it. | Write `{% include "partials/_empty_state.html" with message="..." %}`, or a `{% section %}`'s `{% empty %}`. |

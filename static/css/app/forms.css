@@ -334,7 +334,6 @@ select.toned:not(.toned-neutral) { border-color: currentColor; }
   gap: var(--space-2);
   min-width: 0;
 }
-.command-center-evidence .scope-chip { padding: var(--space-1) var(--space-3); font-size: var(--text-3xs); white-space: nowrap; }
 .command-center-destination { color: var(--muted); font-size: var(--text-3xs); white-space: nowrap; }
 .command-center-arrow { color: var(--muted-2); opacity: 0; transform: translateX(-3px); transition: 100ms ease; }
 .command-center-option[aria-selected="true"] .command-center-arrow { opacity: 1; transform: none; }
