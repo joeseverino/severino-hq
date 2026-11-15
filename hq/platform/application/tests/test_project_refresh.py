@@ -6,12 +6,10 @@ requests, checks and workflows on the project page follow on the controller's
 next pass. Where it does not, the anonymous public read is the fallback.
 """
 
-import tempfile
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
@@ -29,11 +27,6 @@ from ..projects import REFRESH, refresh_project
 from ..security import OPERATOR_CAPABILITIES, Capability, Principal
 from .markup import select, within
 
-DIRECTORY = Path(tempfile.mkdtemp())
-MARKERS = override_settings(
-    SEVERINO_CONTROLLER_DOORBELL=str(DIRECTORY / "doorbell"),
-    SEVERINO_ACTIVITY_MARKER=str(DIRECTORY / "activity"),
-)
 REF = "example-github"
 PUSHED = "2026-09-27T12:00:00Z"
 OPERATOR = Principal("operator", "web", OPERATOR_CAPABILITIES)
@@ -68,7 +61,6 @@ class Fetcher:
         return self.pushed_at
 
 
-@MARKERS
 class RefreshAsksTheAppTests(TestCase):
     def setUp(self):
         self.project = Project.objects.create(
@@ -140,7 +132,6 @@ class RefreshAsksTheAppTests(TestCase):
         self.assertEqual(result["github"], {"ok": True, "last_push_at": None})
 
 
-@MARKERS
 class RefreshButtonTests(TestCase):
     def setUp(self):
         self.client.force_login(get_user_model().objects.create_user(username="operator", password="x"))
@@ -223,7 +214,6 @@ class RefreshButtonTests(TestCase):
         self.assertEqual(Job.objects.count(), 1)
 
 
-@MARKERS
 class RefreshCapabilityTests(TestCase):
     """``project.refresh`` over the API, MCP and a command line is the same ask."""
 

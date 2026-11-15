@@ -5,9 +5,7 @@ the kinds that connection's credential reads. The request goes through the one
 gated capability, POST only.
 """
 
-import tempfile
 from datetime import timedelta
-from pathlib import Path
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
@@ -26,10 +24,7 @@ from ..credential_sight import fed_kinds
 from ..security import Capability, Principal, cli_principal
 
 READ_NOW = "infrastructure.controller.refresh"
-DIRECTORY = Path(tempfile.mkdtemp())
-MARKERS = override_settings(
-    SEVERINO_CONTROLLER_DOORBELL=str(DIRECTORY / "doorbell"),
-    SEVERINO_ACTIVITY_MARKER=str(DIRECTORY / "activity"),
+SWEEPS = override_settings(
     SEVERINO_SWEEP_INTERVAL_ACTIVE_SECONDS=3600,
     SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS=43200,
 )
@@ -50,7 +45,7 @@ def connect(ref: str, provider: str, *, at=None) -> None:
     )
 
 
-@MARKERS
+@SWEEPS
 class ForcedKindsTests(TestCase):
     def setUp(self):
         connect("example-tailnet", "tailscale")
@@ -122,7 +117,7 @@ class ForcedKindsTests(TestCase):
         self.assertEqual(event.connection, "example-tailnet")
 
 
-@MARKERS
+@SWEEPS
 class RefusalTests(TestCase):
     def setUp(self):
         connect("example-tailnet", "tailscale")
@@ -165,7 +160,7 @@ class RefusalTests(TestCase):
         self.assertIsNone(read_now_link(reader, connection_ref="example-tailnet"))
 
 
-@MARKERS
+@SWEEPS
 class WebTests(TestCase):
     def setUp(self):
         connect("example-tailnet", "tailscale")

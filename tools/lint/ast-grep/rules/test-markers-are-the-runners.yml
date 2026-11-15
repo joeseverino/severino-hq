@@ -1,0 +1,39 @@
+# The test runner gives each process a directory of the controller's markers
+# (the heartbeat, the doorbell, the activity marker), and each class and test
+# a fresh copy of what its setup left there (isolation_testing). A module or
+# class that points a marker's setting at a directory it made once shares
+# that directory among all its tests: a doorbell one rings is there for the
+# next, and a heartbeat touched as the module loads ages with the run until
+# the controller reads as silent. A test that needs the controller to have
+# arrived says so (cadence_testing.controller_arrived). A test of a marker
+# itself may point one at a directory it makes for that test alone.
+id: test-markers-are-the-runners
+language: python
+severity: error
+message: A module or class points a controller marker's setting at one directory for all its tests.
+note: >-
+  Leave the setting as the runner set it: cadence_testing.controller_arrived()
+  says the controller arrived and when, controller_never_arrived() that it
+  did not, and a test of a marker itself makes its directory in that test.
+files:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/testing.py"
+  - "**/*_testing.py"
+rule:
+  kind: keyword_argument
+  has:
+    field: name
+    regex: ^SEVERINO_(CONTROLLER_HEARTBEAT|CONTROLLER_DOORBELL|ACTIVITY_MARKER)$
+  # Inside one test, or a decorator of one, the setting is that test's.
+  not:
+    any:
+      - inside:
+          kind: function_definition
+          stopBy: end
+      - inside:
+          kind: decorated_definition
+          has:
+            field: definition
+            kind: function_definition
+          stopBy: end

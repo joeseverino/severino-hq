@@ -1,10 +1,6 @@
 """The web shell's pages: search, lists, the dashboard and the navigation."""
 
-import os
-import tempfile
-import time
 from datetime import timedelta
-from pathlib import Path
 from unittest.mock import call, patch
 
 from django.contrib.auth import get_user_model
@@ -25,6 +21,7 @@ from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.projects.models import Project
 from hq.platform.application import readings
 from hq.platform.application.action_links import command_url
+from hq.platform.application.cadence_testing import controller_arrived
 from hq.platform.application.dashboard import operating_snapshot
 from hq.platform.application.labels import DOT
 from hq.platform.application.plugin_testing import form_keyed
@@ -339,14 +336,11 @@ class DashboardWorkflowTests(_AuthedTestCase):
         """Green while it is arriving, the attention color once it has gone
         quiet, and neither where it has never run."""
 
-        marker = Path(tempfile.mkdtemp()) / "controller-heartbeat"
-        with self.settings(SEVERINO_CONTROLLER_HEARTBEAT=str(marker)):
-            never = self.client.get("/")
-            marker.touch()
-            arriving = self.client.get("/")
-            long_ago = time.time() - 3600
-            os.utime(marker, (long_ago, long_ago))
-            silent = self.client.get("/")
+        never = self.client.get("/")
+        controller_arrived()
+        arriving = self.client.get("/")
+        controller_arrived(ago=timedelta(hours=1))
+        silent = self.client.get("/")
 
         states = {
             name: (page.context["controller"].known, page.context["controller"].silent)

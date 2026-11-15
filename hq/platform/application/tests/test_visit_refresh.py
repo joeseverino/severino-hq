@@ -1,13 +1,12 @@
 """An open page asks for its own readings: only those, only when due, only by POST."""
 
-import os
 import re
-import tempfile
 from datetime import timedelta
 from html.parser import HTMLParser
 from pathlib import Path
 from unittest.mock import patch
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core import signing
 from django.db import connection
@@ -24,19 +23,14 @@ from hq.platform.core.models import AuditLog
 
 from .. import cadence, visit_refresh
 from ..asks import REFRESHING, Standing, read_standing, watched
+from ..cadence_testing import controller_arrived, controller_never_arrived
 from ..capabilities import Ran, execute_capability
 from ..freshness import VISIT_EVERY
 from ..record_errors import PolicyError, RecordNotFound
 from ..security import Capability, Principal, cli_principal
 from ..visit_refresh import VISIT_REFRESH, Reads, VisitRefreshCommand, askable, request_visit_refresh
 
-DIRECTORY = Path(tempfile.mkdtemp())
-(DIRECTORY / "heartbeat").touch()
-MARKERS = override_settings(
-    SEVERINO_CONTROLLER_DOORBELL=str(DIRECTORY / "doorbell"),
-    SEVERINO_ACTIVITY_MARKER=str(DIRECTORY / "activity"),
-    # A controller that arrived a moment ago.
-    SEVERINO_CONTROLLER_HEARTBEAT=str(DIRECTORY / "heartbeat"),
+SWEEPS = override_settings(
     SEVERINO_SWEEP_INTERVAL_ACTIVE_SECONDS=3600,
     SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS=43200,
 )
@@ -69,7 +63,8 @@ def rings():
 
 
 def rung(watch) -> int:
-    return [touched.args[0].name for touched in watch.call_args_list].count("doorbell")
+    doorbell = Path(settings.SEVERINO_CONTROLLER_DOORBELL)
+    return [touched.args[0] for touched in watch.call_args_list].count(doorbell)
 
 
 def page(*kinds: str):
@@ -94,8 +89,12 @@ def followed(status: str) -> Standing:
     return read_standing(found["read"], moment(found["asked"]), connection_ref=found["ref"])
 
 
-@MARKERS
+@SWEEPS
 class VisitRefreshTests(TestCase):
+    def setUp(self):
+        # A controller that arrived a moment ago.
+        controller_arrived()
+
     def ask(self, name: str = "known", principal: Principal | None = None):
         return request_visit_refresh(VisitRefreshCommand("example", name), principal=principal or cli_principal())
 
@@ -273,10 +272,8 @@ class VisitRefreshTests(TestCase):
     def test_with_no_controller_arriving_nothing_is_asked_or_promised(self):
         store(FAST, age=OLD)
 
-        with (
-            override_settings(SEVERINO_CONTROLLER_HEARTBEAT=str(DIRECTORY / "never-written")),
-            page(FAST),
-        ):
+        controller_never_arrived()
+        with page(FAST):
             result = self.ask()
 
         self.assertEqual(result, NOTHING_ASKED)
@@ -303,12 +300,8 @@ class VisitRefreshTests(TestCase):
             status = self.ask()["status_url"]
         self.assertEqual((followed(status).state, followed(status).note), ("queued", REFRESHING))
 
-        quiet = DIRECTORY / "quiet-heartbeat"
-        quiet.touch()
-        long_ago = (timezone.now() - timedelta(hours=2)).timestamp()
-        os.utime(quiet, (long_ago, long_ago))
-        with override_settings(SEVERINO_CONTROLLER_HEARTBEAT=str(quiet)):
-            stalled = followed(status)
+        controller_arrived(ago=timedelta(hours=2))
+        stalled = followed(status)
 
         self.assertFalse(stalled.live)
         self.assertEqual(stalled.state, "failed")
@@ -323,8 +316,8 @@ class VisitRefreshTests(TestCase):
             status = self.ask()["status_url"]
         store("npm.proxy_host")
 
-        with override_settings(SEVERINO_CONTROLLER_HEARTBEAT=str(DIRECTORY / "never-written")):
-            copied = followed(status)
+        controller_never_arrived()
+        copied = followed(status)
 
         self.assertEqual(copied.state, "failed")
         self.assertIn("no controller", copied.note)
@@ -413,9 +406,13 @@ class AskableSourceTests(SimpleTestCase):
         )
 
 
-@MARKERS
+@SWEEPS
 class SubjectTests(TestCase):
     """What a real page is assembled from, looked up rather than told."""
+
+    def setUp(self):
+        # A controller that arrived a moment ago.
+        controller_arrived()
 
     def test_a_machine_nobody_reported_is_no_page(self):
         self.assertIsNone(visit_refresh.reads_of("machine", "no-such-machine"))
@@ -463,11 +460,13 @@ class SubjectTests(TestCase):
             self.assertFalse(askable(kind))
 
 
-@MARKERS
+@SWEEPS
 class RefusingHostTests(TestCase):
     """A read somebody asked for does not retry an SSH login a host is refusing."""
 
     def setUp(self):
+        # A controller that arrived a moment ago.
+        controller_arrived()
         for ref, reachable in (("example-shell", True), ("example-refusing", False)):
             ProviderConnection.objects.create(
                 controller_id="example-controller",
@@ -509,9 +508,11 @@ class RefusingHostTests(TestCase):
         self.assertIn("example-shell", verdict["carry"])
 
 
-@MARKERS
+@SWEEPS
 class VisitRefreshViewTests(TestCase):
     def setUp(self):
+        # A controller that arrived a moment ago.
+        controller_arrived()
         self.user = get_user_model().objects.create_user(username="someone", password="not-used-here")
         self.url = reverse("control_plane:visit")
         store(FAST, age=OLD)
@@ -629,12 +630,12 @@ class VisitRefreshViewTests(TestCase):
         # Read a moment ago, by the controller of the host it was copied from.
         store("npm.proxy_host")
 
-        with override_settings(SEVERINO_CONTROLLER_HEARTBEAT=str(DIRECTORY / "never-written")):
-            for address in (reverse("control_plane:service", args=["example.test"]), reverse("dashboard")):
-                with self.subTest(address=address):
-                    self.assertNotContains(self.client.get(address), "data-ask-auto")
-            with page(FAST):
-                self.assertFalse(self.post().json()["live"])
+        controller_never_arrived()
+        for address in (reverse("control_plane:service", args=["example.test"]), reverse("dashboard")):
+            with self.subTest(address=address):
+                self.assertNotContains(self.client.get(address), "data-ask-auto")
+        with page(FAST):
+            self.assertFalse(self.post().json()["live"])
         self.assertEqual(asked(), set())
 
     def test_the_note_is_swapped_with_the_content_and_the_ask_is_not(self):

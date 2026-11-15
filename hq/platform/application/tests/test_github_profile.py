@@ -1,11 +1,9 @@
 import json
-import tempfile
-from pathlib import Path
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.db import connection
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
@@ -16,6 +14,7 @@ from hq.platform.core.models import AuditLog, LinkedAccount
 from .. import github_profile
 from ..asks import REFRESHING
 from ..cadence import asked_at
+from ..cadence_testing import controller_arrived
 from ..capabilities import capability_registry, execute_capability
 from ..security import Capability, Principal
 from .markup import hrefs, select, text
@@ -79,23 +78,18 @@ def hold(profile=PROFILE, *, at=None, **fields):
     return snapshot
 
 
-# A controller that reached this HQ a moment ago, so a read asked of it is waiting on it.
-HEARTBEAT = Path(tempfile.mkdtemp()) / "heartbeat"
-HEARTBEAT.touch()
-ARRIVED = override_settings(SEVERINO_CONTROLLER_HEARTBEAT=str(HEARTBEAT))
-
-
 def operator():
     from ..security import cli_principal
 
     return cli_principal()
 
 
-@ARRIVED
 class PlanTests(TestCase):
     """HQ holds the profile's clock: the controller reads when the plan says."""
 
     def setUp(self):
+        # A controller that reached this HQ a moment ago, so a read asked of it is waiting on it.
+        controller_arrived()
         self.user = get_user_model().objects.create_user("operator")
         LinkedAccount.objects.create(user=self.user, provider="github", login="example-user")
 
@@ -223,9 +217,10 @@ class NoOutboundReadTests(TestCase):
         self.assertFalse(hasattr(github_profile, "refresh"))
 
 
-@ARRIVED
 class PageTests(TestCase):
     def setUp(self):
+        # A controller that reached this HQ a moment ago, so a read asked of it is waiting on it.
+        controller_arrived()
         self.user = get_user_model().objects.create_user("operator", is_staff=True)
         self.client.force_login(self.user)
 

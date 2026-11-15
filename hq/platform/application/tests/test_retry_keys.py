@@ -4,10 +4,7 @@ Each takes an optional ``idempotency_key``, declared once from its effect; a
 repeat carrying the same key returns the first result. A ``read`` takes none.
 """
 
-import tempfile
-from pathlib import Path
-
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
 from hq.domains.control_plane.models import CapabilityRule, ManagedResource, OperationRequest, ReadRequest
 from hq.domains.projects.models import Project
@@ -20,11 +17,6 @@ from ..security import Capability, Principal, cli_principal
 
 REFRESH = "infrastructure.controller.refresh"
 RECONCILE = "infrastructure.resource.reconcile"
-DIRECTORY = Path(tempfile.mkdtemp())
-MARKERS = override_settings(
-    SEVERINO_CONTROLLER_DOORBELL=str(DIRECTORY / "doorbell"),
-    SEVERINO_ACTIVITY_MARKER=str(DIRECTORY / "activity"),
-)
 
 
 class DeclaredOnceTests(TestCase):
@@ -49,7 +41,6 @@ class DeclaredOnceTests(TestCase):
                 self.assertFalse(schema["additionalProperties"])
 
 
-@MARKERS
 class RefreshTests(TestCase):
     def ask(self, principal=None, **payload):
         return execute_capability(REFRESH, payload, principal=principal or cli_principal())
@@ -131,7 +122,6 @@ class ReadTests(TestCase):
         self.assertEqual(result["error"]["code"], "invalid_input")
 
 
-@MARKERS
 class ReconcileTests(TestCase):
     """A command that stores the key with what it queues takes it the same way."""
 

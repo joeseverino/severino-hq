@@ -1,6 +1,3 @@
-import tempfile
-from pathlib import Path
-
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -14,11 +11,6 @@ from .markup import hrefs, text, with_class
 
 
 class GettingStartedTests(TestCase):
-    def setUp(self):
-        # A heartbeat file per test, so one test's controller does not count for another.
-        heartbeat = Path(tempfile.mkdtemp()) / "controller-heartbeat"
-        self.enterContext(override_settings(SEVERINO_CONTROLLER_HEARTBEAT=str(heartbeat)))
-
     def ids(self, found):
         return [step.id for step in found]
 
@@ -80,8 +72,6 @@ class GettingStartedTests(TestCase):
 
 class GettingStartedRowTests(TestCase):
     def setUp(self):
-        heartbeat = Path(tempfile.mkdtemp()) / "controller-heartbeat"
-        self.enterContext(override_settings(SEVERINO_CONTROLLER_HEARTBEAT=str(heartbeat)))
         self.client.force_login(get_user_model().objects.create_user("row"))
 
     def test_a_done_step_stays_on_the_row_checked_while_others_are_left(self):
@@ -99,8 +89,6 @@ class ControllerTileTests(TestCase):
     """The dashboard's controller reading never says "not set up" over readings."""
 
     def setUp(self):
-        heartbeat = Path(tempfile.mkdtemp()) / "controller-heartbeat"
-        self.enterContext(override_settings(SEVERINO_CONTROLLER_HEARTBEAT=str(heartbeat)))
         self.client.force_login(get_user_model().objects.create_superuser("tile-reader"))
 
     def test_with_nothing_read_it_is_not_set_up(self):

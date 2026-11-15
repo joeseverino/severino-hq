@@ -1,24 +1,16 @@
 """A command form posts one retry key, and a command that keeps its key keeps that one."""
 
-import tempfile
-from pathlib import Path
-
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.platform.application.adoption_testing import managing_everything
 from hq.platform.application.tests.writers import drawn_key
 from hq.platform.application.web_writes import RETRY_KEY_FIELD
 
-DIRECTORY = Path(tempfile.mkdtemp())
 RESOURCE = "example-rewrite"
 
 
-@override_settings(
-    SEVERINO_CONTROLLER_DOORBELL=str(DIRECTORY / "doorbell"),
-    SEVERINO_ACTIVITY_MARKER=str(DIRECTORY / "activity"),
-)
 class KeptKeyTests(TestCase):
     def setUp(self):
         managing_everything()

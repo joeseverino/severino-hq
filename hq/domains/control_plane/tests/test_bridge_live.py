@@ -19,7 +19,7 @@ from unittest import skipUnless
 from unittest.mock import patch
 
 from django.conf import settings
-from django.test import TransactionTestCase, override_settings
+from django.test import TransactionTestCase
 from django.utils import timezone
 
 from hq.domains.control_plane.bridge_application import application
@@ -51,7 +51,6 @@ class LiveBridge(TransactionTestCase):
         directory = manager.__enter__()
         self.socket = directory / "bridge.sock"
         self.addCleanup(manager.__exit__, None, None, None)
-        self.enterContext(override_settings(SEVERINO_CONTROLLER_HEARTBEAT=str(directory / "heartbeat")))
         serving = served(application, self.socket)
         serving.__enter__()
         self.addCleanup(serving.__exit__, None, None, None)
@@ -186,12 +185,6 @@ class ControllerPassTests(TransactionTestCase):
         directory = manager.__enter__()
         self.socket = directory / "bridge.sock"
         self.addCleanup(manager.__exit__, None, None, None)
-        self.enterContext(
-            override_settings(
-                SEVERINO_CONTROLLER_HEARTBEAT=str(directory / "heartbeat"),
-                SEVERINO_CONTROLLER_DOORBELL=str(directory / "controller-doorbell"),
-            )
-        )
         self.bridge = Counted()
         serving = served(self.bridge, self.socket)
         serving.__enter__()

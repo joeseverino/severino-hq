@@ -1,8 +1,5 @@
 """The controller's own page: what HQ knows of it, from what it left behind."""
 
-import os
-import tempfile
-import time
 from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
@@ -16,14 +13,12 @@ from hq.domains.control_plane.models import ManagedResource, OperationRequest, P
 from hq.platform.core.templatetags.value_tags import dot
 
 from ..cadence import WorkerStanding
+from ..cadence_testing import controller_arrived
 from ..controller_page import controller_page
 from .commands import commands_on
 from .markup import select, texts
 
-DIRECTORY = Path(tempfile.mkdtemp())
-MARKERS = override_settings(
-    SEVERINO_CONTROLLER_HEARTBEAT=str(DIRECTORY / "heartbeat"),
-    SEVERINO_ACTIVITY_MARKER=str(DIRECTORY / "activity"),
+SWEEPS = override_settings(
     SEVERINO_SWEEP_INTERVAL_ACTIVE_SECONDS=300,
     SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS=300,
 )
@@ -38,11 +33,8 @@ def store(kind: str, *, age: timedelta = timedelta(0), **fields) -> None:
     ProviderInventory.objects.filter(kind=kind).update(updated_at=timezone.now() - age)
 
 
-@MARKERS
+@SWEEPS
 class ControllerPageTests(TestCase):
-    def setUp(self):
-        (DIRECTORY / "heartbeat").unlink(missing_ok=True)
-
     def test_an_installation_with_no_controller_says_so_and_nothing_more(self):
         page = controller_page()
 
@@ -133,10 +125,7 @@ class ControllerPageTests(TestCase):
         self.assertEqual([read.subject for read in page.asked], ["adguard.rewrite"])
 
     def test_the_page_shows_a_controller_that_has_gone_quiet(self):
-        marker = DIRECTORY / "heartbeat"
-        marker.touch()
-        long_ago = time.time() - 26 * 3600
-        os.utime(marker, (long_ago, long_ago))
+        controller_arrived(ago=timedelta(hours=26))
         store("adguard.rewrite", age=timedelta(hours=26))
         user = get_user_model().objects.create_user(username="someone", password="not-used-here")
         self.client.force_login(user)

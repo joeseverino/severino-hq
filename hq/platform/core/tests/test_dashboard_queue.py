@@ -1,13 +1,12 @@
 """An insight must keep its next step when it reaches a human or machine queue."""
 
 import json
-import tempfile
-from pathlib import Path
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
+from hq.platform.application import cadence
 from hq.platform.application.card_items import Insight
 from hq.platform.application.dashboard import work_queue
 from hq.platform.application.derivation_testing import uncached
@@ -172,9 +171,7 @@ class DashboardQueueTests(TestCase):
 
         ask = f'action="{reverse("control_plane:visit")}"'
         # A controller that reached this HQ a moment ago, to take what is asked.
-        heartbeat = Path(tempfile.mkdtemp()) / "heartbeat"
-        heartbeat.touch()
-        self.enterContext(override_settings(SEVERINO_CONTROLLER_HEARTBEAT=str(heartbeat)))
+        cadence.note_controller()
         for age, asks in ((timedelta(0), False), (timedelta(hours=3), True)):
             with self.subTest(age=age):
                 ProviderInventory.objects.update_or_create(
