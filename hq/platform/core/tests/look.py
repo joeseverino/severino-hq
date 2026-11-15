@@ -63,7 +63,6 @@ from hq.platform.core.tests.browser.shots import TALLEST, extent_of, shoot_page
 from hq.platform.core.tests.browser.stress import ALL_PAGES, stress_pages
 from hq.platform.core.tests.browser.survey import (
     BUSY,
-    CHECKS,
     CLOSE_OPENED,
     open_every_fold,
     palette_probes,
@@ -920,38 +919,15 @@ def _shown(path: Path) -> str:
     return str(path.relative_to(settings.BASE_DIR)) if path.is_relative_to(settings.BASE_DIR) else str(path)
 
 
-def _by_name() -> set[str]:
-    """Each check that takes a page's name alone."""
+def _rules() -> list[str]:
+    """What ``--rule`` may name: each check that takes a page's name alone."""
 
-    return {
+    return sorted(
         name
         for owner in (Look, LayoutBrowserTests)
         for name, member in vars(owner).items()
         if inspect.isfunction(member) and list(inspect.signature(member).parameters)[1:] in (["name"], ["_name"])
-    }
-
-
-def _rules() -> list[str]:
-    """What ``--rule`` may name: each check that takes a page's name alone,
-    and every rule the gate's sweep without script holds."""
-
-    return sorted(_by_name() | set(LayoutBrowserTests.unscripted_rules()))
-
-
-def held_without_script_only(rule: str) -> list[int]:
-    """The widths the gate holds ``rule`` at without script, when it holds it
-    only there: a rule of the sweep without script that reads a probe the
-    survey, which the gate holds once script has run, does not."""
-
-    widths = LayoutBrowserTests.unscripted_rules().get(rule, [])
-    if not widths or rule in _by_name():
-        return []
-    # A rule's probes are fixed as its class is defined, so none is a probe
-    # the survey reads only when it runs (axe's, from the lint tools, which
-    # the image lacks): naming a rule reads none of those.
-    fixed = (check.probe for check in CHECKS.values() if not callable(check.probe))
-    surveyed = {probe[0] if isinstance(probe, tuple) else probe for probe in fixed}
-    return widths if any(source not in surveyed for source, _arg in getattr(LayoutBrowserTests, rule).probes) else []
+    )
 
 
 def no_rule(rule: str) -> str:
@@ -1147,12 +1123,6 @@ def _checked(records: task.Records | None) -> Asked:
     pages = _served(rest, records) if rest or not undrawn else []
     if (rule := Look.rule_asked()) and rule not in _rules():
         raise AssertionError(no_rule(rule))
-    if rule and not given.switch("no_script") and (widths := held_without_script_only(rule)):
-        at = ",".join(map(str, widths))
-        raise AssertionError(
-            f"{rule} is held without script, at {at}: mise run dev:look --rule {rule} --no-script --widths {at}"
-            f" {' '.join(names)}"
-        )
     probe, probe_source = _probe(given.text("probe"))
     if given.text("arg") and not probe:
         raise AssertionError("--arg is what --probe's function takes: name the probe")

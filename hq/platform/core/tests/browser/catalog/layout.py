@@ -10,10 +10,6 @@ from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.shards import sweep
 from hq.platform.core.tests.browser.widths import PHONE_SCREEN, SPARSE_WIDTHS
 
-# Each drawing with no box of its own while the box that holds it has one.
-_CLOSED = """(disclosure) => document.querySelector(
-  `${disclosure}:not([open]), [popover]:not(:popover-open)`) !== null"""
-
 _UNDRAWN = """(drawings) => [...document.querySelectorAll(drawings)].filter((drawing) => {
   const held = drawing.parentElement.getBoundingClientRect();
   const drawn = drawing.getBoundingClientRect();
@@ -48,14 +44,7 @@ class CatalogLayoutTests(LayoutBrowserTests):
                     was = self.in_scheme("dark")
                     self.hold(name, width, [self.every_palette_check_holds], scheme="dark")
                     self.in_scheme(was)
-                # With nothing closed to open, the page open is the page as read.
-                if self.page.evaluate(_CLOSED, SELECTORS["disclosure"]):
-                    opened = [
-                        self.open_every_disclosure,
-                        self.every_layout_check_holds,
-                        self.every_anchored_popover_keeps_the_layout_rules,
-                    ]
-                    self.hold(name, width, opened, disclosures="open")
+                self.hold_opened(name, width)
 
     @sweep
     def test_every_drawing_is_drawn_on_a_phone(self):

@@ -93,7 +93,7 @@ class HeldRequestWordsTests(TestCase):
 
     def test_its_change_is_shown_beside_its_buttons(self):
         """The dashboard's card and the queue's row say what Approve decides
-        (the browser gate's what_an_item_means_is_never_cut holds it whole)."""
+        (the survey's `cut decisions` holds it whole)."""
 
         user = get_user_model().objects.create_superuser("reviewer", "reviewer@example.test", "x" * 20)
         self.client.force_login(user)

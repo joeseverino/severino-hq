@@ -1,6 +1,6 @@
 """How the gates run probes on a page: a probe page of markup, and many probes in one trip."""
 
-from functools import cache, wraps
+from functools import cache
 
 from django.conf import settings
 lazy from django.template import Context, Template
@@ -64,22 +64,3 @@ def taken(outcome):
     if not returned:
         raise ProbeThrew(value)
     return value
-
-
-def reads(*probes):
-    """A rule that judges only what its probes return: a probe is its source,
-    or its source and argument. ``hold`` reads the probes of a run of such
-    rules in one round trip; a rule called alone reads its own."""
-
-    probes = tuple(map(_probe, probes))
-
-    def rule(judge):
-        @wraps(judge)
-        def held(self, name, *found):
-            return judge(self, name, *(found or self.read(probes)))
-
-        # typeshed's _Wrapped declares no attributes, which a function takes.
-        held.probes = probes  # type: ignore[attr-defined]
-        return held
-
-    return rule

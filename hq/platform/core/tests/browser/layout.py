@@ -2,54 +2,26 @@
 
 import json
 import re
-from itertools import islice, takewhile
 from time import perf_counter
 from typing import override
 
 lazy from playwright.sync_api import TimeoutError as LoadTimeout
 
 from hq.platform.core.tests.browser.gate import RULE_COSTS, SET_ASIDE, BrowserGate, answered_as, signature
-from hq.platform.core.tests.browser.probes.boxes import (
-    ANY_SCROLLER,
-    CHROME_INSETS,
-    INTO_A_NEIGHBOR,
-    NARROW_FRAMES,
-    OVERLAPS,
-    SIDEWAYS,
-)
 from hq.platform.core.tests.browser.probes.palette import PAINT
-from hq.platform.core.tests.browser.probes.parts import EVIDENCE_READ, SUMMARIES_READ
-from hq.platform.core.tests.browser.probes.settle import FINISH_TRANSITIONS, SETTLE, STYLESHEETS
-from hq.platform.core.tests.browser.probes.tables import (
-    CELLS,
-    PAST_THE_GUTTER,
-    TABLES,
-    TABLES_THAT_DO_NOT_FIT,
-)
-from hq.platform.core.tests.browser.probes.text import (
-    BROKEN_WORDS,
-    CUT_DECISIONS,
-    PAST_THE_CLAMP,
-)
-from hq.platform.core.tests.browser.reading import reads, taken
+from hq.platform.core.tests.browser.probes.settle import FINISH_TRANSITIONS, SETTLE
+from hq.platform.core.tests.browser.probes.tables import CELLS, TABLES_THAT_DO_NOT_FIT
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.stress import stress_estate
-from hq.platform.core.tests.browser.survey import AS_FINDINGS, CHECKS
-from hq.platform.core.tests.browser.widths import SPARSE_WIDTHS, WIDTHS
-from hq.platform.core.tests.test_browser_dense_fixtures import DENSE_PAGES
-from hq.platform.core.tests.test_browser_fixtures import PAGES
 
 # A key that changes nothing, pressed before a batch a gate opens, so the
 # browser takes what the batch moves as the reader's own doing (`as_a_reader`).
 _NO_OP_KEY = "Shift"
 
-# What runs past the page's edge, wherever a box that scrolls does not hold it.
-_ESCAPES_READ = (SIDEWAYS, ANY_SCROLLER)
-
-# A list's table in the markup a page was served, read apart from the table
-# probe's selector, so a probe that misses the tables it judges is caught; a
-# drawing laid out as a table (a calendar's month) is none.
-_DATA_TABLE = re.compile(r'<table\b[^>]*\bclass="(?:[^"]*\s)?data-table[\s"]')
+# Each drawing with no box of its own while the box that holds it has one:
+# something a reader can open.
+_CLOSED = """(disclosure) => document.querySelector(
+  `${disclosure}:not([open]), [popover]:not(:popover-open)`) !== null"""
 
 # A page's note on its readings, saying nothing and then the longest line it
 # says (a failure that names what it could not read), against the band
@@ -120,119 +92,28 @@ class LayoutBrowserTests(BrowserGate):
 
     def hold(self, name, width, rules, **where):
         """Hold each rule on the page as it stands, one subtest each, in
-        order. The probes of a run of rules that only read are read in one
-        round trip before the first of them is judged; a probe that threw
-        fails its own rule only. Each subtest's time, its probes' time in the
-        page with it, goes to the run's ledger."""
+        order, each subtest's time going to the run's ledger."""
 
-        read: dict[int, list] = {}
-        for at, rule in enumerate(rules):
-            if hasattr(rule, "probes") and at not in read:
-                read |= self.read_ahead(rules, at)
-            began = perf_counter() - sum(seconds for _returned, _value, seconds in read.get(at, []))
+        for rule in rules:
+            began = perf_counter()
             try:
                 with self.subTest(rule=rule.__name__, page=name, width=width, **where):
-                    if at in read:
-                        rule(name, *map(taken, read[at]))
-                    else:
-                        rule(name)
+                    rule(name)
             finally:
                 self.spent(RULE_COSTS, rule.__name__, perf_counter() - began, f"{name} at {width}px")
 
-    def read_ahead(self, rules, at):
-        """The timed outcomes of each rule's probes, by its place in
-        ``rules``, for the run of reading rules that starts at ``at``."""
+    def hold_opened(self, name, width, *, popovers=True, **where):
+        """Every layout check with every disclosure open, and with each
+        anchored popover shown when ``popovers``, wherever the page holds
+        something closed: with nothing to open, the page open is the page as
+        read."""
 
-        run = list(takewhile(lambda rule: hasattr(rule, "probes"), rules[at:]))
-        outcomes = iter(self.timed_outcomes([probe for rule in run for probe in rule.probes]))
-        return {at + offset: list(islice(outcomes, len(rule.probes))) for offset, rule in enumerate(run)}
-
-    # Without script: the page as the server drew it. Layout must hold before
-    # progressive enhancement.
-
-    def unscripted_reads(self, name, width):
-        """The rules that only read the page: on the sparse estate's pages at
-        every SPARSE_WIDTHS width, and on every page at every WIDTHS width."""
-
-        rules = []
-        if name in PAGES and width in SPARSE_WIDTHS:
-            rules += [
-                self.every_stylesheet_loads,
-                self.nothing_escapes_the_page_sideways,
-                self.tables_scroll_inside_their_own_container,
-                self.nothing_overlaps,
-                self.layout_audit_structural_rules,
-            ]
-        if width in WIDTHS:
-            reads = [*self.overflow_reads(name), self.a_heads_note_costs_its_head_no_room]
-            rules += [rule for rule in reads if rule not in rules]
-        return rules
-
-    @classmethod
-    def unscripted_rules(cls):
-        """Each rule the sweep without script holds, by name, with the widths
-        it holds it at on some page, read off the lists the sweep runs."""
-
-        lists = cls.__new__(cls)
-        held: dict[str, set[int]] = {}
-        for name in (*PAGES, *DENSE_PAGES):
-            for width in {*WIDTHS, *SPARSE_WIDTHS}:
-                for rule in (*lists.unscripted_reads(name, width), *lists.unscripted_openings(name, width)):
-                    held.setdefault(rule.__name__, set()).add(width)
-        return {rule: sorted(widths) for rule, widths in held.items()}
-
-    def overflow_reads(self, name):
-        rules = [
-            self.tables_scroll_inside_their_own_container,
-            self.no_block_breaks_a_paragraph,
-            self.words_stay_inside_the_box_that_holds_them,
-            self.only_a_table_scrolls_sideways,
-            self.nothing_runs_out_of_its_table_cell,
-            self.a_table_frame_spans_its_box,
-            self.no_column_is_narrower_than_its_words,
-            self.a_checks_evidence_follows_its_statement,
-            self.nothing_a_summary_names_is_hidden,
-            self.a_clamped_box_shows_only_its_lines,
-            self.what_an_item_means_is_never_cut,
-            self.code_and_cards_keep_inside_the_gutter,
-            self.nothing_is_drawn_into_its_neighbor,
-            self.the_chrome_is_as_tall_as_its_insets_say,
-        ]
-        if name in DENSE_PAGES:
-            rules.append(self.dense_pages_keep_to_their_boxes)
-        return rules
-
-    def unscripted_openings(self, name, width):
-        """The rules that open the page's disclosures, after every read."""
-
-        rules = [self.open_every_disclosure]
-        if name in PAGES and width in SPARSE_WIDTHS:
-            rules += [
-                self.nothing_escapes_the_page_sideways_with_every_disclosure_open,
-                self.nothing_escapes_the_page_sideways_with_each_anchored_popover_shown,
-            ]
-        if width in WIDTHS:
-            rules += [
-                self.only_a_table_scrolls_sideways_with_every_disclosure_open,
-                self.a_checks_evidence_follows_its_statement,
-                self.nothing_a_summary_names_is_hidden,
-                self.a_fill_shows_in_both_palettes,
-            ]
-        return rules
-
-    @reads(STYLESHEETS)
-    def every_stylesheet_loads(self, _name, sheets):
-        self.assertGreater(sheets["links"], 0)
-        self.assertEqual(sheets["loaded"], sheets["links"])
-        self.assertEqual(sheets["empty"], [])
-
-    @reads(_ESCAPES_READ)
-    def nothing_escapes_the_page_sideways(self, _name, found):
-        self.assertEqual(found, [])
-
-    @reads(CHROME_INSETS)
-    def the_chrome_is_as_tall_as_its_insets_say(self, _name, found):
-        self.assertEqual(found, [])
+        if not self.page.evaluate(_CLOSED, SELECTORS["disclosure"]):
+            return
+        opened = [self.open_every_disclosure, self.every_layout_check_holds]
+        if popovers:
+            opened.append(self.every_anchored_popover_keeps_the_layout_rules)
+        self.hold(name, width, opened, disclosures="open", **where)
 
     def open_every_disclosure(self, _name):
         """Every disclosure open, for the rules that follow. A popover is
@@ -248,10 +129,6 @@ class LayoutBrowserTests(BrowserGate):
         width = self.page.viewport_size["width"]
         if found := self.with_each_anchored_popover(lambda: self.findings(name, width)):
             self.fail(json.dumps(found, indent=1))
-
-    def nothing_escapes_the_page_sideways_with_each_anchored_popover_shown(self, _name):
-        probes = self.nothing_escapes_the_page_sideways.probes
-        self.assertEqual(self.with_each_anchored_popover(lambda: {"sideways": self.read(probes)[0]}), {})
 
     def with_each_anchored_popover(self, read):
         """What ``read`` finds, by check, with one popover of each kind hung
@@ -283,10 +160,6 @@ class LayoutBrowserTests(BrowserGate):
         self.page.keyboard.press(_NO_OP_KEY)
         return self.page.evaluate(script, arg)
 
-    @reads(_ESCAPES_READ)
-    def nothing_escapes_the_page_sideways_with_every_disclosure_open(self, _name, found):
-        self.assertEqual(found, [])
-
     def a_heads_note_costs_its_head_no_room(self, name):
         """A page's note on its readings ends the head's first line, inside
         it and on one line however long what it says: the page is laid out as
@@ -314,64 +187,8 @@ class LayoutBrowserTests(BrowserGate):
         # where its end tag was: the rest of the line falls out of it.
         self.assertEqual(self.page.locator(SELECTORS["broken_paragraph"]).count(), 0)
 
-    @reads(CHECKS["control labels"].probe, CHECKS["cell labels"].probe)
-    def words_stay_inside_the_box_that_holds_them(self, _name, controls, cells):
-        self.assertEqual(controls, [])
-        self.assertEqual(cells, [])
-
-    @reads(CHECKS["sideways"].probe)
-    def only_a_table_scrolls_sideways(self, _name, found):
-        """At a phone, tablet and laptop width; again with every disclosure open."""
-
-        self.assertEqual(found, [])
-
-    @reads(CHECKS["sideways"].probe)
-    def only_a_table_scrolls_sideways_with_every_disclosure_open(self, _name, found):
-        self.assertEqual(found, [])
-
-    @reads(CELLS)
-    def nothing_runs_out_of_its_table_cell(self, _name, found):
-        self.assertEqual(found, [])
-
-    @reads(_ESCAPES_READ, OVERLAPS)
-    def dense_pages_keep_to_their_boxes(self, _name, escapes, overlaps):
-        """Nothing escapes or overlaps with production-sized data."""
-
-        self.assertEqual(escapes, [])
-        self.assertEqual(overlaps, [])
-
-    @reads(TABLES)
-    def tables_scroll_inside_their_own_container(self, name, tables):
-        """A table wider than its card scrolls sideways in its own region; it
-        never runs past the card or stacks into cards."""
-
-        self.assertEqual(tables["found"], [])
-        # The probe counts the tables it skips as undrawn (in a closed
-        # disclosure) by its own test, so a page whose every table is in one
-        # is told apart from a page whose tables it failed to find.
-        if _DATA_TABLE.search(self.pages.get(name) or self.page.content()):
-            self.assertGreater(tables["seen"] + tables["undrawn"], 0, "the probe found no table")
-
-    @reads(OVERLAPS)
-    def nothing_overlaps(self, _name, found):
-        self.assertEqual(found, [])
-
-    @reads(INTO_A_NEIGHBOR)
-    def nothing_is_drawn_into_its_neighbor(self, _name, found):
-        """What a box in a row holds stays in it: a figure's dots never reach the next figure."""
-
-        self.assertEqual(found, [])
-
-    @reads(CHECKS["audit"].probe)
-    def layout_audit_structural_rules(self, _name, report):
-        self.assertEqual(AS_FINDINGS["audit"](report), [])
-
-    @reads((NARROW_FRAMES, SELECTORS["table_scroll"]))
-    def a_table_frame_spans_its_box(self, _name, found):
-        self.assertEqual(found, [])
-
-    def a_fill_shows_in_both_palettes(self, _name):
-        self.assertEqual(self.lost_fills(), [])
+    def nothing_runs_out_of_its_table_cell(self, _name):
+        self.assertEqual(self.read([(CELLS, None)])[0], [])
 
     def every_palette_check_holds(self, _name):
         """Text and the edges of fields and buttons against what they sit
@@ -434,39 +251,12 @@ class LayoutBrowserTests(BrowserGate):
             self.page.unroute(address, answer)
         self.page.evaluate(FINISH_TRANSITIONS)
 
-    @reads((BROKEN_WORDS, SELECTORS["identifier"]))
-    def no_column_is_narrower_than_its_words(self, _name, found):
-        self.assertEqual(found, [])
-
     def every_layout_check_holds(self, name):
         """Every check the layout rules make, on the page as a reader has it:
         what `dev:look --rule survey` reports, held."""
 
         if found := self.findings(name, self.page.viewport_size["width"]):
             self.fail(json.dumps(found, indent=1))
-
-    @reads(PAST_THE_CLAMP)
-    def a_clamped_box_shows_only_its_lines(self, _name, found):
-        self.assertEqual(found, [])
-
-    @reads((CUT_DECISIONS, [SELECTORS["decision_detail"], "*", SELECTORS["unseen"]]))
-    def what_an_item_means_is_never_cut(self, _name, found):
-        """What a queue item means, an approval's change among them, wraps
-        rather than being cut, at every width."""
-
-        self.assertEqual(found, [])
-
-    @reads((PAST_THE_GUTTER, [SELECTORS["gutter_bound"], False]))
-    def code_and_cards_keep_inside_the_gutter(self, _name, found):
-        self.assertEqual(found, [])
-
-    @reads(EVIDENCE_READ)
-    def a_checks_evidence_follows_its_statement(self, _name, found):
-        self.assertEqual(found, [])
-
-    @reads(SUMMARIES_READ)
-    def nothing_a_summary_names_is_hidden(self, _name, found):
-        self.assertEqual(found, [])
 
     # With script: the page a person reads, sorted and selectable.
 

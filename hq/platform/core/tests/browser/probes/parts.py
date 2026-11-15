@@ -333,10 +333,6 @@ PILLS_IN_PIECES = (
 )
 
 
-EVIDENCE_READ = (STRANDED_EVIDENCE, [SELECTORS["check_statement"], SELECTORS["check_evidence"]])
-
-SUMMARIES_READ = (HIDDEN_IN_SUMMARIES, SELECTORS["summary_value"])
-
 _READINGS_OF = f"(selector) => ({READINGS})([...document.querySelectorAll(selector)])"
 
 # The survey checks these probes answer (`probes/__init__.py`).
@@ -366,6 +362,13 @@ CHECKS = {
     "headings parted": Check(HEADINGS_PARTED, reader_sees="a heading at a column's foot, what it heads in the next"),
     "asks outside their rows": Check(
         ASKS_OUTSIDE_THEIR_ROWS, reader_sees="a row's button drawn again beside its table, owned by no row"
+    ),
+    "evidence apart": Check(
+        (STRANDED_EVIDENCE, [SELECTORS["check_statement"], SELECTORS["check_evidence"]]),
+        reader_sees="a check's evidence drawn away from its statement",
+    ),
+    "summaries hiding": Check(
+        (HIDDEN_IN_SUMMARIES, SELECTORS["summary_value"]), reader_sees="what a fold's handle names, hidden"
     ),
     "row actions behind the toggle": Check(
         (

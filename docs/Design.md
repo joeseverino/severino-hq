@@ -287,7 +287,7 @@ words, and is one box: a pill longer than its column wraps inside its own
 paint, never into two pills. *Gates:* the survey's `pills in pieces`,
 `a_table_fits_its_box_at_every_width`,
 `test_a_blank_column_is_not_drawn_and_a_short_word_is_not_split`,
-`only_a_table_scrolls_sideways`, and the page crawl, which fails any
+the survey's `sideways`, and the page crawl, which fails any
 `.data-table` outside `.table-scroll`.
 
 What a table's rows are to each other is an option of its parts, never a
@@ -610,7 +610,7 @@ the connection panel draws its route; it never wraps onto a second row.
 Its line runs from the first stop's mark to the last one's, with any stop
 opened. A check names what it was read from right after its statement, or
 under it where the line is full, and that evidence is shown at every width.
-*Gates:* `a_checks_evidence_follows_its_statement`, `nothing_a_summary_names_is_hidden`.
+*Gates:* the survey's `evidence apart` and `summaries hiding`.
 *Catalog:* `part/path-hops`.
 
 **Checks read down a ladder.** `{% check_ladder %}` draws checks one after
@@ -1497,8 +1497,8 @@ side by side when space permits; empty contributors take no space.
   figure's own link moves from the cell to its value, since a link cannot hold
   links. Past six, dots stand in even rows at most four wide. Where the column
   has no room for them beside the value they take the line under it, so a
-  figure's dots never reach the figure beside it (the layout gates'
-  `nothing_is_drawn_into_its_neighbor`). Past a dozen, dots are a texture and
+  figure's dots never reach the figure beside it (the survey's
+  `into a neighbor`). Past a dozen, dots are a texture and
   are not drawn. A history is `Dots(..., ordered=True)`, drawn in its own
   order, oldest first, as the HQ page draws a piece of scheduled work's recent
   runs, each linking to its job. `partials/_dots.html` draws either, wherever

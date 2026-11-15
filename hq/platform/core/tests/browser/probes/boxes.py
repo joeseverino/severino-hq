@@ -451,4 +451,8 @@ CHECKS = {
         reader_sees="a control too small to hit",
     ),
     "cut rings": Check((CUT_RINGS, SELECTORS["target"]), reader_sees="a focus ring cut off by what holds its control"),
+    "frames short of their box": Check(
+        (NARROW_FRAMES, SELECTORS["table_scroll"]), reader_sees="a table's frame ending short of the box it heads"
+    ),
+    "chrome insets": Check(CHROME_INSETS, reader_sees="a sticky part drawn under the header or the page's nav"),
 }
