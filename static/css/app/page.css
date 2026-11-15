@@ -286,6 +286,21 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
   content: "·" / ""; display: inline-block; inline-size: var(--dot-gap); margin-inline-start: calc(-1 * var(--dot-gap));
   text-align: center; color: var(--muted-2); text-decoration: none;
 }
+/* The same run set at its box's end (a section aside's words, then its link
+   to the rest): each dot stands in the gap after its part, so where the run
+   wraps, the dot that would end a line lies past the box's end and is not
+   drawn, and a line never ends with a separator. Only its paint is cut
+   there, so nothing it holds is clipped out of its box; a focus ring is
+   drawn inside its control. */
+.end-run {
+  --dot-gap: calc(2 * var(--space-3) + .4em);
+  display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: baseline; column-gap: var(--dot-gap);
+  clip-path: inset(-100vh 0 -100vh -100vw);
+}
+.end-run > :not(:last-child)::after {
+  content: "·" / ""; display: inline-block; inline-size: var(--dot-gap); margin-inline-end: calc(-1 * var(--dot-gap));
+  text-align: center; color: var(--muted-2); text-decoration: none;
+}
 
 /* A page declares its sections; the shell owns how they are traversed. Like
    the global navigation this is one row at every width, horizontally

@@ -275,6 +275,10 @@ class SectionTagTests(SimpleTestCase):
         (aside,) = with_class(after, "section-aside")
         self.assertTrue(aside.words.startswith("3 due"))
         self.assertTrue(aside.words.removesuffix("→").strip().endswith("View renewals"))
+        # The dot before the link is the run's (`.end-run`), so where the link
+        # wraps to a line of its own no line ends with it.
+        self.assertNotIn("·", aside.words)
+        self.assertTrue(with_class(after, "end-run"))
 
     def test_its_link_to_the_rest_is_drawn_where_there_is_somewhere_to_go(self):
         html = _render('{% section "Plan" more_label="Change plan" more_url=url %}<p>Body</p>{% endsection %}', url="")

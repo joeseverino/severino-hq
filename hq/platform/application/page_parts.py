@@ -19,7 +19,6 @@ lazy from django.template.loader import render_to_string
 lazy from hq.platform.core.templatetags.value_tags import breakable
 
 from .display_words import display
-from .labels import DOT_MARKUP
 lazy from .ui import STATUS_VALUES
 
 # The arrow that ends a link onward, written inside its last word's box as
@@ -153,8 +152,12 @@ class SectionPart:
         # word's box.
         label = breakable(str.__str__(strip_tags(self.more_label)), ARROW)
         link = format_html('<a class="subtle-link" href="{}">{}</a>', self.more_url, label)
-        # said is escaped above or the template's own output; the rest is HQ's own markup.
-        return mark_safe(f"{said}{DOT_MARKUP if said else ''}{link}")  # noqa: S308 - see above
+        if not said:
+            return link
+        # The link moves to a line of its own whole, and no line ends with
+        # the dot before it (`.end-run`, page.css). said is escaped above or
+        # the template's own output; the rest is HQ's own markup.
+        return mark_safe(f'<span class="end-run"><span>{said}</span>{link}</span>')  # noqa: S308 - see above
 
     def _landmark(self, heading_id: str) -> dict[str, SafeString]:
         """The section's opening and closing tags: the landmark its heading
