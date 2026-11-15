@@ -767,27 +767,23 @@ class ComponentLayoutTests(LayoutBrowserTests):
         """The hit area a small control hangs beside itself widens what it
         scrolls, never what it says; a word wider than its control spills."""
 
-        from hq.platform.core.tests.browser.catalog import CATALOG
-
-        self.pages = {**self.pages, "pin-probe": CATALOG["part/service-pin"].page("part/service-pin")}
-        self.open("pin-probe", WIDE)
-        star = SELECTORS["favorite_star"]
+        # The glyph is drawn smaller than a target, so its area hangs past it.
+        self.pages = {
+            **self.pages,
+            "hit-probe": probe(
+                '<button type="button" class="example-glyph" data-hit aria-label="Example favorite" '
+                'style="inline-size: 1rem; block-size: 1rem; padding: 0">★</button> '
+                '<button type="button" class="example-word" style="inline-size: 2rem; white-space: nowrap">'
+                "example label</button>"
+            ),
+        }
+        self.open("hit-probe", WIDE)
         widened = self.page.evaluate(
-            """(star) => {
-          const word = document.createElement('button');
-          word.className = 'example-word';
-          word.textContent = 'example label';
-          word.style.setProperty('width', '2rem');
-          word.style.setProperty('white-space', 'nowrap');
-          const main = document.querySelector('main');
-          main.append(word);
-          const drawn = main.querySelector(star);
-          return drawn.scrollWidth > drawn.clientWidth;
-        }""",
-            star,
+            "() => { const glyph = document.querySelector('main .example-glyph');"
+            " return glyph.scrollWidth > glyph.clientWidth; }"
         )
         self.assertTrue(widened)
-        found = self.page.evaluate(SPILLED_LABELS, f"main :is({star}, .example-word)")
+        found = self.page.evaluate(SPILLED_LABELS, "main :is(.example-glyph, .example-word)")
         self.assertEqual([spilled.split(" holds ")[0] for spilled in found], ["button.example-word"])
 
     def test_a_word_before_a_name_in_a_cell_shares_the_name_s_line(self):
