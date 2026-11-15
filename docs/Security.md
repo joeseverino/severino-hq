@@ -73,14 +73,16 @@ What each subject holds, with `HELD_ONLY_AT` and `NEEDS_A_PERSON` applied on top
 
 ### What a page reads under
 
-Every page reads under one capability, and a signed-in person opens it only
-while their role holds it. A viewer opens every page that reads under `read`,
-which is most of HQ and every extension page that declares nothing, and is
-refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
+Every page reads under `read`, and under the one capability it declares
+beside it, and a signed-in person opens it only while their role holds both.
+`read` is never replaced, since every page reads the estate HQ draws around
+it. A viewer opens every page that declares nothing, which is most of HQ, and
+is refused the audit log (`read_audit_log`) and the calendar
+(`read_calendar`).
 
 - A view declares its capability as `required_capability`, a class's attribute
   or a function view's `hq_sdk.web.capability_required`. A page that declares
-  nothing reads under `read`, never under nothing, and one that declares it
+  nothing reads under `read` alone, never under nothing, and one that declares it
   empty (`hq_sdk.web.CapabilityRequiredMixin` left as it comes) is never served.
 - The check is `LoginRequiredMiddleware`'s, before the view runs, so a refused
   page has read nothing. It answers with the 403 page, which names no
@@ -106,7 +108,7 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
   not.
 - `PageReadCapabilityTests` walks the URL configuration, every installed
   extension's included, and holds that a person with no role opens no page and
-  that each page reads under one capability an operator holds.
+  that every capability each page reads under is one an operator holds.
 
 ## What HQ enforces
 

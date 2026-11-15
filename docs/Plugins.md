@@ -159,9 +159,9 @@ of its own (a `BaseModel`, or a type under `with_config`), which would hold
 over HQ's.
 Class-based views inherit
 `CapabilityRequiredMixin` and declare `required_capability`; function views use
-`@capability_required(...)`. Either only names the capability. The host's page
-gate refuses a person who does not hold it, and records the refusal, before the
-view runs. It also refuses to serve a mixin view that names none. Bulk work
+`@capability_required(...)`. Either only names the capability, which the page
+reads under beside the host's `read`. The host's page gate refuses a person who
+does not hold both, and records the refusal, before the view runs. It also refuses to serve a mixin view that names none. Bulk work
 records one summary with `record_operation`. Who acted and which operation a
 row belongs to are the door's: the capability runner names every row a
 handler writes by its capability and its caller, and the job runner every row

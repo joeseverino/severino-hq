@@ -273,14 +273,14 @@ class PageReadCapabilityTests(TestCase):
         ]
         self.assertEqual(opened, [], "these pages read without a capability")
 
-    def test_each_page_reads_under_one_capability_an_operator_opens(self):
-        from hq.platform.application.pages import page_capability
+    def test_each_page_reads_under_capabilities_an_operator_opens(self):
+        from hq.platform.application.pages import page_capabilities
 
         operator = get_user_model().objects.create_user("operator")
         held = operator_capabilities()
         wrong = [
             each.path
             for each in self._pages()
-            if page_capability(each.pattern.callback) not in held or not self._opened(operator, each)
+            if not held.issuperset(page_capabilities(each.pattern.callback)) or not self._opened(operator, each)
         ]
         self.assertEqual(wrong, [])
