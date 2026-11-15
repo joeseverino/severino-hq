@@ -92,6 +92,15 @@ class FindingsTests(SentinelMixin, TestCase):
         evidence = dict(found[0].evidence)
         self.assertEqual(set(evidence), {"Last seen", "Others read"})
 
+    def test_the_only_record_of_its_type_left_behind_names_no_others(self):
+        observed(self.rewrite("sole"), self.now - timedelta(hours=6))
+        kind_read("adguard.rewrite", self.now)
+
+        (found,) = [f for f in self.raised() if f.rule == "skipped-by-a-sweep"]
+
+        said = " ".join((found.explanation, *(label for label, _value in found.evidence)))
+        self.assertNotIn("other", said.lower())
+
     def test_the_skipped_record_is_offered_to_be_created_again(self):
         skipped = self.rewrite("skipped-record")
         observed(self.rewrite("swept"), self.now)

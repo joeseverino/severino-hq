@@ -52,9 +52,12 @@ def _many(kind_key: str) -> str:
     return (provider.label_plural if provider else "") or plural(kind_label(kind_key))
 
 
-def _the_others(count: int, noun: str) -> str:
-    """The rest of a record's type as the start of a sentence about them."""
+def _the_others(count: int, noun: str, kind_key: str) -> str:
+    """The rest of a record's type as the start of a sentence about them; its
+    type, when it is the only one."""
 
+    if count == 0:
+        return f"{_many(kind_key)} were"
     if count == 1:
         return f"The one other {noun} was"
     return f"The other {count} {plural(noun)} were"
@@ -106,12 +109,13 @@ def _skipped_by_a_sweep(estate: FindingEstate) -> tuple[Finding, ...]:
                 # The point first: a narrow card shows only the first line.
                 explanation=(
                     "It has probably been removed or renamed. "
-                    f"{_the_others(others, lower_first(node.subtitle))} read {ago(newest)}, and this one was "
+                    f"{_the_others(others, lower_first(node.subtitle), node.kind_key)} read {ago(newest)}, "
+                    "and this one was "
                     f"last seen {duration(behind)} earlier."
                 ),
                 evidence=(
                     _when("Last seen", node.observed_at),
-                    _when("Others read", newest),
+                    _when("Others read" if others else LAST_READ, newest),
                 ),
                 remedies=_skipped_remedies(node),
             )
