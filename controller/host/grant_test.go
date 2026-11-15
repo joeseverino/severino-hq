@@ -30,7 +30,7 @@ func newGrantLaunch(t *testing.T) (*launch, Grant, *bytes.Buffer) {
 	return l, grant, &stderr
 }
 
-func placedHandoff(t *testing.T, edit func(run, top map[string]any)) []byte {
+func placedHandoff(t testing.TB, edit func(run, top map[string]any)) []byte {
 	t.Helper()
 	return handoffDocument(t, func(run, top map[string]any) {
 		run["repositories"] = []string{"example/notes"}
@@ -224,4 +224,69 @@ func TestAHostsGrantsAreReadStrictly(t *testing.T) {
 			t.Errorf("%s was accepted", name)
 		}
 	}
+}
+
+// GitHub's names ignore case, so a placed grant admits its own repositories
+// however the hand-off spells them, in whatever order a sort as spelled puts
+// them.
+func TestAPlacedGrantAdmitsItsRepositoriesInAnyCase(t *testing.T) {
+	grant := Grant{Name: "example-pull", Repositories: []string{"example/Zed", "example/alpha"}}
+	run := HandoffRun{Owner: "example", Repositories: []string{"example/alpha", "example/zed"}, Token: exampleToken}
+	if err := grant.admits(Handoff{Version: handoffV1, Runs: []HandoffRun{run}}); err != nil {
+		t.Fatalf("refused its own repositories: %v", err)
+	}
+	run.Repositories = []string{"example/alpha", "example/zeds"}
+	if err := grant.admits(Handoff{Version: handoffV1, Runs: []HandoffRun{run}}); err == nil {
+		t.Fatal("admitted another repository")
+	}
+}
+
+// A hand-off is the pass's, and the grant it is checked against is the
+// host's configuration. A placed grant admits exactly one token for exactly
+// its repositories, case aside; a planned one admits whatever parses, since
+// HQ's plan scoped it.
+func FuzzAdmits(f *testing.F) {
+	f.Add(placedHandoff(f, nil), "example/notes")
+	f.Add(placedHandoff(f, func(run, _ map[string]any) { run["repositories"] = []string{"example/notes", "example/app"} }), "example/app,example/notes")
+	f.Add(placedHandoff(f, func(run, _ map[string]any) { run["repositories"] = []string{"example/alpha", "example/zed"} }), "example/Zed,example/alpha")
+	f.Add(placedHandoff(f, func(run, _ map[string]any) { run["repositories"] = []string{"example/notes", "example/app"} }), "example/notes")
+	f.Add(placedHandoff(f, func(run, top map[string]any) {
+		other := map[string]any{"owner": "example-org", "repositories": []string{"example-org/notes"}, "token": exampleToken, "expires_at": run["expires_at"]}
+		top["runs"] = []any{run, other}
+	}), "example/notes")
+	f.Fuzz(func(t *testing.T, data []byte, repositories string) {
+		handoff, err := ParseHandoff(data)
+		if err != nil {
+			return
+		}
+		if err := DependencyUpdates.admits(handoff); err != nil {
+			t.Fatalf("a planned grant refused a parsed hand-off: %v", err)
+		}
+		grant := Grant{Name: "example-pull", Repositories: strings.Split(repositories, ",")}
+		if checkRepositories(grant.Repositories) != nil {
+			return
+		}
+		err = grant.admits(handoff)
+		if err != nil && strings.ContainsAny(err.Error(), "\r\n") {
+			t.Fatalf("the refusal is more than one line: %q", err)
+		}
+		same := len(handoff.Runs) == 1 && len(handoff.Runs[0].Repositories) == len(grant.Repositories)
+		for _, want := range grant.Repositories {
+			named := 0
+			for _, got := range handoff.Runs[0].Repositories {
+				if strings.EqualFold(got, want) {
+					named++
+				}
+			}
+			for _, also := range grant.Repositories {
+				if strings.EqualFold(also, want) {
+					named--
+				}
+			}
+			same = same && named == 0
+		}
+		if (err == nil) != same {
+			t.Fatalf("admitted %v (%v) for %d run(s), the first for %q, a grant for %q", err == nil, err, len(handoff.Runs), handoff.Runs[0].Repositories, grant.Repositories)
+		}
+	})
 }

@@ -75,7 +75,9 @@ func (g Grant) Due(now time.Time) bool {
 }
 
 // admits is whether handoff is this grant's: for a placed grant, one run of
-// exactly its repositories.
+// exactly its repositories. GitHub's names ignore case, so each side is
+// folded before it is sorted: a sort of the names as spelled can pair a name
+// with another.
 func (g Grant) admits(handoff Handoff) error {
 	if g.Planned {
 		return nil
@@ -83,12 +85,21 @@ func (g Grant) admits(handoff Handoff) error {
 	if len(handoff.Runs) != 1 {
 		return errors.New("a placed grant is one token")
 	}
-	got := slices.Sorted(slices.Values(handoff.Runs[0].Repositories))
-	want := slices.Sorted(slices.Values(g.Repositories))
-	if !slices.EqualFunc(got, want, strings.EqualFold) {
+	if !slices.Equal(folded(handoff.Runs[0].Repositories), folded(g.Repositories)) {
 		return errors.New("its repositories are not the grant's")
 	}
 	return nil
+}
+
+// folded is repositories in lowercase, sorted. A name is ASCII (githubOwner,
+// githubName), so lowercase is the fold.
+func folded(repositories []string) []string {
+	out := make([]string, len(repositories))
+	for i, repository := range repositories {
+		out[i] = strings.ToLower(repository)
+	}
+	slices.Sort(out)
+	return out
 }
 
 var (
