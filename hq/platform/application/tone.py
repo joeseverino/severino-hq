@@ -49,5 +49,28 @@ class Tone(StrEnum):
         return min((cls(tone) for tone in tones), key=lambda tone: tone.rank, default=default or cls.GOOD)
 
 
+class Toned(StrEnum):
+    """One subject's states (a machine's presence, a container's), each member
+    declared beside the tone it is drawn in, ``ONLINE = "online", Tone.GOOD``.
+
+    Its value is the words it is said in, so ``{% status machine.state %}``
+    draws a state as its label in its tone and no page spells either.
+    """
+
+    tone: Tone
+
+    def __new__(cls, value: str, tone: Tone) -> Toned:
+        member = str.__new__(cls, value)
+        member._value_ = value
+        member.tone = tone
+        return member
+
+    @property
+    def label(self) -> str:
+        """The words it is said in."""
+
+        return self.value
+
+
 _ORDER = tuple(Tone)
 _URGENCY = {Tone.SERIOUS: "Urgent", Tone.ATTENTION: "Needs attention", Tone.NEUTRAL: "Note", Tone.GOOD: "Fine"}

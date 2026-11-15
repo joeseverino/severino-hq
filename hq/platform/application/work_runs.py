@@ -14,6 +14,7 @@ import json
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from enum import StrEnum
 from typing import Any, Literal
 
 from django.db.models import Case, CharField, Exists, F, IntegerField, OuterRef, Q, QuerySet, Value, When
@@ -53,14 +54,29 @@ TONES = {
     # rather than a fault to read.
     JobState.LOST: Tone.ATTENTION,
 }
-# Each task outcome a run reports (the bridge's ``RunEvent``), in the same vocabulary.
+
+
+class TaskOutcome(StrEnum):
+    """What a run's task did on one host (the bridge's ``RunEvent``)."""
+
+    OK = "ok"
+    CHANGED = "changed"
+    SKIPPED = "skipped"
+    FAILED = "failed"
+    UNREACHABLE = "unreachable"
+
+
+# Each task outcome in the same vocabulary as the run's state.
 OUTCOME_TONES = {
-    "ok": Tone.GOOD,
-    "changed": "active",
-    "skipped": "paused",
-    "failed": Tone.SERIOUS,
-    "unreachable": Tone.SERIOUS,
+    TaskOutcome.OK: Tone.GOOD,
+    TaskOutcome.CHANGED: "active",
+    TaskOutcome.SKIPPED: "paused",
+    TaskOutcome.FAILED: Tone.SERIOUS,
+    TaskOutcome.UNREACHABLE: Tone.SERIOUS,
 }
+# The outcomes a run's audit trail records one row each: what changed a
+# machine or went wrong. Every outcome stays in the run's result.
+AUDITED_OUTCOMES = frozenset({TaskOutcome.CHANGED, TaskOutcome.FAILED, TaskOutcome.UNREACHABLE})
 # How work in each state stands for a control that follows it (``asks.Standing``).
 STANDS = {
     JobState.QUEUED: QUEUED,

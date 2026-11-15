@@ -313,7 +313,7 @@ def _estate_items() -> tuple[DiscoveryItem, ...]:
             ),
             url=machine.url,
             destination_label="Machine",
-            badges=(machine.state[0],),
+            badges=(machine.state,),
             search_terms=tuple(
                 term
                 for term in (

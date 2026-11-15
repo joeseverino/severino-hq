@@ -161,7 +161,7 @@ def _runs_tile(found: HQContext) -> Tile:
         return Tile("Runs on", "Not known", "No machine HQ reads answers at HQ's addresses.", icon="server")
     container = found.container
     detail = dotted(container.running.name, container.uptime) if container is not None else "Its container is not known"
-    healthy = container is not None and container.running.healthy
+    healthy = container is not None and container.running.state.running
     return Tile(
         "Runs on", found.machine.name, detail, found.machine.url, Tone.GOOD if healthy else Tone.ATTENTION, "server"
     )
@@ -191,7 +191,7 @@ def _where_json(found: HQContext) -> dict[str, Any]:
         "machine": container.machine.name,
         "container": container.address,
         "uptime": container.uptime,
-        "health": runtime.get("health") or container.running.check,
+        "health": runtime.get("health") or (check.said if (check := container.running.check) else ""),
         "restarts": runtime.get("restart_count"),
         "posture": {"met": posture.met, "measured": posture.measured},
         "services": [job.unit for job in found.work.services],

@@ -1,7 +1,6 @@
 """Infrastructure desired state and policy-gated operation requests."""
 
 from dataclasses import dataclass
-from enum import StrEnum
 from typing import Annotated, Any
 
 from django.conf import settings
@@ -37,7 +36,7 @@ from .projection import keyset_page, read_once
 from .record_errors import PolicyError
 from .record_saves import Held, as_sent, found, held, written
 from .security import Principal
-from .tone import Tone
+from .tone import Tone, Toned
 lazy from .asks import APPLIES_SHORTLY
 lazy from .cadence import ask, swept
 lazy from .capabilities import Consented
@@ -238,69 +237,36 @@ def serialize_public_status(status: dict[str, Any]) -> dict[str, Any]:
     return public_status
 
 
-class ResourceState(StrEnum):
-    """A declared record's health in one word, as the API answers it."""
+class ResourceState(Toned):
+    """A declared record's health in one word, as the API answers it, beside
+    the tone every page draws it in. Its words on a page are its record's
+    (``resource_health``'s label)."""
 
-    HEALTHY = "healthy"
+    HEALTHY = "healthy", Tone.GOOD
     # Nothing converges its kind, so it is as declared.
-    DECLARED = "declared"
-    PENDING = "pending"
-    DRIFTED = "drifted"
-    DEGRADED = "degraded"
+    DECLARED = "declared", Tone.GOOD
+    PENDING = "pending", Tone.ATTENTION
+    DRIFTED = "drifted", Tone.SERIOUS
+    DEGRADED = "degraded", Tone.SERIOUS
     # A deploy on its way to production is not a fault (delivery_progress).
-    DEPLOYING = "deploying"
-    UNKNOWN = "unknown"
-
-    @property
-    def tone(self) -> Tone:
-        """The tone every page draws it in."""
-
-        return _RESOURCE_TONES[self]
+    DEPLOYING = "deploying", Tone.NEUTRAL
+    UNKNOWN = "unknown", Tone.NEUTRAL
 
 
-_RESOURCE_TONES = {
-    ResourceState.HEALTHY: Tone.GOOD,
-    ResourceState.DECLARED: Tone.GOOD,
-    ResourceState.PENDING: Tone.ATTENTION,
-    ResourceState.DRIFTED: Tone.SERIOUS,
-    ResourceState.DEGRADED: Tone.SERIOUS,
-    ResourceState.DEPLOYING: Tone.NEUTRAL,
-    ResourceState.UNKNOWN: Tone.NEUTRAL,
-}
-
-
-class RecordState(StrEnum):
+class RecordState(Toned):
     """Where one record stands on its page and its row
-    (``resource_context.record_status``), in the word ``data-record-status`` says."""
+    (``resource_context.record_status``), in the word ``data-record-status``
+    says, beside the tone its label and detail are drawn in."""
 
-    OFF = "off"
-    DRIFTED = "drifted"
-    DEPLOYING = "deploying"
-    DEGRADED = "degraded"
-    PENDING = "pending"
-    UNSEEN = "unseen"
-    WORKING = "working"
-    RECORDED = "recorded"
-    UNREAD = "unread"
-
-    @property
-    def tone(self) -> Tone:
-        """The tone its label and detail are drawn in."""
-
-        return _RECORD_TONES[self]
-
-
-_RECORD_TONES = {
-    RecordState.OFF: Tone.NEUTRAL,
-    RecordState.DRIFTED: Tone.SERIOUS,
-    RecordState.DEPLOYING: Tone.ATTENTION,
-    RecordState.DEGRADED: Tone.SERIOUS,
-    RecordState.PENDING: Tone.ATTENTION,
-    RecordState.UNSEEN: Tone.NEUTRAL,
-    RecordState.WORKING: Tone.GOOD,
-    RecordState.RECORDED: Tone.NEUTRAL,
-    RecordState.UNREAD: Tone.NEUTRAL,
-}
+    OFF = "off", Tone.NEUTRAL
+    DRIFTED = "drifted", Tone.SERIOUS
+    DEPLOYING = "deploying", Tone.ATTENTION
+    DEGRADED = "degraded", Tone.SERIOUS
+    PENDING = "pending", Tone.ATTENTION
+    UNSEEN = "unseen", Tone.NEUTRAL
+    WORKING = "working", Tone.GOOD
+    RECORDED = "recorded", Tone.NEUTRAL
+    UNREAD = "unread", Tone.NEUTRAL
 
 
 # What a drifted resource reads as. The finding that offers the two ways out

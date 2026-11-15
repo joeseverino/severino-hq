@@ -7,7 +7,7 @@
 /* ── Tone assignment ─────────────────────────────────────────────────
    The one place a status name maps to a tone, for every component that has
    statuses. Grouped by tone rather than by component, so `published`,
-   `reachable` and `success` cannot become three different greens.
+   `done` and `success` cannot become three different greens.
 
    A component decides which fill level it reads (`--tone-bg` for a chip,
    `--tone-wash` for a banner);
@@ -16,7 +16,7 @@
    contract, not restating the colors. */
 
 .pill-active, .pill-published, .pill-created, .pill-uploaded, .pill-public, .pill-done,
-.pill-replied, .pill-reachable, .pill-good, .notice-success, .tone-good {
+.pill-replied, .pill-good, .notice-success, .tone-good {
   --tone-bg: var(--tone-positive-bg);
   --tone-wash: var(--tone-positive-wash);
   --tone-ink: var(--tone-positive-ink);
@@ -30,7 +30,7 @@
 }
 .pill-archived, .pill-deprecated, .pill-retired, .pill-sold, .pill-returned,
 .pill-replaced, .pill-deleted, .pill-login_failed, .pill-denied, .pill-spam,
-.pill-unreachable, .notice-error {
+.notice-error {
   --tone-bg: var(--tone-critical-bg);
   --tone-wash: var(--tone-critical-wash);
   --tone-ink: var(--tone-critical-ink);
@@ -61,7 +61,7 @@
    They are still named: a status with no rule and a status deliberately
    neutral look identical and are not the same claim, and the class has to
    exist for the template check to find it. */
-.pill-read, .pill-unprobed, .pill-neutral {
+.pill-read, .pill-neutral {
   --tone-bg: var(--tone-neutral-bg);
   --tone-ink: var(--tone-neutral-ink);
   --tone-line: var(--tone-neutral-line);

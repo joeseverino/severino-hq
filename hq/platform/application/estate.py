@@ -37,6 +37,7 @@ lazy from .connections import connection_rows
 lazy from .credential_sight import credential_sight
 lazy from .facts import Subject, inventory_about, readings
 lazy from .infrastructure import enabled_resources
+lazy from .machines import MachineState
 lazy from .services import service_reading
 lazy from .zones import ZONE_KIND
 
@@ -119,18 +120,17 @@ class Estate:
 
     @property
     def online(self) -> tuple[Any, ...]:
-        return tuple(item for item in self.machines if item.state[0] == "online")
+        return tuple(item for item in self.machines if item.state is MachineState.ONLINE)
 
     @property
     def offline(self) -> tuple[Any, ...]:
         # A personal device that is off reads as away, never offline.
-        return tuple(item for item in self.machines if item.state[0] == "offline")
+        return tuple(item for item in self.machines if item.state is MachineState.OFFLINE)
 
     @property
     def watched(self) -> tuple[Any, ...]:
-        # What "online" is out of: a machine no connection reaches (an offline
-        # CA, a printer) and a personal device that is away are not missing.
-        return tuple(item for item in self.machines if item.state[1] != "unprobed")
+        # What "online" is out of.
+        return tuple(item for item in self.machines if item.state.watched)
 
     @property
     def empty(self) -> bool:
@@ -377,8 +377,8 @@ def overview(*, principal: Principal):
         "hq.estate.machines": Dots(
             tuple(
                 Dot(
-                    filled=machine.state[0] == "online",
-                    tip=dotted(machine.name, _answers_at(machine), machine.state[0]),
+                    filled=machine.state is MachineState.ONLINE,
+                    tip=dotted(machine.name, _answers_at(machine), machine.state),
                     url=entity_link("machine", machine.name).url,
                 )
                 for machine in estate.watched

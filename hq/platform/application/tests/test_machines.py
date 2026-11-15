@@ -25,7 +25,7 @@ from hq_sdk.testing import plain
 
 from ..capabilities import capability_words
 from ..entity_links import entity_link
-from ..machines import machine, machine_catalog
+from ..machines import MachineState, machine, machine_catalog
 from ..resource_capabilities import UPDATE_CAPABILITY
 from ..services import CONTAINER_KIND
 from .glance_readings import HOST, reported_machine
@@ -752,7 +752,7 @@ class OneStateTests(TestCase):
     def test_a_personal_device_that_is_off_is_away_not_down(self):
         self.device(online=False, tags=())
 
-        self.assertEqual(machine("example-host").state, ("away", "unprobed"))
+        self.assertEqual(machine("example-host").state, MachineState.AWAY)
 
     def test_an_offline_device_reads_as_offline_only(self):
         self.device(online=False)
@@ -761,7 +761,7 @@ class OneStateTests(TestCase):
         listing = self.client.get(reverse("control_plane:machines"))
         page = self.client.get(reverse("control_plane:machine", kwargs={"name": "example-host"}))
 
-        self.assertEqual(found.state, ("offline", "unreachable"))
+        self.assertEqual(found.state, MachineState.OFFLINE)
         for response in (listing, page):
             with self.subTest(page=response.request["PATH_INFO"]):
                 said = [element.words for element in all_elements(response)]
@@ -773,14 +773,14 @@ class OneStateTests(TestCase):
     def test_an_online_device_reads_as_online(self):
         self.device(online=True)
 
-        self.assertEqual(machine("example-host").state, ("online", "reachable"))
+        self.assertEqual(machine("example-host").state, MachineState.ONLINE)
 
     def test_without_presence_the_connection_answer_decides(self):
         a_connection("example-ssh", "ssh", endpoint="192.0.2.8:22", reachable=False)
 
         found = machine("example-ssh")
 
-        self.assertEqual(found.state, ("not answering", "unreachable"))
+        self.assertEqual(found.state, MachineState.NOT_ANSWERING)
         self.assertEqual(found.unanswered, ("example-ssh",))
 
     def test_a_connection_that_did_not_answer_is_marked_where_it_is_named(self):
@@ -796,7 +796,7 @@ class OneStateTests(TestCase):
     def test_nothing_reaching_it_says_so(self):
         containers({"name": "probe", "host": "somewhere", "state": "running"})
 
-        self.assertEqual(machine("somewhere").state, ("not monitored", "unprobed"))
+        self.assertEqual(machine("somewhere").state, MachineState.UNMONITORED)
 
 
 class DeclareFromWhatHQKnowsTests(TestCase):

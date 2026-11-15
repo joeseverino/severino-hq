@@ -134,12 +134,11 @@ def _presence(presence: Any) -> dict[str, Any] | None:
 
 
 def serialize_machine(machine: Any) -> dict[str, Any]:
-    label, _tone = machine.state
     return {
         "name": machine.name,
         "node": f"machine:{machine.name}",
         "url": machine.url,
-        "state": label,
+        "state": machine.state.label,
         "role": machine.role,
         "roles": [{"id": role.id, "label": role.label} for role in machine.roles],
         "declaration": machine.declaration,

@@ -333,9 +333,26 @@ class ToneTests(TestCase):
     def test_a_container_is_good_running_and_serious_otherwise(self):
         record = running("web", "example/web:1.0.0")
 
-        tones = [Running.of({**record, "state": state}, None).state_tone for state in ("running", "exited")]
+        tones = [Running.of({**record, "state": state}, None).state.tone for state in ("running", "exited", "")]
 
-        self.assertEqual(tones, ["good", "serious"])
+        self.assertEqual(tones, ["good", "serious", "serious"])
+
+    def test_a_health_check_is_its_verdict_at_the_end_of_dockers_status(self):
+        from ..container_state import HealthCheck
+
+        record = running("web", "example/web:1.0.0")
+        said = {
+            "Up 11 hours (healthy)": ("health check passing", "good"),
+            "Up 2 minutes (unhealthy)": ("health check failing", "attention"),
+            "Up 3 seconds (health: starting)": ("health check starting", "attention"),
+        }
+
+        for status, (words, tone) in said.items():
+            with self.subTest(status):
+                check = Running.of({**record, "status": status}, None).check
+                self.assertIsInstance(check, HealthCheck)
+                self.assertEqual((check.said, check.tone), (words, tone))
+        self.assertIsNone(Running.of({**record, "status": "Up 11 hours"}, None).check)
 
     def test_a_tally_counts_each_container_and_says_its_tones(self):
         estate(advisories=[HIGH])

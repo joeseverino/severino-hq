@@ -24,7 +24,7 @@ from django.utils.safestring import SafeString, mark_safe
 
 from hq.platform.application.labels import sentence
 from hq.platform.application.page_parts import html_attributes
-from hq.platform.application.tone import Tone
+from hq.platform.application.tone import Tone, Toned
 from hq.platform.core.templatetags.value_tags import breakable
 lazy from hq.platform.application.infrastructure import ResourceState
 lazy from hq.platform.application.ui import ended, severity_tone as _severity_tone
@@ -36,11 +36,14 @@ Ink = Literal["tone", "context"]
 INKS = frozenset(get_args(Ink))
 
 
-def _tone(tone: str) -> str:
-    """The tone class a state is drawn in. A declared resource's health state
-    ("healthy", "drifted") is said as its tone (``ResourceState.tone``); any
-    other word names its own pill (`pill-attention`, `pill-archived`)."""
+def _tone(tone: str | Toned) -> str:
+    """The tone class a state is drawn in. A subject's state (``Toned``: a
+    machine's, a declared resource's) is said as its tone, a resource health
+    word ("healthy", "drifted") as ``ResourceState``'s; any other word names
+    its own pill (`pill-attention`, `pill-archived`)."""
 
+    if isinstance(tone, Toned):
+        return tone.tone
     return ResourceState(tone).tone if tone in ResourceState else tone
 
 
@@ -94,7 +97,7 @@ def _refuse_mixed(*, tone: str, pill: bool, chip: bool, dot: bool, ink: str, ico
 
 def status_pill(
     *parts: object,
-    tone: str = "",
+    tone: str | Toned = "",
     css: str = "",
     href: str = "",
     title: str = "",
@@ -107,7 +110,8 @@ def status_pill(
     **data: object,
 ) -> SafeString:
     """The pill for a state: ``parts`` its words, the first said in sentence
-    case and each held as ``breakable`` holds a value; ``tone`` its color.
+    case and each held as ``breakable`` holds a value; ``tone`` its color,
+    a subject's state (``Toned``) its own when it is the first part.
     ``pill=False`` draws the words in that color with no pill around them,
     on fixed digit widths, and ``dot=True`` those words after a dot in that
     color, which never moves; ``ink="context"`` leaves those words in the
@@ -124,6 +128,8 @@ def status_pill(
     attribute, drawn as ``html_attributes`` draws one.
     """
 
+    if not tone and parts and isinstance(parts[0], Toned):
+        tone = parts[0]
     _refuse_mixed(tone=tone, pill=pill, chip=chip, dot=dot, ink=ink, icon=icon)
     words = [str(part) for part in parts if part not in (None, "")]
     if words and not chip:
@@ -209,6 +215,7 @@ def status(
     *parts, tone="", css="", href="", title="", tip="", pill=True, chip=False, dot=False, ink="tone", icon="", **data
 ):
     """``{% status row.get_status_display tone=row.status %}``: a state as a pill,
+    a subject's state in its own words and tone (``{% status machine.state %}``),
     or with ``pill=False`` as its words in its tone (``{% status change tone="good" pill=False %}``),
     or with ``dot=True`` as those words after a steady dot (``{% status "Allowed" tone="good" dot=True %}``),
     with ``ink="context"`` the words in the ink around them and only the dot toned,
@@ -221,7 +228,7 @@ def status(
 
     return status_pill(
         *parts,
-        tone=str(tone or ""),
+        tone=tone if isinstance(tone, Toned) else str(tone or ""),
         css=css,
         href=str(href or ""),
         title=str(title or ""),

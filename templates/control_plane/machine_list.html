@@ -47,7 +47,7 @@ anyway, and would go on meaning nothing after it stopped being.
             One state. Presence decides when the tailnet reports the machine;
             the connection that sees it is in "Read through".
             {% endcomment %}
-            {% status machine.state.0 tone=machine.state.1 %}{% if machine.state_since %}<br><span class="muted cell-part">since {{ machine.state_since|breakable }}</span>{% endif %}
+            {% status machine.state %}{% if machine.state_since %}<br><span class="muted cell-part">since {{ machine.state_since|breakable }}</span>{% endif %}
           </td>
         </tr>
       {% endfor %}

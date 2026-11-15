@@ -119,12 +119,10 @@ def _running(running: Any, detail: str) -> Health:
     """What the container behind the proxy was last read doing: its own health
     check where it has one, else whether it runs."""
 
-    check = running.check if running is not None else ""
-    if check == "health check passing":
-        return Health(Tone.GOOD, "Health check passing", detail)
-    if check:
-        return Health(Tone.ATTENTION, capfirst(check), detail)
-    if running is not None and running.healthy:
+    check = running.check if running is not None else None
+    if check is not None:
+        return Health(check.tone, capfirst(check.said), detail)
+    if running is not None and running.state.running:
         return Health(Tone.GOOD, "Running", detail)
     return Health(None, "In place", detail)
 

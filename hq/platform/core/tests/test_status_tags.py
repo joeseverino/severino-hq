@@ -45,6 +45,19 @@ class StatusPillTests(SimpleTestCase):
                 pill = elements(_drawn("{% status label tone=state %}", label="Working", state=state), "span")[0]
                 self.assertIn(f"pill-{tone}", pill.attrs["class"].split())
 
+    def test_a_subjects_state_is_drawn_in_its_own_words_and_tone(self):
+        """A machine's or a container's state carries both, so a page names
+        neither, and its pill is colored by its tone, never by its word."""
+
+        from hq.platform.application.container_state import ContainerState
+        from hq.platform.application.machines import MachineState
+
+        for state in (*MachineState, *ContainerState):
+            with self.subTest(state):
+                pill = elements(_drawn("{% status state %}", state=state), "span")[0]
+                self.assertEqual(pill.attrs["class"].split(), ["pill", f"pill-{state.tone}"])
+                self.assertEqual(pill.words.lower(), state.label)
+
     def test_several_parts_are_one_label_only_the_first_cased(self):
         pill = elements(_drawn('{% status record_type "not managed" %}', record_type="cname"), "span")[0]
 

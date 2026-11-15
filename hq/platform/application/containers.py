@@ -27,8 +27,9 @@ from hq.domains.control_plane.observations.public_registry import (
 )
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
+from .container_state import ContainerState, HealthCheck, uptime_of
 from .container_words import UP_TO_DATE, UPDATE_AVAILABLE, ImageStandingWords
-from .display_words import display
+from .display_words import as_members, display
 from .github_public import github_repository
 from .images import ImageRef, affected, compare, newer, version
 from .moments import moment
@@ -74,16 +75,6 @@ _KNOWN_BY = {
 }
 
 
-# Docker's status ends with its health check's verdict: "Up 11 hours (healthy)".
-_CHECK = re.compile(r"\s*\((healthy|unhealthy|health: [^)]*)\)\s*$")
-
-
-def uptime_of(status: str) -> str:
-    """Docker's status without its health check: ``Up 11 hours``."""
-
-    return _CHECK.sub("", str(status or "")).strip()
-
-
 def up_for(status: str, started_at: object, *, running: bool) -> str:
     """How long a container has been up, as HQ writes an age, when Docker's
     inspect gave its start time; Docker's own phrase otherwise.
@@ -106,29 +97,6 @@ def started_at(machine: str, container: str) -> str:
     return str((_runtimes().get((machine, container)) or {}).get("started_at", "") or "")
 
 
-def check_of(status: str) -> str:
-    """What the container's own health check says, in words, or "" without one."""
-
-    found = _CHECK.search(str(status or ""))
-    if not found:
-        return ""
-    verdict = found.group(1)
-    if verdict == "healthy":
-        return "health check passing"
-    if verdict == "unhealthy":
-        return "health check failing"
-    return f"health check {verdict.removeprefix('health: ')}"
-
-
-def health_of(status: str) -> str:
-    """The same verdict in a word, for a line beside the uptime: ``healthy``."""
-
-    found = _CHECK.search(str(status or ""))
-    if not found:
-        return ""
-    return found.group(1).removeprefix("health: ")
-
-
 @dataclass(frozen=True, slots=True)
 class Running:
     """A container a controller last saw, described as a person would read it.
@@ -142,7 +110,7 @@ class Running:
     host: str
     stack: str
     image: str
-    state: str
+    state: ContainerState
     status: str
     ports: tuple[int, ...]
     network_mode: str
@@ -177,7 +145,7 @@ class Running:
             host=host,
             stack=str(record.get("stack", "")),
             image=str(record.get("image", "")),
-            state=str(record.get("state", "")),
+            state=ContainerState.read(str(record.get("state", ""))),
             status=str(record.get("status", "")),
             ports=tuple(int(port) for port in record.get("ports") or () if str(port).isdigit()),
             network_mode=str(record.get("network_mode", "")),
@@ -191,25 +159,16 @@ class Running:
             unit=str(record.get("unit", "")),
         )
 
-    @property
-    def healthy(self) -> bool:
-        return self.state == "running"
-
-    @property
-    def state_tone(self) -> str:
-        return Tone.GOOD if self.healthy else Tone.SERIOUS
+    def __post_init__(self) -> None:
+        as_members(self)
 
     @property
     def uptime(self) -> str:
         return uptime_of(self.status)
 
     @property
-    def check(self) -> str:
-        return check_of(self.status)
-
-    @property
-    def health(self) -> str:
-        return health_of(self.status)
+    def check(self) -> HealthCheck | None:
+        return HealthCheck.of(self.status)
 
     @property
     def published(self) -> str:
@@ -242,7 +201,7 @@ class Running:
         should read it.
         """
 
-        return ("stop", "restart") if self.healthy else ("start",)
+        return ("stop", "restart") if self.state.running else ("start",)
 
     @property
     def image_label(self) -> str:
@@ -505,7 +464,7 @@ class Container:
 
     @property
     def uptime(self) -> str:
-        return up_for(self.running.status, (self.runtime or {}).get("started_at"), running=self.running.healthy)
+        return up_for(self.running.status, (self.runtime or {}).get("started_at"), running=self.running.state.running)
 
     @property
     def address(self) -> str:
@@ -678,7 +637,7 @@ def tally(found: list[Container]) -> Tally:
         up_to_date=updates.count(UP_TO_DATE),
         pinned=sum(1 for item in found if item.standing.pinned),
         checkable=sum(1 for item in found if item.standing.checkable),
-        stopped=sum(1 for item in found if not item.running.healthy),
+        stopped=sum(1 for item in found if not item.running.state.running),
     )
 
 

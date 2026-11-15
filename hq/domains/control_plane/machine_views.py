@@ -65,7 +65,7 @@ class MachineListView(PageMixin, TemplateView):
         context["machines"] = machines
         context["hq_label"] = HQ_LABEL
         # How many are in each state, in the order the states first appear.
-        states = [item.state[0] for item in machines]
+        states = [item.state for item in machines]
         context["state_counts"] = [(states.count(state), state) for state in dict.fromkeys(states)]
         return context
 

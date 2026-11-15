@@ -417,7 +417,8 @@ def _health_detail(service) -> tuple[str, ...]:
     running = service.container
     # Not twice: a health check the verdict or its sentence already says.
     said = f"{service.health.label} {service.health.detail}".lower()
-    check = running.check if running and running.check.lower() not in said else ""
+    found = running.check if running else None
+    check = found.said if found is not None and found.said not in said else ""
     return lines(check, service.health.detail)
 
 
@@ -548,7 +549,7 @@ class PartRow:
     certificate_claim: Any = None
     # ``(label, tone)`` from whatever reading covers a hop no declaration
     # supplies: a machine's presence, the tailnet link, a container's state.
-    observed_health: tuple[str, str] | None = None
+    observed_health: tuple[str, Tone] | None = None
     # Where the hop's value was read, when the hop itself carries none: the
     # tailnet link is the machine's tailnet device, a forward the proxy's.
     read_from: Any = None
@@ -562,29 +563,18 @@ class PartRow:
         return self.hop.label if self.hop is not None else kind_label(self.claim.kind)
 
     @property
-    def health(self) -> tuple[str, str] | None:
+    def health(self) -> tuple[str, Tone] | None:
         """``(label, tone)``; read from an out-of-date reading, what it
         was when last read, in no tone of its own."""
 
-        found: tuple[str, str] | None
+        found: tuple[str, Tone] | None
         if self.claim is not None:
-            tone = ResourceState(self.claim.health["state"]).tone
-            found = (self.claim.health["label"], _PILL_TONES[tone])
+            found = (self.claim.health["label"], ResourceState(self.claim.health["state"]).tone)
         else:
             found = self.observed_health
         if found is not None and self.read_from is not None and self.read_from.stale:
-            return (f"{found[0]} when last read", _PILL_TONES[Tone.NEUTRAL])
+            return (f"{found[0]} when last read", Tone.NEUTRAL)
         return found
-
-
-# A health tone as the status a part is drawn in, so a declared part and a read one that
-# are both fine look the same.
-_PILL_TONES = {
-    "good": "reachable",
-    "attention": "attention",
-    "serious": "unreachable",
-    "neutral": "unprobed",
-}
 
 
 def part_rows(service, route) -> tuple[PartRow, ...]:
@@ -657,18 +647,18 @@ def _previous_step(hops, index: int, step: str):
     return next((item for item in reversed(hops[:index]) if item.step == step), None)
 
 
-def _observed_health(hops, index: int) -> tuple[str, str] | None:
+def _observed_health(hops, index: int) -> tuple[str, Tone] | None:
     """A hop's health from the reading that covers it, when no declaration does."""
 
     reader = _HEALTH_READERS.get(hops[index].step)
     return reader(hops, index) if reader is not None else None
 
 
-def _machine_health(hops, index: int) -> tuple[str, str] | None:
+def _machine_health(hops, index: int) -> tuple[str, Tone] | None:
     """A machine's own state pill."""
 
     found = machines.machine(hops[index].name)
-    return (found.state[0].capitalize(), found.state[1]) if found else None
+    return (found.state.capitalize(), found.state.tone) if found else None
 
 
 def _on_the_tailnet(hop) -> bool:
@@ -678,7 +668,7 @@ def _on_the_tailnet(hop) -> bool:
     return network_of(hop.detail) == "tailnet"
 
 
-def _link_health(hops, index: int) -> tuple[str, str] | None:
+def _link_health(hops, index: int) -> tuple[str, Tone] | None:
     """A tailnet hop's link, read from the tailnet presence of the machine the
     address belongs to: the next machine hop."""
 
@@ -688,10 +678,10 @@ def _link_health(hops, index: int) -> tuple[str, str] | None:
     found = machines.machine(after.name) if after else None
     if found is None or found.presence is None:
         return None
-    return ("Connected", "reachable") if found.presence.online else ("Disconnected", "unreachable")
+    return ("Connected", Tone.GOOD) if found.presence.online else ("Disconnected", Tone.SERIOUS)
 
 
-def _container_health(hops, index: int) -> tuple[str, str] | None:
+def _container_health(hops, index: int) -> tuple[str, Tone] | None:
     """A container's state, or for a forward the state of the container behind
     it, as the machine before it last saw it running."""
 
@@ -704,11 +694,11 @@ def _container_health(hops, index: int) -> tuple[str, str] | None:
     running = next((item for item in found.containers if item.name == container.name), None)
     if running is None:
         return None
-    return (running.state.capitalize(), "reachable" if running.healthy else "unreachable")
+    return (running.state.capitalize(), running.state.tone)
 
 
 # The step each reading covers, and how its health is read.
-_HEALTH_READERS: dict[str, Callable[[Any, int], tuple[str, str] | None]] = {
+_HEALTH_READERS: dict[str, Callable[[Any, int], tuple[str, Tone] | None]] = {
     "machine": _machine_health,
     "network": _link_health,
     "upstream": _container_health,
@@ -785,7 +775,7 @@ def service_badges(service: Any, *, own: bool) -> tuple[Any, ...]:
     reach = service.exposure.reach
     found = []
     if reach.label:
-        found.append(PageBadge(reach.label, "reachable" if reach.tailnet_only else "unprobed", reach.detail))
+        found.append(PageBadge(reach.label, Tone.GOOD if reach.tailnet_only else Tone.NEUTRAL, reach.detail))
     if own:
         found.append(PageBadge("Read-only", title="HQ's own name: changed by deploying HQ"))
     return tuple(found)

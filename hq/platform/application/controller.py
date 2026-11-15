@@ -48,6 +48,7 @@ lazy from .github_profile import plan as github_profiles
 lazy from .github_repositories import plan as github_repositories
 lazy from .resource_capabilities import LIFECYCLE_VERBS
 lazy from .security import CONTROLLER_INTERFACE, cli_principal
+lazy from .work_runs import AUDITED_OUTCOMES
 
 
 @dataclass(frozen=True, slots=True)
@@ -666,11 +667,6 @@ def _end(operation: OperationRequest, state: str, result: dict[str, Any]) -> Non
     work_ended(operation, Outcome(message=message, seconds=seconds, ok=ok, facets=() if ok else (failure,)))
 
 
-# The task outcomes a run's audit trail records one row each: what changed a
-# machine or went wrong. Every outcome stays in the run's result.
-_AUDITED_OUTCOMES = frozenset({"changed", "failed", "unreachable"})
-
-
 def _hold_stated(operation: OperationRequest, stated: dict[str, Any]) -> None:
     """Refuse what a run's playbook stated unless it keeps to ``RunStated``
     and names only the run's own machines.
@@ -719,7 +715,7 @@ def _settle_run(operation: OperationRequest, report: ControllerReport) -> dict[s
         unknown=any(condition.get("reason") == OUTCOME_UNKNOWN for condition in report.conditions),
     )
     for event in events:
-        if event["outcome"] in _AUDITED_OUTCOMES:
+        if event["outcome"] in AUDITED_OUTCOMES:
             said = {name: event[name] for name in ("host", "task", "outcome")}
             work_ended(
                 operation,

@@ -74,7 +74,7 @@ close every one.
     {% endcomment %}
     {% if facet.present and facet.observed %}
       {% with claim=facet.claims.0 %}
-        {% fact facet.label %}{% status facet.observed.state|default:"unknown" tone=facet.observed.healthy|yesno:"good,serious" pill=False %}{% detail %}
+        {% fact facet.label %}{% status facet.observed.state pill=False %}{% detail %}
           <small class="prose">{% entity claim.link code=True label=facet.observed.name %}{% if facet.machine %} on {% entity facet.machine.link %}{% endif %}</small>
           {% section "Running now" fold=True %}
             {% facts %}
@@ -139,7 +139,7 @@ close every one.
 
       Never an Edit link. HQ does not manage this and must not imply it could.
       {% endcomment %}
-      {% fact facet.label %}{% status facet.observed.state|default:"unknown" tone=facet.observed.healthy|yesno:"good,serious" pill=False %}{% detail %}
+      {% fact facet.label %}{% status facet.observed.state pill=False %}{% detail %}
         <small class="prose"><code>{{ facet.observed.name|breakable }}</code>{% if facet.machine %} on {% entity facet.machine.link %}{% else %} on {{ facet.observed.host|breakable }}{% endif %}</small>
         {% section "Running now" fold=True %}
           {% facts %}

@@ -16,6 +16,7 @@ from .finding_model import (
 from .moments import elapsed
 from .tone import Tone
 from .ui import ended
+lazy from .topology_facts import PATH_DENIED, UNREACHABLE
 
 
 def _connection_not_answering(estate: FindingEstate) -> tuple[Finding, ...]:
@@ -79,14 +80,14 @@ def _unreachable_consumer(estate: FindingEstate) -> tuple[Finding, ...]:
     for node in estate.nodes():
         # Every entry shares one key, so a dictionary of the node's facts would
         # report one unreachable name however many there were.
-        names = fact_values(node, "unreachable")
+        names = fact_values(node, UNREACHABLE)
         if not names:
             continue
         # The tailnet refusing the path is a different claim from the consumer
         # being down, and only one of them has a fix worth offering. Present,
         # the policy was asked and said no; absent, it said yes or was never
         # swept, and neither is a reason to send anybody at an access policy.
-        refused = fact_values(node, "path-denied")
+        refused = fact_values(node, PATH_DENIED)
         found.append(
             Finding(
                 rule="unreachable-consumer",

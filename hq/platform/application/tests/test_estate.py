@@ -872,18 +872,12 @@ class WatchedTests(TestCase):
     def test_online_is_out_of_what_hq_watches(self):
         from types import SimpleNamespace as Row
 
+        from ..machines import MachineState
+
         def machine(state, presence=None):
             return Row(state=state, presence=presence)
 
-        estate = Estate(
-            machines=(
-                machine(("online", "reachable")),
-                machine(("not answering", "unreachable")),
-                machine(("offline", "unreachable")),
-                machine(("away", "unprobed")),
-                machine(("not monitored", "unprobed")),
-            )
-        )
+        estate = Estate(machines=(*(machine(state) for state in MachineState),))
 
         self.assertEqual(len(estate.watched), 3)
 
