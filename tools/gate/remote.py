@@ -29,7 +29,7 @@ from typing import NamedTuple
 
 from hq.platform.core.tests.task import RefError, Usage, commit_of, git
 from tools.dev import extension_set
-from tools.gate import chain, room, testmap
+from tools.gate import chain, room
 from tools.gate.room import GATE, LOCK, lock_file
 from tools.gate.tree import working_tree
 from tools.gate.turn import ALL, held_locks, inside
@@ -167,9 +167,6 @@ def bring_back(archive: bytes, sent: Sent, there: Where, host: str, task: str) -
         fast = back / "var/gate/fast.txt"
         if (back / "var/back" / chain.PASSES[1] / tree).is_file() and fast.is_file():
             chain.record_elsewhere(tree, fast.read_text(), host)
-        if (found := back / "var/back" / testmap.MAPS / f"{tree}.json").is_file():
-            chain.maps().mkdir(parents=True, exist_ok=True)
-            shutil.copy2(found, chain.maps() / found.name)
 
 
 def here(text: bytes, where: str, home: str) -> bytes:
@@ -264,7 +261,10 @@ def send(task: str, host: str, checkout: str, values: dict[str, str]) -> Sent:
             for path in extras:
                 archive.add(ROOT / path, arcname=path)
         done(host_half(host, "stage", run), input=staged.getvalue())
-    # fast's chain: the trees passed here and the maps of what their tests ran, so it selects as it would here.
+    # fast's chain: the trees passed here and CI's maps of the tests that ran each line, fetched here where gh
+    # is signed in, so it selects as it would here.
+    if task == "fast":
+        print(f"[{task}] {chain.fetch_map()}", file=sys.stderr, flush=True)
     if folders := [str(folder) for folder in (chain.passes(), chain.maps()) if folder.is_dir()]:
         done(["rsync", "-a", "-e", shlex.join(SSH), *folders, f"{remote}/.git/severino/"])
     return Sent(tree, commit, argv, run, extension, packages)

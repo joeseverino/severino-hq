@@ -4,9 +4,11 @@ runs)."""
 
 from __future__ import annotations
 
+import io
 import json
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 from hq.platform.core.tests.task import RefError, git
@@ -14,6 +16,8 @@ from tools.gate import testmap
 from tools.gate.verdict import TREE_LINE
 
 ROOT = Path(__file__).resolve().parents[2]
+# The tree a run on the second machine was sent, which tools/gate/remote-host.sh names to it.
+SENT = "HQ_GATE_SENT"
 
 
 # How far back first-parent history is read for a commit whose tree passed.
@@ -118,9 +122,82 @@ def passes(root: Path = ROOT) -> Path:
 
 
 def maps(root: Path = ROOT) -> Path:
-    """Where the maps of the tests that ran each file are kept, beside the passed trees."""
+    """Where the maps of the tests that ran each line are kept, beside the passed trees."""
 
     return passes(root).parent / testmap.MAPS
+
+
+# The artifact CI's Map job keeps its map in, beside the commit its run checked out (.github/workflows/ci.yml).
+MAP_ARTIFACT = "fast-map"
+# How many commits back on HEAD's first-parent history a map is read from. Each
+# file changed since its commit beyond a function body selects by the rules a
+# map cannot narrow, and past this most changes since select most of the suite.
+MAP_REACH = 10
+
+
+def map_history(root: Path = ROOT) -> list[str]:
+    return answered("log", "--first-parent", f"--max-count={MAP_REACH}", "--format=%H", "HEAD", root=root)
+
+
+def nearest_map(root: Path = ROOT) -> tuple[str, int] | None:
+    """(the nearest commit within MAP_REACH on HEAD's first-parent history whose map is kept here, how many
+    commits back), or None."""
+
+    folder = maps(root)
+    return next(
+        ((commit, back) for back, commit in enumerate(map_history(root)) if testmap.kept(folder, commit).is_file()),
+        None,
+    )
+
+
+def fetch_map(root: Path = ROOT) -> str:
+    """Fetch from CI the map of the nearest commit within MAP_REACH that has one, when it is nearer than the
+    nearest kept here, and say where the map comes from. Only a run of this repository's own commit counts,
+    since a fork's pull request runs a workflow its author wrote. It asks GitHub through gh, and an error or
+    no network is an answer, never a failure: the selection then reads the map kept here, or none."""
+
+    history = map_history(root)
+    kept = nearest_map(root)
+    nearer = history[: kept[1]] if kept else history
+    if not nearer:
+        return f"the map of {kept[0][:9]}, HEAD's own commit, is kept here" if kept else "HEAD has no history"
+    endpoint = f"repos/{{owner}}/{{repo}}/actions/artifacts?name={MAP_ARTIFACT}&per_page=100"
+    try:
+        listed = subprocess.run(
+            ["gh", "api", endpoint], cwd=root, capture_output=True, text=True, timeout=GITHUB_WAIT, check=False
+        )
+    except OSError, subprocess.TimeoutExpired:
+        return "GitHub did not answer for CI's maps"
+    if listed.returncode:
+        return f"GitHub did not list CI's maps ({(listed.stderr.strip().splitlines() or ['gh failed'])[-1]})"
+    recorded = {
+        run["head_sha"]: artifact["id"]
+        for artifact in reversed(json.loads(listed.stdout).get("artifacts", []))
+        if not artifact.get("expired")
+        and (run := artifact.get("workflow_run") or {}).get("head_repository_id") == run.get("repository_id")
+    }
+    commit = next((commit for commit in nearer if commit in recorded), None)
+    if commit is None:
+        return f"CI kept no map of a commit within {MAP_REACH} back nearer than the one kept here"
+    try:
+        zipped = subprocess.run(
+            ["gh", "api", f"repos/{{owner}}/{{repo}}/actions/artifacts/{recorded[commit]}/zip"],
+            cwd=root,
+            capture_output=True,
+            timeout=GITHUB_WAIT,
+            check=False,
+        )
+    except OSError, subprocess.TimeoutExpired:
+        return f"GitHub did not answer for CI's map of {commit[:9]}"
+    if zipped.returncode:
+        return f"GitHub did not send CI's map of {commit[:9]}"
+    try:
+        with zipfile.ZipFile(io.BytesIO(zipped.stdout)) as archive:
+            body = archive.read(testmap.WRITTEN.name)
+    except zipfile.BadZipFile, KeyError:
+        return f"CI's map of {commit[:9]} came without {testmap.WRITTEN.name}"
+    testmap.keep(maps(root), commit, body)
+    return f"fetched CI's map of {commit[:9]}"
 
 
 def tree_of(commit: str) -> str:

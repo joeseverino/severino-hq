@@ -1,0 +1,13 @@
+#!/bin/sh
+#MISE description="The map of the tests that ran each line, which fast selects from: the whole suite, as fast runs it, measured with a context per test module; CI's Map job runs it (tools/gate/testmap.py)"
+#MISE hide=true
+#MISE outputs=[]
+
+# Its contexts make the run much slower, so only CI's Map job,
+# which nothing waits on, records: never a gate.
+set -eu
+# Every test module the suite discovers, as fast labels them.
+labels="$(uv run python -c 'from tools.gate import selection; print(" ".join(selection.whole_suite(selection.python_files())))')"
+# shellcheck disable=SC2086 # one label a word
+mise run fast:tests --map "$PWD/var/coverage/map/data" $labels
+uv run python -m tools.gate.testmap
