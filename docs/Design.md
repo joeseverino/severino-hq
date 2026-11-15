@@ -128,6 +128,15 @@ which fails on a refusal or a report to `/csp-report/`, and
 `ExampleEstateBrowserTests`, which hears a refused page's report after
 every navigation page.
 
+**No script builds markup.** What a script adds to a page is a `<template>`
+the server drew, in the partial that owns the region (a notice's tone in
+`_notice_frames.html`, an ask's pieces in `_ask.html#frames`, the messages'
+list in `_messages.html`, the live round trip in `_connection_loading.html`),
+cloned and filled through `textContent`. A row's open line a script adds is
+`{% open_line %}`, the line `table_tags` draws, so it is the same part.
+*Gates:* `lint:js`, which refuses `createElement` outside the API reference's
+viewer; `ScriptFrameTests`, that every frame a script clones is drawn.
+
 **One frame per thing.** A box that holds content is a *surface*: one border,
 one radius, one background, one shadow, drawn by the single surface rule in
 `css/app/surfaces.css`. A component joins by adding its selector to that rule's list and

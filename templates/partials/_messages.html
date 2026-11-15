@@ -1,7 +1,8 @@
 {% comment %}
 Messages: what a post said of how it went, first in the page's content
-(base.html), each line a notice of its message's tone. fragment.js finds the
-list by its class to add a line an answer in place brings.
+(base.html), each line a notice of its message's tone. fragment.js adds a
+line an answer in place brings by cloning the frame below: the list with its
+one error line, or the line alone where the list is drawn.
 {% endcomment %}
 {% if messages %}
   <ul class="messages">
@@ -10,3 +11,4 @@ list by its class to add a line an answer in place brings.
     {% endfor %}
   </ul>
 {% endif %}
+<template data-messages><ul class="messages"><li>{% notice tone="error" %}{% endnotice %}</li></ul></template>

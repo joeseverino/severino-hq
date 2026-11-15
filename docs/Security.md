@@ -174,8 +174,8 @@ is refused the audit log (`read_audit_log`) and the calendar
   `outerHTML`, `srcdoc` or a script URL throws instead of parsing, so a
   DOM-based XSS sink cannot execute even if one is introduced.
   `trusted-types 'none'` means no policy can be declared to opt back out. It
-  costs nothing, because every dynamic node HQ builds uses
-  `createElement`/`textContent`.
+  costs nothing, because every node a script adds is a clone of a
+  `<template>` the server drew, filled through `textContent`.
 - The API reference at `/api/docs/` is the one exception. The vendored Scalar
   bundle (`static/vendor/scalar`, version and SHA-256 in `UPSTREAM`, checked by
   a test) renders through `innerHTML`. Its policy is derived from the main one

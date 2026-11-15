@@ -197,31 +197,28 @@ const hqFragment = (() => {
   // (base.html), so a line a script adds is the part the server draws.
   const notice = (tone) =>
     document.querySelector(`template[data-notice="${tone}"]`).content.firstElementChild.cloneNode(true);
-  // One line, the same everywhere a part could not be had.
+  // One line, the same everywhere a part could not be had, and the link that
+  // offers where it can (its frame, _notice_frames.html).
   const explain = (region, text, link) => {
-    const line = notice("warning");
-    line.append(text);
+    const line = link
+      ? document.querySelector('template[data-notice-link="warning"]').content.firstElementChild.cloneNode(true)
+      : notice("warning");
     if (link) {
-      const anchor = document.createElement("a");
+      const anchor = line.querySelector("a");
       anchor.href = link.href;
       anchor.textContent = link.label;
-      line.append(" ", anchor);
-    }
+      line.prepend(text, " ");
+    } else line.append(text);
     region.replaceChildren(line);
   };
-  // A line among the page's messages, where the server says how a post went.
+  // A line among the page's messages, where the server says how a post went,
+  // cloned from the list the server draws them in (_messages.html).
   const say = (region, text) => {
-    let list = region.querySelector(":scope > .messages");
-    if (!list) {
-      list = document.createElement("ul");
-      list.className = "messages";
-      region.prepend(list);
-    }
-    const line = notice("error");
-    line.textContent = text;
-    const item = document.createElement("li");
-    item.append(line);
-    list.append(item);
+    const drawn = document.querySelector("template[data-messages]").content.firstElementChild.cloneNode(true);
+    drawn.querySelector("li > *").textContent = text;
+    const list = region.querySelector(":scope > .messages");
+    if (list) list.append(drawn.firstElementChild);
+    else region.prepend(drawn);
   };
 
   // Why a post was refused, as the page it was answered with says it among

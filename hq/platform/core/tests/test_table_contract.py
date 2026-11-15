@@ -573,6 +573,32 @@ class TableTagTests(SimpleTestCase):
         idle = Ask("Refresh", "/example/ask/")
         self.assertEqual(with_class(_render(source, {"ask": idle}), "row-detail"), [])
 
+    def test_the_line_a_script_adds_beneath_a_row_is_the_one_drawn_there(self):
+        """ask.js clones the frame _ask.html draws for a row whose ask says
+        something once the row is drawn, so its entry nests as a drawn one's
+        does, the label beside the value."""
+
+        source = (
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" gutter=True %}'
+            '{% table_heading "Act" hidden=True %}</tr></thead><tbody>'
+            '<tr><td>A</td><td>{% include "partials/_ask.html" with ask=ask %}</td>'
+            "</tr></tbody></table>{% endtable_region %}"
+        )
+        failed = Ask("Refresh", "/example/ask/", Standing(asks.FAILED, "The example could not be read."))
+
+        def nesting(markup):
+            found = all_elements(markup)
+            (why,) = [each for each in found if "data-ask-why" in each.attrs]
+            (detail,) = [each for each in why.ancestors if "data-row-detail" in each.attrs]
+            entry = why.ancestors[-2]
+            terms = [each.tag for each in found if each.tag == "dt" and entry in each.ancestors]
+            return [each.tag for each in why.ancestors[why.ancestors.index(detail) :]], terms
+
+        drawn = _render(source, {"ask": failed})
+        frame = _render('{% include "partials/_ask.html#frames" %}')
+        (below,) = re.findall(r"<template data-ask-below>(.*?)</template>", frame, re.DOTALL)
+        self.assertEqual(nesting(below), nesting(drawn))
+
     def test_a_row_with_nothing_held_back_has_no_line_beneath(self):
         source = (
             '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'

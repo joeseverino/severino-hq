@@ -1,6 +1,11 @@
 {% comment %}
 What the dialog holds before the panel arrives. Replaced wholesale on open.
+The live round trip connection.js shows in the panel's fact is the frame
+beside it, which the swap leaves in place: a pulse, the best sample and a bar
+for each of the samples the figure is taken over, which the script reads as
+its window.
 {% endcomment %}
 <div class="conn conn-pending" data-fragment="{% url 'connection' %}" data-fragment-name="connection" data-fragment-load data-fragment-failure="Could not check your connection." data-fragment-fallback="{% url 'connection' %}" aria-busy="true">
   {% muted element="p" %}Checking your connection…{% endmuted %}
 </div>
+<template data-rtt-live><span class="conn-live"><span class="conn-pulse"></span><strong></strong><span class="conn-samples"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span></span></template>

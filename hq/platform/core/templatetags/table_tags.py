@@ -109,15 +109,26 @@ def _detail_row(markup: _Markup, width: int, blocks: list[Span], entries: list[L
         for entry in entries
         if entry.name is None
     ]
-    listed = [
-        f"<div{entry.marks}><dt>{escape(entry.name)}</dt><dd>{_entry(markup, entry)}</dd></div>"
-        for entry in entries
-        if entry.name is not None
-    ]
-    columns = f'<dl class="row-columns">{"".join(listed)}</dl>' if listed else ""
-    return (
-        f'<tr class="row-detail" data-row-detail><td colspan="{width}">{"".join(controls + drawn)}{columns}</td></tr>'
-    )
+    listed = [(entry.name, entry.marks, _entry(markup, entry)) for entry in entries if entry.name is not None]
+    return _open_line(width, "".join(controls + drawn), listed)
+
+
+def _open_line(width: int, held: str, listed: list[tuple[str, str, str]]) -> str:
+    """A row's open line: ``held`` first, then each listed entry's value
+    under its label, its ``marks`` saying when it shows."""
+
+    entries = [f"<div{marks}><dt>{escape(name)}</dt><dd>{value}</dd></div>" for name, marks, value in listed]
+    columns = f'<dl class="row-columns">{"".join(entries)}</dl>' if entries else ""
+    return f'<tr class="row-detail" data-row-detail><td colspan="{width}">{held}{columns}</td></tr>'
+
+
+@register.simple_block_tag
+def open_line(content):
+    """``{% open_line %}value{% endopen_line %}``: an open line holding one
+    unlabeled entry, the frame a script clones for a row that comes to hold
+    something beneath it once drawn (ask.js), setting the label and width."""
+
+    return mark_safe(_open_line(1, "", [("", "", content)]))  # noqa: S308 - the body is rendered template output, escaped there
 
 
 def _entry(markup: _Markup, entry: LineEntry) -> str:

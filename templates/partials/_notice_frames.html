@@ -1,7 +1,10 @@
 {% comment %}
 The empty notice of each tone a script draws in (fragment.js, demo.js), so a
-line it adds is the part the server draws and no script writes its class.
+line it adds is the part the server draws and no script writes its class,
+and the warning that ends in a link, for fragment.js to say where the part
+it could not have is offered.
 base.html draws it on every page.
 {% endcomment %}<template data-notice="error">{% notice tone="error" %}{% endnotice %}</template>
 <template data-notice="warning">{% notice tone="warning" %}{% endnotice %}</template>
 <template data-notice="info">{% notice tone="info" %}{% endnotice %}</template>
+<template data-notice-link="warning">{% notice tone="warning" %}<a href=""></a>{% endnotice %}</template>

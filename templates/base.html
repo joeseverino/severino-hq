@@ -35,7 +35,7 @@
   <script src="{% static 'js/transitions.js' %}" {% csp_nonce_attr %}></script>
   {% block head_extra %}{% endblock %}
 </head>
-<body data-sign-in="{% url 'login' %}" data-ask-refreshing="{% refreshing %}" data-ask-newer="{% newer_reading %}" data-ask-show="{% show_newer %}">
+<body data-sign-in="{% url 'login' %}" data-ask-refreshing="{% refreshing %}">
   {% include "partials/_site_header.html" %}
 
   {% page_main %}
@@ -46,6 +46,8 @@
   {# What the head's expect link waits for: the content above is parsed. #}
   <template id="parsed"></template>
   {% include "partials/_notice_frames.html" %}
+  {% include "partials/_ask.html#frames" %}
+  {% include "partials/_tip.html" %}
 
   {% block site_footer %}
     {% if saved_copy and user.is_authenticated %}{% include "partials/_demo_foot.html" %}{% endif %}

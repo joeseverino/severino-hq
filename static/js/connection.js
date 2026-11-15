@@ -18,38 +18,31 @@ const hqRoundTrip = (() => {
     }).then(() => performance.now() - started);
   };
 
+  // The readout the server draws (_connection_loading.html). Its bars are the
+  // samples the figure is taken over: the recent path, not the whole visit.
+  const frame = () => document.querySelector("template[data-rtt-live]")?.content.firstElementChild;
+
   const render = (slot, runs) => {
     const best = Math.min(...runs);
     const worst = Math.max(...runs);
     let live = slot.querySelector(".conn-live");
     if (!live) {
-      live = document.createElement("span");
-      live.className = "conn-live";
-      const pulse = document.createElement("span");
-      pulse.className = "conn-pulse";
-      const value = document.createElement("strong");
-      const samples = document.createElement("span");
-      samples.className = "conn-samples";
-      live.append(pulse, value, samples);
+      live = frame().cloneNode(true);
       slot.replaceChildren(live);
     }
     live.querySelector("strong").textContent = `${best.toFixed(1)} ms`;
-    const samples = live.querySelector(".conn-samples");
     // Each bar relative to the slowest sample, so the shape shows variation
-    // rather than an absolute scale nobody can read at this size.
-    samples.replaceChildren(
-      ...runs.map((run) => {
-        const bar = document.createElement("i");
-        bar.style.setProperty("--at", `${Math.max(12, (run / worst) * 100)}`);
-        return bar;
-      }),
-    );
+    // rather than an absolute scale nobody can read at this size. A bar with
+    // no sample yet holds its room unseen (connection.css).
+    live.querySelectorAll(".conn-samples > i").forEach((bar, at) => {
+      if (at < runs.length) bar.style.setProperty("--at", `${Math.max(12, (runs[at] / worst) * 100)}`);
+      else bar.style.removeProperty("--at");
+    });
   };
 
-  // The figures describe the recent path, not the whole visit.
-  const WINDOW = 12;
-
   const start = (slot, endpoint) => {
+    const bars = frame()?.querySelectorAll(".conn-samples > i").length;
+    if (!bars) return;
     const runs = [];
     // Sampled by the shared loop, which leaves a hidden tab alone: nobody is
     // reading the figure there.
@@ -57,7 +50,7 @@ const hqRoundTrip = (() => {
       return sample(endpoint)
         .then((run) => {
           runs.push(run);
-          if (runs.length > WINDOW) runs.splice(0, runs.length - WINDOW);
+          if (runs.length > bars) runs.splice(0, runs.length - bars);
           render(slot, runs);
         })
         .catch(() => {

@@ -73,8 +73,6 @@ const primitiveSyntax = [
 // the template's never sees change. A class is written as a literal in a
 // className, a class attribute or a classList change, and each form is
 // refused for a primitive's class or one of its tones (`msg-error`).
-// Today's instances are counted in eslint-suppressions.json beside it,
-// which ESLint fails on once one no longer occurs.
 // The names are markup-drawn-by-templates' (tools/lint/ast-grep), which
 // refuses them in a Python string, read from its one class= regex so both
 // tools refuse one list.
@@ -96,6 +94,14 @@ const drawnMarkup = [
   message:
     "A primitive's markup is the server's: fill what the page's HTML already holds, or swap in a part a template draws (`hqFragment.swap`), never spelling its class in a script.",
 }));
+
+// An element a script makes is markup no template draws, whatever its class:
+// the server draws each piece a script adds as a <template>, which it clones.
+const builtMarkup = {
+  selector: "CallExpression[callee.property.name='createElement']",
+  message:
+    "Markup is the server's: clone a <template> the partial that owns the region draws (`template.content.firstElementChild.cloneNode(true)`), never build an element in a script.",
+};
 
 // In fragment.js each of these happens once, where a disable comment says
 // so; a second one is refused, and a comment left over is reported unused.
@@ -139,6 +145,8 @@ const loadTimeQuery = {
     "An element found once at load is lost when a fragment replaces its part: set it up through `hqFragment.each(selector, setup)`, or listen on the document.",
 };
 
+const scriptSyntax = [...primitiveSyntax, ...drawnMarkup, layoutReads, submitterRebuilt, loadTimeQuery];
+
 export default [
   {
     linterOptions: { reportUnusedDisableDirectives: "error" },
@@ -178,8 +186,14 @@ export default [
     rules: {
       "no-restricted-globals": ["error", ...primitiveGlobals],
       "no-restricted-properties": ["error", ...primitiveProperties],
-      "no-restricted-syntax": ["error", ...primitiveSyntax, ...drawnMarkup, layoutReads, submitterRebuilt, loadTimeQuery],
+      "no-restricted-syntax": ["error", ...scriptSyntax, builtMarkup],
     },
+  },
+  {
+    // The reference viewer breaks the third party's long names where they
+    // may wrap, inside markup HQ never draws.
+    files: ["static/js/api-reference.js"],
+    rules: { "no-restricted-syntax": ["error", ...scriptSyntax] },
   },
   {
     files: ["static/js/fragment.js"],
@@ -191,7 +205,7 @@ export default [
         { name: "setTimeout", message: "fragment.js keeps one timer, hqEvery's, as window.setTimeout." },
       ],
       "no-restricted-properties": ["error", ...oncePerPage],
-      "no-restricted-syntax": ["error", parserStaysInside, ...drawnMarkup, layoutReads, submitterRebuilt, loadTimeQuery],
+      "no-restricted-syntax": ["error", parserStaysInside, ...drawnMarkup, layoutReads, submitterRebuilt, loadTimeQuery, builtMarkup],
     },
   },
 ];

@@ -122,6 +122,8 @@ textarea.code {
   width: 3px; background: var(--accent-2); border-radius: 1px;
   height: calc(var(--at) * 1%); min-height: 2px;
 }
+/* A bar the server drew for a sample not yet taken holds its room. */
+.conn-samples i:not([style*="--at"]) { visibility: hidden; }
 
 /* The two ends and the link between them. Its frame is the box its narrow
    layout asks of, so it stacks wherever it is drawn. */
