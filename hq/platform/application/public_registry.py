@@ -552,7 +552,8 @@ def refresh(
     attestations, which cannot have changed.
     """
 
-    principal.require(Capability.LOOK_UP_PUBLIC_RECORDS)
+    # A lookup that stores what it read, so it writes inventory too.
+    principal.require(Capability.LOOK_UP_PUBLIC_RECORDS, Capability.MANAGE_INFRASTRUCTURE)
     now = timezone.now()
     kinds = (ADDRESS_KIND, DOMAIN_KIND)
     payload: dict[str, Any] = {}
