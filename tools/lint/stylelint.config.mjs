@@ -102,6 +102,19 @@ const disallowedProperties = (properties) => [
         : `Disallowed property "${property}"`,
   },
 ];
+// A reader who asks for less motion gets it from one rule in base.css, which
+// stops every transition and animation, so a part never writes its own. A
+// part that draws something else in place of a motion says so in a disable
+// comment.
+const mediaFeatures = (names) => [
+  names,
+  {
+    message: (name) =>
+      name === "prefers-reduced-motion"
+        ? `"${name}" is answered once, in base.css, for every element: delete what only stops a motion; a part that draws something else in its place says so in a disable comment`
+        : `"${name}" skips an operator's chosen theme: a palette is a light-dark() token picked by color-scheme`,
+  },
+];
 // How wide a box in a table is, its own or its tracks', is the table
 // primitive's: an open row holds every box in it to its cell (surfaces.css),
 // and a page that sizes one inside a table reopens what that closes. A
@@ -223,7 +236,7 @@ export default {
     // under the system's preference skips an operator's chosen theme, and the
     // browser gate paints each palette through `color-scheme`, so it would
     // never read that rule either.
-    "media-feature-name-disallowed-list": ["prefers-color-scheme"],
+    "media-feature-name-disallowed-list": mediaFeatures(["prefers-color-scheme", "prefers-reduced-motion"]),
     "function-disallowed-list": [`/^(${colorFunctions})$/i`],
     "declaration-property-value-disallowed-list": disallowedValues({
       ...literalFontSize,
@@ -256,6 +269,11 @@ export default {
       },
     },
     ...restyledBySheet,
+    {
+      // The one sheet that answers a reader who asks for less motion.
+      files: [sheet("base")],
+      rules: { "media-feature-name-disallowed-list": mediaFeatures(["prefers-color-scheme"]) },
+    },
     {
       // The tokens layer is where colors are written.
       files: [tokens],

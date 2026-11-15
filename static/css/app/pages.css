@@ -94,11 +94,6 @@
 .topology-node.is-related { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 .topology-node[hidden], .topology-lane[hidden] { display: none; }
 
-
-@media (prefers-reduced-motion: reduce) {
-  .topology-map { scroll-behavior: auto; }
-}
-
 /* ---- Share list (partials/_share_list.html) ----------------------------- */
 
 /* A row is its label and number on one line over a bar of its share: the
@@ -173,12 +168,9 @@ form[data-changed] .save-bar::before { content: ""; position: absolute; z-index:
   margin-inline-end: var(--space-4); border-radius: 50%; vertical-align: .1em;
   background: var(--muted-2);
 }
-.visit-status:is(.ask[aria-busy="true"] > *, :root:has(.ask[aria-busy="true"] > #page-visit) [form="page-visit"])::before { background: var(--accent); }
+.visit-status:is(.ask[aria-busy="true"] > *, :root:has(.ask[aria-busy="true"] > #page-visit) [form="page-visit"])::before { background: var(--accent); animation: conn-pulse 1.8s ease-in-out infinite; }
 .visit-status:is(.ask[data-ask-state="done"] > *, :root:has(.ask[data-ask-state="done"] > #page-visit) [form="page-visit"])::before { background: var(--ok); }
 .visit-status:is(.ask[data-ask-state="failed"] > *, :root:has(.ask[data-ask-state="failed"] > #page-visit) [form="page-visit"])::before { background: var(--danger); }
-@media (prefers-reduced-motion: no-preference) {
-  .visit-status:is(.ask[aria-busy="true"] > *, :root:has(.ask[aria-busy="true"] > #page-visit) [form="page-visit"])::before { animation: conn-pulse 1.8s ease-in-out infinite; }
-}
 /* An ask: a button and how the work it asked for stands (partials/_ask.html).
    It lays nothing out of its own, so its button stands wherever a button
    does. What it says takes a line under the row the button stands in, as

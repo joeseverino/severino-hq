@@ -373,6 +373,16 @@ input:where([type=text], [type=url], [type=number], [type=password], [type=email
 select:focus,
 textarea:focus { border-color: var(--accent-2); }
 
+/* Less motion, asked for: nothing moves, decided here once for every
+   element, so no part writes its own. An important declaration in this
+   first layer outranks one in any later layer. A WebKit progress bar's fill
+   is a pseudo-element `*` does not reach, in a rule of its own, since a
+   prefix another engine does not know drops every selector beside it. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+  ::-webkit-progress-value { transition: none !important; }
+}
+
 }
 
 /* Moving between pages. Both pages opt in, so a same-origin navigation fades

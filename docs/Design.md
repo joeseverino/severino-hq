@@ -1701,7 +1701,9 @@ asks the page for an element at load outside `hqFragment.each`);
 **Moving between pages is not a flash.** A same-origin navigation fades the
 new page in under a header that does not move (`@view-transition`, with the
 header as its own unanimated layer). It does so in browsers that have it and
-for readers who have not asked for less motion.
+for readers who have not asked for less motion. For a reader who has, one rule
+in `base.css` stops every transition and animation, so no part writes its own
+(`lint:css`).
 
 Every page names one set of speculation rules by header: a link to a page of
 HQ's is prefetched when the pointer or finger goes down on it, so the document

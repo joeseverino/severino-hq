@@ -197,7 +197,6 @@
     transition: transform .12s ease;
   }
   :is(main, dialog) details:not(.ladder-rung > details)[open] > summary::before { transform: rotate(90deg); }
-  @media (prefers-reduced-motion: reduce) { :is(main, dialog) details:not(.ladder-rung > details) > summary::before { transition: none; } }
 
   /* A section that folds: its heading is the toggle. */
   .section-fold > summary { display: flex; align-items: baseline; }
@@ -242,7 +241,6 @@
     transform: rotate(45deg); transition: transform .12s ease;
   }
   :is(.row-expand, .row-fold)[aria-expanded="true"]::before { transform: rotate(135deg); margin-inline-end: 0; margin-block-end: var(--space-1); }
-  @media (prefers-reduced-motion: reduce) { :is(.row-expand, .row-fold)::before { transition: none; } }
   /* With no script a fold cannot open or close, and every row it would fold shows (tables.css), so it is not drawn. */
   @media (scripting: none) { .row-fold { display: none; } }
 

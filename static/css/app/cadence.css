@@ -239,9 +239,9 @@
 .job-progress:is([data-state="failed"], [data-state="lost"]) .job-bar { color: var(--danger); }
 .job-progress[data-state="succeeded"] .job-bar { color: var(--ok, var(--accent)); }
 /* Reduced motion: the sweep is decoration. The bar still fills. */
+/* stylelint-disable-next-line media-feature-name-disallowed-list -- a still band drawn in place of the sweep base.css stops */
 @media (prefers-reduced-motion: reduce) {
-  .job-bar:indeterminate { animation: none; background: color-mix(in srgb, currentcolor 35%, var(--surface-2)); }
-  .job-bar::-webkit-progress-value { transition: none; }
+  .job-bar:indeterminate { background: color-mix(in srgb, currentcolor 35%, var(--surface-2)); }
 }
 
 /* Shown only on paper. In the document rather than in CSS `content` so it
