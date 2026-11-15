@@ -89,8 +89,6 @@ REFUSED_KINDS = {
 }
 # Where a role's own files sit, beside a playbook or at the project's root.
 ROLES = "roles"
-# The file that names the collections the worker's image is built with.
-REQUIREMENTS = "requirements.yml"
 # How a change's effect ranks, so a raise is seen as one.
 EFFECT_RANK = {"read": 0, "infrastructure_change": 1, "destructive": 2}
 # The most characters of an object id a comparison shows: enough to tell two apart.
@@ -515,12 +513,7 @@ def _gains(before: AdoptedProcedure, after: AdoptedProcedure, named: str) -> lis
     # read anything its login can by a change no person looked at.
     if after.files != before.files:
         gained.append(f"{named} runs different files.")
-    moved = sorted(
-        path for path in {*before.shared, *after.shared} if before.shared.get(path) != after.shared.get(path)
-    )
-    if any(PurePosixPath(path).name == REQUIREMENTS for path in moved):
-        gained.append(f"{named} can use other Ansible collections.")
-    if any(PurePosixPath(path).name != REQUIREMENTS for path in moved):
+    if before.shared != after.shared:
         gained.append(f"{named} can read changed files every playbook can read.")
     return gained
 

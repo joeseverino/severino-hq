@@ -312,11 +312,7 @@ def _approval(state, **decided):
             "tone": "attention" if pending else "",
             "asked": Asked("example-agent", "wants to adopt the playbooks", "", ""),
             "preview": compare({}, _CHANGED_AFTER, label="Would change"),
-            "warnings": (
-                "example-ansible-requirements.yml changed. It sets which Ansible collections playbooks can use.",
-            )
-            if pending
-            else (),
+            "warnings": ("The check playbook can read changed files every playbook can read.",) if pending else (),
             "resource_url": "/example/",
             "resource_label": "Playbooks",
             "resource_open": "Open Playbooks",

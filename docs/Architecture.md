@@ -1695,10 +1695,10 @@ whatever its commit. `plan()` refuses with every reason at once, in
 Each change is compared file by file, and each way it lets a run do more is
 a widening. A widening is a playbook that may run on more machines or kinds
 of record, a raised effect, a new privilege, or a playbook whose files
-change, a changed file every playbook may read or one that names the
-collections a run may use among them. So is a new playbook that does more
-than read. A playbook HQ can't adopt is a row of the comparison of its own,
-its problems in it, lined up by its id with the playbook it would replace.
+change, or a changed file every playbook may read. So is a new playbook
+that does more than read. A playbook HQ can't adopt is a row of the
+comparison of its own, its problems in it, lined up by its id with the
+playbook it would replace.
 
 Adopting is a person's act. Adopt and `automation.source.reject` (Reject)
 take `adopt_playbooks`, which `security.HELD_ONLY_AT` keeps at the operator's
