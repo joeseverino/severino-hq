@@ -213,7 +213,6 @@ class DoorbellTests(TestCase):
         with self.captureOnCommitCallbacks(execute=True):
             result = request_controller_sweep(ControllerSweepCommand(), principal=cli_principal())
 
-        self.assertTrue(result["requested"])
         self.assertTrue(result["due"])
         self.assertTrue((self.directory / "doorbell").exists())
 

@@ -9,7 +9,7 @@ GitHub rations calls by the hour (``observations.github.PROFILE_EVERY``).
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Annotated, Any, Literal, TypedDict
+from typing import Annotated, Any
 
 from django.utils import timezone
 
@@ -17,12 +17,13 @@ from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.observations.github import PROFILE_EVERY, PROFILE_KIND as KIND
 from hq.platform.core.models import LinkedAccount
 
-from .asks import Standing, read_standing
+from .asks import AskedAnswer, Standing, asked_read, read_standing
 from .command_fields import Describe
 from .linked_accounts import GITHUB
 from .record_errors import RecordNotFound
 from .security import Principal
 lazy from .cadence import ask, asked_at
+lazy from .capabilities import command_spec
 lazy from .moments import moment
 
 # GitHub's allowance is by the hour, so a read that failed is tried again after one.
@@ -129,12 +130,10 @@ def standing() -> Standing:
     return read_standing((KIND,), asked) if asked is not None else Standing()
 
 
-class ProfileReadRequested(TypedDict):
+class ProfileReadRequested(AskedAnswer):
     """A read of a GitHub profile, asked for now."""
 
-    ok: Literal[True]
     login: Annotated[str, Describe("The GitHub account to read, by its login.")]
-    asked_at: Annotated[str, Describe("When the read was asked for, an ISO 8601 date-time.")]
 
 
 def request_read(command: ProfileReadCommand, *, principal: Principal) -> ProfileReadRequested:
@@ -149,5 +148,6 @@ def request_read(command: ProfileReadCommand, *, principal: Principal) -> Profil
     del principal
     if command.login not in accounts():
         raise RecordNotFound("No sign-in names that GitHub account.")
-    ask(reads=(KIND,), activity=True)
-    return {"ok": True, "login": command.login, "asked_at": (asked_at(KIND) or timezone.now()).isoformat()}
+    at = ask(reads=(KIND,), activity=True)
+    said = command_spec(READ_NOW).requested(f"@{command.login}")
+    return {**asked_read((KIND,), at, message=said).answer(), "login": command.login}

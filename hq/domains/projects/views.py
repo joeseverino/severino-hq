@@ -18,7 +18,7 @@ lazy from django.template.loader import render_to_string
 from hq.domains.projects.github import github_repository
 from hq.platform.application import related
 from hq.platform.application.action_links import capability_action_link, command_url
-from hq.platform.application.capabilities import capability_words, command_spec
+from hq.platform.application.capabilities import capability_words
 from hq.platform.application.documentation import related_documents
 from hq.platform.application.entity_links import web_url
 from hq.platform.application.moments import moment
@@ -41,7 +41,7 @@ from hq.platform.application.tables import (
 )
 from hq.platform.application.where_it_runs import where_it_runs
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
-lazy from hq.platform.application.asks import Ask, AskMixin, Standing, Took, read_standing, read_status_url
+lazy from hq.platform.application.asks import Ask, AskMixin, Standing, read_standing, read_status_url
 lazy from hq.platform.application.connection_setup import docs_url
 lazy from hq.platform.application.dependency_updates import KIND as RUN_KIND, RUN_NOW, asked_at, last_run
 lazy from hq.platform.application.github_estate import repositories, repository_for
@@ -162,7 +162,6 @@ class ProjectUpdatesRunView(AskMixin, View):
     """Ask for a dependency update run now, which the controller's next pass hands off."""
 
     capability = RUN_NOW
-    reads = (RUN_KIND,)
 
     @override
     def back(self) -> str:
@@ -390,15 +389,6 @@ class WatchingRefreshView(AskMixin, View):
     @override
     def payload(self):
         return {"login": self.login}
-
-    @override
-    def asked(self, result, at) -> Took:
-        asked = moment(result["asked_at"])
-        return Took(
-            read_standing((KIND,), asked),
-            read_status_url((KIND,), asked),
-            command_spec(READ_NOW).requested(f"@{self.login}"),
-        )
 
 
 class PostureView(PageMixin, TemplateView):

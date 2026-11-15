@@ -30,6 +30,7 @@ from hq.platform.application.automation_sources import (
     entry_url,
     playbook_rows,
     scan_standing,
+    scan_status_url,
     standing,
 )
 from hq.platform.application.pages import PageMixin
@@ -37,17 +38,11 @@ from hq.platform.application.routes import reverse
 from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.web_writes import execute_posted, refused
 lazy from hq.domains.jobs.models import JobState
-lazy from hq.platform.application.asks import FAILED, Ask, AskMixin, Standing, Took, WatchView, watch_token
+lazy from hq.platform.application.asks import FAILED, Ask, AskMixin, Standing, WatchView
 lazy from hq.platform.application.cadence import automation_standing
 lazy from hq.platform.application.refusal_status import WANTS_A_GRANT, refusal_of
 lazy from hq.platform.application.work_runs import TONES, UNENDED
 lazy from hq.platform.core.templatetags.action_tags import MOST_BESIDE
-
-
-def scan_status_url(operation_id: str) -> str:
-    """Where a page follows one scan, signed so it reports on nothing else."""
-
-    return f"{reverse('control_plane:playbooks_status')}?watch={watch_token({'scan': operation_id})}"
 
 
 class PlaybooksView(PageMixin, TemplateView):
@@ -124,11 +119,6 @@ class RefreshView(AskMixin, View):
 
     capability = REFRESH
     back_to = "control_plane:playbooks"
-
-    @override
-    def asked(self, result, at) -> Took:
-        operation = str(result["operation"]["id"])
-        return Took(scan_standing(operation) or Standing(), scan_status_url(operation))
 
 
 class ScanStatusView(WatchView):

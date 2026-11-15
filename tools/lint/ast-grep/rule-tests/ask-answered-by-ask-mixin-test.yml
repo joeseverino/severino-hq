@@ -5,8 +5,8 @@ valid:
         capability = REFRESH
 
         def asked(self, result, at):
-            return Took(scan_standing(result["id"]), scan_status_url(result["id"]))
-  - 'return Took(Standing(FAILED, result.get("message", "")))'
+            return Asked(scan_standing(result["id"]), scan_status_url(result["id"]))
+  - 'return Asked(Standing(FAILED, result.get("message", "")))'
   - 'return render(request, "strip.html", context, status=202 if result["requested"] else 200)'
 invalid:
   - |

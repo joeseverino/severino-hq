@@ -10,7 +10,7 @@ the reading each run comes back as are docs/Derived-Facts.md#dependency-updates.
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Annotated, Any, Literal, TypedDict
+from typing import Any
 
 from django.utils import timezone
 
@@ -23,11 +23,12 @@ from hq.domains.control_plane.observations.github import (
 from hq.domains.jobs.models import JobState
 from hq.domains.projects.models import Project
 
-from .command_fields import Describe
+from .asks import AskedAnswer, asked_read
 from .projection import iso, read_once
 from .refusal_status import RefusalEnvelope, refuse
 from .security import Principal
 lazy from .cadence import ask, asked_at as read_asked_at
+lazy from .capabilities import command_spec
 lazy from .moments import moment
 lazy from .projects import repository_key
 lazy from .work_runs import TONES
@@ -150,15 +151,7 @@ class DependencyRunCommand:
     """A run of every opted-in repository now."""
 
 
-class RunRequested(TypedDict):
-    """A dependency update run, asked for now."""
-
-    ok: Literal[True]
-    requested: Annotated[Literal[True], Describe("That a run was asked for.")]
-    asked_at: Annotated[str, Describe("When the run was asked for, an ISO 8601 date-time.")]
-
-
-def request_run(_command: DependencyRunCommand, *, principal: Principal) -> RunRequested | RefusalEnvelope:
+def request_run(_command: DependencyRunCommand, *, principal: Principal) -> AskedAnswer | RefusalEnvelope:
     """Ask the controller to hand off a run now, and wake it.
 
     The ask is a read of ``github.dependency_run``: the controller's next pass
@@ -168,6 +161,5 @@ def request_run(_command: DependencyRunCommand, *, principal: Principal) -> RunR
     del principal
     if not owners():
         return refuse("precondition", "No project is opted in to dependency updates.")
-    ask(reads=(KIND,), activity=True)
-    asked = asked_at() or timezone.now()
-    return {"ok": True, "requested": True, "asked_at": asked.isoformat()}
+    at = ask(reads=(KIND,), activity=True)
+    return asked_read((KIND,), at, message=command_spec(RUN_NOW).requested()).answer()

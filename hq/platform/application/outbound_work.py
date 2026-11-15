@@ -13,7 +13,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import cache
-from typing import Annotated, Any, Literal, NotRequired, TypedDict, cast
+from typing import Annotated, Any, NotRequired, cast
 
 from django.core.exceptions import ImproperlyConfigured
 lazy from django.utils import timezone
@@ -21,7 +21,7 @@ lazy from django.utils import timezone
 lazy from hq.domains.jobs.models import Job
 lazy from hq.domains.jobs.runner import ALREADY_RUNNING, JobConflict, Progress, due as is_due, run, start
 
-from .asks import FAILED, Ask, Standing
+from .asks import FAILED, Ask, Asked, AskedAnswer, Standing
 from .contracts import DOTTED_NAME
 from .describe import Describe
 from .integration_specs import CapabilitySpec, requested
@@ -219,19 +219,23 @@ def refusal(name: str, subject: str = "") -> str:
     return read_once(f"outbound_work.refusal:{name}:{subject}", answer)
 
 
-class WorkRequested(TypedDict):
+class WorkRequested(AskedAnswer):
     """Work asked of HQ, and the job doing it."""
 
-    ok: Literal[True]
     started: Annotated[bool, Describe("Whether this call started the work; false when it was already running.")]
     job: NotRequired[Annotated[str, Describe("The id of the job doing it; absent when another job holds the work.")]]
-    message: Annotated[str, Describe("What asking did, in a sentence.")]
     result: NotRequired[
         Annotated[
             dict[str, Any],
             Describe("What the work answered, where the call waited for it to end, as a command line does."),
         ]
     ]
+
+
+def _job_asked(job: Job, message: str) -> AskedAnswer:
+    """How the job doing asked-for work stands, and where a page follows it."""
+
+    return Asked(standing_of(job_run(job)), reverse("jobs:status", args=[job.pk]), message).answer()
 
 
 def request_work(work: OutboundWork, subject: str, *, principal: Principal) -> WorkRequested | RefusalEnvelope:
@@ -262,21 +266,16 @@ def request_work(work: OutboundWork, subject: str, *, principal: Principal) -> W
         )
     except JobConflict:
         live = Job.objects.filter(kind=work.name, state__in=("queued", "running")).first()
-        same = live is not None and live.request.get(SUBJECT_FIELD, "") == subject
-        conflict: WorkRequested = {
-            "ok": True,
-            "started": False,
-            "message": ALREADY_RUNNING if same else ANOTHER_RUNNING,
-        }
-        if live is not None and same:
-            conflict["job"] = str(live.pk)
-        return conflict
+        if live is not None and live.request.get(SUBJECT_FIELD, "") == subject:
+            return {**_job_asked(live, ALREADY_RUNNING), "started": False, "job": str(live.pk)}
+        # Another subject's run of the same work holds the one live slot.
+        return {**Asked(Standing(FAILED, ANOTHER_RUNNING), message=ANOTHER_RUNNING).answer(), "started": False}
     if not waited:
-        return {"ok": True, "started": True, "job": str(job.pk), "message": requested(work.words, subject)}
+        return {**_job_asked(job, requested(work.words, subject)), "started": True, "job": str(job.pk)}
     standing = standing_of(job_run(job))
     if standing.state == FAILED:
         return cast(RefusalEnvelope, refuse("work_failed", standing.note or ended(standing.label)))
-    return {"ok": True, "started": True, "job": str(job.pk), "message": standing.note, "result": job.result}
+    return {**_job_asked(job, standing.note), "started": True, "job": str(job.pk), "result": job.result}
 
 
 def run_now(name: str, subject: str = "", *, principal: Principal) -> Job:

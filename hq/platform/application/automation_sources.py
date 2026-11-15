@@ -39,6 +39,7 @@ lazy from hq.platform.core.models import AuditLog
 from .automation_manifest import DottedName, ProcedureTerms
 from .command_fields import Describe
 from .integration_specs import CapabilitySpec
+from .resource_operations import OperationItem, Queued
 from .security import Capability, Principal
 from .ui import ended
 lazy from . import asks, automation_adoption, pages
@@ -52,7 +53,7 @@ lazy from .idempotency import IdempotencyConflict
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
 lazy from .labels import effect_label
 lazy from .record_errors import PolicyError, RecordNotFound
-lazy from .resource_operations import OperationQueued, enqueue, serialize_operation
+lazy from .resource_operations import enqueue, serialize_operation
 lazy from .routes import reverse
 lazy from .work_runs import UNENDED, run_rows, run_url, seen_as_runs, standing_of
 
@@ -202,8 +203,29 @@ def _source(principal: Principal) -> ManagedResource:
     return models.ManagedResource.objects.select_for_update().get(key=SOURCE_KEY)
 
 
+class ScanAsked(asks.AskedAnswer):
+    """A scan of the automation source asked of HQ's playbook worker."""
+
+    queued: Queued
+    operation: OperationItem
+
+
+def scan_status_url(operation_id: str) -> str:
+    """Where a page follows one scan, signed so it reports on nothing else."""
+
+    return f"{reverse('control_plane:playbooks_status')}?watch={asks.watch_token({'scan': operation_id})}"
+
+
+def _scan_asked(operation: OperationRequest, *, queued: bool) -> ScanAsked:
+    """How the scan stands, saying nothing beyond its standing's own note."""
+
+    scan = str(operation.pk)
+    asked = asks.Asked(scan_standing(scan) or asks.Standing(), scan_status_url(scan))
+    return {**asked.answer(), "queued": queued, "operation": serialize_operation(operation)}
+
+
 @transaction.atomic
-def refresh(command: RefreshCommand, *, principal: Principal) -> OperationQueued:
+def refresh(command: RefreshCommand, *, principal: Principal) -> ScanAsked:
     """Queue one scan of the automation source for the worker, once per retry
     key, and answer the one already waiting while there is one."""
 
@@ -212,7 +234,7 @@ def refresh(command: RefreshCommand, *, principal: Principal) -> OperationQueued
     if existing is not None:
         if existing.action != models.OperationRequest.Action.SCAN:
             raise IdempotencyConflict("That retry key was already used for a different request.")
-        return {"ok": True, "queued": False, "operation": serialize_operation(existing)}
+        return _scan_asked(existing, queued=False)
     # A scan no worker will take would wait for nothing: the finding that
     # says so (``automation_findings``) carries how to set one up.
     untaken = automation_standing().cannot("refresh", now=timezone.now())
@@ -234,7 +256,7 @@ def refresh(command: RefreshCommand, *, principal: Principal) -> OperationQueued
         # The worker pulls the scan over the bridge; the ring only says one
         # waits, and only once it is stored for the claim to find.
         ask(doorbell="automation")
-    return {"ok": True, "queued": created, "operation": serialize_operation(operation)}
+    return _scan_asked(operation, queued=created)
 
 
 # ----------------------------------------------------------- how it stands

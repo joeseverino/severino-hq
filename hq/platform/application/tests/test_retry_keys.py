@@ -58,7 +58,7 @@ class RefreshTests(TestCase):
         result = self.ask(every_connection=True, idempotency_key="refresh-once")
 
         self.assertTrue(result["ok"], result)
-        self.assertTrue(result["requested"])
+        self.assertTrue(result["standing"], result)
 
     def test_it_still_runs_without_one_and_records_nothing_to_replay(self):
         self.assertTrue(self.ask(every_connection=True)["ok"])

@@ -21,7 +21,7 @@ lazy from hq.platform.application.routes import reverse
 
 from . import readings
 from .answer_fields import CallMessage
-from .asks import FAILED, QUEUED, REFRESHING, RUNNING, Ask, Standing, Took
+from .asks import FAILED, QUEUED, REFRESHING, RUNNING, Ask, Asked, AskedAnswer, Standing
 from .cadence import ask
 from .command_fields import Describe
 from .connections import ConnectionAbility, ConnectionInstance, ConnectionLink, ConnectionSpec, machines_once
@@ -600,15 +600,6 @@ def refresh_ask(standing: Standing) -> Ask:
     )
 
 
-def asked_refresh(result: dict[str, Any]) -> Took:
-    """How an ask for the dashboard's readings stands once it is stored."""
-
-    return Took(
-        Standing(QUEUED, REFRESHING) if result["requested"] else Standing(),
-        message=command_spec(DASHBOARD_REFRESH).requested(),
-    )
-
-
 def glance_context(
     configuration: DashboardConfiguration | None = None,
     panels: tuple[dict[str, Any], ...] | None = None,
@@ -673,22 +664,25 @@ def _panel_names(ids: list[str]) -> list[str]:
     return [names.get(panel_id, panel_id) for panel_id in ids]
 
 
-def _ask_for(ids: list[str], *, why: str) -> str:
-    """Queue a reading of each panel in ``ids``, recorded once; when it was asked."""
-
-    if not ids:
-        return timezone.now().isoformat()
-    # Each panel by the name its head shows.
-    said = {panel_id: f"Asked for {why}: {name}" for panel_id, name in zip(ids, _panel_names(ids), strict=True)}
-    return ask(panels=said, doorbell="glance").isoformat()
-
-
-class PanelsRefreshRequested(TypedDict):
+class PanelsRefreshRequested(AskedAnswer):
     """The dashboard panels asked to be read again."""
 
-    ok: Literal[True]
     requested: Annotated[list[str], Describe("The panels asked to be read again, by id.")]
-    requested_at: Annotated[str, Describe("When they were asked for, an ISO 8601 date-time.")]
+
+
+def _ask_for(ids: list[str], *, why: str, message: str = "") -> PanelsRefreshRequested:
+    """Queue a reading of each panel in ``ids``, recorded once."""
+
+    if ids:
+        # Each panel by the name its head shows.
+        ask(
+            panels={
+                panel_id: f"Asked for {why}: {name}" for panel_id, name in zip(ids, _panel_names(ids), strict=True)
+            },
+            doorbell="glance",
+        )
+    standing = Standing(QUEUED, REFRESHING) if ids else Standing()
+    return {**Asked(standing, message=message).answer(), "requested": ids}
 
 
 @transaction.atomic
@@ -702,8 +696,7 @@ def request_dashboard_refresh(_command: DashboardRefreshCommand, *, principal: P
     ids = [f"machine-{machine.pk}" for machine in machines if machine.pk in routes]
     if ids and configuration.weather_point:
         ids.append("weather")
-    requested_at = _ask_for(ids, why="a fresh reading of the dashboard")
-    return {"ok": True, "requested": ids, "requested_at": requested_at}
+    return _ask_for(ids, why="a fresh reading of the dashboard", message=command_spec(DASHBOARD_REFRESH).requested())
 
 
 @transaction.atomic
@@ -721,8 +714,8 @@ def request_stale_panel_refresh(_command: DashboardRefreshCommand, *, principal:
         for panel in dashboard_panels()
         if panel.get("due") and panel.get("refreshable") and not panel.get("refreshing")
     ]
-    requested_at = _ask_for(wanted, why="the dashboard's due readings")
-    return {"ok": True, "requested": wanted, "requested_at": requested_at}
+    # Posted as the page opens, which says nothing of it.
+    return _ask_for(wanted, why="the dashboard's due readings")
 
 
 def dashboard_refresh_plan(controller_id: str) -> dict[str, Any]:

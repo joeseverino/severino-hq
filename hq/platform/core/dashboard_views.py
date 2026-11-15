@@ -12,7 +12,7 @@ from django.views.generic import TemplateView, View
 
 from hq.domains.contacts import inbox
 from hq.platform.application import action_items as queue_state, fragments, getting_started
-from hq.platform.application.asks import AskMixin, Took
+from hq.platform.application.asks import AskMixin
 from hq.platform.application.cadence import controller_standing
 from hq.platform.application.calendar import calendar_month, month_of
 from hq.platform.application.calendar_entries import calendar_choices
@@ -25,7 +25,6 @@ from hq.platform.application.glance import (
     DASHBOARD_REFRESH,
     DASHBOARD_REFRESH_STALE,
     DASHBOARD_SETTINGS,
-    asked_refresh,
     dashboard_configuration,
     glance_context,
 )
@@ -271,10 +270,6 @@ class DashboardGlanceView(AskMixin, View):
             return render(request, self.template_name, glance_context(), status=403)
         # Drawn after the ask, so each panel asked for shows its refresh.
         return render(request, self.template_name, glance_context(), status=202 if result["requested"] else 200)
-
-    @override
-    def asked(self, result, at) -> Took:
-        return asked_refresh(result)
 
 
 def _settings_of(configuration) -> dict[str, str]:

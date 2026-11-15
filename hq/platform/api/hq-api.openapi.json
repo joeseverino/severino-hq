@@ -4107,6 +4107,30 @@
         },
         "description": "Success."
       },
+      "AskedAnswerSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/AskedAnswer"
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
       "AssetSavedSuccess": {
         "content": {
           "application/json": {
@@ -5221,14 +5245,14 @@
         },
         "description": "Success."
       },
-      "RunRequestedSuccess": {
+      "ScanAskedSuccess": {
         "content": {
           "application/json": {
             "schema": {
               "additionalProperties": false,
               "properties": {
                 "data": {
-                  "$ref": "#/components/schemas/RunRequested"
+                  "$ref": "#/components/schemas/ScanAsked"
                 },
                 "ok": {
                   "$ref": "#/components/schemas/Outcome",
@@ -6163,8 +6187,37 @@
         "description": "An object in its source's own shape, passed on as HQ read it: its keys are the source's.",
         "type": "object"
       },
+      "AskedAnswer": {
+        "additionalProperties": false,
+        "description": "What every ask answers, whichever worker does the work.",
+        "properties": {
+          "message": {
+            "$ref": "#/components/schemas/AskedMessage"
+          },
+          "standing": {
+            "$ref": "#/components/schemas/StandingAnswer"
+          },
+          "status_url": {
+            "$ref": "#/components/schemas/AskedStatusUrl"
+          }
+        },
+        "required": [
+          "standing",
+          "status_url",
+          "message"
+        ],
+        "type": "object"
+      },
       "AskedAt": {
         "description": "When it was asked for, an ISO 8601 date-time.",
+        "type": "string"
+      },
+      "AskedMessage": {
+        "description": "What asking did, in the sentence a page shows; empty where it says nothing.",
+        "type": "string"
+      },
+      "AskedStatusUrl": {
+        "description": "Where to follow the work while it is under way; empty when nothing is.",
         "type": "string"
       },
       "AssetCategory": {
@@ -8927,8 +8980,7 @@
             "type": "boolean"
           },
           "message": {
-            "description": "What asking did, in the sentence a page shows for it.",
-            "type": "string"
+            "$ref": "#/components/schemas/AskedMessage"
           },
           "read_now": {
             "description": "What the controller reads at once, by its connection or kind; empty when the call named nothing.",
@@ -8938,18 +8990,20 @@
             "description": "Why a full read is due or not, in a sentence.",
             "type": "string"
           },
-          "requested": {
-            "const": true,
-            "description": "That the controller was woken.",
-            "type": "boolean"
+          "standing": {
+            "$ref": "#/components/schemas/StandingAnswer"
+          },
+          "status_url": {
+            "$ref": "#/components/schemas/AskedStatusUrl"
           }
         },
         "required": [
-          "requested",
+          "standing",
+          "status_url",
+          "message",
           "due",
           "reason",
-          "read_now",
-          "message"
+          "read_now"
         ],
         "type": "object"
       },
@@ -13843,6 +13897,9 @@
         "additionalProperties": false,
         "description": "The dashboard panels asked to be read again.",
         "properties": {
+          "message": {
+            "$ref": "#/components/schemas/AskedMessage"
+          },
           "requested": {
             "description": "The panels asked to be read again, by id.",
             "items": {
@@ -13850,14 +13907,18 @@
             },
             "type": "array"
           },
-          "requested_at": {
-            "description": "When they were asked for, an ISO 8601 date-time.",
-            "type": "string"
+          "standing": {
+            "$ref": "#/components/schemas/StandingAnswer"
+          },
+          "status_url": {
+            "$ref": "#/components/schemas/AskedStatusUrl"
           }
         },
         "required": [
-          "requested",
-          "requested_at"
+          "standing",
+          "status_url",
+          "message",
+          "requested"
         ],
         "type": "object"
       },
@@ -14474,18 +14535,25 @@
         "additionalProperties": false,
         "description": "A read of a GitHub profile, asked for now.",
         "properties": {
-          "asked_at": {
-            "description": "When the read was asked for, an ISO 8601 date-time.",
-            "type": "string"
-          },
           "login": {
             "description": "The GitHub account to read, by its login.",
             "type": "string"
+          },
+          "message": {
+            "$ref": "#/components/schemas/AskedMessage"
+          },
+          "standing": {
+            "$ref": "#/components/schemas/StandingAnswer"
+          },
+          "status_url": {
+            "$ref": "#/components/schemas/AskedStatusUrl"
           }
         },
         "required": [
-          "login",
-          "asked_at"
+          "standing",
+          "status_url",
+          "message",
+          "login"
         ],
         "type": "object"
       },
@@ -16540,26 +16608,6 @@
         },
         "type": "object"
       },
-      "RunRequested": {
-        "additionalProperties": false,
-        "description": "A dependency update run, asked for now.",
-        "properties": {
-          "asked_at": {
-            "description": "When the run was asked for, an ISO 8601 date-time.",
-            "type": "string"
-          },
-          "requested": {
-            "const": true,
-            "description": "That a run was asked for.",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "requested",
-          "asked_at"
-        ],
-        "type": "object"
-      },
       "RunRow": {
         "additionalProperties": false,
         "properties": {
@@ -16673,6 +16721,35 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "ScanAsked": {
+        "additionalProperties": false,
+        "description": "A scan of the automation source asked of HQ's playbook worker.",
+        "properties": {
+          "message": {
+            "$ref": "#/components/schemas/AskedMessage"
+          },
+          "operation": {
+            "$ref": "#/components/schemas/OperationItem"
+          },
+          "queued": {
+            "$ref": "#/components/schemas/Queued"
+          },
+          "standing": {
+            "$ref": "#/components/schemas/StandingAnswer"
+          },
+          "status_url": {
+            "$ref": "#/components/schemas/AskedStatusUrl"
+          }
+        },
+        "required": [
+          "standing",
+          "status_url",
+          "message",
+          "queued",
+          "operation"
+        ],
         "type": "object"
       },
       "ScanChange": {
@@ -17197,6 +17274,57 @@
         },
         "required": [
           "choices"
+        ],
+        "type": "object"
+      },
+      "StandingAnswer": {
+        "additionalProperties": false,
+        "description": "How one piece of asked-for work stands.",
+        "properties": {
+          "label": {
+            "description": "Where it stands, in the words a page shows.",
+            "type": "string"
+          },
+          "live": {
+            "description": "Whether the work is still under way.",
+            "type": "boolean"
+          },
+          "note": {
+            "description": "What the work is doing, or how it ended, in a sentence.",
+            "type": "string"
+          },
+          "percent": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How far along the work is, where it knows; null where it does not."
+          },
+          "seconds": {
+            "description": "How long ago the work was asked for, in whole seconds; 0 when it was not.",
+            "type": "integer"
+          },
+          "state": {
+            "description": "Where the work stands: `idle`, `queued`, `running`, `done` or `failed`.",
+            "type": "string"
+          },
+          "tone": {
+            "description": "The tone a page colors that label in; empty while nothing was asked.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "label",
+          "tone",
+          "live",
+          "note",
+          "seconds",
+          "percent"
         ],
         "type": "object"
       },
@@ -18601,30 +18729,10 @@
       },
       "VisitRefreshed": {
         "additionalProperties": false,
-        "description": "How the readings behind a page stand, as the command answers it.",
+        "description": "How the readings behind a page stand, and where to follow them while one is read.",
         "properties": {
-          "label": {
-            "description": "Where it stands, in the words a page shows.",
-            "type": "string"
-          },
-          "live": {
-            "description": "Whether the work is still under way.",
-            "type": "boolean"
-          },
-          "note": {
-            "description": "What the work is doing, or how it ended, in a sentence.",
-            "type": "string"
-          },
-          "percent": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "How far along the work is, where it knows; null where it does not."
+          "message": {
+            "$ref": "#/components/schemas/AskedMessage"
           },
           "requested": {
             "description": "The readings this call asked for, by type; empty when none was due or no controller is near.",
@@ -18633,33 +18741,18 @@
             },
             "type": "array"
           },
-          "seconds": {
-            "description": "How long ago the work was asked for, in whole seconds; 0 when it was not.",
-            "type": "integer"
+          "standing": {
+            "$ref": "#/components/schemas/StandingAnswer"
           },
-          "state": {
-            "description": "Where the work stands: `idle`, `queued`, `running`, `done` or `failed`.",
-            "type": "string"
-          },
-          "status": {
-            "description": "Where to follow the readings while one is under way; empty when none is.",
-            "type": "string"
-          },
-          "tone": {
-            "description": "The tone a page colors that label in; empty while nothing was asked.",
-            "type": "string"
+          "status_url": {
+            "$ref": "#/components/schemas/AskedStatusUrl"
           }
         },
         "required": [
-          "state",
-          "label",
-          "tone",
-          "live",
-          "note",
-          "seconds",
-          "percent",
-          "requested",
-          "status"
+          "standing",
+          "status_url",
+          "message",
+          "requested"
         ],
         "type": "object"
       },
@@ -18697,21 +18790,28 @@
             "type": "string"
           },
           "message": {
-            "description": "What asking did, in a sentence.",
-            "type": "string"
+            "$ref": "#/components/schemas/AskedMessage"
           },
           "result": {
             "description": "What the work answered, where the call waited for it to end, as a command line does.",
             "type": "object"
           },
+          "standing": {
+            "$ref": "#/components/schemas/StandingAnswer"
+          },
           "started": {
             "description": "Whether this call started the work; false when it was already running.",
             "type": "boolean"
+          },
+          "status_url": {
+            "$ref": "#/components/schemas/AskedStatusUrl"
           }
         },
         "required": [
-          "started",
-          "message"
+          "standing",
+          "status_url",
+          "message",
+          "started"
         ],
         "type": "object"
       },
@@ -19736,7 +19836,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/OperationQueuedSuccess"
+            "$ref": "#/components/responses/ScanAskedSuccess"
           },
           "202": {
             "$ref": "#/components/responses/AwaitingApprovalAccepted"
@@ -23064,7 +23164,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/RunRequestedSuccess"
+            "$ref": "#/components/responses/AskedAnswerSuccess"
           },
           "202": {
             "$ref": "#/components/responses/AwaitingApprovalAccepted"

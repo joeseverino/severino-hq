@@ -1579,7 +1579,9 @@ button alone.
 Pressing it posts to a view that declares only what it asks
 (`asks.AskMixin`): the request runs the work's capability, stores the ask and
 answers at once, a refusal as failed work in the refusal's own sentence, and
-the control then says how the work stands.
+the control then says how the work stands. Every capability an ask runs
+answers `asks.Asked` (its standing, where to follow it, and what asking did),
+so the view reads the answer and words nothing of its own.
 
 - The note beside the button is a live region (`role="status"`) that changes
   only when the state does. The elapsed time ticks next to it outside the

@@ -16,7 +16,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Annotated, Literal, TypedDict
+from typing import Annotated, Literal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -41,6 +41,7 @@ lazy from hq.domains.control_plane.providers import PROVIDERS, enabled_controlle
 lazy from hq.platform.core.doorbell import ask_soon
 
 from . import readings
+from .asks import Asked, AskedAnswer, Standing, asked_read
 from .command_fields import Describe, Names
 from .derivations import asked_ahead, holds_until, passed, present, since
 from .integration_specs import requested
@@ -744,11 +745,8 @@ def ringing() -> Iterator[set[Doorbell]]:
         yield asked
         return
     asked = set()
-    token = _asked.set(asked)
-    try:
+    with _asked.set(asked):
         yield asked
-    finally:
-        _asked.reset(token)
     for doorbell in sorted(asked):
         transaction.on_commit(_RINGS[doorbell], robust=True)
 
@@ -841,18 +839,15 @@ def ask(
     return now
 
 
-class ControllerSweepRequested(TypedDict):
+class ControllerSweepRequested(AskedAnswer):
     """The controller, woken to read the estate, and why a full read is due or not."""
 
-    ok: Literal[True]
-    requested: Annotated[Literal[True], Describe("That the controller was woken.")]
     due: Annotated[bool, Describe("Whether a read of every connection was due.")]
     reason: Annotated[str, Describe("Why a full read is due or not, in a sentence.")]
     read_now: Annotated[
         str,
         Describe("What the controller reads at once, by its connection or kind; empty when the call named nothing."),
     ]
-    message: Annotated[str, Describe("What asking did, in the sentence a page shows for it.")]
 
 
 def request_controller_sweep(
@@ -867,15 +862,20 @@ def request_controller_sweep(
     ref, kind = subject or ("", "")
     # Noted before policy is read, so the active cadence (not the twelve-hour
     # idle economy) decides the sweep.
-    ask(reads=(kind,) if kind else (), connection=ref, every=command.every_connection, activity=True)
+    at = ask(reads=(kind,) if kind else (), connection=ref, every=command.every_connection, activity=True)
     verdict = sweep_due()
+    said = _sweep_message(subject, due=bool(verdict["due"]))
+    # A bare wake-up names nothing to wait for.
+    asked = (
+        Asked(Standing(note=said), message=said)
+        if subject is None
+        else asked_read(forced_kinds(ref, kind) or (), at, connection_ref=ref, message=said)
+    )
     return {
-        "ok": True,
-        "requested": True,
+        **asked.answer(),
         "due": bool(verdict["due"]),
         "reason": str(verdict["reason"]),
         "read_now": _read_label(subject),
-        "message": _sweep_message(subject, due=bool(verdict["due"])),
     }
 
 

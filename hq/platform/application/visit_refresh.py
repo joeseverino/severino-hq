@@ -10,7 +10,7 @@ for what; ``cadence.ask`` asks and ``asks.read_standing`` follows.
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated
 
 from django.utils import timezone
 
@@ -22,7 +22,7 @@ from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND, T
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
-from .asks import Standing, StandingAnswer, read_standing, read_status_url
+from .asks import Asked, AskedAnswer, Standing, asked_read
 from .cadence import ask, controller_standing, forced_reads, swept
 from .command_fields import Describe
 from .freshness import PAGE_VISIT, freshness
@@ -185,34 +185,22 @@ def _watching(kinds: tuple[str, ...]) -> tuple[list[str], datetime | None]:
     return found, min((waiting[kind] for kind in found), default=None)
 
 
-class VisitStanding(StandingAnswer):
+class VisitRefreshed(AskedAnswer):
     """How the readings behind a page stand, and where to follow them while one is read."""
 
     requested: Annotated[
         list[str],
         Describe("The readings this call asked for, by type; empty when none was due or no controller is near."),
     ]
-    status: Annotated[str, Describe("Where to follow the readings while one is under way; empty when none is.")]
 
 
-class VisitRefreshed(VisitStanding):
-    """How the readings behind a page stand, as the command answers it."""
-
-    ok: Literal[True]
-
-
-def _answer(requested: list[str], kinds: tuple[str, ...]) -> VisitStanding:
+def _answer(requested: list[str], kinds: tuple[str, ...]) -> VisitRefreshed:
     """How the page's readings stand, and where to follow them while one is
-    being read: the shape every ask answers in."""
+    being read."""
 
     watching, asked = _watching(kinds) if kinds else ([], None)
-    if asked is None:
-        return {**Standing().as_json(), "requested": requested, "status": ""}
-    return {
-        **read_standing(watching, asked).as_json(),
-        "requested": requested,
-        "status": read_status_url(watching, asked),
-    }
+    standing = Asked(Standing()) if asked is None else asked_read(watching, asked)
+    return {**standing.answer(), "requested": requested}
 
 
 VISIT_REFRESH = "visit.refresh"
@@ -239,8 +227,8 @@ def request_visit_refresh(command: VisitRefreshCommand, *, principal: Principal)
     if reads is None:
         raise RecordNotFound("HQ has no such page.")
     if not controller_standing().takes_reads:
-        return {"ok": True, **_answer([], ())}
+        return _answer([], ())
     requested = _due(reads.kinds, timezone.now())
     if requested:
         ask(reads=requested, activity=True)
-    return {"ok": True, **_answer(requested, reads.kinds)}
+    return _answer(requested, reads.kinds)

@@ -11,7 +11,7 @@ from hq.platform.application.pages import PageAction, PageBadge, PageMixin
 from hq.platform.application.security import web_principal
 from hq.platform.application.tables import Projected, TableColumn, TableFilter, TableListMixin, TableQuery, TableSort
 lazy from hq.platform.application import outbound_work, work_runs
-lazy from hq.platform.application.asks import FAILED, AskMixin, Standing, Took
+lazy from hq.platform.application.asks import AskMixin
 lazy from hq.platform.application.automation_runs import cancel_action, listed_with_actions, run_here_url
 lazy from hq.platform.application.capabilities import capability_spec
 lazy from hq.platform.application.labels import lower_first
@@ -182,15 +182,3 @@ class WorkAskView(AskMixin, View):
     @override
     def target(self) -> str | None:
         return self.request.POST.get(SUBJECT_FIELD, "") if self.work.takes_subject else None
-
-    @override
-    def asked(self, result, at) -> Took:
-        job = Job.objects.filter(pk=result["job"]).first() if result.get("job") else None
-        if job is None:
-            # Another subject's run of the same work holds the one live slot.
-            return Took(Standing(FAILED, result.get("message", "")))
-        return Took(
-            work_runs.standing_of(work_runs.job_run(job)),
-            reverse("jobs:status", args=[job.pk]),
-            result.get("message", ""),
-        )

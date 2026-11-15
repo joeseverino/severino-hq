@@ -298,7 +298,8 @@ def request_app_read(repository_url: str, *, principal: Principal) -> dict[str, 
         principal=principal,
         idempotency_key=f"refresh:{secrets.token_urlsafe(18)}",
     ).answer
-    if answer.get("ok") and answer.get("requested"):
+    # One held for approval stands nowhere yet: nothing was asked.
+    if answer.get("ok") and answer.get("standing"):
         return {
             "ok": True,
             "connection_ref": connection_ref,

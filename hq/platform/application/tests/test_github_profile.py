@@ -136,8 +136,8 @@ class PlanTests(TestCase):
         asked = github_profile.request_read(github_profile.ProfileReadCommand("example-user"), principal=operator())
 
         self.assertTrue(github_profile.plan()["due"])
-        self.assertEqual(asked_at(github_profile.KIND).isoformat(), asked["asked_at"])
-        self.assertEqual(github_profile.standing().state, "queued")
+        self.assertIsNotNone(asked_at(github_profile.KIND))
+        self.assertEqual((asked["standing"]["state"], github_profile.standing().state), ("queued", "queued"))
 
     def test_the_controller_registry_carries_the_plan(self):
         from ..controller import controller_registry

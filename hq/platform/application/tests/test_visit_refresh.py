@@ -82,7 +82,7 @@ def page(*kinds: str):
 
 
 # What a page is told when nothing is being read for it.
-NOTHING_ASKED = {"ok": True, **Standing().as_json(), "requested": [], "status": ""}
+NOTHING_ASKED = {"ok": True, "standing": Standing().as_json(), "status_url": "", "message": "", "requested": []}
 
 
 def followed(status: str) -> Standing:
@@ -106,7 +106,7 @@ class VisitRefreshTests(TestCase):
             result = self.ask()
 
         self.assertEqual(result["requested"], [FAST])
-        self.assertTrue(result["live"])
+        self.assertTrue(result["standing"]["live"])
         self.assertEqual(asked(), {FAST})
         self.assertEqual(rung(watch), 1)
 
@@ -130,7 +130,7 @@ class VisitRefreshTests(TestCase):
         with page(FAST), self.captureOnCommitCallbacks(execute=True) as rung:
             results = [self.ask() for _ in range(5)]
 
-        self.assertTrue(all(result["requested"] == [] and not result["live"] for result in results))
+        self.assertTrue(all(result["requested"] == [] and not result["standing"]["live"] for result in results))
         self.assertEqual(asked(), set())
         self.assertEqual(rung, [])
 
@@ -142,7 +142,7 @@ class VisitRefreshTests(TestCase):
 
         self.assertEqual(first["requested"], [FAST])
         self.assertEqual(second["requested"], [])
-        self.assertTrue(second["live"])
+        self.assertTrue(second["standing"]["live"])
         self.assertEqual(ReadRequest.objects.count(), 1)
 
     def test_several_kinds_are_one_ask_and_one_doorbell(self):
@@ -286,7 +286,7 @@ class VisitRefreshTests(TestCase):
         store(FAST, age=OLD)
 
         with page(FAST):
-            status = self.ask()["status"]
+            status = self.ask()["status_url"]
 
         self.assertTrue(followed(status).live)
         # The controller reads it, successfully or not: either is an answer.
@@ -300,7 +300,7 @@ class VisitRefreshTests(TestCase):
     def test_a_waiting_read_says_what_waits_and_says_so_when_no_controller_will_take_it(self):
         store(FAST, age=OLD)
         with page(FAST):
-            status = self.ask()["status"]
+            status = self.ask()["status_url"]
         self.assertEqual((followed(status).state, followed(status).note), ("queued", REFRESHING))
 
         quiet = DIRECTORY / "quiet-heartbeat"
@@ -320,7 +320,7 @@ class VisitRefreshTests(TestCase):
 
         store(FAST, age=OLD)
         with page(FAST):
-            status = self.ask()["status"]
+            status = self.ask()["status_url"]
         store("npm.proxy_host")
 
         with override_settings(SEVERINO_CONTROLLER_HEARTBEAT=str(DIRECTORY / "never-written")):
