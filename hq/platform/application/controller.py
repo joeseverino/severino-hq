@@ -14,7 +14,7 @@ from django.utils import timezone
 lazy from django.conf import settings
 
 from hq.domains.control_plane.connection_kinds import CONNECTION_CREDENTIALS
-from hq.domains.control_plane.models import ManagedResource, OperationRequest
+from hq.domains.control_plane.models import OPERATION_LAPSE, ManagedResource, OperationRequest
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND, UPLOADED_CERTIFICATE_KIND
 from hq.domains.control_plane.providers import (
@@ -126,7 +126,7 @@ def _fail_lapsed_runs(now) -> None:
     lapsed = (
         OperationRequest.objects.select_for_update()
         .select_related("resource")
-        .filter(state=OperationRequest.State.CLAIMED, lease_expires_at__lte=now, action=OperationRequest.Action.RUN)
+        .filter(OPERATION_LAPSE.q(now), action=OperationRequest.Action.RUN)
         .exclude(resource__spec__retry="safe")
     )
     for operation in lapsed:
@@ -158,10 +158,7 @@ def release_lapsed(now) -> None:
     switched_off = Q(
         resource__in=ManagedResource.objects.filter(enabled=False).values("pk"),
     ) & ~Q(action=OperationRequest.Action.DELETE)
-    OperationRequest.objects.filter(
-        state=OperationRequest.State.CLAIMED,
-        lease_expires_at__lte=now,
-    ).update(
+    OperationRequest.objects.filter(OPERATION_LAPSE.q(now)).update(
         state=Case(
             When(switched_off, then=Value(OperationRequest.State.CANCELLED)),
             default=Value(OperationRequest.State.QUEUED),
@@ -375,9 +372,7 @@ def schedule_automatic_operations(controller_id: str) -> dict[str, Any]:
         idempotency_key = (
             f"controller:{action}:{resource.pk}:g{resource.generation}:{identity}:{now.date().isoformat()}"
         )[:200]
-        operation, created = enqueue(
-            action, partial(_automatic, resource, controller_id, reason), once=idempotency_key
-        )
+        operation, created = enqueue(action, partial(_automatic, resource, controller_id, reason), once=idempotency_key)
         if created:
             scheduled.append(str(operation.id))
     # The second source, after the contract-driven pass so anything already
@@ -421,12 +416,8 @@ def claim_next_operation(
     if attempt:
         held = (
             OperationRequest.objects.select_related("resource")
-            .filter(
-                state=OperationRequest.State.CLAIMED,
-                claimed_by=controller_id,
-                claim_attempt=attempt,
-                lease_expires_at__gt=now,
-            )
+            .filter(state=OperationRequest.State.CLAIMED, claimed_by=controller_id, claim_attempt=attempt)
+            .exclude(OPERATION_LAPSE.q(now))
             .first()
         )
         if held is not None:
@@ -571,7 +562,7 @@ def renew_operation(operation_id: str, *, controller_id: str, lease_seconds: int
         return _stop("Cancelled")
     if operation.state != OperationRequest.State.CLAIMED:
         raise ValueError(f"Operation is {operation.state!r}, not claimed.")
-    if operation.lease_expires_at is None or operation.lease_expires_at <= now:
+    if OPERATION_LAPSE.holds(operation, now):
         raise ValueError("Operation lease has expired.")
     expires = now + timedelta(seconds=lease_seconds)
     OperationRequest.objects.filter(pk=operation.pk).update(lease_expires_at=expires, updated_at=now)
@@ -608,7 +599,7 @@ def report_operation(
         raise ValueError(f"Operation is {operation.state!r}, not claimed.")
     if operation.claimed_by != controller_id:
         raise ValueError("Operation is leased by a different controller.")
-    if operation.lease_expires_at and operation.lease_expires_at <= timezone.now():
+    if OPERATION_LAPSE.holds(operation, timezone.now()):
         raise ValueError("Operation lease has expired.")
 
     requested_generation = operation.input.get("generation")

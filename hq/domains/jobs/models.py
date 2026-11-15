@@ -15,6 +15,7 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
+from hq.platform.core.lapses import Lapse
 from hq.platform.core.rules import Rule, one_of
 
 # How long a running job may go without a heartbeat before it is presumed
@@ -36,6 +37,17 @@ class JobState(models.TextChoices):
     # Distinct from FAILED: a vanished process is a restart to retry,
     # a raised exception is a fault to read in the log.
     LOST = "lost", "Stopped early"
+
+
+# A live job nothing has heard from for too long has stopped early: running
+# with no heartbeat since, or queued and never started (the process that
+# recorded it stopped before its thread ran).
+LAPSE = Lapse(
+    (
+        (JobState.RUNNING, "heartbeat_at", HEARTBEAT_GRACE),
+        (JobState.QUEUED, "created_at", HEARTBEAT_GRACE),
+    )
+)
 
 
 class Job(models.Model):
@@ -103,14 +115,8 @@ class Job(models.Model):
 
     @property
     def is_stale(self) -> bool:
-        """Live, but nothing has been heard from it for too long: running with
-        no heartbeat since, or queued and never started (the process that
-        recorded it stopped before its thread ran)."""
-        if self.state == self.State.RUNNING and self.heartbeat_at is not None:
-            return timezone.now() - self.heartbeat_at > HEARTBEAT_GRACE
-        if self.state == self.State.QUEUED:
-            return timezone.now() - self.created_at > HEARTBEAT_GRACE
-        return False
+        """Live, but nothing has been heard from it for too long (``LAPSE``)."""
+        return LAPSE.holds(self, timezone.now())
 
     @property
     def seen_state(self) -> str:

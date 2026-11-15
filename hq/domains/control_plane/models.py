@@ -1,7 +1,7 @@
 """Desired state and operation queue; credentials live only in the controller."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import override
 
 from django.conf import settings
@@ -12,6 +12,7 @@ from django.utils import timezone
 
 from hq.domains.jobs.models import JobState
 from hq.platform.application.labels import dotted
+from hq.platform.core.lapses import Lapse
 from hq.platform.core.models import TimestampedModel
 from hq.platform.core.rules import Rule, one_of, singleton
 lazy from hq.domains.control_plane.provider_adapters.contracts import FAILURES, REFUSALS
@@ -455,6 +456,12 @@ class OperationState(models.TextChoices):
         return next(state for state in JobState if state.label == self.label)
 
 
+# A claimed operation whose lease has run out is nobody's: the next claim
+# puts it back or ends it (``controller.release_lapsed``), and until then it
+# reads as stopped early.
+OPERATION_LAPSE = Lapse(((OperationState.CLAIMED, "lease_expires_at", timedelta(0)),))
+
+
 class OperationRequest(TimestampedModel):
     class Action(models.TextChoices):
         """Each action in the words of the button that asks for it, which a
@@ -660,6 +667,11 @@ class ApprovalState(models.TextChoices):
     STALE = "stale", "Superseded"
     # Taken back by whoever asked, before anybody decided it.
     WITHDRAWN = "withdrawn", "Withdrawn"
+
+
+# A request nobody decided by its expiry has lapsed, whether or not the
+# sweep has marked it (``approvals.lapse_expired``).
+APPROVAL_LAPSE = Lapse(((ApprovalState.PENDING, "expires_at", timedelta(0)),))
 
 
 class ApprovalRequest(TimestampedModel):

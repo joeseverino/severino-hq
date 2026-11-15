@@ -18,7 +18,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ApprovalRequest, ManagedResource
+from hq.domains.control_plane.models import APPROVAL_LAPSE, ApprovalRequest, ManagedResource
 from hq.platform.core.attribution import own_operation
 from hq.platform.core.digests import digest
 lazy from hq.domains.control_plane.providers import record_spec
@@ -480,7 +480,7 @@ def outcome(held: ApprovalRequest) -> dict[str, Any] | None:
     """
 
     state = held.state
-    if state == ApprovalRequest.State.PENDING and held.expires_at <= derivations.clock():
+    if APPROVAL_LAPSE.holds(held, derivations.clock()):
         state = ApprovalRequest.State.EXPIRED
     if state == ApprovalRequest.State.PENDING:
         return None
@@ -503,14 +503,12 @@ def lapse_expired() -> int:
 
     principal = internal_principal("approvals")
     lapsed = 0
-    for approval_id in ApprovalRequest.objects.filter(
-        state=ApprovalRequest.State.PENDING, expires_at__lte=timezone.now()
-    ).values_list("pk", flat=True):
+    for approval_id in ApprovalRequest.objects.filter(APPROVAL_LAPSE.q(timezone.now())).values_list("pk", flat=True):
         # One at a time, so each lapse is audited as part of its request.
         with transaction.atomic():
             held = (
                 ApprovalRequest.objects.select_for_update()
-                .filter(pk=approval_id, state=ApprovalRequest.State.PENDING, expires_at__lte=timezone.now())
+                .filter(APPROVAL_LAPSE.q(timezone.now()), pk=approval_id)
                 .first()
             )
             if held is not None:
@@ -549,7 +547,9 @@ def pending(*, principal: Principal, limit: int | None = 50, capability: str = "
     """
 
     principal.require(Capability.READ)
-    waiting = ApprovalRequest.objects.filter(state=ApprovalRequest.State.PENDING, expires_at__gt=derivations.clock())
+    waiting = ApprovalRequest.objects.filter(state=ApprovalRequest.State.PENDING).exclude(
+        APPROVAL_LAPSE.q(derivations.clock())
+    )
     if capability:
         waiting = waiting.filter(capability=capability)
     if not reads_every_hold(principal):
@@ -615,7 +615,7 @@ def _decidable(approval_id: str, principal: Principal) -> ApprovalRequest:
     except (ApprovalRequest.DoesNotExist, ValueError) as exc:
         raise ApprovalError("That approval request was not found.") from exc
     _refuse_decided(held)
-    if held.expires_at <= timezone.now():
+    if APPROVAL_LAPSE.holds(held, timezone.now()):
         _settle(held, ApprovalRequest.State.EXPIRED, _LAPSED_NOTE, operation=LAPSE, principal=principal)
         raise Settled("That request expired before it was decided, so nothing was written.")
     return held

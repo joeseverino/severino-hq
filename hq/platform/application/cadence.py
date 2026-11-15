@@ -26,6 +26,7 @@ from django.utils import timezone
 from pydantic import Field
 
 from hq.domains.control_plane.models import (
+    OPERATION_LAPSE,
     DashboardRefreshRequest,
     ManagedResource,
     OperationRequest,
@@ -618,7 +619,7 @@ def pass_due() -> str:
     now = timezone.now()
     if OperationRequest.objects.filter(state=OperationRequest.State.QUEUED).exists():
         return "Work is queued."
-    if OperationRequest.objects.filter(state=OperationRequest.State.CLAIMED, lease_expires_at__lte=now).exists():
+    if OperationRequest.objects.filter(OPERATION_LAPSE.q(now)).exists():
         return "Work a controller took did not finish in time."
     if DashboardRefreshRequest.objects.filter(
         completed_at__isnull=True, requested_at__gte=now - read_request_lifetime()

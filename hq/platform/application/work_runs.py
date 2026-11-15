@@ -22,8 +22,8 @@ from django.db.models.functions import Coalesce, Collate, Concat, NullIf
 from django.db.models.lookups import Exact
 from django.utils import timezone
 
-from hq.domains.control_plane.models import OperationHost, OperationRequest, OperationState
-from hq.domains.jobs.models import HEARTBEAT_GRACE, Job, JobState
+from hq.domains.control_plane.models import OPERATION_LAPSE, OperationHost, OperationRequest, OperationState
+from hq.domains.jobs.models import LAPSE as JOB_LAPSE, Job, JobState
 lazy from hq.domains.jobs.runner import AUDIT_TYPE as JOB_AUDIT_TYPE
 
 from .asks import DONE, FAILED, QUEUED, RUNNING, Standing
@@ -200,13 +200,7 @@ class WorkKind:
 def job_seen_state(now: datetime) -> Case:
     """``Job.seen_state`` as SQL, so a list filters and orders by what it shows."""
 
-    stale = now - HEARTBEAT_GRACE
-    return Case(
-        When(Q(state=JobState.RUNNING, heartbeat_at__isnull=False, heartbeat_at__lt=stale), then=Value(JobState.LOST)),
-        When(Q(state=JobState.QUEUED, created_at__lt=stale), then=Value(JobState.LOST)),
-        default=F("state"),
-        output_field=CharField(),
-    )
+    return Case(When(JOB_LAPSE.q(now), then=Value(JobState.LOST)), default=F("state"), output_field=CharField())
 
 
 def run_seen_state(now: datetime) -> Case:
@@ -214,9 +208,8 @@ def run_seen_state(now: datetime) -> Case:
     claimed run whose lease has run out has stopped early whether or not the
     next claim has ended it yet, as a job nothing has heard from has."""
 
-    lapsed = Q(state=OperationState.CLAIMED) & (Q(lease_expires_at__isnull=True) | Q(lease_expires_at__lte=now))
     return Case(
-        When(lapsed, then=Value(JobState.LOST)),
+        When(OPERATION_LAPSE.q(now), then=Value(JobState.LOST)),
         *(When(state=state, then=Value(state.as_job.value)) for state in OperationState),
         output_field=CharField(),
     )

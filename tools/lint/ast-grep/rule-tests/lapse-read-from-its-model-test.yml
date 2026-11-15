@@ -1,0 +1,13 @@
+id: lapse-read-from-its-model
+valid:
+  - 'lapsed = OperationRequest.objects.filter(OPERATION_LAPSE.q(now))'
+  - 'expired = OPERATION_LAPSE.holds(operation, now)'
+  - 'OperationRequest.objects.filter(pk=pk).update(lease_expires_at=expires)'
+  - 'claimed = models.Q(lease_expires_at__isnull=False)'
+  - 'until = operation.lease_expires_at if claimed else None'
+invalid:
+  - 'OperationRequest.objects.filter(state="claimed", lease_expires_at__lte=now)'
+  - 'held = claims.filter(lease_expires_at__gt=now)'
+  - 'stale = Job.objects.filter(heartbeat_at__lt=now - HEARTBEAT_GRACE)'
+  - 'expired = operation.lease_expires_at <= timezone.now()'
+  - 'quiet = now - job.heartbeat_at > HEARTBEAT_GRACE'
