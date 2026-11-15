@@ -37,6 +37,7 @@ from .finding_model import (
 )
 from .images import version
 from .labels import lower_first
+from .lists import split_list
 from .tone import Tone
 from .ui import ended
 from .workflow_contracts import ActionLink
@@ -393,11 +394,10 @@ def socket_holder_link(item: Container) -> ActionLink:
 
 def _fixed_in(standing: ImageStanding) -> str:
     fixes = {
-        patched.strip()
+        fixed
         for advisory in standing.advisories
         for _vulnerable, patched in advisory.get("vulnerabilities") or ()
-        for patched in str(patched).split(",")
-        if patched.strip()
+        for fixed in split_list(str(patched))
     }
     return ", ".join(sorted(fixes, key=version)) if fixes else ""
 
