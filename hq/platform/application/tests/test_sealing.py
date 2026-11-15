@@ -61,6 +61,4 @@ class SealingTests(SimpleTestCase):
         with self.assertRaises(AttributeError):
             token.carried = "else"  # type: ignore[attr-defined]
         with self.assertRaises(TypeError):
-
-            class _Fielded(Sealed):
-                __slots__ = ("carried",)
+            type("Fielded", (Sealed,), {"__slots__": ("carried",)})

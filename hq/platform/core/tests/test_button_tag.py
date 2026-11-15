@@ -21,7 +21,7 @@ class ButtonTagTests(SimpleTestCase):
                 html = draw(f'{{% button "Example" "/example/" look="primary ghost danger {drawn}" %}}')
                 classes = set(html.split('class="')[1].split('"')[0].split())
 
-                self.assertTrue({"btn", drawn, "danger"} <= classes)
+                self.assertLessEqual({"btn", drawn, "danger"}, classes)
                 self.assertFalse({"primary", "ghost"} & classes)
 
     def test_a_look_it_does_not_offer_is_refused(self):
