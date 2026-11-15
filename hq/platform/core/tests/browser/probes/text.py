@@ -132,7 +132,8 @@ BROKEN_WORDS_IN_TEXT = (
 # the text, or one a part of a run draws before itself and nothing clips), a
 # line that holds only marks (an icon, an asterisk) apart from the words they
 # belong to, or one word alone that the line before cut from its number ("12"
-# above "days") or, in a cell, that a box set whole after it left behind
+# above "days"; a number holds a digit and no letter, so a name that ends in
+# one, "host-01", is none) or, in a cell, that a box set whole after it left behind
 # ("on" above a name), where the break between them is a wrap and not a `br`:
 # a cell cuts a name, so one never needs a line of its own. A value of a list
 # (a user's code before the next) is no running word, so a list wrapping
@@ -246,7 +247,7 @@ STRAYS_OPENING_A_LINE = (
       const opening = line.pieces.find((piece) => piece.ch.trim());
       if (index && SEPARATOR.test(text) && !(opening.opens ?? opening.el).closest(identifier)) found.push(`${name} opens a line with "${text[0]}": "${text.slice(0, 30)}"`);
       else if (MARKS_ONLY.test(text)) found.push(`${name} holds "${text.slice(0, 30)}" on a line of its own (▪ is an icon or an image)`);
-      else if (index && !line.forced && /^\p{L}+[.,;:]?$/u.test(text) && /\p{N}%?$/u.test(lines[index - 1].text.trim())) {
+      else if (index && !line.forced && /^\p{L}+[.,;:]?$/u.test(text) && /(?:^|\s)[^\p{L}\s]*\p{N}[^\p{L}\s]*$/u.test(lines[index - 1].text.trim())) {
         found.push(`${name} cuts "${text}" from its number "${lines[index - 1].text.trim().split(/\s/).at(-1).slice(-30)}"`);
       } else if (inCell && (!index || line.forced) && !line.pieces.some((piece) => piece.whole || piece.el?.closest(identifier)) && /^\p{L}+$/u.test(text) && lines[index + 1] && !lines[index + 1].forced && lines[index + 1].pieces[0].whole) {
         found.push(`${name} cuts "${text}" from "${lines[index + 1].text.trim().slice(0, 30)}" after it`);

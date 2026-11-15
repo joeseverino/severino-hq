@@ -437,21 +437,21 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
    that size (WCAG 2.5.8) without moving anything: the area is the control's
    own, hung over the space beside it, where no other control is. A control
    asks for one in its own partial with `data-hit`; the quiet link
-   (`.subtle-link`) is small wherever it is written, so it always has one. The
-   browser gate measures every control (docs/Design.md, "A control is big
-   enough to hit"). A finger is not a cursor: where the pointer is coarse the
+   (`.subtle-link`) and a pill's link are small wherever they are written,
+   so each always has one. The browser gate measures every control
+   (docs/Design.md, "A control is big enough to hit"). A finger is not a cursor: where the pointer is coarse the
    area grows, and a control packed too close to its neighbors for one under
    a mouse (a calendar's marks and bars) asks for one there only, with
    `data-hit="coarse"`. A control positioned in its own sheet keeps that
    position, which holds its area as well. */
-:is([data-hit]:not([data-hit=coarse]), .subtle-link) { position: relative; }
-:is([data-hit]:not([data-hit=coarse]), .subtle-link)::after {
+:is([data-hit]:not([data-hit=coarse]), .subtle-link, .pill[href]) { position: relative; }
+:is([data-hit]:not([data-hit=coarse]), .subtle-link, .pill[href])::after {
   content: ""; position: absolute; inset: min(0px, calc(50% - var(--target-min) / 2));
 }
 @media (pointer: coarse) {
   [data-hit=coarse],
   main summary { position: relative; }
-  :is([data-hit], .subtle-link)::after {
+  :is([data-hit], .subtle-link, .pill[href])::after {
     content: ""; position: absolute;
     inset: min(calc(-1 * var(--space-5)), calc(50% - var(--target-min) / 2)) min(calc(-1 * var(--space-3)), calc(50% - var(--target-min) / 2));
   }

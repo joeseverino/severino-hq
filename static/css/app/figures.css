@@ -203,6 +203,8 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 /* A run of chips is no wider than what holds it, and a chip longer than the run gives way inside it, where it is cut or broken as its own rules say. */
 .code-list { display: inline-flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); max-inline-size: 100%; }
 .code-list > * { min-inline-size: 0; }
+/* A run that links its names wraps onto lines a target tall (`--target-min`), each link as tall as its line, in a cell too, so a name is hit through a target's height wherever the run is drawn. */
+.code-list:has(> [href]) { line-height: var(--target-min); }
 /* The title says where the link goes, so the arrow is for the eye alone. */
 .external-link::after { content: "\00a0\2197" / ""; font-size: .85em; }
 /* A row of links, each a chip (partials/_link_chips.html): a place to go, so
@@ -280,6 +282,8 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .facts-band .fact-value :is(code, kbd, samp) { line-height: 1; }
 /* An identifier in a value (code, a `|breakable` token) runs inline, its parts too, code a chip on each line it wraps to, so the value's first line is its first line in every engine: an inline block stands on its last line wherever `baseline-source` is not supported (WebKit), so a wrapped identifier would lift a band's value off its row's baseline and draw a list's over the fact above, whose row lines up on baselines. A table lays out its own cells' identifiers; a panel a cell shows (a popover, a dialog) is no part of the cell, so its facts are laid out here. */
 :is(.facts-band, .facts-list) .fact-value :is(code, kbd, samp, .token, .whole):is(:not(td *), [popover] *, dialog *) { display: inline; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+/* A value holding a pill's link sets its lines a target tall (`--target-min`), so the area the pill is hit through (page.css) stays in its own line, clear of a link on the line above. */
+.facts-list .fact-value:has(.pill[href]) { line-height: var(--target-min); }
 .band-icon {
   display: grid; place-items: center; flex: none;
   width: 36px; height: 36px; border-radius: var(--radius);

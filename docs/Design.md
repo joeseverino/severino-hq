@@ -1714,8 +1714,10 @@ its `::before` or `::after` hangs over the space beside it. A control drawn
 smaller asks for that area in its own partial with `data-hit` (`hit=True` on
 `{% button %}`), or with `data-hit="coarse"` where it is packed too close
 to its neighbors for one under a mouse; page.css hangs it, and the quiet link
-(`.subtle-link`) always has one. A smaller target passes only through one of
-the criterion's exceptions:
+(`.subtle-link`) and a pill's link always have one. A run of names that links
+them (`.code-list`) wraps onto lines a target tall, as a value holding a
+pill's link does. A smaller target passes only through one of the criterion's
+exceptions:
 
 - Spacing: "if a 24 CSS pixel diameter circle is centered on the bounding box
   of each, the circles do not intersect another target or the circle for
