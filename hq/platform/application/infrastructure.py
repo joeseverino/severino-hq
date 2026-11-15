@@ -27,7 +27,7 @@ from hq.domains.control_plane.providers import (
 )
 lazy from hq.domains.control_plane.provider_spec import ProviderResolutionContext
 
-from .adoption import Live, require_writable
+from .adoption import Live, live_read, require_writable
 from .command_fields import Choices, Describe
 from .conditions import DEGRADED, DRIFTED, READY, holding
 from .integration_specs import Kept, keeps
@@ -39,7 +39,7 @@ from .security import Principal
 from .tone import Tone, Toned
 lazy from .asks import APPLIES_SHORTLY
 lazy from .cadence import ask, swept
-lazy from .capabilities import Consented
+lazy from .capabilities import Consented, consent
 lazy from .delivery_progress import deploying_label
 lazy from .locate import names_by_connection
 lazy from .resource_capabilities import kind_converges
@@ -392,8 +392,8 @@ def _refuse_authored(
 
     # Asked of the kind to be written and of the record's kind as it is
     # locked, so a gated record is not rewritten as another kind either.
-    consented.require(command.kind)
-    consented.require(held_kind)
+    consent(consented).require(command.kind)
+    consent(consented).require(held_kind)
     if not command.enabled:
         return
     if (
@@ -434,7 +434,7 @@ def save_managed_resource(
 
     return _save(
         command,
-        principal=consented.principal,
+        principal=consent(consented).principal,
         consented=consented,
         current_key=current_key,
         expected_updated_at=expected_updated_at,
@@ -457,7 +457,8 @@ def save_adopted(
     so does keeping what is live over HQ's copy (``accept_observed``).
     """
 
-    command = ManagedResourceCommand(key=key, kind=live.kind, spec=live.spec, enabled=enabled)
+    read = live_read(live)
+    command = ManagedResourceCommand(key=key, kind=read.kind, spec=read.spec, enabled=enabled)
     return _save(command, principal=principal, consented=None, current_key=current_key)
 
 

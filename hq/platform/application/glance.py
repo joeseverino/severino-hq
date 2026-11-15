@@ -2,7 +2,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Annotated, Any, Literal, TypedDict
+from typing import Annotated, Any, Literal, TypedDict
 
 from django.db import transaction
 from django.db.models import Max
@@ -17,6 +17,7 @@ from hq.domains.control_plane.models import (
     ManagedResource,
     ProviderConnection,
 )
+lazy from hq.domains.control_plane.bridge_actions import Admitted, admission
 lazy from hq.platform.application.routes import reverse
 
 from . import readings
@@ -32,9 +33,6 @@ from .labels import dotted, human_bytes
 from .moments import moment, when_hour
 from .record_errors import InputError, PolicyError
 from .security import Capability, Principal
-
-if TYPE_CHECKING:
-    from hq.domains.control_plane.bridge_actions import Admitted
 from .tone import Tone
 from .ui import MISSING, counted, severity_tone
 lazy from .capabilities import capability_words, command_spec
@@ -820,7 +818,7 @@ def _record_weather_reading(
 
 @transaction.atomic
 def record_dashboard_observations(payload: list[dict[str, Any]], *, admitted: Admitted) -> dict[str, Any]:
-    controller_id = admitted.controller_id
+    controller_id = admission(admitted).controller_id
     configuration = dashboard_configuration()
     allowed = {spec.id for spec in panel_specs(configuration)}
     now = timezone.now()

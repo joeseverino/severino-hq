@@ -47,7 +47,7 @@ lazy from .action_links import capability_action_link, command_url
 lazy from .approval_review import grouped, marked
 lazy from .automation_runs import access_words, anywhere, capability_name
 lazy from .cadence import ask, automation_standing
-lazy from .capabilities import Consented, capability_words
+lazy from .capabilities import Consented, capability_words, consent
 lazy from .findings import rule_for
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
 lazy from .record_errors import PolicyError, RecordNotFound
@@ -226,7 +226,9 @@ def refresh(command: RefreshCommand, *, consented: Consented) -> OperationAsked:
         if untaken:
             raise PolicyError(untaken)
         resource = _source(consented)
-        return resource, asked_fields(consented.principal, reason=command.reason, generation=resource.generation)
+        return resource, asked_fields(
+            consent(consented).principal, reason=command.reason, generation=resource.generation
+        )
 
     operation, created = enqueue(models.OperationRequest.Action.SCAN, prepare)
     if created:

@@ -1,8 +1,8 @@
 """Deterministic JSON capability registry for every HQ adapter."""
 
 from collections.abc import Callable
-from dataclasses import replace
-from typing import Annotated, Any, Literal, NamedTuple, TypedDict, final, override
+from dataclasses import dataclass, replace
+from typing import Annotated, Any, Literal, NamedTuple, TypedDict, final
 
 from pydantic import ConfigDict, with_config
 
@@ -46,6 +46,7 @@ from .labels import human_label
 from .projection import QueryRefusal
 from .record_errors import PolicyError
 from .refusal_status import Refusal, next_call, refusal_of, refuse, refused
+from .sealing import Sealed, sealer
 from .security import (
     CLI_INTERFACE,
     Capability,
@@ -500,65 +501,53 @@ def validate_command(spec: CapabilitySpec, payload: dict[str, Any], target: str 
     return command_adapter(spec.command_type).validate_python(payload)
 
 
-# Only this module holds it, so only this module's two consent steps make a
-# ``Consented``.
-_ISSUER = object()
-
-
 # What a declaration write the consent does not admit is refused with.
 NEEDS_APPROVAL = "This change needs approval. Ask for it through the API or MCP, then approve it in HQ in the browser."
 
 
 @final
-class Consented:
-    """What the capability runner decided for one run, which every declaration write asks.
+class Consented(Sealed):
+    """What the capability runner decided for one run, which every declaration write asks (``sealing``).
 
     A declaration writer (``save_managed_resource``, the operation queue's
     ``_queue_operation``, and every handler that reaches one) takes this in
-    place of a principal, and asks it for the kind it writes before writing
-    (``require``). That gives one property: no gated declaration is written
-    without a person's consent, whichever capability's handler writes it.
+    place of a principal, reads it through ``consent``, and asks that for the
+    kind it writes before writing (``Consent.require``). That gives one
+    property: no gated declaration is written without a person's consent,
+    whichever capability's handler writes it.
 
     - Two places make one, both in this module: the runner's consent step
       (``_consent``), once operator policy and the default hold have let the
       run through, and ``execute_approved``, once a person has approved the
-      held request (``approved``). The constructor refuses a caller without
-      this module's private key, so a path that writes a declaration without
-      passing either has no value to hand the writer, and the call fails.
-    - ``admits`` is the one place the rule lives: a kind that waits for a
-      person (``default_hold.kind_waits``) is written only by an interactive
-      principal, under standing policy or a person's approval
-      (``approved_by``), or in an approved run. The hold judges a run by the
-      kind its target or command names; this judges the kind actually
-      written, so a capability of any subject, writing a kind its command
-      never named, is refused at the write all the same.
+      held request (``approved``). Only this module holds its seal, so a path
+      that writes a declaration without passing either has no value to hand
+      the writer, and ``consent`` refuses anything else.
     - The runner hands one only to a handler that names ``consented``, never
       a principal beside it, so who acts and who approved are read from the
       consent alone and cannot disagree with it.
-    - It is immutable and not a dataclass, so ``dataclasses.replace`` cannot
-      rebind it to another principal or mark it approved.
     """
 
-    __slots__ = ("approved", "principal")
+    __slots__ = ()
+
+
+@dataclass(frozen=True, slots=True)
+class Consent:
+    """What a ``Consented`` carries: who acts, and whether a person approved the run."""
+
     principal: Principal
-    approved: bool
-
-    def __init__(self, principal: Principal, *, approved: bool = False, issuer: object) -> None:
-        if issuer is not _ISSUER:
-            raise TypeError("Only the capability runner's consent step makes a Consented.")
-        object.__setattr__(self, "principal", principal)
-        object.__setattr__(self, "approved", approved)
-
-    @override
-    def __setattr__(self, name: str, value: object) -> None:
-        raise AttributeError("A Consented is immutable.")
-
-    @override
-    def __repr__(self) -> str:
-        return f"Consented({self.principal.actor!r}, {self.principal.interface!r}, approved={self.approved})"
+    approved: bool = False
 
     def admits(self, kind: str) -> bool:
-        """Whether this run may write a declaration of ``kind``."""
+        """Whether this run may write a declaration of ``kind``.
+
+        The one place the rule lives: a kind that waits for a person
+        (``default_hold.kind_waits``) is written only by an interactive
+        principal, under standing policy or a person's approval
+        (``approved_by``), or in an approved run. The hold judges a run by the
+        kind its target or command names; this judges the kind actually
+        written, so a capability of any subject, writing a kind its command
+        never named, is refused at the write all the same.
+        """
 
         provider = PROVIDERS.get(kind)
         if provider is None or not kind_waits(provider, self.principal):
@@ -570,6 +559,9 @@ class Consented:
 
         if not self.admits(kind):
             raise PolicyError(NEEDS_APPROVAL)
+
+
+_seal, consent = sealer(Consented, Consent)
 
 
 def _consent(
@@ -597,8 +589,8 @@ def _consent(
             return held
     if decision.overrides_a_hold:
         # Standing policy is the consent; carried where consent travels.
-        return Consented(replace(principal, approved_by=decision.source), issuer=_ISSUER)
-    return Consented(principal, issuer=_ISSUER)
+        return _seal(Consent(replace(principal, approved_by=decision.source)))
+    return _seal(Consent(principal))
 
 
 # What the act of a write that recorded no row of its own is filed under.
@@ -622,7 +614,7 @@ def _run(
     to a handler that declares them.
     """
 
-    principal = consented.principal
+    principal = consent(consented).principal
     arguments = _target_keyword(spec, target)
     # A handler that writes a declaration takes the consent, and is handed no
     # principal beside it.
@@ -681,5 +673,5 @@ def execute_approved(
     shape, so the person's page reports it and the transaction keeps the request.
     """
 
-    consented = Consented(principal, approved=True, issuer=_ISSUER)
+    consented = _seal(Consent(principal, approved=True))
     return _run(spec, command, consented=consented, target=target, expected_updated_at=None, sent=sent)

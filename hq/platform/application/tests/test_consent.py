@@ -6,10 +6,9 @@ and the consent judges the kind actually written, so a command that never
 says it acts on a declaration cannot write a gated one past the hold.
 """
 
-import copy
 import json
-import pickle
 from dataclasses import replace
+from types import SimpleNamespace
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -158,7 +157,7 @@ class AdoptedTests(TestCase):
     def test_what_a_caller_does_to_the_spec_it_is_handed_is_not_written_down(self):
         from hq.platform.application.inventory_testing import store
 
-        from ..adoption import found_live
+        from ..adoption import found_live, live_read
         from ..infrastructure import save_adopted
 
         spec = {"document": policy_document("group:live")}
@@ -166,51 +165,58 @@ class AdoptedTests(TestCase):
         live = found_live(GATED_KIND, spec)
         assert live is not None
 
-        live.spec["document"] = policy_document("group:else")
+        live_read(live).spec["document"] = policy_document("group:else")
         save_adopted(live, key=POLICY_KEY, principal=TOKEN)
 
         self.assertEqual(ManagedResource.objects.get(key=POLICY_KEY).spec["document"], spec["document"])
 
 
 class TokenTests(TestCase):
-    """A consent and a read of the sweep are made only by their modules: no copy,
-    pickle or bare instance gives a caller one it can use."""
+    """A writer takes only the token its module sealed: a stand-in with the
+    same fields, a bare instance, or one another sealer made writes nothing."""
 
-    def made_again(self):
-        return {
-            "copy": copy.copy,
-            "deepcopy": copy.deepcopy,
-            "pickle": lambda token: pickle.loads(pickle.dumps(token)),
-        }
-
-    def test_a_consent_is_not_copied_pickled_or_made_bare(self):
-        from hq.platform.application.tests.consent import consented
-
+    def test_a_declaration_writer_refuses_anything_but_the_runners_consent(self):
         from ..capabilities import Consented
 
-        given = consented(TOKEN)
-        for way, again in self.made_again().items():
-            with self.subTest(way=way), self.assertRaises((TypeError, AttributeError)):
-                again(given)
-        with self.assertRaises(AttributeError):
-            object.__new__(Consented).require(GATED_KIND)
+        def sealed_elsewhere():
+            from ..capabilities import Consent
+            from ..sealing import sealer
 
-    def test_a_read_of_the_sweep_is_not_copied_pickled_or_made_bare(self):
-        from hq.platform.application.inventory_testing import store
+            seal, _unseal = sealer(Consented, Consent)
+            return seal(Consent(TOKEN, approved=True))
 
-        from ..adoption import Live, found_live
+        ManagedResource.objects.create(key=POLICY_KEY, kind=GATED_KIND, spec={"document": policy_document()})
+        stand_ins = {
+            "duck-typed": lambda: SimpleNamespace(principal=TOKEN, approved=True, require=lambda kind: None),
+            "bare": lambda: object.__new__(Consented),
+            "sealed elsewhere": sealed_elsewhere,
+        }
+        for way, stand_in in stand_ins.items():
+            with self.subTest(way=way), self.assertRaises(TypeError):
+                save_managed_resource(amended(), consented=stand_in(), current_key=POLICY_KEY)
+        self.assertEqual(ManagedResource.objects.get(key=POLICY_KEY).spec["document"], policy_document())
+
+    def test_writing_down_what_is_live_refuses_anything_but_a_read_of_the_sweep(self):
+        from ..adoption import Live
         from ..infrastructure import save_adopted
 
-        spec = {"document": policy_document("group:live")}
-        store(GATED_KIND, {"record": "policy", **spec})
-        live = found_live(GATED_KIND, spec)
-        assert live is not None
-        for way, again in self.made_again().items():
-            with self.subTest(way=way), self.assertRaises((TypeError, AttributeError)):
-                again(live)
-        with self.assertRaises(AttributeError):
-            save_adopted(object.__new__(Live), key=POLICY_KEY, principal=TOKEN)
+        spec = {"document": policy_document("group:else")}
 
+        def sealed_elsewhere():
+            from ..adoption import LiveRead
+            from ..sealing import sealer
+
+            seal, _unseal = sealer(Live, LiveRead)
+            return seal(LiveRead(GATED_KIND, spec))
+
+        stand_ins = {
+            "duck-typed": lambda: SimpleNamespace(kind=GATED_KIND, spec=spec),
+            "bare": lambda: object.__new__(Live),
+            "sealed elsewhere": sealed_elsewhere,
+        }
+        for way, stand_in in stand_ins.items():
+            with self.subTest(way=way), self.assertRaises(TypeError):
+                save_adopted(stand_in(), key=POLICY_KEY, principal=TOKEN)
         self.assertFalse(ManagedResource.objects.exists())
 
 

@@ -620,9 +620,10 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
   a container). Adopting a public record is not held, since it makes HQ's copy
   equal what is live. `needs_approval` in `default_hold.py` is the one answer,
   read by the hold, by the consent every declaration write asks
-  (`Consented.admits` in `capabilities.py`), by the provider contract and by
+  (`Consent.admits` in `capabilities.py`), by the provider contract and by
   the policy page's words. A declaration writer takes that consent in place of
-  a principal, and only the capability runner makes one, so no gated
+  a principal, and only the capability runner makes one, a sealed token its
+  writer reads only through the runner's unsealer (`sealing.py`), so no gated
   declaration is written without a person's consent, whichever capability's
   handler writes it. The controller's report is evidence of what exists,
   never consent to act on it: the sweep writes down what it found with no
@@ -790,7 +791,10 @@ nothing leaked.
       database nor its application environment. A controller report's
       writer takes the bridge's admission (`Admitted` in
       `bridge_actions.py`), which only the bridge makes as it runs the
-      report, so no other door has one to hand a writer.
+      report, so no other door has one to hand a writer. It is a sealed
+      token (`sealing.py`): its seal lives only in the closure that runs the
+      reports, and a writer reads it only through `admission`, which refuses
+      a stand-in.
 - [ ] Provider credentials remain outside the web container entirely. The
       controller report guard rejects any status carrying a key named
       `private`, `secret`, `token`, `password`, or `credential`.

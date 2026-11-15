@@ -10,7 +10,7 @@ second copy of AdGuard.
 import hashlib
 import json
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from django.db import transaction
 from django.utils import timezone
@@ -28,6 +28,7 @@ from hq.platform.application.labels import field_label
 from hq.platform.core.audit import CONNECTION_AUDIT_TYPE, record_event
 from hq.platform.core.digests import canonical
 from hq.platform.core.models import AuditLog
+lazy from hq.domains.control_plane.bridge_actions import Admitted, admission
 lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
 from .conditions import DEGRADED, DRIFTED, READY, stamped
@@ -35,9 +36,6 @@ from .contracts import endpoint_has_private_parts
 from .credential_mint import parse_expiry, store_references
 from .ui import counted, ended
 lazy from .credential_sight import standing
-
-if TYPE_CHECKING:
-    from hq.domains.control_plane.bridge_actions import Admitted
 lazy from .facts import inventory_records
 
 
@@ -551,7 +549,7 @@ def record_step_failures(payload: list[dict[str, Any]], *, admitted: Admitted) -
     the right connection.
     """
 
-    controller_id = admitted.controller_id
+    controller_id = admission(admitted).controller_id
     by_ref: dict[str, list[dict[str, str]]] = {}
     for item in payload:
         subject = item["subject"].strip()
@@ -584,7 +582,7 @@ def record_connections(payload: list[dict[str, Any]], *, admitted: Admitted) -> 
     than removing them (``ProviderConnection.unreported_at``).
     """
 
-    controller_id = admitted.controller_id
+    controller_id = admission(admitted).controller_id
     observed_at = timezone.now()
     stored = []
     for connection in payload:

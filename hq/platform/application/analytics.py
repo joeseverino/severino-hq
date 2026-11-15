@@ -8,7 +8,7 @@ Cloudflare's own dashboard.
 """
 
 from datetime import date, timedelta
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from urllib.parse import urlparse
 
 from django.db import transaction
@@ -23,12 +23,10 @@ from hq.domains.analytics.contracts import (
 )
 from hq.domains.analytics.models import AnalyticsCoverage, AnalyticsSite, RumDaily, VitalsDaily
 from hq.domains.control_plane.names import normalized_hostname
+lazy from hq.domains.control_plane.bridge_actions import Admitted, admission
 
 from .cadence import sweep_interval
 from .moments import stamp_day
-
-if TYPE_CHECKING:
-    from hq.domains.control_plane.bridge_actions import Admitted
 
 # The window the analytics page opens on. A day, because the question that
 # brings someone to this page is "what is happening", and a four-week average is
@@ -174,6 +172,9 @@ def record_analytics(
     which the bridge holds every report to before this runs.
     """
 
+    # Sites are keyed by their tag, not by controller, so the admission is
+    # only checked.
+    admission(admitted)
     recorded = {"sites": 0, "coverage": 0, "rows": 0, "vitals": 0}
     for entry in payload["sites"]:
         site_tag = entry["site_tag"].strip()

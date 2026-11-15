@@ -9,7 +9,7 @@ a request itself.
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any, override
+from typing import Any, final
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_adapters.automation import OPERATION_KIND, SOURCE_KIND
@@ -31,6 +31,7 @@ from hq.platform.application.inventory import record_connections, record_step_fa
 from hq.platform.application.outbound_work import run_for_host
 from hq.platform.application.record_errors import CertificateError
 from hq.platform.application.refused_reports import READINGS_ACTION
+from hq.platform.application.sealing import Sealed, sealer
 from hq.platform.application.security import Principal, internal_principal
 from hq.platform.application.sweep import record_sweep
 
@@ -106,57 +107,56 @@ def _material(parameters: Parameters, payload: Any) -> Any:
         raise ValueError(str(exc)) from exc
 
 
-# The key ``Admitted``'s constructor asks for, held by this module alone.
-_ADMITTER = object()
-
-
-class Admitted:
+@final
+class Admitted(Sealed):
     """A controller the bridge admitted, the only thing a controller report's writer takes.
 
     A report's writer (``record_sweep``, ``record_connections``,
     ``record_step_failures``, ``record_analytics``,
     ``record_dashboard_observations``) asks nobody's permission: the bridge
     decided who may report when it admitted the controller's request, and
-    this is that decision, carried to the writer.
+    this is that decision, carried to the writer (``sealing``).
 
-    - One place makes one: ``_recorded``, as the bridge runs a report's
-      action. The constructor refuses a caller without this module's private
-      key, so no other door, an adapter or a capability's handler, has a
-      value to hand a writer, and the call fails.
+    - One place makes one: ``_reports``, as the bridge runs a report's
+      action. Its seal lives only in that closure, so no import mints one,
+      and no other door, an adapter or a capability's handler, has a value to
+      hand a writer.
+    - A writer reads it only through ``admission``, which refuses anything the
+      bridge did not seal, so a stand-in writes nothing.
     - It names the controller the request came from, which the writer stores
       each row against, so a writer is never told a controller by its caller.
-    - HQ itself is who records it (``principal``): nobody acts on the
-      controller's behalf.
-    - It is immutable and not a dataclass, so ``dataclasses.replace`` cannot
-      rebind it to another controller.
     """
 
-    __slots__ = ("controller_id", "principal")
+    __slots__ = ()
+
+
+@dataclass(frozen=True, slots=True)
+class Admission:
+    """What an ``Admitted`` carries: the controller, and HQ itself as who
+    records its report, since nobody acts on the controller's behalf."""
+
     controller_id: str
     principal: Principal
 
-    def __init__(self, controller_id: str, *, admitter: object) -> None:
-        if admitter is not _ADMITTER:
-            raise TypeError("Only the bridge, running a controller's report, makes an Admitted.")
-        object.__setattr__(self, "controller_id", controller_id)
-        object.__setattr__(self, "principal", internal_principal(CONTROLLER))
 
-    @override
-    def __setattr__(self, name: str, value: object) -> None:
-        raise AttributeError("An Admitted is immutable.")
+def _reports(*writers: Callable[..., Any]) -> tuple[tuple[Run, ...], Callable[[Admitted], Admission]]:
+    """Each report's action, handing its writer the bridge's admission, and the unsealer that reads one."""
 
-    @override
-    def __repr__(self) -> str:
-        return f"Admitted({self.controller_id!r})"
+    seal, unseal = sealer(Admitted, Admission)
+
+    def recorded(record: Callable[..., Any]) -> Run:
+        def run(parameters: Parameters, payload: Any) -> Any:
+            admitted = seal(Admission(parameters["controller-id"], internal_principal(CONTROLLER)))
+            return record(payload, admitted=admitted)
+
+        return run
+
+    return tuple(recorded(writer) for writer in writers), unseal
 
 
-def _recorded(record: Callable[..., Any]) -> Run:
-    """A controller's report, handed to its writer with the bridge's admission (``Admitted``)."""
-
-    def run(parameters: Parameters, payload: Any) -> Any:
-        return record(payload, admitted=Admitted(parameters["controller-id"], admitter=_ADMITTER))
-
-    return run
+(_sweep, _connections, _steps, _analytics, _glance), admission = _reports(
+    record_sweep, record_connections, record_step_failures, record_analytics, record_dashboard_observations
+)
 
 
 def _analytics_plan(parameters: Parameters, payload: Any) -> Any:
@@ -212,14 +212,14 @@ ACTIONS: tuple[Action, ...] = (
     Action("export", "The controller read what a record declares", _export),
     Action("schedule", "The controller queued the automatic work", _schedule),
     Action("material", "The controller fetched a certificate's key", _material),
-    Action(READINGS_ACTION, "The controller read what exists", _recorded(record_sweep)),
-    Action("connections", "The controller said what it can reach", _recorded(record_connections)),
-    Action("steps", "The controller said what it could not finish", _recorded(record_step_failures)),
-    Action("analytics", "The controller sent site analytics", _recorded(record_analytics)),
+    Action(READINGS_ACTION, "The controller read what exists", _sweep),
+    Action("connections", "The controller said what it can reach", _connections),
+    Action("steps", "The controller said what it could not finish", _steps),
+    Action("analytics", "The controller sent site analytics", _analytics),
     Action("analytics-plan", "The controller asked which analytics to read", _analytics_plan),
     Action("sweep-due", "The controller asked which readings are due", _sweep_due),
     Action("glance-plan", "The controller asked which panels to refresh", _glance_plan),
-    Action("glance", "The controller refreshed the dashboard", _recorded(record_dashboard_observations)),
+    Action("glance", "The controller refreshed the dashboard", _glance),
     Action("renew", "A worker said it is still on queued work", _renew),
     Action("report", "The controller said how queued work ended", _report),
     Action("registry", "The controller read what each provider declares", _registry),

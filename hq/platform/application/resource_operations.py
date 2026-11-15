@@ -19,7 +19,14 @@ from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND
 from hq.domains.control_plane.providers import PROVIDERS, controller_action_policy
 
-from .adoption import NOTHING_LIVE_CHANGED, found_live, keep_out_declaration, observes_only, require_writable
+from .adoption import (
+    NOTHING_LIVE_CHANGED,
+    found_live,
+    keep_out_declaration,
+    keeping,
+    observes_only,
+    require_writable,
+)
 from .answer_fields import CallMessage
 from .asks import Asked, AskedAnswer, Standing
 from .cadence import ask, swept
@@ -52,7 +59,7 @@ from .resource_records import (
 from .security import CONTROLLER_INTERFACE, Principal
 from .ui import counted, ended
 lazy from . import tailnet
-lazy from .capabilities import Consented, capability_words
+lazy from .capabilities import Consented, capability_words, consent
 lazy from .containers import Running
 lazy from .history import asked_by
 lazy from .integration_specs import requested
@@ -371,14 +378,14 @@ def _queue_operation(
         # (it queues as itself, converging toward a declaration somebody has
         # already agreed to) so this refuses exactly the case it is about: a
         # credential asking for the world to be changed.
-        consented.require(resource.kind)
+        consent(consented).require(resource.kind)
         allowed, explanation = controller_action_policy(resource.kind, action)
         if not allowed:
             raise PolicyError(explanation)
         # The copy an apply by hand may only replace (``controller.over_live``).
         replaced = {REPLACES: replaces} if replaces is not None else {}
         return resource, asked_fields(
-            consented.principal, reason=command.reason, generation=resource.generation, **replaced
+            consent(consented).principal, reason=command.reason, generation=resource.generation, **replaced
         )
 
     operation, queued = enqueue(action, prepare, once=once)
@@ -608,7 +615,7 @@ def accept_observed(
     """
 
     resource = _resource_for_operation(current_key)
-    consented.require(resource.kind)
+    consent(consented).require(resource.kind)
     # Copied from the live record, the same way adopting does, so the next
     # sweep finds the two agreeing.
     found = found_live(resource.kind, resource.spec)
@@ -616,10 +623,10 @@ def accept_observed(
         raise RecordNotFound("No live record was last seen for this one, so there is nothing to accept.")
     # A field no sweep can observe (hidden, on demand) stays as it was declared.
     result = save_adopted(
-        found.keeping(resource.spec),
+        keeping(found, resource.spec),
         key=resource.key,
         enabled=resource.enabled,
-        principal=consented.principal,
+        principal=consent(consented).principal,
         current_key=resource.key,
     )
     return {**result, "reason": command.reason}
@@ -641,7 +648,7 @@ def request_removal(
     resource = _resource_for_operation(current_key)
     # HQ deletes at the provider only through a connection that manages.
     if PROVIDERS[resource.kind].declaration_only or observes_only(resource.kind, resource.spec):
-        return _forget_declaration(resource, command, principal=consented.principal)
+        return _forget_declaration(resource, command, principal=consent(consented).principal)
     allowed, explanation = controller_action_policy(resource.kind, OperationRequest.Action.DELETE)
     if not allowed:
         raise PolicyError(explanation)

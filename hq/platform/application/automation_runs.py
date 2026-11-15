@@ -45,7 +45,7 @@ lazy from .approval_review import ChangePreview
 lazy from .approvals import AUDIT_LABELS, ApprovalSubject, every_call, measured_by, waits_for_a_person
 lazy from .automation_sources import PLAYBOOKS, SHORT_REVISION
 lazy from .cadence import ask, automation_standing
-lazy from .capabilities import Consented, capability_words
+lazy from .capabilities import Consented, capability_words, consent
 lazy from .controller import release_lapsed
 lazy from .doors import NOBODY
 lazy from .entity_links import entity_link, kind_label
@@ -474,7 +474,7 @@ def request_run(manifest: OperationManifest, command: RunCommand, *, consented: 
                 details=_held_by(holder, resource, bound["hosts"]),
             )
         return resource, asked_fields(
-            consented.principal, reason=command.reason, generation=resource.generation, **bound
+            consent(consented).principal, reason=command.reason, generation=resource.generation, **bound
         )
 
     operation, queued = enqueue(OperationRequest.Action.RUN, prepare)

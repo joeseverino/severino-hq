@@ -11,7 +11,7 @@ from collections.abc import Callable, Iterable
 from copy import deepcopy
 from dataclasses import dataclass
 from functools import cached_property
-from typing import Annotated, Any, Literal, NoReturn, TypedDict, final, override
+from typing import Annotated, Any, Literal, NoReturn, TypedDict, final
 
 from django.db import transaction
 from pydantic import Field
@@ -29,6 +29,7 @@ from .command_fields import Describe, Names
 from .conditions import READY, stamped
 from .inventory import live_spec, record_identity, record_token, service_hostnames
 from .record_errors import PolicyError, RecordNotFound, Sentence
+from .sealing import Sealed, sealer
 from .security import Principal
 from .tone import Tone
 lazy from .connection_catalog import EVIDENCE_DETAILS, PROVEN_EVIDENCE, grant_evidence
@@ -259,14 +260,10 @@ def let_in(kind: str, token: str) -> None:
         row.delete()
 
 
-# Only this module holds it, so only this module's reads make a ``Live``.
-_READER = object()
-
-
 @final
-class Live:
+class Live(Sealed):
     """A record's spec as HQ's last read of its provider found it: the only
-    thing ``infrastructure.save_adopted`` writes down.
+    thing ``infrastructure.save_adopted`` writes down (``sealing``).
 
     Writing one down asks no consent, since HQ's copy then equals what is
     live and nothing anybody would agree to has changed. Its security
@@ -275,53 +272,54 @@ class Live:
     - Two reads make one, both in this module and both of the stored sweep:
       ``unmanaged`` (each record no declaration claims, which adopting and
       the sweep's own adoption take) and ``found_live`` (the record a
-      declaration names, which keeping the live version takes). The
-      constructor refuses any caller without this module's private key, so
-      a spec a caller wrote cannot be written down as adopted.
+      declaration names, which keeping the live version takes). Only this
+      module holds its seal, so a spec a caller wrote cannot be written down
+      as adopted.
+    - It is read only through ``live_read``, which refuses anything this
+      module did not seal.
     - The one thing added to a read is ``keeping``: the fields its provider
       declares no sweep can observe, taken from the declaration it replaces.
-    - It is immutable and not a dataclass, so ``dataclasses.replace`` cannot
-      swap its spec, and ``spec`` is a copy, so changing what a caller is
-      handed changes nothing it writes down.
     """
 
-    __slots__ = ("_found", "kind")
-    kind: str
-    _found: dict[str, Any]
+    __slots__ = ()
 
-    def __init__(self, kind: str, spec: dict[str, Any], *, reader: object) -> None:
-        if reader is not _READER:
-            raise TypeError("Only a read of the last sweep makes a Live.")
-        object.__setattr__(self, "kind", kind)
-        object.__setattr__(self, "_found", deepcopy(spec))
+
+@dataclass(frozen=True, slots=True)
+class LiveRead:
+    """What a ``Live`` carries. ``spec`` is a copy, so changing what a caller
+    is handed changes nothing it writes down."""
+
+    kind: str
+    found: dict[str, Any]
 
     @property
     def spec(self) -> dict[str, Any]:
         """What the read found."""
 
-        return deepcopy(self._found)
+        return deepcopy(self.found)
 
-    @override
-    def __setattr__(self, name: str, value: object) -> None:
-        raise AttributeError("A Live is immutable.")
 
-    @override
-    def __repr__(self) -> str:
-        return f"Live({self.kind!r})"
+_seal, live_read = sealer(Live, LiveRead)
 
-    def keeping(self, declared: dict[str, Any]) -> Live:
-        """This read, with each field no sweep can observe as ``declared`` has it."""
 
-        unobservable = PROVIDERS[self.kind].unobservable_fields
-        kept = {field: declared[field] for field in unobservable if field in declared}
-        return Live(self.kind, {**self.spec, **kept}, reader=_READER)
+def _live(kind: str, spec: dict[str, Any]) -> Live:
+    return _seal(LiveRead(kind, deepcopy(spec)))
+
+
+def keeping(live: Live, declared: dict[str, Any]) -> Live:
+    """``live``, with each field no sweep can observe as ``declared`` has it."""
+
+    read = live_read(live)
+    unobservable = PROVIDERS[read.kind].unobservable_fields
+    kept = {field: declared[field] for field in unobservable if field in declared}
+    return _live(read.kind, {**read.spec, **kept})
 
 
 def found_live(kind: str, declared: dict[str, Any]) -> Live | None:
     """What the last sweep found for the record ``declared`` describes, or None."""
 
     found = live_spec(kind, declared)
-    return None if found is None else Live(kind, found, reader=_READER)
+    return None if found is None else _live(kind, found)
 
 
 @dataclass(frozen=True, slots=True)
@@ -351,7 +349,7 @@ class Unmanaged:
 
     @property
     def spec(self) -> dict[str, Any]:
-        return self.live.spec
+        return live_read(self.live).spec
 
     @property
     def label(self) -> str:
@@ -426,7 +424,7 @@ def unmanaged() -> tuple[Unmanaged, ...]:
                     kind=snapshot.kind,
                     identity=identity,
                     hostnames=service_hostnames(snapshot.kind, spec),
-                    live=Live(snapshot.kind, spec, reader=_READER),
+                    live=_live(snapshot.kind, spec),
                     observed_at=snapshot.observed_at,
                     adoptable=not provider.adoption_gap and (provider.adopts is None or provider.adopts(record)),
                     connection_ref=connection_ref,
