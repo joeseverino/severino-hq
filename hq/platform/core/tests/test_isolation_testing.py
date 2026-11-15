@@ -8,8 +8,9 @@ leaves nothing for the next class to set up on.
 """
 
 import io
+import logging
 import unittest
-from unittest import mock
+import unittest.mock
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -32,7 +33,14 @@ def _run(*tests: unittest.TestCase, **options: bool) -> unittest.TestResult:
 
     runner = SeverinoTestRunner(verbosity=0, **options)
     suite = runner.test_suite(tests)
-    return unittest.TextTestRunner(stream=io.StringIO(), resultclass=runner.get_resultclass(), verbosity=0).run(suite)
+    # Django's debug_sql result sets its logger to DEBUG for good; the
+    # process this runs in keeps its own level.
+    queries = logging.getLogger("django.db.backends")
+    level = queries.level
+    try:
+        return unittest.TextTestRunner(stream=io.StringIO(), resultclass=runner.get_resultclass(), verbosity=0).run(suite)
+    finally:
+        queries.setLevel(level)
 
 
 def _procedures() -> set[str]:
@@ -118,7 +126,7 @@ class ClassSetupStartsFreshTests(TestCase):
 
         class Narrows(unittest.TestCase):
             def test_reads_its_commands_without_the_records(self):
-                with mock.patch("hq.platform.application.integrations.record_capability_specs", return_value=()):
+                with unittest.mock.patch("hq.platform.application.integrations.record_capability_specs", return_value=()):
                     capability_registry()
 
         class Reads(unittest.TestCase):
