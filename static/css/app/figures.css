@@ -31,8 +31,9 @@
     & > :not(dialog) { flex-grow: 0; }
   }
 }
-/* A status pill is a label: wrapped it grows its row, so it stays whole. */
-.data-table .pill { white-space: nowrap; }
+/* A pill in a status column stays whole (cards.css), its column as narrow as
+   its widest; one among a cell's other words wraps as they do. */
+.data-table > tbody > tr > :not([data-kind="status"]) .pill { white-space: normal; }
 /* A row's name set in one line with its controls (`name-line`): the controls and the name are a grid's columns, never a flex row, since WebKit keeps a flex row's min-content from before a row closes, so its column reopened narrower than the name it holds out for. */
 .name-line { display: grid; grid-auto-flow: column; justify-content: start; align-items: center; gap: var(--space-4); }
 /* Links one to a line in a cell are a target apart (`--target-min`): each line that tall, and the link's box with it. */

@@ -140,8 +140,7 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 .switch p { margin: var(--space-3) 0 0; }
 /* A row's controls (`{% row_actions %}`, or a cell of a column of kind `control`) stand side by side, so their column is as wide as they are and the words beside them wrap first. They end at the row's end, in every row whatever its set, and stand in the middle of the row however many lines its words take. A control stands taller than a line of words by twice `--control-rise`, which its cell takes out of its padding, so a row holding one is as tall as a row of words. */
 .data-table > tbody > tr > [data-kind="control"] { --control-rise: max(0px, (var(--control-compact) - 1lh) / 2); white-space: nowrap; text-align: end; vertical-align: middle; }
-.data-table > tbody > tr > [data-kind="control"] > :is(.btn, .icon-link, form) { vertical-align: top; }
-.data-table > tbody > tr > [data-kind="control"] > * + * { margin-inline-start: var(--space-4); }
+.data-table > tbody > tr > [data-kind="control"] > :is(.btn, .icon-link, form) { vertical-align: top; }.data-table > tbody > tr > [data-kind="control"] > * + * { margin-inline-start: var(--space-4); }
 .data-table > tbody > tr > [data-kind="control"]:has(> :is(.btn, .icon-link, form, [data-ask])) { padding-block: calc(var(--row-pad) - var(--control-rise)); }
 .data-table > * > tr > .select-column { inline-size: 1px; text-align: center; padding-inline: var(--space-4); }
 /* What a control cell says beside its controls wraps as words do, on a line of its own. */

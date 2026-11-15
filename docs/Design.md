@@ -374,12 +374,10 @@ A long value in a cell (a line past `table_cells.LONG`) wraps and is held to
 its third line by a clamp with its mark (`.cell-clamp`, cuts.css), its whole
 value in its cell's title (written by the server). Only words are held: each
 part of words in it (`data-cell`) is clamped on its own, so a pill or a
-toggle beside them stays whole. An identifier, a name or a pill breaks
-anywhere its column lacks room; prose breaks only inside a word wider than
-its column. A
-status, a figure, a date or a control is never cut: its column is as wide
-as it is. `room=` on a region is accepted, since an extension passes it, and
-asks for nothing.
+toggle beside them stays whole. An identifier, a row's own name or a pill
+breaks anywhere its column lacks room; prose breaks only inside a word wider
+than its column. A status, a figure, a date or a control is never cut: its
+column is as wide as it is.
 
 An identifier the row is read by, in a row of many columns (a container's
 image), is `code.cell-whole`. A value told in several parts marks each

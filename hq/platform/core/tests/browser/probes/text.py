@@ -587,10 +587,9 @@ IDENTIFIER = "code, kbd, samp, time, .token, [data-entity]"
 
 # A row's words fill each line the row gives them: a line of a row's title or
 # of what it says that ends with room for the next word was broken short. The
-# room is the row's, measured to the row's next control on that line (a
-# column of buttons sized by another row leaves a gap the words' own box never
-# sees), else to the words' own box's edge (WebKit's `pretty`, a balanced rag,
-# breaks inside it). A run with no space in it (a name, a path) is one word,
+# room is the words' own box, to its edge: a table's column is every row's,
+# so the room a later column leaves beside one row's words is not theirs
+# (WebKit's `pretty`, a balanced rag, breaks inside the box). A run with no space in it (a name, a path) is one word,
 # however its pieces are drawn, as is a run joined by a no-break space (a
 # count and its noun), and its width holds the edges of the inline
 # boxes it opens or closes (a `code`'s padding and border), which take the
@@ -602,7 +601,6 @@ LINES_SHORT_OF_THEIR_ROOM = (
     + """
   const found = [];
   const range = document.createRange();
-  const padding = (el, side) => parseFloat(getComputedStyle(el)[`padding${side}`]);
   for (const block of document.querySelectorAll('.data-table > tbody > tr > * :is(p, dd, .row-line > *)')) {
     if (!block.checkVisibility() || block.closest(unseen)) continue;
     const style = getComputedStyle(block);
@@ -610,23 +608,7 @@ LINES_SHORT_OF_THEIR_ROOM = (
     // open) keep the boxes they last had, which are no line of the page.
     if (style.contentVisibility === 'hidden') continue;
     if (style.whiteSpace.startsWith('nowrap') || style.textWrapMode === 'nowrap') continue;
-    const own = block.getBoundingClientRect().right - parseFloat(style.paddingRight);
-    const cell = block.closest('td, th');
-    const left = block.getBoundingClientRect().left;
-    // What the row draws after the words' cell: each later cell's controls and words.
-    const after = [];
-    for (let other = cell.nextElementSibling; other; other = other.nextElementSibling) {
-      if (!other.checkVisibility()) continue;
-      const gap = padding(other, 'Left') + padding(cell, 'Right');
-      for (const part of other.querySelectorAll(':scope > *')) {
-        if (!part.checkVisibility()) continue;
-        for (const rect of part.getClientRects()) if (rect.width > 0 && rect.left > left) after.push([rect, gap]);
-      }
-    }
-    const edgeOf = (line) => {
-      const beside = after.filter(([rect]) => rect.top < line.bottom && rect.bottom > line.top);
-      return beside.length ? Math.min(...beside.map(([rect, gap]) => rect.left - gap)) : own;
-    };
+    const edge = block.getBoundingClientRect().right - parseFloat(style.paddingRight);
     // The edges of the inline boxes a piece of a word opens and closes (a
     // `code`'s padding and border): those whose words start or end with it.
     const bare = document.createRange();
@@ -652,9 +634,21 @@ LINES_SHORT_OF_THEIR_ROOM = (
       }
       return [before, after, closes];
     };
-    // An inline block (a chip an open row sets whole) moves to the next line
-    // as one box, so it is one word, as wide as its box.
-    const atomic = (el) => /^inline-(block|flex|grid|table)$/.test(getComputedStyle(el).display);
+    // An inline block (a chip an open row sets whole), or an item of a
+    // wrapping flex line (a dot list's part), moves to the next line as one
+    // box, so it is one word, as wide as its box. Its line is the nearest
+    // box around it, past any drawn as its contents.
+    const boxAround = (el) => {
+      let up = el.parentElement;
+      while (up && up !== block && getComputedStyle(up).display === 'contents') up = up.parentElement;
+      return up;
+    };
+    const atomic = (el) => {
+      const css = getComputedStyle(el);
+      if (/^inline-(block|flex|grid|table)$/.test(css.display)) return true;
+      const line = el !== block && css.display !== 'contents' ? boxAround(el) : null;
+      return !!line && /flex$/.test(getComputedStyle(line).display) && getComputedStyle(line).flexWrap === 'wrap';
+    };
     // Each word's pieces, a word running on across the pieces it is drawn in.
     const words = [];
     let open = false;
@@ -708,7 +702,6 @@ LINES_SHORT_OF_THEIR_ROOM = (
       const next = words[at + 1];
       if (next[0].rect.top < last.bottom - 1) continue;
       const width = next.reduce((sum, piece) => sum + piece.before + piece.rect.width + piece.after, 0) + (next.at(-1).closes ?? 0);
-      const edge = edgeOf(last);
       const right = last.right + lastPiece.after;
       if (right + space + width < edge - 1) {
         found.push(`${describe(block)} breaks before "${block.textContent.trim().slice(0, 24)}…" ${Math.round(edge - right)}px short of its row's room`);
