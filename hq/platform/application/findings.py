@@ -302,7 +302,7 @@ def _permitted(capability: str, principal: Principal, graph: IntegrationGraph) -
 
     spec = graph.capabilities.get(capability)
     if spec is not None:
-        return principal.permits(*spec.required_capabilities), spec.effect
+        return spec.permitted_to(principal), spec.effect
     # A rule naming a capability the registry does not hold is a contract error
     # the suite catches; at runtime the honest answer is to offer nothing.
     return False, ""

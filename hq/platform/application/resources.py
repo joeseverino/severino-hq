@@ -88,7 +88,7 @@ from .resource_refusals import (
     unlisted,
 )
 from .search_contracts import SearchDefinition, search_lines
-from .security import Capability, Principal, require_all
+from .security import Capability, Principal
 lazy from .domains import queue_sources
 lazy from .plugins import ATTENTION_ORDER
 
@@ -754,14 +754,10 @@ def _resource(name: str) -> ResourceSpec:
         raise unknown(name, resource_registry()) from exc
 
 
-def _authorize(spec: ResourceSpec, principal: Principal) -> None:
-    require_all(principal, spec.required_capabilities)
-
-
 def readable(spec: ResourceSpec, principal: Principal) -> bool:
-    """Whether ``principal`` may read ``spec``: what ``_authorize`` refuses by, as a boolean."""
+    """Whether ``principal`` may read ``spec`` (``Requires.permitted_to``), for an adapter, which asks no permission itself."""
 
-    return principal.permits(*spec.required_capabilities)
+    return spec.permitted_to(principal)
 
 
 def _caller(spec: ResourceSpec, principal: Principal) -> dict[str, Principal]:
@@ -780,7 +776,7 @@ def list_resource(
     ``["*"]`` the whole item, and none its kind's ``list_fields``."""
 
     spec = _resource(name)
-    _authorize(spec, principal)
+    spec.authorize(principal)
     if not spec.list_handler or not spec.list_query_type:
         raise unlisted(spec)
     try:
@@ -950,7 +946,7 @@ def get_resource(
     """
 
     spec = _resource(name)
-    _authorize(spec, principal)
+    spec.authorize(principal)
     if not spec.detail_handler or not spec.identifier:
         raise undetailed(spec)
     try:

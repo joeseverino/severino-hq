@@ -48,7 +48,6 @@ from .security import (
     Principal,
     agent_subject,
     could_ever_hold,
-    require_all,
 )
 from .ui import ended
 lazy from . import agent_registry, automation_runs
@@ -91,12 +90,6 @@ def capability_registry() -> dict[str, CapabilitySpec]:
     """Every command, at the catalog adopted now; one command is ``capability_spec``."""
 
     return dict(integration_graph().capabilities)
-
-
-def authorize_capability(spec: CapabilitySpec, principal: Principal) -> None:
-    """Apply the registry's one authorization rule for every adapter."""
-
-    require_all(principal, spec.required_capabilities)
 
 
 class CapabilitySummary(TypedDict):
@@ -206,7 +199,7 @@ def describe_capabilities(*, principal: Principal, name: str = "", resource: str
             "target_initial_fields": list(spec.target_initial_fields),
             "resource": spec.subject_resource,
             "input_schema": capability_schema(spec),
-            "permitted": principal.permits(*spec.required_capabilities),
+            "permitted": spec.permitted_to(principal),
         }
         for spec in _narrowed(name.strip(), resource.strip())
         if could_ever_hold(principal, spec.required_capabilities)
@@ -346,7 +339,7 @@ def _authorized_run(
     # Authority first, then the target, the key and the payload. A caller who
     # may not run this at all is told exactly that, and learns nothing about
     # what target it would have taken.
-    authorize_capability(spec, principal)
+    spec.authorize(principal)
     refused = _target_refusal(spec, target, expected_updated_at)
     if refused is not None:
         return Ran(refused)

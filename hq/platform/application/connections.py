@@ -502,7 +502,7 @@ def _connection(spec: ConnectionSpec, principal: Principal | None) -> Connection
         "abilities": [_ability(ability) for ability in spec.abilities],
     }
     if principal is not None:
-        described["permitted"] = principal.permits(*spec.required_capabilities)
+        described["permitted"] = spec.permitted_to(principal)
     return described
 
 

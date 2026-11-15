@@ -9,7 +9,7 @@ import json
 from django.test import TestCase, override_settings
 
 from hq.platform.application import tokens
-from hq.platform.application.capabilities import authorize_capability, capability_registry
+from hq.platform.application.capabilities import capability_registry
 from hq.platform.application.security import AuthorizationError, Capability
 from hq.platform.mcp import services
 from hq.platform.mcp.identity import set_principal
@@ -40,7 +40,7 @@ class UnkeyedWriteTests(TestCase):
             claims = {"client_id": "example-agent", "sub": "example-agent", "scope": scope}
             principal = tokens.token_principal(claims, interface)
             try:
-                authorize_capability(spec, principal)
+                spec.authorize(principal)
             except AuthorizationError:
                 # Refused for authority first, which no key changes.
                 continue

@@ -269,13 +269,18 @@ class Principal:
         """
 
         try:
-            for capability in capabilities:
-                self.require(capability)
+            self.require(*capabilities)
         except AuthorizationError:
             return False
         return True
 
-    def require(self, capability: Capability | str) -> None:
+    def require(self, *capabilities: Capability | str) -> None:
+        """Raise on the first of ``capabilities`` this principal does not hold."""
+
+        for capability in capabilities:
+            self._require_one(capability)
+
+    def _require_one(self, capability: Capability | str) -> None:
         name = capability.value if isinstance(capability, Capability) else capability
         # Asked first, since no grant or new sign-in gives a machine a person.
         if name in NEEDS_A_PERSON and not has_a_person(self):
@@ -326,7 +331,12 @@ def could_hold(interface: str, capabilities: Iterable[Capability | str]) -> bool
 
 
 class Requires:
-    """What a spec that names the capabilities it needs says them as: a tuple, however it declared them."""
+    """A spec that names the capabilities it needs, and the one way to ask whether a principal may use it.
+
+    Every registry's spec (a capability, a resource, a connection) inherits
+    this, so ``authorize`` and ``permitted_to`` are the only questions asked of
+    one: a refusal and a ``permitted`` flag cannot disagree.
+    """
 
     __slots__ = ()
     required_capability: Capability | str | tuple[Capability | str, ...]
@@ -337,15 +347,15 @@ class Requires:
             return self.required_capability
         return (self.required_capability,)
 
+    def authorize(self, principal: Principal) -> None:
+        """Raise unless ``principal`` holds every capability this spec requires."""
 
-def require_all(principal: Principal, capabilities: Iterable[Capability | str]) -> None:
-    """``Principal.require`` for a set: raise on the first capability it lacks.
+        principal.require(*self.required_capabilities)
 
-    The one authorization rule every registry applies to what a spec requires.
-    """
+    def permitted_to(self, principal: Principal) -> bool:
+        """Whether ``principal`` may use this spec: ``authorize`` as a boolean."""
 
-    for capability in capabilities:
-        principal.require(capability)
+        return principal.permits(*self.required_capabilities)
 
 
 def operator_capabilities() -> frozenset[Capability | str]:

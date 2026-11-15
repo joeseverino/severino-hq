@@ -39,7 +39,6 @@ from .security import (
     Principal,
     internal_principal,
     is_interactive,
-    require_all,
 )
 from .workflow_contracts import ActionLink
 lazy from . import agent_access, capabilities, resources, roles
@@ -680,7 +679,7 @@ def require_decidable(principal: Principal, held: ApprovalRequest, decision: str
         return
     if refused.error is not None:
         raise refused.error
-    require_all(principal, refused.needs)
+    principal.require(*refused.needs)
 
 
 def offers(principal: Principal, rows: Iterable[ApprovalRequest]) -> dict[Any, Offer]:

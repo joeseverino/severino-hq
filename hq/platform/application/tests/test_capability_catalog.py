@@ -110,7 +110,7 @@ class CatalogTests(SimpleTestCase):
             listed = _listed(principal)
             for spec in capability_registry().values():
                 with self.subTest(interface=principal.interface, person=principal.person_key, capability=spec.name):
-                    self.assertEqual(spec.name in listed, principal.permits(*spec.required_capabilities))
+                    self.assertEqual(spec.name in listed, spec.permitted_to(principal))
 
 
 class OnePredicateTests(SimpleTestCase):

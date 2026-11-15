@@ -237,6 +237,16 @@ def as_someone(principal: capabilities.Principal) -> None:
     capabilities.execute_capability("example.do", ["x"], principal=principal)  # type: ignore[arg-type]
 
 
+def may_use(spec: capabilities.CapabilitySpec, principal: capabilities.Principal) -> None:
+    # Whether a principal may use a spec is asked of the spec, one way.
+    assert_type(spec.permitted_to(principal), bool)
+    assert_type(spec.authorize(principal), None)
+    assert_type(principal.require(capabilities.Capability.READ, "example.write"), None)
+
+    spec.authorize()  # type: ignore[call-arg]
+    spec.permitted_to("example.write")  # type: ignore[arg-type]
+
+
 def from_a_form(request: HttpRequest) -> None:
     # A view's write runs as the signed-in person, under the key their form posted.
     assert_type(capabilities.execute_posted(request, "example.do", {"name": "x"}), dict[str, Any])

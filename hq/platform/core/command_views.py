@@ -14,10 +14,7 @@ from django.urls import reverse
 from django.views import View
 
 from hq.platform.application.action_links import command_url
-from hq.platform.application.capabilities import (
-    authorize_capability,
-    capability_spec,
-)
+from hq.platform.application.capabilities import capability_spec
 from hq.platform.application.command_forms import command_form_class, own_fields
 from hq.platform.application.command_targets import (
     capability_target_initial,
@@ -140,7 +137,7 @@ class CommandView(View):
             raise Http404("Unknown command.")
         self.principal = web_principal(request.user)
         try:
-            authorize_capability(self.spec, self.principal)
+            self.spec.authorize(self.principal)
         except Exception as exc:
             raise PermissionDenied(refusal_of(exc, name=self.spec.name, principal=self.principal).message) from exc
         self.target_options = capability_target_options(

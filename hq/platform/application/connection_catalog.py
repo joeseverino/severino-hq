@@ -402,7 +402,7 @@ def connection_catalog(*, principal: Principal) -> tuple[ConnectionGroup, ...]:
 def _permitted(principal: Principal) -> tuple[ConnectionSpec, ...]:
     """The families ``principal`` may read, whose providers alone may run for it."""
 
-    return tuple(spec for spec in held_graph().connections.values() if principal.permits(*spec.required_capabilities))
+    return tuple(spec for spec in held_graph().connections.values() if spec.permitted_to(principal))
 
 
 def _connection_instances(spec: ConnectionSpec) -> tuple[ConnectionInstance, ...]:

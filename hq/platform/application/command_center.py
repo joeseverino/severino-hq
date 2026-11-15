@@ -401,9 +401,7 @@ def command_center(query: str, *, principal: Principal, include_live_connections
 def _command_center(query: str, *, principal: Principal, include_live_connections: bool) -> dict:
 
     graph = integration_graph()
-    permitted_connections = tuple(
-        spec for spec in graph.connections.values() if principal.permits(*spec.required_capabilities)
-    )
+    permitted_connections = tuple(spec for spec in graph.connections.values() if spec.permitted_to(principal))
     # Registry discovery is a zero-query application primitive used by CLI,
     # MCP and contract checks. The web palette explicitly opts into cached live
     # instances because operator-entered names and current reachability are the
@@ -445,7 +443,7 @@ def _resource_items(registered: tuple[ResourceSpec, ...], principal: Principal) 
             badges=(),
         )
         for spec in registered
-        if principal.permits(*spec.required_capabilities)
+        if spec.permitted_to(principal)
     )
 
 
@@ -462,7 +460,7 @@ def _command_items(
     return tuple(
         item
         for spec in registered
-        if principal.permits(*spec.required_capabilities)
+        if spec.permitted_to(principal)
         for item in (
             _command_item(
                 spec,

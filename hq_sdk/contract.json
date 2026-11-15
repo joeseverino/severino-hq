@@ -436,7 +436,7 @@
             "kind": "method",
             "parameters": [
               "self",
-              "capability"
+              "*capabilities"
             ]
           }
         }
