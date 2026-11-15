@@ -149,6 +149,10 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 .data-table > * > tr > .select-column { inline-size: 1px; text-align: center; padding-inline: var(--space-4); }
 /* What a control cell says beside its controls wraps as words do, on a line of its own: a note, or the sentence linked to the setup a change needs (`_write_gap.html`), which is a link and no control's label. */
 .data-table > tbody > tr > [data-kind="control"] > :is(.muted, p, [data-write-gap]) { display: block; margin: 0; white-space: normal; }
+/* In a wide table the write gap's sentence keeps a measure of `--row-words`, so a column as narrow as its controls never sets it a word to a line. */
+@container table-region (width >= 64rem) {
+  .data-table > tbody > tr > [data-kind="control"] > [data-write-gap] { min-inline-size: var(--row-words); }
+}
 /* A row with nothing to press gives its words the room the cell's padding would keep. */
 .data-table td.row-actions:not(:has(> *)) { padding-inline: 0; }
 /* What an ask says stands under its controls, out of their flow, as wide as the cell, so a press moves nothing (partials/_ask.html). */

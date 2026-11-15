@@ -227,6 +227,8 @@ kind `control`. Each is a `PageAction` drawn as a compact control with its
 middle on the first line's. A page never draws a button in a cell (*Gate:* the
 `hand-drawn-row-actions` rule). A row's controls stand side by side on one
 line, which their column asks for, and the words beside them wrap first.
+In a wide table (64rem of region) the sentence a write gap links in a
+control cell keeps a measure of `--row-words`.
 
 **A table stacks in a narrow box.** Below 36rem of its region (the
 `table-region` container query in tables.css) each row is a wrapping line of
