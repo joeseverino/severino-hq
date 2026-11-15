@@ -153,11 +153,11 @@
 main[aria-busy="true"] :is([data-table-results], [data-search-results]) { opacity: .55; transition: opacity 100ms ease; }
 
 .scope-chip { display: inline-flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-5); border: 1px solid var(--line); border-radius: 999px; background: var(--surface-2); color: var(--ink-2); font-size: var(--text-xs); text-decoration: none; }
-a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-decoration: none; }
-/* The current choice in a group of chip links: a heavier border, drawn inside
-   so the chip keeps its size. A switch's chip is inside its link, which holds
-   the count a chip never does. */
-:is(.scope-chip[aria-current], [aria-current] > .scope-chip) { color: var(--ink); border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-decoration: none; }
+/* The current choice in a switch: a heavier border, drawn inside so the chip
+   keeps its size. The chip is inside its link, which holds the count a chip
+   never does. */
+[aria-current] > .scope-chip { color: var(--ink); border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 /* A switch (`{% switch %}`): links to the same view in a row that wraps, the
    current one marked by its chip. */
 .switch { margin: 0 0 var(--stack-gap); }
