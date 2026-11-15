@@ -2,7 +2,7 @@ package host
 
 import (
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"os"
@@ -101,14 +101,16 @@ func (d *Deployer) extensionsOf(ctx context.Context, stage, image, from string, 
 }
 
 // lockedIDs is the plugin ids in Cordon's merged lock: the set the runtime
-// refuses to start without, so the set the release runs.
+// refuses to start without, so the set the release runs. Its keys are matched
+// as spelled and a repeated one is refused, so no second spelling of
+// "plugins" names a set the runtime's reading of the same bytes does not.
 func lockedIDs(data []byte) ([]string, error) {
 	var lock struct {
 		Plugins *[]struct {
 			Plugin string `json:"plugin"`
 		} `json:"plugins"`
 	}
-	if err := json.Unmarshal(data, &lock); err != nil || lock.Plugins == nil {
+	if err := jsonv2.Unmarshal(data, &lock); err != nil || lock.Plugins == nil {
 		return nil, errors.New("the extension lock is not a lock")
 	}
 	ids := make([]string, 0, len(*lock.Plugins))
@@ -121,7 +123,7 @@ func lockedIDs(data []byte) ([]string, error) {
 // retiredIDs is the composition's list of extensions it removed on purpose.
 func retiredIDs(data []byte) ([]string, error) {
 	var ids []string
-	if err := json.Unmarshal(data, &ids); err != nil || ids == nil {
+	if err := jsonv2.Unmarshal(data, &ids); err != nil || ids == nil {
 		return nil, errors.New("the retired extensions are not a list")
 	}
 	return checkedIDs(ids)

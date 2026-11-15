@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -160,17 +161,89 @@ func TestTheRunningSetIsReadBeforeThePruneAndPulledWhenGone(t *testing.T) {
 }
 
 func TestTheLockAndTheDeclarationAreReadStrictly(t *testing.T) {
-	for _, bad := range []string{`{}`, `{"plugins": null}`, `{"plugins": [{"plugin": ""}]}`, `not json`} {
+	for _, bad := range []string{`{}`, `{"plugins": null}`, `{"plugins": [{"plugin": ""}]}`, `not json`,
+		`{"PLUGINS": [{"plugin": "example.alpha"}]}`,
+		`{"plugins": [], "plugins": [{"plugin": "example.alpha"}]}`,
+	} {
 		if _, err := lockedIDs([]byte(bad)); err == nil {
 			t.Errorf("read %s as a lock", bad)
 		}
 	}
-	if ids, err := lockedIDs([]byte(lockOf("example.beta", "example.alpha"))); err != nil || strings.Join(ids, ",") != "example.alpha,example.beta" {
-		t.Errorf("read %v %v", ids, err)
+	// The runtime reads the keys as spelled, so another spelling names nothing.
+	for _, lock := range []string{lockOf("example.beta", "example.alpha"),
+		`{"plugins": [{"plugin": "example.alpha"}, {"plugin": "example.beta"}], "Plugins": [{"plugin": "example.gamma"}]}`,
+		`{"plugins": [{"plugin": "example.alpha", "Plugin": "example.gamma"}, {"plugin": "example.beta"}]}`,
+	} {
+		if ids, err := lockedIDs([]byte(lock)); err != nil || strings.Join(ids, ",") != "example.alpha,example.beta" {
+			t.Errorf("read %s as %v %v", lock, ids, err)
+		}
 	}
 	for _, bad := range []string{`null`, `{}`, `[""]`, `[1]`} {
 		if _, err := retiredIDs([]byte(bad)); err == nil {
 			t.Errorf("read %s as a declaration", bad)
 		}
+	}
+}
+
+// The lock and the retired list are copied out of the image a deploy is
+// given, written by the composition that built it. What reads holds the ids
+// the runtime reads from the same bytes (the keys as spelled), each once and
+// sorted; what is refused is one line.
+func FuzzLockedIDs(f *testing.F) {
+	f.Add([]byte(lockOf("example.beta", "example.alpha")))
+	f.Add([]byte(lockOf()))
+	f.Add([]byte(`{"plugins": [{"plugin": "example.alpha"}, {"plugin": "example.alpha"}]}`))
+	f.Add([]byte(`{"plugins": [{"plugin": "example.alpha"}], "Plugins": [{"plugin": "example.beta"}]}`))
+	f.Add([]byte(`{"plugins": [{"plugin": "example.alpha"}], "plugins": [{"plugin": "example.beta"}]}`))
+	f.Add([]byte(`{"plugins": [null, {"plugin": 1}]}`))
+	f.Fuzz(func(t *testing.T, data []byte) {
+		ids, err := lockedIDs(data)
+		if err != nil {
+			if strings.ContainsAny(err.Error(), "\r\n") {
+				t.Fatalf("the refusal is more than one line: %q", err)
+			}
+			return
+		}
+		var lock map[string]any
+		if json.Unmarshal(data, &lock) != nil {
+			t.Fatalf("read %v from what is not a JSON object", ids)
+		}
+		entries, _ := lock["plugins"].([]any)
+		var want []string
+		for _, entry := range entries {
+			plugin, _ := entry.(map[string]any)["plugin"].(string)
+			want = append(want, plugin)
+		}
+		heldToTheRuntime(t, ids, want)
+	})
+}
+
+func FuzzRetiredIDs(f *testing.F) {
+	f.Add([]byte(`["example.beta", "example.alpha"]`))
+	f.Add([]byte(`[]`))
+	f.Add([]byte(`["example.alpha", "example.alpha"]`))
+	f.Add([]byte(`["example.alpha"] []`))
+	f.Fuzz(func(t *testing.T, data []byte) {
+		ids, err := retiredIDs(data)
+		if err != nil {
+			if strings.ContainsAny(err.Error(), "\r\n") {
+				t.Fatalf("the refusal is more than one line: %q", err)
+			}
+			return
+		}
+		var want []string
+		if json.Unmarshal(data, &want) != nil {
+			t.Fatalf("read %v from what is not a list of strings", ids)
+		}
+		heldToTheRuntime(t, ids, want)
+	})
+}
+
+// heldToTheRuntime fails unless ids are want, each once, sorted, none empty.
+func heldToTheRuntime(t *testing.T, ids, want []string) {
+	t.Helper()
+	sorted := slices.Compact(slices.Sorted(slices.Values(want)))
+	if !slices.Equal(ids, sorted) || slices.Contains(ids, "") {
+		t.Fatalf("read %q, where the runtime reads %q", ids, want)
 	}
 }
