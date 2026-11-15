@@ -32,6 +32,7 @@ from .command_fields import Choices, Describe
 from .conditions import DEGRADED, DRIFTED, READY, holding
 from .default_hold import consent_gap
 from .integration_specs import Kept, keeps
+from .labels import lower_first
 from .projection import keyset_page, read_once
 from .record_errors import PolicyError
 from .record_saves import Held, as_sent, found, held, written
@@ -486,13 +487,14 @@ def _call_off_waiting(resource: ManagedResource) -> None:
     """
 
     now = timezone.now()
+    said = f"The {lower_first(registry_label(resource.kind))} was switched off in HQ before this ran."
     waiting = resource.operations.select_for_update().filter(state=OperationRequest.State.QUEUED)
     for operation in waiting.exclude(action=OperationRequest.Action.DELETE):
         operation.state = OperationRequest.State.CANCELLED
         operation.completed_at = now
         operation.result = {
             "ok": False,
-            "message": "The record was switched off in HQ before this ran.",
+            "message": said,
             "reason": "SwitchedOff",
         }
         operation.save(update_fields=("state", "completed_at", "result", "updated_at"))

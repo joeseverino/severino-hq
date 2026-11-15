@@ -12,11 +12,13 @@ from django.test import TestCase
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
+from hq.domains.control_plane.providers import registry_label
 from hq.platform.core.models import AuditLog
 
 from ..adoption_testing import managing_everything
 from ..capabilities import execute_capability
 from ..controller import claim_next_operation, peek_next_operation
+from ..labels import lower_first
 from ..resource_operations import OperationCommand, request_reconcile, request_removal
 from ..security import cli_principal
 from ..sweep import record_sweep
@@ -55,6 +57,8 @@ class QueuedBeforeTheSwitchOffTests(SwitchedOffRecord):
         operation = OperationRequest.objects.get()
 
         self.assertEqual(operation.state, OperationRequest.State.CANCELLED)
+        # Said as what it is, never as "the record".
+        self.assertIn(lower_first(registry_label(KIND)), operation.result["message"])
         self.assertTrue(
             AuditLog.objects.filter(
                 object_id=str(operation.pk),

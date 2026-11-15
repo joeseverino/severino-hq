@@ -116,12 +116,13 @@ class RunPageTests(TestCase):
         posts = {element.attrs.get("formaction", "") for element in all_elements(html)}
         self.assertFalse({path for path in posts if path.endswith(("/adopt/", "/reject/"))})
 
-    def test_a_working_run_s_page_names_its_lease(self):
+    def test_a_working_run_s_page_names_its_worker_in_plain_words(self):
         run = OperationRequest.objects.get(action=OperationRequest.Action.RUN, state=OperationRequest.State.CLAIMED)
 
         said = facts(self.page(run_page(run.pk)))
 
-        self.assertIn(run.claimed_by, said["Lease"][0])
+        self.assertIn(run.claimed_by, said["Claimed by"][0])
+        self.assertNotIn("Lease", said)
         self.assertNotIn("Result", said)
 
     def test_a_reader_who_may_not_open_jobs_is_refused_a_run_s_page_and_offered_no_link_to_one(self):

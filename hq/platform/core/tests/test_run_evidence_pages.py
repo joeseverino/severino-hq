@@ -70,7 +70,7 @@ class RunEvidencePageTests(TestCase):
         for page, drawn in (("machine", _evidence(machine, "runs")), ("jobs", _evidence(jobs))):
             with self.subTest(page=page):
                 self.assertIn(CORRELATION, " ".join(drawn.get("Correlation", ())))
-                self.assertTrue(drawn.get("Lease"))
+                self.assertTrue(drawn.get("Claimed by"))
                 for task in tasks:
                     self.assertTrue(any(task in said for said in drawn.get("Tasks", ())), task)
 

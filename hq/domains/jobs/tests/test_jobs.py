@@ -542,7 +542,7 @@ class JobsListRunsTests(TestCase):
         approver = self.runs().exclude(Q(input__approved_by="") | Q(input__approved_by__isnull=True)).first()
         task = next(event["task"] for run in self.runs(state="failed") for event in run.result.get("events", ()))
 
-        for label in ("Machines", "Correlation", "Lease", "Tasks"):
+        for label in ("Machines", "Correlation", "Claimed by", "Tasks"):
             with self.subTest(label=label):
                 self.assertIn(f'data-label="{label}"', body)
         for said in (CORRELATION, WORKER, approver.input["approved_by"], task):
