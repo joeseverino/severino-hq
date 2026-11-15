@@ -4,7 +4,9 @@ from typing import Annotated, Any
 from unittest.mock import patch
 
 from django.test import TestCase
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
+
+from hq.platform.application.contracts import Closed
 
 from ..automation_manifest import OperationManifest
 from ..cadence import note_automation
@@ -19,9 +21,7 @@ RESTART_KEY = "automation-example-service_restart"
 APP, DB, EDGE = "app.example.com", "db.example.com", "edge.example.com"
 
 
-class ServiceRestart(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class ServiceRestart(Closed):
     service: Annotated[str, Field(min_length=1, max_length=60, description="The service to restart.")]
 
 

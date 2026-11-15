@@ -2,10 +2,10 @@
 takes, is told which fields its caller sent, says what it keeps, and so
 requires none of the fields it keeps."""
 
+from dataclasses import dataclass
 from unittest import mock
 
 from django.test import SimpleTestCase
-from pydantic import BaseModel
 
 from ..capabilities import capability_registry
 from ..domains import host_records
@@ -33,11 +33,13 @@ def _keeping_specs():
     ]
 
 
-class _Nothing(BaseModel):
+@dataclass(frozen=True, slots=True)
+class _Nothing:
     pass
 
 
-class _Named(BaseModel):
+@dataclass(frozen=True, slots=True)
+class _Named:
     name: str = ""
 
 

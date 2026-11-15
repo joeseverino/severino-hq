@@ -4,6 +4,7 @@ import re
 from urllib.parse import urlsplit
 
 from django.urls import NoReverseMatch
+from pydantic import BaseModel, ConfigDict
 
 from hq.platform.application.routes import reverse
 
@@ -20,6 +21,15 @@ EFFECT_MEANINGS = {
     "destructive": "Stops or deletes something; running it again does not bring it back.",
 }
 EFFECTS = frozenset(EFFECT_MEANINGS)
+
+
+class Closed(BaseModel):
+    """The base of every Pydantic model HQ reads input with that is not a
+    command (a manifest, a query, a provider's spec): a field it does not
+    declare is refused, never dropped. A command is a dataclass or TypedDict,
+    which ``command_adapter`` closes."""
+
+    model_config = ConfigDict(extra="forbid")
 
 
 def effect_glossary(field: str) -> str:

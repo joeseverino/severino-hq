@@ -11,7 +11,7 @@ from typing import Annotated, Any, Literal, Self, get_args, get_origin
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 
 from hq.domains.control_plane.names import is_hostname, normalized_hostname
-from hq.platform.application.contracts import DOTTED_NAME
+from hq.platform.application.contracts import DOTTED_NAME, Closed
 
 # An hour: a procedure that needs longer is more than one procedure, and a
 # stalled run holds what it acts on no longer than this.
@@ -118,7 +118,7 @@ def _closed(model: type[BaseModel], seen: set[type[BaseModel]]) -> None:
         return
     seen.add(model)
     if model.model_config.get("extra") != "forbid":
-        raise ValueError(f"{model.__name__} accepts fields beyond its own; base it on StrictCommand.")
+        raise ValueError(f"{model.__name__} accepts fields beyond its own; base it on Closed.")
     for name, field in model.model_fields.items():
         spellings = {name, field.alias, field.validation_alias if isinstance(field.validation_alias, str) else None}
         if {re.sub(r"[^a-z0-9]", "", spelling.lower()) for spelling in spellings if spelling} & EXECUTION_FIELDS:
@@ -131,11 +131,11 @@ def _closed(model: type[BaseModel], seen: set[type[BaseModel]]) -> None:
                 _closed(annotation, seen)
 
 
-class ProcedureTerms(BaseModel):
+class ProcedureTerms(Closed):
     """What a playbook's manifest and its sidecar both say of it: where it
     may run, what it does, and how to recover from a failed run."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+    model_config = ConfigDict(frozen=True, strict=True)
 
     id: DottedName
     target_kinds: Annotated[tuple[DottedName, ...], Field(min_length=1), AfterValidator(sorted_unique)]

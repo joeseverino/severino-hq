@@ -1,11 +1,13 @@
 """Schema-to-form projection tests; canonical validation remains authoritative."""
 
 import re
+from dataclasses import dataclass
 
 from django.test import SimpleTestCase
 
 from hq.platform.application.capabilities import capability_registry
 from hq.platform.application.command_forms import _field_for_schema, command_form_class
+from hq.platform.application.contracts import Closed
 from hq.platform.application.json_schemas import fields
 
 
@@ -27,9 +29,10 @@ class CapabilityCommandFormTests(SimpleTestCase):
         from typing import Annotated
 
         from hq.platform.application.integration_specs import command_schema
-        from hq_sdk.capabilities import Choices, StrictCommand
+        from hq_sdk.capabilities import Choices
 
-        class ExampleCommand(StrictCommand):
+        @dataclass(frozen=True, slots=True)
+        class ExampleCommand:
             tone: Annotated[str, Choices((("plain", "Plain words"), ("terse", "Terse")))]
 
         declared = _field_for_schema("tone", command_schema(ExampleCommand)["properties"]["tone"], required=True)
@@ -44,11 +47,12 @@ class CapabilityCommandFormTests(SimpleTestCase):
         from typing import Annotated
 
         from hq.platform.application.integration_specs import CapabilitySpec, command_schema
-        from hq_sdk.capabilities import Describe, StrictCommand
+        from hq_sdk.capabilities import Describe
 
         type ExampleChecked = Annotated[date | None, Describe("When it was checked.", api="Null for never.")]
 
-        class ExampleCommand(StrictCommand):
+        @dataclass(frozen=True, slots=True)
+        class ExampleCommand:
             checked: ExampleChecked = None
             owner: Annotated[str | None, Describe("Who keeps it.", api="Their slug; null for nobody.")] = None
             # A use's own marker over its alias's, as the schema says it.
@@ -103,7 +107,6 @@ class CapabilityCommandFormTests(SimpleTestCase):
         # and a procedure's run with inputs of each shape, as an adopted catalog
         # supplies them.
         from django import forms
-        from pydantic import BaseModel, ConfigDict
 
         from hq.platform.application.command_fields import UPLOAD
         from hq.platform.application.command_forms import _one_type
@@ -111,17 +114,13 @@ class CapabilityCommandFormTests(SimpleTestCase):
 
         from .procedures import Supply, manifest
 
-        class Nothing(BaseModel):
-            model_config = ConfigDict(extra="forbid")
+        class Nothing(Closed):
+            pass
 
-        class Window(BaseModel):
-            model_config = ConfigDict(extra="forbid")
-
+        class Window(Closed):
             start: str
 
-        class Maintenance(BaseModel):
-            model_config = ConfigDict(extra="forbid")
-
+        class Maintenance(Closed):
             window: Window
 
         Supply(
@@ -170,12 +169,13 @@ class CapabilityCommandFormTests(SimpleTestCase):
         from pydantic import Field
 
         from hq.platform.application.integration_specs import CapabilitySpec
-        from hq_sdk.capabilities import Describe, StrictCommand
+        from hq_sdk.capabilities import Describe
 
         # The alias's definition is titled from the alias's name, for a viewer.
         type ExampleLastChecked = Annotated[date | None, Describe("When it was checked.")]
 
-        class ExampleCommand(StrictCommand):
+        @dataclass(frozen=True, slots=True)
+        class ExampleCommand:
             reviewed_on: ExampleLastChecked = None
             ttl: Annotated[int, Field(title="TTL in seconds"), Describe("How long it lasts.")] = 60
 
@@ -192,13 +192,14 @@ class CapabilityCommandFormTests(SimpleTestCase):
 
         from hq.platform.application.command_fields import ForAgents
         from hq.platform.application.integration_specs import CapabilitySpec
-        from hq_sdk.capabilities import StrictCommand
 
-        class ExampleCommand(StrictCommand):
+        @dataclass(frozen=True, slots=True)
+        class ExampleCommand:
             note: str = ""
             trace: Annotated[str, ForAgents()] = ""
 
-        class ExampleAsked(StrictCommand):
+        @dataclass(frozen=True, slots=True)
+        class ExampleAsked:
             trace: Annotated[str, ForAgents()]
 
         def spec(command):

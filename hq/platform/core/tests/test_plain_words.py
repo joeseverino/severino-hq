@@ -217,7 +217,7 @@ class ValeRuleTests(SimpleTestCase):
             '    """Some reads wait for a procedure."""\n'
             "def helper():\n"
             '    """A helper writes this procedure."""\n'
-            "class Run(StrictCommand):\n"
+            "class Run(BaseModel):\n"
             '    """Which procedure to run."""\n'
             'CapabilitySpec(wants="adopt the procedures of a commit")\n'
         )

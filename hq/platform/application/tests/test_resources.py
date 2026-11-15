@@ -7,6 +7,7 @@ from django.test import SimpleTestCase, TestCase
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.projects.models import Project
+from hq.platform.application.contracts import Closed
 
 from ..command_center import command_center
 from ..integrations import integration_graph
@@ -322,14 +323,12 @@ class ResourceRegistrationTests(SimpleTestCase):
             integration_graph()
 
     def test_a_query_that_declares_fields_fails_at_registry_construction(self):
-        from pydantic import BaseModel, ConfigDict, Field
+        from pydantic import Field
 
-        class Named(BaseModel):
-            model_config = ConfigDict(extra="forbid")
+        class Named(Closed):
             fields: str = ""
 
-        class Aliased(BaseModel):
-            model_config = ConfigDict(extra="forbid")
+        class Aliased(Closed):
             keys: str = Field("", alias="fields")
 
         for query in (Named, Aliased):

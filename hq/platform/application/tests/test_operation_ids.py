@@ -1,6 +1,8 @@
 """Every audit row written inside one operation carries that operation's id,
 so the log reads as events: one operation, with the items it changed."""
 
+from dataclasses import dataclass
+
 from django.test import TestCase
 from django.utils import timezone
 
@@ -8,7 +10,6 @@ from hq.domains.control_plane.models import ApprovalRequest
 from hq.domains.jobs.runner import run
 from hq.platform.core.audit import audit_operation, operation_context, record_event
 from hq.platform.core.models import AuditLog
-from hq_sdk.capabilities import StrictCommand
 
 from ..approvals import APPROVE, ApprovalError, ApproveCommand, RejectCommand, approve, lapse_expired, reject
 from ..capabilities import CapabilitySpec, execute_capability, run_capability
@@ -22,7 +23,8 @@ UNGATED_KIND = "adguard.rewrite"
 NAME = "example.rewrites.pair"
 
 
-class _Pair(StrictCommand):
+@dataclass(frozen=True, slots=True)
+class _Pair:
     prefix: str
 
 

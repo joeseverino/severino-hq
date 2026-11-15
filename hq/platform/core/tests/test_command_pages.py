@@ -7,7 +7,7 @@ words that set it, or its checkbox and name where it declares none), no warning 
 agent may ask for, a held request said as what it wants done to its target.
 """
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
@@ -35,7 +35,6 @@ from hq.platform.application.tests.writers import drawn_key
 from hq.platform.application.web_writes import RETRY_KEY_FIELD
 from hq.platform.core.attribution import operation_context
 from hq.platform.core.models import AgentAccess
-from hq_sdk.capabilities import StrictCommand
 
 from .command_shapes import SWITCH_WORDS, optional_fields, sets_yes_or_no
 
@@ -273,7 +272,8 @@ class DeclaredStateSwitchTests(TestCase):
                 self.assertEqual(buttons(page), [offered])
 
 
-class RemindersCommand(StrictCommand):
+@dataclass(frozen=True, slots=True)
+class RemindersCommand:
     reminders: bool = False
 
 

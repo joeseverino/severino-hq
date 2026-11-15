@@ -10,6 +10,7 @@ fails the gate the day one of those stops being an error.
 
 from collections.abc import Callable, Iterable
 from contextlib import AbstractContextManager
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated, Any, assert_type, override
@@ -319,7 +320,9 @@ class Note(models.Model):
         return self.about_name
 
 
-class Noting(capabilities.StrictCommand):
+# A command is a frozen dataclass, which HQ closes to the fields it names.
+@dataclass(frozen=True, slots=True)
+class Noting:
     # A field says what it is, which records it names, or which choices it takes.
     note: Annotated[str, capabilities.Describe("What to write down.")]
     project: Annotated[str, capabilities.Names("example.projects"), capabilities.Describe("The project it is for.")]

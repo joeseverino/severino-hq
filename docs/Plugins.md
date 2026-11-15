@@ -152,8 +152,11 @@ return with `assert_type`, and a call an extension must not make carries the
 `# type: ignore[code]` mypy must report for it. A new export gets a case
 there; an annotation that slides to `Any` fails it.
 
-Capability input models inherit `StrictCommand`, so unknown JSON keys fail at
-the boundary instead of being dropped. Class-based views inherit
+A capability's command is a frozen dataclass or a TypedDict, which HQ closes
+at every depth, so an unknown JSON key fails at the boundary instead of being
+dropped. `CapabilitySpec` refuses a command whose own Pydantic config (a
+`BaseModel`'s) would hold over HQ's and take fields it does not name.
+Class-based views inherit
 `CapabilityRequiredMixin` and declare `required_capability`; function views use
 `@capability_required(...)`. Either only names the capability. The host's page
 gate refuses a person who does not hold it, and records the refusal, before the
@@ -604,7 +607,8 @@ A command's fields say what they are through markers in their `Annotated`
 type, the ones the host's commands use, all from `hq_sdk.capabilities`:
 
 ```python
-class NoteCommand(StrictCommand):
+@dataclass(frozen=True, slots=True)
+class NoteCommand:
     note: Annotated[str, Describe("What to write down.")]
     project: Annotated[str, Names("example.projects"), Describe("The project it is for.")]
     tone: Annotated[str, Choices(Note.Tone.choices)]
@@ -883,6 +887,9 @@ parts are always `<li>` elements.
 `partials/_stacked_bar_chart.html`: `partials/_chart.html` draws either chart.
 `PLUGIN_API_VERSION` 15 retires `hq_sdk.audit`'s `audit_operation` and
 `operation_context`: the runner that runs a capability or a job binds its rows.
+It also retires `hq_sdk.capabilities.StrictCommand`: a command is a frozen
+dataclass or a TypedDict, and a bound on a field (a length, a range) is an
+`Annotated[..., Field(...)]` HQ applies as it validates.
 
 A notice is `{% notice tone=... title=... %}body{% endnotice %}`, with a
 title the page composes as its `{% title %}` part after the body

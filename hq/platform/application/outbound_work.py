@@ -16,7 +16,6 @@ from functools import cache
 from typing import Annotated, Any, Literal, NotRequired, TypedDict, cast
 
 from django.core.exceptions import ImproperlyConfigured
-from pydantic import BaseModel, ConfigDict
 lazy from django.utils import timezone
 
 lazy from hq.domains.jobs.models import Job
@@ -93,10 +92,9 @@ class OutboundWork:
         return self.verb or self.label
 
 
-class _NoArguments(BaseModel):
+@dataclass(frozen=True, slots=True)
+class _NoArguments:
     """What is acted on is the target; there is nothing else to say."""
-
-    model_config = ConfigDict(extra="forbid")
 
 
 def validate(work: object) -> OutboundWork:

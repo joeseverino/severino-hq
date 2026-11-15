@@ -8,6 +8,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule, ManagedResource, OperationRequest
 from hq.domains.projects.models import Project
+from hq.platform.application.contracts import Closed
 from hq.platform.core.models import AuditLog
 
 from ..approval_review import preview
@@ -231,15 +232,13 @@ class RunStalenessTests(TestCase):
 
         from typing import Annotated
 
-        from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+        from pydantic import AfterValidator, Field
 
         from .procedures import manifest, run_payload
 
         held = self.held(run_payload(service="Web"))
 
-        class ServiceRestart(BaseModel):
-            model_config = ConfigDict(extra="forbid")
-
+        class ServiceRestart(Closed):
             service: Annotated[
                 str,
                 Field(min_length=1, max_length=60, description="The service to restart."),

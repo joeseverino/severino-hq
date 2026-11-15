@@ -1,10 +1,11 @@
 """Contract tests for the one compiled integration graph."""
 
+from dataclasses import dataclass
+
 from django.test import TestCase
 
 from hq.domains.projects.models import Project
 from hq.domains.projects.specs import ProjectQuery
-from hq_sdk.capabilities import StrictCommand
 
 from ..capabilities import CapabilitySpec, describe_capabilities
 from ..command_center import command_center
@@ -22,7 +23,8 @@ from ..search_contracts import SearchDefinition
 from ..security import Capability, Principal
 
 
-class SyntheticCommand(StrictCommand):
+@dataclass(frozen=True, slots=True)
+class SyntheticCommand:
     pass
 
 

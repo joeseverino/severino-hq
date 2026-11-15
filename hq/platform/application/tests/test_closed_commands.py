@@ -121,10 +121,10 @@ class ClosedCommandTests(SimpleTestCase):
         self.assertEqual(
             open_levels,
             [],
-            "A command's types refuse a field they do not have. A host dataclass or TypedDict is closed by "
-            "integration_specs.command_adapter; a Pydantic model keeps its own config, so an extension's is a "
-            'StrictCommand. A type meant to stay open declares extra="allow" in its own config, with the '
-            "reason beside it.",
+            "A command's types refuse a field they do not have. A dataclass or TypedDict is closed by "
+            "integration_specs.command_adapter; a Pydantic model inside one keeps its own config, so it is a "
+            'Closed. A type meant to stay open declares extra="allow" in its own config, with the reason '
+            "beside it.",
         )
 
 

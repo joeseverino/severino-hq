@@ -1,6 +1,7 @@
-"""For what an extension can do: declare its capabilities and strict commands, and run a write."""
+"""For what an extension can do: declare its capabilities and their commands, and run a write.
 
-from pydantic import BaseModel, ConfigDict
+A command is a frozen dataclass or a TypedDict: HQ closes it to the fields it names.
+"""
 
 from hq.platform.application.capabilities import (
     CapabilitySpec,
@@ -21,13 +22,6 @@ from hq.platform.application.security import (
 )
 from hq.platform.application.web_writes import execute_posted, refusal_response, refused
 
-
-class StrictCommand(BaseModel):
-    """Base for JSON commands that reject misspelled or obsolete fields."""
-
-    model_config = ConfigDict(extra="forbid")
-
-
 __all__ = [
     "ON_ITS_PAGE",
     "AuthorizationError",
@@ -41,7 +35,6 @@ __all__ = [
     "Names",
     "Principal",
     "Refers",
-    "StrictCommand",
     "capability_registry",
     "cli_principal",
     "describe_capabilities",

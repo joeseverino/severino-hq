@@ -1,6 +1,7 @@
 """How a capability runs: who may call it, what it checks, and what it records."""
 
 import json
+from dataclasses import dataclass
 from io import StringIO
 from unittest import mock
 
@@ -12,7 +13,6 @@ from hq.domains.projects.models import Project
 from hq.domains.receipts.models import Receipt
 from hq.platform.core.models import AuditLog
 from hq.platform.mcp.capability_answer import agent_capabilities
-from hq_sdk.capabilities import StrictCommand
 
 from ..capabilities import CapabilitySpec, describe_capabilities, execute_capability
 from ..documentation import sync_documentation
@@ -23,7 +23,8 @@ from .writers import keyed
 
 class CapabilityTests(TestCase):
     def test_plugin_strict_commands_execute_through_the_host(self):
-        class ExampleCommand(StrictCommand):
+        @dataclass(frozen=True, slots=True)
+        class ExampleCommand:
             value: str = "works"
 
         spec = CapabilitySpec(
@@ -232,7 +233,8 @@ class CapabilityTests(TestCase):
     def test_an_invalid_choice_names_the_allowed_ones(self):
         from typing import Literal
 
-        class DecideCommand(StrictCommand):
+        @dataclass(frozen=True, slots=True)
+        class DecideCommand:
             verdict: Literal["applies", "does_not_apply"]
 
         error = self._refusal(DecideCommand, {"verdict": "maybe"})
@@ -259,7 +261,8 @@ class CapabilityTests(TestCase):
         self.assertEqual(result["error"]["message"], "project.create: name is required.")
 
     def test_a_wrong_type_names_the_field_and_the_type(self):
-        class CountCommand(StrictCommand):
+        @dataclass(frozen=True, slots=True)
+        class CountCommand:
             counts: list[int]
 
         error = self._refusal(CountCommand, {"counts": [1, "two"]})
@@ -269,20 +272,19 @@ class CapabilityTests(TestCase):
     def test_a_refusal_never_repeats_the_value_it_refused(self):
         """Field names and choices only: a payload can carry a secret."""
 
-        from typing import Literal
+        from typing import Annotated, Literal
 
-        from pydantic import field_validator
+        from pydantic import AfterValidator
 
         secret = "hunter2-not-for-logs"
 
-        class SecretCommand(StrictCommand):
-            verdict: Literal["applies", "does_not_apply"]
-            token: str
+        def _check(value):
+            raise ValueError(f"{value} is not a token")
 
-            @field_validator("token")
-            @classmethod
-            def _check(cls, value):
-                raise ValueError(f"{value} is not a token")
+        @dataclass(frozen=True, slots=True)
+        class SecretCommand:
+            verdict: Literal["applies", "does_not_apply"]
+            token: Annotated[str, AfterValidator(_check)]
 
         error = self._refusal(SecretCommand, {"verdict": secret, "token": secret})
 
@@ -444,7 +446,8 @@ class CapabilityTests(TestCase):
             )
 
 
-class ExampleWrite(StrictCommand):
+@dataclass(frozen=True, slots=True)
+class ExampleWrite:
     pass
 
 

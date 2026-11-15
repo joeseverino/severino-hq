@@ -6,7 +6,9 @@ from typing import Annotated
 from unittest.mock import patch
 
 from django.test import TestCase
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
+
+from hq.platform.application.contracts import Closed
 
 from ..capabilities import capability_registry, run_capability
 from ..command_forms import command_form_class
@@ -20,20 +22,16 @@ CONFIRMED = {"__confirm_effect": "on"}
 AGENT = Principal("example-agent", "web", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
 
 
-class Nothing(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class Nothing(Closed):
+    pass
 
 
-class Window(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class Window(Closed):
     start: Annotated[str, Field(min_length=1, description="When it may start.")]
     hours: Annotated[int, Field(ge=1, le=12, description="How long it may take.")] = 2
 
 
-class Maintenance(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class Maintenance(Closed):
     service: Annotated[str, Field(min_length=1, description="The service to look after.")]
     window: Window
 

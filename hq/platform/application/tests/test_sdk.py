@@ -1,11 +1,11 @@
 import inspect
 from annotationlib import Format
+from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from django.test import SimpleTestCase, TestCase
-from pydantic import ValidationError
 
 from hq.platform.application.capabilities import CapabilitySpec
 from hq.platform.application.connections import ConnectionSpec
@@ -15,8 +15,13 @@ from hq.platform.application.security import Principal
 from hq.platform.application.workflows import WorkflowPlan
 from hq.platform.core.models import AuditLog
 from hq_sdk.audit import record_operation
-from hq_sdk.capabilities import StrictCommand, execute_capability
+from hq_sdk.capabilities import execute_capability
 from hq_sdk.plugin import NavigationItem as SdkNavigationItem, PluginManifest as SdkPluginManifest
+
+
+@dataclass(frozen=True, slots=True)
+class _Nothing:
+    pass
 
 
 def _routines(name, value):
@@ -83,21 +88,34 @@ class SdkContractTests(SimpleTestCase):
         self.assertIs(SdkNavigationItem, NavigationItem)
         self.assertIs(SdkPluginManifest, PluginManifest)
 
-    def test_strict_commands_reject_unknown_input(self):
-        class ExampleCommand(StrictCommand):
+    def test_a_command_whose_own_pydantic_config_leaves_it_open_is_refused_where_it_is_declared(self):
+        """Such a config holds over the one HQ closes a command with, so the
+        command would take fields it does not name."""
+
+        from typing import TypedDict
+
+        from pydantic import BaseModel, ConfigDict, with_config
+
+        class ExampleModel(BaseModel):
             value: int
 
-        with self.assertRaises(ValidationError):
-            ExampleCommand.model_validate({"value": 1, "typo": True})
+        @with_config(ConfigDict(extra="allow"))
+        class ExampleOpen(TypedDict):
+            value: int
 
-    def test_a_strict_command_declares_its_fields_with_the_hosts_markers(self):
+        for command in (ExampleModel, ExampleOpen):
+            with self.subTest(command.__name__), self.assertRaises(TypeError):
+                CapabilitySpec("example.open", "Open it.", "local_write", "example.write", command, dict)
+
+    def test_a_command_declares_its_fields_with_the_hosts_markers(self):
         from typing import Annotated
 
         from hq.domains.calendars.models import Entry
         from hq.platform.application.integration_specs import command_schema
         from hq_sdk.capabilities import Choices, Describe, Names, Refers
 
-        class ExampleCommand(StrictCommand):
+        @dataclass(frozen=True, slots=True)
+        class ExampleCommand:
             note: Annotated[str, Describe("What to write down.")]
             project: Annotated[str, Names("example.projects", key="slug")]
             tone: Annotated[str, Choices((("plain", "Plain"),))]
@@ -138,9 +156,7 @@ class AuditSdkTests(TestCase):
             record_operation("example.rows", "Imported records.", metadata={"changed": 2})
             return {"ok": True}
 
-        spec = CapabilitySpec(
-            "example.import", "Import examples.", "local_write", "example.write", StrictCommand, handler
-        )
+        spec = CapabilitySpec("example.import", "Import examples.", "local_write", "example.write", _Nothing, handler)
         principal = Principal("example-client", "cli", frozenset({"example.write"}))
 
         with commands_registered({spec.name: spec}):

@@ -1,15 +1,16 @@
 """A capability call is authorized before HQ reads anything about its target."""
 
-from django.test import TestCase
+from dataclasses import dataclass
 
-from hq_sdk.capabilities import StrictCommand
+from django.test import TestCase
 
 from ..capabilities import CapabilitySpec, execute_capability
 from ..integration_testing import commands_registered
 from ..security import Capability, Principal
 
 
-class _Nothing(StrictCommand):
+@dataclass(frozen=True, slots=True)
+class _Nothing:
     pass
 
 

@@ -51,8 +51,8 @@ def command_adapter(command_type: type) -> TypeAdapter[Any]:
     A stdlib dataclass or TypedDict with no config of its own takes the config
     of whatever holds it, so the command and every such type inside it take
     this one. Pydantic accepts a config only for a type that has none of its
-    own to hold, which an alias of the command is. A Pydantic model keeps its
-    own config: an extension's is a ``StrictCommand``.
+    own to hold, which an alias of the command is. A command is such a type;
+    ``CapabilitySpec`` refuses one whose own config leaves it open.
     """
 
     alias: Any = TypeAliasType(command_type.__name__, command_type)
@@ -291,6 +291,21 @@ class CapabilitySpec(Requires):
     # is drawn, so what it lists (a run that just ended) is current, and
     # given its reader, so it lists only what they may read.
     about: Callable[[Principal], CommandAbout] | None = None
+
+    def __post_init__(self) -> None:
+        # A type with a config of its own keeps it over the one
+        # ``command_adapter`` closes a command with, so one that does not
+        # forbid extra fields would take fields it does not name.
+        command = self.command_type
+        if issubclass(command, BaseModel):
+            own: Mapping[str, Any] | None = command.model_config
+        else:
+            own = getattr(command, "__dict__", {}).get("__pydantic_config__")
+        if own is not None and own.get("extra") != "forbid":
+            raise TypeError(
+                f"Capability {self.name!r} command {command.__name__} keeps a Pydantic config of its own that "
+                "takes fields it does not name; declare it a frozen dataclass or a TypedDict, which HQ closes."
+            )
 
     @property
     def title(self) -> str:

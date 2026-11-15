@@ -1337,7 +1337,7 @@ or one out of range is refused when it is built. What it holds, and why:
 | `id` | A dotted name, `example.service_logs` | A run, an approval and a grant name the procedure by it. |
 | `revision` | The adopted commit, 40 lowercase hex | What was reviewed is what runs. A new commit is a new procedure, and an approval of the old one no longer holds. |
 | `playbook` | The playbook's path inside the project at that commit, `playbooks/service_logs.yml`: relative, each part starting with a letter, digit or underscore, ending `.yml` | The manifest names what runs, and only one spelling of it, so an approval pins it. The repository and the project's directory come from the host's root configuration, never from a manifest or a claim. |
-| `input_type` | A `StrictCommand` subclass | A run's parameters are validated the way every capability's are. |
+| `input_type` | A `Closed` subclass | A run's parameters refuse a field they do not name, as every capability's command does. |
 | `target_kinds` | The resource kinds it may act on, at least one | A run's target is held to what the procedure was written for. |
 | `hosts` | The hosts it may act on, empty for any of those kinds | A procedure written for one machine says so. |
 | `privilege` | `None`, or the reviewed profile it escalates through | Escalation is reviewed per procedure, since Ansible's `become` bounds nothing. |

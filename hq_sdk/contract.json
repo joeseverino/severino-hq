@@ -450,15 +450,6 @@
         "kind": "dataclass",
         "members": {}
       },
-      "StrictCommand": {
-        "bases": [
-          "BaseModel"
-        ],
-        "constructor": [],
-        "fields": {},
-        "kind": "model",
-        "members": {}
-      },
       "capability_registry": {
         "kind": "function",
         "parameters": []
@@ -1396,7 +1387,7 @@
     "resources": {
       "ResourceQuery": {
         "bases": [
-          "BaseModel"
+          "Closed"
         ],
         "constructor": [],
         "fields": {},

@@ -183,11 +183,10 @@ def propose(operation: OperationRequest, catalog: dict[str, Any]) -> SourcePropo
     )
 
 
-class RefreshCommand(BaseModel):
+@dataclass(frozen=True, slots=True)
+class RefreshCommand:
     """A Refresh takes nothing but why it was asked and its retry key: the
     repository is the host's configuration."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
 
     reason: Annotated[StrictStr, Field(max_length=300), Describe("Why it is refreshed, kept with the scan.")] = ""
     # Filled by the capability runner with the caller's key, or a fresh one.

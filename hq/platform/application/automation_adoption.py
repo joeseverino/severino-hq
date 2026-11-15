@@ -63,6 +63,7 @@ from .answer_fields import CallMessage
 from .automation_manifest import PLAYBOOK, REVISION, OperationManifest, ProcedureTerms, Statement
 from .automation_sources import InputBound, ProcedureDeclaration
 from .command_fields import Describe
+from .contracts import Closed
 from .integration_specs import CapabilitySpec
 from .record_errors import PolicyError, RecordNotFound
 from .security import Capability, Principal
@@ -104,11 +105,11 @@ TEXT = frozenset({"str", "path"})
 type Scalar = Literal["str", "path", "int", "float", "bool"]
 
 
-class AdoptedInput(BaseModel):
+class AdoptedInput(Closed):
     """One input of a playbook, as adopted: its argument spec's terms, and
     the sidecar's limit on a text input."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+    model_config = ConfigDict(frozen=True, strict=True)
 
     type: Literal["str", "path", "int", "float", "bool", "list"]
     elements: Scalar | None = None
@@ -290,6 +291,12 @@ def _scalar(kind: str, choices: tuple[Any, ...], bound: InputBound | None) -> An
     return SCALARS[kind]
 
 
+class _Inputs(Closed):
+    """A procedure's parameters, fixed once read."""
+
+    model_config = ConfigDict(frozen=True)
+
+
 def input_type(operation_id: str, inputs: Mapping[str, AdoptedInput]) -> type[BaseModel]:
     """The closed model a procedure's parameters are validated with, from its
     inputs as adopted: each by its Ansible type, its choices or its bound."""
@@ -310,9 +317,7 @@ def input_type(operation_id: str, inputs: Mapping[str, AdoptedInput]) -> type[Ba
         else:
             fields[name] = (described, Field(default=spec.default, validate_default=True))
     title = "".join(part.title() for part in operation_id.replace(".", "_").split("_"))
-    model: type[BaseModel] = create_model(
-        f"{title}Inputs", __config__=ConfigDict(extra="forbid", frozen=True), __module__=__name__, **fields
-    )
+    model: type[BaseModel] = create_model(f"{title}Inputs", __base__=_Inputs, __module__=__name__, **fields)
     return model
 
 
@@ -778,10 +783,9 @@ class Adopted(TypedDict):
 PlaybookKey = Annotated[StrictStr, Field(min_length=1, max_length=200, title="Playbook")]
 
 
-class AdoptProposal(BaseModel):
+@dataclass(frozen=True, slots=True)
+class AdoptProposal:
     """The scan result to adopt, and the one playbook to adopt from it."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
 
     proposal: Annotated[StrictInt, Field(ge=1, title="Scan result"), Describe("The scan result's ID.")]
     playbook: Annotated[
@@ -861,10 +865,9 @@ class Rejected(TypedDict):
     message: CallMessage
 
 
-class RejectProposal(BaseModel):
+@dataclass(frozen=True, slots=True)
+class RejectProposal:
     """The scan result to reject, and the one playbook to reject from it."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
 
     proposal: Annotated[StrictInt, Field(ge=1, title="Scan result"), Describe("The scan result's ID.")]
     playbook: Annotated[

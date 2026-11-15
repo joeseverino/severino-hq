@@ -42,7 +42,7 @@ from .connection_records import (
     CredentialRow,
     Tailnet,
 )
-from .contracts import DOTTED_NAME
+from .contracts import DOTTED_NAME, Closed
 from .describe import Describe
 from .field_masks import FieldMaskRefusal, Fields, asks_whole, selected
 from .input_errors import pydantic_refusal
@@ -110,10 +110,8 @@ class ResourceSearchDefinition(SearchDefinition):
         return "\n".join(line for field in fields for line in search_lines(instance.serializable_value(field)))
 
 
-class ResourceQuery(BaseModel):
+class ResourceQuery(Closed):
     """Base for list inputs: unknown fields are always programmer errors."""
-
-    model_config = ConfigDict(extra="forbid")
 
 
 def limit_words(most: int, *, paged: bool) -> str:

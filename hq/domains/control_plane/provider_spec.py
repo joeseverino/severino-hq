@@ -14,7 +14,6 @@ from typing import Any, Literal
 
 from django.urls import NoReverseMatch
 from pydantic import (
-    BaseModel,
     ConfigDict,
     Field,
     TypeAdapter,
@@ -22,6 +21,7 @@ from pydantic import (
     model_validator,
 )
 
+from hq.platform.application.contracts import Closed
 from hq.platform.application.json_schemas import json_schema
 from hq.platform.application.labels import dotted
 from hq.platform.application.moments import span, when_day
@@ -147,8 +147,8 @@ class ConnectionKind:
     gives: str = ""
 
 
-class ProviderModel(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
+class ProviderModel(Closed):
+    model_config = ConfigDict(frozen=True)
 
     # ``after`` because a ``before`` validator is not allowed on a
     # discriminated union's discriminator, and this one matches every field.
