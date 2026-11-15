@@ -545,8 +545,12 @@ def a_dialog() -> None:
     assert_type(action.modal_id, str)
     assert_type(pages.page_context("Example", actions=(action,))["page"].dialogs, tuple[pages.PageDialog, ...])
 
+    # A command whose view draws a form may open it in a dialog.
+    assert_type(pages.PageAction.command("example.import", primary=True, modal=dialog), pages.PageAction | None)
+
     pages.PageDialog("import", "Import records")  # type: ignore[call-arg]
     pages.PageAction("Import", "/example/import/", modal=3)  # type: ignore[arg-type]
+    pages.PageAction.command("example.import", modal=3)  # type: ignore[arg-type]
 
 
 class Things(tables.TableListMixin, pages.PageMixin):

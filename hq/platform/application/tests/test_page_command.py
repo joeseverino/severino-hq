@@ -11,7 +11,7 @@ from django.views import View
 from hq.platform.application import request_context, roles
 from hq.platform.application.capabilities import capability_words
 from hq.platform.application.lookup import LOOK_UP_NAME
-from hq.platform.application.pages import PageAction
+from hq.platform.application.pages import PageAction, PageDialog
 from hq.platform.application.resource_capabilities import REMOVAL_CAPABILITY, UPDATE_CAPABILITY
 from hq.platform.core.test_runner import no_default_role
 
@@ -92,6 +92,16 @@ class CommandControlTests(TestCase):
         self.assertEqual(sent.method, "post")
         with self.assertRaises(ValueError):
             self.offered_to(operator, UPDATE_CAPABILITY, "example-key", field="next", fields={"next": "/"})
+
+    def test_a_command_whose_view_draws_a_form_may_open_it_in_a_dialog_and_one_that_posts_may_not(self):
+        operator = _person("operator", roles.Role.OPERATOR)
+        dialog = PageDialog("example-edit", "Edit", "example/_edit_form.html")
+
+        opened = self.offered_to(operator, UPDATE_CAPABILITY, "example-key", modal=dialog)
+        assert opened is not None
+        self.assertEqual((opened.method, opened.dialog), ("get", dialog))
+        with self.assertRaises(ValueError):
+            self.offered_to(operator, RECONCILE, "example-key", variant=READS_AGAIN, modal=dialog)
 
 
 class HandBuiltControlTests(SimpleTestCase):

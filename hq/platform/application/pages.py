@@ -109,6 +109,7 @@ class PageAction:
         field: str = "action",
         value: str = "",
         fields: Mapping[str, str] | None = None,
+        modal: PageDialog | str = "",
     ) -> PageAction | None:
         """The control that runs the command ``name`` on ``target``, or None
         when the person the page is for may not run it.
@@ -120,7 +121,8 @@ class PageAction:
         ``fields``) posts it, as one to a view that answers only POST does;
         any other opens the form or confirmation its view draws. ``target`` is the route's one argument, or its arguments
         by name; ``query`` is added to the address (a ``next``, a form's
-        first values). It is drawn unusable, saying why, while the command
+        first values). One that opens its view's form may open it in a
+        dialog instead (``modal``). It is drawn unusable, saying why, while the command
         would be refused for ``target`` (``refused``, else the work's own).
         """
 
@@ -138,6 +140,8 @@ class PageAction:
             url = f"{url}{'&' if '?' in url else '?'}{urlencode(query, doseq=True)}"
         if field in sends:
             raise ValueError(f"A POST action's button sends {field!r}; its fields cannot send it too.")
+        if modal and posts:
+            raise ValueError(f"{name} posts from its button, so it has no form for a dialog to open.")
         reason = refused or outbound_refusal(name, subject)
         return cls._built(
             label=spec.words(variant),
@@ -150,6 +154,7 @@ class PageAction:
             field=field,
             value=value,
             fields=sends,
+            modal=modal,
         )
 
     @classmethod
