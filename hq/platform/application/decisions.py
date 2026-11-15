@@ -183,13 +183,43 @@ def _own_page(item: dict[str, Any], subject: dict[str, Any], anchor: str) -> str
     return f"{reverse('action_items')}#{anchor}"
 
 
-def decision(item: dict[str, Any]) -> dict[str, Any]:
-    actions = list(item.get("actions", ()))
-    workflow = item.get("workflow")
-    parts = workflow_parts(workflow)
+def _buttons(item: Any) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """An item's own actions and the plan's actions that stand beside them,
+    each once, with the plan as a card shows it."""
+
+    actions = [_plain(action) for action in item.get("actions", ())]
+    parts = workflow_parts(item.get("workflow"))
     for action in _promoted(parts["steps"], offered=bool(actions)):
         if _identity(action) not in {_identity(known) for known in actions}:
             actions.append(action)
+    return actions, parts
+
+
+def _arranged(actions: list[dict[str, Any]], links: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    # A check again waits behind the owner's named page, so the two that
+    # stand on the row are the fix and where it is done.
+    return _one_primary(
+        [action for action in actions if action.get("name") != "verify"]
+        + links
+        + [action for action in actions if action.get("name") == "verify"],
+        links,
+    )
+
+
+def one_press(item: Any) -> bool:
+    """Whether HQ does what ``item`` asks in one press: the button its row
+    leads with runs an HQ command that fixes it (not a check again) and
+    would run now. Reads its ``actions`` and ``workflow``, each as a
+    dataclass or as written."""
+
+    actions, _ = _buttons(item)
+    lead = next((action for action in _arranged(actions, []) if action["recommended"]), None)
+    return bool(lead and lead.get("capability") and lead.get("name") != "verify" and not lead.get("refusal"))
+
+
+def decision(item: dict[str, Any]) -> dict[str, Any]:
+    actions, parts = _buttons(item)
+    workflow = item.get("workflow")
     identities = {_identity(action) for action in actions}
     steps = []
     for step in parts["steps"]:
@@ -205,14 +235,7 @@ def decision(item: dict[str, Any]) -> dict[str, Any]:
         "anchor": anchor,
         "page": _own_page(item, subject, anchor),
         "urgency": NOTICE if item.get("notice") else Tone(item["status"]).urgency,
-        # A check again waits behind the owner's named page, so the two that
-        # stand on the row are the fix and where it is done.
-        "actions": _one_primary(
-            [action for action in actions if action.get("name") != "verify"]
-            + links
-            + [action for action in actions if action.get("name") == "verify"],
-            links,
-        ),
+        "actions": _arranged(actions, links),
         "late": _late(item),
         "facts": _facts(item.get("facts", ())),
         "origin": _origin(item),

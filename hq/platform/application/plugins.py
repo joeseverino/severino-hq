@@ -30,6 +30,7 @@ from .ui import DomainOverview
 lazy from . import freshness
 lazy from .action_items import item_key
 lazy from .automation_runs import clear_operation_registry_cache
+lazy from .decisions import one_press
 lazy from .domains import NAVIGATION_GROUPS
 lazy from .integrations import clear_integration_graph_cache
 lazy from .item_help import instructions
@@ -861,8 +862,9 @@ def gather_attention(
 
 def ordered_attention(entries: Iterable[dict[str, Any]]) -> tuple[dict[str, Any], ...]:
     """Gathered entries in the one order every surface shows them: by
-    severity, what needs doing before what only reports, the longest-standing
-    first, then by source and title."""
+    severity, what needs doing before what only reports, what HQ does in one
+    press (``decisions.one_press``) before what a person does elsewhere, the
+    longest-standing first, then by source and title."""
 
     def order(entry: dict[str, Any]) -> tuple[Any, ...]:
         item = entry["item"]
@@ -870,6 +872,7 @@ def ordered_attention(entries: Iterable[dict[str, Any]]) -> tuple[dict[str, Any]
         return (
             item.status.rank,
             item.notice,
+            not one_press({"actions": item.actions, "workflow": item.workflow}),
             since is None,
             since.timestamp() if since is not None else 0.0,
             entry["source"],
