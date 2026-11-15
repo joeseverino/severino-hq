@@ -7,6 +7,7 @@ from pathlib import Path
 from django.test import SimpleTestCase, tag
 
 from hq.platform.application.plugins import installed_plugin_apps
+from hq.platform.application.tests.reads import reads
 
 from .source import source_files
 
@@ -129,6 +130,8 @@ class AmericanSpellingTests(SimpleTestCase):
 
 
 @tag("source", "tree")
+# An installed extension is read where it lies: outside the checkout, or an example of this one.
+@reads("examples/**", lists=("examples/**",))
 class ExtensionSpellingTests(SimpleTestCase):
     """An extension's words are held as the host's are, by the extension check
     (tools/pipeline/check-plugin.sh) and wherever one is installed."""
