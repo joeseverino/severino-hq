@@ -3467,6 +3467,20 @@
           "summary"
         ]
       },
+      "muted": {
+        "classes": [
+          "css"
+        ],
+        "parameters": [
+          "*",
+          "css=",
+          "element=",
+          "id=",
+          "title=",
+          "**data"
+        ],
+        "parts": []
+      },
       "notice": {
         "classes": [
           "css"

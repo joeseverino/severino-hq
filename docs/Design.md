@@ -412,7 +412,7 @@ What each part of a cell is decides how it wraps, and the region marks it
 wraps on that mark, never on a page's class or a cell's tags. The bold a cell
 leads with, or its leading link's, is the row's `name`; free text (a message, a
 record's words) is declared `cell-data` and marked `data`; what a row means in
-words is declared `cell-prose`. A context line is the shared `.muted`. A row's
+words is declared `cell-prose`. A context line is `{% muted %}`. A row's
 name set in one line with its controls (a star, a move) is a `.name-line`,
 where the name is cut rather than wrapped. A service's star and the pair that
 moves a favorite are one part, `control_plane/_service_pin.html` (*Catalog:*
@@ -516,7 +516,11 @@ refused by the `hand-drawn-facts` rule, and so is a figure set bold apart from
 the words that count it.
 
 What names a value (`.fact-label`, a tile's label, a `<dt>`) is sentence case
-in the muted voice. Capitals are for a kicker over a group (`.eyebrow`), never
+in the muted voice. Words in that voice anywhere else (a context line beside
+a value, a sentence under it) are `{% muted %}...{% endmuted %}`, a line among
+other words, or a paragraph with `element="p"`; `css` adds the classes of where
+it stands (`narrow-more`, `row-more`, `cell-part`). *Catalog:* `part/muted`.
+Capitals are for a kicker over a group (`.eyebrow`), never
 a value's name, a state or a tag; `lint:css` refuses a change of case
 anywhere but a kicker, whose rule says what it heads in its disable comment.
 

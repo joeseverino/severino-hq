@@ -681,16 +681,30 @@ def slotted(
 CARD_ELEMENTS = frozenset(("section", "article", "figure", "details", "div"))
 
 
-def card_frame(name: str, given: dict) -> dict:
-    """A card's opening and closing tags. Built here rather than in its
-    partial, since the element is a choice and every attribute but the class
-    is drawn only when it has a value, as ``html_attributes`` draws one."""
+def framed(name: str, given: dict, elements: frozenset[str], default: str, own: str, named: dict) -> dict:
+    """A part's opening and closing tags, its element one of ``elements``, its
+    class ``own`` before the page's ``css``, and each ``data_*`` option an
+    attribute. Built here rather than in its partial, since the element is a
+    choice and every attribute but the class is drawn only when it has a
+    value, as ``html_attributes`` draws one."""
 
-    element = given.get("element", "section")
-    if element not in CARD_ELEMENTS:
-        raise template.TemplateSyntaxError(f"{name} element= is one of {', '.join(sorted(CARD_ELEMENTS))}")
+    element = given.get("element", default)
+    if element not in elements:
+        raise template.TemplateSyntaxError(f"{name} element= is one of {', '.join(sorted(elements))}")
+    named = {"class": " ".join((own, given.get("css") or "")).strip(), **named}
+    named |= {option.replace("_", "-"): value for option, value in given.items() if option.startswith("data_")}
+    # The element is one of ``elements``, a tag name and never text, and
+    # html_attributes escapes the attributes.
+    return {
+        "opening": mark_safe(f"<{element}{html_attributes(named)}>"),  # noqa: S308 - see above
+        "closing": mark_safe(f"</{element}>"),  # noqa: S308 - see above
+    }
+
+
+def card_frame(name: str, given: dict) -> dict:
+    """A card's opening and closing tags."""
+
     named = {
-        "class": " ".join(("card", given.get("css") or "")).strip(),
         "id": given.get("id"),
         "aria-labelledby": given.get("heading"),
         "aria-label": given.get("label"),
@@ -698,13 +712,28 @@ def card_frame(name: str, given: dict) -> dict:
         "open": True if given.get("open") else None,
         "data-alone": True if given.get("alone") else None,
     }
-    named |= {option.replace("_", "-"): value for option, value in given.items() if option.startswith("data_")}
-    # The element is one of CARD_ELEMENTS, a tag name and never text, and
-    # html_attributes escapes the attributes.
-    return {
-        "opening": mark_safe(f"<{element}{html_attributes(named)}>"),  # noqa: S308 - see above
-        "closing": mark_safe(f"</{element}>"),  # noqa: S308 - see above
-    }
+    return framed(name, given, CARD_ELEMENTS, "section", "card", named)
+
+
+# Words said in the muted voice: a line or a paragraph, its element a choice.
+MUTED_ELEMENTS = frozenset(("span", "p"))
+
+
+def muted_frame(name: str, given: dict) -> dict:
+    """Muted words' opening and closing tags."""
+
+    return framed(name, given, MUTED_ELEMENTS, "span", "muted", {"id": given.get("id"), "title": given.get("title")})
+
+
+# Words said quietly beside what they are about (a context line, a sentence
+# under a value), the one way a page or an extension writes muted text.
+slotted(
+    "muted",
+    "partials/_muted.html",
+    ("content",),
+    frozenset(("element", "css", "id", "title")),
+    shape=muted_frame,
+)
 
 
 slotted(
