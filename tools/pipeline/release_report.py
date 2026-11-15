@@ -12,7 +12,6 @@ import json
 import os
 import subprocess
 import sys
-import time
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -27,7 +26,6 @@ from tools.pipeline.production import DEPLOYMENTS, Releases, gh, releases, statu
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "var" / "release"
-PERF = ROOT / "var" / "perf"
 READINGS = Path(__file__).with_name("release_readings.py")
 SHORT = 12
 MB = 1024**2
@@ -116,13 +114,26 @@ def run_perf(made: Report, pages: list[str]) -> Path | None:
     here = perf_report.commit_of(ROOT)
     if here != made.release[:SHORT]:
         made.notes.append(f"Measured as {here}: this checkout holds changes past the release")
-    started = time.time()
     # The child parses its own arguments; these are this task's.
     env = {key: value for key, value in os.environ.items() if not key.startswith("usage_")}
-    subprocess.run(["mise", "run", "perf", *pages, "--base", base], cwd=ROOT, env=env, check=False)
-    # A base that refuses the extension set starts a second run, host alone: the newest is the one finished.
-    kept = sorted(path for path in PERF.glob(f"{here}-vs-{base[:SHORT]}-*.json") if path.stat().st_mtime >= started)
-    return kept[-1] if kept else None
+    # The run is the one perf's closing line names, wherever it ran (a run on the gate's second machine
+    # comes back with its files) and whatever it named the commit; a base that refuses the extension set
+    # starts a second run, host alone, whose closing line comes last.
+    named = None
+    with subprocess.Popen(
+        ["mise", "run", "perf", *pages, "--base", base],
+        cwd=ROOT,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    ) as perf:
+        for line in perf.stdout or ():
+            sys.stdout.write(line)
+            sys.stdout.flush()
+            if found := perf_report.KEPT.search(line.rstrip()):
+                named = ROOT / found[1]
+    return named if named and named.is_file() else None
 
 
 # ------------------------------------------------------------------- the host

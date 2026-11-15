@@ -135,7 +135,7 @@ case "$step" in
                 cp "$severino/$kept" "var/back/$kept"
             fi
         done
-        find var/gate var/look var/back -type f -newer var/remote-stamp >var/remote-written 2>/dev/null || true
+        find var/gate var/look var/perf var/back -type f -newer var/remote-stamp >var/remote-written 2>/dev/null || true
         tar -cf "$gates/back/$id.tar" -T var/remote-written || status=$((status ? status : 1))
         exit "$status"
         ;;

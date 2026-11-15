@@ -453,7 +453,8 @@ its failed units and the last run of the controller and glance units. It reads t
 `SEVERINO_HQ_DEPLOY_HOST` as the operator account, with no sudo and no docker
 group: the container is found through the cgroup of the process serving HQ,
 whose files any account can read. A reading that fails is a row saying so; the
-task exits 1 then, or when the release was never marked live.
+task exits 1 then, or when the release was never marked live. The perf reading
+is the run perf's closing line names, wherever perf ran.
 
 ### The bridge
 

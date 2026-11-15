@@ -8,6 +8,7 @@ gate.
 
 import os
 import platform
+import re
 import signal
 import subprocess
 import sys
@@ -49,6 +50,8 @@ lazy from hq.platform.core.tests.browser.widths import PHONE_SCREEN, WIDE, viewp
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "var" / "perf"
+# How a run's closing line names the file it kept, the one way a caller learns which run that is.
+KEPT = re.compile(r"; kept in (var/perf/\S+\.json)$")
 # Set when a run starts again host alone, to the refusal that made it.
 ALONE_BECAUSE = "PERF_HOST_ALONE_BECAUSE"
 # What perf says of a page asked that the base answers 404 and this tree serves.

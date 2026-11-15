@@ -144,8 +144,8 @@ def host_half(host: str, step: str, *args: str) -> list[str]:
 
 
 def bring_back(archive: bytes, sent: Sent, there: Where, host: str, task: str) -> None:
-    """Keep what the run there wrote: each verdict that names the tree sent, the logs and looks, and the pass
-    it recorded, the verdicts and logs naming this checkout where they named the worktree there."""
+    """Keep what the run there wrote: each verdict that names the tree sent, the logs, looks and perf runs, and
+    the pass it recorded, the verdicts and logs naming this checkout where they named the worktree there."""
 
     tree = sent.tree
     with tempfile.TemporaryDirectory() as folder:
@@ -160,7 +160,7 @@ def bring_back(archive: bytes, sent: Sent, there: Where, host: str, task: str) -
                 verdict.unlink()
             elif (mine := ROOT / "var/gate" / verdict.name).is_file():
                 mine.replace(mine.with_suffix(".prev.txt"))
-        for part in ("var/gate", "var/look"):
+        for part in ("var/gate", "var/look", "var/perf"):
             if (back / part).is_dir():
                 shutil.copytree(back / part, ROOT / part, dirs_exist_ok=True)
         fast = back / "var/gate/fast.txt"

@@ -936,7 +936,8 @@ How a run goes (`tools/gate/remote.py`, and `tools/gate/remote-host.sh` there):
    naming each file it changed.
 4. What it wrote comes back, archived there as the run ends, while the
    worktree is still its own: each `var/gate/` verdict that names the tree
-   sent (any other is left there, and said so), the logs and `var/look/`.
+   sent (any other is left there, and said so), the logs, `var/look/` and
+   `var/perf/`.
    A pass fast recorded there is recorded here only then, its file naming the
    machine it ran on.
 
