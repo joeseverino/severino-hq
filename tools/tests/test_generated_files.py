@@ -14,6 +14,7 @@ from hq.domains.control_plane.management.commands.connections_reference import r
 from hq.platform.api.openapi import DOCUMENT_PATH, EXAMPLES_PATH
 from hq.platform.application.procedure_schema import SCHEMA_PATH
 from hq.platform.application.tests.reads import reads
+from hq.platform.core.management.commands.posture_reference import posture_doc
 from hq_sdk.contract import CONTRACT_PATH
 from hq_sdk.text_contract import EXAMPLES_PATH as TEXT_EXAMPLES_PATH
 from tests.mise_tasks import ROOT
@@ -35,6 +36,7 @@ class GeneratedAttributeTests(SimpleTestCase):
             DOCUMENT_PATH,
             EXAMPLES_PATH,
             reference_path(),
+            posture_doc(),
             SCHEMA_PATH,
             SERVED,
             *bridge_contract.emitted(),

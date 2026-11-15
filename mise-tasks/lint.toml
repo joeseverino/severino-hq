@@ -481,6 +481,27 @@ extends = "django"
 usage = 'flag "--fix" help="Rewrite the file instead of checking: fast runs it first"'
 run = 'if [ "${usage_fix:-}" = true ]; then uv run python manage.py connections_reference; else uv run python manage.py connections_reference --check; fi'
 
+["lint:drift-posture-reference"]
+description = "docs/Posture.md's tables are what the checks declare"
+hide = true
+tags = ["fast"]
+sources = [
+  "**/*.py",
+  "docs/Posture.md",
+  "hq/domains/control_plane/bridge_base.json",
+  "deploy/systemd/severino-hq-secrets.timer",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
+extends = "django"
+usage = 'flag "--fix" help="Rewrite the file instead of checking: fast runs it first"'
+run = 'if [ "${usage_fix:-}" = true ]; then uv run python manage.py posture_reference; else uv run python manage.py posture_reference --check; fi'
+
 ["lint:drift-procedure-schema"]
 description = "The published JSON Schema of a procedure's sidecar is what ProcedureDeclaration validates"
 hide = true

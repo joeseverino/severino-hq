@@ -383,7 +383,7 @@ def serialize_hop(hop: Any) -> dict[str, Any]:
 
 
 def serialize_check(result: CheckResult) -> CheckPart:
-    """One check of the request standard as the API answers it."""
+    """One check's result, of whichever standard, as the API answers it."""
 
     check, reading = result.check, result.reading
     return {

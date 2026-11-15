@@ -18,7 +18,7 @@ from hq.domains.control_plane.providers import PROVIDERS
 from .. import findings, roles
 from ..attention import finding_insight, readable_by
 from ..connection_setup import setups
-from ..connections import ConnectionInstance, ConnectionLink, ConnectionSpec
+from ..connections import ConnectionAbility, ConnectionInstance, ConnectionLink, ConnectionSpec
 from ..dashboard import queue_item
 from ..derivation_testing import uncached
 from ..finding_model import Finding
@@ -39,6 +39,8 @@ def gated_family(credential_model: str):
     holds a token of ``credential_model`` for a service that offers scoped ones."""
 
     scoped = next(setup.provider for setup in setups() if setup.permissions)
+    # What the token is used for, whose check finds its full account access.
+    ability = ConnectionAbility("example.read", "Read example", "Read one synthetic account.")
     instance = ConnectionInstance(
         "example-infra",
         "Example infrastructure",
@@ -46,6 +48,7 @@ def gated_family(credential_model: str):
         "good",
         "Good",
         credential_model=credential_model,
+        ability_names=(ability.name,),
     )
     return ConnectionSpec(
         "example.infrastructure",
@@ -53,6 +56,7 @@ def gated_family(credential_model: str):
         "Requires infrastructure management.",
         Capability.MANAGE_INFRASTRUCTURE,
         mock.Mock(return_value=(instance,)),
+        (ability,),
         secret_store="Example Vault",
     )
 

@@ -34,7 +34,7 @@ from .tone import Tone
 from .ui import ended
 lazy from . import connections
 lazy from .card_items import Insight
-lazy from .connection_security import observed_request_controls
+lazy from .connection_security import request_readings
 lazy from .dashboard import queue_item
 lazy from .derived_reads import serialize_hop
 lazy from .facts import Subject, readings
@@ -704,7 +704,7 @@ class RequestPath:
 def request_path(request, principal=None) -> RequestPath:
     """How ``request`` reached HQ, read once per projection, for ``principal`` when a token made it."""
 
-    edge, firewall = observed_request_controls(request.get_host())
+    edge, firewall = request_readings(request.get_host())
     found = connection(request, edge=edge, firewall=firewall, principal=principal)
     path = hq_path(request, found=found) or joined(None, request, found)
     return RequestPath(

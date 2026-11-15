@@ -34,6 +34,7 @@ run = [
   "mise run lint:drift-bridge-contract --fix",
   "cd controller && go generate ./...",
   "mise run lint:drift-connections-reference --fix",
+  "mise run lint:drift-posture-reference --fix",
   "mise run lint:drift-procedure-schema --fix",
   "mise run lint:drift-font --fix",
 ]

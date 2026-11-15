@@ -699,8 +699,8 @@ registrar is the one the zone record names, and a certificate's issuer and
 expiry are what its status holds. Each fact appears once, where it belongs: a
 card does not repeat the strip beside it.
 
-**A check's title states the fact it checks.** "Tokens hold only the permissions HQ
-uses", "Keys are kept in a vault": what was checked, in plain words. Not a
+**A check's title states the fact it checks.** "Tokens hold the permissions HQ
+uses, and no more", "Keys are kept in a vault": what was checked, in plain words. Not a
 sweeping claim ("every credential is limited to what HQ needs"), and not
 "knows", "ensures" or "limited".
 

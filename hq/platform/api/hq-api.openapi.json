@@ -1778,13 +1778,16 @@
             ],
             "posture": {
               "abilities": 50,
-              "controls": [
+              "checks": [
                 {
-                  "detail": "HQ has no reading of an access list for this name.",
-                  "evidence": "Not read",
-                  "id": "edge",
-                  "label": "The proxy lets in tailnet addresses only",
-                  "state": "neutral"
+                  "boundary": "",
+                  "detail": "This page shows the last reading of each connection.",
+                  "evidence": "Oldest reading just now",
+                  "id": "freshness",
+                  "label": "Connections have been read",
+                  "mechanism": "",
+                  "rules": [],
+                  "state": "met"
                 }
               ],
               "dependencies": 33,
@@ -1809,8 +1812,8 @@
                   "stops": "a device added to your tailnet without your key"
                 }
               ],
-              "met": 4,
-              "unread": 2
+              "met": 3,
+              "unread": 3
             },
             "summary": {
               "all_custodied": false,

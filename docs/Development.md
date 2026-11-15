@@ -621,9 +621,10 @@ reads the last, then formats as the lint gates read:
 3. the controller's contracts from the connection registry, and the Go types
    generated from them;
 4. `docs/Connections.md`, from what the providers declare;
-5. the JSON Schema of a procedure's sidecar, from the model HQ validates one
+5. `docs/Posture.md`, from each check's declaration;
+6. the JSON Schema of a procedure's sidecar, from the model HQ validates one
    with ([Declaring a playbook](Architecture.md#declaring-a-playbook));
-6. the served font, cut to the characters HQ prints.
+7. the served font, cut to the characters HQ prints.
 
 It then lowers each count in `tools/lint/eslint-suppressions.json` that has
 fallen to what ESLint finds (`fix:suppressions`), so a change that removes a

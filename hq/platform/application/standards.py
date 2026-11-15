@@ -29,6 +29,9 @@ class Standing(StrEnum):
 # A result, not a standing: a check failed on purpose, for a declared reason.
 INTENDED = "intended"
 
+# The word a page answers a check's statement with, by its result's state.
+ANSWER = {Standing.MET: "Yes", Standing.UNMET: "No", Standing.UNAVAILABLE: "Unknown", INTENDED: "By design"}
+
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Reading:
@@ -125,6 +128,10 @@ class CheckResult:
     @property
     def met(self) -> bool:
         return self.reading.standing is Standing.MET
+
+    @property
+    def answer(self) -> str:
+        return ANSWER[self.state]
 
     @property
     def tone(self) -> str:
