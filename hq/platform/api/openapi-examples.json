@@ -318,12 +318,12 @@
           "rule": null,
           "schema_version": 2,
           "summary": {
-            "findings": 16,
-            "returned": 16,
+            "findings": 15,
+            "returned": 15,
             "severities": {
               "attention": 11,
               "neutral": 1,
-              "serious": 4
+              "serious": 3
             },
             "truncated": false
           }
@@ -1502,7 +1502,7 @@
     "responses": {
       "200": {
         "data": {
-          "count": 14,
+          "count": 13,
           "items": [
             {
               "action": "Review docs",
@@ -1515,7 +1515,7 @@
             }
           ],
           "next": null,
-          "total": 14,
+          "total": 13,
           "truncated": false
         },
         "ok": true
@@ -2980,9 +2980,14 @@
               "findings": [
                 {
                   "affected_scopes": [],
-                  "evidence": [],
-                  "explanation": "Whoever takes over docker-host-01 can add devices to the tailnet.",
-                  "id": "claim:311e60215be36cd8",
+                  "evidence": [
+                    {
+                      "label": "Trusted",
+                      "value": "100.64.0.0/10"
+                    }
+                  ],
+                  "explanation": "HQ accepts requests from every address in the range. You can narrow the trusted networks in HQ's settings to the addresses the tailnet uses.",
+                  "id": "claim:31be84447cd15b63",
                   "investigations": [
                     {
                       "capability": "",
@@ -2994,7 +2999,7 @@
                       "recommended": false,
                       "refusal": "",
                       "target": "",
-                      "url": "/infrastructure/topology/?focus=machine%3Adocker-host-01#trace"
+                      "url": "/infrastructure/topology/?focus=connection%3Ainfrastructure.controllers%3Adocker-host-01%3Atailscale#trace"
                     }
                   ],
                   "no_help_reason": null,
@@ -3002,35 +3007,37 @@
                     {
                       "capability": "",
                       "effect": "read",
-                      "label": "Open",
+                      "label": "Open connections",
                       "method": "GET",
                       "name": "open",
                       "reason": "",
                       "recommended": false,
                       "refusal": "",
                       "target": "",
-                      "url": "/infrastructure/machines/docker-host-01/"
+                      "url": "/infrastructure/connections/"
                     }
                   ],
                   "operator_steps": [
                     {
-                      "command": "tailscale lock remove tlpub:12d02e4ce5fc3a740f0efc5144ccf15d814272a6dd4506d852aa32ac7bb5052e",
-                      "label": "On another signing device, remove its key",
-                      "notes": []
+                      "command": "SEVERINO_TRUSTED_NETWORKS=127.0.0.0/8,::1/128,100.101.102.103/32,100.101.102.104/32,100.101.102.105/32,fd7a:115c:a1e0:1001:2002:3003:4004:5067/128,fd7a:115c:a1e0:1001:2002:3003:4004:5068/128,fd7a:115c:a1e0:1001:2002:3003:4004:5069/128,10.100.200.0/24",
+                      "label": "Set this where HQ is deployed, then restart HQ",
+                      "notes": [
+                        "A device that joins later is refused until it is added."
+                      ]
                     }
                   ],
                   "remedies": [],
-                  "rule": "tailnet-lock-server-signs",
+                  "rule": "trusted-wider-than-tailnet",
                   "scope": null,
-                  "severity": "serious",
+                  "severity": "neutral",
                   "since": null,
-                  "subject": "machine:docker-host-01",
-                  "title": "docker-host-01 can sign devices onto the tailnet",
+                  "subject": "connection:infrastructure.controllers:docker-host-01:tailscale",
+                  "title": "HQ trusts all of 100.64.0.0/10, fd7a:115c:a1e0::/48, and the tailnet uses 6 device addresses and 1 subnet route",
                   "workflow": {
-                    "id": "resolve:claim:311e60215be36cd8",
+                    "id": "resolve:claim:31be84447cd15b63",
                     "label": "Next steps",
                     "outcome": {
-                      "claim_id": "claim:311e60215be36cd8",
+                      "claim_id": "claim:31be84447cd15b63",
                       "kind": "claim_absent",
                       "label": ""
                     },
@@ -3047,7 +3054,7 @@
                             "recommended": false,
                             "refusal": "",
                             "target": "",
-                            "url": "/infrastructure/findings/?rule=tailnet-lock-server-signs"
+                            "url": "/infrastructure/findings/?rule=trusted-wider-than-tailnet"
                           }
                         ],
                         "label": "Check again",

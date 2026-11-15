@@ -321,7 +321,7 @@ def tailnet():
             "record": "lock",
             "enabled": True,
             "node_key_signed": True,
-            "signers": [{"key": lock_key(name), "kind": "25519", "votes": 1} for name in (PHONE_NAME, MACHINE)],
+            "signers": [{"key": lock_key(name), "kind": "25519", "votes": 1} for name in (PHONE_NAME, LAPTOP_NAME)],
         },
     )
     store(
