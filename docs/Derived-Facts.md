@@ -252,10 +252,11 @@ the bridge contract is emitted from the model of that name
 (`hq/domains/control_plane/observations/host.py`): it holds no command line, environment or path, and a
 unit that is not installed is a record saying so. Each record carries when it
 was read, and a unit's state is judged as of then, never against the present
-moment. A reading older than the slowest the controller ever reads is judged by
-no rule: `unit-state-unread` says when it was read and, while the bridge
-refuses the controller's sweep, why (`reading_facts.unjudged`, held for every
-rule by `test_no_rule_measures_an_aged_reading_from_now`).
+moment. A reading out of date (`freshness`: two of the slowest sweeps the
+controller ever runs) is judged by no rule: `unit-state-unread` says when it
+was read and, while the bridge refuses the controller's sweep, why
+(`reading_facts.unjudged`, held for every rule by
+`test_no_rule_measures_an_aged_reading_from_now`).
 
 `hq/platform/application/unit_findings.py` raises, on the same node:
 

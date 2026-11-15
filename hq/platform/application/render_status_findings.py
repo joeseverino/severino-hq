@@ -30,8 +30,9 @@ from .finding_model import (
     journal_step,
     machine_step,
 )
+from .freshness import freshness, missed
 from .moments import ago, duration, moment, when
-from .reading_facts import FactRow, rows_of, state_on_controller, stated, taken_at, too_old, unjudged
+from .reading_facts import FactRow, rows_of, state_on_controller, stated, taken_at, unjudged
 from .topology_model import TopologyNode
 from .ui import ended
 
@@ -66,13 +67,10 @@ def _timer_span(key: str) -> timedelta:
 RENDER_EVERY = _timer_span("OnUnitActiveSec")
 RENDER_DELAY = _timer_span("RandomizedDelaySec")
 FULL_READ_EVERY = timedelta(hours=24)
-# How many runs may pass without a success before the secrets are stale. Three,
-# as for a kind no sweep reaches: one missed run is a restart or a held lock,
-# two is a slow Connect.
-MISSED_RUNS = 3
 # The installed files are stale once nothing has confirmed them current for
-# this long: three runs at their latest.
-CONFIRMED_WITHIN = MISSED_RUNS * (RENDER_EVERY + RENDER_DELAY)
+# three runs at their latest: one missed run is a restart or a held lock, two
+# is a slow Connect.
+CONFIRMED_WITHIN = missed(RENDER_EVERY + RENDER_DELAY, 3).stale_after
 # A full read is overdue once the daily one and that same allowance have both
 # passed. Never sooner than ``CONFIRMED_WITHIN`` after a
 # full read falls due, so a renderer two runs behind raises one claim, not two.
@@ -231,7 +229,7 @@ def failed_units(estate: FindingEstate, node: TopologyNode) -> frozenset[str]:
     unit state leaves these to it, unless the reading is too old for it to.
     """
 
-    if too_old(estate, taken_at(node, RENDER_STATUS_KIND)):
+    if freshness(RENDER_STATUS_KIND, taken_at(node, RENDER_STATUS_KIND), estate.now).stale:
         return frozenset()
     return frozenset(
         unit for rendering in stated_on(node) if rendering.failed and (unit := RENDERER_UNITS.get(rendering.renderer))
