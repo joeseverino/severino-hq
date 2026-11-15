@@ -173,7 +173,7 @@ from dataclasses import dataclass, replace
 from pydantic import BaseModel, ConfigDict
 
 from hq.example.errors import InputError, PolicyError, Sentence
-from hq.platform.application.ui import counted
+from hq.platform.application.ui import counted, ended
 
 LIMIT = 20
 OFF = "It is switched off."
@@ -204,6 +204,7 @@ def handle(command, record, flag):
     reason = OFF if flag else why()
     refuse("Refused.")
     Held("That record was not found.")
+    refuse(ended(f"Refused: {why()}"))
     raise PolicyError(f"{explanation} {reason} It is {record.get_state_display().lower()}.")
 """
 PLANTED = {
@@ -223,6 +224,10 @@ PLANTED = {
     ),
     "a formatter of HQ's name declared elsewhere": (
         "def counted(n, word):\n    return str(n)\n\nraise PolicyError(f'{counted(command, \"day\")} left.')"
+    ),
+    "a value closed through ended": 'raise PolicyError(ended(f"Taken by {command.name}"))',
+    "a closer of HQ's name declared elsewhere": (
+        "def ended(text):\n    return text\n\nraise PolicyError(ended('Refused'))"
     ),
     "a formatter given its words as a value": "raise PolicyError(f'{counted(1, command.word)} left.')",
     "a local name bound once to a value": (

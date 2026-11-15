@@ -14,6 +14,8 @@ built from one sentence. A sentence is:
   ``Sentence`` part of what a sentence-returning function answers;
 - a call to a function whose every definition under ``hq`` is annotated to
   return a ``Sentence``, each ``return`` of which is held to one;
+- ``ended`` of a sentence, the one closer the page sentence rule
+  (``hq_sdk.validation``) asks for where a sentence ends on a value;
 - ``a or b``, ``a if c else b`` and ``a + b`` of sentences.
 
 A formatter coerces what it is given (a date, a number) into HQ's form, so its
@@ -31,6 +33,8 @@ from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from hq_sdk.validation import _CLOSERS
+
 from .apart import apart
 
 ROOT = "HostRefusal"
@@ -45,6 +49,8 @@ FORMATTERS = {
 }
 # The formatters whose arguments after the first are the words for the count.
 WORDED = {"counted"}
+# The closers the page sentence rule asks for: each is a sentence when what it closes is one.
+CLOSERS = dict.fromkeys(_CLOSERS, "hq/platform/application/ui.py")
 CASE = {"lower", "capitalize"}
 CHOICE_LABEL = re.compile(r"get_\w+_display")
 # What builds a pydantic model from data rather than from its constructor.
@@ -311,6 +317,8 @@ class Reader:
                 return self._name(name, place)
             case ast.Attribute(value=ast.Name(id="self"), attr=attr):
                 return attr in self.index.class_fields(place.cls)
+            case ast.Call(args=[closed], keywords=[]) if self._declared(expr, place, CLOSERS):
+                return self.sentence(closed, place)
             case ast.Call():
                 return self.index.returns_sentence_at(called(expr)) is None
         return False
@@ -330,17 +338,22 @@ class Reader:
             return bool(CHOICE_LABEL.fullmatch(name)) or (name in CASE and self.written(expr.func.value, place))
         return self._formatted(expr, place)
 
-    def _formatted(self, call: ast.Call, place: Place) -> bool:
-        if not isinstance(call.func, ast.Name) or call.func.id not in FORMATTERS:
+    def _declared(self, call: ast.Call, place: Place, homes: Mapping[str, str]) -> bool:
+        """Whether ``call`` names one of ``homes`` as the module that declares it."""
+
+        if not isinstance(call.func, ast.Name) or call.func.id not in homes:
             return False
-        home = FORMATTERS[call.func.id]
+        home = homes[call.func.id]
         origin = self.index.imports.get(place.path, {}).get(call.func.id)
         if origin is None or call.func.id in self.index.defined.get(place.path, ()):
-            declared = place.path == home
-        else:
-            declared = _module_path(origin[0], self.index.sources) == home
-        words = [*call.args[1:], *(k.value for k in call.keywords)] if call.func.id in WORDED else []
-        return declared and all(isinstance(w, ast.Constant) and isinstance(w.value, str) for w in words)
+            return place.path == home
+        return _module_path(origin[0], self.index.sources) == home
+
+    def _formatted(self, call: ast.Call, place: Place) -> bool:
+        if not self._declared(call, place, FORMATTERS):
+            return False
+        words = [*call.args[1:], *(k.value for k in call.keywords)] if called(call) in WORDED else []
+        return all(isinstance(w, ast.Constant) and isinstance(w.value, str) for w in words)
 
     def _name(self, name: str, place: Place) -> bool:
         func = place.func
