@@ -10,8 +10,10 @@ last row (`rest`), one cell across the row, counts the others and links to the
 list of them all: an event's page, a run's shared page. A run with no such
 page has no last row. Every title links where `row.url` says, and only a
 moment or run with nowhere to go has none. What a row names reads as an
-identifier where it is one (`readout`, cut at the region's cap); what a row
-says is text that breaks wherever it must (`cell-data`). The User column is
+identifier where it is one (`readout`, cut at the region's cap). An event's
+count of what it changed stands beside its title only when its own row names
+it: one named by what it changed already counts it in its title and message.
+What a row says is text that breaks wherever it must (`cell-data`). The User column is
 who did it (`row.who`) as a line (`cell_line`), left out where `hide_who` is set: a reader who may not
 read the audit log. On a phone only What and When stay, so there What's
 second line says how it came out, in the action's own word (`narrow-only`);
@@ -34,7 +36,7 @@ wider, the Action column says it.
     <td>{% status row.moment.source %}</td>
     <td class="muted cell-data">{{ row.moment.detail|breakable }}</td>
   {% else %}
-    <td>{% if row.grouped %}{% include "partials/_row_fold.html" with label=row.title only %}{% endif %}<a href="{{ row.url }}"><strong>{% if row.head %}{{ row.title|readout }}{% else %}{{ row.named.0|readout }}{{ row.named.1|breakable }}{% endif %}</strong></a>{% if row.grouped %} <span class="count">{{ row.total|breakable }}</span>{% endif %}{% if row.type_label %}<br><span class="muted">{{ row.type_label|breakable }}<span class="narrow-only">{% dot %}{{ row.action_label|breakable }}</span></span>{% else %}<span class="narrow-only"><br><span class="muted">{{ row.action_label|breakable }}</span></span>{% endif %}</td>
+    <td>{% if row.grouped %}{% include "partials/_row_fold.html" with label=row.title only %}{% endif %}<a href="{{ row.url }}"><strong>{% if row.head %}{{ row.title|readout }}{% else %}{{ row.named.0|readout }}{{ row.named.1|breakable }}{% endif %}</strong></a>{% if row.grouped and row.head %} <span class="count">{{ row.total|breakable }}</span>{% endif %}{% if row.type_label %}<br><span class="muted">{{ row.type_label|breakable }}<span class="narrow-only">{% dot %}{{ row.action_label|breakable }}</span></span>{% else %}<span class="narrow-only"><br><span class="muted">{{ row.action_label|breakable }}</span></span>{% endif %}</td>
     <td class="muted date-col">{{ row.at|when:"clock" }}</td>
     {% if not hide_who %}<td>{% cell_line row.who.words %}</td>{% endif %}
     <td>{% status row.action_label tone=row.action %}</td>
