@@ -632,7 +632,7 @@ starts it at once when a sweep found an image or digest HQ has not read.
 
 It reads only subjects that are due, a bounded number at a time, through the
 same ingest as a sweep, so a run with nothing due makes no request. Each
-reading stands as long as what it reads is slow to change (`READ_EVERY`):
+reading stands as long as what it reads is slow to change (its `every`):
 
 | Reading | Stands for |
 | --- | --- |

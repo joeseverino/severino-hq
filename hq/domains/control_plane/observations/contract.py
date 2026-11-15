@@ -131,9 +131,10 @@ class ObservationSpec:
     issuer: Callable[[Mapping[str, Any]], str] = _blank
     # One of ``READERS``.
     read_by: str = "controller"
-    # A clock of its own, slower than the sweep's, for a reading whose provider
-    # rations calls: read when it is this old or somebody asks, and carried by
-    # every sweep between. None reads on every sweep.
+    # How often HQ reads it itself; for a controller's, a clock of its own,
+    # slower than the sweep's, for a reading whose provider rations calls: read
+    # when it is this old or somebody asks, and carried by every sweep between.
+    # None for a controller's reads on every sweep.
     every: timedelta | None = None
     # The provider console page for a record, built only from ids the record
     # stores (an account id, a name). Blank when the record lacks them.
@@ -279,8 +280,10 @@ def registry(specs: tuple[ObservationSpec, ...]) -> Mapping[str, ObservationSpec
             raise ValueError(f"{spec.kind!r}: unknown facet {spec.facet!r}.")
         if spec.read_by not in READERS:
             raise ValueError(f"{spec.kind!r}: read_by is one of {READERS}.")
-        if spec.every is not None and spec.read_by != "controller":
-            raise ValueError(f"{spec.kind!r}: only a controller's reading keeps its own clock.")
+        if spec.every is not None and spec.read_by == "request":
+            raise ValueError(f"{spec.kind!r}: a request's reading keeps no clock.")
+        if spec.every is None and spec.read_by == "hq":
+            raise ValueError(f"{spec.kind!r}: a reading HQ takes itself declares how often.")
         if spec.connects is not None and spec.containers is _none:
             raise ValueError(f"{spec.kind!r}: connects needs the containers it names.")
         _check_parts(spec)

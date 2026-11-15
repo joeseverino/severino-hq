@@ -35,6 +35,7 @@ lazy from hq.domains.control_plane.observations.portainer import IMAGE_KIND as P
 lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
 from .facts import Subject, inventory_records, readings, record_read_at
+from .freshness import freshness
 from .locate import host_of
 from .lookup import HOSTNAME, allocation_of, entity_name
 from .moments import moment
@@ -52,20 +53,10 @@ lazy from .oci_registry import RegistryPrivate, RegistryReadError, attestations,
 lazy from .osv import OSVReadError, finding
 lazy from .tailnet_presence import tailnet_presence
 
-REFRESH_AFTER = timedelta(days=1)
-# How long each reading stands, by how fast what it reads changes: who holds
-# an address or registers a domain moves in years; a tag, a release or a
-# vulnerability can land any day. A digest never changes (``None``).
-READ_EVERY: dict[str, timedelta | None] = {
-    ADDRESS_KIND: timedelta(days=7),
-    DOMAIN_KIND: timedelta(days=7),
-    IMAGE_KIND: REFRESH_AFTER,
-    UPSTREAM_KIND: REFRESH_AFTER,
-    DIGEST_KIND: None,
-    VULNERABILITY_KIND: REFRESH_AFTER,
-}
 # A subject that could not be read is asked again after this, not on every run.
 RETRY_AFTER = timedelta(hours=1)
+# What a digest carries never changes, so a record of one is never read again.
+_UNCHANGING = frozenset({DIGEST_KIND})
 LOOKUPS_PER_REFRESH = 16
 # GitHub allows 60 anonymous reads an hour, shared with Watching; each
 # repository costs two.
@@ -73,13 +64,6 @@ UPSTREAMS_PER_REFRESH = 8
 UPSTREAM_RELEASES = 10
 # Each vulnerability's detail is read once and kept until OSV modifies it.
 DETAILS_PER_REFRESH = 400
-
-
-def read_every(kind: str) -> timedelta:
-    """How long ``kind``'s reading stands; a digest's, as long as a day's check
-    that every running digest is held."""
-
-    return READ_EVERY.get(kind) or REFRESH_AFTER
 
 
 def _configured() -> bool:
@@ -423,18 +407,17 @@ def _advisory(item: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _due(record: Mapping[str, Any] | None, every: timedelta | None, now: datetime, *, force: bool) -> bool:
-    """Whether one subject's record is due to be read again."""
+def _due(record: Mapping[str, Any] | None, kind: str, now: datetime, *, force: bool) -> bool:
+    """Whether one subject's record of ``kind`` is due to be read again."""
 
     if record is None or record.get("unresolved"):
         return True
     read_at = record_read_at(record) or datetime.min.replace(tzinfo=now.tzinfo)
     if record.get("unread"):
         return read_at < now - RETRY_AFTER
-    if every is None:
-        # What a digest carries never changes.
+    if kind in _UNCHANGING:
         return False
-    return force or read_at < now - every
+    return force or freshness(kind, read_at, now).due
 
 
 def _report(
@@ -456,11 +439,10 @@ def _report(
     stored = ProviderInventory.objects.filter(kind=kind).first()
     kept = {str(record.get(key, "")): record for record in (stored.records if stored is not None else ())}
     wanted = tuple(dict.fromkeys(subjects))
-    every = READ_EVERY.get(kind, REFRESH_AFTER)
-    due = [subject for subject in wanted if _due(kept.get(subject), every, now, force=force)]
+    due = [subject for subject in wanted if _due(kept.get(subject), kind, now, force=force)]
     dropped = set(kept) - set(wanted)
     current = stored is not None and (
-        every is not None or (stored.observed_at is not None and stored.observed_at >= now - read_every(kind))
+        kind not in _UNCHANGING or (stored.observed_at is not None and not freshness(kind, stored.observed_at, now).due)
     )
     if not due and not dropped and stored is not None and stored.reachable and current:
         return None

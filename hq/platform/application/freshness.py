@@ -19,7 +19,6 @@ from .derivations import reached
 from .moments import ago
 lazy from . import plugins
 lazy from .cadence import slowest_sweep_interval, ssh_probe_interval
-lazy from .public_registry import read_every
 
 CURRENT = "current"
 DUE = "due"
@@ -40,6 +39,8 @@ def last_read(at: datetime | str) -> str:
 DASHBOARD_GLANCE = "dashboard.glance"
 SSH_PROBE = "connection.ssh_probe"
 PAGE_VISIT = "page.visit"
+FIRST_SEEN = "attention.first-seen"
+AVATAR = "auth.avatar"
 
 # A dashboard reading costs a trip to a machine, so it is re-read when the
 # dashboard is opened and older than this.
@@ -67,18 +68,33 @@ class ReadCadence:
             raise ValueError("A read cadence's every and stale_after are positive.")
 
 
-# The kinds the host names itself; an observation kind is the host's too.
-NAMED_KINDS = (DASHBOARD_GLANCE, SSH_PROBE, PAGE_VISIT)
+def missed(every: timedelta, runs: int) -> ReadCadence:
+    """The cadence of a reading taken ``every`` so often, stale once ``runs``
+    of them have gone by with none newer."""
+
+    return ReadCadence(every, every * runs)
+
+
+# The cadences the host names itself, each read as its kind is judged; an
+# observation kind is the host's too.
+_NAMED: Mapping[str, Callable[[], ReadCadence]] = {
+    DASHBOARD_GLANCE: lambda: missed(GLANCE_EVERY, 3),
+    PAGE_VISIT: lambda: missed(VISIT_EVERY, 3),
+    SSH_PROBE: lambda: missed(ssh_probe_interval(), 2),
+    # A look at what is open derives the whole queue, so a report is followed
+    # by one at most this often. A new item is dated by a look only while the
+    # look before it is current; past that it began somewhere in a gap.
+    FIRST_SEEN: lambda: missed(timedelta(minutes=15), 4),
+    # A session is renewed every few minutes and each renewal is a sign-in, so
+    # a picture is asked for again only once it is a day old.
+    AVATAR: lambda: missed(timedelta(days=1), 2),
+}
 
 
 def host_kind(kind: str) -> bool:
     """Whether the host declares ``kind``'s cadence, which no extension may."""
 
-    return kind in NAMED_KINDS or kind in OBSERVATIONS
-
-
-def _missing(every: timedelta, missed: int) -> ReadCadence:
-    return ReadCadence(every, every * missed)
+    return kind in _NAMED or kind in OBSERVATIONS
 
 
 @cache
@@ -130,22 +146,16 @@ def _extension_cadence(kind: str) -> ReadCadence | None:
 def cadence(kind: str = "") -> ReadCadence:
     """The cadence one kind of reading is taken on."""
 
-    if kind == DASHBOARD_GLANCE:
-        return _missing(GLANCE_EVERY, 3)
-    if kind == PAGE_VISIT:
-        return _missing(VISIT_EVERY, 3)
-    if kind == SSH_PROBE:
-        return _missing(ssh_probe_interval(), 2)
+    if (named := _NAMED.get(kind)) is not None:
+        return named()
     spec = OBSERVATIONS.get(kind)
-    if spec is not None and spec.read_by == "hq":
-        return _missing(read_every(kind), 2)
     if spec is not None and spec.every is not None:
-        return _missing(spec.every, 2)
+        return missed(spec.every, 2)
     if spec is None and kind and (declared := _extension_cadence(kind)) is not None:
         return declared
     # A controller reads on the sweep, whose slowest interval is the idle one;
     # a reading is stale once it has missed a whole sweep, not when one is due.
-    return _missing(slowest_sweep_interval(), 2)
+    return missed(slowest_sweep_interval(), 2)
 
 
 def stale_after(kind: str = "") -> timedelta:
@@ -189,3 +199,17 @@ def freshness(kind: str, observed_at: datetime | None, now: datetime | None = No
     else:
         state = CURRENT
     return Freshness(state, observed_at, found.stale_after)
+
+
+# How far behind its own kind's newest reading a record may fall before the
+# gap means a sweep passed over it rather than reached it a moment later.
+# Sweeps write one timestamp for everything they confirm, so siblings land
+# together, and a kind on a slower clock is slower, never behind.
+_BEHIND = timedelta(hours=1)
+
+
+def behind(observed: datetime | None, newest: datetime | None) -> bool:
+    """Whether a record last seen at ``observed`` was left behind by its
+    kind's newest reading, taken at ``newest``."""
+
+    return observed is not None and newest is not None and newest - observed > _BEHIND

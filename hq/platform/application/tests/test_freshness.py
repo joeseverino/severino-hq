@@ -66,6 +66,15 @@ class FreshnessTests(TestCase):
         self.assertEqual(stale_after("host.perimeter"), timedelta(hours=2))
         self.assertEqual(stale_after(), timedelta(hours=2))
 
+    def test_a_record_is_left_behind_once_its_kind_is_read_over_an_hour_after_it(self):
+        from ..freshness import behind
+
+        newest = timezone.now()
+        self.assertFalse(behind(newest - timedelta(hours=1), newest))
+        self.assertTrue(behind(newest - timedelta(hours=1, seconds=1), newest))
+        self.assertFalse(behind(None, newest))
+        self.assertFalse(behind(newest, None))
+
     def test_the_join_engine_uses_the_same_rule(self):
         from .. import facts
 

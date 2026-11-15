@@ -7,6 +7,7 @@ controller, after a page rather than during one, and stores them through the
 same ingest as a sweep.
 """
 
+from datetime import timedelta
 from typing import Any
 
 from ..names import normalized_hostname, organization_name
@@ -137,6 +138,13 @@ def _domain(record) -> tuple[str, ...]:
     return (domain,) if domain else ()
 
 
+# How long each reading stands, by how fast what it reads changes: who holds
+# an address or registers a domain moves in years; a tag, a release or a
+# vulnerability can land any day. A digest's records never change, so its
+# reading stands for the day's check that every running digest is held.
+_DAY = timedelta(days=1)
+_WEEK = timedelta(days=7)
+
 OBSERVATIONS: tuple[ObservationSpec, ...] = (
     ObservationSpec(
         ADDRESS_KIND,
@@ -148,6 +156,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         relation="On the network of",
         facet="network",
         read_by="hq",
+        every=_WEEK,
     ),
     ObservationSpec(
         DOMAIN_KIND,
@@ -160,6 +169,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         facet="registration",
         expires=lambda record: str(record.get("expires_at", "")),
         read_by="hq",
+        every=_WEEK,
     ),
     ObservationSpec(
         IMAGE_KIND,
@@ -169,6 +179,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         title=lambda record: str(record.get("image", "")),
         relation="Published as",
         read_by="hq",
+        every=_DAY,
     ),
     ObservationSpec(
         UPSTREAM_KIND,
@@ -178,6 +189,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         title=lambda record: str(record.get("repository", "")),
         relation="Built from",
         read_by="hq",
+        every=_DAY,
     ),
     ObservationSpec(
         DIGEST_KIND,
@@ -187,6 +199,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         title=lambda record: str(record.get("digest", "")),
         relation="Attested as",
         read_by="hq",
+        every=_DAY,
     ),
     ObservationSpec(
         VULNERABILITY_KIND,
@@ -196,5 +209,6 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         title=lambda record: str(record.get("digest", "")),
         relation="Checked against",
         read_by="hq",
+        every=_DAY,
     ),
 )

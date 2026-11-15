@@ -29,13 +29,12 @@ from .finding_model import (
     per_connection,
     reconcile_remedy,
 )
-from .freshness import LAST_READ, freshness
+from .freshness import LAST_READ, behind, freshness
 from .infrastructure import DRIFT_LABEL, NOT_READ_LABEL
 from .labels import field_label, lower_first, plural
 from .moments import ago, duration
 from .reading_facts import refusals_on
 from .render_status_findings import RENDERER_UNITS
-from .topology_lenses import _STALE_AFTER
 from .topology_model import TopologyNode
 from .ui import counted, ended
 lazy from .facts import inventory_records
@@ -71,11 +70,6 @@ def _when(label: str, at: date | str | None) -> tuple[str, str]:
 
 def _read_again(variant: str = "") -> FindingRemedy:
     return FindingRemedy(capability=CONTROLLER_REFRESH.name, target="", variant=variant)
-
-
-# ``_STALE_AFTER`` is imported rather than restated: the lens that asks "what
-# was left behind?" and the rule that claims it must not be able to disagree
-# about where that line falls.
 
 
 def _skipped_by_a_sweep(estate: FindingEstate) -> tuple[Finding, ...]:
@@ -126,11 +120,11 @@ def _skipped_by_a_sweep(estate: FindingEstate) -> tuple[Finding, ...]:
 def _left_behind(estate: FindingEstate, node: TopologyNode) -> bool:
     """Whether a record HQ watches was last seen materially before its kind's last read."""
 
-    moment = estate.observed.get(node.id)
-    newest = estate.latest_by_kind.get(node.kind_key)
-    if moment is None or newest is None or not node.managed or node.on_demand:
-        return False
-    return newest - moment > _STALE_AFTER
+    return (
+        node.managed
+        and not node.on_demand
+        and behind(estate.observed.get(node.id), estate.latest_by_kind.get(node.kind_key))
+    )
 
 
 def _emptied_machines(estate: FindingEstate) -> dict[str, tuple[TopologyNode, ...]]:

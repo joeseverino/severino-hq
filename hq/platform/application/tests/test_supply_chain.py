@@ -7,6 +7,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
+from hq.domains.control_plane.observations.public_registry import DIGEST_KIND as DIGEST
 
 from ..containers import DECLARED, LABEL, PROVENANCE, REGISTRY, VULNERABLE, containers
 from ..security import cli_principal
@@ -219,10 +220,10 @@ class CadenceTests(TestCase):
         read = {"digest": "x", "read_at": (now - timedelta(days=400)).isoformat()}
         failed = {"digest": "x", "unread": "down", "read_at": now.isoformat()}
 
-        self.assertFalse(_due(read, None, now, force=True))
-        self.assertFalse(_due(failed, None, now, force=False))
-        self.assertTrue(_due(failed, None, now + RETRY_AFTER + timedelta(seconds=1), force=False))
-        self.assertTrue(_due(None, None, now, force=False))
+        self.assertFalse(_due(read, DIGEST, now, force=True))
+        self.assertFalse(_due(failed, DIGEST, now, force=False))
+        self.assertTrue(_due(failed, DIGEST, now + RETRY_AFTER + timedelta(seconds=1), force=False))
+        self.assertTrue(_due(None, DIGEST, now, force=False))
 
     def test_a_vulnerability_detail_is_read_once_until_osv_modifies_it(self):
         from ..public_registry import vulnerability_reader

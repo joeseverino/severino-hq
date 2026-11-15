@@ -21,6 +21,7 @@ from hq.domains.control_plane.providers import PROVIDERS, controller_capability_
 from .asks import APPLIES_SHORTLY
 from .entity_links import entity_link
 from .expiry import certificate_expiry, days_until, renewal_opens_at, renewal_window
+from .freshness import behind
 from .infrastructure import controller_contract, enabled_resources, resolved_spec, resource_health, serialize_resource
 from .record_errors import RecordNotFound
 from .resource_capabilities import ResourceCapabilities, resource_capabilities
@@ -31,7 +32,6 @@ lazy from .conditions import DEGRADED, DRIFTED, held_since
 lazy from .connections import connection_readings
 lazy from .security import internal_principal
 lazy from .services import certificate_use
-lazy from .topology_lenses import _STALE_AFTER
 lazy from .whereabouts import machine_link
 
 
@@ -117,13 +117,6 @@ def shared_names[Name](names: Iterable[Name]) -> frozenset[Name]:
 _SUMMARY_CHARS = 64
 
 
-# How far behind the newest reading of its own type a record may fall before
-# it reads as not seen. The lens and the rule that ask the same question share
-# the line (``topology_lenses._STALE_AFTER``).
-def _left_behind(read_at: datetime | None, newest: datetime | None) -> bool:
-    return read_at is not None and newest is not None and newest - read_at > _STALE_AFTER
-
-
 @dataclass(frozen=True, slots=True)
 class RecordStatus:
     """One record's state as one line: what it is, since when, what it means.
@@ -205,7 +198,7 @@ def record_status(resource, *, health: dict[str, str] | None = None, newest: dat
             None,
             read_at,
         )
-    if _left_behind(read_at, newest):
+    if behind(read_at, newest):
         return RecordStatus(
             "unseen",
             "unknown",
