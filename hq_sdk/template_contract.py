@@ -160,7 +160,6 @@ CLASSES = (
     "key-col",
     "keyboard-only",
     "list-rows",
-    "muted",
     "name-line",
     "narrow-more",
     "narrow-only",

@@ -1,7 +1,7 @@
 {% extends "page.html" %}
 {% block page %}
 <div class="form-actions">
-  {% if gap %}<p class="muted">{{ gap.reason|breakable }} {% include "partials/_write_gap.html" %}</p>{% else %}
+  {% if gap %}{% muted element="p" %}{{ gap.reason|breakable }} {% include "partials/_write_gap.html" %}{% endmuted %}{% else %}
   {% url 'contacts:set_status' submission.id as status_url %}
   {% if submission.status != "read" %}{% words "contact.submission.review" "read" as said %}{% button said status_url post=True name="status" value="read" %}{% endif %}
   {% if submission.status != "replied" %}{% words "contact.submission.review" "replied" as said %}{% button said status_url post=True name="status" value="replied" %}{% endif %}
@@ -32,7 +32,7 @@
     {% fact "Device" %}{{ submission.device|or_empty }}{% endfact %}
     {% fact "Country" %}{{ submission.country|or_empty }}{% endfact %}
     {% if submission.source_url %}{% fact "Sent from" %}{% entity submission.source_url|outside label=submission.source_url %}{% endfact %}{% endif %}
-    {% fact "User agent" %}<span class="muted">{{ submission.user_agent|or_empty }}</span>{% endfact %}
+    {% fact "User agent" %}{% muted %}{{ submission.user_agent|or_empty }}{% endmuted %}{% endfact %}
   {% endfacts %}
 {% endsection %}
 

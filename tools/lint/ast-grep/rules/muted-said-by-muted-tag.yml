@@ -1,8 +1,8 @@
 # Words in the muted voice are drawn by {% muted %} (value_tags.muted_frame),
 # the one way a host page says a line or a paragraph quietly, so its markup
-# has one owner. A class="muted" written by hand is a second way. Extensions
-# still draw it (hq_sdk.template_contract.CLASSES) until their own lines have
-# moved, so the rule reads the host's templates alone.
+# has one owner. A class="muted" written by hand is a second way. An
+# extension cannot write the class (it is not in
+# hq_sdk.template_contract.CLASSES), so the rule reads the host's templates.
 id: muted-said-by-muted-tag
 language: html
 severity: error
@@ -10,9 +10,6 @@ message: Muted words drawn by hand, where the muted tag draws them.
 note: Write {% muted %}...{% endmuted %}, or {% muted element="p" css="..." %} for a paragraph and the classes of where it stands; a cell or a list item holds the tag.
 files:
   - "templates/**/*.html"
-# Held by the page-actions work, which moves its two lines onto the tag.
-ignores:
-  - "templates/contacts/contact_detail.html"
 rule:
   kind: element
   has:
