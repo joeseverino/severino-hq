@@ -1,9 +1,9 @@
 {% comment %}
 The queue's entries (`action_items.families`), in the queue's table: an item
 is its row (`_queue_rows.html`); a family is a row saying what kind, how many
-and how bad, what is inside (its worst and how many more) and what its items
-offer (`action_items._offered`), which opens to the same rows as anywhere else, set in under its
-name. `prefix` keeps a family's row id apart from another table's on the page;
+and how bad, what is inside (its worst and how many more) and the act its
+items share, if any (`action_items._offered`), which opens to the same rows as
+anywhere else, set in under its name. `prefix` keeps a family's row id apart from another table's on the page;
 `aside_url`, where the queue can be dismissed, lets a family be dismissed
 whole, as the last of the row's buttons.
 {% endcomment %}
