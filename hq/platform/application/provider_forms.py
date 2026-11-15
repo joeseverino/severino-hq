@@ -131,13 +131,18 @@ class NameListWidget(forms.Widget):
             name,
             named,
         )
+        # A row added by the script takes its Remove button from the template,
+        # so the button primitive's markup is drawn here alone.
         return format_html(
             '<div class="name-list" data-name-list>{}{}'
             '<button type="button" class="{} name-list-add" data-name-list-add>'
-            "Add another</button></div>",
+            "Add another</button>"
+            '<template data-name-list-remover><button type="button" class="{}" data-name-list-remove>'
+            "Remove</button></template></div>",
             rows,
             blank,
             button_classes(),
+            button_classes("ghost"),
         )
 
 

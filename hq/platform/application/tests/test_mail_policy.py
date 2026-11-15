@@ -251,7 +251,8 @@ class MailPageTests(TestCase):
 
         # The one sender the record lists, then the blank row for adding one.
         self.assertEqual(len(with_class(response, "name-list-row")), 2)
-        self.assertEqual(len(select(response, "data-name-list-remove")), 1)
+        # The template's button is the one a row added later takes.
+        self.assertEqual(len([button for button in select(response, "data-name-list-remove") if not button.inert]), 1)
 
     def test_a_policy_past_all_failing_mail_is_refused_beside_its_field_as_sent(self):
         before = ManagedResource.objects.get(key="dmarc").spec["content"]

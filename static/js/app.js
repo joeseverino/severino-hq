@@ -519,12 +519,7 @@ document.addEventListener("click", (event) => {
     row.querySelector("input").value = "";
     // The spare row has nothing to remove; a row added here does.
     if (!row.querySelector("[data-name-list-remove]")) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "btn ghost";
-      button.dataset.nameListRemove = "";
-      button.textContent = "Remove";
-      row.append(button);
+      row.append(list.querySelector("template[data-name-list-remover]").content.firstElementChild.cloneNode(true));
     }
     last.after(row);
     row.querySelector("input").focus();
