@@ -183,6 +183,15 @@ class ExampleEstateTests(TestCase):
         self.assertTrue(missing, "an agent missing a permission")
         self.assertIn(str(NOT_CARRIED), {element.words for element in missing if element.tag == "code"})
 
+    def test_dev_look_signs_in_as_a_viewer_the_estate_holds(self):
+        from hq.platform.application import roles
+        from hq.platform.core.example_estate.agents import example_viewer
+
+        viewer = example_viewer()
+
+        self.assertNotEqual(viewer, self.user)
+        self.assertEqual(roles.role_of(viewer), roles.Role.VIEWER)
+
     def test_the_agents_page_draws_every_standing_a_device_can_be_in(self):
         from hq.platform.application.agent_devices import DeviceStanding
         from hq.platform.application.tests.markup import select

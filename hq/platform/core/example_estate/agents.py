@@ -322,6 +322,15 @@ def _block(owner, client_id, moment):
     AgentDevice.objects.filter(pk=device.pk).update(blocked_at=moment)
 
 
+def example_viewer():
+    """The person the estate holds in the viewer role, or ``LookupError`` for a set that holds none."""
+
+    viewer = get_user_model().objects.filter(username=VIEWER_USERNAME).first()
+    if viewer is None:
+        raise LookupError("This data set holds no viewer.")
+    return viewer
+
+
 def _viewer(moment):
     """A person who holds the viewer role, signed in once at ``moment``, as the
     sign-in names them and their role."""

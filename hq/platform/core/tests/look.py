@@ -22,6 +22,7 @@ import time
 from collections.abc import Callable
 from contextlib import ExitStack, redirect_stdout, suppress
 from dataclasses import dataclass
+from http import HTTPStatus
 from pathlib import Path
 from typing import Any, NoReturn, override
 from unittest import mock
@@ -86,6 +87,7 @@ from hq.platform.core.tests.look_tables import COLUMNS, TABLES, columns_line
 from hq.platform.core.tests.task import PREFIX, TEMPLATE, Usage, estate_name, estate_path, is_estate, usage
 from hq.platform.core.tests.test_browser_derived_fixtures import derived_pages
 lazy from hq.platform.core.example_estate import REQUEST
+lazy from hq.platform.core.example_estate.agents import example_viewer
 lazy from hq.platform.core.example_estate.testing import as_production, sign_in
 
 # The catalog builds its entries from the shared parts' constructors as it is
@@ -158,12 +160,16 @@ _LOOK = Path(__file__).resolve().relative_to(Path(settings.BASE_DIR).resolve()).
 _SOURCED = re.compile(r"^\s*\.\s+\./(\S+)", re.MULTILINE)
 # A rule's verdict when it judged no page at any width: none matched, or none drew.
 JUDGED_NOTHING = "{} judged no page: none matched, or none drew"
+# Who the estate's pages are asked as, by --as: its owner by default, or the
+# viewer the estate holds, whose refusal (a 403, an offer withheld) is looked at.
+VIEWER = "viewer"
 # How many processes looked, each with a browser of its own (look_shares).
 LOOKED_IN = "Looked in {} {}"
 # The flags that change what a run draws or reads, named in what it says it judged.
 DRAWN_WITH = (
     "base",
     "seed",
+    "as",
     "widths",
     "dialog",
     "dark",
@@ -993,7 +999,7 @@ def catalog_pages(asked) -> dict[str, str]:
 # says so, and its line goes. A look asked for one is not refused: its record
 # says it was undrawn, since the change owes no survey of a page that is not.
 DRAWN_BY_NOTHING = {
-    "403.html": "Django draws it for a refused request, and the look asks as the estate's owner",
+    "403.html": "Django draws it for a refused request, which the look asks only with --as viewer",
     "404.html": "Django draws it for an address no route answers, which no page of the estate is",
     "500.html": "Django draws it for a request that raised, which no page of the estate does",
     "auth/login.html": "drawn for a reader signed out, and the look signs in as the estate's owner",
@@ -1393,8 +1399,9 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
 
     @classmethod
     def serve_estate(cls):
-        """A client signed in as the example estate's owner, answering as
-        production does, until the class is done.
+        """A client signed in as the example estate's owner, or its viewer
+        with ``--as viewer``, answering as production does, until the class
+        is done.
 
         The estate is committed to the run's own test database, which the
         runner destroys after it: `respond` runs in Playwright's event loop,
@@ -1415,7 +1422,13 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         stack.enter_context(mock.patch.dict(os.environ, {"DJANGO_ALLOW_ASYNC_UNSAFE": "1"}))
         stack.enter_context(as_production())
         client = Client()
-        sign_in(client, stack.enter_context(seeds.built(_asked().text("seed"))))
+        seed = _asked().text("seed")
+        owner = stack.enter_context(seeds.built(seed))
+        try:
+            person = example_viewer() if _asked().text("as") == VIEWER else owner
+        except LookupError:
+            cls.refuse(f"--as viewer: the {seed} set holds no viewer; --seed showcase does")
+        sign_in(client, person)
         cls.answered = {}
         return client
 
@@ -1925,10 +1938,14 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             self.open(name, width)
         except BrowserError as refused:
             return f"not a page ({str(refused).splitlines()[0]})"
-        # A named POST's page is its refusal, so it answers that refusal's status.
+        # A named POST's page is its refusal, so it answers that refusal's
+        # status; so does a page the viewer is refused.
+        said = self.answered.get(_address(self.page.url), (None, ""))
         expected = posted(name).status if is_post(name) else 200
+        if _asked().text("as") == VIEWER and said == (HTTPStatus.FORBIDDEN, ""):
+            expected = HTTPStatus.FORBIDDEN
         served = is_estate(name) or is_post(name)
-        if served and (said := self.answered.get(_address(self.page.url), (None, ""))) != (expected, ""):
+        if served and said != (expected, ""):
             status, refusal = said
             if status != expected:
                 self.unanswered_pages[name] = status
