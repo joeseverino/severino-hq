@@ -306,7 +306,7 @@ class WriteTests(TestCase):
 
     def test_removing_needs_the_entry_named_again(self):
         entry = _entry()
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ValidationError):
             delete_calendar_entry(DeleteCommand(confirm="other"), principal=cli_principal(), current_key=str(entry.uid))
         delete_calendar_entry(
             DeleteCommand(confirm=str(entry.uid)), principal=cli_principal(), current_key=str(entry.uid)

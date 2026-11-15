@@ -7737,6 +7737,10 @@
         },
         "type": "object"
       },
+      "Confirm": {
+        "description": "The identifier of what it deletes, again, to confirm the delete.",
+        "type": "string"
+      },
       "ConfirmPrune": {
         "description": "Confirms the delete that prune_orphans asks for.",
         "type": "boolean"
@@ -8243,21 +8247,7 @@
             "$ref": "#/components/schemas/ExpectedUpdatedAt"
           },
           "payload": {
-            "additionalProperties": false,
-            "description": "The command: the fields its input schema names.",
-            "properties": {
-              "confirm": {
-                "description": "The submission's ID again, to confirm the delete.",
-                "type": "string"
-              },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              }
-            },
-            "required": [
-              "confirm"
-            ],
-            "type": "object"
+            "$ref": "#/components/schemas/DeleteCommand"
           },
           "target": {
             "description": "The message to delete: its id.",
@@ -9335,8 +9325,7 @@
         "description": "The command: the fields its input schema names.",
         "properties": {
           "confirm": {
-            "description": "The record's identifier again, to confirm the delete.",
-            "type": "string"
+            "$ref": "#/components/schemas/Confirm"
           },
           "idempotency_key": {
             "$ref": "#/components/schemas/IdempotencyKey"

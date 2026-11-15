@@ -24,7 +24,8 @@ from hq.domains.control_plane.providers import validate_spec
 from .adoption import WriteGap, require_writable, write_gap
 from .answer_fields import CallMessage
 from .cadence import ask
-from .command_fields import Choices, Describe
+from .command_fields import Choices, Describe, confirm
+from .deletion import DeleteCommand
 from .integration_specs import Kept, keeps
 from .projection import window
 from .record_errors import PolicyError, RecordNotFound
@@ -57,9 +58,8 @@ class ContactReviewCommand:
     admin_notes: AdminNotes = ""
 
 
-@dataclass(frozen=True, slots=True)
-class ContactDeleteCommand:
-    confirm: Annotated[str, Describe("The submission's ID again, to confirm the delete.")]
+# The name the contact specs import the shared delete command by.
+ContactDeleteCommand = DeleteCommand
 
 
 def _status(value: str, *, allow_blank: bool = False) -> str:
@@ -255,13 +255,12 @@ class ContactDeleted(TypedDict):
 
 @transaction.atomic
 def execute_contact_delete(
-    command: ContactDeleteCommand,
+    command: DeleteCommand,
     *,
     consented: Consented,
     current_id: int,
 ) -> ContactDeleted:
-    if command.confirm != str(current_id):
-        raise ValidationError({"confirm": ValidationError("Must match the message.", code="invalid")})
+    confirm(command.confirm, current_id)
     current = inbox.current()
     before = find_submission(current_id, current)
     if before is None:

@@ -323,8 +323,8 @@ class CapabilityTests(TestCase):
         )
 
         self.assertFalse(result["ok"])
-        self.assertEqual(result["error"]["code"], "rejected")
-        self.assertEqual(result["error"]["message"], "project.delete could not be executed.")
+        self.assertEqual(result["error"]["code"], "invalid_input")
+        self.assertEqual(result["error"]["details"], {"confirm": ["invalid"]})
         self.assertNotIn("wrong-target", result["error"]["message"])
         self.assertTrue(Project.objects.filter(pk=project.pk).exists())
 
