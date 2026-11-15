@@ -895,7 +895,8 @@ dataclass or a TypedDict, and a bound on a field (a length, a range) is an
 `PLUGIN_API_VERSION` 16 retires `{% post_button %}` and the `btn` class:
 `{% button %}` draws every control that looks like a button.
 It also retires a region's `room=` and a list's `table_room`: the browser
-sizes every column.
+sizes every column. And it retires `Principal.require`'s `capability=`
+keyword: it takes any number of capabilities, by position.
 
 A notice is `{% notice tone=... title=... %}body{% endnotice %}`, with a
 title the page composes as its `{% title %}` part after the body
