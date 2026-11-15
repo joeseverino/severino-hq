@@ -5,6 +5,7 @@ from dataclasses import dataclass, replace
 
 from .freshness import behind
 from .moments import moment
+from .tone import Tone
 from .topology_model import JOINED_KINDS, Topology, TopologyTrace
 
 TRACE_DIRECTIONS = ("inbound", "outbound", "both")
@@ -26,7 +27,7 @@ class TopologyLens:
     select: Callable[[Topology], frozenset[str]]
 
 
-_ATTENTION_STATES = frozenset({"attention", "serious"})
+_ATTENTION_STATES = frozenset({Tone.ATTENTION, Tone.SERIOUS})
 
 
 def _incoming_kinds(topology: Topology) -> dict[str, set[str]]:

@@ -30,6 +30,7 @@ from .request_connection import Connection, connection
 from .request_headers import HEADERS_READ, RESPONSE_CHECKS, Header, ResponseCheck, headers_of, redacted
 from .request_standard import ADDRESS_HOST, PROXY_HEADERS, owned_by
 from .standards import CheckResult, Standing
+from .tone import Tone
 from .ui import ended
 lazy from . import connections
 lazy from .card_items import Insight
@@ -87,7 +88,7 @@ class HopCheck:
 
 
 # A forwarded hop's role as the tone its pill takes.
-_ROLE_TONES = {"judged": "good", "ignored": "serious"}
+_ROLE_TONES = {"judged": Tone.GOOD, "ignored": Tone.SERIOUS}
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,10 +102,10 @@ class Evidence:
     role: str = ""
 
     @property
-    def tone(self) -> str:
+    def tone(self) -> Tone:
         """The address HQ judges by stands out, one it ignores reads as a warning."""
 
-        return _ROLE_TONES.get(self.role, "neutral")
+        return _ROLE_TONES.get(self.role, Tone.NEUTRAL)
 
 
 # ----- The forwarded chain ----------------------------------------------------
@@ -675,7 +676,7 @@ class RequestPath:
                 "request-path",
                 "Request path",
                 Insight(
-                    status="attention",
+                    status=Tone.ATTENTION,
                     eyebrow="",
                     title=hop.label,
                     value="",

@@ -31,6 +31,7 @@ from .finding_model import (
 )
 from .freshness import LAST_READ, freshness
 from .moments import moment, when
+from .tone import Tone
 from .topology_model import TopologyNode, derived_id
 from .ui import ended
 lazy from .facts import snapshots_of
@@ -248,7 +249,7 @@ class Unjudged:
             subject=self.node.id,
             scope=scope,
             title=title,
-            severity="attention",
+            severity=Tone.ATTENTION,
             explanation=self.explanation,
             evidence=self.evidence,
             remedies=() if self.refusal else (FindingRemedy(capability=CONTROLLER_REFRESH.name, target=""),),

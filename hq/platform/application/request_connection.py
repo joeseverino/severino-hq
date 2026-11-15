@@ -22,6 +22,7 @@ from .request_channel import Channel, channel_for_request, displayed_client_ip, 
 from .request_identity import Identity, identity_of
 from .request_standard import RequestFacts, ServingDeviceResolution, measure_request
 from .standards import CheckResult, Measurement, Standing
+from .tone import Tone
 from .ui import MISSING, counted
 lazy from . import connections
 lazy from .entity_links import entity_link
@@ -177,7 +178,7 @@ class Connection:
 
         if self.channel.id != "tailnet" or self.verdict == "confirmed":
             return self.channel.tone
-        return "attention" if self.verdict == "failing" else "neutral"
+        return Tone.ATTENTION if self.verdict == "failing" else Tone.NEUTRAL
 
     @property
     def summary(self) -> str:

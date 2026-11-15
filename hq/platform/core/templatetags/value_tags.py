@@ -34,7 +34,8 @@ from hq.platform.application.moments import (
 from hq.platform.application.money import money as _money
 from hq.platform.application.page_parts import html_attributes
 from hq.platform.application.printable import admitted
-from hq.platform.application.ui import MISSING, STATUS_VALUES, counted as _counted
+from hq.platform.application.tone import Tone
+from hq.platform.application.ui import MISSING, counted as _counted
 from hq.platform.core.templatetags.line_breaks import breakable, button_words, code_spans, held, mark_text
 lazy from hq.domains.control_plane.provider_spec import expiry_phrase
 lazy from hq.platform.application import references, request_identity, security
@@ -723,15 +724,17 @@ def reading_frame(name: str, given: dict) -> dict:
     """A reading's options as its partial draws them: its tone as the shared
     tone class, and each ``data_*`` option as an attribute of the reading."""
 
-    tone, note_tone = given.get("tone") or "", given.get("note_tone") or ""
-    if tone and tone not in STATUS_VALUES:
-        raise template.TemplateSyntaxError(f"{name} tone= is one of {', '.join(sorted(STATUS_VALUES))}")
+    note_tone = given.get("note_tone") or ""
+    try:
+        tone = Tone(given.get("tone") or Tone.NEUTRAL)
+    except ValueError:
+        raise template.TemplateSyntaxError(f"{name} tone= is one of {', '.join(Tone)}") from None
     if note_tone not in NOTE_TONES:
         raise template.TemplateSyntaxError(f"{name} note_tone= is one of {', '.join(sorted(filter(None, NOTE_TONES)))}")
     data = {option.replace("_", "-"): value for option, value in given.items() if option.startswith("data_")}
     return {
         **{option: value for option, value in given.items() if not option.startswith("data_")},
-        "tone_class": f" tone-{tone}" if tone not in ("", "neutral") else "",
+        "tone_class": f" tone-{tone}" if tone is not Tone.NEUTRAL else "",
         "attributes": html_attributes(data),
     }
 

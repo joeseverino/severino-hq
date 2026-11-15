@@ -20,9 +20,6 @@ from .display_words import display
 from .labels import dotted, plural
 from .tone import Tone
 
-# The tone words, for value_tags' `tone=` check alone.
-STATUS_VALUES = frozenset(Tone)
-
 # An advisory's severity as the tone it is drawn in, wherever one is listed:
 # critical and high serious, medium attention, the rest neutral. A weather
 # alert's severity (extreme, severe, moderate, minor) reads the same way.
