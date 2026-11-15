@@ -122,7 +122,8 @@ architecture test, a glob) fails when its path matches nothing.
   resource can do is derived from topology facts, never from a per-kind flag.
 - Never interpolate a newline-separated file list into `eval` or `bash -c`,
   where each line runs as a command: split it with `set --` and pass `"$@"`.
-- Reject unknown input; Pydantic plugin commands inherit `StrictCommand`.
+- Reject unknown input: a capability's command is a frozen dataclass, and
+  `CapabilitySpec` refuses one that is open.
 - Enforce authorization in the shared capability/view layer, not ad hoc in a
   template or handler.
 - A rule one row must keep on its own is a `Rule` in the model's
