@@ -3,7 +3,7 @@
 from django.template import Context, Template, TemplateSyntaxError
 from django.test import SimpleTestCase
 
-from hq.platform.application.tests.markup import elements, with_class
+from hq.platform.application.markup_testing import elements, with_class
 
 
 def _render(source: str, **context) -> str:

@@ -6,8 +6,8 @@ from django.test import SimpleTestCase
 from django.utils.safestring import mark_safe
 
 from hq.platform.application.entity_links import EntityLink
+from hq.platform.application.markup_testing import all_elements, links, select, text, texts, with_class
 from hq.platform.application.printable import Unprintable
-from hq.platform.application.tests.markup import all_elements, links, select, text, texts, with_class
 from hq.platform.core.templatetags.value_tags import breakable, cell_line, code_spans, entity, or_empty, readout
 
 

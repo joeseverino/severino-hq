@@ -84,7 +84,7 @@ class AddressEvidenceTests(TestCase):
         and a flow would leave it beside yours with a gap under it.
         """
 
-        from .markup import select
+        from hq.platform.application.markup_testing import select
 
         a_tailnet(
             a_device("a-laptop", A_TAILNET_ADDRESS, user="someone@example.test"),

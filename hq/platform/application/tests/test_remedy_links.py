@@ -17,6 +17,7 @@ from django.urls import Resolver404, resolve, reverse
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.providers import PROVIDERS
+from hq.platform.application.markup_testing import all_elements, elements, text, texts
 
 from ..action_links import command_url
 from ..capabilities import capability_registry, capability_words
@@ -27,7 +28,6 @@ from ..projection import MAX_PAGE_SIZE, projection_scope
 from ..resource_capabilities import UPDATE_CAPABILITY
 from ..security import web_principal
 from ..topology import derive_topology
-from .markup import all_elements, elements, text, texts
 from .test_approvals import POLICY_KEY, declare_policy
 from .test_finding_fixes import document
 from .test_paths import PUBLIC_RANGE, estate, record, store

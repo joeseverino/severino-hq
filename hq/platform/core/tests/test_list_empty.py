@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from hq.platform.application.capabilities import capability_words
-from hq.platform.application.tests.markup import links
+from hq.platform.application.markup_testing import links
 
 
 def offers(page, label: str, href: str) -> bool:

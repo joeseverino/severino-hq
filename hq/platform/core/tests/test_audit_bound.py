@@ -16,8 +16,8 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
+from hq.platform.application.markup_testing import select, text, within
 from hq.platform.application.read_models import recent_activity
-from hq.platform.application.tests.markup import select, text, within
 from hq.platform.core import append_only
 from hq.platform.core.models import AuditLog
 

@@ -13,8 +13,8 @@ from hq.domains.content.models import ContentItem
 from hq.domains.projects.models import Project
 from hq.platform.application.http_read import USER_AGENT
 from hq.platform.application.labels import adding
+from hq.platform.application.markup_testing import elements, links, select, text
 from hq.platform.application.tests import network
-from hq.platform.application.tests.markup import elements, links, select, text
 
 
 def _payload():

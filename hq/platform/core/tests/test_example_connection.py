@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from hq.platform.application.tests.markup import text, with_class
+from hq.platform.application.markup_testing import text, with_class
 
 NOTICE = "Not your connection."
 MARK = "example-connection"

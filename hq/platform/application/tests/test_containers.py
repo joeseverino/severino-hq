@@ -7,6 +7,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
+from hq.platform.application.markup_testing import elements, text
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 from hq_sdk.testing import plain
 
@@ -17,7 +18,6 @@ from ..derivation_testing import uncached
 from ..exposure import OPEN, PRIVATE, Exposure, RouteExposure, front_door_names, listening_ports
 from ..findings import rule_of
 from ..github_estate import Repository
-from .markup import elements, text
 
 
 def exposed(level):

@@ -8,6 +8,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderInventory
+from hq.platform.application.markup_testing import select
 from hq.platform.core.tests.forwarding import arrived
 
 from ..connection_catalog import ConnectionAbilityState, ConnectionGroup, ConnectionView
@@ -24,7 +25,6 @@ from ..projection import projection_scope
 from ..request_connection import connection
 from ..security import Capability
 from ..standards import Reading, Standing
-from .markup import select
 
 
 # The readings are imported where they are read, so this module imports at a

@@ -10,7 +10,7 @@ from hq.domains.assets.models import Asset
 from hq.domains.content.models import ContentItem
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
-from hq.platform.application.tests.markup import links, text
+from hq.platform.application.markup_testing import links, text
 
 
 class ReportsPageTests(TestCase):

@@ -16,6 +16,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ApprovalRequest, ManagedResource, OperationRequest
 from hq.domains.control_plane.providers import PROVIDERS
+from hq.platform.application.markup_testing import text
 from hq.platform.application.tests.consent import consented
 from hq.platform.core.models import AuditLog
 
@@ -43,7 +44,6 @@ from ..security import (
     mcp_principal,
     web_principal,
 )
-from .markup import text
 from .writers import keyed
 
 POLICY_KEY = "access-policy"

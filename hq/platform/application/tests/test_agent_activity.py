@@ -14,8 +14,8 @@ from django.utils import timezone
 from hq.platform.application import agent_activity, agent_limits, agent_registry, denials, roles
 from hq.platform.application.agent_limits import RATE_LIMITED
 from hq.platform.application.linked_accounts import bind_sign_in
+from hq.platform.application.markup_testing import all_elements
 from hq.platform.application.security import AuthorizationError, agent_principal
-from hq.platform.application.tests.markup import all_elements
 from hq.platform.core.models import AgentIdentity, AuditLog
 from hq.platform.core.test_runner import no_default_role
 

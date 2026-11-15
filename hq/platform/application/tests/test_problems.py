@@ -12,6 +12,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_adapters.github import COMPOSE_WORKFLOW, CURRENT, KIND as DELIVERY
+from hq.platform.application.markup_testing import select, text
 
 from .. import first_seen, freshness
 from ..attention import infrastructure
@@ -26,7 +27,6 @@ from ..resource_context import record_status
 from ..security import cli_principal
 from .host_only import host_only
 from .inventory_records import kind_read
-from .markup import select, text
 
 REWRITE = "adguard.rewrite"
 

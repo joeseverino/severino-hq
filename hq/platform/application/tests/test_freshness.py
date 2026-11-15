@@ -10,6 +10,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderConnection
+from hq.platform.application.markup_testing import elements, links, select, text
 
 from ..entity_links import entity_link
 from ..freshness import (
@@ -26,7 +27,6 @@ from ..freshness import (
 )
 from ..plugin_testing import installed, sibling
 from ..report_testing import report_connections
-from .markup import elements, links, select, text
 
 # A kind the controller sweeps, read through a provider's API.
 SWEPT = "adguard.rewrite"

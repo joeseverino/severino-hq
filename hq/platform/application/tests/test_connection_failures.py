@@ -7,12 +7,12 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderConnection
+from hq.platform.application.markup_testing import select, within
 
 from ..credential_mint import address_fields
 from ..findings import findings
 from ..report_testing import report_connections
 from ..security import Capability, Principal
-from .markup import select, within
 
 EVERYTHING = Principal("test", "operator", frozenset(Capability))
 SIGN_IN = (

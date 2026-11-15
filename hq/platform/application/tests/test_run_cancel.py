@@ -9,12 +9,12 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
+from hq.platform.application.markup_testing import select, text
 from hq.platform.core.models import AuditLog
 
 from ..capabilities import run_capability
 from ..controller import claim_next_operation
 from ..security import Capability, Principal, web_principal
-from .markup import select, text
 from .procedures import APP, DB, EDGE, RESTART_RUN, Supply, approved_run, manifest, run_payload
 
 CANCEL = "automation.run.cancel"

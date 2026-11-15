@@ -8,7 +8,7 @@ from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
-from hq.platform.application.tests.markup import text
+from hq.platform.application.markup_testing import text
 from hq.platform.core import append_only
 from hq.platform.core.models import AuditLog
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct

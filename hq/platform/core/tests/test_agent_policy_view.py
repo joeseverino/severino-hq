@@ -14,9 +14,9 @@ from hq.platform.application.capability_policy import (
     field_name,
     submitted_rules,
 )
+from hq.platform.application.markup_testing import text
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal, web_principal
-from hq.platform.application.tests.markup import text
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AgentIdentity, AuditLog
 

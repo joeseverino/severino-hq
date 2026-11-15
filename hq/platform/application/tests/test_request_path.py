@@ -12,6 +12,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
+from hq.platform.application.markup_testing import elements
 from hq.platform.core.tests.forwarding import arrived
 from hq_sdk.testing import plain
 
@@ -25,7 +26,6 @@ from ..request_path import (
     serialize_request_path,
 )
 from ..standards import Standing
-from .markup import elements
 from .people import someone
 
 HQ = "hq.example.test"

@@ -12,9 +12,9 @@ from hq.domains.control_plane.models import CapabilityRule
 from hq.domains.jobs.runner import run
 from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.domains import domain_attention_items
+from hq.platform.application.markup_testing import select, within
 from hq.platform.application.read_models import recent_activity
 from hq.platform.application.security import Capability, Principal, cli_principal
-from hq.platform.application.tests.markup import select, within
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core import append_only
 from hq.platform.core.audit import audit_operation, record_event

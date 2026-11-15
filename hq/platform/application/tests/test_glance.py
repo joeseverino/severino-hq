@@ -18,6 +18,7 @@ from hq.domains.control_plane.models import (
     ManagedResource,
     ProviderConnection,
 )
+from hq.platform.application.markup_testing import hrefs, select, text, with_class
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog
@@ -41,7 +42,6 @@ from ..glance import (
 from ..report_testing import bridged
 from ..security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal
 from .glance_readings import DOCKER, HOST, reported_hour, reported_machine, reported_weather
-from .markup import hrefs, select, text, with_class
 
 AN_OPERATOR = Principal("operator", "web", OPERATOR_CAPABILITIES)
 

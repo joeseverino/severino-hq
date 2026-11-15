@@ -7,8 +7,8 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
+from hq.platform.application.markup_testing import select
 from hq.platform.application.plugin_testing import form_keyed
-from hq.platform.application.tests.markup import select
 
 ADDRESS = "203.0.113.7"
 

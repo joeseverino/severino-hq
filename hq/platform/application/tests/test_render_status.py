@@ -18,6 +18,7 @@ from hq.domains.control_plane.observations.host import (
     STATUS_WORD,
     UNREADABLE_WORD,
 )
+from hq.platform.application.markup_testing import all_elements
 
 from .. import render_status_findings as rules
 from ..dashboard import work_queue
@@ -28,7 +29,6 @@ from ..projection import projection_scope
 from ..security import web_principal
 from ..topology import derive_topology
 from .commands import commands_on
-from .markup import all_elements
 from .test_remedy_links import TRAP, UNOFFERED, _command_links, an_operator
 from .test_tailnet_posture import EVERYTHING, raised, tailnet_connection
 

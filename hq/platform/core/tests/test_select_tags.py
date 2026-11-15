@@ -5,7 +5,7 @@ import re
 from django.template import Context, Template, TemplateSyntaxError
 from django.test import SimpleTestCase, tag
 
-from hq.platform.application.tests.markup import elements
+from hq.platform.application.markup_testing import elements
 from hq.platform.core.tests.test_part_tags import _catalog_templates
 
 OPTIONS = (("", "Default"), ("allow", "On"), ("deny", "Off"))

@@ -10,11 +10,11 @@ from hq.domains.content.models import ContentItem
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
+from hq.platform.application.markup_testing import elements, hrefs, links, select, text, texts, with_class
 from hq.platform.application.plugin_testing import ComposedPluginTestCase, sibling
 from hq.platform.application.plugins import NavigationItem
 from hq.platform.application.projection import projection_scope
 from hq.platform.application.projects import hq_sections, refresh_summary
-from hq.platform.application.tests.markup import elements, hrefs, links, select, text, texts, with_class
 from hq.platform.application.tests.test_relationships import estate
 from hq.platform.application.where_it_runs import where_it_runs
 
@@ -285,7 +285,7 @@ class ProjectToggleTests(TestCase):
 
 class PostureProjectTests(TestCase):
     def test_a_repository_finds_its_project_whatever_the_case_of_its_url(self):
-        from hq.platform.application.tests.markup import hrefs
+        from hq.platform.application.markup_testing import hrefs
         from hq.platform.application.tests.test_github_estate import store
 
         self.client.force_login(get_user_model().objects.create_user("posture-reader"))

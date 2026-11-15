@@ -7,8 +7,8 @@ from django.test import TestCase
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource
+from hq.platform.application.markup_testing import elements, select, within
 from hq.platform.application.tests.host_only import host_only
-from hq.platform.application.tests.markup import elements, select, within
 
 
 def asks(url: str) -> dict[str, str]:

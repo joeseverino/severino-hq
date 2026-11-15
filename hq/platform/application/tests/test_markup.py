@@ -2,7 +2,7 @@
 
 from django.test import SimpleTestCase
 
-from .markup import all_elements, links
+from hq.platform.application.markup_testing import all_elements, links
 
 
 class ShadowRootTests(SimpleTestCase):

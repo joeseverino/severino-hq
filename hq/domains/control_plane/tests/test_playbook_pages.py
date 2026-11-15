@@ -14,7 +14,7 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from hq.domains.control_plane.models import AdoptedCatalog, ApprovalRequest, OperationRequest, SourceProposal
-from hq.platform.application.tests.markup import elements, select, text, with_class, within
+from hq.platform.application.markup_testing import elements, select, text, with_class, within
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.testing import throwaway_media
 from hq.platform.core.models import AuditLog

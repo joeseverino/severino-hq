@@ -16,6 +16,7 @@ from hq.domains.control_plane.models import (
     ProviderConnection,
 )
 from hq.platform.application.derivation_testing import uncached
+from hq.platform.application.markup_testing import elements, hrefs, text
 from hq.platform.application.security import cli_principal
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
@@ -35,7 +36,6 @@ from ..security import Capability, Principal
 from ..tailnet_presence import tailnet_presence
 from .glance_readings import HOST, reported_hour, reported_machine, reported_weather
 from .host_only import host_only
-from .markup import elements, hrefs, text
 
 READ = Principal("test", "read", frozenset({Capability.READ}))
 # 203.0.113.0/24 stands in for a public range here.

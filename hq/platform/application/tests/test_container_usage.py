@@ -9,12 +9,12 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.control_plane.observations.portainer import RUNTIME_KIND
+from hq.platform.application.markup_testing import select
 from hq_sdk.testing import plain
 
 from ..container_reads import get_container
 from ..inventory import record_inventory
 from ..services import CONTAINER_KIND
-from .markup import select
 
 STARTED = "2026-10-31T11:00:00+00:00"
 SAMPLED = datetime(2026, 10, 31, 12, 0, tzinfo=UTC)

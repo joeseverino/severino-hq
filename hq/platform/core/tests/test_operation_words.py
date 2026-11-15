@@ -6,8 +6,8 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
+from hq.platform.application.markup_testing import within
 from hq.platform.application.read_models import recent_activity
-from hq.platform.application.tests.markup import within
 from hq.platform.core import append_only
 from hq.platform.core.audit import record_event
 from hq.platform.core.middleware import request_operation

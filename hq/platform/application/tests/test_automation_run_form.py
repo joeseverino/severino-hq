@@ -9,13 +9,13 @@ from django.test import TestCase
 from pydantic import Field
 
 from hq.platform.application.contracts import Closed
+from hq.platform.application.markup_testing import elements
 
 from ..capabilities import capability_registry, run_capability
 from ..command_forms import command_form_class
 from ..command_targets import record_options
 from ..integration_specs import capability_schema
 from ..security import Capability, Principal
-from .markup import elements
 from .procedures import APP, DB, EDGE, RESTART_RUN, Supply, manifest
 
 # The box a change's form is posted with ticked.

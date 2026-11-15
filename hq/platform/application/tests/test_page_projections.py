@@ -14,6 +14,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
 from hq.domains.control_plane.permissions import Tailscale
+from hq.platform.application.markup_testing import select, text
 from hq.platform.application.plugin_testing import form_keyed
 
 from ..connection_context import ConnectionsContext, connections_context
@@ -26,7 +27,6 @@ from ..resources import (
 )
 from ..security import AuthorizationError, Capability, Principal, cli_principal
 from ..tailnet_context import TailnetContext
-from .markup import select, text
 
 NOW = timezone.now()
 

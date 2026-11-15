@@ -3,7 +3,7 @@ toggle in the gutter, and the heading row of a group."""
 
 from django.test import SimpleTestCase
 
-from hq.platform.application.tests.markup import all_elements, elements, select
+from hq.platform.application.markup_testing import all_elements, elements, select
 
 from .test_table_contract import _render
 

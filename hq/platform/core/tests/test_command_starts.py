@@ -8,8 +8,8 @@ from hq.platform.application.capabilities import capability_registry
 from hq.platform.application.command_center import command_center
 from hq.platform.application.command_targets import starting_page
 from hq.platform.application.integration_specs import ON_ITS_PAGE
+from hq.platform.application.markup_testing import select, within
 from hq.platform.application.security import Capability, Principal
-from hq.platform.application.tests.markup import select, within
 from hq.platform.core.models import Appearance
 
 User = get_user_model()

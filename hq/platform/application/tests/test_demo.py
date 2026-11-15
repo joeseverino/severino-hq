@@ -7,12 +7,12 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
+from hq.platform.application.markup_testing import with_class, within
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog
 
 from ..demo import amount, day, demo_scope, label, showing_demo
-from .markup import with_class, within
 
 
 class SubstitutionTests(TestCase):

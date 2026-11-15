@@ -12,10 +12,10 @@ from django.urls import reverse
 
 from hq.platform.application import asks
 from hq.platform.application.asks import Ask, Standing
+from hq.platform.application.markup_testing import all_elements, elements, links, select, with_class, within
 from hq.platform.application.plugin_testing import hand_drawn_tables, table_problems
 from hq.platform.application.routes import routed
 from hq.platform.application.tables import TableColumn, TableListMixin, ranked, typed
-from hq.platform.application.tests.markup import all_elements, elements, links, select, with_class, within
 from hq.platform.application.tests.reads import reads
 from hq.platform.core.stylesheets import stylesheet as whole_stylesheet
 

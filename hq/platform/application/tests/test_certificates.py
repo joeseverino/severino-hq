@@ -17,6 +17,7 @@ from cryptography.x509.oid import NameOID
 from django.test import SimpleTestCase, TestCase, override_settings
 
 from hq.domains.control_plane.models import ApprovalRequest, CertificateMaterial, ManagedResource, SealedSecret
+from hq.platform.application.markup_testing import all_elements
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core import secrets
 from hq.platform.core.audit import audited_labels
@@ -34,7 +35,6 @@ from ..certificates import (
 from ..infrastructure import serialize_resource
 from ..record_errors import CertificateError, PolicyError
 from ..security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal, internal_principal, mcp_principal
-from .markup import all_elements
 
 # A controller's seed for these tests, and the public half HQ seals to.
 SEAL_SEED = random.token_bytes(32)

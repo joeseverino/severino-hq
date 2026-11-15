@@ -13,6 +13,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderInventory
+from hq.platform.application.markup_testing import select
 from hq.platform.core.tests.forwarding import arrived
 
 from .. import cadence
@@ -20,7 +21,6 @@ from ..request_connection import connection
 from ..request_path import request_path
 from ..standards import Standing
 from .connection_requests import A_TAILNET_ADDRESS, a_device, a_request, a_tailnet
-from .markup import select
 
 # How long the panel was left unopened.
 AWAY = timedelta(hours=13)

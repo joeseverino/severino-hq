@@ -12,7 +12,7 @@ from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
-from hq.platform.application.tests.markup import text
+from hq.platform.application.markup_testing import text
 
 from ..entity_links import declared_link, entity_link, web_url
 

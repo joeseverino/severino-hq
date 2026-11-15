@@ -9,7 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.platform.application import request_context
-from hq.platform.application.tests.markup import text
+from hq.platform.application.markup_testing import text
 from hq.platform.core.attribution import operation_context
 from hq.platform.core.models import AuditLog
 

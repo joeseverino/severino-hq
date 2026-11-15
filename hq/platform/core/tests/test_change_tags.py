@@ -4,8 +4,8 @@ from django.template import Context, Template
 from django.test import SimpleTestCase
 
 from hq.platform.application.approval_review import ChangePreview, compare
+from hq.platform.application.markup_testing import all_elements, elements, select, with_class, within
 from hq.platform.application.payload_words import ChangeRow
-from hq.platform.application.tests.markup import all_elements, elements, select, with_class, within
 from hq.platform.application.ui import MISSING
 
 

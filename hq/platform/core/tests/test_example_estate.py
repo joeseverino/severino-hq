@@ -23,8 +23,8 @@ from hq.platform.application.automation_adoption import ADOPT
 from hq.platform.application.capability_policy import RULE_LABELS
 from hq.platform.application.findings import findings
 from hq.platform.application.linked_accounts import GITHUB, linked_login
+from hq.platform.application.markup_testing import all_elements, elements, select, within
 from hq.platform.application.security import WEB_INTERFACE, cli_principal, web_principal
-from hq.platform.application.tests.markup import all_elements, elements, select, within
 from hq.platform.application.topology import derive_topology
 from hq.platform.core import seeds
 from hq.platform.core.audit import ANONYMOUS, audited_labels
@@ -194,7 +194,7 @@ class ExampleEstateTests(TestCase):
 
     def test_the_agents_page_draws_every_standing_a_device_can_be_in(self):
         from hq.platform.application.agent_devices import DeviceStanding
-        from hq.platform.application.tests.markup import select
+        from hq.platform.application.markup_testing import select
 
         client = Client()
         sign_in(client, self.user)

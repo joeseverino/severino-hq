@@ -6,6 +6,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource
+from hq.platform.application.markup_testing import select, text
 
 from ..action_links import command_url
 from ..attention import infrastructure
@@ -13,7 +14,6 @@ from ..containers import containers
 from ..derivation_testing import uncached
 from ..exposure import OPEN, PRIVATE
 from ..findings import rule_of
-from .markup import select, text
 from .test_container_standard import KEPT, runtime
 from .test_containers import HIGH, estate, exposed, inventory
 

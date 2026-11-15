@@ -11,7 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
-from hq.platform.application.tests.markup import links, text
+from hq.platform.application.markup_testing import links, text
 
 from ..connection_catalog import connection_catalog
 from ..inventory_testing import store

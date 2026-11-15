@@ -8,7 +8,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderInventory
-from hq.platform.application.tests.markup import select, text
+from hq.platform.application.markup_testing import select, text
 from hq.platform.core import append_only
 from hq.platform.core.models import AuditLog
 

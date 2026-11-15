@@ -17,10 +17,10 @@ from django.utils import timezone
 from hq.domains.analytics.models import AnalyticsCoverage, AnalyticsSite, RumDaily, VitalsDaily
 from hq.domains.content.models import ContentItem
 from hq.platform.application import analytics as service
+from hq.platform.application.markup_testing import hrefs, text
 from hq.platform.application.report_testing import bridged
 from hq.platform.application.resources import InvalidResourceInput, list_resource
 from hq.platform.application.security import AuthorizationError, Capability, Principal
-from hq.platform.application.tests.markup import hrefs, text
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 SITE_TAG = "0" * 32

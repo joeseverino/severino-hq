@@ -9,6 +9,7 @@ from django.test import TestCase, override_settings
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
+from hq.platform.application.markup_testing import elements, links, with_class
 from hq.platform.application.tests.consent import consented
 from hq_sdk.testing import plain
 
@@ -19,7 +20,6 @@ from ..inventory_testing import store
 from ..policy_fixes import policy_without_empty_groups, request_empty_groups_removal
 from ..record_errors import PolicyError, RecordNotFound
 from ..security import cli_principal, mcp_principal
-from .markup import elements, links, with_class
 from .test_approvals import POLICY_KEY, an_operator, declare_policy
 from .test_tailnet_posture import policy, raised, tailnet_connection
 

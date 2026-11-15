@@ -9,7 +9,7 @@ from django.test import SimpleTestCase, TestCase, tag
 from django.urls import reverse
 
 from hq.platform.application.automation_runs import access_words
-from hq.platform.application.tests.markup import links, select, text, texts, with_class, within
+from hq.platform.application.markup_testing import links, select, text, texts, with_class, within
 from hq.platform.application.tests.reads import reads
 from hq.platform.application.tests.source import source_files, template_files
 from hq.platform.application.tests.tree import ROOT

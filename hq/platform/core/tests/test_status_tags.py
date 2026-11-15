@@ -6,7 +6,7 @@ from django.template import engines
 from django.template.autoreload import get_template_directories
 from django.test import SimpleTestCase, tag
 
-from hq.platform.application.tests.markup import elements
+from hq.platform.application.markup_testing import elements
 from hq.platform.application.tests.reads import reads
 from hq.platform.core.templatetags.status_tags import severity_tone, status_pill
 

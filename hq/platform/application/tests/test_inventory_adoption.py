@@ -15,6 +15,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.control_plane.providers import PROVIDERS, validate_spec
+from hq.platform.application.markup_testing import select
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.core.models import AuditLog
 
@@ -33,7 +34,6 @@ from ..record_errors import RecordNotFound
 from ..report_testing import bridged, refused_part
 from ..security import cli_principal
 from .inventory_records import A_PROXY, A_REWRITE, ANOTHER, a_sweep
-from .markup import select
 
 
 class AdoptionTests(TestCase):

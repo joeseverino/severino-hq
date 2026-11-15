@@ -21,12 +21,12 @@ from hq.platform.application.contact_submissions import (
     execute_contact_review,
     list_contact_submissions,
 )
+from hq.platform.application.markup_testing import elements, select, with_class
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.record_errors import RecordNotFound
 from hq.platform.application.security import Capability, Principal
 from hq.platform.application.tests.consent import consented
 from hq.platform.application.tests.facts import ROOT, STRING, scan, strings
-from hq.platform.application.tests.markup import elements, select, with_class
 from hq.platform.application.tests.reads import reads
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog

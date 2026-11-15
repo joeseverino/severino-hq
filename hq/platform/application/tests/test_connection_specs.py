@@ -9,6 +9,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ProviderConnection
+from hq.platform.application.markup_testing import text
 
 from ..command_center import command_center
 from ..connection_catalog import connection_catalog
@@ -26,7 +27,6 @@ from ..plugin_testing import offering
 from ..resources import list_resource
 from ..security import Capability, Principal
 from .host_only import host_only
-from .markup import text
 from .sentinel import CONNECTION as SENTINEL_CONNECTION, SENTINEL, SentinelMixin, plant_credentials
 
 READ = Principal("reader", "test", frozenset({Capability.READ}))

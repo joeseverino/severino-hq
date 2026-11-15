@@ -12,6 +12,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource
+from hq.platform.application.markup_testing import select, with_class
 from hq.platform.application.plugin_testing import form_keyed
 
 from ..mail_policy import (
@@ -25,7 +26,6 @@ from ..mail_policy import (
     parse_dmarc,
     parse_spf,
 )
-from .markup import select, with_class
 
 
 class DmarcReadingTests(SimpleTestCase):

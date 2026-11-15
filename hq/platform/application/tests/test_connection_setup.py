@@ -6,10 +6,10 @@ from django.utils.html import escape
 from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS
 from hq.domains.control_plane.credential_reads import observer_permissions
 from hq.domains.control_plane.permissions import Cloudflare
+from hq.platform.application.markup_testing import hrefs, text
 
 from ..connection_setup import setups
 from .host_only import host_only
-from .markup import hrefs, text
 
 
 class DeclarationTests(TestCase):

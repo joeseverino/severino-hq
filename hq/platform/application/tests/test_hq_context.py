@@ -12,6 +12,7 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.observations.host import RENDER_STATUS_KIND, UNIT_KIND
 from hq.domains.jobs.models import Job
+from hq.platform.application.markup_testing import all_elements, links, select, text
 from hq.platform.application.security import cli_principal
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 
@@ -21,7 +22,6 @@ from ..hq_context import hq_context
 from ..inventory_testing import store
 from ..moments import moment
 from .host_only import host_only
-from .markup import all_elements, links, select, text
 
 # The package exports a function named work, so the module is named by its path.
 work_module = importlib.import_module("hq.platform.application.hq_context.work_part")

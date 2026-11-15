@@ -3,10 +3,11 @@
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase
 
+from hq.platform.application.markup_testing import actions, hrefs
+
 from ..action_links import ActionLink
 from ..card_items import Insight
 from ..workflows import claim_identity, claim_resolution_plan, serialize_workflow
-from .markup import actions, hrefs
 
 REMEDY = ActionLink(
     "remedy",

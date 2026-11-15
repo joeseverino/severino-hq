@@ -17,6 +17,7 @@ from hq.domains.control_plane.models import ProviderConnection
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_STACK_KIND
 from hq.domains.control_plane.provider_spec import NameContext
 from hq.domains.control_plane.providers import PROVIDERS
+from hq.platform.application.markup_testing import all_elements, hrefs, text
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 
@@ -27,7 +28,6 @@ from ..derivations import counting
 from ..provider_choices import container_stack, zone
 from ..report_testing import bridged, report_connections
 from ..security import cli_principal
-from .markup import all_elements, hrefs, text
 from .sentinel import CONNECTION, SentinelMixin, plant_credentials
 
 A_PORTAINER = {

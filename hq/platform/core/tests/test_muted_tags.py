@@ -1,7 +1,7 @@
 from django.template import Context, Template, TemplateSyntaxError
 from django.test import SimpleTestCase
 
-from hq.platform.application.tests.markup import elements, select, with_class
+from hq.platform.application.markup_testing import elements, select, with_class
 
 
 def drawn(source: str, **context) -> str:

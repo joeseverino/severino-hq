@@ -13,6 +13,7 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.providers import PROVIDERS
+from hq.platform.application.markup_testing import hrefs, text
 from hq.platform.core.tests.estate_sizes import (
     assert_cost_does_not_grow,
     assert_subject_cost_does_not_grow,
@@ -29,7 +30,6 @@ from ..services import prospects
 from ..tailnet import TAILNET_KIND
 from ..topology import relation_graph
 from ..topology_model import READING_RANKS, RELATIONS
-from .markup import hrefs, text
 from .test_hq_self import SITE, declare, own
 
 READER = Principal("reader", "test", frozenset({Capability.READ}))

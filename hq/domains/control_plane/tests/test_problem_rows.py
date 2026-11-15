@@ -5,10 +5,10 @@ never loose between the page's cards."""
 from django.test import TestCase
 from django.urls import reverse
 
+from hq.platform.application.markup_testing import Element, all_elements
 from hq.platform.application.problems import problem_counts
 from hq.platform.application.projection import projection_scope
 from hq.platform.application.security import cli_principal
-from hq.platform.application.tests.markup import Element, all_elements
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.names import MACHINE
 from hq.platform.core.example_estate.testing import throwaway_media

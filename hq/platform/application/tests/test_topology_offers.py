@@ -9,11 +9,10 @@ from django.test import SimpleTestCase, TestCase, override_settings, tag
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource
+from hq.platform.application.markup_testing import actions, hrefs
 from hq.platform.application.tests.reads import reads
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.testing import throwaway_media
-
-from .markup import actions, hrefs
 
 ROOT = Path(__file__).resolve().parents[4]
 # The edit and removal routes, which only ``resource_capabilities.Offered`` builds a link to.

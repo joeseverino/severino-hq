@@ -8,6 +8,7 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
+from hq.platform.application.markup_testing import hrefs, select, text
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.core.models import AuditLog, LinkedAccount
 
@@ -18,7 +19,6 @@ from ..cadence_testing import controller_arrived
 from ..capabilities import capability_registry, execute_capability
 from ..freshness import RETRY_AFTER, cadence
 from ..security import Capability, Principal
-from .markup import hrefs, select, text
 from .sentinel import SENTINEL
 
 PROFILE_EVERY = cadence(github_profile.KIND).every

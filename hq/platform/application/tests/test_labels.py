@@ -2,10 +2,10 @@ from django.template import engines
 from django.test import SimpleTestCase, tag
 from django.utils.safestring import mark_safe
 
+from hq.platform.application.markup_testing import elements, links, text
 from hq.platform.application.tests.reads import reads
 
 from ..labels import dotted, dotted_html, lower_first, plural
-from .markup import elements, links, text
 
 
 class PluralTests(SimpleTestCase):

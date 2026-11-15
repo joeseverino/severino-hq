@@ -17,6 +17,7 @@ from hq.domains.calendars.models import Entry
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
+from hq.platform.application.markup_testing import all_elements, elements, hrefs, links, select, text, texts
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from .. import references
@@ -25,7 +26,6 @@ from ..calendar_entries import EntryCommand, save_entry
 from ..plugin_testing import form_keyed
 from ..references import Referable, Reference, ReferenceField, Target
 from ..security import Principal, cli_principal, internal_principal
-from .markup import all_elements, elements, hrefs, links, select, text, texts
 
 
 def one(items):

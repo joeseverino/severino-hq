@@ -15,6 +15,8 @@ from django.template.loader import render_to_string
 from django.test import SimpleTestCase, TestCase as DatabaseTestCase, tag
 from django.utils import timezone
 
+from hq.platform.application.markup_testing import hrefs, text, with_class
+
 from ..card_items import Insight, Kpi
 from ..domains import domain_navigation
 from ..pages import page_context
@@ -34,7 +36,6 @@ from ..plugins import (
     plugin_health,
 )
 from ..ui import PageNavigation, PageSection
-from .markup import hrefs, text, with_class
 
 # What the coupling scan walks past. Generated trees, virtualenvs and vendored
 # assets are not host source, and the runtime image has neither `.git` nor git

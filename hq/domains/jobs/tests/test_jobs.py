@@ -9,7 +9,7 @@ from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.platform.application.tests.markup import text, with_class
+from hq.platform.application.markup_testing import text, with_class
 from hq.platform.core.models import AuditLog
 from hq_sdk.testing import plain
 

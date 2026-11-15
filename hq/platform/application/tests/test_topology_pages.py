@@ -13,6 +13,7 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
 from hq.domains.control_plane.topology_views import TopologyView
 from hq.platform.application.derivation_testing import uncached
+from hq.platform.application.markup_testing import hrefs, links, select, text, texts, within
 from hq_sdk.testing import plain
 
 from ..action_links import topology_investigation_links, topology_url
@@ -23,7 +24,6 @@ from ..security import Capability
 from ..topology import derive_topology, topology as serialized_topology
 from ..topology_lenses import apply_lens, lens_for, topology_lenses
 from .host_only import host_only
-from .markup import hrefs, links, select, text, texts, within
 from .topology_principals import MANAGE, NONE, READ
 
 

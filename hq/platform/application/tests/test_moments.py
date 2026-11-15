@@ -7,6 +7,8 @@ from django.template import Context, Template, TemplateSyntaxError
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import formats, timezone
 
+from hq.platform.application.markup_testing import elements, text, with_class
+
 from ..moments import (
     ago,
     ahead,
@@ -21,7 +23,6 @@ from ..moments import (
     when_range,
 )
 from ..ui import MISSING
-from .markup import elements, text, with_class
 
 CHICAGO = ZoneInfo("America/Chicago")
 UTC = ZoneInfo("UTC")

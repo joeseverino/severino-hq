@@ -10,7 +10,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from hq.domains.control_plane.models import OperationRequest
-from hq.platform.application.tests.markup import all_elements, elements, within
+from hq.platform.application.markup_testing import all_elements, elements, within
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.automation import CACHE_FLUSH, CORRELATION
 from hq.platform.core.example_estate.names import MACHINE

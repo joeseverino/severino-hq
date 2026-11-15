@@ -6,7 +6,7 @@ from django import forms
 from django.template import RequestContext, Template, TemplateSyntaxError
 from django.test import RequestFactory, SimpleTestCase
 
-from hq.platform.application.tests.markup import all_elements
+from hq.platform.application.markup_testing import all_elements
 
 EDITED = (
     '{% table_region "Example runs" %}<table class="data-table"><thead><tr>'

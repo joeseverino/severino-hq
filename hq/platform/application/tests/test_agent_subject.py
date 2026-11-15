@@ -15,7 +15,7 @@ from mcp.shared.exceptions import MCPError
 
 from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
 from hq.domains.projects.models import Project
-from hq.platform.application.tests.markup import select
+from hq.platform.application.markup_testing import select
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AgentIdentity
 from hq.platform.mcp import tasks

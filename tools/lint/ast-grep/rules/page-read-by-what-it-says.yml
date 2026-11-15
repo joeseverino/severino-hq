@@ -23,7 +23,7 @@ language: python
 severity: error
 message: A test reads a page by a shared part's markup (a tag or a class), which breaks when the part changes though the page says the same thing.
 note: >-
-  Read what the page says through hq/platform/application/tests/markup.py
+  Read what the page says through hq/platform/application/markup_testing.py
   (text, texts, links, hrefs, elements, select, within), or the data- hook
   the page carries. A test of how a part draws belongs in that part's own
   tests or its catalog entry.

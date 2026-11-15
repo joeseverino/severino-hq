@@ -12,7 +12,7 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.permissions import NginxProxyManager
-from hq.platform.application.tests.markup import text
+from hq.platform.application.markup_testing import text
 
 from ..derived_reads import get_reading, serialize_path
 from ..findings import findings

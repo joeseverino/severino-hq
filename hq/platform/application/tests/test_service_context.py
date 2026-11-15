@@ -15,13 +15,13 @@ from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.projects.models import Project
+from hq.platform.application.markup_testing import all_elements, select, with_class, within
 from hq.platform.core.models import AuditLog
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from ..service_context import Cell, ServiceSection, sections_for
 from ..services import prospects
 from ..ui import MISSING
-from .markup import all_elements, select, with_class, within
 
 
 def a_service(hostname="probe.example.com"):
@@ -309,10 +309,10 @@ class TopologyWindowTests(TestCase):
         from django.utils import timezone
 
         from hq.domains.analytics.models import AnalyticsSite, RumDaily
+        from hq.platform.application.markup_testing import text
 
         from ..security import web_principal
         from ..topology import derive_topology
-        from .markup import text
 
         user = get_user_model().objects.create_superuser("operator", password="x" * 20)
         self.client.force_login(user)

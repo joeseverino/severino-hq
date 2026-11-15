@@ -6,8 +6,8 @@ column and draws the copy, and the stylesheet shows one or the other
 from django.template import Context, Template
 from django.test import SimpleTestCase
 
+from hq.platform.application.markup_testing import all_elements
 from hq.platform.application.tables import TableColumn, ranked
-from hq.platform.application.tests.markup import all_elements
 
 _ROW = (
     '<tr><td><div class="row-line">Example title</div><p>Example words.</p></td>'

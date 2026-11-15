@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from django.template import Context, Template
 from django.test import SimpleTestCase
 
-from hq.platform.application.tests.markup import all_elements
+from hq.platform.application.markup_testing import all_elements
 
 
 def _drawn(evidence) -> dict[str, str]:

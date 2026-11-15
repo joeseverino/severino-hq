@@ -18,7 +18,7 @@ from hq.domains.control_plane.provider_adapters.contracts import (
     PERMISSION_REFUSAL,
 )
 from hq.domains.control_plane.providers import PROVIDERS
-from hq.platform.application.tests.markup import text
+from hq.platform.application.markup_testing import text
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from ..connections import _controller_contract

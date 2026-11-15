@@ -8,7 +8,7 @@ from django.template import Context, Template, TemplateSyntaxError
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase, tag
 
-from hq.platform.application.tests.markup import elements, select, with_class
+from hq.platform.application.markup_testing import elements, select, with_class
 from hq.platform.application.tests.reads import reads
 from hq.platform.core.tests.test_part_tags import _catalog_templates
 from hq.platform.core.tests.test_template_values import template_sources

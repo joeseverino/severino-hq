@@ -11,10 +11,9 @@ from django.utils import timezone
 
 from hq.platform.application.decisions import decision, workflow_parts
 from hq.platform.application.item_help import cannot_step, commands, do_step, run_step
+from hq.platform.application.markup_testing import all_elements, elements, hrefs, select, text, texts, with_class
 from hq.platform.application.tone import Tone
 from hq.platform.application.workflow_contracts import ActionLink, WorkflowOutcome, WorkflowPlan, WorkflowStep
-
-from .markup import all_elements, elements, hrefs, select, text, texts, with_class
 
 
 def row_hrefs(html):

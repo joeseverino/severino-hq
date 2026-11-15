@@ -20,6 +20,7 @@ from hq.domains.control_plane.models import (
     ProviderConnection,
     ProviderInventory,
 )
+from hq.platform.application.markup_testing import all_elements, text
 from hq.platform.application.plugin_testing import form_keyed
 from hq_sdk.testing import plain
 
@@ -29,7 +30,6 @@ from ..machines import MachineState, machine, machine_catalog
 from ..resource_capabilities import UPDATE_CAPABILITY
 from ..services import CONTAINER_KIND
 from .glance_readings import HOST, reported_machine
-from .markup import all_elements, text
 
 
 def a_connection(ref, provider, endpoint="", reaches=(), *, reachable=True):

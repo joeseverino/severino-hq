@@ -17,11 +17,11 @@ from hq.domains.control_plane.models import ApprovalRequest
 from hq.platform.application.agent_access import AgentAccessCommand, set_agents_paused
 from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.derived_reads import list_action_items
+from hq.platform.application.markup_testing import text
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.roles import Role, assign
 from hq.platform.application.security import mcp_principal, web_principal
 
-from .markup import text
 from .reads import reads
 from .test_approvals import POLICY_KEY, declare_policy, policy_document, update_payload
 from .writers import keyed
