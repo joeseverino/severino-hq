@@ -131,21 +131,25 @@ case "${first}" in *"${work}/alpha/src, ${work}/beta-worktree/src"*) ;; *) fail 
     fail "the suite did not import the set named: $(cat "${work}/seen.set")"
 
 # A package of another plugin API than the host's is never composed as it
-# stands: the suite imports its repository's newest commit at the host's API,
-# else no extension, which a required run refuses.
+# stands: the suite imports its repository's newest commit at the host's API
+# made before the host moved on from the commit it stands on (an extension's
+# later commit at that API may use what the host added since), else no
+# extension, which a required run refuses.
 extensions="${work}/extensions"
 mkdir -p "${extensions}/packages/alpha/src/example_alpha"
 printf '[project]\nname = "example-alpha"\n' >"${extensions}/packages/alpha/pyproject.toml"
-declares() { # declares <api>: the package's manifest requires <api>, committed
-    printf 'plugin = PluginManifest(id="example.alpha", api_version=%s)\n' "$1" \
+declares() { # declares <api> <unix time> <word>: the package's manifest requires <api>, committed then
+    printf '# %s\nplugin = PluginManifest(id="example.alpha", api_version=%s)\n' "$3" "$1" \
         >"${extensions}/packages/alpha/src/example_alpha/plugin.py"
     git -C "${extensions}" add -A
-    git -C "${extensions}" -c user.name=test -c user.email=test@example.com -c commit.gpgsign=false commit -q --no-verify -m "API $1"
+    GIT_COMMITTER_DATE="@$2 +0000" git -C "${extensions}" -c user.name=test -c user.email=test@example.com \
+        -c commit.gpgsign=false commit -q --no-verify -m "API $1"
 }
 git -C "${extensions}" init -q
-declares 1
+declares 1 1700000000 first
 at_one="$(git -C "${extensions}" rev-parse HEAD)"
-declares 2
+declares 1 1700000200 later
+declares 2 1700000300 bumped
 composed() { # composed <host api> [NAME=value...]: the task's status; what the suite imported is in seen.set
     echo "PLUGIN_API_VERSION = $1" >"${fixture}/hq/platform/application/plugins.py"
     shift
@@ -167,7 +171,17 @@ case "$(cat "${work}/seen.set")" in
 esac
 picked="$(cat "${work}/seen.set")"
 picked="${picked#*|}"
-grep -q 'api_version=1' "${picked}/example_alpha/plugin.py" || fail "the commit imported is not the one at API 1"
+grep -q '^# later' "${picked}/example_alpha/plugin.py" || fail "the commit imported is not the newest at API 1"
+# Another line moves the host on from this commit between the extension's two
+# commits at API 1, so only the first was made against the host as it stands.
+moved_on="$(cd "${fixture}" && GIT_COMMITTER_DATE="@1700000100 +0000" git -c user.name=test -c user.email=test@example.com \
+    commit-tree -m "the host moves on" -p HEAD "HEAD^{tree}")"
+git -C "${fixture}" update-ref refs/heads/moved-on "${moved_on}"
+[ "$(composed 1)" = 0 ] || fail "a host the extension moved past did not compose"
+picked="$(cat "${work}/seen.set")"
+picked="${picked#*|}"
+grep -q '^# first' "${picked}/example_alpha/plugin.py" ||
+    fail "the commit imported is not the newest at API 1 made before the host moved on"
 grep -qF "${at_one%"${at_one#????????????}"}" "${work}/out" || fail "the run does not name the commit it composed"
 [ "$(composed 3)" = 0 ] || fail "a host ahead of every commit did not run alone"
 [ "$(cat "${work}/seen.set")" = "|" ] || fail "a host ahead of every commit composed $(cat "${work}/seen.set")"

@@ -280,10 +280,10 @@ def chromium() -> Iterator[Any]:
             browser.close()
 
 
-def image_of(tree: Path, commit: str, *, here: bool, composed: bool) -> str:
+def image_of(tree: Path, commit: str, *, here: bool, composed: bool, named: dict[str, str]) -> str:
     """The image to run for ``tree``: the one IMAGE hands over here, else the host image
-    image:build makes, composed with this checkout's extension set where the plan composes one,
-    as production runs it. A base tree has no image:compose of its own, so this checkout's
+    image:build makes, composed where the plan composes the extensions with the set ``named`` for
+    it (a base's) or this checkout's, as production runs it. A base tree has no image:compose of its own, so this checkout's
     composes it with the base's own composition/Dockerfile and staging."""
 
     if here and os.environ.get("IMAGE"):
@@ -297,7 +297,7 @@ def image_of(tree: Path, commit: str, *, here: bool, composed: bool) -> str:
         return host
     tag = f"{host}-composed"
     command = ["mise", "-C", str(ROOT), "run", "image:compose", "--host", host, "--tag", tag, "--context", str(tree)]
-    done = subprocess.run(command, capture_output=True, text=True, env=clean_env(), check=False)
+    done = subprocess.run(command, capture_output=True, text=True, env=clean_env(**named), check=False)
     if done.returncode:
         tail = "\n".join(f"{done.stdout}\n{done.stderr}".strip().splitlines()[-20:])
         raise NotMeasured(f"image:compose exited {done.returncode}: {tail}")
@@ -458,7 +458,7 @@ def serve(
     named = {} if here else asked.base_set
     try:
         target = (
-            Image(image_of(tree, commit, here=here, composed=bool(asked.extensions)), log, asked.seed)
+            Image(image_of(tree, commit, here=here, composed=bool(asked.extensions), named=named), log, asked.seed)
             if asked.image
             else Scratch(tree, log, asked.seed, trusted=not here, alone=bool(asked.alone), named=named)
         )

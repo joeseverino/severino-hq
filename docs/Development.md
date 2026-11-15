@@ -667,8 +667,10 @@ the step runs:
 
 - every package requires it: the trees named are composed as they stand;
 - a repository's packages require another: its newest commit on HEAD whose
-  manifests all require the host's API is composed instead, unpacked once
-  per commit under `var/extensions/`;
+  manifests all require the host's API, made before the host moved on from
+  the commit it stands on, is composed instead, unpacked once per commit
+  under `var/extensions/` (an extension's later commit at the same API may use
+  what the host added since);
 - no commit does: no extension is composed, and the step runs the host alone.
 
 The step's first line says which: the `src` each package is imported from, the
