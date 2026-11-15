@@ -21,7 +21,7 @@ from .own_addresses import tailnet_sightings
 from .projection import complete, page_size, projection_scope, window
 from .record_errors import RecordNotFound
 from .security import Principal
-from .standards import CheckResult, Standing
+from .standards import CheckResult
 lazy from . import connections, dashboard, estate, machines, request_context
 lazy from .action_items import filter_items
 lazy from .command_center import estate_search
@@ -34,7 +34,7 @@ lazy from .machine_context import header_addresses
 lazy from .paths import path_to
 lazy from .relationships import readout_records, relationships_for
 lazy from .request_path import request_path, serialize_request_path
-lazy from .resource_records import LayerPart
+lazy from .resource_records import CheckPart
 lazy from .search import global_search
 lazy from .service_list import services_by_zone
 lazy from .topology import relation_graph
@@ -351,7 +351,7 @@ def _certificate(certificate: Any) -> dict[str, Any] | None:
 
 def serialize_hop(hop: Any) -> dict[str, Any]:
     """One hop as every adapter returns it; a hop walked for a request adds
-    what the request showed there and the layers decided there."""
+    what the request showed there and the checks decided there."""
 
     found = {
         "step": hop.step,
@@ -378,24 +378,18 @@ def serialize_hop(hop: Any) -> dict[str, Any]:
             {"label": item.label, "value": item.value, "detail": item.detail, "role": item.role}
             for item in hop.evidence
         ],
-        "layers": list(hop.layers),
+        "layers": [serialize_check(result) for result in hop.checks],
     }
 
 
-# The rung's words for each standing (``ladder_tags.STATES``), which the API's
-# ``LayerPart.state`` also answers in.
-_RUNG_STATES = {Standing.MET: "holds", Standing.UNMET: "does-not", Standing.UNAVAILABLE: "unknown"}
-
-
-def serialize_layer(result: CheckResult) -> LayerPart:
-    """One check of the request standard as the API answers it, and as the
-    connection panel's rungs read it (``Hop.layers``)."""
+def serialize_check(result: CheckResult) -> CheckPart:
+    """One check of the request standard as the API answers it."""
 
     check, reading = result.check, result.reading
     return {
         "id": check.id,
         "label": check.label,
-        "state": _RUNG_STATES[reading.standing],
+        "state": reading.standing,
         "detail": reading.detail,
         "evidence": reading.evidence,
         "boundary": check.boundary,

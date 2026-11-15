@@ -580,7 +580,7 @@ under it where the line is full, and that evidence is shown at every width.
 
 **Checks read down a ladder.** `{% check_ladder %}` draws checks one after
 another, each a `{% check_rung %}`. A rung holds its tick for how it stands
-(`state`: holds, does-not, or unknown when not read), its `kind`, the statement
+(`state`: met, unmet, or unavailable when not read), its `kind`, the statement
 with the `evidence` it was read from, and a `more` part saying what opening it
 shows. Its `body` part is what it opens to. `route=True` draws the rungs as the
 stops of a route, the connection panel's path to HQ, and a ladder inside a

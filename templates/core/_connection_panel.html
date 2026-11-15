@@ -105,12 +105,12 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
   {% section "Path to HQ" data_connection_layers=True %}
     {% check_ladder route=True %}
       {% for hop in request_path.hops %}
-        {% check_rung state=hop.check.layer_state kind=hop.label open=hop.check.contradicted data_connection_hop=hop.step %}
+        {% check_rung state=hop.check.standing kind=hop.label open=hop.check.contradicted data_connection_hop=hop.step %}
           {% if hop.link and hop.link.url %}{{ hop.link.label|breakable }}{% elif hop.name %}{{ hop.name|breakable }}{% elif hop.detail %}{{ hop.detail|breakable }}{% else %}{% empty_value %}{% endif %}
         {% detail %}
           {% if hop.name and hop.detail and hop.detail != hop.name and hop.detail != hop.link.label %}{{ hop.detail|breakable }}{% elif hop.link.url and hop.name and hop.name != hop.link.label %}{{ hop.name|breakable }}{% endif %}
         {% more %}
-          {% if hop.layers %}{{ hop.layers|length|counted:"check,checks" }}{% else %}Details{% endif %}
+          {% if hop.checks %}{{ hop.checks|length|counted:"check,checks" }}{% else %}Details{% endif %}
         {% page %}
           {% if hop.link and hop.link.url %}{% entity hop.link %}{% endif %}
         {% body %}
@@ -135,15 +135,15 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
               </table>
             {% endtable_region %}
           {% endif %}
-          {% if hop.layers %}
+          {% if hop.checks %}
             {% check_ladder %}
-              {% for layer in hop.layers %}
-                {% check_rung state=layer.state evidence=layer.evidence data_connection_layer=layer.id %}
-                  {{ layer.label|breakable }}
+              {% for result in hop.checks %}
+                {% check_rung state=result.reading.standing evidence=result.reading.evidence data_connection_layer=result.check.id %}
+                  {{ result.check.label|breakable }}
                 {% body %}
-                  <p class="muted">{{ layer.detail|breakable }}</p>
-                  {% if layer.rules %}
-                    {% stack_list %}{% for rule in layer.rules %}<li><code>{{ rule|breakable }}</code></li>{% endfor %}{% endstack_list %}
+                  <p class="muted">{{ result.reading.detail|breakable }}</p>
+                  {% if result.reading.rules %}
+                    {% stack_list %}{% for rule in result.reading.rules %}<li><code>{{ rule|breakable }}</code></li>{% endfor %}{% endstack_list %}
                   {% endif %}
                 {% endcheck_rung %}
               {% endfor %}

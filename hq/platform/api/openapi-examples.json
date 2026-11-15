@@ -2781,7 +2781,7 @@
                   "label": "The tailnet knows this device",
                   "mechanism": "The tailnet device list",
                   "rules": [],
-                  "state": "does-not"
+                  "state": "unmet"
                 }
               ],
               "link": null,

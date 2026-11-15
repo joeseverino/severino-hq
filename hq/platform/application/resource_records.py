@@ -39,6 +39,7 @@ from .json_schemas import Written
 from .plugins import ATTENTION_ORDER
 from .record_fields import Notes, PublishedAt
 from .services import HQ_MARK, OBSERVED_MARK
+from .standards import Standing
 from .tone import Tone
 from .ui import ended
 from .upgrades import HIGH, LOW, MAJOR, MEDIUM, MINOR, PATCH, UNKNOWN_CHANGE
@@ -277,12 +278,12 @@ class EvidencePart(TypedDict):
     ]
 
 
-class LayerPart(TypedDict):
-    id: Annotated[str, Describe("The layer's stable id, such as `edge` or `identity`.")]
-    label: Annotated[str, Describe("The layer, in words.")]
+class CheckPart(TypedDict):
+    id: Annotated[str, Describe("The check's stable id, such as `edge` or `identity`.")]
+    label: Annotated[str, Describe("The check, in words.")]
     state: Annotated[
         str,
-        Describe("`holds`, `does-not`, or `unknown` when what decides it did not answer."),
+        Describe(ended(f"Where it stands: {listed(Standing)}, the last when what decides it did not answer")),
     ]
     detail: Annotated[str, Describe("Why it was decided so, in a sentence.")]
     evidence: Annotated[str, Describe("The value it was decided from; empty for none.")]
@@ -380,7 +381,9 @@ class HopRow(TypedDict):
         ]
     ]
     evidence: NotRequired[Annotated[list[EvidencePart], Describe(f"What the request carried at the hop. {_WALKED}")]]
-    layers: NotRequired[Annotated[list[LayerPart], Describe(f"The admission layers decided at the hop. {_WALKED}")]]
+    layers: NotRequired[
+        Annotated[list[CheckPart], Describe(f"The checks of the request standard decided at the hop. {_WALKED}")]
+    ]
 
 
 # ----- The estate -------------------------------------------------------------

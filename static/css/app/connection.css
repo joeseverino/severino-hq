@@ -199,9 +199,9 @@ textarea.code {
   display: grid; place-items: center; font-size: var(--text-2xs); line-height: 1;
   background: var(--tone-positive-tint); color: var(--ok);
 }
-.ladder-rung[data-state="does-not"] .ladder-mark { background: var(--tone-critical-tint); color: var(--danger); }
-.ladder-rung[data-state="unknown"] { border-color: color-mix(in srgb, var(--warn) 38%, var(--line)); }
-.ladder-rung[data-state="unknown"] .ladder-mark { background: var(--tone-caution-tint); color: var(--warn); }
+.ladder-rung[data-state="unmet"] .ladder-mark { background: var(--tone-critical-tint); color: var(--danger); }
+.ladder-rung[data-state="unavailable"] { border-color: color-mix(in srgb, var(--warn) 38%, var(--line)); }
+.ladder-rung[data-state="unavailable"] .ladder-mark { background: var(--tone-caution-tint); color: var(--warn); }
 .ladder-kind { color: var(--muted); font-size: var(--text-3xs); font-weight: 700; }
 /* A check's statement, then what it was read from: on the same line while
    both fit, under the statement when they do not. */
@@ -268,8 +268,8 @@ details[open] > summary .ladder-more::after { transform: rotate(90deg); }
   background: color-mix(in srgb, var(--ok) 40%, transparent);
 }
 .check-ladder.is-route > .ladder-rung:last-child::before { display: none; }
-.check-ladder.is-route > .ladder-rung[data-state="does-not"]::before { background: color-mix(in srgb, var(--danger) 45%, transparent); }
-.check-ladder.is-route > .ladder-rung[data-state="unknown"]::before { background: color-mix(in srgb, var(--warn) 45%, transparent); }
+.check-ladder.is-route > .ladder-rung[data-state="unmet"]::before { background: color-mix(in srgb, var(--danger) 45%, transparent); }
+.check-ladder.is-route > .ladder-rung[data-state="unavailable"]::before { background: color-mix(in srgb, var(--warn) 45%, transparent); }
 /* An opened stop's evidence sits in a frame of its own under the stop's
    name, so it reads as that stop's and the route plainly continues after
    it. It is on the card's own surface, where the rows inside keep their

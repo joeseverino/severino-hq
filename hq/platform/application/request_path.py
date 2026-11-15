@@ -52,8 +52,8 @@ _CHECK_LABELS = {
     CONTRADICTED: "This request disagrees",
     UNPROVEN: "Not confirmed",
 }
-# The layer class each check state is drawn with.
-_CHECK_STATES = {PROVEN: "holds", CONTRADICTED: "does-not", UNPROVEN: "unknown"}
+# The standing each check state is drawn with.
+_CHECK_STATES = {PROVEN: Standing.MET, CONTRADICTED: Standing.UNMET, UNPROVEN: Standing.UNAVAILABLE}
 
 # How each role in the forwarded chain was decided.
 _CHAIN_DETAIL = {
@@ -77,7 +77,7 @@ class HopCheck:
         return _CHECK_LABELS[self.state]
 
     @property
-    def layer_state(self) -> str:
+    def standing(self) -> Standing:
         return _CHECK_STATES[self.state]
 
     @property

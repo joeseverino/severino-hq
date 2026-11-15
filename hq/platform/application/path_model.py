@@ -15,10 +15,8 @@ from hq.domains.control_plane.providers import PROVIDERS
 
 from .entity_links import EntityLink, entity_link, kind_label
 from .labels import dotted, lower_first
-lazy from .derived_reads import serialize_layer
 lazy from .freshness import Freshness, freshness as reading_freshness
 lazy from .moments import ago
-lazy from .resource_records import LayerPart
 
 if TYPE_CHECKING:
     from .standards import CheckResult
@@ -167,12 +165,6 @@ class Hop:
     # On a proxy's hop: the network its access list admits requests from
     # (``reach.admitted_network``), "" when it narrows nothing HQ read.
     admits: str = ""
-
-    @property
-    def layers(self) -> tuple[LayerPart, ...]:
-        """Its checks as the connection panel's rungs read them, in the API's words."""
-
-        return tuple(serialize_layer(result) for result in self.checks)
 
     @property
     def icon(self) -> str:

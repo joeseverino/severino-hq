@@ -2795,7 +2795,7 @@
                     "label": "The tailnet knows this device",
                     "mechanism": "The tailnet device list",
                     "rules": [],
-                    "state": "does-not"
+                    "state": "unmet"
                   }
                 ],
                 "link": null,
@@ -7636,6 +7636,47 @@
         ],
         "type": "object"
       },
+      "CheckPart": {
+        "additionalProperties": false,
+        "properties": {
+          "boundary": {
+            "description": "The security boundary it belongs to; empty for none.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "Why it was decided so, in a sentence.",
+            "type": "string"
+          },
+          "evidence": {
+            "description": "The value it was decided from; empty for none.",
+            "type": "string"
+          },
+          "id": {
+            "description": "The check's stable id, such as `edge` or `identity`.",
+            "type": "string"
+          },
+          "label": {
+            "description": "The check, in words.",
+            "type": "string"
+          },
+          "mechanism": {
+            "description": "What enforces it; empty for none.",
+            "type": "string"
+          },
+          "rules": {
+            "description": "The rules behind it, where what decides it has rules.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "state": {
+            "description": "Where it stands: `met`, `unmet` or `unavailable`, the last when what decides it did not answer.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "CommandAnswer": {
         "description": "What the command answers, in the shape its capability's own route in this document gives.",
         "type": "object"
@@ -11427,9 +11468,9 @@
             "type": "string"
           },
           "layers": {
-            "description": "The admission layers decided at the hop. Present only on a hop the calling request walked.",
+            "description": "The checks of the request standard decided at the hop. Present only on a hop the calling request walked.",
             "items": {
-              "$ref": "#/components/schemas/LayerPart"
+              "$ref": "#/components/schemas/CheckPart"
             },
             "type": "array"
           },
@@ -12373,47 +12414,6 @@
         ],
         "description": "When the doc last changed in the vault. Null for unknown.",
         "title": "Last reviewed"
-      },
-      "LayerPart": {
-        "additionalProperties": false,
-        "properties": {
-          "boundary": {
-            "description": "The security boundary it belongs to; empty for none.",
-            "type": "string"
-          },
-          "detail": {
-            "description": "Why it was decided so, in a sentence.",
-            "type": "string"
-          },
-          "evidence": {
-            "description": "The value it was decided from; empty for none.",
-            "type": "string"
-          },
-          "id": {
-            "description": "The layer's stable id, such as `edge` or `identity`.",
-            "type": "string"
-          },
-          "label": {
-            "description": "The layer, in words.",
-            "type": "string"
-          },
-          "mechanism": {
-            "description": "What enforces it; empty for none.",
-            "type": "string"
-          },
-          "rules": {
-            "description": "The rules behind it, where what decides it has rules.",
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "state": {
-            "description": "`holds`, `does-not`, or `unknown` when what decides it did not answer.",
-            "type": "string"
-          }
-        },
-        "type": "object"
       },
       "LensEntry": {
         "additionalProperties": false,
@@ -28024,7 +28024,7 @@
     },
     "/api/v2/resources/request.path/": {
       "get": {
-        "description": "How the calling request reached HQ, hop by hop, each checked against the request, with the admission layers decided there.",
+        "description": "How the calling request reached HQ, hop by hop, each checked against the request, with the checks of the request standard decided there.",
         "operationId": "listRequestPathV2",
         "parameters": [
           {

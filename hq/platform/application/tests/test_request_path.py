@@ -421,7 +421,7 @@ class TokenIdentityTests(TestCase):
         said, layer = self.served()
 
         self.assertTrue(said["identity_agrees"])
-        self.assertEqual(layer["state"], "holds")
+        self.assertEqual(layer["state"], "met")
         self.assertIn("example-operator", layer["detail"])
 
     def test_a_device_awaiting_approval_does_not_agree(self):
@@ -430,7 +430,7 @@ class TokenIdentityTests(TestCase):
         said, layer = self.served()
 
         self.assertFalse(said["identity_agrees"])
-        self.assertEqual(layer["state"], "does-not")
+        self.assertEqual(layer["state"], "unmet")
 
     def test_a_blocked_device_does_not_agree_though_it_was_approved(self):
         now = timezone.now()
@@ -439,7 +439,7 @@ class TokenIdentityTests(TestCase):
         said, layer = self.served()
 
         self.assertFalse(said["identity_agrees"])
-        self.assertEqual(layer["state"], "does-not")
+        self.assertEqual(layer["state"], "unmet")
 
     def test_every_standing_a_device_can_be_in_is_explained(self):
         from ..agent_devices import DeviceStanding
