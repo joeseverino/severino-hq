@@ -395,7 +395,7 @@ class WalkedStatesTests(TestCase):
         # has given it one item it cannot tell apart, row or dismissal.
         from hq.domains.control_plane.models import ProviderInventory
         from hq.platform.application.action_items import item_key
-        from hq.platform.application.domains import all_domains
+        from hq.platform.application.domains import domain_attention_items
         from hq.platform.application.inventory_testing import store
         from hq.platform.application.projection import projection_scope
 
@@ -429,12 +429,8 @@ class WalkedStatesTests(TestCase):
         ]
         self.assertIn("expires in 5 days", item["label"])
         with projection_scope():
-            for domain in all_domains():
-                if domain.integration.attention is None:
-                    continue
-                keys = [item_key(domain.id, item) for item in domain.integration.attention()]
-                with self.subTest(source=domain.id):
-                    self.assertEqual(sorted({key for key in keys if keys.count(key) > 1}), [])
+            keys = [item_key(entry["source_id"], entry["item"]) for entry in domain_attention_items()]
+        self.assertEqual(sorted({key for key in keys if keys.count(key) > 1}), [])
 
 
 def in_days(days):

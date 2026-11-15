@@ -1,248 +1,35 @@
-"""What each host section believes needs a decision now.
+"""What the host's sections raise on the queue: the findings of their rules, and the held requests.
 
-One function per domain, referenced by its descriptor in ``application.domains``
-(nothing here knows the set). Each returns ``Insight``, the shape an extension
-emits, with the ``url`` of the domain's own filter for its backlog; one with
-nothing outstanding returns ``()`` rather than a zero, so the queue holds only
-real work and its length is the number of areas needing attention.
+A section raises nothing of its own: an item is a finding of a rule about its
+records (``FindingRule.domain``), or a change an agent asked for that waits on
+a person. Each is the ``Insight`` shape an extension emits.
 """
 
 from collections.abc import Iterable, Mapping
 from typing import Any
 
-from django.db.models import BooleanField, Count, ExpressionWrapper, Q
+from django.core.exceptions import ImproperlyConfigured
 
-from hq.domains.assets.models import Asset
-from hq.domains.contacts import inbox
-from hq.domains.content.models import ContentItem
-from hq.domains.expenses.models import Expense
-from hq.domains.receipts.models import Receipt
 from hq.platform.application.routes import reverse
 
-from . import sections
 from .card_items import Insight
-from .delivery_progress import STALLED_AFTER, WAITING, delivery_progress
-from .entity_links import EntityLink, entity_link
-from .estate import subject_link
 from .finding_model import Finding, FindingRule
-from .findings import estate_findings, finding_key, rule_for
-from .first_seen import dated
+from .findings import estate_findings, finding_key, finding_rules, rule_for
 from .infrastructure import enabled_resources, resource_health
 from .item_help import finding_plan
 from .labels import lower_first
 from .projection import read_once
-from .references import dangling
 from .security import cli_principal, internal_principal
 from .ui import counted, ended
 from .workflow_contracts import ActionLink
 lazy from .approval_review import asked, preview
 lazy from .approvals import pending, reads_every_hold
+lazy from .domains import host_domains
 
-# How many of a backlog's things a card says by name before it counts the rest.
-MOST_NAMED = 3
-CONTACTS_STATE_KEY = "attention.contacts-state"
-
-
-def _backlog(
-    *,
-    key: str,
-    count: int,
-    eyebrow: str,
-    one: str,
-    many: str,
-    action: str,
-    url: str,
-    why: str,
-    body: str = "",
-    notice: bool = False,
-    named: tuple[EntityLink, ...] = (),
-) -> tuple[Insight, ...]:
-    """One Insight when there is something to do, nothing when there is not.
-
-    The title is the count and what is true of them, said whole for one and
-    for many. ``action`` names the page the work is done on, which is the
-    help every backlog comes with. ``named`` is the things themselves, where
-    the domain read them: the first few are said by name, each a link to its
-    own page, and the rest are a count."""
-
-    if not count:
-        return ()
-    first = named[:MOST_NAMED]
-    more = count - len(first)
-    names = ", ".join(link.label for link in first) + (f" and {counted(more, 'other')}" if first and more > 0 else "")
-    body = " ".join(part for part in (ended(names), body) if part)
-    return (
-        Insight(
-            status="attention",
-            eyebrow=eyebrow,
-            title=counted(count, one, many),
-            value=str(count),
-            body=body,
-            action=action,
-            url=url,
-            magnitude=count,
-            key=key,
-            notice=notice,
-            why=why,
-            actions=tuple(ActionLink("open", link.label, "read", link.url) for link in first if link.url),
-        ),
-    )
-
-
-@dated
-def documentation() -> tuple[Insight, ...]:
-    return _backlog(
-        count=sections.documentation_reading()["needing_review"],
-        key="docs-review",
-        eyebrow="Projects",
-        one="doc is past its review date",
-        many="docs are past their review date",
-        action="Review docs",
-        url=f"{reverse('docs_index:list')}?needs_review=1",
-        why="HQ's doc records hold a review date that has passed, so the doc may no longer match what it describes.",
-    )
-
-
-@dated
-def content() -> tuple[Insight, ...]:
-    return (
-        *_backlog(
-            count=sections.content_reading()["drafts"],
-            key="content-drafts",
-            eyebrow="Web",
-            one="draft is not published",
-            many="drafts are not published",
-            action="Open drafts",
-            url=f"{reverse('content:list')}?status=draft",
-            why="HQ's content records hold an unpublished draft, which is work in hand rather than a problem.",
-            # A draft is work in hand, not a problem to fix.
-            notice=True,
-        ),
-        *_backlog(
-            # Published only: a draft already has its own entry and is too
-            # early to be missing documentation.
-            count=(
-                ContentItem.objects.filter(status=ContentItem.Status.PUBLISHED)
-                .annotate(doc_count=Count("related_documentation"))
-                .filter(doc_count=0)
-                .count()
-            ),
-            key="content-undocumented",
-            eyebrow="Web",
-            one="published piece has no doc linked",
-            many="published pieces have no doc linked",
-            action="Link a doc",
-            url=f"{reverse('content:list')}?no_docs=1",
-            why="HQ's content records hold a published piece with no doc linked, so nothing records what it covers.",
-        ),
-    )
-
-
-def contacts_state() -> tuple[int, str]:
-    """Unread submissions and whether the last read reached D1. No network:
-    the snapshot and the queue both ask here, so they cannot disagree."""
-
-    return read_once(CONTACTS_STATE_KEY, inbox.unread)
-
-
-@dated
-def contacts() -> tuple[Insight, ...]:
-    """Unread submissions from the public site.
-
-    An unreachable upstream reports nothing outstanding rather than raising:
-    the dashboard composes every domain, and one bad upstream must not take the
-    whole page down. The outage surfaces as upstream health instead, which is
-    where it belongs.
-    """
-
-    count, _ = contacts_state()
-    return _backlog(
-        count=count,
-        key="contacts-unread",
-        eyebrow="Web",
-        one="unread message from the contact form",
-        many="unread messages from the contact form",
-        action="Read messages",
-        url=f"{reverse('contacts:list')}?status=unread",
-        why="The contact form's store holds messages nobody has read, and each one waits on a reply.",
-    )
-
-
-@dated
-def expenses() -> tuple[Insight, ...]:
-    # One statement says how many lack a receipt and whether any names
-    # something, so a ledger with no links costs nothing more to check.
-    counts = Expense.objects.aggregate(
-        bare=Count("pk", filter=Q(receipts__isnull=True), distinct=True),
-        linked=Count("pk", filter=~Q(paid_from="") | ~Q(about=""), distinct=True),
-    )
-    backlog = _backlog(
-        count=counts["bare"],
-        key="expenses-without-receipts",
-        eyebrow="Business",
-        one="expense has no receipt",
-        many="expenses have no receipt",
-        action="Attach receipts",
-        url=f"{reverse('expenses:list')}?no_receipts=1",
-        why="HQ's expense records hold an expense with no receipt, and a deduction needs its receipt.",
-    )
-    if not counts["linked"]:
-        return backlog
-    return (*backlog, *dangling(Expense, principal=cli_principal()))
-
-
-@dated
-def receipts() -> tuple[Insight, ...]:
-    return _backlog(
-        count=Receipt.objects.filter(related_expense__isnull=True, related_asset__isnull=True).count(),
-        key="receipts-unlinked",
-        eyebrow="Business",
-        one="receipt is not attached to an expense or asset",
-        many="receipts are not attached to an expense or asset",
-        action="Attach receipts",
-        url=f"{reverse('receipts:list')}?unlinked=1",
-        why="HQ's receipt records hold a receipt attached to nothing, so no expense counts it as proof.",
-    )
-
-
-def _asset_backlog() -> tuple[tuple[EntityLink, ...], bool]:
-    """Each active asset with no purchase date or no cost, by name, and
-    whether any asset holds a link to check. One read."""
-
-    unpriced = Q(status=Asset.Status.ACTIVE) & (Q(purchase_date__isnull=True) | Q(total_cost=0))
-    rows = tuple(
-        Asset.objects.filter(unpriced | ~Q(infrastructure=""))
-        .annotate(unpriced=ExpressionWrapper(unpriced, output_field=BooleanField()))
-        .order_by("item_name")
-        .values_list("item_name", "slug", "unpriced", "infrastructure")
-    )
-    missing = tuple(entity_link("asset", slug, label=name) for name, slug, lacks, _linked in rows if lacks)
-    return missing, any(linked for _name, _slug, _lacks, linked in rows)
-
-
-@dated
-def assets() -> tuple[Insight, ...]:
-    missing, linked = _asset_backlog()
-    backlog = _backlog(
-        count=len(missing),
-        named=missing,
-        key="assets-missing-purchase",
-        eyebrow="Business",
-        one="asset has no purchase date or cost",
-        many="assets have no purchase date or cost",
-        body="Depreciation cannot be calculated without both.",
-        action="Fill in details",
-        url=f"{reverse('assets:list')}?missing_purchase=1",
-        why=(
-            "HQ's asset records hold an active asset with no purchase date or cost, "
-            "so its depreciation cannot be worked out."
-        ),
-    )
-    if not linked:
-        return backlog
-    return (*backlog, *dangling(Asset, principal=cli_principal()))
-
-
+# The section that raises a finding about the estate, which its subject gates.
+INFRASTRUCTURE = "hq.infrastructure"
+# The section that raises each change an agent asked for, held for a person.
+APPROVALS = "hq.approvals"
 # A neutral finding is context, which the queue leaves out.
 _FINDING_STATUS = {"serious": "serious", "attention": "attention", "neutral": "neutral"}
 # How a finding's severity reads before the bar its rule declares for it.
@@ -265,23 +52,41 @@ def finding_why(finding: Finding, rule: FindingRule | None) -> str:
     return ended(f"{read}; {_RATED.get(finding.severity, _RATED['attention'])} {bar}" if bar else read)
 
 
-@dated
-def infrastructure() -> tuple[Insight, ...]:
-    """What infrastructure needs looking at: one entry per finding HQ can speak
-    for now, each read, acted on and resolved on its own, and one per deploy on
-    its way to production, which is no finding (``delivery_progress``)."""
+def raising_domains() -> frozenset[str]:
+    """Each host section that raises items on the queue: Infrastructure for
+    the estate's findings, each one a rule names for its records, and
+    Approvals for the held requests."""
 
+    named = frozenset({INFRASTRUCTURE, APPROVALS, *(rule.domain for rule in finding_rules() if rule.domain)})
+    if unknown := named - {domain.id for domain in host_domains()}:
+        raise ImproperlyConfigured(f"A finding rule names a section HQ does not have: {', '.join(sorted(unknown))}.")
+    return named
+
+
+def raised(domain: str) -> tuple[Insight, ...]:
+    """What ``domain`` raises on the queue: the findings of each rule about
+    its records, and under Infrastructure, each finding about the estate that
+    HQ can speak for now."""
+
+    return read_once("attention.raised", _raised).get(domain, ())
+
+
+def infrastructure() -> tuple[Insight, ...]:
+    """What Infrastructure raises: ``raised`` for the section of the estate's findings."""
+
+    return raised(INFRASTRUCTURE)
+
+
+def _raised() -> dict[str, tuple[Insight, ...]]:
     resources = enabled_resources()
     health_by_key = {resource.key: resource_health(resource) for resource in resources}
     findings_url = reverse("control_plane:findings")
-    return (
-        *(finding_insight(finding, findings_url) for finding in _findings_to_raise(resources, health_by_key)),
-        *(
-            _deploying(resource, health)
-            for resource in resources
-            if (health := health_by_key[resource.key])["state"] == "deploying"
-        ),
-    )
+    found: dict[str, list[Insight]] = {}
+    for finding in _findings_to_raise(resources, health_by_key):
+        rule = rule_for(finding.rule)
+        section = (rule.domain if rule is not None else "") or INFRASTRUCTURE
+        found.setdefault(section, []).append(finding_insight(finding, findings_url))
+    return {domain: tuple(items) for domain, items in found.items()}
 
 
 def _findings_to_raise(resources, health_by_key: dict[str, dict[str, str]]) -> tuple[Any, ...]:
@@ -327,7 +132,10 @@ def finding_insight(finding: Any, findings_url: str) -> Insight:
         clears=rule.clears if rule is not None else "",
         key=finding_key(finding),
         title=finding.title,
-        value="",
+        value=str(finding.count) if finding.count else "",
+        magnitude=finding.count,
+        notice=finding.notice,
+        awaiting_fix=finding.awaiting_fix,
         body=finding.explanation,
         action=finding.primary.label if finding.primary else "",
         url=finding.primary.url if finding.primary else f"{findings_url}?rule={finding.rule}",
@@ -350,43 +158,6 @@ def _dedupe_links(links: Iterable[Any]) -> tuple[Any, ...]:
     for link in links:
         seen.setdefault(link.label, link)
     return tuple(seen.values())
-
-
-def _deploying(resource, health: dict[str, str]) -> Insight:
-    """A delivery on its way to production: a notice while a deploy runs or is
-    about to, and a thing to do while a run waits for approval."""
-
-    progress = delivery_progress(resource)
-    link = entity_link("resource", resource.key)
-    said = ended(health["message"])
-    if progress.state == WAITING:
-        return Insight(
-            status="attention",
-            eyebrow="Infrastructure",
-            key=f"resource:{resource.key}",
-            title="A deploy is waiting for your approval",
-            value="1",
-            body=said,
-            why="GitHub reports a deploy run held for a reviewer, and it goes no further until you approve it.",
-            action="Approve on GitHub" if progress.run_url else "Open deploy",
-            url=progress.run_url or link.url,
-            subject=subject_link("resource", resource.key),
-            since=progress.since,
-        )
-    minutes = int(STALLED_AFTER.total_seconds() // 60)
-    return Insight(
-        status="attention",
-        eyebrow="Infrastructure",
-        key=f"resource:{resource.key}",
-        title="A deploy is running" if progress.state == "running" else "A deploy is about to start",
-        value="1",
-        body=f"{said} It becomes a problem if production is still behind after {counted(minutes, 'minute')}.",
-        why="HQ's controller reports a delivery on its way to production, which is news rather than a problem.",
-        action="Open deploy",
-        url=link.url,
-        subject=subject_link("resource", resource.key),
-        notice=True,
-    )
 
 
 def _approval_entry(held) -> str:

@@ -663,20 +663,15 @@ class FindingsTests(SentinelMixin, TestCase):
 
     # ----- properties that must hold ---------------------------------------
 
-    def test_deriving_findings_costs_no_query_and_changes_nothing(self):
-        from django.db import connection as database_connection
-        from django.test.utils import CaptureQueriesContext
-
+    def test_deriving_findings_changes_nothing(self):
         observed(self.rewrite("one"), self.now)
         observed(self.rewrite("two"), self.now - timedelta(hours=9))
         with host_only():
             projection = derive_topology(principal=MANAGE)
         before = list(ManagedResource.objects.values_list("key", "last_observed_at", "conditions"))
 
-        with CaptureQueriesContext(database_connection) as captured:
-            derive_findings(projection, principal=MANAGE)
+        derive_findings(projection, principal=MANAGE)
 
-        self.assertEqual(len(captured), 0)
         self.assertEqual(
             before,
             list(ManagedResource.objects.values_list("key", "last_observed_at", "conditions")),

@@ -7,11 +7,19 @@ from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.observations.github import PARTS, REPOSITORY_KIND
 
+from ..attention import raised
 from ..dashboard import work_queue
 from ..derivation_testing import frozen
 from ..freshness import stale_after
-from ..github_estate import ALERT_PAGES, Repository, attention, repository_for, workflow_run
+from ..github_estate import ALERT_PAGES, Repository, repository_for, workflow_run
 from ..item_help import RUN
+from ..repository_findings import PROJECTS
+
+
+def raised_items():
+    """What Projects raises on the queue: its repository rules' findings."""
+
+    return raised(PROJECTS)
 
 
 def store(**record):
@@ -60,35 +68,35 @@ class EstateTests(TestCase):
             artifacts=[{"name": "alpha-admission-abc", "expires_at": soon}],
         )
 
-        items = {item.key: item for item in attention()}
+        items = {item.key: item for item in raised_items()}
 
         self.assertEqual(
             set(items),
             {
-                "github-waiting:example/alpha:9",
-                "github-failing:example/alpha",
-                "github-alerts:example/alpha",
-                "github-artifact:example/alpha:alpha-admission-abc",
+                "finding:github-waiting::example/alpha:9",
+                "finding:github-failing::example/alpha",
+                "finding:github-alerts::example/alpha",
+                "finding:github-artifact::example/alpha:alpha-admission-abc",
             },
         )
-        self.assertEqual(items["github-waiting:example/alpha:9"].status, "serious")  # held for hours
-        self.assertEqual(items["github-alerts:example/alpha"].title, "1 serious alert in alpha")
-        self.assertEqual(items["github-artifact:example/alpha:alpha-admission-abc"].status, "attention")
+        self.assertEqual(items["finding:github-waiting::example/alpha:9"].status, "serious")  # held for hours
+        self.assertEqual(items["finding:github-alerts::example/alpha"].title, "1 serious alert in alpha")
+        self.assertEqual(items["finding:github-artifact::example/alpha:alpha-admission-abc"].status, "attention")
 
     def test_an_admission_uploaded_by_two_runs_lapses_with_the_newer(self):
         # Every admission run uploads under the same name.
         in_days = [(timezone.now() + timedelta(days=days, hours=1)).isoformat() for days in (2, 6)]
         store(artifacts=[{"name": "admission-example.alpha", "expires_at": when} for when in in_days])
 
-        (item,) = attention()
+        (item,) = raised_items()
 
-        self.assertEqual(item.key, "github-artifact:example/alpha:admission-example.alpha")
-        self.assertEqual(item.value, "6")
+        self.assertEqual(item.key, "finding:github-artifact::example/alpha:admission-example.alpha")
+        self.assertEqual(item.facts, (("Lapses in", "6 days"),))
 
     def test_a_quiet_repository_asks_for_nothing(self):
         store(checks={"state": "success"}, alerts={"code_scanning": {"low": 2}})
 
-        self.assertEqual(attention(), ())
+        self.assertEqual(raised_items(), ())
 
 
 def commands(item) -> list[str]:
@@ -100,7 +108,7 @@ class FailingRunTests(TestCase):
 
     def failing(self, *runs):
         store(checks={"state": "failure", "failing": ["lint"]}, runs=list(runs))
-        (item,) = attention()
+        (item,) = raised_items()
         return item
 
     def test_the_item_opens_the_run_that_failed_on_the_head(self):
@@ -150,9 +158,9 @@ class VerificationTests(TestCase):
             ]
         )
 
-        (item,) = attention()
+        (item,) = raised_items()
 
-        self.assertEqual((item.key, item.status), ("github-unverified:example/alpha", "serious"))
+        self.assertEqual((item.key, item.status), ("finding:github-unverified::example/alpha", "serious"))
         self.assertIn("Verify the image was signed", item.body)
 
 
@@ -190,7 +198,7 @@ class ReadingAgeTests(TestCase):
         waiting_deploy()
         read(timedelta(minutes=5))
 
-        (item,) = attention()
+        (item,) = raised_items()
 
         self.assertEqual((item.status, item.notice), ("serious", False))
         self.assertIn("waits for your approval", item.title)
@@ -200,7 +208,7 @@ class ReadingAgeTests(TestCase):
         waiting_deploy()
         read(stale_after(REPOSITORY_KIND) + timedelta(hours=1))
 
-        (item,) = attention()
+        (item,) = raised_items()
         queued = [entry for entry in work_queue() if entry["key"].endswith(item.key)]
 
         self.assertTrue(item.notice)
@@ -305,7 +313,7 @@ class UnmatchedAlertItemTests(TestCase):
             dependabot_alerts=[ANSWERED, UNANSWERED, LOW],
         )
 
-        (item,) = attention()
+        (item,) = raised_items()
 
         self.assertIn("1 has no update pull request", item.body)
         self.assertEqual(item.url, "/projects/alpha/#updates")
@@ -314,7 +322,7 @@ class UnmatchedAlertItemTests(TestCase):
     def test_with_every_serious_alert_answered_the_item_opens_that_parts_alerts(self):
         store(alerts={"dependabot": {"critical": 1}}, pull_requests=[UPDATE], dependabot_alerts=[ANSWERED])
 
-        (item,) = attention()
+        (item,) = raised_items()
 
         self.assertNotIn("update pull request", item.body)
         self.assertEqual((item.url, item.links), (f"{ALPHA}/security/dependabot", ()))
@@ -325,7 +333,9 @@ class UnmatchedAlertItemTests(TestCase):
                 alerts={"dependabot": {alert["severity"]: 1 for alert in alerts}},
                 dependabot_alerts=list(alerts),
             )
-            return [entry["key"] for entry in work_queue() if entry["key"].endswith("github-alerts:example/alpha")]
+            return [
+                entry["key"] for entry in work_queue() if entry["key"].endswith("finding:github-alerts::example/alpha")
+            ]
 
         # Nobody can act on an alert no release fixes: its project's updates
         # list it, with "no fixed version yet".
@@ -335,7 +345,7 @@ class UnmatchedAlertItemTests(TestCase):
     def test_serious_alerts_in_several_parts_link_each_parts_list_the_worst_first(self):
         store(alerts={"dependabot": {"high": 1}, "code_scanning": {"critical": 1}, "leaked_credentials": {"leaked": 1}})
 
-        (item,) = attention()
+        (item,) = raised_items()
 
         self.assertEqual(item.url, f"{ALPHA}/security/code-scanning")
         self.assertEqual(
@@ -348,7 +358,7 @@ class LeakedCredentialItemTests(TestCase):
     def test_a_leaked_credential_alone_is_a_serious_item_that_opens_secret_scanning(self):
         store(alerts={"leaked_credentials": {"leaked": 1}})
 
-        (item,) = attention()
+        (item,) = raised_items()
 
         self.assertEqual(item.status, "serious")
         self.assertEqual(item.title, "1 leaked credential in alpha")
@@ -357,9 +367,9 @@ class LeakedCredentialItemTests(TestCase):
     def test_a_leaked_credential_beside_a_high_alert_is_one_item_linking_each_kind(self):
         store(alerts={"leaked_credentials": {"leaked": 1}, "dependabot": {"high": 1}})
 
-        (item,) = attention()
+        (item,) = raised_items()
 
-        self.assertEqual(item.value, "2")
+        self.assertEqual(item.facts, (("Open", "2"),))
         self.assertIn("1 is a leaked credential", item.body)
         self.assertEqual(
             {link.url for link in item.links}, {f"{ALPHA}/security/dependabot", f"{ALPHA}/security/secret-scanning"}
@@ -368,7 +378,7 @@ class LeakedCredentialItemTests(TestCase):
     def test_no_open_alert_raises_no_item(self):
         store(alerts={"leaked_credentials": {"leaked": 0}, "dependabot": {}})
 
-        self.assertEqual(attention(), ())
+        self.assertEqual(raised_items(), ())
 
 
 ALPHA = "https://github.com/example/alpha"

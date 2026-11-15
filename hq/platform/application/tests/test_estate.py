@@ -22,10 +22,10 @@ from hq.platform.core.models import AuditLog
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from .. import readings
-from ..attention import infrastructure
+from ..attention import infrastructure, raised
 from ..command_center import command_center
 from ..connection_lifecycle import Lifecycle
-from ..estate import Estate, attention as estate_attention, cards, estate_reading, overview
+from ..estate import Estate, cards, estate_reading, overview
 from ..glance import dashboard_panels
 from ..inventory_testing import store
 from ..machines import machine, machine_catalog
@@ -578,7 +578,7 @@ class ActionItemTests(TestCase):
         declare_record("other-record", "other.example.com", "100.64.0.7")
 
         with projection_scope():
-            found = [item for item in estate_attention() if item.eyebrow == "Machines"]
+            found = [item for item in raised("hq.estate") if item.key.startswith("finding:machine-offline:")]
 
         self.assertEqual([item.subject.label for item in found], ["example-host"])
         self.assertEqual(found[0].status, "serious")
@@ -599,7 +599,7 @@ class ActionItemTests(TestCase):
         declare_record("dev-record", "dev.example.com", "100.64.0.9")
 
         with projection_scope():
-            found = [item for item in estate_attention() if item.eyebrow == "Machines"]
+            found = [item for item in raised("hq.estate") if item.key.startswith("finding:machine-offline:")]
 
         self.assertEqual(found, [])
 
@@ -862,10 +862,7 @@ class EstateQueryBudgetTests(TestCase):
 
         self.estate_of(3)
         with_estate = self.snapshot_queries()
-        with (
-            mock.patch("hq.platform.application.estate.cards", return_value=()),
-            mock.patch("hq.platform.application.estate.attention", return_value=()),
-        ):
+        with mock.patch("hq.platform.application.estate.cards", return_value=()):
             without = self.snapshot_queries()
 
         self.assertLessEqual(with_estate - without, 1)

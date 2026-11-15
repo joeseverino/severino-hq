@@ -223,7 +223,7 @@ class DeployInProgressTests(TestCase):
             return [item for item in infrastructure() if item.key.endswith("resource:delivery")]
 
     def item(self):
-        (found,) = [item for item in self.items() if item.key == "resource:delivery"]
+        (found,) = [item for item in self.items() if item.key.startswith("finding:deploy-")]
         return found
 
     def test_a_running_deploy_is_a_notice(self):

@@ -561,7 +561,7 @@ class DanglingTests(TestCase):
         self.assertEqual(len([query for query in queries if "assets_asset" in query["sql"]]), 3)
 
     def test_the_asset_and_expense_sections_report_their_own(self):
-        from ..attention import assets, expenses
+        from ..attention import raised
 
         Asset.objects.create(
             item_name="A server",
@@ -572,10 +572,10 @@ class DanglingTests(TestCase):
         )
         an_expense(about="machine:lab-9", about_name="lab-9")
 
-        self.assertIn("A server links to lab-9, which HQ does not have", [item.title for item in assets()])
+        self.assertIn("A server links to lab-9, which HQ does not have", [item.title for item in raised("hq.assets")])
         self.assertIn(
             "Example Registrar\xa0· Renewal links to lab-9, which HQ does not have",
-            [item.title for item in expenses()],
+            [item.title for item in raised("hq.expenses")],
         )
 
 

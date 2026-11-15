@@ -7,7 +7,7 @@ vocabulary without importing the pipeline that collects it."""
 import json
 import re
 import shlex
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import TYPE_CHECKING, Annotated, NotRequired, TypedDict
@@ -86,8 +86,8 @@ class Finding:
     # Why HQ can neither run a remedy nor name the exact command for this one.
     # Derivation fills it from the rule when the finding carries neither.
     no_help_reason: str = ""
-    # When this was first seen open, where a look recorded it
-    # (application.first_seen). Derivation leaves it unset.
+    # When this was first seen open: when its condition began, where the
+    # detector read it, else where a look recorded it (application.first_seen).
     since: datetime | None = None
     # The page of what it is about, as the topology names it. Derivation sets
     # it beside the offers, so a card links its title without the topology.
@@ -112,6 +112,15 @@ class Finding:
     # The page a card leads with, where its subject's own page is not it: the
     # certificate to renew, the containers to upgrade.
     primary: ActionLink | None = None
+    # How many things one finding stands for, where it counts a backlog of
+    # records: what the queue's row counts, and what brings a set-aside one back.
+    count: int = 0
+    # News rather than a problem (a draft in hand, a deploy on its way): the
+    # queue keeps it in its own section, below what needs doing.
+    notice: bool = False
+    # Its only remedy does not exist yet (an alert no released version fixes):
+    # it stays a finding, and the queue leaves it out until one does.
+    awaiting_fix: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -150,6 +159,15 @@ class FindingRule:
     # ast-grep rule threshold-says-what-clears-it asks it of every rule whose
     # bars name a constant.
     clears: str = ""
+    # The host section whose records a rule is about (``hq.expenses``): its
+    # findings are raised under that section, and told only to a reader of
+    # what the section declares. Empty for a rule about the estate, whose
+    # subject gates it and which Infrastructure raises.
+    domain: str = ""
+    # Whether its detector reads HQ's own records (a model, a stored reading)
+    # rather than the projection. It runs as the estate is gathered, before
+    # derivation, which reads nothing of its own.
+    gathered: bool = False
 
     def __post_init__(self) -> None:
         if not self.operator_action.strip():
@@ -158,6 +176,10 @@ class FindingRule:
             raise ValueError(f"Finding rule {self.name!r} must say why HQ cannot resolve it itself.")
         if not self.bars.get(self.severity, "").strip():
             raise ValueError(f"Finding rule {self.name!r} must say the bar its {self.severity} findings cross (bars).")
+
+
+# What each rule that reads HQ's records found, by rule (``gathered_findings``).
+Gathered = Mapping[str, tuple[Finding, ...]]
 
 
 @dataclass(frozen=True, slots=True)

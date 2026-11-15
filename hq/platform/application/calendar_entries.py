@@ -35,7 +35,6 @@ from .ui import counted, ended
 lazy from . import calendar
 lazy from .calendar_specs import EntryRecord
 lazy from .record_answers import EntrySaved
-lazy from .references import dangling
 
 _ENTRY = Held("That calendar event was not found.", "This event changed after it was read.")
 
@@ -327,12 +326,6 @@ def choose_source(command: SourceChoiceCommand, *, principal: Principal) -> Sour
     preference.choices = {**preference.choices, command.source: bool(command.shown)}
     preference.save(update_fields=("choices", "updated_at"))
     return {"ok": True, "choices": calendar_choices(user)}
-
-
-def attention() -> tuple[Any, ...]:
-    """An event about something HQ no longer has, for the queue."""
-
-    return dangling(Entry)
 
 
 # ----- Agenda -----------------------------------------------------------------

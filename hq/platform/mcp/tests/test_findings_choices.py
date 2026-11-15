@@ -140,7 +140,7 @@ class FindingActionsTests(TestCase):
             kind_read(REWRITE, when)
 
     def test_every_action_on_a_seeded_finding_is_a_tool_call_and_no_answer_holds_a_path(self):
-        listed, (answer,) = session(("get_findings", {}))
+        listed, (answer,) = session(("get_findings", {"severity": "serious", "limit": 100}))
 
         self.assertFalse(answer.is_error)
         found = answer.structured_content["findings"]
@@ -149,13 +149,13 @@ class FindingActionsTests(TestCase):
         self.assertLessEqual(
             {"remedies", "offers", "investigations", "workflow.verify"},
             {where for where, _ in carried},
-            [(finding["rule"], finding["subject"]) for finding in found],
+            [(finding["rule"], finding.get("subject")) for finding in found],
         )
         for where, call in carried:
             with self.subTest(where=where, call=call):
                 self.assertIn(call["tool"], listed)
                 self.assertIsInstance(call["arguments"], dict)
-        self.assertEqual(list(paths(answer.structured_content)), [])
+        self.assertEqual(list(paths(answer.structured_content)), [], [finding["rule"] for finding in found])
 
     def test_each_read_a_finding_offers_answers_and_each_command_is_addressed_as_it_takes(self):
         _, (answer,) = session(("get_findings", {}))

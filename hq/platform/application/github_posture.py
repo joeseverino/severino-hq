@@ -15,15 +15,11 @@ from typing import Any
 
 lazy from django.conf import settings
 
-from hq.platform.application.routes import reverse
-
-from .card_items import Insight
 from .derivations import passed
-from .github_estate import REPOSITORY_KIND, Repository, attention as repository_attention, repositories
-from .item_help import cannot_help, do_step, run_step, steps
+from .github_estate import Repository, repositories
 from .moments import moment
-from .standards import UNMET, Check as _Check, Measurement, measure
-from .ui import counted, ended
+from .standards import Check as _Check, Measurement, measure
+from .ui import ended
 lazy from .projects import repository_key
 
 BOTH = "both"
@@ -447,31 +443,7 @@ PINS_UNREAD = (
 PINS_CALLED = "It calls another repository's workflow, which HQ has not read, so HQ does not offer to require pinning."
 
 
-def help_for(check: _Check, missing: list[Repository]) -> Any:
-    """The item's workflow: each repository's exact commands, or why there are none."""
-
-    key = f"github-posture:{check.id}"
-    derive = COMMANDS.get(check.id)
-    if derive is None:
-        return cannot_help(key, REASONS[check.id])
-    runs = tuple(run_step(label, command) for repo in missing for label, command in derive(repo))
-    return steps(key, runs + _called_workflows(check, missing), reason=_left_out(check, missing))
-
-
-def _called_workflows(check: _Check, missing: list[Repository]) -> tuple[Any, ...]:
-    """One step for each workflow a repository calls from another: the thing
-    to check before requiring pinning there."""
-
-    if check.id != "actions-pinned":
-        return ()
-    return tuple(
-        do_step(f"{repo.short}: check that {workflow} pins its own actions, then require pinning.")
-        for repo in missing
-        for workflow in calls_workflows(repo)
-    )
-
-
-def _left_out(check: _Check, missing: list[Repository]) -> str:
+def left_out(check: _Check, missing: list[Repository]) -> str:
     """What the commands do not cover, and why: only pinning can leave some out."""
 
     if check.id != "actions-pinned":
@@ -527,43 +499,3 @@ def posture_of(repo: Repository) -> Measurement | None:
 def postures() -> list[Measurement]:
     found = (posture_of(repo) for repo in sorted(repositories().values(), key=lambda item: item.name))
     return [posture for posture in found if posture is not None]
-
-
-def attention() -> tuple[Insight, ...]:
-    """One item per check not met, naming every repository that misses it, so
-    the queue grows with the gaps in the standard rather than with the estate."""
-
-    found = postures()
-    items = []
-    for check in STANDARD:
-        unmet = [item.subject for item in found if item.state_of(check.id) == UNMET]
-        missing = [repo.short for repo in unmet]
-        if not missing:
-            continue
-        items.append(
-            Insight(
-                status="serious" if check.serious else "attention",
-                eyebrow="Repo checks",
-                family="Repository checks",
-                key=f"github-posture:{check.id}",
-                title=f"{check.label}: not met in {counted(len(missing), 'repository', 'repositories')}",
-                value=str(len(missing)),
-                # A setting to change in each repository that misses it.
-                magnitude=len(missing),
-                body=f"{ended(', '.join(missing))} {check.fix}",
-                why=check.why,
-                action="Open repo checks",
-                url=reverse("posture"),
-                workflow=help_for(check, unmet),
-                # The oldest of the readings it names: the claim is no newer.
-                observed_at=min((repo.observed_at for repo in unmet if repo.observed_at), default=None),
-                reads=REPOSITORY_KIND,
-            )
-        )
-    return tuple(items)
-
-
-def build_attention() -> tuple[Insight, ...]:
-    """What GitHub holds for you: the repositories' own items, then the standard's."""
-
-    return repository_attention() + attention()

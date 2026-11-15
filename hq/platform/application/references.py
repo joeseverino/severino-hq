@@ -721,12 +721,26 @@ def referenced_by_row(row: models.Model, *, principal: Principal) -> tuple[Menti
 # ----- A reference that names nothing ---------------------------------------------
 
 
-def dangling(
+@dataclass(frozen=True, slots=True)
+class Dangling:
+    """One row whose reference names nothing: what it says, and its page."""
+
+    title: str
+    url: str
+    # What it is about, for as long as it is the same matter: the row and its column.
+    key: str
+
+
+# What to do about a row whose reference names nothing.
+UNLINK = "Choose something else for it, or clear the link."
+
+
+def naming_nothing(
     *models_: type[models.Model],
     principal: Principal | None = None,
     source: Callable[[models.Model], str] = str,
-) -> tuple[Insight, ...]:
-    """One item for the queue per row whose reference names nothing.
+) -> tuple[Dangling, ...]:
+    """Each row whose reference names nothing.
 
     Three statements whatever the number of rows: every distinct reference
     the models hold, the records those name, then the rows holding one that
@@ -752,10 +766,18 @@ def dangling(
         for field, values in gone
     ]
     return tuple(
-        _dangling_item(field, row, source)
-        for (field, _values), rows in zip(gone, _rows(parts), strict=True)
-        for row in rows
+        _dangling(field, row, source) for (field, _values), rows in zip(gone, _rows(parts), strict=True) for row in rows
     )
+
+
+def dangling(
+    *models_: type[models.Model],
+    principal: Principal | None = None,
+    source: Callable[[models.Model], str] = str,
+) -> tuple[Insight, ...]:
+    """``naming_nothing`` as an extension's queue items, one per row."""
+
+    return tuple(_dangling_item(found) for found in naming_nothing(*models_, principal=principal, source=source))
 
 
 def _naming_nothing(held: list[set[str]], principal: Principal) -> list[set[str]]:
@@ -778,20 +800,28 @@ def _names_nothing(reference: Reference | None, named: Mapping[Reference, Entity
     return reference not in named and not hidden
 
 
-def _dangling_item(field: ReferenceField, row: models.Model, source: Callable[[models.Model], str]) -> Insight:
+def _dangling(field: ReferenceField, row: models.Model, source: Callable[[models.Model], str]) -> Dangling:
+    name = getattr(row, field.name_attname) or getattr(row, field.attname)
+    return Dangling(
+        title=f"{source(row)} links to {name}, which HQ does not have",
+        url=row.get_absolute_url(),
+        key=f"reference:{field.model._meta.label_lower}:{row.pk}:{field.attname}",
+    )
+
+
+def _dangling_item(found: Dangling) -> Insight:
     """The queue's item for one row whose reference names nothing."""
 
-    name = getattr(row, field.name_attname) or getattr(row, field.attname)
     return Insight(
         status="attention",
         eyebrow="Records",
-        title=f"{source(row)} links to {name}, which HQ does not have",
+        title=found.title,
         value="",
-        body="Choose something else for it, or clear the link.",
+        body=UNLINK,
         why="HQ's records hold a link to something it no longer has, so the record points nowhere.",
         action="Open record",
-        url=row.get_absolute_url(),
-        key=f"reference:{field.model._meta.label_lower}:{row.pk}:{field.attname}",
+        url=found.url,
+        key=found.key,
         family="Links to nothing",
         # A row's own link, checked against every record and reading at once.
         observed_at=None,

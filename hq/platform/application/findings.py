@@ -34,16 +34,20 @@ from . import (
     contradiction_findings,
     controller_findings,
     credential_findings,
+    delivery_findings,
     dns_findings,
     docker_estate,
     filesystem_findings,
     github_findings,
+    machine_findings,
     perimeter_findings,
     posture_findings,
     reboot_findings,
+    record_findings,
     reference_findings,
     registration_findings,
     render_status_findings,
+    repository_findings,
     tailnet_device_findings,
     tailnet_findings,
     unit_findings,
@@ -58,7 +62,7 @@ from .action_links import (
 from .answer_fields import Pinned, SchemaVersion
 from .contracts import route_url
 from .derivations import derivation, present
-from .derived_inputs import ESTATE_READS, estate_variant
+from .derived_inputs import FINDINGS_READS, estate_variant
 from .describe import Describe, listed
 from .finding_model import (
     CHECK_AGAIN,
@@ -66,6 +70,7 @@ from .finding_model import (
     FindingEstate,
     FindingRemedy,
     FindingRule,
+    Gathered,
     OperatorStep,
     is_observable,
     parse_stamp,
@@ -93,7 +98,9 @@ from .workflows import (
 )
 lazy from . import cadence
 lazy from .automation_runs import playbook_remedies
+lazy from .domains import resources_of
 lazy from .estate import estate_reading
+lazy from .gathered_findings import gather_findings
 lazy from .moments import ago
 lazy from .ui import counted
 
@@ -196,6 +203,10 @@ RULE_MODULES = (
     contradiction_findings,
     posture_findings,
     automation_findings,
+    delivery_findings,
+    machine_findings,
+    record_findings,
+    repository_findings,
 )
 RULES: tuple[FindingRule, ...] = tuple(rule for module in RULE_MODULES for rule in module.RULES)
 
@@ -396,16 +407,18 @@ _POSTURE_READ = "connections"
 def read_gate(finding: Finding, subject: TopologyNode | None) -> tuple[str, ...] | None:
     """What a reader must hold to be told ``finding``; None when it cannot be derived.
 
-    The union of its subject node's gate, each scope's and what its detector
-    carried for the evidence it names, which alone gates a claim about none
-    of them. A subject that names no node, a scope no resource reads, or a
-    claim about nothing that carries no gate leaves it underivable.
+    The union of its subject node's gate, each scope's, its rule's section's
+    and what its detector carried for the evidence it names. A subject that
+    names no node, a scope no resource reads, or a claim about nothing that
+    carries no gate leaves it underivable.
     """
 
     scopes = _finding_scopes(finding)
-    if (finding.subject and subject is None) or not (subject or scopes or finding.read_capabilities):
+    declared = _RULE_BY_NAME.get(finding.rule)
+    section = declared.domain if declared is not None else ""
+    if (finding.subject and subject is None) or not (subject or scopes or finding.read_capabilities or section):
         return None
-    gates = [finding.read_capabilities]
+    gates = [finding.read_capabilities, *(_resource_gate(name) for name in resources_of(section))]
     if subject is not None:
         gates += [_resource_gate(NODE_READ), subject.read_capabilities]
     for scope in scopes:
@@ -553,8 +566,10 @@ def _is_suppressed(
     )
 
 
-def derive_findings(topology: Topology, *, principal: Principal, rule: str = "") -> tuple[Finding, ...]:
-    """Every claim the projection supports, most serious first.
+def derive_findings(
+    topology: Topology, *, principal: Principal, rule: str = "", gathered: Gathered | None = None
+) -> tuple[Finding, ...]:
+    """Every claim the projection and what was ``gathered`` support, most serious first.
 
     Pure: no query, no write. The projection was already narrowed to what this
     principal may see, so a finding cannot reveal a node the caller could not
@@ -564,8 +579,9 @@ def derive_findings(topology: Topology, *, principal: Principal, rule: str = "")
     estate = _estate(topology)
     wanted = _RULE_BY_NAME.get(rule) if rule else None
     raised: dict[str, tuple[Finding, ...]] = {}
+    found = gathered or {}
     for declared in RULES:
-        raised[declared.name] = declared.detect(estate)
+        raised[declared.name] = found.get(declared.name, ()) if declared.gathered else declared.detect(estate)
 
     # A rule that fired takes its subsumed rules off the same subject, and off
     # the whole kind when it speaks for one.
@@ -612,13 +628,19 @@ def estate_findings(*, principal: Principal, rule: str = "") -> tuple[Any, ...]:
 
 @derivation(
     "estate.findings",
-    reads=ESTATE_READS,
+    reads=FINDINGS_READS,
     vary=lambda principal, rule: (estate_variant(principal), rule),
 )
 def _estate_findings(principal: Principal, rule: str) -> tuple[Any, ...]:
-    raised = derive_findings(derive_topology(principal=principal), principal=principal, rule=rule)
+    topology = derive_topology(principal=principal)
+    gathered = gather_findings(_estate(topology), principal=principal)
+    raised = derive_findings(topology, principal=principal, rule=rule, gathered=gathered)
     seen = recorded() if raised else {}
-    return tuple(replace(finding, since=seen.get(finding_key(finding))) for finding in raised)
+    # A notice says when in its own words; a detector may read when its condition began.
+    return tuple(
+        replace(finding, since=None if finding.notice else finding.since or seen.get(finding_key(finding)))
+        for finding in raised
+    )
 
 
 def finding_key(finding: Finding) -> str:

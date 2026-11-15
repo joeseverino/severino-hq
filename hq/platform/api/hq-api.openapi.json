@@ -287,57 +287,36 @@
             "findings": [
               {
                 "affected_scopes": [],
-                "evidence": [],
-                "explanation": "Expires Feb\u00a08\u00a0\u00b7 24 days. Renewal has not run; renew it.",
-                "id": "claim:864a7bc7f7125608",
-                "investigations": [
+                "evidence": [
                   {
-                    "capability": "",
-                    "effect": "read",
-                    "label": "Map neighborhood",
-                    "method": "GET",
-                    "name": "topology",
-                    "reason": "What this is connected to.",
-                    "recommended": false,
-                    "refusal": "",
-                    "target": "",
-                    "url": "/infrastructure/topology/?focus=resource%3Awildcard-example-com#trace"
+                    "label": "Failing",
+                    "value": "1"
                   }
                 ],
+                "explanation": "Failing job: Scan",
+                "id": "claim:48255c337ca54ade",
+                "investigations": [],
                 "no_help_reason": null,
-                "offers": [
-                  {
-                    "capability": "",
-                    "effect": "read",
-                    "label": "Open",
-                    "method": "GET",
-                    "name": "open",
-                    "reason": "",
-                    "recommended": false,
-                    "refusal": "",
-                    "target": "",
-                    "url": "/infrastructure/wildcard-example-com/"
-                  }
-                ],
+                "offers": [],
                 "operator_steps": [
                   {
-                    "command": "",
-                    "label": "Renew the certificate from its page in HQ, or where it is held, or fix its automatic renewal. Then press Check again.",
+                    "command": "gh run list -R example/homelab --commit ca56003cb3b8e468cee70371d7325a539718262b --status failure",
+                    "label": "See the failing runs",
                     "notes": []
                   }
                 ],
                 "remedies": [],
-                "rule": "certificate-expiring",
+                "rule": "github-failing",
                 "scope": null,
-                "severity": "attention",
+                "severity": "serious",
                 "since": null,
-                "subject": "resource:wildcard-example-com",
-                "title": "wildcard-example-com expires in 24 days",
+                "subject": null,
+                "title": "homelab is failing on main",
                 "workflow": {
-                  "id": "resolve:claim:864a7bc7f7125608",
+                  "id": "resolve:claim:48255c337ca54ade",
                   "label": "Next steps",
                   "outcome": {
-                    "claim_id": "claim:864a7bc7f7125608",
+                    "claim_id": "claim:48255c337ca54ade",
                     "kind": "claim_absent",
                     "label": ""
                   },
@@ -354,7 +333,7 @@
                           "recommended": false,
                           "refusal": "",
                           "target": "",
-                          "url": "/infrastructure/findings/?rule=certificate-expiring"
+                          "url": "/infrastructure/findings/?rule=github-failing"
                         }
                       ],
                       "label": "Check again",
@@ -369,12 +348,12 @@
             "rule": null,
             "schema_version": 2,
             "summary": {
-              "findings": 9,
-              "returned": 9,
+              "findings": 15,
+              "returned": 15,
               "severities": {
-                "attention": 6,
+                "attention": 11,
                 "neutral": 1,
-                "serious": 2
+                "serious": 3
               },
               "truncated": false
             }
@@ -24249,7 +24228,26 @@
                 "published-port-unfronted",
                 "service-wiring-incomplete",
                 "posture-unmet",
-                "automation-worker-absent"
+                "automation-worker-absent",
+                "deploy-waiting",
+                "deploy-running",
+                "machine-offline",
+                "docs-review",
+                "content-drafts",
+                "content-undocumented",
+                "contacts-unread",
+                "expenses-without-receipts",
+                "expense-links-to-nothing",
+                "receipts-unlinked",
+                "assets-missing-purchase",
+                "asset-links-to-nothing",
+                "event-links-to-nothing",
+                "github-waiting",
+                "github-failing",
+                "github-unverified",
+                "github-alerts",
+                "github-artifact",
+                "github-posture"
               ],
               "type": "string"
             }

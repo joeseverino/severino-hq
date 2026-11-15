@@ -12,7 +12,7 @@ from typing import Any, TypedDict
 from django.utils import timezone
 
 from . import sections
-from .attention import contacts_state, readable_by
+from .attention import readable_by
 from .derivations import derivation
 from .derived_inputs import DASHBOARD_READS, QUEUE_READS, composed_variant
 from .domains import (
@@ -26,6 +26,7 @@ from .domains import (
 from .plugins import source_overview
 from .projection import projection_scope
 from .read_models import ActivityEvent, recent_activity
+from .record_findings import contacts_state
 from .security import Capability, Principal
 from .workflows import WrittenAction, WrittenWorkflow, serialize_workflow
 lazy from .action_items import item_key, item_revision, waiting_count

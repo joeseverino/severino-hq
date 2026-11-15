@@ -7,7 +7,7 @@ center read ``estate_reading``; none keeps a list of its own.
 """
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 from hq.domains.control_plane.provider_adapters.tls import (
@@ -19,20 +19,17 @@ from hq.platform.application.labels import dotted
 from hq.platform.application.routes import reverse
 lazy from hq.domains.control_plane.names import in_zone
 
-from .card_items import Insight, Kpi
+from .card_items import Kpi
 from .certificate_expiry import serving
 from .connection_lifecycle import Lifecycle, probed, standing
-from .derivations import reached
 from .drawings import Dot, Dots
 from .entity_links import entity_link
 from .expiry import DEFAULT_RENEWAL_WINDOW_DAYS, days_until, renewal_window
-from .first_seen import dated
-from .item_help import cannot_help
-from .moments import ago, moment, when_day
+from .moments import moment, when_day
 from .projection import read_once
 from .security import Principal
 from .service_health import UNKNOWN
-from .ui import DomainOverview, counted, ended
+from .ui import DomainOverview, counted
 from .workflow_contracts import ActionLink
 lazy from . import connections, services, zones
 lazy from .connection_catalog import connection_total
@@ -43,9 +40,6 @@ lazy from .infrastructure import enabled_resources
 lazy from .services import service_reading
 lazy from .zones import ZONE_KIND
 
-# A machine that holds something for the estate and has been offline this long
-# is an action item. Shorter gaps are restarts.
-OFFLINE_AFTER = timedelta(hours=1)
 # An edge certificate renews itself well before this; inside it, renewal is failing.
 EDGE_RENEWAL_OVERDUE_DAYS = 14
 MANAGED_CERTIFICATE_KINDS = (CERTIFICATE_KIND, UPLOADED_CERTIFICATE_KIND)
@@ -444,66 +438,3 @@ def overview(*, principal: Principal):
             for card in shown
         ),
     )
-
-
-# ----- Action items ---------------------------------------------------------
-
-
-@dated
-def attention() -> tuple[Insight, ...]:
-    """Offline machines the estate depends on.
-
-    A connection that does not answer is the ``connection-not-answering``
-    finding; a domain that will not renew is ``registration-lapsing``, and a
-    certificate near expiry is ``certificate-expiring``.
-    """
-
-    return _offline(estate_reading())
-
-
-def _holds_something(machine) -> bool:
-    return bool(machine.declaration or machine.hostnames or machine.containers or machine.roles or machine.runs_hq)
-
-
-def _offline(estate: Estate) -> tuple[Insight, ...]:
-    items = []
-    for machine in estate.machines:
-        presence = machine.presence
-        # A person's laptop asleep or phone away is normal, not an outage.
-        if presence is None or presence.online or presence.personal or not _holds_something(machine):
-            continue
-        seen = moment(presence.last_seen)
-        if seen is None or seen.year < 2000 or not reached(seen + OFFLINE_AFTER):
-            continue
-        serves = bool(machine.hostnames or machine.roles or machine.runs_hq)
-        what = ", ".join(role.label for role in machine.roles)
-        items.append(
-            Insight(
-                status="serious" if serves else "attention",
-                eyebrow="Machines",
-                key=f"estate-offline:{machine.name}",
-                title=f"{machine.name} is offline",
-                value="1",
-                body=(
-                    f"Last seen {ago(seen)}."
-                    + (ended(f" It is the {what}") if what else "")
-                    + (f" It serves {counted(len(machine.hostnames), 'name')}." if machine.hostnames else "")
-                ),
-                why=(
-                    f"Tailscale last saw it {ago(seen)}, and a machine that serves a name or a role is urgent "
-                    "while it is away."
-                    if serves
-                    else f"Tailscale last saw it {ago(seen)}, and a machine that serves no name or role needs "
-                    "attention while it is away."
-                ),
-                action="Open machine",
-                url=machine.url,
-                subject=subject_link("machine", machine.name),
-                since=seen,
-                workflow=cannot_help(
-                    f"estate-offline:{machine.name}",
-                    "HQ has no power or console access to machines. Bring it back on the machine itself.",
-                ),
-            )
-        )
-    return tuple(items)

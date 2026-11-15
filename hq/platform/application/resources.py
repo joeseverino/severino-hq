@@ -89,7 +89,7 @@ from .resource_refusals import (
 )
 from .search_contracts import SearchDefinition, search_lines
 from .security import Capability, Principal, require_all
-lazy from .domains import all_domains
+lazy from .domains import queue_sources
 lazy from .plugins import ATTENTION_ORDER
 
 
@@ -238,7 +238,7 @@ def action_item_query() -> type[BoundedQuery]:
     """The queue's narrowing: a status the queue holds, and a domain that raises
     items, as this composition declares them."""
 
-    sources = (domain.id for domain in all_domains() if domain.integration.attention is not None)
+    sources = queue_sources()
     return create_model(
         "ActionItemQuery",
         __base__=BoundedQuery,

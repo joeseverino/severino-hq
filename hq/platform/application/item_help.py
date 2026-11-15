@@ -106,13 +106,17 @@ def remedy_link(
 
 def finding_plan(finding: Finding, key: str) -> WorkflowPlan:
     """A finding's own help, as an action item carries it: its resolution
-    plan's remedies, then its commands; with neither, what to do in words and
-    the reason it has neither."""
+    plan's remedies, then its commands; without a remedy, each of its steps in
+    order (a command, or what to do in words) and what they leave HQ unable to
+    do."""
 
     steps = tuple(finding.workflow.steps) if finding.workflow is not None else ()
-    runs = tuple(run_step(step.label, step.command) for step in finding.steps if step.command)
-    if finding.remedies or runs:
-        return _plan(key, steps + runs)
-    told = tuple(do_step(step.label) for step in finding.steps if step.label.strip())
+    if finding.remedies:
+        return _plan(key, steps + tuple(run_step(step.label, step.command) for step in finding.steps if step.command))
+    told = tuple(
+        run_step(step.label, step.command) if step.command else do_step(step.label)
+        for step in finding.steps
+        if step.command or step.label.strip()
+    )
     reason = finding.no_help_reason
     return _plan(key, steps + told + ((cannot_step(reason),) if reason else ()))

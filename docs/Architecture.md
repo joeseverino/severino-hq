@@ -198,6 +198,17 @@ findings (`perimeter_findings`, `controller_findings`, `docker_estate`,
 is derived from the closed `RULE_MODULES` tuple; that module keeps only the
 pipeline: estate, derivation, suppression, resolution, serialization.
 
+A host section puts an item on "Needs you" only as a finding of a rule that
+names it (`FindingRule.domain`, as `record_findings` and `repository_findings`
+do for their records), or, under Approvals, as a held request. A rule with no
+section raises under Infrastructure. Its findings are gated by what the
+section's resources need to be read, and `attention.raised(domain)` is what
+the queue reads for each section. A host `DomainDescriptor` with an attention
+provider is refused at import, so there is no second way onto the queue.
+A rule that reads HQ's own records rather than the projection is
+`gathered`: it runs before derivation (`gathered_findings`), only for a reader
+of its section, so deriving stays pure.
+
 Findings group downstream symptoms under a shared controller when the topology
 proves one, while each exact resource and kind fact stays addressable. The
 frontend renders the subject's already-authorized actions as "what HQ can do
