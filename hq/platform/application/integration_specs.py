@@ -4,7 +4,7 @@ import annotationlib
 import inspect
 from annotationlib import Format
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, fields as dataclass_fields, is_dataclass
 from functools import cache
 from typing import TYPE_CHECKING, Any, TypeAliasType, Union, get_args, get_origin, is_typeddict
 
@@ -93,12 +93,6 @@ IDEMPOTENCY_FIELD_SCHEMA: dict[str, Any] = {
         "shell is not asked."
     ),
 }
-
-
-def declares_idempotency_key(command_type: type) -> bool:
-    """Whether the command carries the key into its own domain operation."""
-
-    return IDEMPOTENCY_FIELD in command_schema(command_type).get("properties", {})
 
 
 # Where the record a command acts on goes in what asking for it wants done.
@@ -243,6 +237,14 @@ class CommandAbout:
             raise ValueError("A command's facts are drawn under a heading: give CommandAbout a label.")
 
 
+def _declared(command: type) -> frozenset[str]:
+    """The field names ``command`` declares, without evaluating its annotations."""
+
+    if is_dataclass(command):
+        return frozenset(each.name for each in dataclass_fields(command))
+    return frozenset(getattr(command, "__required_keys__", ())) | frozenset(getattr(command, "__optional_keys__", ()))
+
+
 @dataclass(frozen=True, slots=True)
 class CapabilitySpec(Requires):
     name: str
@@ -300,6 +302,13 @@ class CapabilitySpec(Requires):
             raise TypeError(
                 f"Capability {self.name!r} command {command.__name__} keeps a Pydantic config of its own; "
                 "declare it a frozen dataclass or a TypedDict, which HQ closes."
+            )
+        # A retry is the runner's to answer once (``execute_once``), so no
+        # handler is handed the key to answer it a second way.
+        if IDEMPOTENCY_FIELD in _declared(command):
+            raise TypeError(
+                f"Capability {self.name!r} command {command.__name__} declares {IDEMPOTENCY_FIELD}; "
+                "the capability runner keeps the retry key, so leave it out."
             )
 
     @property

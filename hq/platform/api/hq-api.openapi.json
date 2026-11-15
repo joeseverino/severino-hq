@@ -394,7 +394,7 @@
             "answer": {},
             "asks": "example-automation wants to carry out the playbook example.service_restart",
             "capability": "automation.example.service_restart.run",
-            "content_fingerprint": "b6a89f32118450a586acc5756910731655bd71fb60990a8193ebb9b5bc27baac",
+            "content_fingerprint": "8d4be752f42b7f4be76cbf3ecf9d4dd69f11b985c8e9987abaeb138de7d04c53",
             "done": false,
             "expires_at": "2026-01-16T09:30:00+00:00",
             "id": "5da6c038-f78f-583a-b073-5da59683c5b1",
@@ -6718,7 +6718,7 @@
           },
           "payload": {
             "additionalProperties": false,
-            "description": "A Refresh takes nothing but why it was asked and its retry key: the\nrepository is the host's configuration.",
+            "description": "A Refresh takes nothing but why it was asked: the repository is the\nhost's configuration.",
             "properties": {
               "idempotency_key": {
                 "$ref": "#/components/schemas/IdempotencyKey"

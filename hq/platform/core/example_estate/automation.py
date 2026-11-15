@@ -485,7 +485,6 @@ def _asked(manifest, host, principal, ago, carried_out, *, correlation="") -> No
     with every audit row it writes dated to the moment it was asked."""
 
     at = timezone.now() - ago
-    key = f"example-run-{manifest.id}-{int(ago.total_seconds())}"
     # Each ask through its asker's own door, as the command page or the MCP server binds one.
     door = (
         doors.mcp()
@@ -493,11 +492,7 @@ def _asked(manifest, host, principal, ago, carried_out, *, correlation="") -> No
         else doors.request(f"/commands/{capability_name(manifest.id)}/")
     )
     spec = command_spec(capability_name(manifest.id))
-    payload = {
-        "hosts": [host],
-        "correlation": correlation,
-        **({IDEMPOTENCY_FIELD: key} if manifest.effect != "read" else {}),
-    }
+    payload = {"hosts": [host], "correlation": correlation}
     with stamped(lambda *_: {"created_at": at}):
         with door:
             # Past the consent an agent's ask waits on: the history this

@@ -6,7 +6,7 @@ before the controller runs it.
 """
 
 import secrets
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal, TypedDict, cast
@@ -56,7 +56,6 @@ from .ui import counted, ended
 lazy from . import tailnet
 lazy from .containers import Running
 lazy from .history import Acts, who_did_each
-lazy from .idempotency import IdempotencyConflict
 lazy from .integration_specs import requested
 lazy from .inventory import live_spec
 lazy from .machines import Machine, container_context
@@ -68,7 +67,6 @@ lazy from .work_runs import WorkRun, run_rows, seen_as_runs, shown_result, stand
 
 @dataclass(frozen=True, slots=True)
 class OperationCommand:
-    idempotency_key: str
     reason: Annotated[str, Describe("Why it is done, kept with the operation it queues.")] = ""
 
 
@@ -320,32 +318,28 @@ type Prepared = tuple[ManagedResource, dict[str, Any]]
 
 
 def enqueue(
-    resource_key: str,
     action: str,
     prepare: Callable[[], Prepared],
     *,
-    idempotency_key: str = "",
-    same: Mapping[str, Any] | None = None,
+    once: str = "",
 ) -> tuple[OperationRequest, bool]:
-    """The one way an operation enters the queue: once per retry key, and once
-    per record and action while one waits. Returns it and whether this call
+    """The one way an operation enters the queue: once per record and action
+    while one waits, and once for ``once``. Returns it and whether this call
     queued it.
 
-    A key already used answers its operation before ``prepare`` checks
-    anything, so a retry answers what the first call did, however things
-    stand now; the same key asking for another record, action or input
-    (``same``, the fields of its input a retry repeats) is a conflict.
-    Otherwise ``prepare`` checks the request and returns the record and the
-    row's fields. A caller with no key (a read's run, which takes none) gets
-    a fresh one, so asking twice queues twice. The key's unique column decides
-    between two writers on one key: ``get_or_create`` hands the second one
-    the first one's row.
+    ``once`` is what HQ's own work is queued once for (a generation, a
+    finding's evidence, a day's renewal), so the operation it already queued
+    answers before ``prepare`` checks anything. A caller's retry key is the
+    capability runner's (``execute_once``), never the row's. Otherwise
+    ``prepare`` checks the request and returns the record and the row's
+    fields. The key's unique column decides between two writers on one key:
+    ``get_or_create`` hands the second one the first one's row.
     """
 
-    key = idempotency_key or f"{action}:{secrets.token_urlsafe(18)}"
-    found = OperationRequest.objects.filter(idempotency_key=key).select_related("resource").first()
+    key = once or f"{action}:{secrets.token_urlsafe(18)}"
+    found = OperationRequest.objects.filter(idempotency_key=key).first()
     if found is not None:
-        return _keyed(found, resource_key, action, same), False
+        return found, False
     resource, fields = prepare()
     active = OperationRequest.objects.filter(
         resource=resource,
@@ -357,22 +351,7 @@ def enqueue(
     operation, created = OperationRequest.objects.get_or_create(
         idempotency_key=key, defaults={"resource": resource, "action": action, **fields}
     )
-    return (operation, True) if created else (_keyed(operation, resource_key, action, same), False)
-
-
-def _keyed(
-    operation: OperationRequest, resource_key: str, action: str, same: Mapping[str, Any] | None
-) -> OperationRequest:
-    """``operation``, the one a retry key already names, else a conflict."""
-
-    asked = operation.input or {}
-    if (
-        operation.resource.key != resource_key
-        or operation.action != action
-        or any(asked.get(name) != value for name, value in (same or {}).items())
-    ):
-        raise IdempotencyConflict("That retry key was already used for a different request.")
-    return operation
+    return operation, created
 
 
 def asked_fields(principal: Principal, *, reason: str, **asked: Any) -> dict[str, Any]:
@@ -402,6 +381,7 @@ def _queue_operation(
     action: str,
     require_enabled: bool = True,
     replaces: dict[str, Any] | None = None,
+    once: str = "",
 ) -> OperationAsked:
     def prepare() -> Prepared:
         if require_enabled and not resource.enabled:
@@ -422,7 +402,7 @@ def _queue_operation(
         replaced = {REPLACES: replaces} if replaces is not None else {}
         return resource, asked_fields(principal, reason=command.reason, generation=resource.generation, **replaced)
 
-    operation, queued = enqueue(resource.key, action, prepare, idempotency_key=command.idempotency_key)
+    operation, queued = enqueue(action, prepare, once=once)
     said = requested(verb_words(action), resource.key, again=not queued)
     if not queued:
         return operation_asked(operation, queued=False, message=said)
@@ -445,9 +425,13 @@ def queue_reconcile(
     which the claim holds the live record to.
     """
 
-    command = OperationCommand(idempotency_key=f"reconcile:{resource.pk}:g{resource.generation}", reason=reason)
     return _queue_operation(
-        resource, command, principal=principal, action=OperationRequest.Action.RECONCILE, replaces=replaces
+        resource,
+        OperationCommand(reason=reason),
+        principal=principal,
+        action=OperationRequest.Action.RECONCILE,
+        replaces=replaces,
+        once=f"reconcile:{resource.pk}:g{resource.generation}",
     )
 
 

@@ -356,7 +356,7 @@ class AcceptObservedTests(TestCase):
         from ..resource_operations import OperationCommand, accept_observed
 
         return accept_observed(
-            OperationCommand(idempotency_key="accept-1", reason="changed on purpose"),
+            OperationCommand(reason="changed on purpose"),
             principal=principal or cli_principal(),
             current_key="a-device",
         )

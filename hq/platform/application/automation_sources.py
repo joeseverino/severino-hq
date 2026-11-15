@@ -184,12 +184,10 @@ def propose(operation: OperationRequest, catalog: dict[str, Any]) -> SourcePropo
 
 @dataclass(frozen=True, slots=True)
 class RefreshCommand:
-    """A Refresh takes nothing but why it was asked and its retry key: the
-    repository is the host's configuration."""
+    """A Refresh takes nothing but why it was asked: the repository is the
+    host's configuration."""
 
     reason: Annotated[StrictStr, Field(max_length=300), Describe("Why it is refreshed, kept with the scan.")] = ""
-    # Filled by the capability runner with the caller's key, or a fresh one.
-    idempotency_key: StrictStr = ""
 
 
 def _source(principal: Principal) -> ManagedResource:
@@ -218,8 +216,8 @@ def _scan_asked(operation: OperationRequest, *, queued: bool) -> OperationAsked:
 
 @transaction.atomic
 def refresh(command: RefreshCommand, *, principal: Principal) -> OperationAsked:
-    """Queue one scan of the automation source for the worker, once per retry
-    key, and answer the one already waiting while there is one."""
+    """Queue one scan of the automation source for the worker, and answer the
+    one already waiting while there is one."""
 
     def prepare() -> Prepared:
         # A scan no worker will take would wait for nothing: the finding that
@@ -230,9 +228,7 @@ def refresh(command: RefreshCommand, *, principal: Principal) -> OperationAsked:
         resource = _source(principal)
         return resource, asked_fields(principal, reason=command.reason, generation=resource.generation)
 
-    operation, created = enqueue(
-        SOURCE_KEY, models.OperationRequest.Action.SCAN, prepare, idempotency_key=command.idempotency_key
-    )
+    operation, created = enqueue(models.OperationRequest.Action.SCAN, prepare)
     if created:
         # The worker pulls the scan over the bridge; the ring only says one
         # waits, and only once it is stored for the claim to find.

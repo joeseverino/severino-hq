@@ -34,7 +34,7 @@ lazy from hq.platform.core.templatetags.value_tags import seconds
 
 from .automation_manifest import OperationManifest, OperationRegistry, sorted_unique
 from .command_fields import Among, AmongNow, Describe, ForAgents, Names
-from .integration_specs import IDEMPOTENCY_FIELD, CapabilitySpec, CommandAbout, CommandFact, command_adapter
+from .integration_specs import CapabilitySpec, CommandAbout, CommandFact, command_adapter
 from .record_errors import PolicyError, RecordNotFound
 from .security import Capability, Principal
 lazy from . import approvals, automation_adoption, pages
@@ -192,9 +192,6 @@ def command_type(manifest: OperationManifest) -> type[RunCommand]:
             field(default_factory=parameters) if takes_none else field(),
         ),
     ]
-    if manifest.effect != "read":
-        # Filled by the capability runner with the caller's key, or a fresh one.
-        fields.append((IDEMPOTENCY_FIELD, StrictStr, field()))
     return make_dataclass(
         f"Run{''.join(part.title() for part in manifest.id.replace('.', '_').split('_'))}",
         fields,
@@ -446,11 +443,10 @@ def _holder_cancel(holding: dict[str, Any], principal: Principal | None) -> Page
 
 @transaction.atomic
 def request_run(manifest: OperationManifest, command: RunCommand, *, principal: Principal) -> OperationAsked:
-    """Queue one run of ``manifest`` for the automation worker, once per retry key.
+    """Queue one run of ``manifest`` for the automation worker.
 
-    A read takes no retry key, so its run is keyed afresh (``enqueue``):
-    asking twice queues twice, and the procedure's one active run refuses the
-    second.
+    A read takes no retry key, so asking twice queues twice, and the
+    procedure's one active run refuses the second.
     """
 
     bound = _bound(manifest, command)
@@ -476,13 +472,7 @@ def request_run(manifest: OperationManifest, command: RunCommand, *, principal: 
             )
         return resource, asked_fields(principal, reason=command.reason, generation=resource.generation, **bound)
 
-    operation, queued = enqueue(
-        resource_key(manifest.id),
-        OperationRequest.Action.RUN,
-        prepare,
-        idempotency_key=getattr(command, IDEMPOTENCY_FIELD, ""),
-        same=bound,
-    )
+    operation, queued = enqueue(OperationRequest.Action.RUN, prepare)
     if not queued:
         return operation_asked(operation, queued=False)
     OperationHost.objects.bulk_create(OperationHost(operation=operation, host=host) for host in bound["hosts"])

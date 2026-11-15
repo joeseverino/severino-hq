@@ -603,7 +603,7 @@ class FloorTests(TestCase):
 
         with self.assertRaisesMessage(PolicyError, "This change needs approval."):
             request_reconcile(
-                OperationCommand(idempotency_key="direct", reason=""),
+                OperationCommand(reason=""),
                 principal=Principal("a-token", "mcp", frozenset({Capability.MANAGE_INFRASTRUCTURE})),
                 current_key=POLICY_KEY,
             )

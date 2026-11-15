@@ -122,7 +122,7 @@ class ControllerContractTests(TestCase):
     )
     def test_peek_claim_and_report(self, _policy):
         request_reconcile(
-            OperationCommand(idempotency_key="contract-once"),
+            OperationCommand(),
             principal=cli_principal(),
             current_key=self.resource.key,
         )
@@ -155,7 +155,7 @@ class ControllerContractTests(TestCase):
     )
     def test_a_renewal_carries_its_verification_policy(self, _policy):
         request_certificate_renewal(
-            OperationCommand(idempotency_key="contract-renew"),
+            OperationCommand(),
             principal=cli_principal(),
             current_key=self.resource.key,
         )
@@ -167,7 +167,7 @@ class ControllerContractTests(TestCase):
 
     def test_a_certificate_reconcile_verifies_under_the_renewal_policy(self):
         request_reconcile(
-            OperationCommand(idempotency_key="contract-plain"),
+            OperationCommand(),
             principal=cli_principal(),
             current_key=self.resource.key,
         )

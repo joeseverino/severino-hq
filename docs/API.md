@@ -691,7 +691,6 @@ validated by.
 
 | Caller | Its key |
 |---|---|
-| A command that queues controller work | stored with the operation it queues; generated when the caller sent none |
 | A command form in the browser | generated and kept hidden |
 | A `read` capability | none |
 

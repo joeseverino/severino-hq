@@ -37,9 +37,7 @@ def refusal_of(resource: ManagedResource) -> str:
     """What the use case itself says, so each adapter is held to it."""
 
     try:
-        request_reconcile(
-            OperationCommand(idempotency_key="direct"), principal=cli_principal(), current_key=resource.key
-        )
+        request_reconcile(OperationCommand(), principal=cli_principal(), current_key=resource.key)
     except PolicyError as exc:
         return exc.reason
     raise AssertionError("The record was applied.")

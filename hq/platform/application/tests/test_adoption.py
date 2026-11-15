@@ -154,7 +154,7 @@ class StopManagingSticksTests(TestCase):
     def forget(self):
         key = ManagedResource.objects.get(kind=ZONE_KIND).key
         request_removal(
-            OperationCommand(idempotency_key="forget-example"),
+            OperationCommand(),
             principal=cli_principal(),
             current_key=key,
         )
@@ -226,7 +226,7 @@ class StopManagingAnyKindTests(TestCase):
         key = ManagedResource.objects.get(kind="portainer.container").key
 
         request_removal(
-            OperationCommand(idempotency_key="forget-container"),
+            OperationCommand(),
             principal=cli_principal(),
             current_key=key,
         )

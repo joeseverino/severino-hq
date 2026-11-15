@@ -445,7 +445,7 @@ class PendingRemovalTests(TestCase):
         from ..resource_operations import OperationCommand, request_removal
 
         request_removal(
-            OperationCommand(idempotency_key="r1"),
+            OperationCommand(),
             principal=cli_principal(),
             current_key="going",
         )
@@ -462,7 +462,7 @@ class PendingRemovalTests(TestCase):
         from ..topology import derive_topology
 
         request_removal(
-            OperationCommand(idempotency_key="r1"),
+            OperationCommand(),
             principal=cli_principal(),
             current_key="going",
         )

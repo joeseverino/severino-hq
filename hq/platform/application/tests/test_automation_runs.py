@@ -10,7 +10,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 
 from hq.domains.control_plane.models import CapabilityRule, ManagedResource, OperationRequest
-from hq.platform.core.models import AgentIdentity, IdempotencyRecord
+from hq.platform.core.models import AgentIdentity
 
 from ..automation_runs import CANCEL
 from ..capabilities import capability_registry, run_capability
@@ -213,8 +213,6 @@ class DoorbellTests(RunTestCase):
         with self.captureOnCommitCallbacks(execute=True):
             self.ask(run_payload())
         self.marker.unlink()
-        # Past the replay record, so the run's own key is what answers.
-        IdempotencyRecord.objects.all().delete()
 
         with self.captureOnCommitCallbacks(execute=True):
             self.ask(run_payload())
@@ -437,16 +435,6 @@ class RetriedRunTests(RunTestCase):
 
         self.refused(run_payload(service="db"), "idempotency_conflict")
         self.assertEqual(OperationRequest.objects.count(), 1)
-
-    def test_a_key_outliving_its_replay_still_names_its_run(self):
-        """The operation's own key holds after the replay record expires."""
-
-        first = self.ask(run_payload())
-        IdempotencyRecord.objects.all().delete()
-
-        self.assertEqual(self.ask(run_payload())["operation"]["id"], first["operation"]["id"])
-        IdempotencyRecord.objects.all().delete()
-        self.refused(run_payload(service="db"), "idempotency_conflict")
 
     def test_the_shell_queues_without_a_key(self):
         answer = run_capability(RESTART_RUN, run_payload(), principal=cli_principal()).answer

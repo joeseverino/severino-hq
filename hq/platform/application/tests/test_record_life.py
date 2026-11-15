@@ -121,18 +121,14 @@ if HYPOTHESIS:
         @rule(key=declarations)
         def apply(self, key):
             if ManagedResource.objects.get(key=key).enabled:
-                request_reconcile(
-                    OperationCommand(idempotency_key=self._ask("apply")), principal=self.principal, current_key=key
-                )
+                request_reconcile(OperationCommand(), principal=self.principal, current_key=key)
             self._controller("reconcile")
 
         @rule(key=declarations)
         def keep_what_is_live(self, key):
             # Refused when no sweep has listed it: there is nothing live to keep.
             with suppress(RecordNotFound):
-                accept_observed(
-                    OperationCommand(idempotency_key=self._ask("accept")), principal=self.principal, current_key=key
-                )
+                accept_observed(OperationCommand(), principal=self.principal, current_key=key)
 
         @rule(key=declarations)
         def switch_off(self, key):
@@ -144,9 +140,7 @@ if HYPOTHESIS:
 
         @rule(key=consumes(declarations))
         def remove(self, key):
-            request_removal(
-                OperationCommand(idempotency_key=self._ask("remove")), principal=self.principal, current_key=key
-            )
+            request_removal(OperationCommand(), principal=self.principal, current_key=key)
             self._controller("delete")
             assert not ManagedResource.objects.filter(key=key).exists(), "a confirmed removal kept its declaration"
 

@@ -1,7 +1,8 @@
-"""A command form posts one retry key, and a command that keeps its key keeps that one."""
+"""A command form posts one retry key, and a resend under it acts once."""
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.platform.application.adoption_testing import managing_everything
@@ -22,7 +23,7 @@ class KeptKeyTests(TestCase):
         user = get_user_model().objects.create_superuser("operator", "operator@example.com", "strongtestpass-1234")
         self.client.force_login(user)
 
-    def test_the_operation_keeps_the_key_the_form_posted(self):
+    def test_a_resend_under_the_form_s_key_queues_nothing_more(self):
         opened = self.client.get("/commands/infrastructure.resource.reconcile/", {"target": RESOURCE})
         form = opened.context["form"]
         key = drawn_key(opened, "data-command-form")
@@ -38,6 +39,10 @@ class KeptKeyTests(TestCase):
         }
 
         response = self.client.post("/commands/infrastructure.resource.reconcile/", posted)
-
         self.assertEqual(response.status_code, 302, response.context and response.context["form"].errors)
-        self.assertEqual(OperationRequest.objects.get().idempotency_key, key)
+        # Done, so only the key, and no waiting operation, keeps a resend from queueing another.
+        OperationRequest.objects.update(state=OperationRequest.State.SUCCEEDED, completed_at=timezone.now())
+
+        self.client.post("/commands/infrastructure.resource.reconcile/", posted)
+
+        self.assertEqual(OperationRequest.objects.count(), 1)

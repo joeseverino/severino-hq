@@ -142,7 +142,7 @@ class StopManagingDomainTests(TestCase):
         from ..resource_operations import OperationCommand, request_removal
 
         return request_removal(
-            OperationCommand(idempotency_key="forget-1", reason="no longer mine"),
+            OperationCommand(reason="no longer mine"),
             principal=self.principal,
             current_key="example-com",
         )
@@ -178,7 +178,7 @@ class StopManagingDomainTests(TestCase):
 
         key = ManagedResource.objects.filter(kind=RECORD_KIND).first().key
         request_removal(
-            OperationCommand(idempotency_key="delete-1"),
+            OperationCommand(),
             principal=self.principal,
             current_key=key,
         )

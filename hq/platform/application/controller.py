@@ -336,10 +336,9 @@ def _finding_repairs(controller_id: str, now) -> list[str]:
         # Keyed on the evidence, not the attempt.
         idempotency_key = (f"finding:{repair.rule}:{resource.pk}:g{resource.generation}:{now.date().isoformat()}")[:200]
         _, created = enqueue(
-            resource.key,
             OperationRequest.Action.RECONCILE,
             partial(_automatic, resource, controller_id, repair.reason),
-            idempotency_key=idempotency_key,
+            once=idempotency_key,
         )
         if created:
             queued.append(resource.key)
@@ -377,7 +376,7 @@ def schedule_automatic_operations(controller_id: str) -> dict[str, Any]:
             f"controller:{action}:{resource.pk}:g{resource.generation}:{identity}:{now.date().isoformat()}"
         )[:200]
         operation, created = enqueue(
-            resource.key, action, partial(_automatic, resource, controller_id, reason), idempotency_key=idempotency_key
+            action, partial(_automatic, resource, controller_id, reason), once=idempotency_key
         )
         if created:
             scheduled.append(str(operation.id))

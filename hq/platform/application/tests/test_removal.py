@@ -46,7 +46,7 @@ class RemovalRequestTests(TestCase):
         resource = a_rewrite()
 
         result = request_removal(
-            OperationCommand(idempotency_key="remove-1"),
+            OperationCommand(),
             principal=cli_principal(),
             current_key=resource.key,
         )
@@ -64,7 +64,7 @@ class RemovalRequestTests(TestCase):
         resource = a_rewrite(enabled=False)
 
         result = request_removal(
-            OperationCommand(idempotency_key="remove-1"),
+            OperationCommand(),
             principal=cli_principal(),
             current_key=resource.key,
         )
@@ -94,16 +94,16 @@ class RemovalRequestTests(TestCase):
 
         with self.assertRaises(PolicyError):
             request_removal(
-                OperationCommand(idempotency_key="remove-1"),
+                OperationCommand(),
                 principal=cli_principal(),
                 current_key="a-certificate",
             )
 
     def test_asking_twice_queues_one_operation(self):
         resource = a_rewrite()
-        for key in ("remove-1", "remove-2"):
+        for _ in range(2):
             request_removal(
-                OperationCommand(idempotency_key=key),
+                OperationCommand(),
                 principal=cli_principal(),
                 current_key=resource.key,
             )
@@ -123,7 +123,7 @@ class RemovalReportTests(TestCase):
     def _claimed_removal(self) -> tuple[ManagedResource, dict]:
         resource = a_rewrite()
         request_removal(
-            OperationCommand(idempotency_key="remove-1"),
+            OperationCommand(),
             principal=cli_principal(),
             current_key=resource.key,
         )
@@ -179,7 +179,7 @@ class RemovalReportTests(TestCase):
         from ..resource_operations import request_reconcile
 
         request_reconcile(
-            OperationCommand(idempotency_key="reconcile-1"),
+            OperationCommand(),
             principal=cli_principal(),
             current_key=resource.key,
         )

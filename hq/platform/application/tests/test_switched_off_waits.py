@@ -39,9 +39,7 @@ class SwitchedOffRecord(TestCase):
         managing_everything()
         record_sweep(a_sweep(**{KIND: [A_REWRITE]}), principal=cli_principal())
         self.resource = ManagedResource.objects.get(kind=KIND)
-        request_reconcile(
-            OperationCommand(idempotency_key="apply-1"), principal=cli_principal(), current_key=self.resource.key
-        )
+        request_reconcile(OperationCommand(), principal=cli_principal(), current_key=self.resource.key)
 
 
 class QueuedBeforeTheSwitchOffTests(SwitchedOffRecord):
@@ -66,9 +64,7 @@ class QueuedBeforeTheSwitchOffTests(SwitchedOffRecord):
         )
 
     def test_its_removal_is_still_handed_over(self):
-        request_removal(
-            OperationCommand(idempotency_key="remove-1"), principal=cli_principal(), current_key=self.resource.key
-        )
+        request_removal(OperationCommand(), principal=cli_principal(), current_key=self.resource.key)
 
         claim = claim_next_operation("test-controller", capabilities=((KIND, "delete"),))
 

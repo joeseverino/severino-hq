@@ -178,7 +178,7 @@ class DoorbellTests(TestCase):
         # rollback then took away.
         with self.captureOnCommitCallbacks(execute=True):
             request_reconcile(
-                OperationCommand(idempotency_key="test-1", reason=""),
+                OperationCommand(reason=""),
                 principal=cli_principal(),
                 current_key="a-rewrite",
             )
@@ -227,7 +227,7 @@ class DoorbellTests(TestCase):
 
         with self.captureOnCommitCallbacks(execute=True):
             result = request_reconcile(
-                OperationCommand(idempotency_key="test-2", reason=""),
+                OperationCommand(reason=""),
                 principal=cli_principal(),
                 current_key="a-rewrite",
             )

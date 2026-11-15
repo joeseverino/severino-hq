@@ -71,7 +71,7 @@ class ConcurrentCallTests(LiveBridge):
             principal=cli_principal(),
         )
         queued = request_reconcile(
-            OperationCommand(idempotency_key="live-once"),
+            OperationCommand(),
             principal=cli_principal(),
             current_key=ManagedResource.objects.get(key="example-wildcard").key,
         )

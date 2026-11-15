@@ -40,6 +40,11 @@ class OperationPolicyTests(TestCase):
         OperationRequest.objects.all().delete()  # applied, so the reconcile its save queued is done
         self.resource = ManagedResource.objects.get(key="example-wildcard")
 
+    def reconcile(self, key: str, retry: str) -> dict:
+        return execute_capability(
+            "infrastructure.resource.reconcile", {"idempotency_key": retry}, principal=cli_principal(), target=key
+        )
+
     def test_a_verb_returns_to_the_page_that_offered_it(self):
         """These forms sit on pages that show the fact the verb answers, and
         they have been sending `next` all along while the view returned to the
@@ -123,7 +128,7 @@ class OperationPolicyTests(TestCase):
 
     def test_active_controller_capability_queues_renewal_work(self):
         result = request_certificate_renewal(
-            OperationCommand(idempotency_key="renew-active"),
+            OperationCommand(),
             principal=cli_principal(),
             current_key=self.resource.key,
         )
@@ -152,7 +157,7 @@ class OperationPolicyTests(TestCase):
 
         with self.assertRaisesMessage(PolicyError, PROVIDERS["cloudflare.zone"].actions["reconcile"].reason):
             request_reconcile(
-                OperationCommand(idempotency_key="zone-locked"),
+                OperationCommand(),
                 principal=cli_principal(),
                 current_key="a-domain",
             )
@@ -167,7 +172,7 @@ class OperationPolicyTests(TestCase):
         self.resource.save()
         with self.assertRaisesRegex(PolicyError, "Renews automatically from"):
             request_certificate_renewal(
-                OperationCommand(idempotency_key="renew-too-early"),
+                OperationCommand(),
                 principal=cli_principal(),
                 current_key=self.resource.key,
             )
@@ -181,12 +186,12 @@ class OperationPolicyTests(TestCase):
         self.resource.conditions = [{"type": "Drifted", "status": True, "reason": "NPMStale"}]
         self.resource.save()
         first = request_certificate_renewal(
-            OperationCommand(idempotency_key="renew-drift"),
+            OperationCommand(),
             principal=cli_principal(),
             current_key=self.resource.key,
         )
         second = request_certificate_renewal(
-            OperationCommand(idempotency_key="renew-drift"),
+            OperationCommand(),
             principal=cli_principal(),
             current_key=self.resource.key,
         )
@@ -199,17 +204,12 @@ class OperationPolicyTests(TestCase):
         return_value=(True, "active"),
     )
     def test_a_finished_operations_key_replays_it_and_refuses_another_resource(self, _policy):
-        first = request_reconcile(
-            OperationCommand(idempotency_key="finished-once"), principal=cli_principal(), current_key=self.resource.key
-        )
+        first = self.reconcile(self.resource.key, "finished-once")
         OperationRequest.objects.filter(pk=first["operation"]["id"]).update(
             state=OperationRequest.State.SUCCEEDED, completed_at=timezone.now()
         )
 
-        again = request_reconcile(
-            OperationCommand(idempotency_key="finished-once"), principal=cli_principal(), current_key=self.resource.key
-        )
-        self.assertFalse(again["queued"])
+        again = self.reconcile(self.resource.key, "finished-once")
         self.assertEqual(again["operation"]["id"], first["operation"]["id"])
 
         save_managed_resource(
@@ -217,14 +217,9 @@ class OperationPolicyTests(TestCase):
             principal=cli_principal(),
         )
         OperationRequest.objects.filter(resource__key="other-wildcard").delete()  # applied, as above
-        from hq.platform.application.idempotency import IdempotencyConflict
 
-        with self.assertRaises(IdempotencyConflict):
-            request_reconcile(
-                OperationCommand(idempotency_key="finished-once"),
-                principal=cli_principal(),
-                current_key="other-wildcard",
-            )
+        other = self.reconcile("other-wildcard", "finished-once")
+        self.assertEqual(other["error"]["code"], "idempotency_conflict")
         self.assertEqual(OperationRequest.objects.count(), 1)
 
     @patch(
@@ -234,9 +229,7 @@ class OperationPolicyTests(TestCase):
     def test_an_operation_answers_how_it_stands_as_every_ask_does(self, _policy):
         from hq.platform.application.asks import Asked
 
-        answer = request_reconcile(
-            OperationCommand(idempotency_key="stands"), principal=cli_principal(), current_key=self.resource.key
-        )
+        answer = request_reconcile(OperationCommand(), principal=cli_principal(), current_key=self.resource.key)
 
         asked = Asked.of(answer)
         self.assertTrue(asked.standing.live)
@@ -250,18 +243,13 @@ class OperationPolicyTests(TestCase):
     def test_a_retry_answers_what_its_first_call_queued_however_the_record_stands_now(self, _policy):
         """A client that lost the first answer learns what it did, and nothing is asked twice."""
 
-        first = request_reconcile(
-            OperationCommand(idempotency_key="asked-once"), principal=cli_principal(), current_key=self.resource.key
-        )
+        first = self.reconcile(self.resource.key, "asked-once")
         ManagedResource.objects.filter(pk=self.resource.pk).update(enabled=False)
 
-        again = request_reconcile(
-            OperationCommand(idempotency_key="asked-once"), principal=cli_principal(), current_key=self.resource.key
-        )
+        again = self.reconcile(self.resource.key, "asked-once")
 
         self.assertTrue(first["queued"])
-        self.assertFalse(again["queued"])
-        self.assertEqual(again["operation"]["id"], first["operation"]["id"])
+        self.assertEqual(again, first)
         self.assertEqual(OperationRequest.objects.count(), 1)
 
     def test_an_agent_not_granted_infrastructure_is_refused_a_renewal(self):
@@ -280,7 +268,7 @@ class OperationPolicyTests(TestCase):
     )
     def test_controller_claim_and_report_updates_observed_state(self, _policy):
         queued = request_reconcile(
-            OperationCommand(idempotency_key="reconcile-once"),
+            OperationCommand(),
             principal=cli_principal(),
             current_key=self.resource.key,
         )
@@ -383,7 +371,7 @@ class QueueHeadTests(TestCase):
         self.certificate.save()
 
         request_removal(
-            OperationCommand(idempotency_key="forget-it"),
+            OperationCommand(),
             principal=cli_principal(),
             current_key="edge-certificate-target",
         )

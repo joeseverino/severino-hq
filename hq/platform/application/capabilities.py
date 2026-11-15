@@ -1,6 +1,5 @@
 """Deterministic JSON capability registry for every HQ adapter."""
 
-import secrets
 from collections.abc import Callable
 from dataclasses import replace
 from typing import Annotated, Any, Literal, NamedTuple, TypedDict
@@ -34,7 +33,6 @@ from .integration_specs import (
     CapabilitySpec,
     capability_schema,
     command_adapter,
-    declares_idempotency_key,
     kept_by,
     takes_sent_fields,
     takes_stale_write_token,
@@ -415,9 +413,7 @@ def _retry_key(spec: CapabilitySpec, payload: dict[str, Any], sent: str | None) 
 
     The key arrives beside the payload (``sent``), in it, or both alike; an
     empty one is none. A read takes none, so one in its payload is an unknown
-    field. A command type that declares the field stores it with the operation
-    it queues, so it receives the caller's key, or a fresh one when the caller
-    sent none. Any other command never sees the field.
+    field. No command sees the key: a retry is this runner's to answer.
     """
 
     if spec.effect == "read" or not isinstance(payload, dict):
@@ -426,10 +422,7 @@ def _retry_key(spec: CapabilitySpec, payload: dict[str, Any], sent: str | None) 
     if len(keys) > 1:
         raise InvalidIdempotencyKey("The request sent two different idempotency keys.")
     key = keys.pop() if keys else ""
-    rest = {name: value for name, value in payload.items() if name != IDEMPOTENCY_FIELD}
-    if declares_idempotency_key(spec.command_type):
-        rest[IDEMPOTENCY_FIELD] = key or f"command:{secrets.token_urlsafe(18)}"
-    return key, rest
+    return key, {name: value for name, value in payload.items() if name != IDEMPOTENCY_FIELD}
 
 
 def _valid_key(given: object) -> str:

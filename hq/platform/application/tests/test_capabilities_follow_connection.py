@@ -73,7 +73,7 @@ class EveryWritePathFollowsTheConnectionTests(TestCase):
 
         with self.assertRaisesMessage(PolicyError, _gap("adguard.rewrite").refusal):
             request_reconcile(
-                OperationCommand(idempotency_key="k1"),
+                OperationCommand(),
                 principal=self.principal,
                 current_key=self.resource.key,
             )
@@ -111,7 +111,7 @@ class EveryWritePathFollowsTheConnectionTests(TestCase):
         connection("adguard", manages=True)
 
         result = request_reconcile(
-            OperationCommand(idempotency_key="k2"),
+            OperationCommand(),
             principal=self.principal,
             current_key=self.resource.key,
         )
