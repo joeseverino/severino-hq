@@ -3042,7 +3042,6 @@
       "primary",
       "print-footer",
       "print-only",
-      "prose-list",
       "route-band-1",
       "route-band-2",
       "route-band-3",
@@ -3683,6 +3682,14 @@
         "classes": [],
         "parameters": [
           "value"
+        ],
+        "parts": []
+      },
+      "prose_list": {
+        "classes": [],
+        "parameters": [
+          "*",
+          "numbered="
         ],
         "parts": []
       },

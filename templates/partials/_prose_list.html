@@ -1,0 +1,9 @@
+{% comment %}
+A list of sentences, drawn by {% prose_list %}: {% prose_list %}<li>A sentence.</li>{% endprose_list %}.
+Its items are the page's <li>s, each marked as the browser marks it, a muted
+bullet or, with numbered, its number for items read in order.
+<!-- ast-grep-ignore: hand-drawn-prose-list --> the part itself
+{% endcomment %}{% if numbered %}<ol class="prose-list">{{ content|safe }}</ol>{% else %}
+{% comment %}
+<!-- ast-grep-ignore: hand-drawn-prose-list --> the part itself
+{% endcomment %}<ul class="prose-list">{{ content|safe }}</ul>{% endif %}

@@ -1,0 +1,33 @@
+# A list of sentences is the prose list part, so every one keeps the same
+# markers, gap and size. A list with no class of its own is one, and so is
+# the part's class written by hand. The switch and the relation list style
+# the list they draw from the part around it. No fix: the part takes its
+# items as the page writes them.
+id: hand-drawn-prose-list
+language: html
+severity: error
+message: A list of sentences drawn by hand, where the prose list part draws it.
+note: Write {% prose_list %}<li>...</li>{% endprose_list %}, with numbered=True for items read in order.
+files:
+  - "**/templates/**/*.html"
+ignores:
+  - "templates/partials/_switch.html"
+  - "templates/partials/_relation_list.html"
+rule:
+  kind: element
+  has:
+    kind: start_tag
+    all:
+      - has:
+          kind: tag_name
+          regex: '^(?:ul|ol)$'
+      - any:
+          - not:
+              has:
+                kind: attribute
+                has:
+                  kind: attribute_name
+                  regex: '^class$'
+          - has:
+              kind: attribute
+              regex: '(?:^|\})class=["''](?:[^"'']*[\s}])?prose-list(?:[^\w-]|$)'

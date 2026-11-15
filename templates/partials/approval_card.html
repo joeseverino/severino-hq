@@ -15,7 +15,7 @@ carries stands above it. Its buttons are the decisions its reader may take
 
   {% if entry.warnings %}
     {% notice tone="warning" %}
-      {% if entry.warnings|length == 1 %}{{ entry.warnings.0|breakable }}{% else %}<ul>{% for warning in entry.warnings %}<li>{{ warning|breakable }}</li>{% endfor %}</ul>{% endif %}
+      {% if entry.warnings|length == 1 %}{{ entry.warnings.0|breakable }}{% else %}{% prose_list %}{% for warning in entry.warnings %}<li>{{ warning|breakable }}</li>{% endfor %}{% endprose_list %}{% endif %}
     {% endnotice %}
   {% endif %}
   {% change_table entry.preview %}

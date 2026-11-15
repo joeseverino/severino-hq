@@ -806,6 +806,9 @@ slotted(
 # stands, or its number, then what it says.
 slotted("steps", "partials/_steps.html", ("content",), frozenset(("numbered",)))
 slotted("step", "partials/_step.html", ("content",), frozenset(("icon", "tone", "done", "title")))
+# A list of sentences, each marked as the browser marks it, or numbered when
+# they are read in order.
+slotted("prose_list", "partials/_prose_list.html", ("content",), frozenset(("numbered",)))
 # A row of links, each a chip of its own.
 slotted("link_chips", "partials/_link_chips.html", ("content",), frozenset())
 # A row of buttons standing on its own, a form's closing row among them.

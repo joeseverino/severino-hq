@@ -37,12 +37,12 @@
 {% if scan %}
   {% if scan.unplaced %}
     {% notice tone="error" %}
-      <ul>{% for reason in scan.unplaced %}<li>{{ reason|breakable }}</li>{% endfor %}</ul>
+      {% prose_list %}{% for reason in scan.unplaced %}<li>{{ reason|breakable }}</li>{% endfor %}{% endprose_list %}
     {% title %}HQ can't adopt this commit{% endnotice %}
   {% endif %}
   {% if scan.unmarked %}
     {% notice tone="warning" title="More access" %}
-      <ul>{% for widening in scan.unmarked %}<li>{{ widening|breakable }}</li>{% endfor %}</ul>
+      {% prose_list %}{% for widening in scan.unmarked %}<li>{{ widening|breakable }}</li>{% endfor %}{% endprose_list %}
     {% endnotice %}
   {% endif %}
   {% if scan_rows %}
