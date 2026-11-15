@@ -340,15 +340,15 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
             ),
             None,
         )
+        reached = remedy.reach
         kept.append(
             FindingRemedy(
                 capability=remedy.capability,
                 target=remedy.target,
                 intent=remedy.intent,
                 variant=remedy.variant,
-                effect=effect,
-                url=(action_with_return(action, "control_plane:findings").url if action else remedy.url),
-                method=action.method if action else remedy.method,
+                url=(action_with_return(action, "control_plane:findings").url if action else reached[0]),
+                method=action.method if action else reached[1],
                 auto=False,
             )
         )

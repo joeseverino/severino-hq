@@ -25,7 +25,8 @@ from .tone import Tone
 from .topology_model import Topology, TopologyNode
 from .ui import ended
 from .workflows import WorkflowPlan
-lazy from .capabilities import capability_words
+lazy from .capabilities import capability_spec, capability_words
+lazy from .pages import command_reach
 
 if TYPE_CHECKING:
     from .cadence import ControllerSweepCommand
@@ -39,12 +40,14 @@ class FindingRemedy:
     ``intent`` is this remedy's own words for what the press does here, where
     the command's name would not say it ("Mark it as running only
     sometimes" through the command that changes a record): declared once,
-    here, and read by every surface that offers the remedy.
+    here, and read by every surface that offers the remedy. Its effect is
+    the command's, and it is reached where the command is (``reach``),
+    unless ``url`` and ``method`` name a route that runs it on something
+    other than its target, such as a container's adoption by its token.
     """
 
     capability: str
     target: str
-    effect: str = ""
     intent: str = ""
     variant: str = ""
     url: str = ""
@@ -57,6 +60,22 @@ class FindingRemedy:
     @property
     def label(self) -> str:
         return self.intent or capability_words(self.capability, self.variant)
+
+    @property
+    def effect(self) -> str:
+        """What running it does, as its command declares; empty for a command HQ does not hold."""
+
+        spec = capability_spec(self.capability)
+        return spec.effect if spec else ""
+
+    @property
+    def reach(self) -> tuple[str, str]:
+        """Where it is pressed, and how: its own route, else where its command is reached."""
+
+        if self.url:
+            return self.url, self.method
+        url, answers_get = command_reach(self.capability, self.target, self.variant)
+        return url, "GET" if answers_get else "POST"
 
 
 @dataclass(frozen=True, slots=True)
@@ -217,7 +236,7 @@ def open_the_path(node: TopologyNode) -> tuple[FindingRemedy, ...]:
     """
 
     return (
-        FindingRemedy(capability="tailnet.reach.allow", target=node.label, effect="infrastructure_change"),
+        FindingRemedy(capability="tailnet.reach.allow", target=node.label),
         *reconcile_remedy(node),
     )
 

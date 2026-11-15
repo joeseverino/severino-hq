@@ -17,7 +17,6 @@ from hq.domains.control_plane.providers import PROVIDERS
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
 lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
-from .action_links import command_url
 from .exposure import FRONT_DOOR_PORTS, front_door_names, listening_ports, public_name, publicly_answering
 from .finding_model import (
     CANNOT_EDIT_COMPOSE,
@@ -48,9 +47,7 @@ SERVICE_FAULT = "service-fault"
 
 
 def _update(key: str, *, intent: str) -> FindingRemedy:
-    return FindingRemedy(
-        capability=UPDATE_CAPABILITY, target=key, intent=intent, url=command_url(UPDATE_CAPABILITY, key)
-    )
+    return FindingRemedy(capability=UPDATE_CAPABILITY, target=key, intent=intent)
 
 
 def _claims(hostname: str, facet_ids: Iterable[str] = ()) -> tuple[Any, ...]:

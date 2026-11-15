@@ -116,7 +116,6 @@ def _edit(node: TopologyNode) -> tuple[FindingRemedy, ...]:
         FindingRemedy(
             capability="infrastructure.resource.update",
             target=node.label,
-            effect="",
         ),
     )
 

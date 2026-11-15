@@ -8,7 +8,6 @@ from django.urls import reverse
 from hq.domains.control_plane.models import ManagedResource
 from hq.platform.application.markup_testing import select, text
 
-from ..action_links import command_url
 from ..attention import infrastructure
 from ..containers import containers
 from ..derivation_testing import uncached
@@ -285,13 +284,13 @@ class FindingHelpTests(TestCase):
         items = self.items()
 
         (mark,) = self.remedies(items["container-hardening", "web"])
-        self.assertEqual(mark.url, command_url("infrastructure.resource.update", "example-box-web"))
+        self.assertEqual(mark.url, command_reach("infrastructure.resource.update", "example-box-web")[0])
         self.assertEqual((mark.capability, mark.target), ("infrastructure.resource.update", "example-box-web"))
         (adopt,) = self.remedies(items["container-hardening", "kuma"])
         self.assertEqual(adopt.method, "POST")
         self.assertIn("/adopt/record/portainer.container/", adopt.url)
 
-    def test_the_socket_button_opens_the_update_prefilled_with_its_declaration(self):
+    def test_the_socket_button_opens_the_update_of_its_own_declaration(self):
         self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.test", "pw"))
         estate()
         declare("web")
@@ -301,8 +300,7 @@ class FindingHelpTests(TestCase):
         page = self.client.get(mark.url)
 
         self.assertEqual(page.status_code, 200)
-        self.assertEqual(page.context["form"].initial["__target"], "example-box-web")
-        self.assertEqual(page.context["form"].initial["spec"]["name"], "web")
+        self.assertEqual(page.context["resource"].key, "example-box-web")
 
     def test_a_marked_container_leaves_the_item(self):
         estate()

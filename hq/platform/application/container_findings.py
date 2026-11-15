@@ -19,7 +19,7 @@ from hq.domains.control_plane.observations.public_registry import IMAGE_KIND
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.platform.application.routes import reverse
 
-from .action_links import command_action, command_url, read_link
+from .action_links import command_action, read_link
 from .containers import VULNERABLE, Container, ImageStanding, containers
 from .exposure import LEVELS, OPEN, UNKNOWN, exposure_of_container, status_at
 from .finding_model import (
@@ -357,7 +357,6 @@ def _posture_help(check_id: str, item: Container) -> dict[str, Any]:
                     capability=UPDATE_CAPABILITY,
                     target=key,
                     intent=SOCKET_HOLDER_INTENT,
-                    url=command_url(UPDATE_CAPABILITY, key),
                 ),
             )
         }

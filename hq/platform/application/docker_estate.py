@@ -187,7 +187,6 @@ def unrecognized_containers(estate: FindingEstate) -> tuple[Finding, ...]:
                             capability="infrastructure.resource.create",
                             target=name,
                             intent="Adopt it",
-                            effect="HQ starts watching it like any other container.",
                             url=adopt_url,
                             method="POST",
                         ),
