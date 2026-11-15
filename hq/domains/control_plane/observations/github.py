@@ -194,7 +194,7 @@ PUBLIC_PROVIDER = "github"
 PROFILE_KIND = "github.profile"
 # GitHub rations anonymous calls by the hour, and a profile changes slowly, so
 # it is read this often and when somebody asks.
-PROFILE_EVERY = timedelta(hours=6)
+_PROFILE_EVERY = timedelta(hours=6)
 AVATAR = ReadingPart("avatar", "Profile picture")
 # The bounds of a profile record, which the controller reads from the record's
 # schema in the bridge contract. GitHub allows an address 60 anonymous calls an
@@ -230,7 +230,7 @@ class ProfileRecord(ObservationRecord):
 
 DEPENDENCY_RUN_KIND = "github.dependency_run"
 # Opted-in repositories are updated once a day and when somebody asks.
-DEPENDENCY_RUN_EVERY = timedelta(days=1)
+_DEPENDENCY_RUN_EVERY = timedelta(days=1)
 # An account and a repository as a run names them: GitHub's rules, lower-cased.
 # The controller reads both from this record's schema in the bridge contract.
 OWNER = r"^[a-z0-9-]{1,39}$"
@@ -372,7 +372,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         title=lambda record: str(record.get("login", "")),
         relation="Public profile of",
         console=lambda record: str(record.get("url", "")),
-        every=PROFILE_EVERY,
+        every=_PROFILE_EVERY,
     ),
     ObservationSpec(
         DEPENDENCY_RUN_KIND,
@@ -390,7 +390,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         ),
         title=lambda record: str(record.get("owner", "")),
         relation="Dependency updates of",
-        every=DEPENDENCY_RUN_EVERY,
+        every=_DEPENDENCY_RUN_EVERY,
     ),
     ObservationSpec(
         ALLOWANCE_KIND,

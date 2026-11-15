@@ -13,11 +13,11 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_adapters.github import COMPOSE_WORKFLOW, CURRENT, KIND as DELIVERY
 
-from .. import first_seen
+from .. import first_seen, freshness
 from ..attention import infrastructure
 from ..delivery_progress import STALLED_AFTER
 from ..entity_links import entity_link
-from ..first_seen import KNOWN_WITHIN, LOOK_EVERY, note_open, recorded
+from ..first_seen import note_open, recorded
 from ..infrastructure import resource_health
 from ..problems import note_open_problems, problem_counts, problems_about
 from ..projection import projection_scope
@@ -119,6 +119,7 @@ class FirstSeenTests(TestCase):
     def setUp(self):
         first_seen._looked.clear()
         self.now = timezone.now()
+        self.cadence = freshness.cadence(freshness.FIRST_SEEN)
 
     def test_what_is_open_at_the_first_look_has_no_date(self):
         note_open(["a"], now=self.now)
@@ -127,28 +128,28 @@ class FirstSeenTests(TestCase):
 
     def test_what_appears_between_two_close_looks_is_dated_by_the_second(self):
         note_open(["a"], now=self.now)
-        later = self.now + LOOK_EVERY
+        later = self.now + self.cadence.every
         note_open(["a", "b"], now=later)
 
         self.assertEqual(recorded(), {"b": later})
 
     def test_what_appears_after_a_gap_has_no_date(self):
         note_open(["a"], now=self.now)
-        note_open(["a", "b"], now=self.now + KNOWN_WITHIN + timedelta(minutes=1))
+        note_open(["a", "b"], now=self.now + self.cadence.stale_after + timedelta(minutes=1))
 
         self.assertEqual(recorded(), {})
 
     def test_a_date_is_kept_while_the_item_stays_open_and_forgotten_when_it_closes(self):
         note_open([], now=self.now)
-        seen = self.now + LOOK_EVERY
+        seen = self.now + self.cadence.every
         note_open(["a"], now=seen)
-        note_open(["a"], now=seen + LOOK_EVERY)
+        note_open(["a"], now=seen + self.cadence.every)
         self.assertEqual(recorded(), {"a": seen})
 
-        note_open([], now=seen + 2 * LOOK_EVERY)
-        note_open(["a"], now=seen + 3 * LOOK_EVERY)
+        note_open([], now=seen + 2 * self.cadence.every)
+        note_open(["a"], now=seen + 3 * self.cadence.every)
 
-        self.assertEqual(recorded(), {"a": seen + 3 * LOOK_EVERY})
+        self.assertEqual(recorded(), {"a": seen + 3 * self.cadence.every})
 
     def test_a_report_is_followed_by_a_look_only_when_one_is_due(self):
         with host_only():
@@ -167,7 +168,9 @@ class FirstSeenTests(TestCase):
             record_sweep({REWRITE: {"ok": True, "records": []}}, principal=cli_principal())
             first_seen._looked.clear()
             broken()
-            with mock.patch.object(first_seen, "LOOK_EVERY", timedelta(0)):
+            # A look due at once, the one before it still current.
+            at_once = freshness.ReadCadence(timedelta(microseconds=1), self.cadence.stale_after)
+            with mock.patch.dict(freshness._NAMED, {freshness.FIRST_SEEN: lambda: at_once}):
                 record_sweep({REWRITE: {"ok": True, "records": []}}, principal=cli_principal())
             with projection_scope():
                 (item,) = [item for item in infrastructure() if item.key.endswith(":resource:app")]

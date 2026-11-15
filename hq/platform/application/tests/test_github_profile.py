@@ -16,9 +16,12 @@ from ..asks import REFRESHING
 from ..cadence import asked_at
 from ..cadence_testing import controller_arrived
 from ..capabilities import capability_registry, execute_capability
+from ..freshness import cadence
 from ..security import Capability, Principal
 from .markup import hrefs, select, text
 from .sentinel import SENTINEL
+
+PROFILE_EVERY = cadence(github_profile.KIND).every
 
 
 def tips(response):
@@ -107,12 +110,12 @@ class PlanTests(TestCase):
         self.assertEqual(github_profile.plan(), {"accounts": ["example-user"], "due": False})
 
     def test_a_reading_past_its_clock_is_due(self):
-        hold(at=timezone.now() - github_profile.PROFILE_EVERY)
+        hold(at=timezone.now() - PROFILE_EVERY)
 
         self.assertTrue(github_profile.plan()["due"])
 
     def test_a_read_that_just_failed_is_not_tried_on_every_sweep(self):
-        old = timezone.now() - github_profile.PROFILE_EVERY
+        old = timezone.now() - PROFILE_EVERY
         hold(at=old, updated_at=timezone.now(), reachable=False, error="GitHub API returned HTTP 502.")
 
         self.assertFalse(github_profile.plan()["due"])
@@ -155,7 +158,7 @@ class PlanTests(TestCase):
         from ..cadence import sweep_due
 
         ProviderInventory.objects.create(kind="adguard.rewrite", observed_at=timezone.now())
-        hold(at=timezone.now() - github_profile.PROFILE_EVERY * 2)
+        hold(at=timezone.now() - PROFILE_EVERY * 2)
 
         self.assertFalse(sweep_due()["due"])
 
@@ -196,7 +199,7 @@ class IngestTests(TestCase):
         self.assertGreater(before.updated_at, before.observed_at)
 
     def test_a_read_replaces_the_reading(self):
-        hold(at=timezone.now() - github_profile.PROFILE_EVERY)
+        hold(at=timezone.now() - PROFILE_EVERY)
 
         self.record({"ok": True, "records": [{**PROFILE, "followers": 9, "token": SENTINEL}]})
 

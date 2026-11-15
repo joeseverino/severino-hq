@@ -4,7 +4,7 @@ Whose profile is the login the signed-in person's sign-in claims, never one
 typed into HQ. HQ reads nothing here: the controller reads GitHub's public API
 (``controller/providers/github_profile.go``), under the GitHub App's allowance
 where there is one and anonymously where not, on a clock of its own since
-GitHub rations calls by the hour (``observations.github.PROFILE_EVERY``).
+GitHub rations calls by the hour (its ``every``, ``observations.github``).
 """
 
 from dataclasses import dataclass
@@ -14,11 +14,12 @@ from typing import Annotated, Any
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderInventory
-from hq.domains.control_plane.observations.github import PROFILE_EVERY, PROFILE_KIND as KIND
+from hq.domains.control_plane.observations.github import PROFILE_KIND as KIND
 from hq.platform.core.models import LinkedAccount
 
 from .asks import AskedAnswer, Standing, asked_read, read_standing
 from .command_fields import Describe
+from .freshness import freshness
 from .linked_accounts import GITHUB
 from .record_errors import RecordNotFound
 from .security import Principal
@@ -117,7 +118,7 @@ def plan(now: datetime | None = None) -> dict[str, Any]:
     held = {login.lower() for login in profiles()}
     behind = (
         snapshot.observed_at is None
-        or now - snapshot.observed_at >= PROFILE_EVERY
+        or freshness(KIND, snapshot.observed_at, now).due
         or any(login.lower() not in held for login in wanted)
     )
     return {"accounts": list(wanted), "due": behind and now - snapshot.updated_at >= RETRY_AFTER}

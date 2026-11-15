@@ -15,15 +15,12 @@ from typing import Any
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderInventory
-from hq.domains.control_plane.observations.github import (
-    DEPENDENCY_RUN_EVERY,
-    DEPENDENCY_RUN_KIND as KIND,
-    REPOSITORY,
-)
+from hq.domains.control_plane.observations.github import DEPENDENCY_RUN_KIND as KIND, REPOSITORY
 from hq.domains.jobs.models import JobState
 from hq.domains.projects.models import Project
 
 from .asks import AskedAnswer, asked_read
+from .freshness import freshness
 from .projection import iso, read_once
 from .refusal_status import RefusalEnvelope, refuse
 from .security import Principal
@@ -142,7 +139,7 @@ def plan(now: datetime | None = None) -> dict[str, Any]:
     elif snapshot is not None and not snapshot.reachable and now - snapshot.updated_at < RETRY_AFTER:
         due = False
     else:
-        due = started is None or now - started >= DEPENDENCY_RUN_EVERY
+        due = started is None or freshness(KIND, started, now).due
     return {**found, "due": due}
 
 

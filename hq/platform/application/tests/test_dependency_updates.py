@@ -14,6 +14,7 @@ from hq.domains.projects.models import Project
 from .. import dependency_updates
 from ..capabilities import execute_capability
 from ..domains import records_of
+from ..freshness import cadence
 from ..projection import projection_scope
 from ..security import Capability, Principal, cli_principal
 
@@ -79,7 +80,7 @@ class PlanTests(TestCase):
         found = dependency_updates.plan()
         self.assertFalse(found["due"])
         self.assertEqual(found["last_started_at"], started.isoformat())
-        self.assertTrue(dependency_updates.plan(started + dependency_updates.DEPENDENCY_RUN_EVERY)["due"])
+        self.assertTrue(dependency_updates.plan(started + cadence(dependency_updates.KIND).every)["due"])
 
     def test_a_run_handed_off_and_not_finished_is_not_handed_off_again(self):
         opted_in("app", "https://github.com/example/app")
