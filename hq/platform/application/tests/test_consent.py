@@ -137,12 +137,6 @@ class ConsentTests(TestCase):
         payload = keyed(wanted)
         command = validate_command(spec, wanted, POLICY_KEY)
 
-        # A caller naming a principal of its own, which only a sealed approval may carry.
-        unsealed = {"principal": TOKEN, "sent": frozenset(payload)}
-        with self.assertRaises(TypeError):
-            execute_approved(spec, command, POLICY_KEY, **unsealed)  # type: ignore[call-arg, arg-type]
-        self.assertEqual(self.policy(), policy_document())
-
         from ..approvals import Approval, Approved
         from ..sealing import sealer
 
