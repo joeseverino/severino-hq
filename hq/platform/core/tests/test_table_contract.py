@@ -308,6 +308,21 @@ class TableTagTests(SimpleTestCase):
         )
         self.assertEqual([cell.attrs.get("data-kind") for cell in elements(html, "td")], ["name", "status", "control"])
 
+    def test_a_stacked_cell_names_its_column(self):
+        """A narrow box stacks its table, each value under its column's name
+        (tables.css), so each body cell carries that name. The cell that
+        names its row, a row's controls and a tick-box need none."""
+
+        source = (
+            '{% table_region "Things" %}<table class="data-table" data-selectable-table><thead><tr>'
+            '{% table_heading "Select" select_all=True %}{% table_heading "Name" gutter=True %}'
+            '{% table_heading "State" "status" %}{% table_heading "Act" css="actions-col" %}</tr></thead><tbody>'
+            "<tr>{% row_select 1 %}<td>a</td><td>Up &amp; on</td><td><button>Go</button></td></tr>"
+            "</tbody></table>{% endtable_region %}"
+        )
+        cells = [cell.attrs.get("data-label") for cell in elements(_render(source), "td")]
+        self.assertEqual(cells, [None, None, "State", None])
+
     def test_every_cell_under_a_control_heading_is_marked_a_control(self):
         """tables.css sizes a select or a field to what it holds only in a
         cell marked a control, so every cell under such a heading is, however

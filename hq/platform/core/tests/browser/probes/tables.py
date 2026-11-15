@@ -40,8 +40,17 @@ TABLES = (
     + DESCRIBE
     + """
   // A table is laid out by the browser's table layout (tables.css), which
-  // keeps every cell under its column's heading, and its headings are drawn.
+  // keeps every cell under its column's heading, or stacked in a narrow box,
+  // where every value that has a column's name stands under it, and its
+  // headings are drawn.
   const width = document.documentElement.clientWidth;
+  const stacked = (table) => {
+    if (getComputedStyle(table).display !== 'block') return false;
+    const rows = [...table.querySelectorAll(':scope > * > tr')].filter((row) => row.checkVisibility());
+    return rows.every((row) => !/^table/.test(getComputedStyle(row).display));
+  };
+  const unlabeled = (table) => [...table.querySelectorAll(':scope > tbody > tr > [data-label]')]
+    .filter((cell) => cell.checkVisibility() && getComputedStyle(cell, '::before').content === 'none');
   const found = [];
   let seen = 0;
   let undrawn = 0;
@@ -55,7 +64,9 @@ TABLES = (
     }
     seen += 1;
     const name = describe(table);
-    if (getComputedStyle(table).display !== 'table') found.push(`${name} is not laid out as a table`);
+    if (stacked(table)) {
+      for (const cell of unlabeled(table)) found.push(`${describe(cell)} stands stacked without its column's name`);
+    } else if (getComputedStyle(table).display !== 'table') found.push(`${name} is not laid out as a table`);
     const head = table.querySelector('thead');
     const headings = head ? [...head.querySelectorAll(':scope > tr:last-child > th')] : [];
     if (headings.length && !headings.some((heading) => heading.checkVisibility())) {
@@ -526,10 +537,11 @@ UNSEEN_COLUMNS = (
     + """
   // A table's width belongs to the columns that are showing. A cell left
   // spanning columns that were dropped keeps them in the table, and a table
-  // held to its box then shares its width with columns nobody sees.
+  // held to its box then shares its width with columns nobody sees. A
+  // stacked table has no columns to share it.
   const found = [];
   for (const table of document.querySelectorAll('main ' + scroll + ' > table')) {
-    if (!table.checkVisibility()) continue;
+    if (!table.checkVisibility() || getComputedStyle(table).display !== 'table') continue;
     const shown = [...table.querySelectorAll(':scope > thead > tr:last-child > th')]
       .filter((heading) => getComputedStyle(heading).display !== 'none');
     if (!shown.length) continue;

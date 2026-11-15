@@ -429,7 +429,7 @@ class Cells(HTMLParser):
             if row.group:
                 self._span(row, width)
                 continue
-            self._mark_cells(row, kinds, named, empty, levels, leaving)
+            self._mark_cells(row, kinds, named, empty, levels, leaving, names)
             self._name(row, kinds, named)
             if gutter is not None and row.section != "thead":
                 self._gutter(row, gutter)
@@ -466,12 +466,20 @@ class Cells(HTMLParser):
         self.toggles.append((cell.closed, any(_finished(each, "editor") for each in row.cells)))
 
     def _mark_cells(
-        self, row: _Row, kinds: dict[int, str], named: int, empty: set[int], levels: dict[int, int], leaving: set[int]
+        self,
+        row: _Row,
+        kinds: dict[int, str],
+        named: int,
+        empty: set[int],
+        levels: dict[int, int],
+        leaving: set[int],
+        names: list[str],
     ) -> None:
         """What each cell says of itself: blank, its whole column blank, the
         width its column leaves at (a column of the rows' controls leaves in
-        a narrow box, `data-narrow`), and in the body its kind and a cut
-        cell's whole value."""
+        a narrow box, `data-narrow`), and in the body its kind, a cut cell's
+        whole value and the name it stands under once its table stacks
+        (`data-label`; none for the cell naming the row or a control)."""
 
         body = row.section == "tbody"
         for at, cell in _placed(row):
@@ -481,7 +489,11 @@ class Cells(HTMLParser):
                 marks += [f' data-drop="{levels[at]}"'] if at in levels else []
                 marks += [" data-narrow"] if at in leaving else []
                 if row.section != "thead":
-                    marks += self._body_marks(cell, _kind_at(at, kinds, named), body=body)
+                    kind = _kind_at(at, kinds, named)
+                    marks += self._body_marks(cell, kind, body=body)
+                    label = names[at] if 0 <= at < len(names) else ""
+                    if label and kind not in {"name", "control"} and "data-label" not in cell.attrs:
+                        marks.append(f' data-label="{html.escape(label)}"')
             self.marks.setdefault(cell.start, []).extend(marks)
 
     def _body_marks(self, cell: _Cell, kind: str, *, body: bool) -> list[str]:
@@ -607,10 +619,13 @@ def _kept_naming_column(heads: list[list[_Cell]]) -> int:
 
 
 def _columns(heading: list[_Cell]) -> tuple[list[str], dict[int, int], int | None]:
-    """Each column's name, the rank of each column that may leave, and the
-    one whose heading keeps the gutter."""
+    """Each column's name (none for the tick-boxes, which their own label
+    names), the rank of each column that may leave, and the one whose heading
+    keeps the gutter."""
 
-    names = [" ".join("".join(cell.text).split()) for cell in heading]
+    names = [
+        "" if "select-column" in _classes(cell.attrs) else " ".join("".join(cell.text).split()) for cell in heading
+    ]
     drops = {index: int(cell.attrs["data-drop"]) for index, cell in enumerate(heading) if cell.attrs.get("data-drop")}
     gutters = (index for index, cell in enumerate(heading) if "row-gutter" in _classes(cell.attrs))
     return names, drops, next(gutters, None)

@@ -143,8 +143,8 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 .data-table > tbody > tr > [data-kind="control"] > :is(.btn, .icon-link, form) { vertical-align: top; }.data-table > tbody > tr > [data-kind="control"] > * + * { margin-inline-start: var(--space-4); }
 .data-table > tbody > tr > [data-kind="control"]:has(> :is(.btn, .icon-link, form, [data-ask])) { padding-block: calc(var(--row-pad) - var(--control-rise)); }
 .data-table > * > tr > .select-column { inline-size: 1px; text-align: center; padding-inline: var(--space-4); }
-/* What a control cell says beside its controls wraps as words do, on a line of its own. */
-.data-table > tbody > tr > [data-kind="control"] > :is(.muted, p) { display: block; margin: 0; white-space: normal; }
+/* What a control cell says beside its controls wraps as words do, on a line of its own: a note, or the sentence linked to the setup a change needs (`_write_gap.html`), which is a link and no control's label. */
+.data-table > tbody > tr > [data-kind="control"] > :is(.muted, p, [data-write-gap]) { display: block; margin: 0; white-space: normal; }
 /* A row with nothing to press gives its words the room the cell's padding would keep. */
 .data-table td.row-actions:not(:has(> *)) { padding-inline: 0; }
 /* What an ask says stands under its controls, out of their flow, as wide as the cell, so a press moves nothing (partials/_ask.html). */
@@ -274,6 +274,38 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
   .data-table[data-marks] > * > tr > * { padding: var(--space-3) var(--space-1); }
 }
 
+/* A narrow box stacks its table: each row is a block, a cell a line of it,
+   its value under its column's name (`data-label`, table_cells), so no value
+   that keeps its line can hold the table wider than its box. The headings
+   stand above the rows as a line of their sort controls. A table of marks is
+   read down its columns and a chart's scrolls, so both stay tables. What
+   stacks is said without weight (`:where`), so a part the table does not draw
+   (a column that left, a closed line, a folded row) stays undrawn. */
+@container table-region (width < 36rem) {
+  :where(.table-scroll:not([data-chart]) > .data-table:not([data-marks])) {
+    &, & > *, & > * > tr, & > * > tr > * { display: block; }
+    & > * > tr:not(.row-detail) { display: flex; }
+  }
+  .table-scroll:not([data-chart]) > .data-table:not([data-marks]) {
+    & > tbody > tr.is-expanded + tr.row-detail { display: block; }
+    /* A line that says nothing is left out, as the open line leaves it out. */
+    & > tbody > tr > [data-blank]:not(:first-child) { display: none; }
+    /* The headings' line sticks under the page's chrome, as their row does. */
+    & > thead { position: sticky; z-index: 2; inset-block-start: calc(var(--site-header-height) + var(--page-nav-height)); }
+    & > thead > tr { flex-wrap: wrap; gap: 0 var(--space-6); padding-inline: var(--space-6); background: var(--surface-2); box-shadow: inset 0 -1px 0 var(--line); }
+    & > thead > tr > th { position: static; inline-size: auto; padding-inline: 0; box-shadow: none; background: none; }
+    /* Each line of a row starts where its name does, as its open line does. */
+    & > :not(thead) > tr:not(.row-detail) { flex-wrap: wrap; padding-block-end: var(--row-pad); border-bottom: 1px solid var(--line-2); }
+    & > tbody > tr:is(:last-child, :has(+ .row-detail:last-child), .is-expanded:has(+ .row-detail)) { border-bottom: 0; }
+    & > :not(thead) > tr:not(.row-detail) > * { flex: 1 1 100%; inline-size: auto; padding-block: var(--space-3) 0; padding-inline-start: var(--row-inset, var(--space-6)); border-bottom: 0; text-align: start; }
+    /* The row's first line stands where a row's toggle does; the tick-box shares it with the name after it. */
+    & > :not(thead) > tr:not(.row-detail) > :is(:first-child, .select-column + *) { padding-block-start: var(--row-pad); }
+    & > :not(thead) > tr > .select-column { flex: none; padding-inline: var(--space-4); }
+    & > :not(thead) > tr > .select-column + * { flex-basis: 0; }
+    & > :not(thead) > tr > [data-label]::before { content: attr(data-label) / ""; display: block; color: var(--muted); font-size: var(--text-xs); font-weight: 400; }
+  }
+}
+
 /* ── A row's toggle and its open line ───────────────────────────── */
 
 /* The server draws a toggle in every row that can open; it shows where the row holds something back: at any width (`data-below`, table_cells: a clamped value, a part the row never shows, a block or buttons moved to its open line), where a column of it has left or a narrow box has let a part go (above), and on an open row. */
@@ -283,7 +315,8 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 .data-table [data-kind] :is(.row-more, .line-rest), .row-detail .row-less { display: none; }
 /* The gutter the toggle stands in is kept in every row and the heading of a table where any row can open, so names share one edge. */
 .data-table > tbody > tr > .row-gutter { position: relative; }
-.data-table:has(> tbody > tr.row-detail, .row-fold, .cell-clamp) > * > tr > .row-gutter { padding-inline-start: var(--row-gutter); }
+.data-table:has(> tbody > tr.row-detail, .row-fold, .cell-clamp) { --row-inset: var(--row-gutter); }
+.data-table > * > tr > .row-gutter { padding-inline-start: var(--row-inset, var(--space-6)); }
 .data-table .row-gutter > [data-row-toggle] { position: absolute; inset-inline-start: var(--space-3); inset-block-start: calc(var(--row-pad) - var(--space-1)); }
 /* A column of a row's controls (`actions-col`, a public class) holds them on one line. */
 .actions-col { white-space: nowrap; }
@@ -304,7 +337,7 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
   display: grid; grid-template-columns: fit-content(40%) minmax(0, 1fr); align-items: baseline; gap: var(--space-5) var(--space-6); margin: 0;
   padding: var(--space-5) var(--space-6); border-radius: var(--radius); background: var(--bg-tint); container: row-columns / inline-size;
 }
-.row-columns > * { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; align-items: inherit; }
+.row-columns > * { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; row-gap: var(--space-1); align-items: inherit; }
 /* A value that opens with a wrapped inline block has its baseline on that block's last line where an engine has no `baseline-source`, so there a pair lines up by its top. */
 @supports not (baseline-source: first) {
   .row-columns { align-items: start; }
@@ -316,7 +349,6 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 /* Beside its label a value on a narrow line has too little room to hold a word, so there each label stands above its value. */
 @container row-columns (width < 18rem) {
   .row-columns dd, .row-columns dt { grid-column: 1 / -1; }
-  .row-columns dt + dd { margin-block-start: calc(var(--space-1) - var(--space-5)); }
 }
 /* A flat line (`data-line="flat"` on the table): what a row keeps beneath it, in one column on no panel. */
 .data-table[data-line="flat"] .row-detail .row-columns { padding: 0; background: none; }
