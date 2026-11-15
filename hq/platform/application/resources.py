@@ -520,8 +520,7 @@ def connections() -> tuple[ResourceSpec, ...]:
         ResourceSpec(
             "request.path",
             "Request path",
-            "How the calling request reached HQ, hop by hop, each checked against the request, "
-            "with the checks of the request standard decided there.",
+            "How the calling request reached HQ, hop by hop, and the request standard's checks decided at each.",
             Capability.READ,
             derived_reads.list_request_path,
             EmptyQuery,

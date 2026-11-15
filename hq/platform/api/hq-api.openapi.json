@@ -28024,7 +28024,7 @@
     },
     "/api/v2/resources/request.path/": {
       "get": {
-        "description": "How the calling request reached HQ, hop by hop, each checked against the request, with the checks of the request standard decided there.",
+        "description": "How the calling request reached HQ, hop by hop, and the request standard's checks decided at each.",
         "operationId": "listRequestPathV2",
         "parameters": [
           {
