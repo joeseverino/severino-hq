@@ -4,7 +4,7 @@ The programs that develop, check and release HQ: what mise tasks, CI and the
 operator's machine run. None of it is in the image (`Dockerfile.dockerignore`
 admits nothing from here, and `image:verify:no-dev` fails an image that
 carries any of it). So code that `hq` and `tools/` both use lives under `hq`,
-and Ruff's TID251 (`banned-api` in `pyproject.toml`) refuses an import of
+and the ast-grep rule `tools-imported-only-by-tools` refuses an import of
 `tools` from outside it.
 
 | Folder | What it holds |

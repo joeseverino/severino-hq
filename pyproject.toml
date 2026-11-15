@@ -299,7 +299,6 @@ ignore = [
 check-typed-exception = true
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
-"tools".msg = "tools/ is development and CI code the image does not ship; a test of it lives under tools/."
 "urllib.request".msg = "urllib carries every header across a redirect, to any origin and to http://; read over HTTP with hq.platform.application.http_read."
 
 [tool.ruff.lint.per-file-ignores]

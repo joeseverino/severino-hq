@@ -92,7 +92,10 @@ lazy from hq.platform.core.example_estate.testing import as_production, sign_in
 # imported, so a base whose constructors this tree's catalog does not fit still
 # looks at every other page: it is read only for a name nothing else is.
 lazy from hq.platform.core.tests.browser import catalog
-lazy from tools.perf.report import tokens as perf_tokens  # noqa: TID251 - dev:look runs perf in its share, and perf declares what it draws
+
+# dev:look runs perf in its share, and perf declares what it draws.
+# ast-grep-ignore: tools-imported-only-by-tools
+lazy from tools.perf.report import tokens as perf_tokens
 
 # Each run's shots go to a folder of their own under here, named for when the
 # run began, so a later run never overwrites what an earlier one printed: the
