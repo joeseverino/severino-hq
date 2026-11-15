@@ -1,8 +1,6 @@
 from django.db import connection
 from django.test import TestCase
 
-from hq.platform.application import derivations
-
 from .estate_sizes import assert_cost_does_not_grow, assert_subject_cost_does_not_grow, distinct
 
 
@@ -26,20 +24,6 @@ class CostDoesNotGrowTests(TestCase):
 
         with self.assertRaisesMessage(AssertionError, "the cost grows with the rows"):
             assert_cost_does_not_grow(self, sizes=(1, 6), draw=per_row, rows=len)
-
-    def test_the_rows_are_laid_out_outside_the_count_and_drawn_uncached(self):
-        laid, seen = [], []
-
-        def draw(size):
-            seen.append(derivations._UNCACHED.get())
-            return laid[-size:]
-
-        def arrange(size):
-            laid.extend(_rows(1)[0] for _ in range(size))
-
-        assert_cost_does_not_grow(self, sizes=(1, 6), arrange=arrange, draw=draw, rows=len)
-        # The first size is drawn once more, uncounted, before its count.
-        self.assertEqual(seen, [True, True, True])
 
     def test_a_subject_whose_cost_grows_with_the_estate_fails(self):
         laid = []

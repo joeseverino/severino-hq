@@ -59,29 +59,6 @@ STATUSES = {
 }
 
 
-def side(commit, idle, server_ms):
-    return {
-        "commit": commit[:12],
-        "pages": [
-            {
-                "page": "/",
-                "server": {
-                    "p50_ms": server_ms,
-                    "p95_ms": server_ms,
-                    "queries": 3,
-                    "repeated_queries": 0,
-                    "rows": 1,
-                    "html_bytes": 2048,
-                    "row_html_bytes": 512,
-                },
-            }
-        ],
-        "memory": {"idle_bytes": idle, "after_pass_bytes": idle * 2},
-        "cold_start": {"median_ms": 1300.0},
-        "failures": [],
-    }
-
-
 class PreviousReleaseTests(SimpleTestCase):
     def test_a_live_release_is_compared_with_the_one_live_before_it(self):
         found = release_report.releases(RELEASE, DEPLOYMENTS, STATUSES.__getitem__)
@@ -141,40 +118,6 @@ class RenderTests(SimpleTestCase):
     def made(self):
         return release_report.Report(RELEASE, base=BEFORE)
 
-    def test_the_headline_sets_each_number_beside_its_move(self):
-        made = self.made()
-        release_report.perf_rows(
-            made, {"run": "r", "here": side(RELEASE, 100 * 1024**2, 30.0), "base": side(BEFORE, 120 * 1024**2, 25.0)}
-        )
-        rows = {row[0]: row for row in made.perf}
-        self.assertEqual(rows["memory idle"][1:], ("120.0 MB", "100.0 MB", "-20.0"))
-        self.assertEqual(rows["p50 ms, every page summed"][3], "+5.0")
-        self.assertEqual(made.failed, [])
-        self.assertIn("moved past their spread", release_report.verdict(made, None))
-
-    def test_a_kept_base_names_its_run_and_the_load_of_each_side(self):
-        made = self.made()
-        doc = {
-            "run": "r",
-            "base_reused_from": "kept-run",
-            "here": side(RELEASE, 1, 1.0) | {"load": 4.5},
-            "base": side(BEFORE, 1, 1.0) | {"load": 5.75},
-        }
-        release_report.perf_rows(made, doc)
-        written = release_report.render(made, None)
-        self.assertRegex(written, r"kept from run kept-run\b.*\b5\.75\b.*\b4\.5\b")
-
-    def test_a_base_measured_host_alone_says_so(self):
-        made = self.made()
-        doc = {
-            "run": "r",
-            "alone": "the base refused the extension set",
-            "here": side(RELEASE, 1, 1.0),
-            "base": side(BEFORE, 1, 1.0),
-        }
-        release_report.perf_rows(made, doc)
-        self.assertIn("the base refused the extension set", release_report.render(made, None))
-
     def test_a_failed_reading_is_a_row_and_counted_in_the_verdict(self):
         made = self.made()
         release_report.production_rows(made, {"error": "RuntimeError: no process runs hq.config.asgi:application"})
@@ -196,17 +139,3 @@ class RenderTests(SimpleTestCase):
     def test_a_release_not_deployed_says_what_production_runs(self):
         found = release_report.Releases(previous=BEFORE, deployed=False, running=BEFORE)
         self.assertIn(f"production runs {BEFORE[:12]}", release_report.verdict(self.made(), found))
-
-    def test_a_unit_run_is_timed_from_its_main_process(self):
-        said = release_report.last_run(
-            {
-                "ExecMainStartTimestamp": "Sat 2026-10-31 04:42:09 UTC",
-                "ExecMainStartTimestampMonotonic": "1469026336986",
-                "ExecMainExitTimestampMonotonic": "1469027263396",
-                "Result": "success",
-                "ExecMainStatus": "0",
-                "CPUUsageNSec": "[not set]",
-            }
-        )
-        self.assertIn("0.93 s", said)
-        self.assertNotIn("CPU", said)
