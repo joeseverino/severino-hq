@@ -58,10 +58,6 @@ class ContactReviewCommand:
     admin_notes: AdminNotes = ""
 
 
-# The name the contact specs import the shared delete command by.
-ContactDeleteCommand = DeleteCommand
-
-
 def _status(value: str, *, allow_blank: bool = False) -> str:
     value = value.strip()
     if not value and allow_blank:

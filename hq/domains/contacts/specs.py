@@ -7,12 +7,12 @@ from pydantic import Field
 from hq.domains.control_plane.provider_adapters.cloudflare import ContactStatus
 from hq.platform.application import contact_submissions
 from hq.platform.application.contact_submissions import (
-    ContactDeleteCommand,
     ContactReviewCommand,
     execute_contact_delete,
     execute_contact_review,
 )
 from hq.platform.application.contracts import Effect
+from hq.platform.application.deletion import DeleteCommand
 from hq.platform.application.describe import Describe
 from hq.platform.application.integration_specs import CapabilitySpec, ResourceSpec
 from hq.platform.application.records import DELETE
@@ -99,7 +99,7 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
             "Delete one message sent through the contact form.",
             Effect.DESTRUCTIVE,
             Capability.MANAGE_CONTACTS,
-            ContactDeleteCommand,
+            DeleteCommand,
             execute_contact_delete,
             "integer",
             "contact.submissions",

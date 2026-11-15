@@ -15,12 +15,12 @@ from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.contact_submissions import (
     DELETE,
     REVIEW,
-    ContactDeleteCommand,
     ContactReviewCommand,
     execute_contact_delete,
     execute_contact_review,
     list_contact_submissions,
 )
+from hq.platform.application.deletion import DeleteCommand
 from hq.platform.application.markup_testing import elements, select, with_class
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.record_errors import RecordNotFound
@@ -397,11 +397,11 @@ class QueuedChangeTests(TestCase):
         self.assertEqual(resource.generation, 2)
 
     def test_a_deletion_hides_the_row_until_it_is_gone(self):
-        execute_contact_delete(ContactDeleteCommand(confirm="2"), consented=consented(OPERATOR), current_id=2)
+        execute_contact_delete(DeleteCommand(confirm="2"), consented=consented(OPERATOR), current_id=2)
 
         self.assertEqual([row["id"] for row in inbox.current().rows], [1])
         self.assertEqual(ManagedResource.objects.get(kind=inbox.DECLARATION).spec["deletions"], [2])
-        again = execute_contact_delete(ContactDeleteCommand(confirm="2"), consented=consented(OPERATOR), current_id=2)
+        again = execute_contact_delete(DeleteCommand(confirm="2"), consented=consented(OPERATOR), current_id=2)
         self.assertTrue(again["deleted"]["already_absent"])
 
     def test_the_controllers_refusal_is_shown(self):
