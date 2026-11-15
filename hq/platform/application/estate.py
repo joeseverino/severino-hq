@@ -19,10 +19,10 @@ from hq.platform.application.labels import dotted
 from hq.platform.application.routes import reverse
 lazy from hq.domains.control_plane.names import in_zone
 
+from .action_links import read_link
 from .card_items import Kpi
 from .certificate_expiry import serving
 from .connection_lifecycle import Lifecycle, probed, standing
-from .contracts import Effect
 from .drawings import Dot, Dots
 from .entity_links import entity_link
 from .expiry import DEFAULT_RENEWAL_WINDOW_DAYS, days_until, renewal_window
@@ -55,7 +55,7 @@ def subject_link(kind: str, name: str) -> ActionLink | None:
     if not name:
         return None
     link = entity_link(kind, name)
-    return ActionLink("subject", link.label, Effect.READ, link.url) if link.url else None
+    return read_link("subject", link.label, link.url) if link.url else None
 
 
 @dataclass(frozen=True, slots=True)

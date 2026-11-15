@@ -18,6 +18,7 @@ from django.urls import Resolver404, resolve, reverse
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.application.markup_testing import all_elements, elements, text, texts
+from hq.platform.application.pages import runs_at
 
 from ..action_links import command_url
 from ..capabilities import capability_registry, capability_words
@@ -96,7 +97,8 @@ class EveryTargetedCommandPreselectsTests(TestCase):
 
 
 def _command_links(links) -> list[tuple[str, str]]:
-    """``(label, url)`` for each link that opens a command form."""
+    """``(label, url)`` for each link that opens a command form: its own page,
+    or the route whose view runs it."""
 
     found = []
     for label, url, method in links:
@@ -107,7 +109,7 @@ def _command_links(links) -> list[tuple[str, str]]:
         except Resolver404:
             found.append((label, url))  # kept, so the follow fails loudly
             continue
-        if match.url_name == "command":
+        if match.url_name == "command" or runs_at(url) is not None:
             found.append((label, url))
     return found
 
@@ -201,7 +203,7 @@ class EveryEmittedRemedyOpensReadyTests(TestCase):
             found += [
                 (element.words, element.attrs["href"], "GET")
                 for element in all_elements(self.client.get(page))
-                if element.tag == "a" and element.attrs.get("href", "").startswith("/commands/")
+                if element.tag == "a" and runs_at(element.attrs.get("href", "")) is not None
             ]
         return found
 

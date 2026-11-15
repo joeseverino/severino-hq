@@ -401,14 +401,12 @@ class InfrastructureDetailView(PageMixin, DetailView):
         if gap := capabilities.write_gap:
             # Beside the verbs it holds back: what they need, at the step that gives it.
             actions.append(PageAction(gap.needs, gap.setup_url, title=gap.reason))
-        if capabilities.offered.edit_url:
-            actions.append(
-                PageAction.command("infrastructure.resource.update", key, query={"next": self.request.get_full_path()})
-            )
+        if edit := capabilities.offered.edit(key, next=self.request.get_full_path()):
+            actions.append(edit)
         if PROVIDERS[self.object.kind].material_form:
             replaces = "replace" if getattr(self.object, "material", None) else ""
             actions.append(PageAction.command(CERTIFICATE_UPLOAD, key, variant=replaces, primary=True))
-        if capabilities.offered.remove_url:
+        if capabilities.offered.removes:
             actions.append(PageAction.command(REMOVAL_CAPABILITY, key, variant=capabilities.removal_variant))
         return tuple(actions)
 

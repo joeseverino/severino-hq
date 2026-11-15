@@ -10,6 +10,7 @@ from django.urls import reverse
 
 from hq.domains.control_plane.models import ProviderConnection
 from hq.platform.application.markup_testing import text
+from hq.platform.application.pages import runs_at
 
 from ..command_center import command_center
 from ..connection_catalog import connection_catalog
@@ -229,7 +230,8 @@ class ConnectionExecutionTests(SentinelMixin, TestCase):
         action = operator.abilities[0].action
         self.assertIsNotNone(action)
         self.assertEqual(action.capability, "project.create")
-        self.assertEqual(action.url, "/commands/project.create/")
+        # Addressed where a page's control for the command is: the route whose view runs it.
+        self.assertEqual(runs_at(action.url), "project.create")
 
     def test_machine_catalog_emits_the_same_safe_actions_as_the_web_projection(self):
         with offering(_finance_spec()):

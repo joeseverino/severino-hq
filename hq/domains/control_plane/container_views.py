@@ -10,7 +10,6 @@ lazy from hq.platform.application.containers import BEHIND, VULNERABLE, containe
 lazy from hq.platform.application.machines import container_context
 lazy from hq.platform.application.resource_capabilities import offered_changes
 lazy from hq.platform.application.upgrades import plan_for, readiness_of
-lazy from hq.platform.core.templatetags.nav_tags import returning_to
 
 
 def container_detail(resource: Any, request: Any) -> dict[str, Any]:
@@ -25,7 +24,7 @@ def container_detail(resource: Any, request: Any) -> dict[str, Any]:
     found = container_context(resource.spec.get("host", ""), resource.spec.get("name", ""))
     running, machine = found.get("running"), found.get("machine")
     if running is None:
-        return {**found, "standing": None, "item": None, "plan": None, "readiness": None, "edit_url": ""}
+        return {**found, "standing": None, "item": None, "plan": None, "readiness": None, "edit": None}
     host = machine.name if machine is not None else resource.spec.get("host", "")
     item = next(
         (each for each in containers() if each.machine.name == host and each.running.name == running.name),
@@ -38,11 +37,7 @@ def container_detail(resource: Any, request: Any) -> dict[str, Any]:
         "plan": plan_for(item) if item is not None else None,
         "readiness": readiness_of(item) if item is not None and item.standing.repository is None else None,
         # Where the operator names what its image is built from, when the image does not say.
-        "edit_url": (
-            returning_to(edit_url, request.get_full_path())
-            if (edit_url := offered_changes([resource])[resource.key].edit_url)
-            else ""
-        ),
+        "edit": offered_changes([resource])[resource.key].edit(resource.key, next=request.get_full_path()),
     }
 
 

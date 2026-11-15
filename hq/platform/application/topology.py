@@ -28,7 +28,6 @@ from .action_links import (
     ActionLink as TopologyAction,
     capability_action_link,
     command_action,
-    command_url,
     connection_action_links,
     topology_url,
 )
@@ -44,7 +43,7 @@ from .entity_links import entity_link, kind_label, node_name, record_name
 from .infrastructure import ResourceState, resource_health
 from .integration_validation import required_capability_names
 from .projection import QUERY, QueryRefusal, projection_scope
-from .resource_capabilities import REMOVAL_CAPABILITY, removals_pending, resource_capabilities
+from .resource_capabilities import REMOVAL_CAPABILITY, UPDATE_CAPABILITY, removals_pending, resource_capabilities
 from .resource_context import record_summary, shared_names
 from .security import Capability, Principal
 from .tone import Tone
@@ -104,59 +103,21 @@ def _resource_actions(
     if not principal.permits(Capability.MANAGE_INFRASTRUCTURE) or removal_pending:
         return tuple(actions)
     capabilities = resource_capabilities(resource, running=(), removal_pending=removal_pending, manages=manages)
-    if capabilities.offered.edit_url:
-        actions.append(
-            command_action(
-                "edit",
-                "infrastructure.resource.update",
-                capabilities.offered.edit_url,
-                target=key,
-            )
-        )
+    if capabilities.offered.edits:
+        actions.append(command_action("edit", UPDATE_CAPABILITY, target=key))
     drifted = bool(holding(resource.conditions, DRIFTED))
     if drifted:
         # Something changed it outside HQ: keeping that is the choice that
         # loses nothing, so it is offered, and first.
-        actions.append(
-            command_action(
-                "keep_live",
-                "infrastructure.resource.accept_observed",
-                command_url("infrastructure.resource.accept_observed", key),
-                target=key,
-            )
-        )
+        actions.append(command_action("keep_live", "infrastructure.resource.accept_observed", target=key))
     reconcile = capabilities.actions.get("reconcile")
     if reconcile and reconcile.enabled:
-        actions.append(
-            command_action(
-                "reconcile",
-                "infrastructure.resource.reconcile",
-                reverse("control_plane:reconcile", kwargs={"key": key}),
-                method="POST",
-                target=key,
-            )
-        )
+        actions.append(command_action("reconcile", "infrastructure.resource.reconcile", target=key))
     renew = capabilities.actions.get("renew")
     if renew and renew.enabled and principal.permits(Capability.REQUEST_CERTIFICATE_RENEWAL):
-        actions.append(
-            command_action(
-                "renew",
-                "certificate.renew",
-                reverse("control_plane:renew", kwargs={"key": key}),
-                method="POST",
-                target=key,
-            )
-        )
-    if capabilities.offered.remove_url:
-        actions.append(
-            command_action(
-                "remove",
-                REMOVAL_CAPABILITY,
-                capabilities.offered.remove_url,
-                target=key,
-                intent=capabilities.removal_words,
-            )
-        )
+        actions.append(command_action("renew", "certificate.renew", target=key))
+    if capabilities.offered.removes:
+        actions.append(command_action("remove", REMOVAL_CAPABILITY, target=key, variant=capabilities.removal_variant))
     return tuple(actions)
 
 

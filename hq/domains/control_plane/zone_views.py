@@ -25,7 +25,6 @@ from hq.platform.application.pins import DOMAIN, PIN, pinned
 from hq.platform.application.relationships import relationships_for
 from hq.platform.application.resource_capabilities import (
     REMOVAL_CAPABILITY,
-    UPDATE_CAPABILITY,
     public_dns_enabled,
     resource_capabilities,
 )
@@ -293,8 +292,10 @@ def _record_actions(record, here: str) -> tuple[PageAction, ...]:
     to this page, and Remove."""
 
     offered = (
-        PageAction.command(UPDATE_CAPABILITY, record.resource_key, query={"next": here}) if record.edit_url else None,
-        PageAction.command(REMOVAL_CAPABILITY, record.resource_key) if record.remove_url else None,
+        record.offered.edit(record.resource_key, next=here) if record.offered else None,
+        PageAction.command(REMOVAL_CAPABILITY, record.resource_key)
+        if record.offered and record.offered.removes
+        else None,
     )
     return tuple(filter(None, offered))
 
@@ -317,10 +318,8 @@ def _declaration_actions(zone) -> tuple[PageAction, ...]:
     offered = capabilities.offered
     key = zone.resource_key
     shown = (
-        PageAction.command(UPDATE_CAPABILITY, key) if offered.edit_url else None,
-        PageAction.command(REMOVAL_CAPABILITY, key, variant=capabilities.removal_variant)
-        if offered.remove_url
-        else None,
+        offered.edit(key),
+        PageAction.command(REMOVAL_CAPABILITY, key, variant=capabilities.removal_variant) if offered.removes else None,
     )
     return tuple(filter(None, shown))
 

@@ -89,8 +89,6 @@ class RecordTableTests(SimpleTestCase):
             "service_url": "",
             "manageable": True,
             "managed": True,
-            "edit_url": "/edit/",
-            "remove_url": "/remove/",
             "health": {"state": ResourceState.HEALTHY, "label": "Healthy"},
         }
         return SimpleNamespace(**{**base, **fields})

@@ -23,7 +23,6 @@ from hq.platform.application.resource_capabilities import (
     CREATE_CAPABILITY,
     MACHINE_DETAILS,
     REMOVAL_CAPABILITY,
-    UPDATE_CAPABILITY,
     Offered,
     offered_changes,
     resource_capabilities,
@@ -71,11 +70,11 @@ class MachineListView(PageMixin, TemplateView):
         return context
 
 
-def policy_edit_url(key: str) -> str:
+def policy_edit(key: str) -> PageAction | None:
     """The tailnet policy's editor, when its declaration offers one."""
 
     resource = ManagedResource.objects.filter(key=key).first() if key else None
-    return offered_changes([resource])[key].edit_url if resource is not None else ""
+    return offered_changes([resource])[key].edit(key) if resource is not None else None
 
 
 def whatif_context(request, default: str = "", *, target_default: str | None = None) -> dict:
@@ -98,7 +97,7 @@ def whatif_context(request, default: str = "", *, target_default: str | None = N
         "ports": ports(),
         "asked": asked,
         "whatif_action": request.path,
-        "policy_edit_url": policy_edit_url(declaration()),
+        "policy_edit": policy_edit(declaration()),
     }
     # Answered only when all three were given. A half-filled form is a question
     # nobody has asked yet, not one whose answer is "no".
@@ -128,7 +127,7 @@ class TailnetView(PageMixin, TemplateView):
 
     @override
     def get_page_actions(self):
-        policy_edit = policy_edit_url(self.tailnet.declaration)
+        edit = policy_edit(self.tailnet.declaration)
         return (
             PageAction(
                 "Policy test",
@@ -141,7 +140,7 @@ class TailnetView(PageMixin, TemplateView):
                     lede="Check whether the policy allows a connection. Tailscale evaluates it.",
                 ),
             ),
-            *((PageAction.command(UPDATE_CAPABILITY, self.tailnet.declaration),) if policy_edit else ()),
+            *((edit,) if edit else ()),
             PageAction("All machines", reverse("control_plane:machines")),
         )
 
@@ -193,9 +192,9 @@ class MachineDetailView(PageMixin, TemplateView):
             capabilities = resource_capabilities(resource) if resource is not None else None
             offered = capabilities.offered if capabilities is not None else Offered()
             actions = [
-                PageAction.command(UPDATE_CAPABILITY, key) if offered.edit_url else None,
+                offered.edit(key),
                 PageAction.command(REMOVAL_CAPABILITY, key, variant=capabilities.removal_variant)
-                if capabilities is not None and offered.remove_url
+                if capabilities is not None and offered.removes
                 else None,
             ]
         else:

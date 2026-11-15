@@ -10,7 +10,7 @@ through the ``item_help`` gauge defined there.
 
 from collections.abc import Iterable
 
-from .action_links import command_action, command_url
+from .action_links import command_action
 from .finding_model import Finding
 from .workflow_contracts import ActionLink, WorkflowOutcome, WorkflowPlan, WorkflowStep
 from .workflows import claim_identity
@@ -97,11 +97,8 @@ def remedy_link(
     the command route is not mounted, so an item never offers a dead link.
     """
 
-    if not url:
-        url = command_url(capability, target)
-        if not url:
-            return None
-    return command_action(REMEDY, capability, url, target=target, intent=intent, reason=reason, recommended=True)
+    link = command_action(REMEDY, capability, url, target=target, intent=intent, reason=reason, recommended=True)
+    return link if link.url else None
 
 
 def finding_plan(finding: Finding, key: str) -> WorkflowPlan:

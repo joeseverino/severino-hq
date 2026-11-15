@@ -353,7 +353,7 @@ class PlaybooksPageTests(TestCase):
 
         playbooks = reverse("control_plane:playbooks")
         self.assertRedirects(self.client.get(reverse("control_plane:detail", kwargs={"key": SOURCE_KEY})), playbooks)
-        self.assertEqual(resource_capabilities(ManagedResource.objects.get(key=SOURCE_KEY)).offered, ("", ""))
+        self.assertEqual(resource_capabilities(ManagedResource.objects.get(key=SOURCE_KEY)).offered, (False, False))
         changes = {reverse(f"control_plane:{route}", kwargs={"key": SOURCE_KEY}) for route in ("edit", "remove")}
         links = {urlsplit(element.attrs["href"]).path for element in select(self.page(), "href")}
         self.assertFalse(changes & links)

@@ -5,7 +5,7 @@ and whether a provider fronts them. Read once per projection.
 """
 
 from dataclasses import dataclass, field, replace
-from typing import Any, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.names import LEADS_TO, names_a_host, normalized_hostname
@@ -21,7 +21,11 @@ from .infrastructure import (
 )
 from .projection import read_once
 from .whereabouts import Origin
-lazy from .resource_capabilities import Offered, offered_changes
+lazy from .pages import PageAction
+lazy from .resource_capabilities import offered_changes
+
+if TYPE_CHECKING:
+    from .resource_capabilities import Offered
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,8 +71,14 @@ class Claim:
     # What tells this claim from another of its kind that would not replace it
     # (the provider's ``slot``): a DNS record's type.
     slot: str = ""
-    # Blank where its declaration is not offered for edit (``Offered``).
-    edit_url: str = ""
+    # What its declaration offers.
+    offered: Offered | None = None
+
+    @property
+    def edit(self) -> PageAction | None:
+        """The control that edits its declaration, where that is offered."""
+
+        return self.offered.edit(self.resource_key) if self.offered else None
 
     @property
     def url(self) -> str:
@@ -205,7 +215,7 @@ def _read_declarations() -> Declarations:
             _readings(provider, resource),
             fronted=_fronted(provider, resource),
             slot=_slot(provider, resource),
-            edit_url=offered[resource.key].edit_url,
+            offered=offered[resource.key],
         )
         ledger.file(provider, claim, reading)
 
@@ -282,7 +292,7 @@ def runtime_claim(origin: Origin | None, containers: dict[tuple[str, str], Any])
         _readings(provider, resource),
         fronted=_fronted(provider, resource),
         # A switched-off container is not among the enabled ones read together.
-        edit_url=(_offered().get(resource.key) or offered_changes([resource])[resource.key]).edit_url,
+        offered=_offered().get(resource.key) or offered_changes([resource])[resource.key],
     )
 
 

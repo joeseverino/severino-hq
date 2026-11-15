@@ -31,7 +31,6 @@ from .derivations import holds_until
 from .held_answer import HELD, ApprovalApplied, ApprovalRejected, HeldCall, serialize_approval
 from .record_errors import PolicyError, RecordNotFound
 from .refusal_status import refusal_of, refuse
-from .routes import reverse
 from .sealing import Sealed, sealer
 from .security import (
     INTERNAL_INTERFACE,
@@ -699,8 +698,7 @@ def _decision_link(approval_id: Any, decision: str) -> ActionLink:
     return command_action(
         decision,
         decision,
-        reverse("control_plane:approval_decide", kwargs={"approval_id": approval_id, "decision": DECISIONS[decision]}),
-        method="POST",
+        target={"approval_id": str(approval_id), "decision": DECISIONS[decision]},
         recommended=decision == APPROVE,
     )
 

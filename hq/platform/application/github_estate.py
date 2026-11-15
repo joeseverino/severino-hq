@@ -22,9 +22,9 @@ from hq.domains.control_plane.observations.github import (
 )
 from hq.platform.application.labels import dotted
 
+from .action_links import read_link
 from .card_items import ListRow
 from .containers import SERIOUS
-from .contracts import Effect
 from .derivations import whole
 from .entity_links import web_url
 from .expiry import days_until
@@ -174,9 +174,7 @@ class Repository:
             url = web_url(run.get("url"))
             if sha and url and run.get("sha") == sha and run.get("conclusion") in FAILED:
                 name = run.get("name") or "Workflow"
-                found.append(
-                    ActionLink("failing-run", f"{name} run", Effect.READ, url, reason=f"{name} failed on this commit.")
-                )
+                found.append(read_link("failing-run", f"{name} run", url, reason=f"{name} failed on this commit."))
         return tuple(found)
 
     @property
@@ -319,7 +317,7 @@ class Repository:
         for part, page in ALERT_PAGES.items():
             held = [level for level, n in ((self.record.get("alerts") or {}).get(part.name) or {}).items() if n]
             if held and (not levels or any(level in levels for level in held)):
-                link = ActionLink(f"alerts-{part.name}", part.label, Effect.READ, f"{self.url}/security/{page}")
+                link = read_link(f"alerts-{part.name}", part.label, f"{self.url}/security/{page}")
                 found.append((min(map(_severity_rank, held)), link))
         return tuple(link for _, link in sorted(found, key=lambda item: item[0]))
 

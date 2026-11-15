@@ -18,6 +18,8 @@ class ApprovalDecisionView(View):
     ``application.approvals`` checks again, so a second surface cannot forget to.
     """
 
+    runs = tuple(DECISIONS)
+
     def post(self, request, approval_id, decision):
         capability = next((name for name, path in DECISIONS.items() if path == decision), None)
         if capability is None:

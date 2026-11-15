@@ -130,11 +130,7 @@ class PageAction:
             return None
         subject = "" if isinstance(target, Mapping) else str(target)
         sends = dict(fields or {})
-        found = command_route(name, variant)
-        if found is None:
-            url, answers_get = command_url(name, subject), True
-        else:
-            url, answers_get = found.address(target), found.answers_get
+        url, answers_get = command_reach(name, target, variant)
         # A press that sends something posts it; one that sends nothing opens
         # the page its view draws, or posts to a view that draws none.
         posts = bool(value or sends) or not answers_get
@@ -626,6 +622,29 @@ def command_route(name: str, variant: str = "") -> CommandRoute | None:
     if found is None:
         found = _COMMAND_ROUTES[resolver] = _commands_routed()
     return found.get((name, variant)) or found.get((name, ""))
+
+
+def command_reach(name: str, target: str | int | Mapping[str, str] = "", variant: str = "") -> tuple[str, bool]:
+    """Where a control for the command ``name`` on ``target`` goes, and
+    whether it opens a page there by GET: the route whose view declares it
+    ``runs`` the command (``command_route``), else the command's own page, ""
+    where that is not mounted. Every control for a command, a page's and a
+    projection's, is addressed here."""
+
+    found = command_route(name, variant)
+    if found is not None and (address := _reached(found, target)):
+        return address, found.answers_get
+    return command_url(name, "" if isinstance(target, Mapping) else str(target)), True
+
+
+def _reached(route: CommandRoute, target: str | int | Mapping[str, str]) -> str:
+    """``route``'s address for ``target``, or "" where its route names the
+    record it runs on and none is given, which the command's own page asks for."""
+
+    try:
+        return route.address(target)
+    except NoReverseMatch:
+        return ""
 
 
 def _commands_routed() -> dict[tuple[str, str], CommandRoute]:

@@ -21,12 +21,12 @@ from hq.domains.control_plane.providers import (
 )
 
 from .adoption import WriteGap, manages_through, observes_only as observes_through, write_gap
-from .routes import reverse
 lazy from . import resource_operations
 lazy from .capabilities import capability_words
 lazy from .connections import connection_rows
 lazy from .finding_model import on_machine
 lazy from .machines import container_context
+lazy from .pages import PageAction
 lazy from .whereabouts import locate, whereabouts
 
 # Actions a person starts from a resource's page, in the order they lead.
@@ -47,14 +47,22 @@ class Allowed:
 
 
 class Offered(NamedTuple):
-    """A declaration's edit and removal links, each blank where it is not offered.
+    """Whether a declaration's edit and its removal are offered.
 
-    The one place either link is built, so every page a declaration is shown
-    on (its own, a domain's, a service's, the map's panel) offers the same.
+    Decided once, so every page a declaration is shown on (its own, a
+    domain's, a service's, the map's panel) offers the same. Each control is
+    its command's (``PageAction.command``, ``command_action``), which says
+    its words, address and method and leaves it out for a reader who may not
+    run it.
     """
 
-    edit_url: str = ""
-    remove_url: str = ""
+    edits: bool = False
+    removes: bool = False
+
+    def edit(self, key: str, **query: str) -> PageAction | None:
+        """The control that edits the declaration ``key``, where its edit is offered."""
+
+        return PageAction.command(UPDATE_CAPABILITY, key, query=query or None) if self.edits else None
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,10 +106,7 @@ def _offered(resource: ManagedResource, provider, removal: str, *, removal_pendi
     # A withheld kind's form would print its spec; the domain that owns it changes it.
     editable = not removal_pending and not held and not (provider is not None and provider.withheld)
     removable = removal == "forget" or (removal != "unavailable" and not held)
-    return Offered(
-        reverse("control_plane:edit", kwargs={"key": resource.key}) if editable else "",
-        reverse("control_plane:remove", kwargs={"key": resource.key}) if removable else "",
-    )
+    return Offered(editable, removable)
 
 
 def offered_changes(resources: Iterable[ManagedResource]) -> dict[str, Offered]:

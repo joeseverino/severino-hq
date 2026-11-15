@@ -81,7 +81,7 @@ close every one.
               {% if facet.observed.stack and facet.observed.stack != facet.observed.name %}{% fact "Compose project" %}<code>{{ facet.observed.stack|breakable }}</code>{% endfact %}{% endif %}
               {% fact "Reading" %}{% include "partials/_reading_age.html" with at=facet.observed.observed_at only %}{% endfact %}
             {% endfacts %}
-            {% if claim.edit_url %}<p><a class="subtle-link" href="{{ claim.edit_url|returning_to:request.get_full_path }}">{% words "infrastructure.resource.update" %}{% arrow %}</a></p>{% endif %}
+            {% with edit=claim.edit %}{% if edit %}<p><a class="subtle-link" href="{{ edit.url|returning_to:request.get_full_path }}">{{ edit.label|breakable }}{% arrow %}</a></p>{% endif %}{% endwith %}
           {% endsection %}
           {% partial reading_lines %}
         {% endfact %}
@@ -100,7 +100,7 @@ close every one.
               <small>{{ reading.label|breakable }} {{ reading.value|breakable }}{% if reading.drifted %} {% status "HQ expects" reading.desired tone="serious" %}{% endif %}</small>
             {% endif %}
           {% endfor %}
-          <small>{% entity claim.within_service code=True %} {% status claim.health.label tone=claim.health.state %}{% if claim.edit_url %} <a class="subtle-link" href="{{ claim.edit_url|returning_to:request.get_full_path }}">{% words "infrastructure.resource.update" %}</a>{% endif %}</small>
+          <small>{% entity claim.within_service code=True %} {% status claim.health.label tone=claim.health.state %}{% with edit=claim.edit %}{% if edit %} <a class="subtle-link" href="{{ edit.url|returning_to:request.get_full_path }}">{{ edit.label|breakable }}</a>{% endif %}{% endwith %}</small>
         {% endfor %}
         {% if facet.machine %}<small>On {% entity facet.machine.link %}</small>{% endif %}
         {% partial reading_lines %}

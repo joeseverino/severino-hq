@@ -519,6 +519,15 @@ def a_refused_action() -> None:
     workflows.ActionLink("run", "Run", "remote_write", "/run/", refusal=True)  # type: ignore[arg-type]
 
 
+def a_read_link() -> None:
+    # A link that only opens a page is a read, with no command or effect of its own.
+    link = workflows.read_link("subject", "Example", "/example/", reason="What it is.")
+    assert_type(link, workflows.ActionLink)
+
+    workflows.read_link("subject", "Example", "/example/", method="POST")  # type: ignore[call-arg]
+    workflows.read_link("subject", "Example", "/example/", capabilities.Effect.READ)  # type: ignore[call-arg]
+
+
 def a_page_lead(page: pages.Page) -> None:
     assert_type(page.lead, pages.PageAction | None)
 

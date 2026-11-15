@@ -146,7 +146,8 @@ class DecisionOfferTests(TestCase):
 class DecisionLinkSourceTests(SimpleTestCase):
     def test_only_the_rule_makes_a_decision_s_address(self):
         """A decision's button is made only by ``approvals.offers``, which
-        asks the rule first: no other code or template names its route."""
+        asks the rule first, and addressed by the command it runs: no code or
+        template names its route."""
 
         names = {
             pattern.name
@@ -164,6 +165,4 @@ class DecisionLinkSourceTests(SimpleTestCase):
         naming = sorted(
             path.relative_to(ROOT).as_posix() for path in sources if named.search(path.read_text(encoding="utf-8"))
         )
-        self.assertEqual(
-            naming, ["hq/domains/control_plane/urls.py", "hq/platform/application/approvals.py"], "approvals.offers"
-        )
+        self.assertEqual(naming, ["hq/domains/control_plane/urls.py"], "approvals.offers")

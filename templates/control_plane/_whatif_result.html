@@ -29,7 +29,7 @@ The answer to the policy test. The tailnet page answers it alone as its
     </table>
     {% endtable_region %}
   {% endif %}
-  {% if proposal and policy_edit_url %}
+  {% if proposal and policy_edit %}
     {% comment %}
     The refusal and the fix, together. Nobody reads "not allowed" and stops
     there: the next question is always what it would take, so the grant that
@@ -50,7 +50,7 @@ The answer to the policy test. The tailnet page answers it alone as its
       </tbody>
     </table>
     {% endtable_region %}
-    <p>{% button "Edit policy" policy_edit_url arrow=True %}</p>
+    <p>{% button "Edit policy" policy_edit.url arrow=True %}</p>
   {% endif %}
 {% endif %}
 </div>
