@@ -74,7 +74,8 @@ run = 'echo $$ >"$READY"; read -r _ <"$RELEASE"'
 
 [tasks.quick]
 extends = "heavy"
-timeout = "1s"
+# Long enough for its measured shell to start on a loaded machine.
+timeout = "5s"
 run = 'echo ran >>"$RAN"'
 
 # A heavy task as this checkout declares one, which passes the gate first.
@@ -197,7 +198,7 @@ names_holder() {
 
 # A heavy task in the other worktree waits and says for whom. Its output is a
 # fifo read through fd 8 as it comes. While it waits, a third one that gives
-# up names the holder, and outlasts the waiter's own one-second timeout,
+# up names the holder, and outlasts the waiter's own five-second timeout,
 # which only starts once the waiter holds the turn.
 hold
 fifo waiting
@@ -215,7 +216,7 @@ done
 names_holder "${said}" "the waiting line"
 [ ! -e "${RAN}" ] || fail "a heavy task ran while another worktree held the turn"
 status=0
-said="$(MISE_TASK_LOCK_TIMEOUT=2s mise -C "${second}" run quick 2>&1)" || status=$?
+said="$(MISE_TASK_LOCK_TIMEOUT=6s mise -C "${second}" run quick 2>&1)" || status=$?
 [ "${status}" -ne 0 ] || fail "a heavy task that gave up on the turn passed"
 names_holder "${said}" "a heavy task that gave up waiting"
 release
