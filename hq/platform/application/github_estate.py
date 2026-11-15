@@ -32,7 +32,7 @@ from .moments import ago, moment
 from .projection import read_once
 from .ui import severity_tone
 from .workflow_contracts import ActionLink
-lazy from .facts import snapshots_of
+lazy from .facts import record_read_at, snapshots_of
 lazy from .images import GHCR, ImageRef
 lazy from .projects import repository_key
 
@@ -440,7 +440,10 @@ def _load() -> dict[str, Repository]:
         for record in snapshot.records or ():
             if isinstance(record, Mapping) and record.get("repository"):
                 name = str(record["repository"])
-                found[name] = Repository(name, record, snapshot.observed_at, tuple(refused_by_repo.get(name, ())))
+                # A record carried across sweeps holds what it held when it
+                # was read, so its age is that read's, never the sweep's.
+                read_at = record_read_at(record) or snapshot.observed_at
+                found[name] = Repository(name, record, read_at, tuple(refused_by_repo.get(name, ())))
     return found
 
 

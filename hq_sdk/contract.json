@@ -3270,10 +3270,11 @@
         ]
       },
       "partials/_reading_age.html": {
-        "about": "When a reading was taken, `at` the moment, in the one wording every page uses.",
+        "about": "When a reading was taken, `at` the moment, in the one wording every page uses; `unread` why there is none.",
         "optional": [
           "at",
-          "reading"
+          "reading",
+          "unread"
         ],
         "required": []
       },

@@ -2131,15 +2131,17 @@ ENTRIES = {
         },
     ),
     # A reading's age in each of its states: current, out of date, the moment
-    # alone, and none.
+    # alone, none, and none with why.
     "part/reading-age": Entry(
         '{% section "Example readings 4" %}{% facts %}'
         '{% fact "Example current" %}{% include "partials/_reading_age.html" with reading=current only %}{% endfact %}'
         '{% fact "Example stale" %}{% include "partials/_reading_age.html" with reading=stale only %}{% endfact %}'
         '{% fact "Example moment" %}{% include "partials/_reading_age.html" with at=at only %}{% endfact %}'
-        '{% fact "Example never" %}{% include "partials/_reading_age.html" %}{% endfact %}'
+        '{% fact "Example never" %}{% include "partials/_reading_age.html" only %}{% endfact %}'
+        '{% fact "Example unread" %}{% include "partials/_reading_age.html" with unread=unread only %}{% endfact %}'
         "{% endfacts %}{% endsection %}",
         {
+            "unread": "the registry refused an anonymous read (HTTP 401); the image may be private.",
             "current": Freshness(CURRENT, _NOW - timedelta(minutes=4), timedelta(hours=1)),
             "stale": Freshness(STALE, _NOW - timedelta(days=3), timedelta(hours=1)),
             "at": _NOW - timedelta(hours=2),

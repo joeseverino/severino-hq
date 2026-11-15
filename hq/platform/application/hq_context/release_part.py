@@ -132,7 +132,7 @@ def release(container: Any) -> Release:
         signed=bool(build.get("signed")) if build is not None else None,
         signed_unread="" if build is not None else _unread(standing),
         vulnerabilities=standing.vulnerabilities if read else NOT_READ,
-        vulnerabilities_note=standing.vulnerabilities_note if read else _unread(standing),
+        vulnerabilities_note=standing.vulnerabilities_note if read else "",
         vulnerabilities_unread="" if read else _unread(standing),
         repository=repository(container),
         extensions=tuple((plugin.name, plugin.version) for plugin in installed_plugins()),
