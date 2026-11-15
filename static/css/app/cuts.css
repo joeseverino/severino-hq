@@ -105,13 +105,18 @@
   & * { line-height: inherit; }
   @container table-region (width < 36rem) { &:is(.is-expanded *) { -webkit-line-clamp: none; line-clamp: none; max-block-size: none; } }
 }
-/* An identifier (a hash, a key, a host), a row's name (its own part, never
-   its cell's other words) or a pill may break anywhere, so one with no break
-   in it asks its column for no more than a letter: the table still gives
-   each column its whole line when the box holds it. Prose breaks only where
-   one word alone is wider than its column (tables.css). */
-.data-table > tbody > tr > [data-kind="identifier"],
-.data-table > tbody > tr > * :is(code:not(.cell-whole), .token, .pill, [data-cell~="name"]) { overflow-wrap: anywhere; }
+/* A row's name (its own part, never its cell's other words) may break
+   anywhere, so a long one asks its column for no more than a letter: the
+   table still gives it its whole line when the box holds it. An identifier
+   (a hash, a key, a host) breaks at its seams (`breakable`) and a pill at its
+   words while the table has columns, and anywhere once it stacks, where a
+   line is all the room there is. Prose breaks only where one word alone is
+   wider than its column (tables.css). */
+.data-table > tbody > tr > * [data-cell~="name"] { overflow-wrap: anywhere; }
+@container table-region (width < 36rem) {
+  .data-table > tbody > tr > [data-kind="identifier"],
+  .data-table > tbody > tr > * :is(code:not(.cell-whole), .token, .pill) { overflow-wrap: anywhere; }
+}
 /* A part of a run (`line_list`) is whole on its line while the line holds it (the run wraps between its parts); one longer than the line takes the line and wraps at its words. */
 .data-table > tbody > tr > td .line-list > :not(.line-rest) { min-inline-size: 0; }
 .data-table > tbody > tr > td .line-list > :not(.line-rest) > .cell-part { white-space: normal; }

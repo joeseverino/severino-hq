@@ -649,6 +649,14 @@ LINES_SHORT_OF_THEIR_ROOM = (
       const line = el !== block && css.display !== 'contents' ? boxAround(el) : null;
       return !!line && /flex$/.test(getComputedStyle(line).display) && getComputedStyle(line).flexWrap === 'wrap';
     };
+    // The block a word's line is laid in: a word in another block (a value
+    // that opens with a host on a line of its own) starts a line the markup
+    // ended, as a `<br>` ends one.
+    const home = (node) => {
+      let el = node.parentElement;
+      while (el !== block && /^(inline|contents)$/.test(getComputedStyle(el).display)) el = el.parentElement;
+      return el;
+    };
     // Each word's pieces, a word running on across the pieces it is drawn in.
     const words = [];
     let open = false;
@@ -663,7 +671,7 @@ LINES_SHORT_OF_THEIR_ROOM = (
         const rect = node.getBoundingClientRect();
         if (atomic(node) && node.checkVisibility() && rect.width > 0) {
           const css = getComputedStyle(node);
-          words.push([{ rect, before: parseFloat(css.marginLeft), after: parseFloat(css.marginRight) }]);
+          words.push(Object.assign([{ rect, before: parseFloat(css.marginLeft), after: parseFloat(css.marginRight) }], { home: home(node) }));
           inside = node;
           open = false;
         }
@@ -689,14 +697,14 @@ LINES_SHORT_OF_THEIR_ROOM = (
           closes: index === rects.length - 1 ? closes : 0,
         }));
         if (open && match.index === 0 && words.length) words.at(-1).push(...pieces);
-        else words.push(pieces);
+        else words.push(Object.assign(pieces, { home: home(node) }));
         open = end === text.length;
       }
       if (/[ \\t\\n\\r\\f]$/.test(text) || text === '') open = false;
     }
     const space = parseFloat(style.fontSize) * 0.35;
     for (let at = 0; at + 1 < words.length; at += 1) {
-      if (words[at].ended) continue;
+      if (words[at].ended || words[at].home !== words[at + 1].home) continue;
       const lastPiece = words[at].at(-1);
       const last = lastPiece.rect;
       const next = words[at + 1];
