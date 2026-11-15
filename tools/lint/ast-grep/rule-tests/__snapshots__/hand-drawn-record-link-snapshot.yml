@@ -34,36 +34,36 @@ snapshots:
       style: secondary
       start: 0
       end: 57
-  "<a class=\"row-less\" href=\"{% url 'fitness:detail' row.pk %}#distance\">Correct distance</a>":
+  "<a class=\"row-less\" href=\"{% url 'example:detail' row.pk %}#size\">Correct the size</a>":
     labels:
     - source: >-
-        <a class="row-less" href="{% url 'fitness:detail' row.pk %}#distance">Correct
-        distance</a>
+        <a class="row-less" href="{% url 'example:detail' row.pk %}#size">Correct the
+        size</a>
       style: primary
       start: 0
-      end: 90
+      end: 86
     - source: a
       style: secondary
       start: 1
       end: 2
-    - source: <a class="row-less" href="{% url 'fitness:detail' row.pk %}#distance">
+    - source: <a class="row-less" href="{% url 'example:detail' row.pk %}#size">
       style: secondary
       start: 0
-      end: 70
-  "<a href=\"{% url \"life:vehicle-detail\" row.doc_id %}\">Example car</a>":
+      end: 66
+  "<a href=\"{% url \"example:widget-detail\" row.doc_id %}\">Example widget</a>":
     labels:
-    - source: <a href="{% url "life:vehicle-detail" row.doc_id %}">Example car</a>
+    - source: <a href="{% url "example:widget-detail" row.doc_id %}">Example widget</a>
       style: primary
       start: 0
-      end: 68
+      end: 73
     - source: a
       style: secondary
       start: 1
       end: 2
-    - source: <a href="{% url "life:vehicle-detail" row.doc_id %}">
+    - source: <a href="{% url "example:widget-detail" row.doc_id %}">
       style: secondary
       start: 0
-      end: 53
+      end: 55
   "<a href=\"{% url 'control_plane:detail' resource.key %}\">example</a>":
     labels:
     - source: <a href="{% url 'control_plane:detail' resource.key %}">example</a>

@@ -14,8 +14,8 @@ invalid:
   - '<a href="{% url ''control_plane:service'' service.hostname %}">example.com</a>'
   - '<a href="{% url ''zones:detail'' zone.zone %}">example.com</a>'
   - '<a href="{% url ''projects:detail'' project.slug %}">example-app</a>'
-  - '<a href="{% url "life:vehicle-detail" row.doc_id %}">Example car</a>'
-  - '<a class="row-less" href="{% url ''fitness:detail'' row.pk %}#distance">Correct distance</a>'
+  - '<a href="{% url "example:widget-detail" row.doc_id %}">Example widget</a>'
+  - '<a class="row-less" href="{% url ''example:detail'' row.pk %}#size">Correct the size</a>'
   - '<a href="{{ row.get_absolute_url }}"><strong>{{ row.label|breakable }}</strong></a>'
   - '<a href="{{ row.get_absolute_url }}#updates">2 open updates</a>'
   - "<a\n  href=\"{% url 'projects:detail'\n    project.slug %}\">example-app</a>"
