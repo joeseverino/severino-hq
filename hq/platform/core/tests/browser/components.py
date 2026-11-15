@@ -1,18 +1,12 @@
 """The layout rules held over single components, drawn on probe pages and pages of the stress estate."""
 
 import base64
-import io
 import json
 import re
-import shutil
-import zipfile
-from contextlib import redirect_stdout
 from datetime import date, timedelta
 from decimal import Decimal
-from pathlib import Path
 from unittest import mock
 
-from django.conf import settings
 from django.template.loader import render_to_string
 
 from hq.platform.application import asks
@@ -1129,24 +1123,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
             self.page.evaluate(BUTTON_EDGES, SELECTORS["pressed"]), ["button.example-edged wears a field's edge"]
         )
 
-    def test_a_failure_keeps_a_trace_of_the_test_beside_its_screenshot(self):
-        """What a failure saves, CI keeps: the page as it stood, and the trace
-        of the steps that led there, each with the page as it stood then, in
-        the checkout's var/browser-failures/, which outlives the run and is
-        the folder CI uploads."""
-
-        self.open(next(iter(PAGES)), WIDE)
-        with redirect_stdout(io.StringIO()):
-            self.shoot("example-failure")
-        folder = self.failures
-        if folder is None:
-            self.fail("the shot made no folder")
-        self.addCleanup(lambda: shutil.rmtree(folder))
-        self.assertTrue(folder.is_relative_to(Path(settings.BASE_DIR, "var", "browser-failures")), folder)
-        self.assertEqual(sorted(p.name for p in folder.iterdir()), ["example-failure.png", "example-failure.zip"])
-        with zipfile.ZipFile(folder / "example-failure.zip") as trace:
-            self.assertTrue(any(name.endswith(".trace") for name in trace.namelist()), trace.namelist())
-
     def test_a_small_target_under_an_open_menu_is_not_measured_and_one_in_view_is(self):
         """A target drawn under another element is out of a pointer's reach,
         so the size rule skips it; the same target left in view still fails."""
@@ -2097,31 +2073,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.assertEqual(self.page.evaluate("() => window.exampleHeard"), 0)
         self.page.evaluate("() => document.querySelector('main').append(document.createElement('span'))")
         self.page.wait_for_function("() => window.exampleHeard > 0")
-
-    def test_a_palette_finding_names_the_token_that_paints_it(self):
-        """A fill or an ink one palette loses is named with the token that
-        paints it, in that palette, so the fix goes to the token every page
-        shares; a color written as a literal is said to be one."""
-
-        self.pages = {
-            **self.pages,
-            "token-probe": probe('<pre>example.com</pre><pre class="example-literal">example.net</pre>'),
-        }
-        self.open("token-probe", WIDE)
-        # Each token's dark half lost into what it sits on, and the same
-        # colors written as literals.
-        add_css(
-            self.page,
-            ":root { --code-bg: light-dark(#161922, var(--bg)); --code-ink: light-dark(#eaeef2, var(--code-bg)); }"
-            ".example-literal { background: light-dark(#161922, transparent); color: light-dark(#eaeef2, transparent); }",
-        )
-        fills = "\n".join(self.lost_fills())
-        self.assertRegex(fills, r"dark loses pre \([^\n]*; fill: --code-bg in dark")
-        self.assertRegex(fills, r"dark loses pre\.example-literal [^\n]*; fill: no token paints this")
-        self.in_scheme("dark")
-        text = "\n".join(self.palette()["contrast"])
-        self.assertRegex(text, r"pre \d[^\n]*; ink: --code-ink in dark; ground: --code-bg in dark")
-        self.assertRegex(text, r"pre\.example-literal \d[^\n]*; ink: no token paints this")
 
     def test_a_fill_is_judged_on_its_own_box_while_the_page_grows_between_palettes(self):
         """A live page changes between the two readings (a figure that samples

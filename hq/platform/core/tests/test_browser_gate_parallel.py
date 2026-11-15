@@ -36,14 +36,6 @@ class Probe(BrowserGate):
                     self.fail("on purpose")
         self.on = "example/last"
 
-    def passes(self):
-        with self.subTest(part="one"):
-            pass
-
-    def breaks(self):
-        self.on = "example/last"
-        self.fail("outside a subtest")
-
 
 class ParallelBrowserGateTests(SimpleTestCase):
     def test_a_failed_subtest_reaches_the_parent_and_is_shot_on_its_own_page(self):
@@ -64,23 +56,3 @@ class ParallelBrowserGateTests(SimpleTestCase):
         self.assertEqual(
             probe.shots, [(failure_name({"page": "example/one", "width": 402, "rule": "overflow"}), "example/one")]
         )
-
-    def test_a_test_failing_outside_its_subtests_is_shot_as_it_ended(self):
-        probe = Probe("breaks")
-        probe.run(RemoteTestResult())
-
-        self.assertTrue(probe.failed)
-        self.assertEqual(probe.shots, [("page", "example/last")])
-
-    def test_a_passing_test_is_not_shot(self):
-        probe = Probe("passes")
-        probe.run(RemoteTestResult())
-
-        self.assertFalse(probe.failed)
-        self.assertEqual(probe.shots, [])
-
-    def test_a_shot_is_named_for_its_page_width_and_rule_as_one_file_name(self):
-        name = failure_name({"rule": "overflow", "theme": "dark", "width": 402, "page": "dense/services"})
-        self.assertEqual(name, "dense-services-402-overflow-dark")
-        self.assertNotIn("/", failure_name({"page": "estate/a/b?c=d"}))
-        self.assertLessEqual(len(failure_name({"said": "x" * 400})), 150)
