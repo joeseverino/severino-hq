@@ -297,7 +297,8 @@ class ReadOnlyConnectionTests(TestCase):
                 for change in changes:
                     self.assertNotIn(f'formaction="{change}"', page)
                     self.assertNotIn(f'href="{change}"', page)
-                self.assertNotRegex(page, r'<button type="submit" class="primary">Save note')
+                offered = [button.words for button in elements(page, "button") if "disabled" not in button.attrs]
+                self.assertNotIn("Save note", offered)
                 self.assertIn(f'href="{self.setup}"', page)
                 self.assertIn(missing, page)
 

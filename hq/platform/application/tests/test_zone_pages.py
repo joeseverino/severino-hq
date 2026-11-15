@@ -12,7 +12,7 @@ from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, disti
 
 from ..adoption_testing import managing_everything
 from ..security import cli_principal
-from .markup import hrefs, text, texts
+from .markup import elements, hrefs, text, texts
 from .zone_records import DNS_CONNECTIONS, RECORD_KIND, ZONE_KIND, record, sweep
 
 
@@ -506,16 +506,19 @@ class ResourceListReadabilityTests(TestCase):
         )
 
     def row(self, page, key):
-        start = page.index(f'href="{reverse("control_plane:detail", args=[key])}"')
-        return page[start : page.index("</tr>", start)]
+        """The words of the row that links to ``key``'s page."""
+
+        target = reverse("control_plane:detail", args=[key])
+        link = next(element for element in elements(page, "a") if element.attrs.get("href") == target)
+        return next(ancestor for ancestor in reversed(link.ancestors) if ancestor.tag == "tr").words
 
     def test_each_row_says_what_it_is_and_only_a_converging_one_waits(self):
         """A domain has no controller action, so nothing is ever coming to it."""
 
-        page = self.client.get(reverse("control_plane:list")).content.decode()
+        page = self.client.get(reverse("control_plane:list"))
         domain, caa = self.row(page, "example-com"), self.row(page, "example-com-caa")
 
-        self.assertIn('CAA 0 issue "letsencrypt.org"', text(caa))
+        self.assertIn('CAA 0 issue "letsencrypt.org"', caa)
         self.assertIn("Change waiting to apply", caa)
         self.assertNotIn("Change waiting to apply", domain)
 

@@ -11,7 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
-from hq.platform.application.tests.markup import text
+from hq.platform.application.tests.markup import links, text
 
 from ..connection_catalog import connection_catalog
 from ..inventory_testing import store
@@ -297,7 +297,7 @@ class PageTests(TestCase):
     def test_the_connection_panel_says_advanced_posture_is_enabled(self):
         response = self.client.get(reverse("connection"))
 
-        self.assertContains(response, "Advanced HQ Posture</a>")
+        self.assertIn("Advanced HQ Posture", [words for words, _target in links(response)])
         self.assertNotContains(response, "SEVERINO_POSTURE=advanced")
 
     def test_the_api_carries_the_standard(self):

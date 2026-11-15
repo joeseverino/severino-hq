@@ -9,8 +9,6 @@ it acts on, however far down the catalog, and every link the findings, the
 action queue and the service pages emit is followed and checked.
 """
 
-import re
-from html import unescape
 from urllib.parse import parse_qs, urlsplit
 
 from django.contrib.auth import get_user_model
@@ -200,10 +198,11 @@ class EveryEmittedRemedyOpensReadyTests(TestCase):
 
         found = []
         for page in self.pages():
-            body = self.client.get(page).content.decode()
-            for label_url in re.finditer(r'<a [^>]*href="(/commands/[^"]+)"[^>]*>(.*?)</a>', body, re.DOTALL):
-                url, label = unescape(label_url.group(1)), " ".join(re.sub(r"<[^>]+>", "", label_url.group(2)).split())
-                found.append((label, url, "GET"))
+            found += [
+                (element.words, element.attrs["href"], "GET")
+                for element in all_elements(self.client.get(page))
+                if element.tag == "a" and element.attrs.get("href", "").startswith("/commands/")
+            ]
         return found
 
     def test_the_estate_emits_command_remedies_to_follow(self):

@@ -3,7 +3,6 @@
 import json
 import re
 from datetime import UTC, datetime, timedelta
-from html import unescape
 from pathlib import Path
 
 from django.test import SimpleTestCase, TestCase, tag
@@ -29,6 +28,7 @@ from ..projection import projection_scope
 from ..security import web_principal
 from ..topology import derive_topology
 from .commands import commands_on
+from .markup import all_elements
 from .test_remedy_links import TRAP, UNOFFERED, _command_links, an_operator
 from .test_tailnet_posture import EVERYTHING, raised, tailnet_connection
 
@@ -557,7 +557,9 @@ class PageTests(TestCase):
             self.assertIn("could not refresh its credentials from 1Password", body)
             self.assertIn("sudo systemctl start severino-hq-secrets.service", commands_on(body))
             emitted += [
-                (unescape(match.group(1)), "GET") for match in re.finditer(r'<a [^>]*href="(/commands/[^"]+)"', body)
+                (element.attrs["href"], "GET")
+                for element in all_elements(body)
+                if element.tag == "a" and element.attrs.get("href", "").startswith("/commands/")
             ]
         principal = web_principal(self.user)
         with projection_scope():

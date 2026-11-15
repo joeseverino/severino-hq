@@ -1,6 +1,5 @@
 """Contract tests for HQ's shared connection registry."""
 
-import re
 from dataclasses import replace
 from unittest import mock
 
@@ -27,6 +26,7 @@ from ..plugin_testing import offering
 from ..resources import list_resource
 from ..security import Capability, Principal
 from .host_only import host_only
+from .markup import text
 from .sentinel import CONNECTION as SENTINEL_CONNECTION, SENTINEL, SentinelMixin, plant_credentials
 
 READ = Principal("reader", "test", frozenset({Capability.READ}))
@@ -561,11 +561,8 @@ class ConnectionWorkspaceTests(TestCase):
     def test_a_keyless_connection_with_no_store_needs_no_key(self):
         response = self.page_for("none")
 
-        self.assertContains(response, "No key needed")
         # The row names it beside the connection, so its state cell does not repeat it.
-        state_cells = re.findall(r'<td [^>]*class="tight-col"[^>]*>(.*?)</td>', response.content.decode(), re.DOTALL)
-        self.assertTrue(state_cells)
-        self.assertFalse([cell for cell in state_cells if "No key needed" in cell])
+        self.assertEqual(text(response).count("No key needed"), 1)
         self.assertNotContains(response, "Does not say where its secret is kept")
 
     def test_a_connection_with_a_key_must_say_where_it_is_kept(self):

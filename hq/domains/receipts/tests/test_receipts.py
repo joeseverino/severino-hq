@@ -50,7 +50,7 @@ class ReceiptLinkTests(TestCase):
         # A receipt with no vendor is named by its file.
         self.assertIn("scan.pdf", text(response))
         self.assertContains(response, "No expense or asset")
-        self.assertNotContains(response, ">expense</a>")
+        self.assertNotIn("expense", [words for words, _target in found])
 
     def test_a_match_s_row_links_it_to_this_receipt(self):
         receipt = _receipt(vendor="Example Host", amount=Decimal("12.00"))

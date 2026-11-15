@@ -15,6 +15,7 @@ from hq.platform.application import agent_activity, agent_limits, agent_registry
 from hq.platform.application.agent_limits import RATE_LIMITED
 from hq.platform.application.linked_accounts import bind_sign_in
 from hq.platform.application.security import AuthorizationError, agent_principal
+from hq.platform.application.tests.markup import all_elements
 from hq.platform.core.models import AgentIdentity, AuditLog
 from hq.platform.core.test_runner import no_default_role
 
@@ -257,13 +258,12 @@ class PageTests(TestCase):
         _listening(OTHER, settings.SEVERINO_AGENT_STREAMS_AT_ONCE)
         self.client.force_login(get_user_model().objects.create_user("operator"))
 
-        page = self.client.get(reverse("agent_policy")).content.decode()
+        page = self.client.get(reverse("agent_policy"))
 
-        rows = {client: _row(page, client) for client in (AGENT, OTHER, "example-quiet")}
-        self.assertIn('data-streams="open"', rows[AGENT])
-        self.assertNotIn('data-streams="full"', rows[AGENT])
-        self.assertIn('data-streams="full"', rows[OTHER])
-        self.assertNotIn("data-streams", rows["example-quiet"], "an agent holding none shows nothing more")
+        rows = {client: _streams(page, client) for client in (AGENT, OTHER, "example-quiet")}
+        self.assertEqual(rows[AGENT], {"open"})
+        self.assertIn("full", rows[OTHER])
+        self.assertEqual(rows["example-quiet"], set(), "an agent holding none shows nothing more")
 
     def test_the_refused_headline_counts_what_the_rows_count(self):
         _seen(AGENT)
@@ -281,12 +281,12 @@ class PageTests(TestCase):
         self.assertEqual(rows, 15)
 
 
-def _row(page: str, client_id: str) -> str:
-    """The markup of ``client_id``'s row on the Agents page, its open line
-    included."""
+def _streams(page, client_id: str) -> set[str]:
+    """The stream states ``client_id``'s row on the Agents page shows, its open
+    line included."""
 
-    start = page.index(f'data-agent="{client_id}"')
-    end = page.index("</tr>", start)
-    if page[end:].partition(">")[2].lstrip().startswith('<tr class="row-detail"'):
-        end = page.index("</tr>", end + 1)
-    return page[start:end]
+    shown = all_elements(page)
+    row = next(element for element in shown if element.tag == "tr" and element.attrs.get("data-agent") == client_id)
+    return {
+        element.attrs["data-streams"] for element in shown if "data-streams" in element.attrs and element.inside(row)
+    }

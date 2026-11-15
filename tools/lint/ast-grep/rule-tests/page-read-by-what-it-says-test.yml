@@ -1,0 +1,45 @@
+id: page-read-by-what-it-says
+valid:
+  - 'self.assertContains(response, "No scan yet.")'
+  - 'self.assertIn("Served", texts(response, "td"))'
+  - 'self.assertIn(("Example", "/x/"), links(response))'
+  - "self.assertContains(response, 'data-fragment=\"/x/\"')"
+  - "self.assertNotIn(f'href=\"{change}\"', page)"
+  - 'self.assertNotContains(response, "&lt;b&gt;")'
+  - 'self.assertTrue(page.main_closed, "the page has no <main>")'
+  - 'self.assertEqual(found, {}, "Write the count in its heading: <h2>Words</h2>.")'
+  - 'self.assertEqual(stray_arrows("<p>{{ a }} &rarr; {{ b }}</p>"), [2])'
+  - 'self.assertEqual(problems(source), ["<form method=post>"])'
+  - 'main = body[body.index("<main") : body.index("</main>")]'
+  - 'self.assertNotContains(response, "<script>alert(1)</script>")'
+  - 'response = render("<p>{{ value }}</p>")'
+invalid:
+  - 'self.assertContains(response, "<td>Served</td>")'
+  - "self.assertContains(response, 'class=\"pill pill-good\"')"
+  - 'self.assertNotContains(response, ">expense</a>")'
+  - 'self.assertContains(response, text="<th>Name")'
+  - "self.assertContains(response, '<a href=\"/x/\">Example</a>', html=True)"
+  - 'self.assertNotRegex(page, r"</a>,\s*<a")'
+  - "self.assertIn('<span class=\"count\">3</span>', html)"
+  - 'self.assertNotIn(member="<td>", container=html)'
+  - 'self.assertInHTML("<li>One</li>", html)'
+  - 'self.assertIn(f"<td>{name}</td>", html)'
+  - 'self.assertIn("<td>" + name, html)'
+  - 'self.assertIn("<td " "data-x>", html)'
+  - "self.assertIn('<td class=\"{}\">'.format(tone), html)"
+  - 'self.assertEqual(cell, "<td>Served</td>")'
+  - 'self.assertEqual(html.count("<tr"), 3)'
+  - "self.assertTrue(html.startswith('<ul class=\"dot-list\">'))"
+  - 'self.assertTrue("<td>" in html)'
+  - 'assert "<td>" not in html'
+  - 'end = page.index("</tr>", start)'
+  - |
+    self.assertContains(
+        response,
+        '<span class="pill">'
+        "Ready</span>",
+    )
+  - |
+    self.assertContains(response, """
+        <td>Served</td>
+    """)

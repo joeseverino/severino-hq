@@ -1,0 +1,177 @@
+# A page's test holds what the page says and does: a word, a number, a
+# denial, an empty state, a link's target, a data- hook. How a shared part
+# draws (its tags, its classes) is the part's own, held by its own tests, its
+# catalog entry and the survey, so a test of a page that pins that markup
+# breaks whenever the part changes, though the page says the same thing. So
+# no test outside a part's own looks for markup by a literal: a tag or a
+# class= attribute that a literal (an implicit concatenation, a + of it, a
+# .format() of it) holds, where an assertion compares it (assertContains or
+# assertRegex's text, assertIn or assertInHTML's member, either side of an
+# assertEqual), or where `in` or a str method (count, find, index, split,
+# startswith and the like) searches text for it. The page shell's landmarks
+# (main, header, nav, footer) and what a page loads (script, style, link,
+# meta) are no part's drawing, so a literal of those stays.
+#
+# A part's own tests are this rule's ignores: the catalog and the browser
+# probes, each template tag's tests (test_*_tag.py, test_*_tags.py), each rule
+# over template source (test_template_*.py, test_architecture_*.py), the
+# shared markup, table, row, form and print gate tests, and the table
+# contract an extension's check runs. cell-read-by-its-text is the narrower
+# rule for an extension's tests and these ignores.
+id: page-read-by-what-it-says
+language: python
+severity: error
+message: A test reads a page by a shared part's markup (a tag or a class), which breaks when the part changes though the page says the same thing.
+note: >-
+  Read what the page says through hq/platform/application/tests/markup.py
+  (text, texts, links, hrefs, elements, select, within), or the data- hook
+  the page carries. A test of how a part draws belongs in that part's own
+  tests or its catalog entry.
+files:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/testing.py"
+  - "**/*_testing.py"
+ignores:
+  - "hq/platform/core/tests/browser/**"
+  - "hq/platform/core/tests/test_*_tag.py"
+  - "hq/platform/core/tests/test_*_tags.py"
+  - "hq/platform/core/tests/test_template_*.py"
+  - "hq/platform/core/tests/test_table_contract.py"
+  - "hq/platform/core/tests/test_table_rows.py"
+  - "hq/platform/core/tests/test_row_controls.py"
+  - "hq/platform/core/tests/test_row_editor.py"
+  - "hq/platform/core/tests/test_form_partial.py"
+  - "hq/platform/core/tests/test_post_button.py"
+  - "hq/platform/core/tests/test_print_gate.py"
+  - "hq/platform/application/tests/test_architecture_*.py"
+  - "hq/platform/application/tests/test_shared_markup.py"
+  - "hq/platform/application/tests/test_view_primitives.py"
+  - "hq/platform/application/tests/test_markup.py"
+  - "hq/platform/application/plugin_testing.py"
+utils:
+  markup-literal:
+    kind: string
+    any:
+      - regex: </?(a|abbr|b|button|caption|code|col|colgroup|dd|del|details|dfn|div|dl|dt|em|fieldset|figcaption|figure|form|h[1-6]|hr|i|img|input|ins|kbd|label|legend|li|mark|menu|meter|ol|optgroup|option|output|p|pre|progress|q|s|samp|search|section|select|small|span|strong|sub|summary|sup|svg|table|tbody|td|textarea|tfoot|th|thead|time|tr|u|ul|var|wbr|br)([\s>/]|["']$)
+      - regex: \bclass=
+  markup:
+    any:
+      - matches: markup-literal
+      - kind: concatenated_string
+        has:
+          matches: markup-literal
+      - kind: binary_operator
+        has:
+          matches: markup
+      - kind: parenthesized_expression
+        has:
+          matches: markup
+      - kind: call
+        has:
+          field: function
+          kind: attribute
+          all:
+            - has:
+                field: attribute
+                regex: ^format$
+            - has:
+                field: object
+                matches: markup
+  positional:
+    not:
+      any:
+        - kind: keyword_argument
+        - kind: comment
+  first:
+    has:
+      nthChild:
+        position: 1
+        ofRule:
+          matches: positional
+      matches: markup
+  second:
+    has:
+      nthChild:
+        position: 2
+        ofRule:
+          matches: positional
+      matches: markup
+  named:
+    has:
+      kind: keyword_argument
+      all:
+        - has:
+            field: name
+            regex: ^(text|needle|member|first|second|expected_regex|unexpected_regex)$
+        - has:
+            field: value
+            matches: markup
+  searched:
+    any:
+      - kind: comparison_operator
+        all:
+          - has:
+              nthChild: 1
+              matches: markup
+          - has:
+              regex: ^(in|not in)$
+      - kind: call
+        all:
+          - has:
+              field: function
+              kind: attribute
+              has:
+                field: attribute
+                regex: ^(count|startswith|endswith|find|rfind|index|rindex|split|rsplit|partition|rpartition|removeprefix|removesuffix)$
+          - has:
+              field: arguments
+              matches: first
+  # The assertion that compares its first argument (the member), its second
+  # (the text a response is read for), or either.
+  member-asserted:
+    kind: call
+    has:
+      field: function
+      kind: attribute
+      has:
+        field: attribute
+        regex: ^assert(Not)?(In|InHTML)$
+  text-asserted:
+    kind: call
+    has:
+      field: function
+      kind: attribute
+      has:
+        field: attribute
+        regex: ^assert(Not)?(Contains|Regex)$
+  equal-asserted:
+    kind: call
+    has:
+      field: function
+      kind: attribute
+      has:
+        field: attribute
+        regex: ^(assert(Not)?Equal|assertHTML(Not)?Equal|assertMultiLineEqual)$
+rule:
+  any:
+    - matches: searched
+    - matches: member-asserted
+      has:
+        field: arguments
+        any:
+          - matches: first
+          - matches: named
+    - matches: text-asserted
+      has:
+        field: arguments
+        any:
+          - matches: second
+          - matches: named
+    - matches: equal-asserted
+      has:
+        field: arguments
+        any:
+          - matches: first
+          - matches: second
+          - matches: named

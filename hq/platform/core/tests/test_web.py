@@ -22,7 +22,7 @@ from django.utils import timezone
 
 from hq.domains.receipts.models import Receipt
 from hq.platform.application import request_context
-from hq.platform.application.tests.markup import hrefs
+from hq.platform.application.tests.markup import elements, hrefs
 from hq.platform.core.audit import record_event
 from hq.platform.core.logging import JsonFormatter
 from hq.platform.core.oidc import TAILSCALE_PRINCIPAL_SESSION_KEY, HQOIDCAuthenticationBackend
@@ -515,7 +515,7 @@ class CompressedResponseTests(TestCase):
                 self.assertIn("Accept-Encoding", response.headers["vary"])
                 self.assertEqual(len(response.headers.get_list("content-length")), 1)
                 self.assertEqual(int(response.headers["content-length"]), len(sent))
-                self.assertIn(b"<form", decoded(sent))
+                self.assertTrue(elements(decoded(sent).decode(), "form"))
 
 
 class RootIconTests(SimpleTestCase):

@@ -15,6 +15,7 @@ from ..command_forms import command_form_class
 from ..command_targets import record_options
 from ..integration_specs import capability_schema
 from ..security import Capability, Principal
+from .markup import elements
 from .procedures import APP, DB, EDGE, RESTART_RUN, Supply, manifest
 
 # The box a change's form is posted with ticked.
@@ -87,7 +88,7 @@ class RunFormTests(TestCase):
         drawn = str(self.form_class()()["hosts"])
 
         self.assertEqual(drawn.count('type="checkbox"'), 3)
-        self.assertNotIn("<select", drawn)
+        self.assertEqual(elements(drawn, "select"), [])
 
     def test_a_worker_that_reaches_nothing_offers_nothing_and_says_so(self):
         self.supply.reach()
