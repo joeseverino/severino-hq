@@ -11,7 +11,7 @@ arrow. Drawn by the services table (_service_rows.html).
   {% else %}
     {% button "☆" pin_url post=True css="icon-link" pressed=False hit=True title="Add "|add:service.hostname|add:" to favorites" %}
   {% endif %}
-  <strong>{% entity "service"|entity_of:service.hostname %}</strong>
+  <strong data-cell="name">{% entity "service"|entity_of:service.hostname %}</strong>
   {% if reorderable %}
     {% url 'control_plane:service_move' service.hostname as move_url %}
     {% if not first %}

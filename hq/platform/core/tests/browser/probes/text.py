@@ -249,7 +249,7 @@ STRAYS_OPENING_A_LINE = (
       const text = line.text.trim();
       const opening = line.pieces.find((piece) => piece.ch.trim());
       if (index && SEPARATOR.test(text) && !(opening.opens ?? opening.el).closest(identifier)) found.push(`${name} opens a line with "${text[0]}": "${text.slice(0, 30)}"`);
-      else if (MARKS_ONLY.test(text)) found.push(`${name} holds "${text.slice(0, 30)}" on a line of its own (▪ is an icon or an image)`);
+      else if (MARKS_ONLY.test(text) && !(opening.opens ?? opening.el).closest(identifier)) found.push(`${name} holds "${text.slice(0, 30)}" on a line of its own (▪ is an icon or an image)`);
       else if (index && !line.forced && /^\p{L}+[.,;:]?$/u.test(text) && /(?:^|\s)[^\p{L}\s]*\p{N}[^\p{L}\s]*$/u.test(lines[index - 1].text.trim())) {
         found.push(`${name} cuts "${text}" from its number "${lines[index - 1].text.trim().split(/\s/).at(-1).slice(-30)}"`);
       } else if (inCell && (!index || line.forced) && !line.pieces.some((piece) => piece.whole || piece.el?.closest(identifier)) && /^\p{L}+$/u.test(text) && lines[index + 1] && !lines[index + 1].forced && lines[index + 1].pieces[0].whole) {

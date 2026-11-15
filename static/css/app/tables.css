@@ -33,7 +33,7 @@
   --row-gutter: calc(var(--space-6) + 1.5rem);
   /* A column's share of its region while every column stands: the region's width over one more than the table's count of columns, read from its headings, less a cell's padding. The one more is kept for what a column asks past its share (a state's line, a row's name among its controls). What a value holds whole, or the line a long one keeps, is never more than that share, so the table's columns together never ask more than their region. */
   --columns: 1;
-  --share: calc(100cqi / (var(--columns) + 1) - 2 * var(--space-6));
+  --share: calc(100cqi / (var(--columns) - var(--gone-1, 0) - var(--gone-2, 0) - var(--gone-3, 0) - var(--gone-4, 0) - var(--gone-5, 0) - var(--gone-6, 0) + 1) - 2 * var(--space-6));
   inline-size: 100%; border-collapse: collapse;
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-sm);
 }
@@ -83,19 +83,19 @@
   font-weight: 650;
 }
 .data-table tbody tr:hover { background: var(--surface-2); }
-/* A column whose values keep their line (a state, a figure, a row's controls, a date) is as wide as its widest, and the columns that wrap share the rest. A state or a figure longer than a line of words (`data-long`, table_cells) wraps and shares the room as words do; the row's controls stay as narrow as their line (below) asks, so the row's words keep theirs. */
-.data-table > thead th:is([data-kind="status"], [data-kind="numeric"]):not([data-long]), .data-table > thead th[data-kind="control"], .data-table .date-col { inline-size: 1px; }
+/* A column whose values keep their line (a state, a figure, a row's controls, a date) is as wide as its widest, and the columns that wrap share the rest. A state, a figure or what a row's controls say longer than a line of words (`data-long`, table_cells: a note, the setup a change needs) wraps and shares the room as words do; the row's controls stay as narrow as their line (below) asks, so the row's words keep theirs. */
+.data-table > thead th:is([data-kind="status"], [data-kind="numeric"], [data-kind="control"]):not([data-long]), .data-table .date-col { inline-size: 1px; }
 .data-table .date-col { white-space: nowrap; }
-/* A table's count of columns (`--share`, above), read from its headings. */
-.data-table:has(> thead > tr:last-child > :nth-child(2)) { --columns: 2; }
-.data-table:has(> thead > tr:last-child > :nth-child(3)) { --columns: 3; }
-.data-table:has(> thead > tr:last-child > :nth-child(4)) { --columns: 4; }
-.data-table:has(> thead > tr:last-child > :nth-child(5)) { --columns: 5; }
-.data-table:has(> thead > tr:last-child > :nth-child(6)) { --columns: 6; }
-.data-table:has(> thead > tr:last-child > :nth-child(7)) { --columns: 7; }
-.data-table:has(> thead > tr:last-child > :nth-child(8)) { --columns: 8; }
-.data-table:has(> thead > tr:last-child > :nth-child(9)) { --columns: 9; }
-.data-table:has(> thead > tr:last-child > :nth-child(10)) { --columns: 10; }
+/* A table's count of columns (`--share`, above), read from its headings: a column with nothing in any row is never drawn, and one that has left its region (`--gone-N`, below) is taken off. */
+.data-table:has(> thead > tr:last-child > :nth-child(2 of :not([data-blank-column]))) { --columns: 2; }
+.data-table:has(> thead > tr:last-child > :nth-child(3 of :not([data-blank-column]))) { --columns: 3; }
+.data-table:has(> thead > tr:last-child > :nth-child(4 of :not([data-blank-column]))) { --columns: 4; }
+.data-table:has(> thead > tr:last-child > :nth-child(5 of :not([data-blank-column]))) { --columns: 5; }
+.data-table:has(> thead > tr:last-child > :nth-child(6 of :not([data-blank-column]))) { --columns: 6; }
+.data-table:has(> thead > tr:last-child > :nth-child(7 of :not([data-blank-column]))) { --columns: 7; }
+.data-table:has(> thead > tr:last-child > :nth-child(8 of :not([data-blank-column]))) { --columns: 8; }
+.data-table:has(> thead > tr:last-child > :nth-child(9 of :not([data-blank-column]))) { --columns: 9; }
+.data-table:has(> thead > tr:last-child > :nth-child(10 of :not([data-blank-column]))) { --columns: 10; }
 /* A short value's box (below) is no box in a stacked row or on the open line. */
 .cell-short { display: contents; }
 /* Laid out as a table (a narrow box stacks it, below): a state keeps its line. A short value of words keeps its line up to its share; a longer one (past `table_cells.SHORT`, or a state or figure longer than a line of words, `data-long`) wraps at its words in a line of `--row-words`, or its share where that is less, so no column of words is set a word to a line. */
@@ -107,6 +107,10 @@
   }
   /* A short value of words (`cell-short`, table_cells) is one box as wide as it says, up to its share, so its column holds it whole: broken, a project's name or an address and its port reads as two. Past its share it wraps inside its box. The box fills its cell, so a column given more than its share (the room a table has past every column's needs) holds the value on that wider line. */
   .data-table > tbody > tr:not(.row-detail) > :is(td, th) > .cell-short { display: inline-block; inline-size: max-content; max-inline-size: var(--share); min-inline-size: 100%; vertical-align: top; baseline-source: first; }
+  /* Where an engine sizes by a box's own content (`calc-size`), only the room a short value is sure of is held to its share: its column still asks for the value whole, so a table with room past every column's needs gives it there rather than to a column already whole. */
+  @supports (min-inline-size: calc-size(max-content, size)) {
+    .data-table > tbody > tr:not(.row-detail) > :is(td, th) > .cell-short { inline-size: 100%; max-inline-size: none; min-inline-size: calc-size(max-content, min(size, var(--share))); }
+  }
 }
 /* Figures right-aligned on fixed digit widths compare by eye; the heading too, so the label sits over them. A cell is a figure by its heading's kind, which the region writes on it (table_tags). */
 .data-table > * > tr > [data-kind="numeric"] { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -261,26 +265,38 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 .row-columns:not(:has(> :not([data-drop], [data-narrow]))) { display: none; }
 @container table-region (width < 24rem) {
   .data-table > * > tr > [data-drop="6"] { display: none; }
+  .data-table:has(> thead > tr:last-child > [data-drop="6"]) { --gone-6: 1; }
+  .data-table:has(> thead > tr:last-child > [data-drop="6"] ~ [data-drop="6"]) { --gone-6: 2; }
   :is(.row-columns > [data-drop="6"], .row-columns:has(> [data-drop="6"]), .data-table > tbody > tr:has(+ .row-detail [data-drop="6"]) .row-expand) { display: grid; }
 }
 @container table-region (width < 32rem) {
   .data-table > * > tr > [data-drop="5"] { display: none; }
+  .data-table:has(> thead > tr:last-child > [data-drop="5"]) { --gone-5: 1; }
+  .data-table:has(> thead > tr:last-child > [data-drop="5"] ~ [data-drop="5"]) { --gone-5: 2; }
   :is(.row-columns > [data-drop="5"], .row-columns:has(> [data-drop="5"]), .data-table > tbody > tr:has(+ .row-detail [data-drop="5"]) .row-expand) { display: grid; }
 }
 @container table-region (width < 40rem) {
   .data-table > * > tr > [data-drop="4"] { display: none; }
+  .data-table:has(> thead > tr:last-child > [data-drop="4"]) { --gone-4: 1; }
+  .data-table:has(> thead > tr:last-child > [data-drop="4"] ~ [data-drop="4"]) { --gone-4: 2; }
   :is(.row-columns > [data-drop="4"], .row-columns:has(> [data-drop="4"]), .data-table > tbody > tr:has(+ .row-detail [data-drop="4"]) .row-expand) { display: grid; }
 }
 @container table-region (width < 48rem) {
   .data-table > * > tr > [data-drop="3"] { display: none; }
+  .data-table:has(> thead > tr:last-child > [data-drop="3"]) { --gone-3: 1; }
+  .data-table:has(> thead > tr:last-child > [data-drop="3"] ~ [data-drop="3"]) { --gone-3: 2; }
   :is(.row-columns > [data-drop="3"], .row-columns:has(> [data-drop="3"]), .data-table > tbody > tr:has(+ .row-detail [data-drop="3"]) .row-expand) { display: grid; }
 }
 @container table-region (width < 56rem) {
   .data-table > * > tr > [data-drop="2"] { display: none; }
+  .data-table:has(> thead > tr:last-child > [data-drop="2"]) { --gone-2: 1; }
+  .data-table:has(> thead > tr:last-child > [data-drop="2"] ~ [data-drop="2"]) { --gone-2: 2; }
   :is(.row-columns > [data-drop="2"], .row-columns:has(> [data-drop="2"]), .data-table > tbody > tr:has(+ .row-detail [data-drop="2"]) .row-expand) { display: grid; }
 }
 @container table-region (width < 64rem) {
   .data-table > * > tr > [data-drop="1"] { display: none; }
+  .data-table:has(> thead > tr:last-child > [data-drop="1"]) { --gone-1: 1; }
+  .data-table:has(> thead > tr:last-child > [data-drop="1"] ~ [data-drop="1"]) { --gone-1: 2; }
   :is(.row-columns > [data-drop="1"], .row-columns:has(> [data-drop="1"]), .data-table > tbody > tr:has(+ .row-detail [data-drop="1"]) .row-expand) { display: grid; }
 }
 
@@ -312,9 +328,9 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
   :where(.table-scroll:not([data-chart]) > .data-table:not([data-marks])) {
     &, & > *, & > * > tr, & > * > tr > * { display: block; }
     & > * > tr:not(.row-detail) { display: flex; }
-    /* A cell is as wide as its row's line, and a box wider than that line (a value set to a width of its own) is held to it and wraps there, so nothing in a stacked row runs past its card. */
+    /* A cell is as wide as its row's line, and a box wider than that line (a value set to a width of its own) is held to it and wraps there, so nothing in a stacked row runs past its card. A short value's box is no box here, so what it holds is held. */
     & > * > tr:not(.row-detail) > * { min-inline-size: 0; }
-    & > * > tr > * > * { max-inline-size: 100%; }
+    & > * > tr > * > *, & > * > tr > * > .cell-short > * { max-inline-size: 100%; }
   }
   .table-scroll:not([data-chart]) > .data-table:not([data-marks]) {
     & > tbody > tr.is-expanded + tr.row-detail { display: block; }

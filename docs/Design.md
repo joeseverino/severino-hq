@@ -171,17 +171,20 @@ table. No width is computed in Python. A column whose values keep their line
 (a status, a figure, a row's controls, a date) is as wide as its widest
 (`inline-size: 1px` on its heading), and the columns that wrap share the rest
 as the browser shares it. Each column's share is its region's width over one
-more than the table's count of headings (`--share`, tables.css), the one more
+more than the count of columns it shows (`--share`, tables.css: a column with
+nothing in any row, or one ranked to leave at the region's width, is not
+counted), the one more
 kept for what a column asks past its share, and no column asks more than its
 share to hold a value whole, so the columns together never ask more than the
 region. A value longer than a line of words (`data-long` on its cell and
 heading, `table_cells`), whatever its kind, wraps at its words in a line of
 `--row-words`, or its share where that is less, so no column of words is set
-a word to a line while its neighbor sits empty. A status or a figure that
-long shares the room as words do; a row's controls stay as narrow as their
-line. A long value is held to its third line (below); a heading's words wrap
+a word to a line while its neighbor sits empty. A status, a figure or what a
+row's controls say that long shares the room as words do; a row's controls
+stay as narrow as their line. A long value is held to its third line (below); a heading's words wrap
 as a cell's do. *Gate:* the survey's `room unshared`, which fails a cell
-squeezed below what it needs while another column holds the room it lacks.
+squeezed below what it needs while another column holds the room it lacks,
+counting each share itself.
 
 Each column that may leave has a rank, 1 first
 (`{% table_heading ... drop=N %}`). A list's ranks are derived by `ranked`:
@@ -250,6 +253,9 @@ kind `control`. Each is a `PageAction` drawn as a compact control with its
 middle on the first line's. A page never draws a button in a cell (*Gate:* the
 `hand-drawn-row-actions` rule). A row's controls stand side by side on one
 line, which their column asks for, and the words beside them wrap first.
+Every row's controls end on one edge, and each draws its edge of its own but
+the last, which is quiet only when it sets the row aside (`put_away`, a
+button). A cell of the row's actions is a control whatever its heading says.
 A sentence in a control cell (what a write gap links) is long, so it keeps a
 measure of `--row-words` as any long value does.
 
@@ -264,13 +270,16 @@ empty box. *Gates:* the survey's `rows unruled` and `empty panels`.
 `table-region` container query in tables.css) each row is a wrapping line of
 blocks: the row's name first, each other cell on a line of its own under its
 column's name, which the region writes on the cell (`data-label`,
-`table_cells`) and the cell draws before its value. The heading row stays
+`table_cells`) and the cell draws before its value; a column a row fills a
+field in is a column of values, so its cells carry the name under any kind,
+and a row of choices still says whose each one is. The heading row stays
 above, its sort controls wrapping on one line. The rule that stacks sets
 `display` inside `:where()`, so whatever hides a part (a ranked column, a
 blank cell, a closed row's open line, a folded row) still wins without a
 second rule. Nothing is measured and no table opts in or out but a chart's and
 a table of marks, which keep their grid. *Gate:* `tables` in the layout
-survey, which fails a stacked cell drawn without its column's name.
+survey, which fails a stacked cell drawn without its column's name, and
+`values named`, which fails a stacked field's column drawn without it.
 
 **A row's controls leave a narrow box for its open line.** The region marks
 every cell of a column of the rows' controls, its heading included,
@@ -425,7 +434,9 @@ toggle beside them stays whole. A value of words of 32 characters at most
 (`table_cells.SHORT`: an address and its port, a host, a project's name) is
 one box (`cell-short`) as wide as the value up to its column's share, and as
 wide as its column where that is more, so its column holds it whole while the
-table is laid out as one, and past its share it wraps inside its box; a longer
+table is laid out as one, and past its share it wraps inside its box. Its
+column still asks for the value whole (`calc-size` holds only the share as
+its floor), so room the table has past every column's needs goes to it; a longer
 one wraps at its words in a line of `--row-words`, or its share where that is
 less, as a long one does; a longer identifier and a row's own name break
 anywhere their column lacks room; a pill and prose break only inside a word

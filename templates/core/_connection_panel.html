@@ -114,7 +114,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
         {% page %}
           {% if hop.link and hop.link.url %}{% entity hop.link %}{% endif %}
         {% body %}
-          {% if hop.check or hop.source %}{% muted element="p" %}{% if hop.check %}{{ hop.check.label|breakable:"." }} {{ hop.check.detail|breakable }}{% endif %}{% if hop.source %} Read from {% with mark=hop.source.observed_at|then:",|." %}{{ hop.source.phrase|breakable:mark }}{% endwith %}{% if hop.source.observed_at %} {{ hop.source.observed_at|when }}.{% endif %}{% endif %}{% endmuted %}{% endif %}
+          {% if hop.check.label or hop.check.detail or hop.source %}{% muted element="p" %}{% if hop.check %}{{ hop.check.label|breakable:"." }} {{ hop.check.detail|breakable }}{% endif %}{% if hop.source %} Read from {% with mark=hop.source.observed_at|then:",|." %}{{ hop.source.phrase|breakable:mark }}{% endwith %}{% if hop.source.observed_at %} {{ hop.source.observed_at|when }}.{% endif %}{% endif %}{% endmuted %}{% endif %}
           {% if hop.check.step %}{% notice tone="warning" %}{{ hop.check.step|breakable }}{% endnotice %}{% endif %}
           {% if hop.certificate %}{% muted element="p" %}{{ hop.certificate.statement|breakable }}{% endmuted %}{% endif %}
           {% if hop.unread %}{% muted element="p" %}{{ hop.unread|capfirst|breakable }}{% endmuted %}{% endif %}
@@ -141,7 +141,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
                 {% check_rung state=result.reading.standing evidence=result.reading.evidence data_connection_layer=result.check.id %}
                   {{ result.check.label|breakable }}
                 {% body %}
-                  {% muted element="p" %}{{ result.reading.detail|breakable }}{% endmuted %}
+                  {% if result.reading.detail %}{% muted element="p" %}{{ result.reading.detail|breakable }}{% endmuted %}{% endif %}
                   {% if result.reading.rules %}
                     {% stack_list %}{% for rule in result.reading.rules %}<li><code>{{ rule|breakable }}</code></li>{% endfor %}{% endstack_list %}
                   {% endif %}

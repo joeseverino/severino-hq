@@ -327,6 +327,34 @@ class TableTagTests(SimpleTestCase):
         cells = [cell.attrs.get("data-label") for cell in elements(_render(source), "td")]
         self.assertEqual(cells, [None, None, "State", None])
 
+    def test_a_stacked_choice_names_its_column(self):
+        """A column a row fills a field in holds the rows' values, so each of
+        its cells, the field's and the words standing in for one, stands
+        under its column's name once stacked, whatever kind its heading says."""
+
+        source = (
+            '{% table_region "Rules" %}<table class="data-table"><thead><tr>{% table_heading "Action" %}'
+            '{% table_heading "example-agent" "control" %}{% table_heading "Act" css="actions-col" %}</tr></thead>'
+            "<tbody><tr><td>a</td><td><select><option>Allow</option></select></td><td><button>Go</button></td></tr>"
+            "<tr><td>b</td><td>Not granted</td><td><button>Go</button></td></tr></tbody></table>{% endtable_region %}"
+        )
+        cells = [cell.attrs.get("data-label") for cell in elements(_render(source), "td")]
+        self.assertEqual(cells, [None, "example-agent", None, None, "example-agent", None])
+
+    def test_a_rows_actions_are_its_controls_under_any_heading(self):
+        """A row's actions keep one line as controls whatever their heading
+        says, so they are never a value of words held in a box."""
+
+        source = (
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
+            '{% table_heading "Act" hidden=True %}</tr></thead><tbody>'
+            '<tr><td>a</td><td class="row-actions"><a class="btn compact" href="/example/">Open</a></td></tr>'
+            "</tbody></table>{% endtable_region %}"
+        )
+        html = _render(source)
+        self.assertEqual([cell.attrs.get("data-kind") for cell in elements(html, "td")], ["name", "control"])
+        self.assertEqual([box.text for box in with_class(html, "cell-short")], ["a"])
+
     def test_every_cell_under_a_control_heading_is_marked_a_control(self):
         """tables.css sizes a select or a field to what it holds only in a
         cell marked a control, so every cell under such a heading is, however

@@ -107,10 +107,14 @@
   @container table-region (width < 36rem) { &:is(.is-expanded *) { -webkit-line-clamp: none; line-clamp: none; max-block-size: none; } }
 }
 /* A pill in a held value is one box of one line, cut at its own end: a pill of several lines would stand across the clamp's foot, and the cell's title says it whole. Laid out as a table it is no wider than the line its long cell keeps (tables.css), so it never widens its column. */
-.data-table .cell-clamp:not(.row-detail *) .pill {
+.cell-clamp:not(.row-detail *) :is(.pill, .tag) {
   display: inline-block; vertical-align: top; max-inline-size: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   @container table-region (width >= 36rem) { max-inline-size: min(var(--row-words), var(--share)); }
 }
+/* A list inside a clamp uses its inline line boxes. A flex item's padded
+   rows can cross the clamp's last line and leave half a glyph visible. */
+.cell-clamp .line-list { display: inline; }
+.cell-clamp .tag { padding-block: 0; }
 /* An identifier (a hash, a key, a host) or a row's name (its own part, never
    its cell's other words) may break anywhere, so one with no break in it
    asks its column for no more than a letter: the table still gives each

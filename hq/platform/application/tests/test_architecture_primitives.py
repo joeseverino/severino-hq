@@ -3,6 +3,7 @@
 import re
 from pathlib import Path
 
+from django.template.loader import render_to_string
 from django.test import SimpleTestCase, tag
 
 from hq.platform.application.tests.reads import reads
@@ -179,8 +180,8 @@ class FragmentPrimitiveTests(SimpleTestCase):
     PRIMITIVE = "fragment.js"
 
     def test_the_primitive_loads_before_the_scripts_that_use_it(self):
-        base = (self.ROOT / "templates" / "base.html").read_text(encoding="utf-8")
-        deferred = re.findall(r"js/([\w-]+\.js)'[^>]*\bdefer\b", base)
+        base = render_to_string("base.html")
+        deferred = re.findall(r'js/([\w-]+\.js)"[^>]*\bdefer\b', base)
 
         self.assertGreater(len(deferred), 1)
         self.assertEqual(deferred[0], self.PRIMITIVE)
