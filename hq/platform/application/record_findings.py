@@ -1,7 +1,7 @@
 """Findings about HQ's own records: what a record section holds that waits on a person.
 
-A backlog is one finding that counts its records (docs past review, expenses
-with no receipt), raised under the section that holds them and told only to a
+A backlog is one finding that counts its records (drafts not published,
+expenses with no receipt), raised under the section that holds them and told only to a
 reader of what that section declares (``FindingRule.domain``).
 A record whose reference names nothing is one finding of its own.
 """
@@ -30,7 +30,6 @@ from .ui import counted, ended
 MOST_NAMED = 3
 CONTACTS_STATE_KEY = "attention.contacts-state"
 
-DOCS_REVIEW = "docs-review"
 CONTENT_DRAFTS = "content-drafts"
 CONTENT_UNDOCUMENTED = "content-undocumented"
 CONTACTS_UNREAD = "contacts-unread"
@@ -167,23 +166,6 @@ def _links_to_nothing(rule: str, model: type) -> FindingRule:
 
 # The rules this module raises, beside what each counts.
 RULES: tuple[FindingRule, ...] = (
-    _backlog(
-        DOCS_REVIEW,
-        "Docs past review",
-        _Backlog(
-            one="doc is past its review date",
-            many="docs are past their review date",
-            counts="Past their review date",
-            opens_as="Review docs",
-            route="docs_index:list",
-            query="needs_review=1",
-            count=lambda: sections.documentation_reading()["needing_review"],
-        ),
-        domain="hq.docs",
-        operator_action="Read each doc against what it describes, then set its next review date.",
-        no_help_reason="Only a person can say whether a doc still matches what it describes.",
-        bar="a doc's review date has passed, so it may no longer match what it describes",
-    ),
     _backlog(
         CONTENT_DRAFTS,
         "Unpublished drafts",

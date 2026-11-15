@@ -409,7 +409,7 @@ def _documentation_line(d) -> str:
     if d["github_path"]:
         bits.append(f"github=`{d['github_path']}`")
     if d["last_reviewed"]:
-        bits.append(f"reviewed {d['last_reviewed']}")
+        bits.append(f"changed {d['last_reviewed']}")
     return "- " + dotted(f"**{d['doc_id']}**", d["title"], *bits)
 
 

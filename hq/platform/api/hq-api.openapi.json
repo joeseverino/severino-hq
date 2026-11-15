@@ -348,10 +348,10 @@
             "rule": null,
             "schema_version": 2,
             "summary": {
-              "findings": 15,
-              "returned": 15,
+              "findings": 14,
+              "returned": 14,
               "severities": {
-                "attention": 11,
+                "attention": 10,
                 "neutral": 1,
                 "serious": 3
               },
@@ -1519,20 +1519,20 @@
       "listActionItemsV2OK": {
         "dataValue": {
           "data": {
-            "count": 13,
+            "count": 12,
             "items": [
               {
-                "action": "Review docs",
+                "action": "Attach receipts",
                 "detail": "",
-                "label": "1 doc is past its review date",
+                "label": "1 expense has no receipt",
                 "since": "",
-                "source": "Docs",
+                "source": "Expenses",
                 "status": "attention",
-                "url": "/docs/?needs_review=1"
+                "url": "/expenses/?no_receipts=1"
               }
             ],
             "next": null,
-            "total": 13,
+            "total": 12,
             "truncated": false
           },
           "ok": true
@@ -12371,7 +12371,7 @@
             "type": "null"
           }
         ],
-        "description": "When it was last checked against what it describes. Null for never.",
+        "description": "When the doc last changed in the vault. Null for unknown.",
         "title": "Last reviewed"
       },
       "LayerPart": {
@@ -24272,7 +24272,6 @@
                 "deploy-waiting",
                 "deploy-running",
                 "machine-offline",
-                "docs-review",
                 "content-drafts",
                 "content-undocumented",
                 "contacts-unread",
@@ -24611,7 +24610,6 @@
                     "hq.calendar",
                     "hq.contacts",
                     "hq.content",
-                    "hq.docs",
                     "hq.estate",
                     "hq.expenses",
                     "hq.infrastructure",

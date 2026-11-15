@@ -132,12 +132,12 @@ class YearSummaryTests(TestCase):
     def test_a_date_not_yet_set_reads_as_none(self):
         ContentItem.objects.create(title="Published post", published_at="2030-02-03")
         ContentItem.objects.create(title="Draft post")
-        DocumentationRecord.objects.create(doc_id="rb-reviewed", title="Reviewed", last_reviewed="2030-04-05")
-        DocumentationRecord.objects.create(doc_id="rb-unreviewed", title="Unreviewed")
+        DocumentationRecord.objects.create(doc_id="rb-changed", title="Changed", last_reviewed="2030-04-05")
+        DocumentationRecord.objects.create(doc_id="rb-unchanged", title="Unchanged")
 
         summary = exports.year_summary(2030)
 
         published = {item["title"]: item["published_at"] for item in summary["content"]}
-        reviewed = {doc["doc_id"]: doc["last_reviewed"] for doc in summary["documentation"]}
+        changed = {doc["doc_id"]: doc["last_reviewed"] for doc in summary["documentation"]}
         self.assertEqual(published, {"Published post": "2030-02-03", "Draft post": None})
-        self.assertEqual(reviewed, {"rb-reviewed": "2030-04-05", "rb-unreviewed": None})
+        self.assertEqual(changed, {"rb-changed": "2030-04-05", "rb-unchanged": None})

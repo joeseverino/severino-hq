@@ -1,7 +1,7 @@
 id: test-markers-are-the-runners
 valid:
   - 'cadence_testing.controller_arrived()'
-  - 'override_settings(SEVERINO_DOC_REVIEW_INTERVAL_DAYS=30)'
+  - 'override_settings(SEVERINO_FISCAL_YEAR_START_MONTH=7)'
   - |
     def test_the_doorbell_rings(self):
         with override_settings(SEVERINO_CONTROLLER_DOORBELL=str(directory / "doorbell")):

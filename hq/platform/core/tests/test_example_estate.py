@@ -379,11 +379,10 @@ class WalkedStatesTests(TestCase):
         ]
         self.assertTrue(waiting)
 
-    def test_the_reports_exports_follow_three_readings(self):
-        # Three readings fill a wide row, so the exports wrap onto one of their own.
+    def test_each_reports_reading_has_rows(self):
         page = self.walked(reverse("reports:dashboard"))
 
-        for reading in ("status_groups", "assets_by_category", "docs_needing_review"):
+        for reading in ("status_groups", "assets_by_category"):
             with self.subTest(reading=reading):
                 self.assertTrue(page.context[reading])
 

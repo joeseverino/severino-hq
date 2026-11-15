@@ -141,9 +141,7 @@ type DocSensitivity = Annotated[_SENSITIVITY, Describe("Who may read it; a restr
 type ObsidianPath = Annotated[str, Describe("Its path in the vault.", api="Empty for none.")]
 type GithubPath = Annotated[str, Describe("Its path in a repository.", api="Empty for none.")]
 type ExternalUrl = Annotated[str, Describe("Where it is published outside HQ.", api="Empty for none.")]
-type LastReviewed = Annotated[
-    date | None, Describe("When it was last checked against what it describes.", api="Null for never.")
-]
+type LastReviewed = Annotated[date | None, Describe("When the doc last changed in the vault.", api="Null for unknown.")]
 
 
 # The vault's manifest copies a doc's frontmatter as it is written, so any

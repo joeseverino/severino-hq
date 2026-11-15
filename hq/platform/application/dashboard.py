@@ -189,7 +189,6 @@ class Kpis(TypedDict):
     projects_needing_output: int
     draft_content: int
     published_content: int
-    docs_needing_review: int
     unread_contacts: int
     # Money as its decimal text.
     expenses_total: str
@@ -214,7 +213,6 @@ class Glance(_Activity):
     active_projects: list[dict[str, Any]]
     draft_content: list[dict[str, Any]]
     recent_published: list[dict[str, Any]]
-    docs_needing_review: list[dict[str, Any]]
 
 
 class _Snapshot(Glance):
@@ -272,7 +270,6 @@ def _operating_snapshot(principal) -> _Snapshot:
     unread_contacts_count, contacts_status = contacts_state()
     projects = sections.projects_reading()
     content = sections.content_reading()
-    documentation = sections.documentation_reading()
     expenses = sections.expenses_reading()
     priority = readable_queue(principal)
 
@@ -286,7 +283,6 @@ def _operating_snapshot(principal) -> _Snapshot:
             "projects_needing_output": projects["needing_output"],
             "draft_content": content["drafts"],
             "published_content": content["published"],
-            "docs_needing_review": documentation["needing_review"],
             "unread_contacts": unread_contacts_count,
             "expenses_total": str(expenses["total"]),
             "expenses_count": expenses["count"],
@@ -302,7 +298,6 @@ def _operating_snapshot(principal) -> _Snapshot:
         "active_projects": sections.recent_active_projects(),
         "draft_content": sections.recent_draft_content(),
         "recent_published": sections.recently_published(),
-        "docs_needing_review": sections.docs_awaiting_review(),
         **_activity(principal),
     }
 

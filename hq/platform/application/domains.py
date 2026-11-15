@@ -325,7 +325,6 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         navigation=(NavigationItem("Docs", "docs_index:list", "docs_index", 101, "Projects"),),
         integration=PluginIntegration(
             resources=_provider("hq.domains.docs_index.specs:resources"),
-            dashboard=_provider("hq.platform.application.sections:documentation"),
         ),
         apps=("hq.domains.docs_index",),
         mounts=(Mount("docs/", "hq.domains.docs_index.urls"),),

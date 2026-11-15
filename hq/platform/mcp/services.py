@@ -293,7 +293,7 @@ def system_health() -> SystemHealth:
 
 @tool("HQ at a glance", requires=holding(Capability.READ), budget=Budget(8_200))
 def dashboard_snapshot() -> AgentSnapshot:
-    """What needs doing in HQ: its figures, the most urgent items in the queue and the docs due a review.
+    """What needs doing in HQ: its figures and the most urgent items in the queue.
 
     Call it first for what needs doing. `system_health` says whether HQ
     answers, and `get_findings` what is wrong. The `status-brief` prompt

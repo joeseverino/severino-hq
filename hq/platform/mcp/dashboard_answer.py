@@ -77,8 +77,6 @@ class AgentSnapshot(TypedDict):
     priority_count: int
     # Its first page, the most urgent; ``lists.priority`` reads the rest.
     priority: list[AgentQueueItem]
-    # No other read narrows the documentation to the docs due a review.
-    docs_needing_review: list[dict[str, Any]]
     # Each part this caller may not read, said, so withheld and empty read apart.
     unread: list[str]
     # Each list the page shows that this answer leaves to its own read, or
@@ -146,7 +144,6 @@ def agent_snapshot(*, principal: Principal) -> AgentSnapshot:
         "cards": snapshot["cards"],
         "priority_count": snapshot["priority_count"],
         "priority": [agent_item(item) for item in snapshot["priority"][:ACTION_ITEMS_PAGE]],
-        "docs_needing_review": snapshot["docs_needing_review"],
         "unread": snapshot["unread"],
         "lists": _lists(principal, snapshot["unread"]),
     }

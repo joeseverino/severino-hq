@@ -900,8 +900,6 @@ SEVERINO_SITE_NAME = env_str("SEVERINO_SITE_NAME", "Severino HQ")
 SEVERINO_RENDERED_COPY = False
 # The month the fiscal year starts, for the dashboard's expense window.
 SEVERINO_FISCAL_YEAR_START_MONTH = 1
-# Days before an active document is due for review.
-SEVERINO_DOC_REVIEW_INTERVAL_DAYS = 180
 
 # Public DNS and reverse-DNS lookups. The one question HQ cannot answer from
 # the inside: a resolver on this network follows the internal rewrites and

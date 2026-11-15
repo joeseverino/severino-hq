@@ -6,5 +6,5 @@
   <td>{{ row.get_environment_display|breakable }}</td>
   <td>{% status row.get_status_display tone=row.status %}</td>
   <td>{% status row.get_sensitivity_display tone=row.sensitivity %}</td>
-  <td class="muted">{% if row.last_reviewed %}{{ row.last_reviewed|when:"day" }}{% else %}Never{% endif %}</td>
+  <td class="muted">{% if row.last_reviewed %}{{ row.last_reviewed|when:"day" }}{% endif %}</td>
 {% endblock %}

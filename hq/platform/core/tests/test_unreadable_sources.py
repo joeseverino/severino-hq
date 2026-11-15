@@ -40,8 +40,8 @@ def urgent(title):
 
 
 def good_source(domain: str) -> tuple[Insight, ...]:
-    # The docs section raises one item; every other host section raises none.
-    return (urgent("Good source item"),) if domain == "hq.docs" else ()
+    # The content section raises one item; every other host section raises none.
+    return (urgent("Good source item"),) if domain == "hq.content" else ()
 
 
 def cards(name, count=3):

@@ -111,7 +111,7 @@ WRITEUPS = (
     ("restored-backups", "Backups you have actually restored", "offsite-backups", 25),
 )
 # doc_id, title, environment, the projects it is about, and how many days ago
-# it was first written and last reviewed.
+# it was first written and last changed.
 RUNBOOKS = (
     (
         "rb-restore-backup",
@@ -122,7 +122,6 @@ RUNBOOKS = (
         20,
     ),
     ("rb-rotate-tailnet-keys", "Rotate the tailnet lock signing keys", "tailscale", ("tailnet-hardening",), 140, 45),
-    # Past the review interval: the one runbook due for review.
     ("rb-public-site", "Publish the public site and answer its contact form", "homelab", ("hq",), 380, 200),
     (
         "rb-upgrade-containers",
@@ -154,7 +153,7 @@ def projects():
 
 def _runbooks():
     today = timezone.localdate()
-    for doc_id, title, environment, about, written, reviewed in RUNBOOKS:
+    for doc_id, title, environment, about, written, changed in RUNBOOKS:
         record = _about(
             DocumentationRecord,
             about,
@@ -166,8 +165,8 @@ def _runbooks():
             sensitivity="internal",
             last_reviewed=today - timedelta(days=written),
         )
-        # Reviewed since, and mirrored again.
-        record.last_reviewed = today - timedelta(days=reviewed)
+        # Changed since, and mirrored again.
+        record.last_reviewed = today - timedelta(days=changed)
         record.save()
 
 

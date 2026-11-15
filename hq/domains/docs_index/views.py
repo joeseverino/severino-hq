@@ -24,7 +24,6 @@ from hq.platform.application.tables import (
     TableFilter,
     TableListMixin,
     TableSort,
-    TableToggle,
 )
 from hq.platform.application.web_writes import execute_posted, refused
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
@@ -54,7 +53,7 @@ class DocsListView(PageMixin, TableListMixin, ListView):
         TableColumn("Environment", "environment"),
         TableColumn("Status", "status"),
         TableColumn("Sensitivity", "sensitivity"),
-        TableColumn("Last reviewed", "last_reviewed"),
+        TableColumn("Last changed", "last_reviewed"),
     )
     table_filters = (
         TableFilter("status", "Status", "status", DocumentationRecord.Status.choices),
@@ -82,15 +81,14 @@ class DocsListView(PageMixin, TableListMixin, ListView):
         TableSort("-doc_type", "Type Z–A", "-doc_type"),
         TableSort("environment", "Environment A–Z", "environment"),
         TableSort("-environment", "Environment Z–A", "-environment"),
-        TableSort("last_reviewed", "Oldest review", "last_reviewed"),
-        TableSort("-last_reviewed", "Newest review", "-last_reviewed"),
+        TableSort("last_reviewed", "Oldest change", "last_reviewed"),
+        TableSort("-last_reviewed", "Newest change", "-last_reviewed"),
         TableSort("status", "Status A–Z", "status"),
         TableSort("-status", "Status Z–A", "-status"),
         TableSort("sensitivity", "Sensitivity A–Z", "sensitivity"),
         TableSort("-sensitivity", "Sensitivity Z–A", "-sensitivity"),
         TableSort("updated_at", "Least recently updated", "updated_at"),
     )
-    table_toggles = (TableToggle("needs_review", "Due for review"),)
     table_default_sort = "-updated_at"
     table_search_placeholder = "Search IDs, titles, systems, paths, and notes…"
 
@@ -106,15 +104,12 @@ class DocsListView(PageMixin, TableListMixin, ListView):
         qs = DocumentationRecord.objects.all()
         q = self.request.GET.get("q", "").strip()
         doc_types = self.table_values("doc_type")
-        needs_review = self.request.GET.get("needs_review", "").strip()
 
         # Writeups and pages live in the Content tab; hide them from the
         # default Docs view unless the user explicitly filtered for that
         # doc_type or searched for one.
         if not doc_types and not q:
             qs = qs.exclude(doc_type=DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT)
-        if needs_review:
-            qs = qs.needing_review()
         return self.apply_table_query(qs)
 
 

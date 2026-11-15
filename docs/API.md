@@ -866,8 +866,7 @@ the answer's root `$defs`, which each `#/$defs/<name>` there points to. The API
 answers every entry in full with each schema whole, since its readers index one
 entry's schema alone and its document and recorded examples hold that shape.
 `dashboard_snapshot` answers what needs doing: the figures, the cards, the
-priority queue's first page, with `priority_count` counting it whole, and the
-docs due a review. For the whole queue and each other list the page shows (the
+priority queue's first page, with `priority_count` counting it whole. For the whole queue and each other list the page shows (the
 recent activity, the active projects, the draft and published content), its
 `lists` names the `recent_activity` or `list_resource` call that reads it, and
 leaves out one the caller may not read. Every domain, an extension's too,

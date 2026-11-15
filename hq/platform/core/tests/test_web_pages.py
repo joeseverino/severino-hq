@@ -4,7 +4,7 @@ from datetime import timedelta
 from unittest.mock import call, patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
@@ -22,10 +22,8 @@ from hq.domains.projects.models import Project
 from hq.platform.application import readings
 from hq.platform.application.action_links import command_url
 from hq.platform.application.cadence_testing import controller_arrived
-from hq.platform.application.dashboard import operating_snapshot
 from hq.platform.application.labels import DOT
 from hq.platform.application.plugin_testing import form_keyed
-from hq.platform.application.security import cli_principal
 from hq.platform.application.tests.glance_readings import HOST, reported_machine
 from hq.platform.application.tests.host_only import host_only
 from hq.platform.application.tests.markup import elements, hrefs, select, text
@@ -428,16 +426,6 @@ class DashboardWorkflowTests(_AuthedTestCase):
         queue = self.client.get(reverse("action_items"))
         self.assertNotIn(f"{reverse('projects:list')}?needs_output=1", hrefs(queue))
 
-    def test_dashboard_excludes_site_pages_from_docs_review(self):
-        DocumentationRecord.objects.create(
-            doc_id="page-about",
-            title="About page",
-            doc_type=DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT,
-            status=DocumentationRecord.Status.ACTIVE,
-        )
-
-        self.assertEqual(operating_snapshot(principal=cli_principal())["kpis"]["docs_needing_review"], 0)
-
     def test_projects_can_filter_for_missing_output(self):
         project = Project.objects.create(name="No output yet", status=Project.Status.ACTIVE)
         documented = Project.objects.create(name="Documented", status=Project.Status.ACTIVE)
@@ -528,61 +516,6 @@ class DashboardWorkflowTests(_AuthedTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(list(response.context["object_list"]), [matching])
-
-    @override_settings(SEVERINO_DOC_REVIEW_INTERVAL_DAYS=30)
-    def test_docs_review_filter_uses_configured_interval(self):
-        current = DocumentationRecord.objects.create(
-            doc_id="rb-current-001",
-            title="Current runbook",
-            status=DocumentationRecord.Status.ACTIVE,
-            last_reviewed=timezone.localdate() - timedelta(days=20),
-        )
-        stale = DocumentationRecord.objects.create(
-            doc_id="rb-stale-001",
-            title="Stale runbook",
-            status=DocumentationRecord.Status.ACTIVE,
-            last_reviewed=timezone.localdate() - timedelta(days=31),
-        )
-        site_page = DocumentationRecord.objects.create(
-            doc_id="page-stale-001",
-            title="Stale site page",
-            doc_type=DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT,
-            status=DocumentationRecord.Status.ACTIVE,
-            last_reviewed=timezone.localdate() - timedelta(days=31),
-        )
-
-        response = self.client.get("/docs/?needs_review=1")
-
-        listed = list(response.context["object_list"])
-        self.assertIn(stale, listed)
-        self.assertNotIn(current, listed)
-        self.assertNotIn(site_page, listed)
-
-    @override_settings(SEVERINO_DOC_REVIEW_INTERVAL_DAYS=30)
-    def test_reports_docs_review_uses_shared_definition(self):
-        stale = DocumentationRecord.objects.create(
-            doc_id="rb-stale-002",
-            title="Stale runbook",
-            status=DocumentationRecord.Status.ACTIVE,
-            last_reviewed=timezone.localdate() - timedelta(days=31),
-        )
-        DocumentationRecord.objects.create(
-            doc_id="page-stale-002",
-            title="Stale site page",
-            doc_type=DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT,
-            status=DocumentationRecord.Status.ACTIVE,
-            last_reviewed=timezone.localdate() - timedelta(days=31),
-        )
-
-        response = self.client.get("/reports/")
-
-        self.assertEqual(response.status_code, 200)
-        figures = {figure.label: figure for figure in response.context["figures"]}
-        self.assertEqual(figures["Docs due for review"].value, 1)
-        self.assertEqual(
-            [row.link.title for row in response.context["docs_needing_review"]],
-            [stale.doc_id],
-        )
 
 
 class NavigationTests(TestCase):

@@ -48,7 +48,7 @@ BROUGHT = {"hq": "hq", "immich": "photo-library", "jellyfin": "media-server", "f
 MACHINE_DAYS = 425
 AGENT_DAYS = 300
 # The runbooks the agent mirrors: how many days ago each was first mirrored.
-MIRRORED = {doc_id: written for doc_id, *_rest, written, _reviewed in RUNBOOKS}
+MIRRORED = {doc_id: written for doc_id, *_rest, written, _changed in RUNBOOKS}
 SYNC = {"interface": MCP_INTERFACE, "actor": AGENT, "operation": DOCUMENTATION_SYNC}
 # HQ's own scheduled work, which nobody asked for in the moment.
 OWN = {"interface": JOB_INTERFACE, "actor": "system"}

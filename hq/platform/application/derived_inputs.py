@@ -62,7 +62,6 @@ READER_QUEUE_READS: tuple[str, ...] = (*QUEUE_READS, "core.AgentAccess", "core.A
 DASHBOARD_READS: tuple[str, ...] = (
     *ESTATE_READS,
     "content.ContentItem",
-    "docs_index.DocumentationRecord",
     "expenses.Expense",
 )
 
