@@ -166,6 +166,7 @@
 @container style(--opens: 1) {
 .data-table > tbody > tr:not(.is-expanded) > :is([data-kind="name"], [data-kind="prose"]) :is(.tag, .pill, code:not(.cell-whole), .token[data-sole]:not(code *)),
 .data-table > tbody > tr:not(.is-expanded) > [data-kind="identifier"],
+.data-table > tbody > tr:not(.is-expanded) > :is([data-kind="name"], [data-kind="prose"]) .name-line > :not(button, form),
 .data-table > tbody > tr:not(.is-expanded) > :is([data-kind="name"], [data-kind="prose"], [data-kind="identifier"]) .cell-line[data-lines="1"] { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 }
 /* A control's label is the control's to cut, as one line at its end: its words (`button_words`, one box) are cut where the control ends, a part among them text of that line so the cut lands inside it; a part alone, longer than the control, is held to it and cut there, set on the line by its top since a box that clips takes its bottom edge as its baseline. */
