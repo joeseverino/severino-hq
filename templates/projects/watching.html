@@ -33,7 +33,7 @@ would be a page about anybody.
               <strong>{% entity repo.url|outside label=repo.name %}</strong>
               {% if repo.description %}<div class="muted">{{ repo.description|truncatechars:110|breakable }}</div>{% endif %}
             </td>
-            <td class="prose">{% if repo.release %}{% entity repo.release.url|outside label=repo.release.tag %}{% if repo.release.published %} <span class="muted nowrap">{{ repo.release.published|when_text:"ago" }}</span>{% endif %}{% else %}{% empty_value %}{% endif %}</td>
+            <td><span class="prose">{% if repo.release %}{% entity repo.release.url|outside label=repo.release.tag %}{% if repo.release.published %} <span class="muted nowrap">{{ repo.release.published|when_text:"ago" }}</span>{% endif %}{% else %}{% empty_value %}{% endif %}</span></td>
             <td>
               {% for item in repo.advisories|slice:":2" %}
                 <div class="prose">{% status item.severity|default:"advisory" tone=item.severity|severity_tone %} {% entity item.url|outside label=item.id %}{% if item.summary %} {{ item.summary|truncatechars:90|breakable }}{% endif %}{% if item.published %} <span class="muted nowrap">{{ item.published|when_text:"ago" }}</span>{% endif %}</div>

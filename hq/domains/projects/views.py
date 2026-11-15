@@ -72,7 +72,7 @@ class ProjectListView(PageMixin, TableListMixin, ListView):
         TableColumn("Name", "name"),
         TableColumn("Status", "status", css="key-col"),
         TableColumn("Updates"),
-        TableColumn("Technologies", "technologies_used"),
+        TableColumn("Technologies", "technologies_used", css="optional-col"),
         TableColumn("Repository", kind="status"),
         TableColumn("Edited", "updated_at"),
         TableColumn("", css="row-actions"),

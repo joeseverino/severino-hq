@@ -202,8 +202,8 @@ the section or card around a table is one already, often by the same name.
 *Gates:* `test_a_region_that_scrolls_is_a_stop_named_for_its_table`,
 `test_a_section_and_the_table_in_it_are_one_landmark`. A pane (`pane=True`) is
 as tall as its rows up to a fixed reading height, as the topology ledger is,
-and scrolls past it. A table never stacks into cards and is not swiped through:
-in a narrow box a row's controls leave for its open line (below). A column of words every row must
+and scrolls past it. A table is never swiped through: in a narrow box it
+stacks (below). A column of words every row must
 show, such as a change's two sides, takes no rank
 (`{% table_heading ... beneath=True %}`), since a rank would hide it behind
 the row's toggle.
@@ -227,6 +227,18 @@ kind `control`. Each is a `PageAction` drawn as a compact control with its
 middle on the first line's. A page never draws a button in a cell (*Gate:* the
 `hand-drawn-row-actions` rule). A row's controls stand side by side on one
 line, which their column asks for, and the words beside them wrap first.
+
+**A table stacks in a narrow box.** Below 36rem of its region (the
+`table-region` container query in tables.css) each row is a wrapping line of
+blocks: the row's name first, each other cell on a line of its own under its
+column's name, which the region writes on the cell (`data-label`,
+`table_cells`) and the cell draws before its value. The heading row stays
+above, its sort controls wrapping on one line. The rule that stacks sets
+`display` inside `:where()`, so whatever hides a part (a ranked column, a
+blank cell, a closed row's open line, a folded row) still wins without a
+second rule. Nothing is measured and no table opts in or out but a chart's and
+a table of marks, which keep their grid. *Gate:* `tables` in the layout
+survey, which fails a stacked cell drawn without its column's name.
 
 **A row's controls leave a narrow box for its open line.** The region marks
 every cell of a column of the rows' controls, its heading included,
@@ -374,13 +386,17 @@ A long value in a cell (a line past `table_cells.LONG`) wraps and is held to
 its third line by a clamp with its mark (`.cell-clamp`, cuts.css), its whole
 value in its cell's title (written by the server). Only words are held: each
 part of words in it (`data-cell`) is clamped on its own, so a pill or a
-toggle beside them stays whole. An identifier, a row's own name or a pill
-breaks anywhere its column lacks room; prose breaks only inside a word wider
-than its column. A status, a figure, a date or a control is never cut: its
-column is as wide as it is.
+toggle beside them stays whole. A name of 32 characters at most (an address
+and its port, a host, a mailbox) holds its line while the region is at least
+64rem, where every column stands (`data-short`, `line_breaks`), and breaks at
+its seams once columns leave; a longer identifier and a row's own name break anywhere their
+column lacks room; a pill and prose break only inside a word wider than their
+column, a pill among words drawn inline with its paint on each of its lines. A status, a figure, a date or a control is never cut: its column is as
+wide as it is.
 
 An identifier the row is read by, in a row of many columns (a container's
-image), is `code.cell-whole`. A value told in several parts marks each
+image), is `code.cell-whole`, and what a row's buttons decide (a queue row's
+detail) is a `cell-whole` the clamp never holds. A value told in several parts marks each
 `cell-part`. A description cut to a preview is a `.table-clamp`.
 
 A few words that read wrong split (an age, a hyphenated word) are one `.whole`,
@@ -426,9 +442,10 @@ An intrinsic size (`max-content`, `min-content`) goes on an element inside a
 cell, never on the `td`. Chromium ignores it on a table cell and WebKit does
 not, so the two engines would size the column differently.
 
-An identifier in a cell is one line, never broken at a seam: cut with an
-ellipsis on a closed row, whole in its title and in its open row. The row's
-own name, free text, a preview and a context line wrap as they always do.
+An identifier short enough to hold its line is never broken while every
+column stands; once columns leave for the open line, where it is drawn whole,
+its seams are where it breaks. The row's own name, free text, a preview and a
+context line wrap as they always do.
 *Gate:* `broken identifiers` in the layout survey,
 `test_an_identifier_in_a_table_is_whole_while_a_column_can_leave`.
 

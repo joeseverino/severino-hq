@@ -24,7 +24,7 @@ whole.
   <td class="row-gutter">
     <div class="row-line">{% if glance %}<a class="cell-prose" href="{{ item.page }}" data-attention-title>{{ item.label|breakable }}</a>{% elif item.href and not here %}<a class="cell-prose" href="{{ item.href }}" data-attention-title>{{ item.label|breakable }}</a>{% else %}<span class="cell-prose" data-attention-title>{{ item.label|breakable }}</span>{% endif %}{% if not item.aside %} {% include "partials/_urgency_pill.html" with item=item mark=True quiet=glance only %}{% endif %}</div>{% if not item.aside %}{% include "partials/_urgency_pill.html#panel" with item=item only %}{% endif %}
     {% if not item.aside %}
-      {% if item.detail and not dense %}<p class="muted cell-prose" data-attention-detail>{{ item.detail|breakable }}</p>{% endif %}
+      {% if item.detail and not dense %}<p class="muted cell-prose cell-whole" data-attention-detail>{{ item.detail|breakable }}</p>{% endif %}
       {% if item.since or item.late or not grouped %}
       <ul class="dot-list muted">
         {% if not grouped %}<li>{{ item.source|breakable }}</li>{% endif %}

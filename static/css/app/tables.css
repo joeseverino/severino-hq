@@ -93,6 +93,10 @@
 .data-table:not(:has(> thead)) th[scope=row] { inline-size: 1px; white-space: nowrap; }
 /* A value of several parts marks each one and wraps only between them: "1 week" broken from "Up" reads as another fact. */
 .data-table td .cell-part { white-space: nowrap; }
+/* A name short enough for a column's share of a wide table (`data-short`, line_breaks) holds its line while every column stands, so its column is as wide as it: broken, an address or a port reads as two. Once columns leave for the open line, it breaks at its seams. */
+@container table-region (width >= 64rem) {
+  .data-table td .token[data-short] { white-space: nowrap; & .seam::after { content: none; } }
+}
 /* A field in a cell fills its cell and gives way as its column does, so a table of fields fits as one of words. */
 .data-table > tbody > tr > td :is(select, textarea, input:not([type=checkbox], [type=radio], [type=hidden])) { box-sizing: border-box; inline-size: 100%; min-inline-size: 0; }
 .data-table input[type=checkbox] { inline-size: 16px; block-size: 16px; accent-color: var(--accent); }
@@ -148,7 +152,7 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 /* A row with nothing to press gives its words the room the cell's padding would keep. */
 .data-table td.row-actions:not(:has(> *)) { padding-inline: 0; }
 /* What an ask says stands under its controls, out of their flow, as wide as the cell, so a press moves nothing (partials/_ask.html). */
-.data-table td:has(> [data-ask]) { position: relative; padding-block-end: calc(var(--row-pad) + 1lh); }
+.data-table td:has(> [data-ask]), .data-table > tbody > tr > [data-kind="control"]:has(> [data-ask]) { position: relative; padding-block-end: calc(var(--row-pad) + 1lh); }
 .data-table td > [data-ask] > :has(> [data-ask-note]) { position: absolute; inset-inline: var(--space-6); inset-block-end: var(--row-pad); }
 /* A row's first line (`row-line`) is its title, then the marks after it (an urgency's pill, a tip's target), each a box of its own, so a mark that no longer fits wraps under the title whole rather than sit inside a wrapped link's box, where it would be no target of its own ("small targets"). */
 .data-table .row-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-3); font-weight: 600; }
@@ -163,8 +167,6 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 .data-table > tbody > tr > [data-kind="status"] .toned:has(> .icon) { white-space: nowrap; }
 /* A time is one phrase; broken over two lines it doubles its row. */
 .data-table td time { white-space: nowrap; }
-/* A name's unseen copy (value_tags) holds nothing open in a table. */
-.strut { display: none; }
 /* An identifier the row is read by, among many columns, wraps at its seams with a chip on each line. */
 .data-table td code.cell-whole { display: inline; white-space: normal; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 .data-table td code.cell-whole :is(.token, .whole) { display: inline; }

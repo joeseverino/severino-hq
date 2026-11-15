@@ -255,26 +255,25 @@ class BreakableTests(SimpleTestCase):
         self.assertIn("data-sole", breakable("example-docker-host-01"))
         self.assertNotIn("data-sole", breakable("Receipt for example-docker-host-01"))
 
-    def test_a_name_has_its_box_and_its_strut_side_by_side_in_its_token(self):
-        """A name is drawn in a box of its own beside its strut, both in its
-        token, so whatever lays the name out holds the strut that sizes it
-        beside the box that draws it (cuts.css); a word of a sentence has
-        neither, and a line of words is cut by the line's own box."""
+    def test_only_a_name_that_fits_a_column_holds_its_line(self):
+        """A name of at most 32 characters is ``data-short``, which a table
+        holds on one line (tables.css); a longer one breaks anywhere."""
+
+        self.assertIn("data-short", breakable("192.0.2.10:9000"))
+        self.assertIn("data-short", breakable("x" * 31 + "-"))
+        self.assertNotIn("data-short", breakable("an-example-name-" * 3))
+        self.assertNotIn("data-short", breakable("Receipt for example-docker-host-01"))
+
+    def test_a_name_has_its_box_in_its_token(self):
+        """A name is drawn in a box of its own in its token; a word of a
+        sentence has none, and a line of words is cut by the line's own box."""
 
         for name in ("example.com/example-path", "hq.example.com"):
             with self.subTest(name=name):
                 html = str(breakable(name))
                 (token,) = with_class(html, "token")
-                (strut,) = with_class(html, "strut")
                 (box,) = with_class(html, "cut")
-                self.assertEqual(strut.ancestors[-1:], (token,))
                 self.assertEqual(box.ancestors[-1:], (token,))
-                self.assertEqual(strut.attrs.get("aria-hidden"), "true")
-                self.assertEqual(strut.words, "")
-                pieces = strut.attrs["data-strut"].split("\u200b")
-                self.assertEqual("".join(pieces), name)
-                self.assertGreater(len(pieces), 1)
-        self.assertEqual(with_class(str(breakable("Receipt for example-docker-host-01")), "strut"), [])
         self.assertEqual(with_class(str(breakable("Receipt for example-docker-host-01")), "cut"), [])
         (line,) = with_class(str(cell_line("on example-web")), "cut")
         self.assertIn("cell-line", line.ancestors[-1].classes)

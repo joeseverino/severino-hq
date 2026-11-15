@@ -92,12 +92,13 @@
    and in a narrow box, where the title is out of reach, opening its row
    releases the clamp in place. Only words are held: each part of words in it
    (`data-cell`) is clamped on its own, so a mark or a toggle beside them
-   stays whole, and a cell of no such part is clamped whole. WebKit lays a
+   stays whole, and a cell of no such part is clamped whole. A part the row
+   is read by (`cell-whole`: what its buttons decide) is never held. WebKit lays a
    value's boxes out past the clamp, so the box holds three lines too. A
    column's copy on the open line is whole, so nothing there is clamped. */
 .cell-clamp:not(:has([data-cell]), .row-detail *) { display: -webkit-box; }
-.cell-clamp:not(.row-detail *) [data-cell]:not([data-cell] *) { display: -webkit-inline-box; vertical-align: top; }
-.cell-clamp:not(:has([data-cell]), .row-detail *), .cell-clamp:not(.row-detail *) [data-cell]:not([data-cell] *) {
+.cell-clamp:not(.row-detail *) [data-cell]:not([data-cell] *, .cell-whole) { display: -webkit-inline-box; vertical-align: top; }
+.cell-clamp:not(:has([data-cell]), .row-detail *), .cell-clamp:not(.row-detail *) [data-cell]:not([data-cell] *, .cell-whole) {
   -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; max-block-size: 3lh; overflow: hidden;
   /* Each of its lines is one of its own line-heights tall, so three of them
      fill the box; one that holds something to press has lines a target tall. */
@@ -105,18 +106,14 @@
   & * { line-height: inherit; }
   @container table-region (width < 36rem) { &:is(.is-expanded *) { -webkit-line-clamp: none; line-clamp: none; max-block-size: none; } }
 }
-/* A row's name (its own part, never its cell's other words) may break
-   anywhere, so a long one asks its column for no more than a letter: the
-   table still gives it its whole line when the box holds it. An identifier
-   (a hash, a key, a host) breaks at its seams (`breakable`) and a pill at its
-   words while the table has columns, and anywhere once it stacks, where a
-   line is all the room there is. Prose breaks only where one word alone is
-   wider than its column (tables.css). */
-.data-table > tbody > tr > * [data-cell~="name"] { overflow-wrap: anywhere; }
-@container table-region (width < 36rem) {
-  .data-table > tbody > tr > [data-kind="identifier"],
-  .data-table > tbody > tr > * :is(code:not(.cell-whole), .token, .pill) { overflow-wrap: anywhere; }
-}
+/* An identifier (a hash, a key, a host) or a row's name (its own part, never
+   its cell's other words) may break anywhere, so one with no break in it
+   asks its column for no more than a letter: the table still gives each
+   column its whole line when the box holds it. A pill, a state in words,
+   breaks only inside a word wider than its column, as prose does
+   (tables.css), so its column holds its words whole. */
+.data-table > tbody > tr > [data-kind="identifier"],
+.data-table > tbody > tr > * :is(code:not(.cell-whole), .token, [data-cell~="name"]) { overflow-wrap: anywhere; }
 /* A part of a run (`line_list`) is whole on its line while the line holds it (the run wraps between its parts); one longer than the line takes the line and wraps at its words. */
 .data-table > tbody > tr > td .line-list > :not(.line-rest) { min-inline-size: 0; }
 .data-table > tbody > tr > td .line-list > :not(.line-rest) > .cell-part { white-space: normal; }
@@ -129,8 +126,10 @@
 .data-table > tbody > tr > [data-kind="identifier"] > :is(a[href], [tabindex]) { line-height: var(--target-min); }
 /* Words that open a tip are a box of their own a target tall, no wider than the cell, alone in it or on one of its lines; a chip or a pill keeps its one size. */
 .data-table > tbody > tr > td span[data-tip][tabindex]:not(.pill) { display: inline-block; max-inline-size: 100%; line-height: var(--target-min); vertical-align: top; }
-/* An identifier's link stays text of its line, a target tall by its padding as a name's is. */
-.data-table > tbody > tr > [data-kind="identifier"] > a[href] { padding-block: calc((var(--target-min) - 1.25em) / 2); }
+/* A link alone in its cell or its name (an identifier's, a name set among its controls) stays text of its line, a target tall by its padding as a name's is. */
+.data-table > tbody > tr > [data-kind="identifier"] > a[href],
+.data-table > tbody > tr > td > a[href]:only-child,
+.data-table > tbody > tr > td .name-line > strong > a[href]:only-child { padding-block: calc((var(--target-min) - 1.25em) / 2); }
 /* A fact on one line of its own (`{% cell_line lines=1 %}`). */
 .data-table > tbody > tr > td .cell-line[data-lines="1"] { display: block; }
 .data-table > tbody > tr > td .cell-line[data-lines="1"] :is(.token, .whole, .part) { display: inline; max-inline-size: none; }

@@ -388,7 +388,7 @@ def cell_line(text, url="", *, lines=2):
     row as tall as its neighbors."""
 
     drawn = breakable(text)
-    # A name brings its own box and strut; words are cut by the line's box.
+    # A name brings its own box; words are cut by the line's box.
     inside = (
         drawn
         if drawn.startswith('<span class="token" data-sole')
