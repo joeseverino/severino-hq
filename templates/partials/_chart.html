@@ -10,7 +10,9 @@ zero-based axis. The two differ only in their marks (lines or bars), so this
 one frame draws both.
 {% endcomment %}
 {% section chart.title lede=chart.description figure=True %}
-  {% if not chart.empty %}
+  {% if chart.spatial %}
+    {% if not chart.empty %}{% include "partials/_chart_path.html" %}{% endif %}
+  {% elif not chart.empty %}
     <div class="chart-scroll">
       <div class="chart-frame{% if chart.dense %} chart-frame-dense{% endif %}">
       {% comment %}
@@ -69,6 +71,6 @@ one frame draws both.
     {% endsection %}
   {% endif %}
 {% comment %}A line chart of one series is named by its heading, so only bars or several lines carry a legend.{% endcomment %}
-{% aside %}{% if not chart.empty %}{% if chart.stacked or chart.series|length > 1 %}<div class="chart-legend" aria-label="Legend">{% for series in chart.series %}<span><i class="chart-series-{{ series.slot }}" aria-hidden="true"></i>{{ series.label|breakable }}</span>{% endfor %}</div>{% endif %}{% endif %}
-{% empty %}{% if chart.stacked %}Not enough data to chart yet.{% else %}Not enough readings to chart yet.{% endif %}
+{% aside %}{% if chart.note %}{% muted %}{{ chart.note|breakable }}{% endmuted %}{% endif %}{% if not chart.empty %}{% if chart.stacked or chart.series|length > 1 %}{% include "partials/_chart_legend.html" with items=chart.legend only %}{% endif %}{% endif %}
+{% empty %}{% if chart.spatial %}No path recorded.{% elif chart.stacked %}Not enough data to chart yet.{% else %}Not enough readings to chart yet.{% endif %}
 {% endsection %}

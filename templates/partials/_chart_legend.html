@@ -1,0 +1,1 @@
+{% comment %}A chart's legend: its palette places and their names, ordered bands or distinct series.{% endcomment %}<div class="chart-legend" aria-label="Legend">{% for slot, label in items %}<span><i class="{% if ordered %}chart-band-{{ slot }}{% else %}chart-series-{{ slot }}{% endif %}" aria-hidden="true"></i>{{ label|breakable }}</span>{% endfor %}</div>

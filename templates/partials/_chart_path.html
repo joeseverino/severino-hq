@@ -1,0 +1,11 @@
+{% comment %}
+A path in its own coordinate system, the spatial option of _chart.html.
+Every coordinate and label belongs to the supplied PathChart.
+{% endcomment %}<div class="chart-path-frame">
+  <svg class="chart-path" viewBox="0 0 {{ chart.width }} {{ chart.height }}" role="img" aria-label="{{ chart.description }}" data-chart>
+    {% for segment in chart.segments %}<path class="chart-path-segment chart-band-{{ segment.band }}" d="{{ segment.path }}" data-tip="{{ segment.tooltip }}"></path>{% endfor %}
+    {% for marker in chart.markers %}<circle class="chart-path-marker" cx="{{ marker.x }}" cy="{{ marker.y }}" r="6" data-tip="{{ marker.label }}"></circle>{% endfor %}
+    {% if chart.scale %}<line class="chart-path-scale" x1="{{ chart.scale.x }}" y1="{{ chart.scale.y }}" x2="{{ chart.scale.end }}" y2="{{ chart.scale.y }}"></line><text class="chart-axis" x="{{ chart.scale.x }}" y="{{ chart.scale.label_y }}">{{ chart.scale.label }}</text>{% endif %}
+  </svg>
+</div>
+{% if chart.legend %}{% include "partials/_chart_legend.html" with items=chart.legend ordered=True only %}{% endif %}

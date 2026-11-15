@@ -823,6 +823,8 @@ identifier that may be any string, names it in `fields`
 (`fields={"client_id": client_id}`). It is then a form of its own, never
 drawn inside another.
 
+A page may fill `{% block print_footer %}` with the date and provenance its printed copy needs. The page frame shows it only on paper.
+
 Where the page sits is declared too. `page_trail` is every crumb above it, from
 the top, as (label, url) pairs, `(("Notes", reverse_lazy("notes:list")),)`. A
 record's page adds its own crumb after them by naming it in
@@ -968,7 +970,7 @@ A test that posts a form without opening its page first sends
 | `confirm_page.html` | `consequences` | A destructive action's confirmation: `consequences` says what will happen. |
 | `form_page.html` | nothing | A page that is one form, a record's: its card and `partials/_form.html`, closing with `form_verb` and `cancel_url`; `form_fields` names a template for fields beyond the form's own loop and `form_note` says what saving does, each from the view, so the page fills no block. |
 | `list_page.html` | `foot`, `row` (given `forloop`, `row`), `summary` | A `TableListMixin` list: toolbar, table, empty state and pagination. `row` is one row's cells, `summary` sits above the table and is redrawn with it when a search or filter changes, `foot` is its `<tfoot>`. |
-| `page.html` | `page` | Any page: the head, actions, dialogs and section navigation, drawn from `page`. |
+| `page.html` | `page`, `print_footer` | Any page: the head, actions, dialogs and section navigation, drawn from `page`. |
 
 | Partial | Required | Optional | What it is |
 | --- | --- | --- | --- |
@@ -978,7 +980,7 @@ A test that posts a form without opening its page first sends
 | `partials/_attention_list.html` | `empty`, `entries` | nothing | Decisions waiting on the operator, from the entries `hq_sdk.plugin.plugin_attention_items` gathers. |
 | `partials/_cadence.html` | `cadence` | nothing | Whether a thing happened, period by period, from `hq_sdk.ui.Cadence`. |
 | `partials/_cadence_matrix.html` | `matrix` | `compact`, `label` | Several cadences over the same periods, from `hq_sdk.ui.CadenceMatrix`. |
-| `partials/_chart.html` | `chart` | nothing | A measure over time from `hq_sdk.ui.line_chart`, or quantities that add up from `hq_sdk.ui.stacked_bar_chart`. |
+| `partials/_chart.html` | `chart` | nothing | A measure over time from `hq_sdk.ui.line_chart`, or quantities that add up from `hq_sdk.ui.stacked_bar_chart`, or a spatial path from `hq_sdk.ui.PathChart`. |
 | `partials/_chart_tabs.html` | `charts`, `group` | nothing | Up to four charts of one thing in the space of one. |
 | `partials/_dropzone.html` | `field` | `hint`, `title` | A file field that also accepts a drop. |
 | `partials/_empty_state.html` | `message` | `action_label`, `action_url`, `inline`, `remedy`, `why` | The one empty state: what is missing, then what would fill it. |
@@ -997,7 +999,7 @@ A test that posts a form without opening its page first sends
 
 Host tags: `{% arrow %}`, `{% button %}`, `{% button_row %}`, `{% card %}`, `{% dot %}`, `{% dot_list %}`, `{% empty_value %}`, `{% entity %}`, `{% fact %}`, `{% facts %}`, `{% filter_bar %}`, `{% muted %}`, `{% notice %}`, `{% outside_link %}`, `{% present %}`, `{% prose_list %}`, `{% reference %}`, `{% referenced_by %}`, `{% row_actions %}`, `{% row_editor %}`, `{% row_group %}`, `{% row_toggle %}`, `{% section %}`, `{% status %}`, `{% table_heading %}`, `{% table_region %}`, `{% words %}`, `{% write_token %}`. Host filters: `|breakable[:arg]`, `|counted:arg`, `|measured:arg`, `|money[:arg]`, `|or_empty`, `|outside`, `|readout`, `|record[:arg]`, `|span`, `|web_url`, `|when[:arg]`, `|when_text[:arg]`. Django's own tags and filters, and `{% load %}` of `static` or the extension's own libraries.
 
-Classes: `actions-col`, `address-list`, `allocation`, `allocation-legend`, `cell-data`, `cell-part`, `cell-whole`, `chart-axis`, `chart-legend`, `code-list`, `compact`, `compact-table`, `count`, `danger`, `data-table`, `date-col`, `domain-charts`, `errors`, `eyebrow`, `finding`, `form`, `ghost`, `help`, `icon-link`, `inline`, `key-col`, `keyboard-only`, `list-rows`, `name-line`, `narrow-more`, `narrow-only`, `nowrap`, `one-line`, `optional-col`, `page-lede`, `primary`, `print-footer`, `print-only`, `route-band-1`, `route-band-2`, `route-band-3`, `route-band-4`, `route-band-5`, `route-frame`, `route-line`, `route-map`, `route-marker`, `route-scale`, `route-swatch`, `row-actions`, `row-below`, `row-empty`, `row-group`, `row-gutter`, `row-less`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-flow`, `section-foot`, `split`, `stacked`, `subtle-link`, `table-clamp`, `table-scroll`, `tight-col`, `two-col`, `visually-hidden`, `whole`.
+Classes: `actions-col`, `address-list`, `allocation`, `allocation-legend`, `cell-data`, `cell-part`, `cell-whole`, `code-list`, `compact`, `compact-table`, `count`, `danger`, `data-table`, `date-col`, `domain-charts`, `errors`, `eyebrow`, `finding`, `form`, `ghost`, `help`, `icon-link`, `inline`, `key-col`, `keyboard-only`, `list-rows`, `name-line`, `narrow-more`, `narrow-only`, `nowrap`, `one-line`, `optional-col`, `page-lede`, `primary`, `row-actions`, `row-below`, `row-empty`, `row-group`, `row-gutter`, `row-less`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-flow`, `section-foot`, `split`, `stacked`, `subtle-link`, `table-clamp`, `table-scroll`, `tight-col`, `two-col`, `visually-hidden`, `whole`.
 
 Script hooks: `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit-status`, `data-tip`. Styled attributes: `data-chart`.
 

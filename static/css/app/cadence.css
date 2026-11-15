@@ -167,30 +167,20 @@
 /* A finding: the one claim a reading makes, stated once. */
 .finding { margin: var(--space-1) 0 var(--space-1); font-size: var(--text-lg); font-weight: 600; line-height: 1.4; }
 
-/* A route, drawn from its own points. No basemap, so the line carries
-   everything: shape for where, color for how fast. */
-.route-frame { background: var(--bg-tint); border-radius: var(--radius); padding: var(--space-2); margin: var(--space-5) 0 var(--space-2); }
-.route-map { display: block; width: 100%; height: auto; }
-/* Semi-transparent so a retraced route shows its repeats as density rather
-   than hiding every pass but the last under an opaque line. */
-.route-line { fill: none; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; stroke-opacity: .55; transition: opacity .08s ease; }
-/* A sequential ramp, slowest to fastest. Deliberately not the categorical
-   series palette: these bands are ordered, and a reader has to be able to see
-   which way the order runs without consulting the legend. */
-.route-band-1 { stroke: var(--route-band-1); }
-.route-band-2 { stroke: var(--route-band-2); }
-.route-band-3 { stroke: var(--route-band-3); }
-.route-band-4 { stroke: var(--route-band-4); }
-.route-band-5 { stroke: var(--route-band-5); }
-.route-swatch { inline-size: 9px; block-size: 9px; border-radius: 2px; }
-.route-band-1.route-swatch { background: var(--route-band-1); }
-.route-band-2.route-swatch { background: var(--route-band-2); }
-.route-band-3.route-swatch { background: var(--route-band-3); }
-.route-band-4.route-swatch { background: var(--route-band-4); }
-.route-band-5.route-swatch { background: var(--route-band-5); }
-.route-marker { stroke: var(--surface); stroke-width: 2.5; }
-.route-scale { stroke: var(--ink-2); stroke-width: 2; }
-.route-map:hover .route-line:not(:hover) { opacity: .55; }
+/* A path in its own coordinate system. An ordered band uses the same color
+   for its stroke and its legend, and retraced paths remain visible. */
+.chart-path-frame { background: var(--bg-tint); border-radius: var(--radius); padding: var(--space-2); margin: var(--space-5) 0 var(--space-2); }
+.chart-path { display: block; inline-size: 100%; block-size: auto; }
+.chart-path-segment { fill: none; stroke: var(--chart-band); stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; stroke-opacity: .55; transition: opacity .08s ease; }
+.chart-band-1 { --chart-band: var(--route-band-1); }
+.chart-band-2 { --chart-band: var(--route-band-2); }
+.chart-band-3 { --chart-band: var(--route-band-3); }
+.chart-band-4 { --chart-band: var(--route-band-4); }
+.chart-band-5 { --chart-band: var(--route-band-5); }
+.chart-legend [class*="chart-band-"] { background: var(--chart-band); }
+.chart-path-marker { stroke: var(--surface); stroke-width: 2.5; }
+.chart-path-scale { stroke: var(--ink-2); stroke-width: 2; }
+.chart-path:hover .chart-path-segment:not(:hover) { opacity: .55; }
 
 /* ── Background jobs ────────────────────────────────────────────── */
 /* Work that outlives its request, reporting where it has got to. */
@@ -246,10 +236,10 @@
 
 /* Shown only on paper. In the document rather than in CSS `content` so it
    can carry real values: a date, a name. */
-.print-only { display: none; }
+.page-print-footer { display: none; }
 
 /* ── Print ──────────────────────────────────────────────────────── */
-/* A page that leaves the building: the care brief is handed to a clinician on
+/* A page that leaves the building: a report is shared on
    paper, in black and white. Three things break when a screen page is printed
    without help: backgrounds and borders are dropped, so cards dissolve;
    anything carried by color is carried by nothing; and a chart lands half on
@@ -344,8 +334,8 @@
   /* A sheet of numbers with no date on it is one nobody can place. Rendered
      by the page, not here: `counter(page)` only resolves inside an `@page`
      margin box and silently produces nothing in ordinary flow. */
-  .print-only { display: block !important; }
-  .print-footer {
+  .page-print-footer {
+    display: block !important;
     margin-top: 10pt;
     padding-top: 6pt;
     border-top: 0.5pt solid var(--print-rule);

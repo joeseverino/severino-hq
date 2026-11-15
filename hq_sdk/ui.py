@@ -18,6 +18,7 @@ from hq.platform.application.moments import (
     when_range,
 )
 from hq.platform.application.page_parts import SectionPart
+from hq.platform.application.path_chart import PathChart, PathMarker, PathScale, PathSegment
 from hq.platform.application.tone import Tone
 from hq.platform.application.ui import (
     MISSING,
@@ -61,6 +62,10 @@ __all__ = [
     "ListRow",
     "PageNavigation",
     "PageSection",
+    "PathChart",
+    "PathMarker",
+    "PathScale",
+    "PathSegment",
     "PlanNote",
     "PlannedDay",
     "SectionPart",

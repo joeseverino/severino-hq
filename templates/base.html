@@ -42,6 +42,7 @@
     {% include "partials/_messages.html" %}
 
     {% block content %}{% endblock %}
+  {% print_footer %}{% block print_footer %}{% endblock %}
   {% endpage_main %}
   {# What the head's expect link waits for: the content above is parsed. #}
   <template id="parsed"></template>

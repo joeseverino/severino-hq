@@ -815,7 +815,7 @@ slotted("link_chips", "partials/_link_chips.html", ("content",), frozenset())
 slotted("button_row", "partials/_button_row.html", ("content",), frozenset(("bar",)))
 # The content column of the page frame, which base.html and the component
 # catalog draw in.
-slotted("page_main", "partials/_page_main.html", ("content",), frozenset())
+slotted("page_main", "partials/_page_main.html", ("content", "print_footer"), frozenset())
 slotted(
     "card",
     "partials/_card.html",

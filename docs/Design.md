@@ -1817,6 +1817,12 @@ held to the same size.
 `hq/platform/core/tests/browser/probes/boxes.py`), on every page and width the
 layout checks read.
 
+
+Spatial drawings use the same chart frame as time series: `PathChart` supplies
+paths, markers, an optional scale and the ordered legend. The drawing makes
+no outside requests. A printed page's provenance belongs in its frame's
+`print_footer` block; the page frame owns its visibility and typography.
+
 ## Held by eye
 
 What these say is design, judged by looking at the page at every width

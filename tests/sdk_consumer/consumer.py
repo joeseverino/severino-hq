@@ -920,3 +920,21 @@ def a_capability_renamed() -> None:
     assert_type(migrations.CAPABILITY_ROWS, tuple[str, str])
 
     migrations.RenameCapabilities(["example.entries"])  # type: ignore[arg-type]
+
+
+def a_spatial_chart() -> None:
+    segment = ui.PathSegment("M 0 0 L 10 20", 1, "Example reading")
+    marker = ui.PathMarker(0, 0, "Start")
+    scale = ui.PathScale(5, 25, 10, "100 m")
+    assert_type(
+        ui.PathChart(
+            title="Example path",
+            description="The example path.",
+            segments=(segment,),
+            width=100,
+            height=50,
+            markers=(marker,),
+            scale=scale,
+        ),
+        ui.PathChart,
+    )

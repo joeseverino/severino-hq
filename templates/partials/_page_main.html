@@ -4,4 +4,4 @@ base.html draws each page's content in it, and the component catalog each of
 its entries. It is a region (static/js/fragment.js), so a posting button pressed
 in it is answered in place from the page the post returns to, messages
 included. It answers no link or form of its own.
-{% endcomment %}<main class="content" id="content" tabindex="-1" data-fragment>{{ content|safe }}</main>
+{% endcomment %}<main class="content" id="content" tabindex="-1" data-fragment>{{ content|safe }}{% if print_footer %}<footer class="page-print-footer">{{ print_footer|safe }}</footer>{% endif %}</main>

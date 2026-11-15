@@ -3,6 +3,7 @@
 from datetime import date, timedelta
 
 from hq.platform.application.cadence_chart import Cadence, CadenceMatrix, CadenceRow, CadenceWeek
+from hq.platform.application.path_chart import PathChart, PathMarker, PathScale, PathSegment
 from hq.platform.application.ui import (
     ActivityCalendar,
     CalendarDay,
@@ -90,6 +91,29 @@ def _matrix():
 
 
 ENTRIES = {
+    "chart/path": Entry(
+        '{% include "partials/_chart.html" %}',
+        {
+            "chart": PathChart(
+                title="Example path",
+                description="A path colored by its reading.",
+                segments=(
+                    PathSegment("M 20 40 L 150 120 L 280 30", 1, "First reading"),
+                    PathSegment("M 280 30 L 360 160 L 20 40", 5, "Last reading"),
+                ),
+                markers=(PathMarker(20, 40, "Start"), PathMarker(150, 120, "Finish")),
+                scale=PathScale(20, 180, 80, "100 m"),
+                legend=((1, "Lower"), (5, "Higher")),
+                width=400,
+                height=220,
+                note="An example reading.",
+            )
+        },
+    ),
+    "chart/path-empty": Entry(
+        '{% include "partials/_chart.html" %}',
+        {"chart": PathChart(title="Example path", description="A path.", segments=(), width=400, height=220)},
+    ),
     # Each chart partial, its head a section's: the heading, the line under
     # it, and its legend or a month's controls beside them; its data a folded
     # section in its frame.

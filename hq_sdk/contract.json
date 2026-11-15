@@ -2459,6 +2459,73 @@
           }
         }
       },
+      "PathChart": {
+        "bases": [],
+        "constructor": [
+          "*",
+          "title",
+          "description",
+          "segments",
+          "width",
+          "height",
+          "markers=",
+          "scale=",
+          "legend=",
+          "note="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {
+          "empty": {
+            "kind": "property"
+          },
+          "spatial": {
+            "kind": "attribute",
+            "type": "bool"
+          }
+        }
+      },
+      "PathMarker": {
+        "bases": [],
+        "constructor": [
+          "x",
+          "y",
+          "label"
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "PathScale": {
+        "bases": [],
+        "constructor": [
+          "x",
+          "y",
+          "length",
+          "label"
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {
+          "end": {
+            "kind": "property"
+          },
+          "label_y": {
+            "kind": "property"
+          }
+        }
+      },
+      "PathSegment": {
+        "bases": [],
+        "constructor": [
+          "path",
+          "band",
+          "tooltip="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
       "PlanNote": {
         "bases": [],
         "constructor": [
@@ -2817,16 +2884,7 @@
       "ActionLink": {
         "bases": [],
         "constructor": [
-          "name",
-          "label",
-          "effect",
-          "url",
-          "method=",
-          "capability=",
-          "target=",
-          "reason=",
-          "recommended=",
-          "refusal="
+          "_factory"
         ],
         "fields": [],
         "kind": "dataclass",
@@ -2875,7 +2933,8 @@
           "label",
           "url",
           "*",
-          "reason="
+          "reason=",
+          "recommended="
         ]
       }
     },
@@ -3011,8 +3070,6 @@
       "cell-data",
       "cell-part",
       "cell-whole",
-      "chart-axis",
-      "chart-legend",
       "code-list",
       "compact",
       "compact-table",
@@ -3040,19 +3097,6 @@
       "optional-col",
       "page-lede",
       "primary",
-      "print-footer",
-      "print-only",
-      "route-band-1",
-      "route-band-2",
-      "route-band-3",
-      "route-band-4",
-      "route-band-5",
-      "route-frame",
-      "route-line",
-      "route-map",
-      "route-marker",
-      "route-scale",
-      "route-swatch",
       "row-actions",
       "row-below",
       "row-empty",
@@ -3255,6 +3299,9 @@
         "blocks": {
           "page": {
             "given": []
+          },
+          "print_footer": {
+            "given": []
           }
         },
         "reads": [
@@ -3327,7 +3374,7 @@
         ]
       },
       "partials/_chart.html": {
-        "about": "A measure over time from `hq_sdk.ui.line_chart`, or quantities that add up from `hq_sdk.ui.stacked_bar_chart`.",
+        "about": "A measure over time from `hq_sdk.ui.line_chart`, or quantities that add up from `hq_sdk.ui.stacked_bar_chart`, or a spatial path from `hq_sdk.ui.PathChart`.",
         "optional": [],
         "required": [
           "chart"
