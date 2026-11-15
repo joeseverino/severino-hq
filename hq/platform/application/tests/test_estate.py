@@ -18,6 +18,7 @@ from hq.domains.control_plane.models import (
 from hq.platform.application.derivation_testing import uncached
 from hq.platform.application.markup_testing import elements, hrefs, text
 from hq.platform.application.security import cli_principal
+from hq.platform.application.tests.worded import worded
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
@@ -369,7 +370,7 @@ class EdgeCertificateExpiryTests(TestCase):
 
     def items(self):
         with projection_scope():
-            return [item for item in infrastructure() if "certificate-expiring:resource:" in item.key]
+            return [item for item in worded(infrastructure()) if "certificate-expiring:resource:" in item.key]
 
     def test_an_edge_certificate_outside_the_window_is_not_the_next_expiry(self):
         self.edge(40)
@@ -523,7 +524,7 @@ class ActionItemTests(TestCase):
     def test_a_connection_that_does_not_answer_is_an_action_item(self):
         connection("example-ssh", reachable=False, detail="Timed out")
 
-        found = [item for item in infrastructure() if "connection-not-answering" in item.key]
+        found = [item for item in worded(infrastructure()) if "connection-not-answering" in item.key]
 
         self.assertEqual(len(found), 1)
         self.assertIn("example-ssh", found[0].title)
@@ -546,7 +547,7 @@ class ActionItemTests(TestCase):
             },
         )
 
-        found = [item for item in infrastructure() if "registration-lapsing" in item.key]
+        found = [item for item in worded(infrastructure()) if "registration-lapsing" in item.key]
 
         self.assertEqual(len(found), 1)
         self.assertIn("will not renew", found[0].title)
@@ -578,7 +579,7 @@ class ActionItemTests(TestCase):
         declare_record("other-record", "other.example.com", "100.64.0.7")
 
         with projection_scope():
-            found = [item for item in raised("hq.estate") if item.key.startswith("finding:machine-offline:")]
+            found = [item for item in worded(raised("hq.estate")) if item.key.startswith("finding:machine-offline:")]
 
         self.assertEqual([item.subject.label for item in found], ["example-host"])
         self.assertEqual(found[0].status, "serious")
@@ -599,7 +600,7 @@ class ActionItemTests(TestCase):
         declare_record("dev-record", "dev.example.com", "100.64.0.9")
 
         with projection_scope():
-            found = [item for item in raised("hq.estate") if item.key.startswith("finding:machine-offline:")]
+            found = [item for item in worded(raised("hq.estate")) if item.key.startswith("finding:machine-offline:")]
 
         self.assertEqual(found, [])
 
@@ -613,7 +614,7 @@ class ActionItemTests(TestCase):
             )
 
         with projection_scope():
-            found = [item for item in infrastructure() if "certificate-expiring:resource:" in item.key]
+            found = [item for item in worded(infrastructure()) if "certificate-expiring:resource:" in item.key]
 
         self.assertEqual(len(found), 1)
         self.assertEqual(found[0].status, "serious")

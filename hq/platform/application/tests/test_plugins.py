@@ -17,8 +17,9 @@ from django.utils import timezone
 
 from hq.platform.application.markup_testing import hrefs, text, with_class
 
-from ..card_items import Insight, Kpi
+from ..card_items import Kpi
 from ..domains import domain_navigation
+from ..finding_model import Finding
 from ..pages import page_context
 from ..plugin_testing import importable
 from ..plugins import (
@@ -630,42 +631,46 @@ class AttentionContractTests(TestCase):
             return plugins.plugin_attention_items()
 
     def test_serious_items_sort_ahead_of_attention_across_extensions(self):
-        from hq.platform.application.card_items import Insight
+        from hq.platform.application.finding_model import Finding
 
         a = self._manifest(id="example.a", name="Aaa")
         b = self._manifest(id="example.b", name="Bbb")
         gathered = self._gather(
             (a, b),
             {
-                "example.a": [Insight("attention", "e", "A watch", "1", "body")],
-                "example.b": [Insight("serious", "e", "B urgent", "2", "body")],
+                "example.a": [
+                    Finding(rule="example", subject="A watch", severity="attention", title="A watch", explanation="")
+                ],
+                "example.b": [
+                    Finding(rule="example", subject="B urgent", severity="serious", title="B urgent", explanation="")
+                ],
             },
         )
         # Severity must beat source ordering, or the urgent item hides below.
-        self.assertEqual([e["item"].title for e in gathered], ["B urgent", "A watch"])
+        self.assertEqual([e["finding"].title for e in gathered], ["B urgent", "A watch"])
 
     def test_healthy_and_neutral_items_are_not_attention(self):
-        from hq.platform.application.card_items import Insight
+        from hq.platform.application.finding_model import Finding
 
         manifest = self._manifest()
         gathered = self._gather(
             (manifest,),
             {
                 "example.demo": [
-                    Insight("good", "e", "Fine", "1", "body"),
-                    Insight("neutral", "e", "Context", "2", "body"),
-                    Insight("serious", "e", "Broken", "3", "body"),
+                    Finding(rule="example", subject="Fine", severity="good", title="Fine", explanation=""),
+                    Finding(rule="example", subject="Context", severity="neutral", title="Context", explanation=""),
+                    Finding(rule="example", subject="Broken", severity="serious", title="Broken", explanation=""),
                 ]
             },
         )
-        self.assertEqual([e["item"].title for e in gathered], ["Broken"])
+        self.assertEqual([e["finding"].title for e in gathered], ["Broken"])
 
     def test_items_carry_their_source_for_attribution(self):
-        from hq.platform.application.card_items import Insight
+        from hq.platform.application.finding_model import Finding
 
         gathered = self._gather(
             (self._manifest(),),
-            {"example.demo": [Insight("serious", "e", "T", "1", "b")]},
+            {"example.demo": [Finding(rule="example", subject="T", severity="serious", title="T", explanation="")]},
         )
         self.assertEqual(gathered[0]["source"], "Demo")
         self.assertEqual(gathered[0]["source_id"], "example.demo")
@@ -727,12 +732,8 @@ class ComposedPluginTestKitTests(TestCase):
         from ..plugin_testing import sibling
         from ..plugins import plugin_attention_items
 
-        item = Insight(
-            status="serious",
-            eyebrow="Alpha",
-            title="Something is wrong",
-            value="1",
-            body="Body.",
+        item = Finding(
+            rule="alpha-wrong", subject="", severity="serious", title="Something is wrong", explanation="Body."
         )
         self.case(siblings=(sibling(attention=(item,)),))
 
@@ -742,7 +743,7 @@ class ComposedPluginTestKitTests(TestCase):
         entries = plugin_attention_items()
         alpha = [entry for entry in entries if entry["source"] == "Alpha"]
         self.assertEqual(len(alpha), 1)
-        self.assertEqual(alpha[0]["item"].title, "Something is wrong")
+        self.assertEqual(alpha[0]["finding"].title, "Something is wrong")
 
     def test_a_rich_domain_still_reaches_the_attention_queue(self):
         """A DomainOverview must not displace its domain's attention items.
@@ -755,13 +756,7 @@ class ComposedPluginTestKitTests(TestCase):
         from ..plugins import plugin_attention_items
         from ..ui import DomainOverview
 
-        item = Insight(
-            status="serious",
-            eyebrow="Alpha",
-            title="Still wrong",
-            value="1",
-            body="Body.",
-        )
+        item = Finding(rule="alpha-wrong", subject="", severity="serious", title="Still wrong", explanation="Body.")
         self.case(
             siblings=(
                 sibling(
@@ -771,7 +766,7 @@ class ComposedPluginTestKitTests(TestCase):
             )
         )
 
-        titles = [entry["item"].title for entry in plugin_attention_items()]
+        titles = [entry["finding"].title for entry in plugin_attention_items()]
         self.assertIn("Still wrong", titles)
 
     def test_an_overview_cannot_carry_attention_items(self):
@@ -800,8 +795,26 @@ class ComposedPluginTestKitTests(TestCase):
 
 class AttentionOrderTests(SimpleTestCase):
     def entry(self, title, status="attention", *, since=None, notice=False, source="Example", actions=()):
-        item = Insight(status, "Example", title, "", "", since=since, notice=notice, actions=actions)
-        return {"item": item, "source": source, "source_id": "example"}
+        from ..finding_model import Finding
+        from ..workflow_contracts import WorkflowOutcome, WorkflowPlan, WorkflowStep
+
+        plan = WorkflowPlan(
+            "example",
+            "Next steps",
+            (WorkflowStep("remedy", "Fix", "Fix it.", "recommended", actions=actions),),
+            WorkflowOutcome("claim_absent", "example", ""),
+        )
+        finding = Finding(
+            rule="example",
+            subject=title,
+            severity=status,
+            title=title,
+            explanation="",
+            since=since,
+            notice=notice,
+            workflow=plan if actions else None,
+        )
+        return {"finding": finding, "source": source, "source_id": "example"}
 
     def test_within_one_urgency_what_hq_fixes_in_one_press_comes_first(self):
         from ..workflow_contracts import ActionLink
@@ -819,7 +832,7 @@ class AttentionOrderTests(SimpleTestCase):
             self.entry("serious", status="serious", since=old),
         ]
 
-        order = [entry["item"].title for entry in ordered_attention(entries)]
+        order = [entry["finding"].title for entry in ordered_attention(entries)]
 
         self.assertEqual(order[:2], ["serious", "one press"])
 
@@ -833,7 +846,7 @@ class AttentionOrderTests(SimpleTestCase):
             self.entry("serious", status="serious"),
         ]
 
-        order = [entry["item"].title for entry in ordered_attention(entries)]
+        order = [entry["finding"].title for entry in ordered_attention(entries)]
 
         self.assertEqual(order, ["serious", "older", "newer", "undated", "a notice"])
 

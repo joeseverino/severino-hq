@@ -6,7 +6,6 @@ from django.test import SimpleTestCase
 from hq.platform.application.markup_testing import actions, hrefs
 
 from ..action_links import ActionLink
-from ..card_items import Insight
 from ..effects import Effect
 from ..workflows import claim_identity, claim_resolution_plan, serialize_workflow
 
@@ -61,19 +60,21 @@ class FindingResolutionWorkflowTests(SimpleTestCase):
         self.assertEqual(payload["steps"][0]["actions"][0]["url"], REMEDY.url)
         self.assertEqual(payload["outcome"]["kind"], "claim_absent")
 
-    def test_any_domain_insight_can_render_the_shared_resolution_workflow(self):
-        insight = Insight(
-            "attention",
-            "Utility",
-            "A reading changed",
-            "$1",
-            "Synthetic plugin evidence.",
+    def test_any_domain_finding_can_render_the_shared_resolution_workflow(self):
+        from ..finding_model import Finding
+
+        finding = Finding(
+            rule="example-reading",
+            subject="",
+            severity="attention",
+            title="A reading changed",
+            explanation="Synthetic plugin evidence.",
             workflow=plan_of(),
         )
 
         html = render_to_string(
             "partials/_attention_list.html",
-            {"entries": ({"item": insight, "source": "Example"},)},
+            {"entries": ({"finding": finding, "source": "Example"},)},
         )
 
         offered = hrefs(html) + actions(html)

@@ -763,33 +763,71 @@ def a_demo() -> None:
     plugin.PluginIntegration(demo_pages=("/examples/notes/first/",))  # type: ignore[arg-type]
 
 
-def a_gated_insight() -> None:
-    # An item about what only some capabilities may read names them; left
+def a_finding_on_the_queue() -> None:
+    # What needs a person is a finding: its rule and subject are what the
+    # queue knows it by, and the page it leads with is opened by its words.
+    found = plugin.Finding(
+        rule="example-lapsing",
+        subject="passport",
+        severity=ui.Tone.SERIOUS,
+        title="Passport expires",
+        explanation="It expires in 20 days.",
+        evidence=(("Expires", "in 20 days"),),
+        primary=plugin.opens("Renew it", "/examples/passport/"),
+        count=1,
+    )
+    assert_type(found.primary, workflows.ActionLink | None)
+    integration = plugin.PluginIntegration(attention=lambda: (found,))
+    assert_type(integration.attention, Callable[[], Iterable[plugin.Finding]] | None)
+
+    plugin.Finding(rule="example", subject="", severity="urgent", title="Example", explanation="")  # type: ignore[arg-type]
+    plugin.Finding(rule="example", subject="", severity=ui.Tone.SERIOUS, title="Example")  # type: ignore[call-arg]
+
+
+def a_gated_finding() -> None:
+    # A finding about what only some capabilities may read names them; left
     # out, every reader of the queue is shown it.
-    gated = ui.Insight(
-        ui.Tone.ATTENTION, "Finding", "Example is not answering", "", "", read_capabilities=("example.read",)
+    gated = plugin.Finding(
+        rule="example",
+        subject="",
+        severity=ui.Tone.ATTENTION,
+        title="Example is not answering",
+        explanation="",
+        read_capabilities=("example.read",),
     )
     assert_type(gated.read_capabilities, tuple[str, ...])
-    ui.Insight(ui.Tone.ATTENTION, "Finding", "Example", "", "", read_capabilities="example.read")  # type: ignore[arg-type]
 
 
-def an_insight_about_one_part() -> None:
-    # An item about one of its subject's many things names that thing, so a
-    # page about it alone leaves out its neighbors' items.
-    about = ui.Insight(ui.Tone.ATTENTION, "Finding", "Example is restarting", "", "", part="example-web")
+def a_finding_about_one_part() -> None:
+    # A finding about one of its subject's many things names that thing, so a
+    # page about it alone leaves out its neighbors' findings.
+    about = plugin.Finding(
+        rule="example",
+        subject="",
+        severity=ui.Tone.ATTENTION,
+        title="Example is restarting",
+        explanation="",
+        part="web",
+    )
     assert_type(about.part, str)
-    ui.Insight(ui.Tone.ATTENTION, "Finding", "Example", "", "", part=("example-web",))  # type: ignore[arg-type]
 
 
-def an_insight_that_says_why() -> None:
-    # An item says why it is as urgent as it is, which the panel behind its
-    # urgency leads with.
-    said = ui.Insight(ui.Tone.SERIOUS, "Renewals", "Passport expires", "", "", why="It expires in 20 days.")
-    assert_type(said.why, str)
-    ui.Insight(ui.Tone.SERIOUS, "Renewals", "Passport", "", "", why=("It expires.",))  # type: ignore[arg-type]
-    # One a threshold raises says what clears it.
-    held = ui.Insight(ui.Tone.ATTENTION, "Renewals", "Passport", "", "", why="Under 90 days.", clears="it is renewed")
-    assert_type(held.clears, str)
+def a_finding_that_says_its_own_words() -> None:
+    # A finding no host rule raises says why it is as urgent as it is, what
+    # clears it, and the kind of matter it is, as a rule would.
+    said = plugin.Finding(
+        rule="example-lapsing",
+        subject="passport",
+        severity=ui.Tone.ATTENTION,
+        title="Passport",
+        explanation="",
+        why="Under 90 days.",
+        clears="it is renewed",
+        family="Renewals",
+    )
+    assert_type((said.why, said.clears, said.family), tuple[str, str, str])
+    # A held request is decided, never set aside.
+    assert_type(said.held, bool)
 
 
 def a_section(hosts: int) -> None:

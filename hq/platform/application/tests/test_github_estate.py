@@ -6,6 +6,7 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.observations.github import PARTS, REPOSITORY_KIND
+from hq.platform.application.tests.worded import worded
 
 from ..attention import raised
 from ..dashboard import work_queue
@@ -19,7 +20,7 @@ from ..repository_findings import PROJECTS
 def raised_items():
     """What Projects raises on the queue: its repository rules' findings."""
 
-    return raised(PROJECTS)
+    return worded(raised(PROJECTS))
 
 
 def store(**record):

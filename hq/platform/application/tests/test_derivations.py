@@ -648,11 +648,11 @@ class ActionItemCountTests(TestCase):
         self.assertEqual(self.client.get(self.url, headers={"if-none-match": '"anything"'}).status_code, 200)
 
     def test_a_queue_an_extension_reports_work_to_carries_a_validator(self):
-        from hq.platform.application.card_items import Insight
         from hq.platform.application.domains import Domain, all_domains
+        from hq.platform.application.finding_model import Finding
         from hq.platform.application.plugins import PluginIntegration, provided
 
-        item = Insight("attention", "Example", "Something waits", "1", "Body.")
+        item = Finding(rule="example", subject="", severity="attention", title="Something waits", explanation="Body.")
         extra = Domain(
             "example.extension",
             "Example",

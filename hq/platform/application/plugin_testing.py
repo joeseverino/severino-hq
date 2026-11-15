@@ -29,7 +29,7 @@ lazy from django.utils import timezone
 lazy from hq.platform.core.stylesheets import stylesheet
 lazy from hq.platform.core.templatetags import table_tags
 
-from .card_items import Insight
+from .finding_model import Finding
 from .lists import split_list
 from .plugins import (
     DERIVED_PROVIDERS,
@@ -177,7 +177,7 @@ def sibling(
     identifier: str = "example.alpha",
     name: str = "Alpha",
     cards: Iterable[dict[str, Any]] = (),
-    attention: Iterable[Insight] = (),
+    attention: Iterable[Finding] = (),
     overview: DomainOverview | None = None,
     **manifest_fields: Any,
 ) -> tuple[PluginManifest, PluginIntegration]:

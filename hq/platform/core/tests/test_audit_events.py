@@ -187,9 +187,7 @@ class HeldChangeGroupTests(TestCase):
             "documentation.sync", keyed({"manifest": [{"doc_id": "rb-example", "title": "Example"}]}), principal=agent
         )
 
-        (item,) = [
-            item for item in domain_attention_items() if item["item"].key == f"approval:{held['approval']['id']}"
-        ]
+        (item,) = [item for item in domain_attention_items() if item["finding"].subject == str(held["approval"]["id"])]
 
         self.assertIn("approval", item["source"].lower())
         self.assertNotEqual(item["source"], "Audit")

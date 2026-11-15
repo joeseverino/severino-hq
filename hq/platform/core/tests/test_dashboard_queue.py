@@ -7,10 +7,10 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from hq.platform.application import cadence
-from hq.platform.application.card_items import Insight
 from hq.platform.application.contracts import Effect
 from hq.platform.application.dashboard import work_queue
 from hq.platform.application.derivation_testing import uncached
+from hq.platform.application.finding_model import Finding, OperatorStep, opens
 from hq.platform.application.markup_testing import hrefs, select, with_class, within
 from hq.platform.application.plugins import gather_attention
 from hq.platform.application.tests.test_decisions import row_hrefs
@@ -40,29 +40,29 @@ class DashboardQueueTests(TestCase):
             ),
         )
         insights = (
-            Insight(
-                "attention",
-                "Review",
-                "Check the reading",
-                "1",
-                "Supporting facts.",
-                action="Reconcile the bill",
+            Finding(
+                rule="example-reading",
+                subject="one",
+                severity="attention",
+                title="Check the reading",
+                explanation="Supporting facts.",
+                primary=opens("Reconcile the bill", ""),
                 workflow=plan,
             ),
-            Insight(
-                "serious",
-                "Review",
-                "A service needs you",
-                "1",
-                "Inspect the dependency.",
-                url="/infrastructure/services/",
+            Finding(
+                rule="example-service",
+                subject="",
+                severity="serious",
+                title="A service needs you",
+                explanation="Inspect the dependency.",
+                primary=opens("", "/infrastructure/services/"),
             ),
-            Insight(
-                "neutral",
-                "Context",
-                "An interesting observation",
-                "1",
-                "No decision needed.",
+            Finding(
+                rule="example-context",
+                subject="",
+                severity="neutral",
+                title="An interesting observation",
+                explanation="No decision needed.",
             ),
         )
         entries = gather_attention((("example.utility", "Example", lambda: insights, ()),))
@@ -74,7 +74,7 @@ class DashboardQueueTests(TestCase):
         queue = work_queue()
         json.dumps(queue)
         self.assertEqual([item["status"] for item in queue], ["serious", "attention"])
-        self.assertIsNone(queue[0]["workflow"])
+        self.assertEqual(list(queue[0]["workflow"]["steps"]), [])
         self.assertEqual(queue[1]["action"], "Reconcile the bill")
         self.assertEqual(queue[1]["workflow"]["steps"][-1]["actions"][0]["method"], "POST")
 
@@ -142,16 +142,13 @@ class DashboardQueueTests(TestCase):
 
         from django.utils import timezone
 
-        from hq.platform.application.item_help import commands
-
-        urgent = Insight(
-            "serious",
-            "Review",
-            "A run is failing",
-            "1",
-            "Two checks fail.",
-            key="example-failing",
-            workflow=commands("example-failing", (("See the failing runs", "example-tool runs --failing"),)),
+        urgent = Finding(
+            rule="example-failing",
+            subject="",
+            severity="serious",
+            title="A run is failing",
+            explanation="Two checks fail.",
+            steps=(OperatorStep("See the failing runs", command="example-tool runs --failing"),),
             observed_at=timezone.now() - timedelta(days=30),
             reads="github.repository",
         )
@@ -216,7 +213,13 @@ class DashboardQueueTests(TestCase):
 
         def dashboard(findings, reader=None):
             serious = tuple(
-                Insight("serious", "Review", f"Example finding {n}", "1", "Inspect it.", key=f"example-{n}")
+                Finding(
+                    rule="example",
+                    subject=str(n),
+                    severity="serious",
+                    title=f"Example finding {n}",
+                    explanation="Inspect it.",
+                )
                 for n in range(findings)
             )
             entries = gather_attention(

@@ -7,11 +7,8 @@ page only reads what a look recorded. An item open at the first look ever, or ap
 no look, began at a time nobody recorded, so it keeps no date.
 """
 
-from collections.abc import Callable, Iterable
-from dataclasses import replace
+from collections.abc import Iterable
 from datetime import datetime
-from functools import wraps
-from typing import Any
 
 from django.utils import timezone
 
@@ -19,12 +16,6 @@ from .freshness import FIRST_SEEN as READING_KEY, freshness
 from .moments import moment
 from .projection import read_once
 from .readings import record, stored
-
-
-def about(item: Any) -> str:
-    """What an item is about, for as long as it is the same matter."""
-
-    return item.key or f"{item.eyebrow}:{item.title}"
 
 
 def recorded() -> dict[str, datetime]:
@@ -37,30 +28,6 @@ def _recorded() -> dict[str, datetime]:
     found = stored(READING_KEY)
     seen = found.value if found is not None and isinstance(found.value, dict) else {}
     return {key: at for key, at in ((key, moment(stamp)) for key, stamp in seen.items()) if at}
-
-
-def with_first_seen[Item](items: Iterable[Item]) -> tuple[Item, ...]:
-    """``items``, each saying since when where it does not already.
-
-    A notice reports an occurrence and carries its own date in its words.
-    """
-
-    items = tuple(items)
-    if not items:
-        return items
-    seen = recorded()
-    return tuple(
-        item
-        if item.since is not None or item.notice or about(item) not in seen
-        else replace(item, since=seen[about(item)])
-        for item in items
-    )
-
-
-def dated[Item](provider: Callable[[], Iterable[Item]]) -> Callable[[], tuple[Item, ...]]:
-    """A queue provider whose items say since when."""
-
-    return wraps(provider)(lambda: with_first_seen(provider()))
 
 
 # When this process last knew of a look, so a report that follows one closely

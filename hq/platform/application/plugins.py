@@ -22,24 +22,25 @@ from django.core.exceptions import ImproperlyConfigured
 
 from hq.platform.application.routes import reverse
 
-from .card_items import Insight
 from .demo import showing_demo
 from .derivations import derivation, forget, holds_until, present
 from .lists import split_list
 from .tone import Tone
 from .ui import DomainOverview
-lazy from . import freshness
+lazy from . import finding_model, freshness
 lazy from .action_items import item_key
 lazy from .automation_runs import clear_operation_registry_cache
 lazy from .decisions import one_press
 lazy from .domains import NAVIGATION_GROUPS
+lazy from .findings import finding_key
 lazy from .integrations import clear_integration_graph_cache
-lazy from .item_help import instructions
+lazy from .item_help import finding_plan
 lazy from .outbound_work import clear_outbound_work_cache
 lazy from .plugin_admission import enforce_plugin_admission
 lazy from .security import host_capabilities
 
 if TYPE_CHECKING:
+    from .finding_model import Finding
     from .freshness import ReadCadence
 
 logger = logging.getLogger("severino.composition")
@@ -176,7 +177,8 @@ class PluginIntegration:
     connections: Callable[[], Iterable[Any]] | None = None
     dashboard: Callable[[], Iterable[dict[str, Any]]] | None = None
     overview: Callable[[], DomainOverview] | None = None
-    attention: Callable[[], Iterable[Any]] | None = None
+    # What needs a person, each a finding the host words as its queue row.
+    attention: Callable[[], Iterable[Finding]] | None = None
     # The page where ``attention``'s items are decided together, when there
     # is one: the queue's heading for the domain links there.
     attention_url: Callable[[], str] | None = None
@@ -616,6 +618,10 @@ def read_source[T](source_id: str, ask: Callable[[], T], unreadable: Callable[[]
         return unreadable()
 
 
+# What a source that could not be read is raised under, keyed by the source.
+UNREADABLE = "unreadable"
+
+
 def source_attention(
     source_id: str, label: str, provider: Callable[[], Iterable[Any]], read_capabilities: tuple[str, ...] = ()
 ) -> tuple[Any, ...]:
@@ -629,18 +635,18 @@ def source_attention(
         source_id,
         lambda: distinct_attention(source_id, checked_attention(source_id, tuple(provider()))),
         lambda: (
-            Insight(
-                status=Tone.ATTENTION,
-                eyebrow="HQ",
+            finding_model.Finding(
+                rule=UNREADABLE,
+                subject=source_id,
+                severity=Tone.ATTENTION,
                 title=f"{label} could not be read",
-                value="",
-                body="What it reports is missing from this queue until it reads again. The failure is logged.",
+                explanation="What it reports is missing from this queue until it reads again. The failure is logged.",
                 why="Asking this source for its items raised an error, so anything it would report is missing.",
-                key=f"unreadable:{source_id}",
-                workflow=instructions(
-                    f"unreadable:{source_id}",
-                    "Find the line in HQ's log whose event is composition.source.unreadable and whose message "
-                    f"names {source_id}; the traceback under it says what failed.",
+                steps=(
+                    finding_model.OperatorStep(
+                        "Find the line in HQ's log whose event is composition.source.unreadable and whose message "
+                        f"names {source_id}; the traceback under it says what failed."
+                    ),
                 ),
                 read_capabilities=read_capabilities,
             ),
@@ -679,21 +685,21 @@ def source_overview(source_id: str, provider: Callable[[], Any]) -> DomainOvervi
 # What one source's answer must be, by the provider that gives it: a source
 # whose answer is not is that source's failure (``read_source``), and the
 # extension kit names it (``plugin_testing.providers_derived_again``).
-def checked_attention(source_id: str, items: tuple[Any, ...]) -> tuple[Any, ...]:
+def checked_attention(source_id: str, items: tuple[Any, ...]) -> tuple[Finding, ...]:
     for item in items:
-        if not isinstance(item, Insight):
-            raise ImproperlyConfigured(f"{source_id!r} produced an attention item that is not an Insight: {item!r}.")
+        if not isinstance(item, finding_model.Finding):
+            raise ImproperlyConfigured(f"{source_id!r} produced an attention item that is not a Finding: {item!r}.")
     return items
 
 
-def repeated_keys(source_id: str, items: tuple[Any, ...]) -> tuple[str, ...]:
+def repeated_keys(source_id: str, items: tuple[Finding, ...]) -> tuple[str, ...]:
     """Each queue key (``action_items.item_key``) more than one of a source's items share."""
 
-    counts = Counter(item_key(source_id, item) for item in items)
+    counts = Counter(item_key(source_id, finding_key(item)) for item in items)
     return tuple(key for key, count in counts.items() if count > 1)
 
 
-def distinct_attention(source_id: str, items: tuple[Any, ...]) -> tuple[Any, ...]:
+def distinct_attention(source_id: str, items: tuple[Finding, ...]) -> tuple[Finding, ...]:
     """A source's items, one per queue key: the worst of each, where it stood.
 
     A key is what the queue knows an item by (its row, its dismissal), so two
@@ -702,9 +708,9 @@ def distinct_attention(source_id: str, items: tuple[Any, ...]) -> tuple[Any, ...
     of a key's items are dropped and logged as the source's defect.
     """
 
-    worst: dict[str, Any] = {}
+    worst: dict[str, Finding] = {}
     for item in items:
-        key = item_key(source_id, item)
+        key = item_key(source_id, finding_key(item))
         held = worst.get(key)
         if held is None or _urgency(item) < _urgency(held):
             worst[key] = item
@@ -719,8 +725,8 @@ def distinct_attention(source_id: str, items: tuple[Any, ...]) -> tuple[Any, ...
     return tuple(item for item in items if id(item) in kept)
 
 
-def _urgency(item: Insight) -> tuple[int, bool]:
-    return item.status.rank, item.notice
+def _urgency(item: Finding) -> tuple[int, bool]:
+    return item.severity.rank, item.notice
 
 
 def _refused_attention(source_id: str, items: tuple[Any, ...]) -> tuple[Any, ...]:
@@ -855,9 +861,9 @@ def gather_attention(
         for item in source_attention(source_id, label, provider, read_capabilities):
             # Only what someone can act on now: never context, and never what
             # waits on a fix that does not exist yet.
-            if not item.status.acted_on or item.awaiting_fix:
+            if not item.severity.acted_on or item.awaiting_fix:
                 continue
-            gathered.append({"item": item, "source": label, "source_id": source_id})
+            gathered.append({"finding": item, "source": label, "source_id": source_id})
     return ordered_attention(gathered)
 
 
@@ -868,12 +874,12 @@ def ordered_attention(entries: Iterable[dict[str, Any]]) -> tuple[dict[str, Any]
     longest-standing first, then by source and title."""
 
     def order(entry: dict[str, Any]) -> tuple[Any, ...]:
-        item = entry["item"]
+        item = entry["finding"]
         since = item.since
         return (
-            item.status.rank,
+            item.severity.rank,
             item.notice,
-            not one_press({"actions": item.actions, "workflow": item.workflow}),
+            not one_press({"workflow": finding_plan(item, finding_key(item))}),
             since is None,
             since.timestamp() if since is not None else 0.0,
             entry["source"],
@@ -901,7 +907,7 @@ def plugin_attention_items() -> tuple[dict[str, Any], ...]:
             (plugin.id, plugin.name, integration.attention, plugin.mcp_read_capabilities)
             for plugin, integration in installed_integrations()
         )
-        if not entry["item"].notice
+        if not entry["finding"].notice
     )
 
 

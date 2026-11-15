@@ -59,7 +59,7 @@ PARTIALS: dict[str, str] = {
     "partials/_activity_calendar.html": "One month of plan against execution, from `hq_sdk.ui.ActivityCalendar`.",
     "partials/_allocation.html": "Parts of one whole as one bar, from `hq_sdk.ui.AllocationBar`.",
     "partials/_ask.html": "A do-this-now control and how its work stands, from `hq_sdk.outbound.ask`.",
-    "partials/_attention_list.html": "Decisions waiting on the operator, from `hq_sdk.ui.Insight` entries.",
+    "partials/_attention_list.html": "Decisions waiting on the operator, from the entries `hq_sdk.plugin.plugin_attention_items` gathers.",
     "partials/_cadence.html": "Whether a thing happened, period by period, from `hq_sdk.ui.Cadence`.",
     "partials/_cadence_matrix.html": "Several cadences over the same periods, from `hq_sdk.ui.CadenceMatrix`.",
     "partials/_chart.html": "A measure over time from `hq_sdk.ui.line_chart`, or quantities that add up from `hq_sdk.ui.stacked_bar_chart`.",

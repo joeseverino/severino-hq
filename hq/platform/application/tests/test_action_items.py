@@ -5,7 +5,7 @@ from unittest import mock
 from urllib.parse import parse_qs, urlsplit
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, tag
+from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
@@ -56,7 +56,7 @@ class IdentityTests(TestCase):
         first = self.insight(key="finding:rule:a", title="Expires in 5 days", body="x")
         later = self.insight(key="finding:rule:a", title="Expires in 4 days", body="y")
 
-        self.assertEqual(item_key("infra", first), item_key("infra", later))
+        self.assertEqual(item_key("infra", first.key), item_key("infra", later.key))
         self.assertEqual(item_revision(first), item_revision(later))
 
     def test_getting_worse_or_growing_is_a_new_revision(self):
@@ -87,30 +87,6 @@ class IdentityTests(TestCase):
             item_revision(told),
             item_revision(self.insight(key="k", notice=True, body="Rose 12 bpm on the Sep 28 run")),
         )
-
-    def test_without_a_key_the_eyebrow_and_title_stand_in(self):
-        self.assertEqual(item_key("ext", self.insight(title="Plan a run")), "ext:Finding:Plan a run")
-
-
-@tag("source")
-class HostItemsNameTheirSubjectTests(TestCase):
-    def test_every_host_attention_item_carries_a_key(self):
-        """Read state follows the key, so a host item without one would fall
-        back to its title, and several titles carry counts and days-left."""
-
-        import ast
-        from pathlib import Path
-
-        source = Path(__file__).parent.with_name("attention.py").read_text()
-        missing = [
-            node.lineno
-            for node in ast.walk(ast.parse(source))
-            if isinstance(node, ast.Call)
-            and getattr(node.func, "id", "") in {"Insight", "_backlog"}
-            and "key" not in {keyword.arg for keyword in node.keywords}
-        ]
-
-        self.assertEqual(missing, [], f"attention.py builds items without a key at lines {missing}")
 
 
 class AsideStateTests(TestCase):

@@ -157,7 +157,8 @@ class ComposedQueueTests(TestCase):
         from hq.domains.expenses.models import Expense
         from hq.domains.receipts.models import Receipt
 
-        from ..dashboard import queue_entry
+        from ..attention import finding_insight
+        from ..dashboard import gathered_rows
         from ..decisions import decision
         from ..domains import all_domains, domain_attention_items
         from .test_github_estate import store
@@ -190,11 +191,11 @@ class ComposedQueueTests(TestCase):
         entries = [entry for entry in domain_attention_items() if entry["source_id"] in host]
 
         self.assertGreaterEqual(len(entries), 10)
-        for entry in entries:
-            with self.subTest(item=entry["item"].key):
-                self.assertTrue(item_help(entry["item"]))
+        for entry, row in zip(entries, gathered_rows(entries), strict=True):
+            with self.subTest(item=row["key"]):
+                self.assertTrue(item_help(finding_insight(entry["finding"], "/findings/")))
                 # The panel behind its urgency leads with why, in words.
-                shown = decision(queue_entry(entry))
+                shown = decision(row)
                 self.assertTrue(shown["origin"]["why"].strip())
 
     def test_every_finding_the_example_estate_raises_says_what_was_read_and_the_bar_it_crossed(self):

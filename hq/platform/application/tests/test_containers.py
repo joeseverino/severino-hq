@@ -8,6 +8,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.platform.application.markup_testing import elements, text
+from hq.platform.application.tests.worded import worded
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 from hq_sdk.testing import plain
 
@@ -33,7 +34,7 @@ def queued(rule=""):
     """The containers' findings as the queue carries them, each keyed by its rule."""
 
     with uncached():
-        found = [item for item in infrastructure() if rule_of(item.key) in {ADVISORY, UPDATE}]
+        found = [item for item in worded(infrastructure()) if rule_of(item.key) in {ADVISORY, UPDATE}]
     return tuple(item for item in found if not rule or rule_of(item.key) == rule)
 
 

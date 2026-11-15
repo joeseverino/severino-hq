@@ -9,27 +9,27 @@ from django.template import Context, Template
 from django.test import RequestFactory, SimpleTestCase
 
 from hq.platform.application.action_items import by_source
-from hq.platform.application.card_items import Insight
-from hq.platform.application.dashboard import queue_entry
+from hq.platform.application.dashboard import finding_rows
+from hq.platform.application.finding_model import Finding
 from hq.platform.application.markup_testing import Element, all_elements
 
 
 def _item(title: str, *, family: str = "", status: str = "attention") -> dict:
-    return queue_entry(
-        {
-            "source_id": "example",
-            "source": "Example",
-            "item": Insight(
-                status=status,
-                eyebrow="",
+    (row,) = finding_rows(
+        "example",
+        "Example",
+        (
+            Finding(
+                rule="example",
+                subject=title,
+                severity=status,
                 title=title,
-                value="",
-                body=f"What {title} means.",
-                key=f"example:{title}",
+                explanation=f"What {title} means.",
                 family=family,
             ),
-        }
+        ),
     )
+    return row
 
 
 def _drawn(source: str, **context) -> list[Element]:
@@ -133,3 +133,56 @@ class DenseRowTests(SimpleTestCase):
         details = [element for element in page if "data-attention-detail" in element.attrs]
         self.assertTrue(details)
         self.assertFalse(any(_below(detail) for detail in details))
+
+
+class FindingWordsTests(SimpleTestCase):
+    """A row's why, clears and family are its rule's, and a finding no host
+    rule raises (an extension's, a held request) says its own."""
+
+    def said(self, rule: str) -> dict:
+        (row,) = finding_rows(
+            "example",
+            "Example",
+            (
+                Finding(
+                    rule=rule,
+                    subject="example.com",
+                    severity="attention",
+                    title="Example reads late",
+                    explanation="",
+                    why="The example was last read a week ago.",
+                    clears="the example is read again",
+                    family="Late examples",
+                ),
+            ),
+        )
+        return {field: row[field] for field in ("why", "clears", "family")}
+
+    def test_a_finding_no_rule_raises_is_said_in_its_own_words(self):
+        self.assertEqual(
+            self.said("example-unruled"),
+            {
+                "why": "The example was last read a week ago.",
+                "clears": "the example is read again",
+                "family": "Late examples",
+            },
+        )
+
+    def test_a_host_rules_finding_is_said_in_its_rules_words(self):
+        from hq.platform.application.findings import finding_rules
+
+        rule = finding_rules()[0]
+
+        said = self.said(rule.name)
+
+        self.assertEqual((said["clears"], said["family"]), (rule.clears, rule.title))
+        self.assertNotEqual(said["why"], "The example was last read a week ago.")
+
+    def test_a_held_request_is_a_held_row(self):
+        (row,) = finding_rows(
+            "",
+            "Approvals",
+            (Finding(rule="approval", subject="1", severity="attention", title="Example", explanation="", held=True),),
+        )
+
+        self.assertTrue(row["held"])

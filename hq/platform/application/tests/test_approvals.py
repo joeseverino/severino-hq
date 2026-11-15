@@ -856,13 +856,13 @@ class SurfaceTests(TestCase):
     def test_each_request_is_an_action_item_that_opens_its_audit_entry(self):
         from ..domains import domain_attention_items
 
-        entries = [entry for entry in domain_attention_items() if entry["item"].eyebrow == "Approval"]
+        entries = [entry for entry in domain_attention_items() if entry["finding"].held]
 
         self.assertEqual(len(entries), 2)
         self.assertEqual({entry["source"] for entry in entries}, {"Waiting for approval"})
         self.assertIn(
             reverse("core:approval_entry", kwargs={"approval_id": self.held.id}),
-            {entry["item"].url for entry in entries},
+            {entry["finding"].primary.url for entry in entries},
         )
 
     def test_it_can_be_decided_from_the_action_items_page(self):

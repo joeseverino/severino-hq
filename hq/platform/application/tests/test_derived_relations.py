@@ -11,6 +11,7 @@ from django.urls import reverse
 from hq.domains.assets.models import Asset
 from hq.domains.control_plane.models import ProviderConnection
 from hq.platform.application.markup_testing import hrefs, with_class
+from hq.platform.application.tests.worded import worded
 
 from ..attention import raised
 from ..connection_context import connections_context
@@ -27,7 +28,7 @@ class NamedBacklogTests(TestCase):
         for name in ("Desk", "Bench", "Camera", "Anvil"):
             Asset.objects.create(item_name=name)
 
-        (item,) = raised("hq.assets")
+        (item,) = worded(raised("hq.assets"))
 
         self.assertEqual(item.magnitude, 4)
         self.assertTrue(item.body.startswith("Anvil, Bench, Camera and 1 other. "))
@@ -37,7 +38,7 @@ class NamedBacklogTests(TestCase):
     def test_a_backlog_of_one_names_it_and_counts_nothing(self):
         Asset.objects.create(item_name="Desk")
 
-        (item,) = raised("hq.assets")
+        (item,) = worded(raised("hq.assets"))
 
         self.assertTrue(item.body.startswith("Desk. "))
 

@@ -55,10 +55,9 @@ class RestoreCommand:
     keys: Annotated[list[str], Describe("The set-aside items to bring back into the queue.")]
 
 
-def item_key(source_id: str, item: Any) -> str:
-    # An item is identified by what it is about: its source and key.
-    about = item.key or f"{item.eyebrow}:{item.title}"
-    return f"{source_id}:{about}"[:200]
+def item_key(source_id: str, key: str) -> str:
+    # An item is identified by what it is about: its source and its finding's key (``findings.finding_key``).
+    return f"{source_id}:{key}"[:200]
 
 
 def item_revision(item: Any) -> str:

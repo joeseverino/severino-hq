@@ -2,7 +2,8 @@
 
 A section raises nothing of its own: an item is a finding of a rule about its
 records (``FindingRule.domain``), or a change an agent asked for that waits on
-a person. Each is the ``Insight`` shape an extension emits.
+a person. Each is a ``Finding``, as an extension's are, and reaches a page
+worded by ``finding_insight``.
 """
 
 from collections.abc import Iterable, Mapping
@@ -14,7 +15,7 @@ from django.core.exceptions import ImproperlyConfigured
 from hq.platform.application.routes import reverse
 
 from .card_items import Insight
-from .finding_model import Finding, FindingRule
+from .finding_model import Finding, FindingRule, opens
 from .findings import estate_findings, finding_key, finding_rules, rule_for
 from .infrastructure import ResourceState, enabled_resources, resource_health
 from .item_help import finding_plan
@@ -42,6 +43,8 @@ def finding_why(finding: Finding, rule: FindingRule | None) -> str:
     urgent once free space is under 512 MB and 3% of the disk." The one place a
     finding's reason is worded, from its evidence and its rule's ``bars``."""
 
+    if rule is None and finding.why:
+        return finding.why
     quoted = finding.evidence[:_WHY_EVIDENCE]
     read = "; ".join(f"{label}: {value}" for label, value in quoted) or finding.title
     more = len(finding.evidence) - len(quoted)
@@ -62,7 +65,7 @@ def raising_domains() -> frozenset[str]:
     return named
 
 
-def raised(domain: str) -> tuple[Insight, ...]:
+def raised(domain: str) -> tuple[Finding, ...]:
     """What ``domain`` raises on the queue: the findings of each rule about
     its records, and under Infrastructure, each finding about the estate that
     HQ can speak for now."""
@@ -70,21 +73,20 @@ def raised(domain: str) -> tuple[Insight, ...]:
     return read_once("attention.raised", _raised).get(domain, ())
 
 
-def infrastructure() -> tuple[Insight, ...]:
+def infrastructure() -> tuple[Finding, ...]:
     """What Infrastructure raises: ``raised`` for the section of the estate's findings."""
 
     return raised(INFRASTRUCTURE)
 
 
-def _raised() -> dict[str, tuple[Insight, ...]]:
+def _raised() -> dict[str, tuple[Finding, ...]]:
     resources = enabled_resources()
     health_by_key = {resource.key: resource_health(resource) for resource in resources}
-    findings_url = reverse("control_plane:findings")
-    found: dict[str, list[Insight]] = {}
+    found: dict[str, list[Finding]] = {}
     for finding in _findings_to_raise(resources, health_by_key):
         rule = rule_for(finding.rule)
         section = (rule.domain if rule is not None else "") or INFRASTRUCTURE
-        found.setdefault(section, []).append(finding_insight(finding, findings_url))
+        found.setdefault(section, []).append(finding)
     return {domain: tuple(items) for domain, items in found.items()}
 
 
@@ -118,18 +120,23 @@ def _subject_confirmed(finding: Any, actionable_keys: set[str], actionable_kinds
     return bool(finding.subject) or not finding.scope or finding.scope in actionable_kinds
 
 
-def finding_insight(finding: Any, findings_url: str) -> Insight:
+def finding_insight(finding: Finding, findings_url: str) -> Insight:
     """A finding as the queue's card carries it, wherever it is drawn: what
-    was read that shows it, its plan, and the pages that help look into it."""
+    was read that shows it, its plan, and the pages that help look into it.
+
+    A host rule's finding is said in its rule's words; one no host rule
+    raises (an extension's, a held request) says its own ``family``, ``why``
+    and ``clears``."""
 
     rule = rule_for(finding.rule)
     return Insight(
         status=finding.severity,
         eyebrow="Finding",
         # A rule's findings are one kind of matter, named as the rule names itself.
-        family=rule.title if rule is not None else "",
+        family=rule.title if rule is not None else finding.family,
         why=finding_why(finding, rule),
-        clears=rule.clears if rule is not None else "",
+        clears=rule.clears if rule is not None else finding.clears,
+        held=finding.held,
         key=finding_key(finding),
         title=finding.title,
         value=str(finding.count) if finding.count else "",
@@ -171,7 +178,11 @@ def approval_queue() -> str:
     return f"{reverse('core:audit_list')}?awaiting=1"
 
 
-def waiting_for_approval() -> tuple[Insight, ...]:
+# What a held request is raised under: no host rule, so it says its own why.
+APPROVAL = "approval"
+
+
+def waiting_for_approval() -> tuple[Finding, ...]:
     """One item per change an agent asked for. Nothing is written until a person decides."""
 
     items = []
@@ -179,15 +190,14 @@ def waiting_for_approval() -> tuple[Insight, ...]:
         shown = preview(held)
         sentence = asked(held, shown)
         items.append(
-            Insight(
-                status=Tone.ATTENTION,
-                eyebrow="Approval",
-                key=f"approval:{held.id}",
+            Finding(
+                rule=APPROVAL,
+                subject=str(held.id),
+                severity=Tone.ATTENTION,
                 title=str(sentence),
-                value="1",
-                body="" if sentence.whole else _asked_change(shown),
+                explanation="" if sentence.whole else _asked_change(shown),
                 why="An agent asked for this change, and HQ writes nothing until a person approves or rejects it.",
-                url=_approval_entry(held),
+                primary=opens("", _approval_entry(held)),
                 since=held.created_at,
                 held=True,
             )

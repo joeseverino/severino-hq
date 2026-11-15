@@ -545,17 +545,24 @@ the extension's own pages say which setting is missing and where its guide
 is. It is never a readiness failure, so an install without production's
 secrets, such as a development one, still answers ready.
 
-Supply the help the shared card shows ([Design](Design.md), "A card says what
-is wrong and holds what fixes it"):
+`PluginIntegration.attention` returns `hq_sdk.plugin.Finding`s, built with
+`opens` for the page the work is done on; HQ refuses anything else as an
+unreadable answer. HQ words each row from it (`attention.finding_insight`).
+No host rule words an extension's finding, so it says its own words. Supply
+the help the shared card shows ([Design](Design.md), "A card says what is
+wrong and holds what fixes it"):
 
 | Field | For |
 | --- | --- |
-| `Insight.actions` | what can be pressed |
-| `Insight.action` with `Insight.url` | the page the work is done on (a short label; a sentence is shown as a sentence) |
-| `Insight.workflow` | commands and their check |
-| `Insight.since` | the moment it began, when that is known |
-| `Insight.why` | why it is as urgent as its status says: what was read and what makes that this urgent, in one sentence. Required of every item the queue may show, never a restatement of its rating; the plugin check's `attention-item-says-why` fails an `Insight` built without it, and `attention-why-restates-rating` one that closes on "which needs attention" or "which is urgent" |
-| `Insight.clears` | what clears an item a threshold raises, worded from that same threshold as a clause after "Clears once" ("a balance newer than 3 days arrives"); the panel says it after the why. The plugin check's `threshold-says-what-clears-it` fails a why that names a constant without it |
+| `Finding.primary` | the page the work is done on, as `opens(label, url)` (a short label; a sentence is shown as a sentence). The plugin check's `extension-finding-carries-help` fails a finding built with no help at all |
+| `Finding.workflow`, `Finding.steps` | commands and their check, or instructions in words |
+| `Finding.evidence` | what was read, as label and value pairs, shown in the row's open fold |
+| `Finding.since` | the moment it began, when that is known |
+| `Finding.why` | why it is as urgent as its severity says: what was read and what makes that this urgent, in one sentence. Required of every finding, never a restatement of its rating; the plugin check's `attention-item-says-why` fails one built without it, and `attention-why-restates-rating` one that closes on "which needs attention" or "which is urgent" |
+| `Finding.clears` | what clears a finding a threshold raises, worded from that same threshold as a clause after "Clears once" ("a balance newer than 3 days arrives"); the panel says it after the why. The plugin check's `threshold-says-what-clears-it` fails a why that names a constant without it |
+| `Finding.family` | the words that head a fold of several findings alike |
+| `Finding.count` | how many things it stands for, when it is a countable backlog; a row set aside returns when it changes |
+| `Finding.notice` | it reports something that happened, with nothing to do |
 
 **Capabilities.** HQ validates every `CapabilitySpec` before describing or
 invoking the registry: name, required permissions, target kind and label,
@@ -975,7 +982,7 @@ A test that posts a form without opening its page first sends
 | `partials/_activity_calendar.html` | `calendar` | `calendar_id` | One month of plan against execution, from `hq_sdk.ui.ActivityCalendar`. |
 | `partials/_allocation.html` | `allocation` | `legend`, `stacked` | Parts of one whole as one bar, from `hq_sdk.ui.AllocationBar`. |
 | `partials/_ask.html` | `ask` | `extra`, `heard` | A do-this-now control and how its work stands, from `hq_sdk.outbound.ask`. |
-| `partials/_attention_list.html` | `empty`, `entries` | nothing | Decisions waiting on the operator, from `hq_sdk.ui.Insight` entries. |
+| `partials/_attention_list.html` | `empty`, `entries` | nothing | Decisions waiting on the operator, from the entries `hq_sdk.plugin.plugin_attention_items` gathers. |
 | `partials/_cadence.html` | `cadence` | nothing | Whether a thing happened, period by period, from `hq_sdk.ui.Cadence`. |
 | `partials/_cadence_matrix.html` | `matrix` | `compact`, `label` | Several cadences over the same periods, from `hq_sdk.ui.CadenceMatrix`. |
 | `partials/_chart.html` | `chart` | nothing | A measure over time from `hq_sdk.ui.line_chart`, or quantities that add up from `hq_sdk.ui.stacked_bar_chart`. |

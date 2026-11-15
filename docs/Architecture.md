@@ -140,11 +140,13 @@ grouping is presentation.
 
 ### Priority work
 
-Every domain's `Insight` provider is composed by `domain_attention_items()`.
+Every domain's attention provider returns `Finding`s, composed by
+`domain_attention_items()`, and each row is worded from its finding by
+`attention.finding_insight`, the one wording.
 The dashboard preview, `/action-items/` and the machine snapshot project that
 one queue. Each flattened item keeps its `action` and JSON-safe `workflow` (or
 `null`) beside its label, evidence, severity, count and URL. Neutral and good
-insights stay out of the queue; the contributing domain decides whether a
+findings stay out of the queue; the contributing domain decides whether a
 reading needs a decision.
 
 The dashboard and the full queue share one row partial and one resolution
@@ -159,16 +161,16 @@ or HQ's reason it can offer neither. A finding rule declares two fields:
 | `operator_action` | `steps`, each an `OperatorStep`: a label, a command HQ never runs, notes; the API and MCP's `get_findings` both return `operator_steps` beside the remedies, which MCP writes as tool calls | the operator has a command to run |
 | `no_help_reason` | the reason | there is no remedy and no command |
 
-A queue `Insight` keeps the SDK's shape. A remedy is one of its `actions`; a
-command or reason is a `run` or `cannot` step of its `workflow`
-(`hq/platform/application/item_help.py`).
+A row's remedy is one of its `actions`; a command or reason is a `run` or
+`cannot` step of its `workflow`, which `finding_plan` derives from the
+finding (`hq/platform/application/item_help.py`).
 The ast-grep rule `attention-item-carries-help` (lint:ast-grep) fails on host
 source that builds an item without help, and
 `hq/platform/application/tests/test_item_help.py` reads the composed queue
 through the `item_help` gauge defined there.
 
 Every item also says why it is as urgent as it is, in one sentence on what HQ
-read and what makes that this urgent (`Insight.why`). The panel behind a card's
+read and what makes that this urgent. The panel behind a card's
 urgency leads with it, then lists in view what raised it (the domain, a
 finding's rule, and the key), and closes on when its reading was taken and
 since when, in the modal's quiet foot line
@@ -178,13 +180,13 @@ the bar its rule declares for its severity (`FindingRule.bars`, worded from the
 detector's own constants and refused at import when the rule's own severity
 has none), as in "Free on /: 400 MB of 30 GB (1.3%); urgent once free space is
 under 512 MB and 3% of the disk." The ast-grep rule `attention-item-says-why`
-fails on an `Insight` built without one, and `attention-why-restates-rating`
+fails on an `Insight`, or an extension's `Finding`, built without one, and `attention-why-restates-rating`
 on a why that closes on its rating or names its rule, in host source and,
 through the plugin check, in an extension's. `test_item_help.py` holds every
 finding the example estate raises to a bar for its severity.
 
-An item a threshold raises also says what clears it (`Insight.clears`, a
-finding's from `FindingRule.clears`), worded from the same constant as its
+An item a threshold raises also says what clears it (`FindingRule.clears`,
+or `Finding.clears` for one no host rule words), worded from the same constant as its
 bar; `decisions._origin` adds it after the why, "Clears once free space is
 back above 2 GB or 10% of the disk." The ast-grep rule
 `threshold-says-what-clears-it` fails a why or a rule's bars that name a

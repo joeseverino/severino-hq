@@ -527,8 +527,8 @@ class DanglingTests(TestCase):
         item = one(references.dangling(Asset))
 
         self.assertEqual(item.title, "A server links to lab-9, which HQ does not have")
-        self.assertEqual(item.url, asset.get_absolute_url())
-        self.assertEqual(item.key, f"reference:assets.asset:{asset.pk}:infrastructure")
+        self.assertEqual(item.primary.url, asset.get_absolute_url())
+        self.assertEqual(item.part, f"reference:assets.asset:{asset.pk}:infrastructure")
 
     def test_text_that_is_no_reference_is_reported_by_what_it_holds(self):
         Asset.objects.create(item_name="A server", slug="a-server", infrastructure="the old rack")

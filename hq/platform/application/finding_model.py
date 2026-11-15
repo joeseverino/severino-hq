@@ -142,6 +142,19 @@ class Finding:
     # Its only remedy does not exist yet (an alert no released version fixes):
     # it stays a finding, and the queue leaves it out until one does.
     awaiting_fix: bool = False
+    # A request a person decides, by its Approve or Reject: it ends only when
+    # decided, so a reader can never set it aside (``Insight.held``).
+    held: bool = False
+    # What a finding no host rule raises says of itself, where a rule would:
+    # an extension's or a held request's. A host rule's finding is worded by
+    # its rule alone (``attention.finding_insight``), which ignores these.
+    # Why it is as urgent as its severity says, in one sentence.
+    why: str = ""
+    # What clears it, a clause after "Clears once".
+    clears: str = ""
+    # What kind of matter it is, as its owner heads a list of them; several
+    # of one family from one source fold under it in the queue.
+    family: str = ""
 
     def __post_init__(self) -> None:
         as_members(self)

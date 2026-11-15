@@ -1103,6 +1103,43 @@
       }
     },
     "plugin": {
+      "Finding": {
+        "bases": [],
+        "constructor": [
+          "rule",
+          "subject",
+          "title",
+          "severity",
+          "explanation",
+          "evidence=",
+          "remedies=",
+          "offers=",
+          "investigations=",
+          "scope=",
+          "affected_scopes=",
+          "workflow=",
+          "steps=",
+          "no_help_reason=",
+          "since=",
+          "subject_link=",
+          "read_capabilities=",
+          "part=",
+          "read_now=",
+          "observed_at=",
+          "reads=",
+          "primary=",
+          "count=",
+          "notice=",
+          "awaiting_fix=",
+          "held=",
+          "why=",
+          "clears=",
+          "family="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
       "NavigationGroup": {
         "bases": [],
         "constructor": [
@@ -1179,6 +1216,13 @@
       "installed_plugins": {
         "kind": "function",
         "parameters": []
+      },
+      "opens": {
+        "kind": "function",
+        "parameters": [
+          "label",
+          "url"
+        ]
       },
       "plugin_attention_items": {
         "kind": "function",
@@ -3259,7 +3303,7 @@
         ]
       },
       "partials/_attention_list.html": {
-        "about": "Decisions waiting on the operator, from `hq_sdk.ui.Insight` entries.",
+        "about": "Decisions waiting on the operator, from the entries `hq_sdk.plugin.plugin_attention_items` gathers.",
         "optional": [],
         "required": [
           "empty",

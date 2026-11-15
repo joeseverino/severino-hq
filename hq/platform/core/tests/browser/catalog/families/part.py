@@ -52,7 +52,8 @@ from hq.platform.core.models import AgentIdentity
 from hq.platform.core.templatetags.action_tags import MOST_BESIDE
 from hq.platform.core.tests.browser.catalog.common import DRAWN_AT, HEAD, Entry
 from hq.platform.core.tests.browser.selectors import SELECTORS
-lazy from hq.platform.application.dashboard import queue_entry
+lazy from hq.platform.application.dashboard import finding_rows
+lazy from hq.platform.application.finding_model import Finding
 lazy from hq.platform.application.github_estate import Repository
 lazy from hq.platform.application.github_posture import posture_of
 lazy from hq.platform.application.path_model import Certificate, Hop, Route
@@ -190,24 +191,23 @@ def _month_gone_by(month=date(2026, 1, 1)):
 def _problems(*titles, family="", status="attention"):
     """The queue's items about a thing, each with its meaning and the check that reads again."""
 
-    return [
-        queue_entry(
-            {
-                "source_id": "example",
-                "source": "Example",
-                "item": Insight(
-                    status=status,
-                    eyebrow="",
+    return list(
+        finding_rows(
+            "example",
+            "Example",
+            tuple(
+                Finding(
+                    rule="example",
+                    subject=title,
+                    severity=status,
                     title=title,
-                    value="",
-                    body="What it means for the thing this page is about, in one sentence.",
-                    key=f"example:{title}",
+                    explanation="What it means for the thing this page is about, in one sentence.",
                     family=family,
-                ),
-            }
+                )
+                for title in titles
+            ),
         )
-        for title in titles
-    ]
+    )
 
 
 def _policy():

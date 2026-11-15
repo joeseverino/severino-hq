@@ -88,7 +88,7 @@ def work_queue() -> list[QueueItem]:
     a change to one composes the rest from what is stored.
     """
 
-    return [queue_entry(entry) for entry in domain_attention_items()]
+    return gathered_rows(domain_attention_items())
 
 
 def _reader(principal: Principal) -> tuple[Any, ...]:
@@ -151,13 +151,6 @@ class QueueItem(TypedDict):
     read_capabilities: list[str]
 
 
-def queue_entry(entry: Mapping[str, Any]) -> QueueItem:
-    """An entry the queue gathered (``domains.domain_attention_items``), as
-    the queue partial and the API carry it."""
-
-    return _queue_item(entry["source_id"], entry["source"], entry["item"])
-
-
 def finding_rows(source_id: str, source: str, findings: Iterable[Finding]) -> tuple[QueueItem, ...]:
     """``findings`` as the queue's rows, each worded by ``attention.finding_insight``:
     how a page draws what is wrong with the thing it is about."""
@@ -166,11 +159,18 @@ def finding_rows(source_id: str, source: str, findings: Iterable[Finding]) -> tu
     return tuple(_queue_item(source_id, source, finding_insight(finding, url)) for finding in findings)
 
 
+def gathered_rows(entries: Iterable[Mapping[str, Any]]) -> list[QueueItem]:
+    """Entries the queue gathered (``plugins.gather_attention``), each its
+    finding as ``finding_rows`` words it, in the order gathered."""
+
+    return [row for entry in entries for row in finding_rows(entry["source_id"], entry["source"], (entry["finding"],))]
+
+
 def _queue_item(source_id: str, source: str, item: Insight) -> QueueItem:
-    # Private, so a row reaches a page only from a gathered entry or a finding.
+    # Private, so a row reaches a page only as a finding (``finding_rows``).
 
     return {
-        "key": item_key(source_id, item),
+        "key": item_key(source_id, item.key),
         "revision": item_revision(item),
         "source_id": source_id,
         "source": source,

@@ -17,7 +17,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.projects.models import Project
-from hq.platform.application.card_items import Insight, Kpi
+from hq.platform.application.card_items import Kpi
 from hq.platform.application.contracts import Effect
 from hq.platform.application.drawings import Dot, Dots
 from hq.platform.application.report_testing import report_connections
@@ -513,38 +513,41 @@ def _urgent_dashboard():
     """The dashboard with a short urgent queue read in place: a held request
     and a finding, each with a long line, beside their buttons."""
 
+    from dataclasses import asdict
     from uuid import UUID
 
     from hq.platform.application.approvals import DECISIONS, _decision_link
-    from hq.platform.application.dashboard import queue_entry
+    from hq.platform.application.dashboard import finding_rows
+    from hq.platform.application.finding_model import Finding, opens
     from hq.platform.application.workflow_contracts import ActionLink
 
     held = UUID(int=1)
-    # As an operator is offered it (``approvals.offers``).
-    decide = (_decision_link(held, decision) for decision in DECISIONS)
-    approval = Insight(
-        "serious",
-        "Approval",
-        "example-agent wants to change the expected answer of photos.example.com from 192.0.2.10 to 198.51.100.20",
-        "1",
-        "DNS rewrite photos-example: answer from 192.0.2.10 to 198.51.100.20, and 2 more fields.",
-        key=f"approval:{held}",
-        url=reverse("core:approval_entry", kwargs={"approval_id": held}),
+    approval = Finding(
+        rule="approval",
+        subject=str(held),
+        severity="serious",
+        title="example-agent wants to change the expected answer of photos.example.com from 192.0.2.10 to 198.51.100.20",
+        explanation="DNS rewrite photos-example: answer from 192.0.2.10 to 198.51.100.20, and 2 more fields.",
+        primary=opens("", reverse("core:approval_entry", kwargs={"approval_id": held})),
         held=True,
-        actions=tuple(decide),
     )
-    finding = Insight(
-        "serious",
-        "Estate",
-        "wildcard-example-com expires in 4 days",
-        "1",
-        "Expires in 4 days. Renewal opens at 30 days; renew it or check why renewal did not run, since a "
+    finding = Finding(
+        rule="example-expiry",
+        subject="wildcard-example-com",
+        severity="serious",
+        title="wildcard-example-com expires in 4 days",
+        explanation="Expires in 4 days. Renewal opens at 30 days; renew it or check why renewal did not run, since a "
         "certificate that lapses takes every name it covers down with it.",
-        actions=(ActionLink("renew", "Renew certificate", "remote_write", "/example/renew/", method="POST"),),
+    )
+    # Each row with what its reader is offered: a held request's decisions
+    # (``approvals.offers``), the finding's own remedy.
+    offered = (
+        [_decision_link(held, decision) for decision in DECISIONS],
+        [ActionLink("renew", "Renew certificate", "remote_write", "/example/renew/", method="POST")],
     )
     queue = [
-        {**queue_entry({"source_id": "example.urgent", "source": "Example", "item": item}), "aside": False}
-        for item in (approval, finding)
+        {**row, "actions": [asdict(action) for action in actions], "aside": False}
+        for row, actions in zip(finding_rows("example.urgent", "Example", (approval, finding)), offered, strict=True)
     ]
     with (
         _dashboard(populated=False),
@@ -560,8 +563,10 @@ def _rechecks(*, populated):
     quoted unit name long enough to wrap. No row holds a third button, so a
     table of them is as narrow as two buttons leave it."""
 
-    from hq.platform.application.dashboard import queue_entry
-    from hq.platform.application.finding_model import CHECK_AGAIN
+    from dataclasses import asdict
+
+    from hq.platform.application.dashboard import finding_rows
+    from hq.platform.application.finding_model import CHECK_AGAIN, Finding
     from hq.platform.application.workflow_contracts import ActionLink
 
     titles = (
@@ -571,28 +576,19 @@ def _rechecks(*, populated):
         ),
         ("Edge certificate example.com expires in 19 days", "Visitors get a certificate error once it expires."),
     )
+    found = tuple(
+        Finding(rule="example-recheck", subject=str(place), severity="serious", title=title, explanation=detail)
+        for place, (title, detail) in enumerate(titles)
+    )
     queue = [
         {
-            **queue_entry(
-                {
-                    "source_id": "example.rechecks",
-                    "source": "Example",
-                    "item": Insight(
-                        "serious",
-                        "Example",
-                        title,
-                        "1",
-                        detail,
-                        key=f"example:recheck-{place}",
-                        actions=(
-                            ActionLink("verify", CHECK_AGAIN, Effect.READ, f"/example/check/{place}/", method="POST"),
-                        ),
-                    ),
-                }
-            ),
+            **row,
+            "actions": [
+                asdict(ActionLink("verify", CHECK_AGAIN, Effect.READ, f"/example/check/{place}/", method="POST"))
+            ],
             "aside": False,
         }
-        for place, (title, detail) in enumerate(titles)
+        for place, row in enumerate(finding_rows("example.rechecks", "Example", found))
     ]
     with (
         _dashboard(populated=populated),

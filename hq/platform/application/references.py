@@ -26,9 +26,10 @@ lazy from hq.domains.control_plane.providers import PROVIDERS
 
 from .tone import Tone
 lazy from . import entity_links, security
-lazy from .card_items import Insight, ListRow
+lazy from .card_items import ListRow
 lazy from .demo import showing_demo
 lazy from .entity_links import NODE_KINDS, entity_link, kind_label, node_name
+lazy from .finding_model import Finding, opens
 lazy from .labels import plural
 lazy from .projection import read_once
 lazy from .security import Principal, cli_principal
@@ -775,7 +776,7 @@ def dangling(
     *models_: type[models.Model],
     principal: Principal | None = None,
     source: Callable[[models.Model], str] = str,
-) -> tuple[Insight, ...]:
+) -> tuple[Finding, ...]:
     """``naming_nothing`` as an extension's queue items, one per row."""
 
     return tuple(_dangling_item(found) for found in naming_nothing(*models_, principal=principal, source=source))
@@ -810,22 +811,23 @@ def _dangling(field: ReferenceField, row: models.Model, source: Callable[[models
     )
 
 
-def _dangling_item(found: Dangling) -> Insight:
+# What an extension's row that links to nothing is raised under.
+LINKS_TO_NOTHING = "links-to-nothing"
+
+
+def _dangling_item(found: Dangling) -> Finding:
     """The queue's item for one row whose reference names nothing."""
 
-    return Insight(
-        status=Tone.ATTENTION,
-        eyebrow="Records",
+    return Finding(
+        rule=LINKS_TO_NOTHING,
+        subject="",
+        part=found.key,
+        severity=Tone.ATTENTION,
         title=found.title,
-        value="",
-        body=UNLINK,
+        explanation=UNLINK,
         why="HQ's records hold a link to something it no longer has, so the record points nowhere.",
-        action="Open record",
-        url=found.url,
-        key=found.key,
+        primary=opens("Open record", found.url),
         family="Links to nothing",
-        # A row's own link, checked against every record and reading at once.
-        observed_at=None,
     )
 
 

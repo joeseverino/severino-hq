@@ -8,9 +8,10 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from hq.platform.application import roles
-from hq.platform.application.card_items import Insight, Kpi
+from hq.platform.application.card_items import Kpi
 from hq.platform.application.dashboard import dashboard_highlights, operating_snapshot, work_queue
 from hq.platform.application.domains import Domain, host_domains
+from hq.platform.application.finding_model import Finding
 from hq.platform.application.plugin_testing import installed, sibling
 from hq.platform.application.plugins import NavigationItem, PluginIntegration
 from hq.platform.application.projection import projection_scope
@@ -36,10 +37,10 @@ def contributor(name, *, origin="extension", attention=None, dashboard=None, ove
 
 
 def urgent(title):
-    return Insight("serious", "Example", title, "1", "Look into it.", key=title)
+    return Finding(rule="example", subject=title, severity="serious", title=title, explanation="Look into it.")
 
 
-def good_source(domain: str) -> tuple[Insight, ...]:
+def good_source(domain: str) -> tuple[Finding, ...]:
     # The content section raises one item; every other host section raises none.
     return (urgent("Good source item"),) if domain == "hq.content" else ()
 
@@ -71,7 +72,7 @@ class UnreadableSourceTests(TestCase):
         self.assertIsNotNone(record.exc_info)
 
     def test_a_raising_host_section_is_one_item_and_the_rest_of_the_queue_renders(self):
-        def raised(domain: str) -> tuple[Insight, ...]:
+        def raised(domain: str) -> tuple[Finding, ...]:
             if domain == "hq.expenses":
                 raise RuntimeError("stored readings no longer parse")
             return good_source(domain)

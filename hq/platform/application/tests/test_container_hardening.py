@@ -7,6 +7,7 @@ from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.platform.application.markup_testing import select, text
+from hq.platform.application.tests.worded import worded
 
 from ..attention import infrastructure
 from ..containers import containers
@@ -263,7 +264,7 @@ class FindingHelpTests(TestCase):
         with uncached():
             return {
                 (rule_of(item.key), name): item
-                for item in infrastructure()
+                for item in worded(infrastructure())
                 if rule_of(item.key)
                 for name in [value for label, value in item.facts if label == "Container"] or [item.part]
             }

@@ -4,7 +4,21 @@ valid:
   - 'ui.Insight(title="Example", why=reason)'
   - 'Insight(status="attention", title="Example", **said)'
   - 'Insightful(title="Example")'
+  - |
+    from hq_sdk.plugin import Finding
+    Finding(rule="example", subject="", severity="attention", title="Example", explanation="", why="Example reads late.")
+  - |
+    from example_findings import Finding
+    Finding(rule="example", subject="", severity="attention", title="Example", explanation="")
 invalid:
   - 'Insight(status="attention", eyebrow="Example", title="Example", value="1", body="")'
   - 'ui.Insight(title="Example", workflow=plan)'
   - 'Insight("attention", "Example", "Example", "", "")'
+  - |
+    from hq_sdk.plugin import Finding, opens
+    Finding(rule="example", subject="", severity="attention", title="Example", explanation="")
+  - |
+    from hq_sdk.plugin import (
+        Finding,
+    )
+    Finding(rule="example", subject="", severity="attention", title="Example", explanation="", clears="it is read")

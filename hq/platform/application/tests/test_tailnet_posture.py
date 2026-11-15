@@ -9,6 +9,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection
 from hq.platform.application.markup_testing import texts
+from hq.platform.application.tests.worded import worded
 
 from ..findings import findings
 from ..inventory_testing import store
@@ -98,7 +99,7 @@ class DeviceApprovalTests(TestCase):
 
         policy(settings={"devicesApprovalOn": False})
 
-        keys = [item.key for item in infrastructure()]
+        keys = [item.key for item in worded(infrastructure())]
 
         self.assertTrue(any(key.startswith("finding:devices-join-without-approval") for key in keys))
 

@@ -13,6 +13,7 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_adapters.github import COMPOSE_WORKFLOW, CURRENT, KIND as DELIVERY
 from hq.platform.application.markup_testing import select, text
+from hq.platform.application.tests.worded import worded
 
 from .. import first_seen, freshness
 from ..attention import infrastructure
@@ -173,7 +174,7 @@ class FirstSeenTests(TestCase):
             with mock.patch.dict(freshness._NAMED, {freshness.FIRST_SEEN: lambda: at_once}):
                 bridged("inventory", {REWRITE: {"ok": True, "records": []}})
             with projection_scope():
-                (item,) = [item for item in infrastructure() if item.key.endswith(":resource:app")]
+                (item,) = [item for item in worded(infrastructure()) if item.key.endswith(":resource:app")]
                 card = one(problems_about(entity_link("resource", "app").url, cli_principal()))
 
         self.assertIsNotNone(item.since)
@@ -223,7 +224,7 @@ class DeployInProgressTests(TestCase):
 
     def items(self):
         with host_only(), projection_scope():
-            return [item for item in infrastructure() if item.key.endswith("resource:delivery")]
+            return [item for item in worded(infrastructure()) if item.key.endswith("resource:delivery")]
 
     def item(self):
         (found,) = [item for item in self.items() if item.key.startswith("finding:deploy-")]

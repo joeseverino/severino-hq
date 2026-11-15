@@ -66,14 +66,14 @@ class HeldRequestWordsTests(TestCase):
     def test_needs_you_says_what_a_list_and_a_flag_mean(self):
         (item,) = waiting_for_approval()
 
-        self.assertEqual(dumped(item.body), [], item.body)
-        self.assertIn("docs set to rb-example-0, rb-example-1", item.body)
-        self.assertIn("confirm the delete set to yes", item.body)
+        self.assertEqual(dumped(item.explanation), [], item.explanation)
+        self.assertIn("docs set to rb-example-0, rb-example-1", item.explanation)
+        self.assertIn("confirm the delete set to yes", item.explanation)
 
     def test_a_command_on_no_record_is_not_said_to_create_one(self):
         (item,) = waiting_for_approval()
 
-        self.assertNotIn("created", item.body.lower(), item.body)
+        self.assertNotIn("created", item.explanation.lower(), item.explanation)
 
     def test_the_audit_says_it_as_the_card_does(self):
         event = AuditLog.objects.get(object_type__in=AUDIT_LABELS, object_id=str(self.held.id))
@@ -102,7 +102,7 @@ class HeldRequestWordsTests(TestCase):
         for page in (reverse("dashboard"), reverse("action_items")):
             with self.subTest(page=page):
                 details = [element.words for element in select(self.client.get(page), "data-attention-detail")]
-                self.assertIn(" ".join(item.body.split()), details)
+                self.assertIn(" ".join(item.explanation.split()), details)
 
     def test_its_card_on_the_dashboard_opens_its_own_page(self):
         user = get_user_model().objects.create_superuser("reviewer", "reviewer@example.test", "x" * 20)

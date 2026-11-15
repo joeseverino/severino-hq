@@ -162,7 +162,7 @@ class EveryHeldRequestTests(TestCase):
         page = self.client.get(reverse("core:approval_entry", kwargs={"approval_id": held.id}), follow=True)
         # The card's heading is what was asked.
         card = next(element.words for element in within(page, "data-approval") if element.tag in ("h2", "h3"))
-        (bell,) = [item.title for item in waiting_for_approval() if item.key == f"approval:{held.id}"]
+        (bell,) = [item.title for item in waiting_for_approval() if item.subject == str(held.id)]
         return card, bell
 
     def test_every_command_an_agent_may_ask_for_says_what_it_wants_done(self):
