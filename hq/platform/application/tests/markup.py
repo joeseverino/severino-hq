@@ -26,6 +26,10 @@ class Element:
     # parses into no element of the page; and an element marked inert, which
     # no one reaches (a filter bar's sizer).
     inert: bool = field(default=False, repr=False, compare=False)
+    # Within a declarative shadow root (`<template shadowrootmode>`), which a
+    # browser draws as the page, in a tree of its own: its ids and what points
+    # at them are the root's alone.
+    shadowed: bool = field(default=False, repr=False, compare=False)
     # For a row's open line (`data-row-detail`), the row it opens: what the
     # row moved there (`row-below`, its editor) is still the row's.
     opens: Element | None = field(default=None, repr=False, compare=False)
@@ -64,12 +68,17 @@ class _Page(HTMLParser):
         element.beneath = not moved and (
             "data-row-detail" in element.attrs or any("data-row-detail" in opened.attrs for opened in self._open)
         )
-        element.inert = tag == "template" or "inert" in element.attrs or any(opened.inert for opened in self._open)
+        root = tag == "template" and "shadowrootmode" in element.attrs
+        element.shadowed = root or any(opened.shadowed for opened in self._open)
+        element.inert = (
+            (tag == "template" and not root) or "inert" in element.attrs or any(opened.inert for opened in self._open)
+        )
         if tag == "tr" and "data-row-detail" in element.attrs:
             element.opens = next(
                 (row for row in reversed(self.elements) if row.tag == "tr" and row.ancestors == element.ancestors), None
             )
-        if not element.inert:
+        # A shadow root's template is no element of the page; what it holds is.
+        if not element.inert and not root:
             self.elements.append(element)
         self._edge = self._edge or not _TOKEN_PARTS & element.classes
         if tag not in _VOID:

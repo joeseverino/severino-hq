@@ -17,7 +17,7 @@ from django.core.management import CommandError, call_command
 from django.test import SimpleTestCase, TestCase, override_settings, tag
 from django.urls import reverse
 
-from hq.platform.application.tests.markup import all_elements, elements, select, texts
+from hq.platform.application.tests.markup import all_elements, elements, select
 from hq.platform.core import design_gallery
 from hq.platform.core.models import AuditLog
 from hq.platform.core.tests.browser import catalog
@@ -38,7 +38,7 @@ POINTERS = ("id", "for", "form", "popovertarget", "commandfor", "aria-controls",
 def _light(html):
     """The elements of the page's own tree, out of every shadow root."""
 
-    return [element for element in all_elements(html) if not element.inert]
+    return [element for element in all_elements(html) if not element.shadowed]
 
 
 class DesignPageTests(TestCase):
@@ -88,11 +88,8 @@ class DesignPageTests(TestCase):
     def test_no_part_takes_the_page_s_focus(self):
         # A part's autofocus would scroll the page to it on load, under the
         # families' map, which stays at the top.
-        # A shadow root's markup is parsed as the page's own, as a browser
-        # parses it, rather than as a template's inert content.
         def focused(html):
-            unwrapped = html.replace('<template shadowrootmode="open">', "")
-            return [element.tag for element in all_elements(unwrapped) if "autofocus" in element.attrs]
+            return [element.tag for element in all_elements(html) if "autofocus" in element.attrs]
 
         self.assertEqual(focused(catalog.CATALOG["form/filter-bar"].part("form/filter-bar")), ["input"])
         self.assertEqual(focused(self.gallery), [])
@@ -104,7 +101,8 @@ class DesignPageTests(TestCase):
             page = self.client.get(reverse("design"))
 
         self.assertEqual(page.status_code, 200)
-        self.assertEqual(texts(page, "h1"), ["Design"])
+        # Each part that heads its own page draws its heading in its own tree.
+        self.assertEqual([element.words for element in _light(page) if element.tag == "h1"], ["Design"])
         self.assertEqual(elements(page, "iframe"), [])
         self.assertIn(self.gallery, page.content.decode())
         self.assertEqual(AuditLog.objects.count(), recorded)
