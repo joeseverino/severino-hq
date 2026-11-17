@@ -94,7 +94,7 @@ SELECTORS = {
     "nav_drawer": ".primary-nav",
     "nav_toggle": "[popovertarget=primary-navigation]",
     # The dashboard's domain overviews, and the row its calendar leads.
-    "highlights": ".section-flow > .section:has(> .section-body > .facts-band.is-lead)",
+    "highlights": ".section-flow > .section:has(> .section-body > .facts-band.is-large)",
     "patterns": ".section-flow:has(> #dashboard-calendar) > .section",
     # Each reading in the dashboard's row: a mark, then its lines.
     "readings": ".readings .reading-head",

@@ -577,7 +577,8 @@ A fact's `drawing` is drawn beside its value or under its detail. Given
 is the button that opens the panel in place, as a menu does, and each
 `data_*` option is its attribute, so a fragment region in the band holds
 facts refreshed in place as its own (`core/_dashboard_glance.html`). Under
-24rem a band of status facts reads as a list, each fact a row of its own.
+24rem a band reads as a list, each fact a row of its own; small figures keep
+their grid, and a lead its figure on a row of its own.
 
 Every label and its value is a fact: `{% fact "Label" value=n url=...
 detail=... %}` inside `{% facts %}`, or the block form `{% fact "Label"
@@ -1552,10 +1553,9 @@ what the items carry (`hq/platform/application/action_items.py`), so a domain th
 raising items has its section without being listed anywhere.
 Filters that match nothing offer a way back; they never imply a healthy estate.
 
-**Overview figures have a hierarchy.** A domain's overview is a band of
-facts at `size="lead"`: it leads with its contributor's first figure, then the
-supporting figures together. Values, context and links render once from the
-`Kpi` collection. Other counts keep their even band. Overview cards fit their
+**A band's values are one size.** A domain's overview is a band of facts
+at `size="large"`, every figure the same size, in its contributor's order.
+Values, context and links render once from the `Kpi` collection. Overview cards fit their
 available width, placing three domains side by side when space permits; empty
 contributors take no space.
 
@@ -1927,8 +1927,8 @@ Alignment:
 - A frame across the page is filled by what it holds.
 - What reads as one unit (a state, a time, a part of a value, a control's
   label) does not wrap.
-- The dashboard's readings are one shape: each mark beside its lead, every
-  lead one size, every second line at one depth.
+- A band's values are one size, and a drawing beside one never sets its
+  cell's width.
 
 Decoration:
 

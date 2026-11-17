@@ -65,9 +65,9 @@
      column a card sets (110px, layout.css). */
   .figure-dots:has(> :nth-child(7)) { display: inline-grid; grid-auto-flow: column; grid-template-rows: repeat(2, auto); }
   .figure-dots:has(> :nth-child(9)) { grid-template-rows: repeat(3, auto); }
-  /* Rows of dots stand taller than the value: it keeps to the top of its
+  /* Dots may wrap into rows taller than the value: it keeps to the top of its
      line, level with the values beside it, rather than at their middle. */
-  .fact-figure:has(> .figure-dots > :nth-child(7)) > span { align-self: flex-start; }
+  .fact-figure:has(> .figure-dots) > span { align-self: flex-start; }
   .figure-dot { position: relative; display: block; width: 10px; height: 10px; border: 1.5px solid var(--muted-2); border-radius: 50%; }
   .figure-dot.is-filled { border-color: var(--ok); background: var(--ok); }
   /* A dot that leads somewhere is hit through a square around it (page.css),
@@ -152,21 +152,25 @@
   /* With no script a fold cannot open or close, and every row it would fold shows (tables.css), so it is not drawn. */
   @media (scripting: none) { .row-fold { display: none; } }
 
-  /* A band of status facts too narrow for two cells is a list, like every
-     other summary: each fact a row of its own, its label and its value at
-     the right edge, the detail under both. Asked of the band's own width, so
-     a band in a narrow card reads the same as one on a phone. Figures (`small`,
-     `large`, `lead`) keep their size and their cells. */
+  /* A band too narrow for two cells is a list, like every other summary:
+     each fact a row of its own, its label and its value at the right edge,
+     the detail and its drawing under both. Asked of the band's own width, so
+     a band in a narrow card reads the same as one on a phone. Small figures
+     keep their grid, which holds a dozen across at any width, and a lead its
+     figure on a row of its own. */
   @container band (width < 24rem) {
     /* The label keeps its words up to three fifths of the row and wraps past
        that, and the value never narrows past its longest run that cannot
        break (`min-content`, a count bound to its noun), so a long label never
        squeezes its value to a letter a line or parts a number from its unit. */
-    .facts-band:not(.is-small, .is-large, .is-lead) > .fact { flex-basis: 100%; display: grid; grid-template-columns: fit-content(60%) minmax(min-content, 1fr); align-items: baseline; gap: var(--space-2) var(--space-4); padding-block: var(--space-5); }
-    .facts-band:where(:not(.card:not(.section-body) > :only-child)):not(.is-small, .is-large, .is-lead) > .fact { padding-block: 0; }
-    .facts-band:not(.is-small, .is-large, .is-lead) dt { font-size: var(--text-sm); }
-    .facts-band:not(.is-small, .is-large, .is-lead) .fact-value { text-align: right; font-size: var(--text-md); }
-    .facts-band:not(.is-small, .is-large, .is-lead) .fact-detail { grid-column: 1 / -1; }
+    .facts-band:not(.is-small, .is-lead) > .fact { flex-basis: 100%; display: grid; grid-template-columns: fit-content(60%) minmax(min-content, 1fr); align-items: baseline; gap: var(--space-2) var(--space-4); padding-block: var(--space-5); }
+    .facts-band:where(:not(.card:not(.section-body) > :only-child)):not(.is-small, .is-lead) > .fact { padding-block: 0; }
+    .facts-band:not(.is-small, .is-lead) dt { font-size: var(--text-sm); }
+    .facts-band:not(.is-small, .is-lead) .fact-value { text-align: right; font-size: var(--text-md); }
+    .facts-band:not(.is-small, .is-lead) .fact-detail { grid-column: 1 / -1; }
+    /* A value's dots stand before it, so the value keeps the right edge. */
+    .facts-band:not(.is-small, .is-lead) .fact-figure { flex-direction: row-reverse; }
+    .facts-band:not(.is-small, .is-lead) .figure-dots { justify-content: end; }
   }
 
   /* On paper a pill in a section's head is a link, which cannot be followed
