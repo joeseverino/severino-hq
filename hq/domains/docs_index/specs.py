@@ -4,7 +4,7 @@ from pydantic import Field, create_model
 
 from hq.platform.application import documentation
 from hq.platform.application.integration_specs import ResourceSpec
-from hq.platform.application.resource_records import DocumentationRow
+from hq.platform.application.resource_records import DocumentationItem, DocumentationRow
 from hq.platform.application.resources import STATUS_FILTER, BoundedQuery, TextFilter, one_of
 from hq.platform.application.search_contracts import SearchDefinition
 from hq.platform.application.security import Capability
@@ -28,6 +28,8 @@ def resources() -> tuple[ResourceSpec, ...]:
             Capability.READ,
             documentation.list_documentation,
             DocumentationQuery,
+            documentation.get_documentation,
+            "doc_id",
             search=SearchDefinition(
                 "documentation",
                 DocumentationRecord,
@@ -46,5 +48,6 @@ def resources() -> tuple[ResourceSpec, ...]:
             ),
             web_route="docs_index:list",
             row_type=DocumentationRow,
+            record_type=DocumentationItem,
         ),
     )

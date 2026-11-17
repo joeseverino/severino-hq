@@ -86,6 +86,10 @@ type LinkedDocs = Annotated[
 ]
 type LinkedContent = Annotated[list[str], Describe("The slugs of the writeups and pages linked to it, sorted.")]
 type LinkedExpenses = Annotated[list[int], Describe("The ids of the expenses linked to it, newest first.")]
+type LinkedProjects = Annotated[list[str], Describe("The slugs of the projects it is about, sorted.")]
+type LinkedAssets = Annotated[list[str], Describe("The slugs of the assets it is about, sorted.")]
+# The expenses a writeup or a doc records, in the order HQ took them in.
+type RecordedExpenses = Annotated[list[int], Describe("The ids of the expenses it records, oldest first.")]
 # A part HQ passes on in the shape its source gave it (a provider's record, a
 # policy entry as written, a reading type's record), so its keys are the
 # source's and HQ names none of them. Every part HQ builds says its fields.

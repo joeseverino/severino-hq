@@ -18,7 +18,16 @@ from hq.domains.control_plane.models import OperationRequest
 from hq.domains.control_plane.observations.contract import READERS, READING_FACETS
 from hq.domains.control_plane.provider_adapters.contracts import REFUSALS
 
-from .answer_fields import AsRead, DateTime, ObservedAt, Since, UpdatedAt
+from .answer_fields import (
+    AsRead,
+    DateTime,
+    LinkedAssets,
+    LinkedProjects,
+    ObservedAt,
+    RecordedExpenses,
+    Since,
+    UpdatedAt,
+)
 from .conditions import DEGRADED, DRIFTED, READY
 from .credential_sight import STATE_LABELS
 from .describe import Describe, listed
@@ -883,10 +892,25 @@ class DocumentationRow(TypedDict):
     updated_at: UpdatedAt
 
 
+class DocumentationLinks(TypedDict):
+    """The records a documentation pointer is linked to."""
+
+    projects: LinkedProjects
+    assets: LinkedAssets
+    expense_ids: RecordedExpenses
+
+
+class DocumentationItem(DocumentationRow):
+    """One documentation pointer with the records it is linked to."""
+
+    relationships: DocumentationLinks
+
+
 __all__ = [
     "ActionItemRow",
     "ContainerRecord",
     "ContainerRow",
+    "DocumentationItem",
     "DocumentationRow",
     "DomainRecord",
     "DomainRow",

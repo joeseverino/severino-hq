@@ -22,7 +22,7 @@ from .command_fields import Describe, Names
 from .entity_links import EntityLink, entity_link
 from .labels import plural
 from .projection import listing
-from .record_errors import PolicyError
+from .record_errors import PolicyError, RecordNotFound
 from .record_fields import Notes, PublishedAt, RecordId, one_of
 from .record_saves import Held, Link, linked_saver
 from .references import Mention, Mentions
@@ -243,6 +243,18 @@ def list_documentation(*, status: str | None = None, query: str | None = None, l
         order=("doc_id",),
         limit=limit,
     )
+
+
+def get_documentation(doc_id: str) -> dict[str, Any]:
+    """One documentation record any reader may see, by its doc ID, with the
+    records it is linked to; a restricted one is answered as none, as the list
+    leaves it out."""
+
+    try:
+        record = safe_records().get(doc_id=doc_id)
+    except DocumentationRecord.DoesNotExist as exc:
+        raise RecordNotFound("No documentation record has that doc ID.") from exc
+    return serialize_documentation(record)
 
 
 save_documentation = linked_saver(

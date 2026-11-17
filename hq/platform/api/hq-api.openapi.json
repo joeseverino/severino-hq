@@ -63,6 +63,15 @@
         },
         "style": "form"
       },
+      "DocIdIdentifier": {
+        "description": "The record's `doc_id`, as each item of the list carries it.",
+        "in": "path",
+        "name": "identifier",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
       "Fields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` alone keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
@@ -932,6 +941,30 @@
         },
         "description": "Success."
       },
+      "ContentRecordSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/ContentRecord"
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
       "ContentRowPageSuccess": {
         "content": {
           "application/json": {
@@ -1132,6 +1165,30 @@
               "properties": {
                 "data": {
                   "$ref": "#/components/schemas/DependencyUpdatesSet"
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
+      "DocumentationItemSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/DocumentationItem"
                 },
                 "ok": {
                   "$ref": "#/components/schemas/Outcome",
@@ -6420,6 +6477,65 @@
         ],
         "type": "object"
       },
+      "ContentLinks": {
+        "additionalProperties": false,
+        "description": "The records a writeup or page is linked to.",
+        "properties": {
+          "assets": {
+            "$ref": "#/components/schemas/LinkedAssets"
+          },
+          "documentation": {
+            "$ref": "#/components/schemas/LinkedDocs"
+          },
+          "expense_ids": {
+            "$ref": "#/components/schemas/RecordedExpenses"
+          },
+          "projects": {
+            "$ref": "#/components/schemas/LinkedProjects"
+          }
+        },
+        "type": "object"
+      },
+      "ContentRecord": {
+        "additionalProperties": false,
+        "description": "One writeup, video or page with the records it is linked to.",
+        "properties": {
+          "content_type": {
+            "$ref": "#/components/schemas/ContentRow/properties/content_type"
+          },
+          "notes": {
+            "$ref": "#/components/schemas/ContentRow/properties/notes"
+          },
+          "published_at": {
+            "$ref": "#/components/schemas/ContentRow/properties/published_at"
+          },
+          "published_url": {
+            "$ref": "#/components/schemas/ContentRow/properties/published_url"
+          },
+          "relationships": {
+            "$ref": "#/components/schemas/ContentLinks"
+          },
+          "slug": {
+            "$ref": "#/components/schemas/ContentRow/properties/slug"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ContentRow/properties/status"
+          },
+          "tags": {
+            "$ref": "#/components/schemas/ContentRow/properties/tags"
+          },
+          "title": {
+            "$ref": "#/components/schemas/ContentRow/properties/title"
+          },
+          "topic": {
+            "$ref": "#/components/schemas/ContentRow/properties/topic"
+          },
+          "updated_at": {
+            "$ref": "#/components/schemas/ContentRow/properties/updated_at"
+          }
+        },
+        "type": "object"
+      },
       "ContentRow": {
         "additionalProperties": false,
         "description": "One writeup, video or page, published or not.",
@@ -6466,7 +6582,7 @@
         "description": "The content item as saved, and whether the call created it.",
         "properties": {
           "content": {
-            "$ref": "#/components/schemas/ContentRow"
+            "$ref": "#/components/schemas/ContentRecord"
           },
           "created": {
             "$ref": "#/components/schemas/Created"
@@ -7379,6 +7495,74 @@
         ],
         "type": "object"
       },
+      "DocumentationItem": {
+        "additionalProperties": false,
+        "description": "One documentation pointer with the records it is linked to.",
+        "properties": {
+          "doc_id": {
+            "$ref": "#/components/schemas/DocumentationRow/properties/doc_id"
+          },
+          "doc_type": {
+            "$ref": "#/components/schemas/DocumentationRow/properties/doc_type"
+          },
+          "environment": {
+            "$ref": "#/components/schemas/DocumentationRow/properties/environment"
+          },
+          "external_url": {
+            "$ref": "#/components/schemas/DocumentationRow/properties/external_url"
+          },
+          "github_path": {
+            "$ref": "#/components/schemas/DocumentationRow/properties/github_path"
+          },
+          "last_reviewed": {
+            "$ref": "#/components/schemas/DocumentationRow/properties/last_reviewed"
+          },
+          "notes": {
+            "$ref": "#/components/schemas/DocumentationRow/properties/notes"
+          },
+          "obsidian_path": {
+            "$ref": "#/components/schemas/DocumentationRow/properties/obsidian_path"
+          },
+          "published_at": {
+            "$ref": "#/components/schemas/DocumentationRow/properties/published_at"
+          },
+          "relationships": {
+            "$ref": "#/components/schemas/DocumentationLinks"
+          },
+          "sensitivity": {
+            "$ref": "#/components/schemas/DocumentationRow/properties/sensitivity"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DocumentationRow/properties/status"
+          },
+          "system": {
+            "$ref": "#/components/schemas/DocumentationRow/properties/system"
+          },
+          "title": {
+            "$ref": "#/components/schemas/DocumentationRow/properties/title"
+          },
+          "updated_at": {
+            "$ref": "#/components/schemas/DocumentationRow/properties/updated_at"
+          }
+        },
+        "type": "object"
+      },
+      "DocumentationLinks": {
+        "additionalProperties": false,
+        "description": "The records a documentation pointer is linked to.",
+        "properties": {
+          "assets": {
+            "$ref": "#/components/schemas/LinkedAssets"
+          },
+          "expense_ids": {
+            "$ref": "#/components/schemas/RecordedExpenses"
+          },
+          "projects": {
+            "$ref": "#/components/schemas/LinkedProjects"
+          }
+        },
+        "type": "object"
+      },
       "DocumentationRow": {
         "additionalProperties": false,
         "description": "One documentation pointer; a path or note it may not show is blank.",
@@ -7437,7 +7621,7 @@
             "$ref": "#/components/schemas/Created"
           },
           "documentation": {
-            "$ref": "#/components/schemas/DocumentationRow"
+            "$ref": "#/components/schemas/DocumentationItem"
           },
           "message": {
             "$ref": "#/components/schemas/CallMessage"
@@ -10164,6 +10348,13 @@
         ],
         "type": "object"
       },
+      "LinkedAssets": {
+        "description": "The slugs of the assets it is about, sorted.",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
       "LinkedContent": {
         "description": "The slugs of the writeups and pages linked to it, sorted.",
         "items": {
@@ -10182,6 +10373,13 @@
         "description": "The ids of the expenses linked to it, newest first.",
         "items": {
           "type": "integer"
+        },
+        "type": "array"
+      },
+      "LinkedProjects": {
+        "description": "The slugs of the projects it is about, sorted.",
+        "items": {
+          "type": "string"
         },
         "type": "array"
       },
@@ -13533,6 +13731,13 @@
       "RecordSlug": {
         "description": "Its address in HQ, unique among records of its type: what its page and its links name it by.",
         "type": "string"
+      },
+      "RecordedExpenses": {
+        "description": "The ids of the expenses it records, oldest first.",
+        "items": {
+          "type": "integer"
+        },
+        "type": "array"
       },
       "RefusalCode": {
         "description": "Which cause, from HQ's table of codes (docs/API.md, Errors). Branch on the status.",
@@ -22584,6 +22789,55 @@
         "x-hq-resource": "content"
       }
     },
+    "/api/v2/resources/content/{identifier}/": {
+      "get": {
+        "description": "One of the records Content lists, found by its `slug`.",
+        "operationId": "getContentV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SlugIdentifier"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ContentRecordSuccess"
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ResourceReadNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Content: one by slug",
+        "tags": [
+          "hq.content"
+        ],
+        "x-hq-identifier": "slug",
+        "x-hq-resource": "content"
+      }
+    },
     "/api/v2/resources/credentials/": {
       "get": {
         "description": "What each connection's credential can read, and what it would need to read more.",
@@ -22754,6 +23008,55 @@
         "tags": [
           "hq.docs"
         ],
+        "x-hq-resource": "documentation"
+      }
+    },
+    "/api/v2/resources/documentation/{identifier}/": {
+      "get": {
+        "description": "One of the records Docs lists, found by its `doc_id`.",
+        "operationId": "getDocumentationV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DocIdIdentifier"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/DocumentationItemSuccess"
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ResourceReadNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Docs: one by doc id",
+        "tags": [
+          "hq.docs"
+        ],
+        "x-hq-identifier": "doc_id",
         "x-hq-resource": "documentation"
       }
     },
@@ -24580,7 +24883,9 @@
                 "connections",
                 "contact.submissions",
                 "containers",
+                "content",
                 "credentials",
+                "documentation",
                 "domains",
                 "infrastructure",
                 "machines",

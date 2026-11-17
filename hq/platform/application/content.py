@@ -9,7 +9,7 @@ from hq.domains.content.models import ContentItem
 
 from .command_fields import Describe, Names
 from .entity_links import EntityLink, entity_link, web_url
-from .projection import iso, listing
+from .projection import addressable, iso, listing
 from .record_fields import Notes, PublishedAt, PublishedUrl, RecordId, one_of
 from .record_saves import Held, Link, linked_saver
 from .sensitivity import safe_doc_ids
@@ -95,6 +95,12 @@ def list_content(*, status: str | None = None, query: str | None = None, limit: 
         query=query,
         limit=limit,
     )
+
+
+def get_content(slug: str) -> dict[str, Any]:
+    """One writeup, video or page by its slug, with the records it is linked to."""
+
+    return addressable(ContentItem, serialize_content, slug)
 
 
 save_content = linked_saver(
