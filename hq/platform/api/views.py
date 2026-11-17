@@ -582,10 +582,11 @@ _COUNT = re.compile(r"-?[0-9]{1,18}")
 def _narrowing(request: APIRequest, query_fields: QueryFields) -> dict[str, Any]:
     """The declared query parameters, each sent at most once, an integer one in digits read as that integer.
 
-    Text sent empty is absent, as a form leaves it, so the read's own default
-    applies. Anything but a count stays the text it was, which the read's
-    strict model refuses in the words MCP's argument model uses for the same
-    input.
+    Anything but a count stays the text it was, an empty one included, which
+    the read's strict model judges as the document declares it, in the words
+    MCP's argument model uses for the same input: only a field left out takes
+    the read's default. The web pages, whose forms send a field they leave
+    empty, read their own queries.
     """
 
     values: dict[str, Any] = {}
@@ -596,10 +597,7 @@ def _narrowing(request: APIRequest, query_fields: QueryFields) -> dict[str, Any]
         if not sent:
             continue
         (raw,) = sent
-        if schema.get("type") == "integer":
-            values[field] = int(raw) if _COUNT.fullmatch(raw) else raw
-        elif text := raw.strip():
-            values[field] = text
+        values[field] = int(raw) if schema.get("type") == "integer" and _COUNT.fullmatch(raw) else raw
     return values
 
 

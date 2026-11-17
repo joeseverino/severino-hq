@@ -410,14 +410,14 @@ KEYLESS_INTERFACES = frozenset({CLI_INTERFACE})
 def _retry_key(spec: CapabilitySpec, payload: dict[str, Any], sent: str | None) -> tuple[str, dict[str, Any]]:
     """``(key, payload)``: the caller's retry key, and the payload its command reads.
 
-    The key arrives beside the payload (``sent``), in it, or both alike; an
-    empty one is none. A read takes none, so one in its payload is an unknown
-    field. No command sees the key: a retry is this runner's to answer.
+    The key arrives beside the payload (``sent``), in it, or both alike. A read
+    takes none, so one in its payload is an unknown field. No command sees the
+    key: a retry is this runner's to answer.
     """
 
     if not spec.effect.changes or not isinstance(payload, dict):
         return "", payload
-    keys = {_valid_key(given) for given in (sent, payload.get(IDEMPOTENCY_FIELD))} - {""}
+    keys = {_valid_key(given) for given in (sent, payload.get(IDEMPOTENCY_FIELD)) if given is not None}
     if len(keys) > 1:
         raise InvalidIdempotencyKey("The request sent two different idempotency keys.")
     key = keys.pop() if keys else ""
@@ -425,10 +425,13 @@ def _retry_key(spec: CapabilitySpec, payload: dict[str, Any], sent: str | None) 
 
 
 def _valid_key(given: object) -> str:
-    """``given`` as a retry key, or "" for none; raises ``InvalidIdempotencyKey`` for any other value."""
+    """``given`` as a retry key; raises ``InvalidIdempotencyKey`` for any other value.
 
-    if given is None or given == "":
-        return ""
+    A key sent empty is a key of the wrong shape, as the API document declares
+    it, never a key left out: a door whose form posts the field empty leaves it
+    out itself (``web_writes._call_key``).
+    """
+
     if not isinstance(given, str):
         raise InvalidIdempotencyKey(KEY_SHAPE)
     return validate_key(given)
