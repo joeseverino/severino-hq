@@ -261,6 +261,10 @@ SCOPE = Check(
     holds="Each token holds what HQ uses, so a stolen one reaches only that.",
     boundary="Credentials",
     mechanism="Each connection's permission check",
+    # Changes to the connections standard's kept connection (``connection_security``).
+    breaks=({"evidence": ["coarse"]}, {"evidence": ["verified", "missing"]}),
+    # A login whose service offers nothing narrower is met, though not cleanly.
+    keeps=({"kind": "acme", "evidence": ["coarse"]}, {"kind": "npm", "evidence": ["coarse"]}),
 )
 
 # ``why`` is what each stops, read after "Stops" in its sentence.

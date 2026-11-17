@@ -271,83 +271,9 @@ class PageTests(TestCase):
         self.assertTrue(served["read_with_url"])
 
 
-class ScopeTests(TestCase):
-    """One judgment of every token, from what the checks of its abilities found."""
-
-    def reading(self, provider: str, *evidence: str):
-        from types import SimpleNamespace
-
-        from ..posture import Inputs, posture
-
-        connection = SimpleNamespace(
-            instance=SimpleNamespace(label="Example", kind=provider),
-            abilities=tuple(SimpleNamespace(evidence=found) for found in evidence),
-        )
-        group = SimpleNamespace(connections=(connection,), spec=SimpleNamespace(required_capabilities=("read",)))
-        unread = Reading.unavailable("Not read")
-        found = posture(Inputs(edge=unread, firewall=unread, groups=(group,)))
-        return next(result for result in found.results if result.check.id == "scope").reading
-
-    def test_a_full_account_token_where_a_scoped_one_is_offered_is_unmet(self):
-        reading = self.reading("cloudflare_api", "coarse")
-
-        self.assertEqual(reading.standing, Standing.UNMET)
-        self.assertEqual(reading.evidence, "Full account access: Example")
-
-    def test_a_missing_permission_is_unmet(self):
-        reading = self.reading("cloudflare_api", "verified", "missing")
-
-        self.assertEqual(reading.standing, Standing.UNMET)
-        self.assertEqual(reading.evidence, "Permission missing: Example")
-
-    def test_a_certificate_authority_account_is_read_as_the_whole_account_it_is(self):
-        from hq.domains.control_plane.connection_kinds import connection_credential
-
-        reading = self.reading("acme", "coarse")
-
-        self.assertEqual(connection_credential("acme"), "coarse")
-        self.assertEqual(reading.standing, Standing.MET)
-        self.assertTrue(reading.limited)
-
-    def test_a_login_with_no_scoped_form_is_met_but_not_a_clean_pass(self):
-        reading = self.reading("npm", "coarse")
-
-        self.assertEqual(reading.standing, Standing.MET)
-        self.assertTrue(reading.limited)
-        self.assertEqual(reading.evidence, "Nothing narrower offered for Example")
-
-    def test_a_checked_token_is_met(self):
-        reading = self.reading("cloudflare_api", "verified")
-
-        self.assertEqual(reading.standing, Standing.MET)
-        self.assertFalse(reading.limited)
-        self.assertEqual(reading.evidence, "1 checked")
-
-    def test_a_token_not_checked_is_not_read(self):
-        self.assertEqual(self.reading("cloudflare_api", "unverified").standing, Standing.UNAVAILABLE)
-
-    def test_with_nothing_held_there_is_nothing_to_judge(self):
-        self.assertEqual(self.reading("").standing, Standing.UNAVAILABLE)
-
-
 class ToneTests(TestCase):
     def result(self, reading, *, enforced=True):
         return CheckResult(STANDARD[0], reading, enforced=enforced)
-
-    def test_without_advanced_posture_an_unmet_check_is_quiet(self):
-        found = self.result(Reading.unmet(), enforced=False)
-
-        self.assertEqual((found.tone, found.icon), ("neutral", "circle"))
-
-    def test_under_advanced_posture_an_unmet_check_is_a_fault(self):
-        found = self.result(Reading.unmet())
-
-        self.assertEqual((found.tone, found.icon), ("attention", "x-circle"))
-
-    def test_an_unread_check_is_never_a_fault(self):
-        found = self.result(Reading.unavailable("Waiting on the first read of example"))
-
-        self.assertEqual((found.tone, found.icon), ("neutral", "clock"))
 
     def test_a_limited_pass_is_ticked_but_not_green(self):
         found = self.result(Reading.met(limited=True))

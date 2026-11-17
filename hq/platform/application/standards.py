@@ -109,6 +109,11 @@ class Check:
     # The security boundary it belongs to, and what enforces it.
     boundary: str = field(default="", kw_only=True)
     mechanism: str = field(default="", kw_only=True)
+    # Its examples, for a check of a standard that has them (``Examples``):
+    # changes to the kept record it alone fails (none for a check that is only
+    # ever met or not read), and changes it still meets.
+    breaks: tuple[Mapping[str, Any], ...] | None = field(default=None, kw_only=True)
+    keeps: tuple[Mapping[str, Any], ...] = field(default=(), kw_only=True)
 
     @property
     def why_said(self) -> str:
@@ -117,6 +122,40 @@ class Check:
         if not self.why or self.why.endswith("."):
             return self.why
         return ended(f"Stops {self.why}")
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Examples:
+    """A standard decided from its subject alone, shown at work as every Part
+    shows itself in its example: the record of a subject that meets every
+    check, those of one nothing was read for, and how a subject is built from
+    a record. Each check's ``breaks`` and ``keeps`` change the kept record,
+    and one test walks them all."""
+
+    checks: tuple[Check, ...]
+    subject: Callable[[Mapping[str, Any]], Any]
+    kept: Mapping[str, Any]
+    unread: tuple[Mapping[str, Any], ...] = ({},)
+    # Whether a subject is offered the fix of a check it fails as it is done
+    # (commands, a change to paste) or told why not.
+    fixed: Callable[[Any, Check], bool] | None = None
+
+    def of(self, change: Mapping[str, Any]) -> Any:
+        """The subject of the kept record with ``change`` laid over it."""
+
+        return self.subject(_laid(self.kept, change))
+
+
+def _laid(record: Mapping[str, Any], change: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        **record,
+        **{
+            key: _laid(record[key], value)
+            if isinstance(value, Mapping) and isinstance(record.get(key), Mapping)
+            else value
+            for key, value in change.items()
+        },
+    }
 
 
 @dataclass(frozen=True, slots=True)

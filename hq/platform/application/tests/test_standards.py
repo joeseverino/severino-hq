@@ -1,6 +1,7 @@
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, TestCase
 
-from ..standards import Check, CheckResult, Measurement, Reading, measure
+from ..standards import Check, CheckResult, Measurement, Reading, Standing, measure
+from ..tone import Tone
 
 
 def _check(label, unmet, reading=None):
@@ -157,6 +158,50 @@ class RaisesTests(SimpleTestCase):
         for policy, found, expected in cases:
             with self.subTest(policy):
                 self.assertEqual(found, expected)
+
+
+class ExamplesTests(TestCase):
+    """Every standard decided from its subject alone, walked through its
+    examples: the kept record meets every check, one nothing was read for
+    fails none, each check's breaks fail it alone at its seriousness with its
+    fix written out where the standard writes one, and each of its keeps
+    meets it."""
+
+    def test_every_example_of_every_standard(self):
+        from .. import connection_security, container_standard, github_posture, supply_chain
+
+        for examples in (
+            container_standard.EXAMPLES,
+            github_posture.EXAMPLES,
+            supply_chain.EXAMPLES,
+            connection_security.EXAMPLES,
+        ):
+            for check in examples.checks:
+                with self.subTest(check=check.id):
+                    self.assertIsNotNone(check.breaks, "it declares what breaks it, or () where nothing can")
+            with self.subTest(kept=examples.checks[0].id):
+                found = measure(examples.subject(examples.kept), examples.checks)
+                self.assertEqual({result.state for result in found.results}, {Standing.MET})
+            for record in examples.unread:
+                with self.subTest(unread=record):
+                    found = measure(examples.subject(record), examples.checks)
+                    unread = [result for result in found.results if result.state == Standing.UNAVAILABLE]
+                    self.assertEqual(found.unmet, ())
+                    self.assertTrue(unread)
+                    self.assertTrue(all((result.tone, result.icon) == (Tone.NEUTRAL, "clock") for result in unread))
+            for check in examples.checks:
+                for change in check.breaks or ():
+                    with self.subTest(check=check.id, breaks=change):
+                        subject = examples.of(change)
+                        unmet = measure(subject, examples.checks).unmet
+                        self.assertEqual([result.check.id for result in unmet], [check.id])
+                        self.assertEqual(unmet[0].tone, Tone.SERIOUS if check.serious else Tone.ATTENTION)
+                        if examples.fixed:
+                            self.assertTrue(examples.fixed(subject, check), "its fix is written out, or why not")
+                for change in check.keeps:
+                    with self.subTest(check=check.id, keeps=change):
+                        found = measure(examples.of(change), examples.checks)
+                        self.assertEqual((found.state_of(check.id), found.unmet), (Standing.MET, ()))
 
 
 class UnmetCheckRowTests(SimpleTestCase):

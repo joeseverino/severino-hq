@@ -15,20 +15,10 @@ from hq.platform.application.markup_testing import hrefs, select
 from ..attention import raised
 from ..finding_steps import Do, Run
 from ..findings import finding_key
-from ..github_posture import (
-    COMMANDS,
-    PINS_CALLED,
-    PINS_UNREAD,
-    REASONS,
-    STANDARD,
-    postures,
-)
+from ..github_posture import EXAMPLES, PINS_CALLED, PINS_UNREAD, STANDARD, postures
 from ..repository_findings import PROJECTS
 from ..standards import INTENDED, Standing
 from .test_github_estate import store
-
-# What a well-kept repository reads as: only its owner, one read-only key in
-# use, a read-only token that approves nothing, pinned actions, fixes on.
 
 
 def raised_items():
@@ -37,110 +27,13 @@ def raised_items():
     return tuple(raised(PROJECTS))
 
 
-KEPT = {
-    "collaborators": [{"login": "example", "role": "admin"}],
-    "deploy_keys": [{"title": "deploy", "read_only": True, "last_used": timezone.now().isoformat()}],
-    "token": "read",
-    "token_approves_reviews": False,
-    "pinning_required": True,
-    "vulnerability_alerts": True,
-    "security": None,
-}
-
-
 def kept(**changes):
-    return {**KEPT, **changes}
+    """The access of the standard's kept repository, with ``changes``."""
+
+    return {**EXAMPLES.kept["access"], **changes}
 
 
 class PostureTests(TestCase):
-    def test_a_kept_private_repository_meets_the_private_standard(self):
-        store(private=True, access=kept(), variables=[])
-
-        found = postures()[0]
-
-        self.assertEqual((found.met, found.measured, found.unmet), (8, 8, ()))
-        self.assertNotIn("secret-scanning", [result.check.id for result in found.results])
-
-    def test_a_public_repository_is_held_to_more(self):
-        store(
-            private=False,
-            access=kept(security={"secret_scanning": "enabled", "secret_scanning_push_protection": "disabled"}),
-            variables=[],
-            rules={"pull_request": True, "blocks_force_push": True, "blocks_deletion": False},
-            alerts={"code_scanning": {}},
-        )
-
-        found = postures()[0]
-
-        self.assertEqual(found.state_of("secret-scanning"), Standing.MET)
-        self.assertEqual(found.state_of("push-protection"), Standing.UNMET)
-        self.assertEqual(found.state_of("deletion-blocked"), Standing.UNMET)
-        self.assertEqual(found.state_of("code-scanning"), Standing.MET)
-        self.assertEqual(len(found.results), 14)
-
-    def test_what_hq_could_not_read_is_unavailable_not_a_failure(self):
-        store(private=False)
-
-        found = postures()[0]
-
-        self.assertEqual(found.state_of("only-you"), Standing.UNAVAILABLE)
-        self.assertEqual(found.state_of("secret-scanning"), Standing.UNAVAILABLE)
-        self.assertEqual((found.measured, raised_items()), (0, ()))
-
-    def test_someone_gaining_reach_is_serious_and_drift_is_not(self):
-        stale = (timezone.now() - timedelta(days=200)).isoformat()
-        store(
-            private=True,
-            variables=["DEPLOY_TARGET"],
-            access=kept(
-                collaborators=[{"login": "example", "role": "admin"}, {"login": "guest", "role": "write"}],
-                deploy_keys=[{"title": "old", "read_only": False, "last_used": stale}],
-                token="write",
-            ),
-        )
-
-        items = {finding_key(item): item.severity for item in raised_items()}
-
-        self.assertEqual(
-            items,
-            {
-                "finding:github-posture::only-you": "serious",
-                "finding:github-posture::keys-read-only": "serious",
-                "finding:github-posture::keys-in-use": "attention",
-                "finding:github-posture::token-read-only": "attention",
-                "finding:github-posture::no-variables": "attention",
-            },
-        )
-
-    def test_one_item_per_gap_however_many_repositories_miss_it(self):
-        from hq.domains.control_plane.models import ProviderInventory
-
-        record = {
-            "connection_ref": "github",
-            "default_branch": "main",
-            "head": {},
-            "private": True,
-            "access": kept(pinning_required=False),
-            "variables": [],
-        }
-        ProviderInventory.objects.update_or_create(
-            kind="github.repository",
-            defaults={
-                "records": [
-                    {**record, "repository": f"example/{name}", "url": f"https://github.com/example/{name}"}
-                    for name in ("alpha", "beta", "gamma")
-                ],
-                "reachable": True,
-                "connected": True,
-                "observed_at": timezone.now(),
-            },
-        )
-
-        (item,) = raised_items()
-
-        self.assertEqual((finding_key(item), item.count), ("finding:github-posture::actions-pinned", 3))
-        self.assertEqual(dict(item.evidence)["Not met in"], "alpha, beta, gamma")
-
     def test_an_archived_repository_is_held_to_nothing(self):
         from hq.domains.control_plane.models import ProviderInventory
 
@@ -248,11 +141,6 @@ class PostureHelpTests(TestCase):
     def item(self, key: str, **record):
         store(private=True, **{"access": kept(), "variables": [], **record})
         return {finding_key(item): item for item in raised_items()}[f"finding:github-posture::{key}"]
-
-    def test_vulnerability_alerts_name_the_exact_command_for_the_repository(self):
-        item = self.item("vulnerability-alerts", access=kept(vulnerability_alerts=False))
-
-        self.assertEqual(runs(item), [("alpha", "gh api -X PUT repos/example/alpha/vulnerability-alerts")])
 
     def test_pinning_offers_no_setting_while_the_workflows_were_not_read(self):
         item = self.item("actions-pinned", access=kept(pinning_required=False))
@@ -407,30 +295,6 @@ class PostureHelpTests(TestCase):
             "gh api -X DELETE repos/example/alpha/keys/"
             "$(gh api repos/example/alpha/keys --jq '.[] | select(.title == \"deploy\") | .id')",
         )
-
-    def test_a_public_repository_gets_the_ruleset_and_scanning_commands(self):
-        store(
-            private=False,
-            access=kept(security={"secret_scanning": "disabled", "secret_scanning_push_protection": "enabled"}),
-            variables=[],
-            rules={"pull_request": True, "blocks_force_push": True, "blocks_deletion": False},
-        )
-        items = {finding_key(item): item for item in raised_items()}
-
-        (deletion,) = runs(items["finding:github-posture::deletion-blocked"])
-        (scanning,) = runs(items["finding:github-posture::secret-scanning"])
-
-        self.assertTrue(deletion[1].startswith("gh api -X POST repos/example/alpha/rulesets --input - <<< '"))
-        self.assertIn('"rules":[{"type":"deletion"}]', deletion[1])
-        self.assertEqual(
-            scanning[1],
-            "gh api -X PATCH repos/example/alpha -f 'security_and_analysis[secret_scanning][status]=enabled'",
-        )
-
-    def test_every_check_has_commands_or_a_reason(self):
-        for check in STANDARD:
-            with self.subTest(check=check.id):
-                self.assertTrue(check.id in COMMANDS or REASONS.get(check.id))
 
 
 def pin(uses: str) -> dict[str, str]:

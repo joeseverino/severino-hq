@@ -10,6 +10,8 @@ guarantee, and each is judged by the one ``standards.Check`` that states it
 from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from types import SimpleNamespace as Row
 from typing import Any
 
 from django.conf import settings
@@ -27,7 +29,7 @@ from .connection_lifecycle import ATTENTION, WORKING
 from .posture import SCOPE, STANDARD, Inputs, advanced
 from .reach import TAILNET
 from .request_standard import ADMISSION
-from .standards import Check, CheckResult, Measurement, Reading, Standing, measure
+from .standards import Check, CheckResult, Examples, Measurement, Reading, Standing, measure
 from .tone import Tone
 from .ui import counted, ended
 lazy from . import tailnet
@@ -247,6 +249,9 @@ CONNECTIONS_STANDARD: tuple[Check, ...] = (
         "Name the store that keeps each connection's secret on its item.",
         unmet="A key is kept outside a vault",
         holds="HQ keeps no secret itself.",
+        # Each connection says where its secret is kept, or that it needs none.
+        breaks=(),
+        keeps=({"keyless": True},),
     ),
     SCOPE,
     Check(
@@ -257,7 +262,38 @@ CONNECTIONS_STANDARD: tuple[Check, ...] = (
         "Start the controller, or press Refresh on the connection.",
         unmet="A connection has no reading",
         holds="Every connection has a reading.",
+        breaks=({"observed_at": None},),
     ),
+)
+
+
+def _example(record: Mapping[str, Any]) -> Inputs:
+    """The connections standard's subject holding the one connection ``record``
+    says, or none when it is empty: its kind, what the checks of its
+    abilities found, whether it needs a key, and when it was last read."""
+
+    held = Row(
+        instance=Row(
+            label="Example",
+            kind=record.get("kind", ""),
+            keyless=record.get("keyless", False),
+            observed_at=record.get("observed_at"),
+        ),
+        abilities=tuple(Row(evidence=found) for found in record.get("evidence", ())),
+    )
+    spec = Row(secret_store="a vault", required_capabilities=("read",))  # noqa: S106 - where a secret is kept, never one
+    group = Row(connections=(held,) if record else (), spec=spec)
+    return Inputs(edge=None, firewall=None, groups=(group,))
+
+
+_KEPT = {"kind": "cloudflare_api", "evidence": ["verified"], "observed_at": datetime(2026, 1, 1, tzinfo=UTC)}
+
+# A scoped token whose permissions were checked, kept in a vault and read.
+EXAMPLES = Examples(
+    checks=CONNECTIONS_STANDARD,
+    subject=_example,
+    kept=_KEPT,
+    unread=({}, {**_KEPT, "evidence": ["unverified"]}),
 )
 
 

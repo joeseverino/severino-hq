@@ -1,5 +1,10 @@
+"""What the container standard's examples (``container_standard.EXAMPLES``,
+walked in test_standards) cannot say: what a container's declaration excuses,
+and the standard as an agent and Needs you read it."""
+
 from django.test import TestCase
 
+from ..container_standard import EXAMPLES
 from ..containers import containers
 from ..standards import INTENDED, Standing
 from .test_containers import HIGH, estate, inventory
@@ -9,15 +14,7 @@ def runtime(container="web", **fields):
     return {"connection_ref": "example-portainer", "host": "example-box", "container": container, **fields}
 
 
-# How a well-run container reads: a user, no-new-privileges, a limit, a check.
-KEPT = {
-    "user": "1000",
-    "security_opt": ["no-new-privileges:true"],
-    "memory_limit": 268435456,
-    "healthcheck": True,
-    "network_mode": "bridge",
-    "port_bindings": [{"container_port": "80/tcp", "host_ip": "127.0.0.1", "host_port": "8080"}],
-}
+KEPT = dict(EXAMPLES.kept)
 
 
 class StandardTests(TestCase):
@@ -25,45 +22,6 @@ class StandardTests(TestCase):
         estate()
         inventory("portainer.runtime", [runtime(name, **fields)])
         return next(item.posture for item in containers() if item.running.name == name)
-
-    def test_a_well_run_container_meets_every_check(self):
-        found = self.posture(**KEPT)
-
-        self.assertEqual(found.unmet, ())
-        self.assertFalse(found.serious)
-
-    def test_reach_over_the_machine_is_serious(self):
-        found = self.posture(
-            **{
-                **KEPT,
-                "privileged": True,
-                "pid_mode": "host",
-                "cap_add": ["SYS_ADMIN"],
-                "security_opt": ["seccomp=unconfined"],
-                "mounts": [
-                    {
-                        "type": "bind",
-                        "source": "/var/run/docker.sock",
-                        "destination": "/var/run/docker.sock",
-                        "read_only": True,
-                    },
-                    {"type": "bind", "source": "/etc", "destination": "/host-etc", "read_only": False},
-                ],
-            }
-        )
-
-        serious = {result.check.id for result in found.unmet if result.check.serious}
-        self.assertEqual(
-            serious,
-            {
-                "not-privileged",
-                "no-docker-socket",
-                "own-process-namespace",
-                "confined",
-                "no-system-path-writable",
-                "no-powerful-capability",
-            },
-        )
 
     def test_a_check_declared_by_design_is_shown_with_its_reason_and_never_a_gap(self):
         from hq.domains.control_plane.models import ManagedResource
@@ -158,74 +116,6 @@ class StandardTests(TestCase):
             Standing.UNMET,
         )
 
-    def test_an_undeclared_container_writing_dockers_data_is_still_flagged(self):
-        volumes = {"type": "bind", "source": "/var/lib/docker/volumes", "destination": "/v", "read_only": False}
-
-        self.assertEqual(
-            self.posture(**{**KEPT, "mounts": [volumes]}).state_of("no-system-path-writable"), Standing.UNMET
-        )
-
-    def test_a_container_not_declared_to_hold_the_socket_still_is(self):
-        socket = {
-            "type": "bind",
-            "source": "/var/run/docker.sock",
-            "destination": "/var/run/docker.sock",
-            "read_only": True,
-        }
-
-        self.assertEqual(self.posture(**{**KEPT, "mounts": [socket]}).state_of("no-docker-socket"), Standing.UNMET)
-
-    def test_a_read_only_system_mount_and_a_data_bind_are_not_reach(self):
-        found = self.posture(
-            **{
-                **KEPT,
-                "mounts": [
-                    {"type": "bind", "source": "/etc/localtime", "destination": "/etc/localtime", "read_only": True},
-                    {"type": "bind", "source": "/opt/apps/web/data", "destination": "/data", "read_only": False},
-                ],
-            }
-        )
-
-        self.assertEqual(found.state_of("no-system-path-writable"), Standing.MET)
-
-    def test_an_applications_own_runtime_directory_is_not_the_machines(self):
-        found = self.posture(
-            **{
-                **KEPT,
-                "mounts": [
-                    {"type": "bind", "source": "/run/web", "destination": "/run/web", "read_only": False},
-                ],
-            }
-        )
-        whole = self.posture(
-            **{
-                **KEPT,
-                "mounts": [
-                    {"type": "bind", "source": "/run", "destination": "/host-run", "read_only": False},
-                ],
-            }
-        )
-
-        self.assertEqual(found.state_of("no-system-path-writable"), Standing.MET)
-        self.assertEqual(whole.state_of("no-system-path-writable"), Standing.UNMET)
-
-    def test_hardening_is_not_serious(self):
-        found = self.posture(user="", network_mode="host", port_bindings=[{"host_ip": "0.0.0.0", "host_port": "80"}])
-
-        self.assertEqual(
-            {result.check.id for result in found.unmet},
-            {"not-root", "no-new-privileges", "own-network", "ports-bound", "memory-limited", "health-checked"},
-        )
-        self.assertFalse(found.serious)
-
-    def test_what_was_not_read_is_unavailable_not_a_failure(self):
-        estate()
-
-        found = next(item.posture for item in containers() if item.running.name == "web")
-
-        self.assertEqual(found.state_of("not-privileged"), Standing.UNAVAILABLE)
-        self.assertEqual(found.state_of("no-docker-socket"), Standing.UNAVAILABLE)
-
 
 class ResourceTests(TestCase):
     def principal(self):
@@ -278,19 +168,3 @@ class AttentionTests(TestCase):
         self.assertEqual(sorted(finding.part for finding in found), ["kuma", "web"])
         self.assertTrue(all("runs privileged" in finding.title for finding in found))
         self.assertFalse(any("root" in finding.title for finding in found))
-
-
-class HealthCheckedTests(TestCase):
-    def check(self, runtime, *, check=None, serves=()):
-        from types import SimpleNamespace as Row
-
-        from ..container_standard import _health_checked
-
-        return _health_checked(Row(runtime=runtime, running=Row(check=check), serves=serves)).standing
-
-    def test_its_own_health_check_or_a_name_hq_requests_says_whether_it_works(self):
-        self.assertEqual(self.check({"healthcheck": True}), Standing.MET)
-        # An image with no shell cannot run a check; a name HQ requests still says.
-        self.assertEqual(self.check({}, serves=("admin.example.com",)), Standing.MET)
-        self.assertEqual(self.check({}), Standing.UNMET)
-        self.assertEqual(self.check(None), Standing.UNAVAILABLE)
