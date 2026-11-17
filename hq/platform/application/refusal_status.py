@@ -19,6 +19,8 @@ from typing import Annotated, Any, NotRequired, TypedDict, TypeIs
 from django.core.exceptions import ValidationError as DjangoValidationError
 from pydantic import Field, ValidationError as PydanticValidationError
 
+from hq.platform.core.errors import UpstreamUnavailable
+
 from .answer_fields import Outcome, Pinned
 from .input_errors import django_refusal, pydantic_refusal
 from .projection import QueryRefusal
@@ -118,6 +120,11 @@ CODES = {
     "work_failed": _code(409, "the work ran and failed", Door.CAPABILITY),
     # Something HQ did not expect went wrong: the log holds it, the answer says nothing of it.
     "operation_failed": _code(500, "something HQ did not expect went wrong", Door.ENDPOINT, Door.CAPABILITY),
+    # A service outside HQ that the call reaches did not answer, or answered
+    # nothing usable: the request is sound, and asking again may succeed.
+    "upstream_unavailable": _code(
+        503, "a service outside HQ that it reaches did not answer", Door.ENDPOINT, Door.CAPABILITY
+    ),
     "invalid_input": _code(400, "what it sent is not valid", Door.RESOURCE, Door.CAPABILITY),
     "target_required": _code(400, "it names no record to act on", Door.TARGETED),
     "target_not_allowed": _code(400, "it names a record, and this acts on none", Door.UNTARGETED),
@@ -394,6 +401,16 @@ def _mapped(exc: Exception, name: str) -> Refusal:
         # A narrowing or a resource HQ cannot read, said in HQ's own sentence.
         return Refusal("invalid_input", exc.reason)
     subject = name or "This request"
+    if isinstance(exc, UpstreamUnavailable):
+        # Every reader of a service outside HQ raises this for one that did
+        # not answer (``http_read.UNREACHABLE``), whichever call reached it.
+        logger.warning(
+            "%s could not reach a service outside HQ: %s",
+            _loggable(subject),
+            _loggable(exc),
+            extra={"event": "capability.upstream_unavailable"},
+        )
+        return Refusal("upstream_unavailable", f"{subject} could not reach a service outside HQ. Try again later.")
     # Neither handler nor dependency exception text crosses an adapter. It can
     # contain argument names, provider responses, paths, or values from the
     # request, so it stays in the log. The name is registry-owned and safe.

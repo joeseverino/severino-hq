@@ -14713,7 +14713,8 @@
                 "$ref": "#/components/schemas/RefusalCode",
                 "enum": [
                   "not_configured",
-                  "tailnet_unavailable"
+                  "tailnet_unavailable",
+                  "upstream_unavailable"
                 ]
               },
               "details": {

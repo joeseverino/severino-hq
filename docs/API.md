@@ -629,6 +629,12 @@ beside `details.filters`, what the kind's list narrows by, and `details.next`,
 `describe_resources` with the kind's `name`, which answers each filter's type
 and choices.
 
+A call whose service outside HQ did not answer (a public resolver, a
+registry, the secrets store) is a 503 `upstream_unavailable`: the request was
+sound, and asking again may succeed. Every reader of such a service raises
+`UpstreamUnavailable` (`hq/platform/core/errors.py`), the one class
+`refusal_of` answers so.
+
 ### An agent's limits
 
 An agent past its call rate is refused `rate_limited`; past its calls or
