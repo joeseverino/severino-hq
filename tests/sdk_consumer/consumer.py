@@ -40,7 +40,6 @@ from hq_sdk import (
     tables,
     testing,
     ui,
-    validation,
     workflows,
     writes,
 )
@@ -176,7 +175,6 @@ def sentences(registrar: str) -> None:
     # A place's chips are words, one each.
     ui.ListRow("Backup host", url="/x/", chips=("Running",))
     ui.ListRow("Backup host", chips="Running")  # type: ignore[arg-type]
-    assert_type(validation.sentence_closes("src"), list[str])
 
 
 def the_demo(due: date, at: datetime) -> None:

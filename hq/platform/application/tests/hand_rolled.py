@@ -10,7 +10,7 @@ import re
 from hq.platform.core.interface_text import TEMPLATE_COMMENT
 from hq.platform.core.stylesheets import STATIC
 from hq.platform.core.table_cells import ROLE_CLASSES
-from hq_sdk.template_contract import CLASSES, PARTIALS, class_words
+from hq.platform.core.template_contract import CLASSES, PARTIALS, class_words
 
 # The host's own templates, which no extension's check reads.
 TEMPLATES = STATIC.parent / "templates"

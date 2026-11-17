@@ -170,7 +170,7 @@ class PluginContractTests(TestCase):
     def test_the_host_source_never_names_an_installed_extension(self):
         """The host must not know which extensions exist, even by a mention (a
         docstring, a fixture, a default), since that is the first dependency.
-        Imports are `hq_sdk.validation`'s half; this is the other.
+        Imports are `hq.platform.application.plugin_validation`'s half; this is the other.
 
         The names come from the runtime composition, since a list of them here
         would be the coupling itself, so this speaks only where a set is

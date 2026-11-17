@@ -4,7 +4,7 @@ A host template is an interface as much as an export is: an override of a block
 the frame no longer defines, or a parameter a partial stopped reading, renders
 and raises nothing. So the public pieces are declared here, what each one is is
 derived from the host's templates and tags as it is asked for, and
-``hq_sdk.validation`` holds an extension's templates to it.
+``plugin_validation`` holds an extension's templates to it.
 """
 
 import json
@@ -13,6 +13,7 @@ from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
 lazy import inspect
+lazy from annotationlib import Format
 
 # Read only by hand_drawn_rules, which development alone runs: no image installs it.
 lazy import yaml
@@ -29,8 +30,6 @@ lazy from hq.platform.core.stylesheets import stylesheet
 lazy from hq.platform.core.table_cells import ROLE_CLASSES
 lazy from hq.platform.core.templatetags.part_tags import SectionTakes
 lazy from hq.platform.core.templatetags.value_tags import PresentNode, Takes
-
-lazy from .contract import _parameters
 
 # The frames a page may extend, and the blocks of each it may fill. Every
 # public block is an empty slot, so an override never needs ``block.super``.
@@ -301,7 +300,7 @@ _AMBIENT = frozenset({"block", "csrf_token", "perms", "request", "user"})
 _LITERALS = frozenset({"None", "True", "False"})
 _DEFAULTING = frozenset({"default", "default_if_none"})
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[3]
 
 
 def _filtered_names(value: Any) -> Iterator[tuple[str, bool]]:
@@ -470,6 +469,38 @@ def _filter_argument(function: Any) -> str:
     if not parameters:
         return "none"
     return "optional" if parameters[0].default is not inspect.Parameter.empty else "required"
+
+
+def _parameters(target: Any) -> list[str] | None:
+    """A signature as short strings: ``name``, ``name=`` when it has a default,
+    ``*args``/``**kwargs``, and the bare ``*`` and ``/`` markers Python uses."""
+
+    try:
+        signature = inspect.signature(target, annotation_format=Format.STRING)
+    except TypeError, ValueError:
+        # A callable Python gives no signature (a builtin's) has none to write.
+        return None
+    parameters = list(signature.parameters.values())
+    rendered: list[str] = []
+    keyword_only_started = False
+    for index, parameter in enumerate(parameters):
+        kind = parameter.kind
+        if kind is inspect.Parameter.KEYWORD_ONLY and not keyword_only_started:
+            rendered.append("*")
+            keyword_only_started = True
+        if kind is inspect.Parameter.VAR_POSITIONAL:
+            rendered.append(f"*{parameter.name}")
+            keyword_only_started = True
+            continue
+        if kind is inspect.Parameter.VAR_KEYWORD:
+            rendered.append(f"**{parameter.name}")
+            continue
+        optional = parameter.default is not inspect.Parameter.empty
+        rendered.append(f"{parameter.name}=" if optional else parameter.name)
+        following = parameters[index + 1] if index + 1 < len(parameters) else None
+        if kind is inspect.Parameter.POSITIONAL_ONLY and (following is None or following.kind is not kind):
+            rendered.append("/")
+    return rendered
 
 
 def _tag_parameters(compile_function: Any) -> list[str]:

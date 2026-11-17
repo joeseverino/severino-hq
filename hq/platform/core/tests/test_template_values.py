@@ -26,8 +26,8 @@ from hq.platform.application.markup_testing import elements, select
 from hq.platform.application.tests.facts import scan
 from hq.platform.application.tests.reads import reads
 from hq.platform.application.tests.source import template_files
+from hq.platform.core.template_contract import WORDED_FIGURES
 from hq.platform.core.templatetags.value_tags import breakable, entity, readable, when
-from hq_sdk.template_contract import WORDED_FIGURES
 
 # Filters whose output holds every name in it: `breakable` itself, and the
 # filters that build on it (`button_words`) or print a `<time>` (`last_read`).

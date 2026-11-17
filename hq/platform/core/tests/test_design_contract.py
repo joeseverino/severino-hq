@@ -6,7 +6,7 @@ from pathlib import Path
 from django.template.defaultfilters import register as django_filters
 from django.test import SimpleTestCase, tag
 
-from hq_sdk import template_contract
+from hq.platform.core import template_contract
 
 ROOT = Path(__file__).resolve().parents[4]
 

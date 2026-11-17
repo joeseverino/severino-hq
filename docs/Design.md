@@ -1922,8 +1922,8 @@ Decoration:
    table or list.
 2. If one almost fits, extend it in its sheet and its partial, with a comment
    saying what it covers and why. A page writes only the public classes
-   (`hq_sdk.template_contract.CLASSES`), as an extension does; a shared
-   part's own classes (one under `templates/partials/` that code or two
+   (`hq.platform.core.template_contract.CLASSES`), as an extension does; a
+   shared part's own classes (one under `templates/partials/` that code or two
    pages draw) reach it only through the part. A widget drawn once in the
    product is drawn from those, or named with its reason in
    `hand_rolled.ONE_OF_A_KIND`, a list that only shrinks.

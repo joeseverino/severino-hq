@@ -20,7 +20,7 @@ lazy import django
 lazy from django.apps import apps
 lazy from django.template.base import Lexer, TokenType
 
-lazy from hq_sdk import template_contract
+lazy from hq.platform.core import template_contract
 
 # Sentence checks ------------------------------------------------------------
 

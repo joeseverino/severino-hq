@@ -10,12 +10,13 @@ from django.template import engines
 from django.template.loader import render_to_string
 from django.test import RequestFactory, SimpleTestCase, override_settings
 
-from hq_sdk import template_contract, validation
+from hq.platform.application import plugin_validation as validation
+from hq.platform.application.plugin_validation import template_violations
+from hq.platform.core import template_contract
 from hq_sdk.money import money
 from hq_sdk.pages import PageAction, PageDialog, page_context
 from hq_sdk.site import host
 from hq_sdk.testing import plain
-from hq_sdk.validation import template_violations
 
 ROOT = Path(__file__).resolve().parents[4]
 

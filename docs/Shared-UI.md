@@ -3,8 +3,8 @@
 What an extension's templates may use of the host's: the frames and their
 blocks, the public partials and what each reads, the host tags and filters,
 and the classes and `data-` hooks. Written by `manage.py shared_ui_reference`
-from the host's templates (`hq_sdk.template_contract`); a test fails when this
-file falls behind. The rules around it are in
+from the host's templates (`hq.platform.core.template_contract`); a test
+fails when this file falls behind. The rules around it are in
 [Plugins](Plugins.md#shared-ui-contract).
 
 | Frame | Blocks a page fills | What it is |

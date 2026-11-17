@@ -144,8 +144,8 @@ architecture test, a glob) fails when its path matches nothing.
   ([Plugins](docs/Plugins.md)).
 - The shared mechanisms (a list view's table, a command's link, the derived
   files, plugin imports) are held by the architecture tests, the
-  `lint:drift-*` gates and `hq_sdk.validation`, whose failures name the one
-  way to do it.
+  `lint:drift-*` gates and `hq.platform.application.plugin_validation`, whose
+  failures name the one way to do it.
 - An href built from data HQ did not write (a reading, an attestation, a
   manifest, the public contact form) passes through `web_url`, in Python or as
   the template filter. It is then an http(s) address or no link at all.

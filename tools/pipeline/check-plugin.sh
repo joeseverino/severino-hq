@@ -94,7 +94,7 @@ export PYTHONPATH="$hq_root"
 # The package's templates are held to the host's declarations, read from
 # this host's tree with no extension installed: -P keeps the package root off
 # the path, so nothing the package ships can stand in for the host's.
-SEVERINO_HQ_PLUGINS='' "$python" -P -m hq_sdk.validation src
+SEVERINO_HQ_PLUGINS='' "$python" -P -m hq.platform.application.plugin_validation src
 export SEVERINO_HQ_PLUGINS="$plugin_reference"
 # The package's own mypy against the host's typed hq_sdk; its django-stubs
 # settings are hq.config.settings_typecheck, with this package installed.

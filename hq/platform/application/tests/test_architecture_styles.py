@@ -9,7 +9,7 @@ from django.test import SimpleTestCase, tag
 from hq.platform.application.tests.reads import reads
 from hq.platform.core.stylesheets import STATIC, sheet_paths, stylesheet
 from hq.platform.core.table_cells import ROLE_CLASSES
-from hq_sdk.template_contract import class_words
+from hq.platform.core.template_contract import class_words
 
 from .hand_rolled import ONE_OF_A_KIND, hand_rolled_classes, needless_exemptions
 from .source import template_files
@@ -621,7 +621,7 @@ class HandRolledClassTests(SimpleTestCase):
         self.assertEqual(
             sorted(f"templates/{name}: .{word}" for name, word in hand_rolled_classes()),
             [],
-            "a page writes only hq_sdk.template_contract.CLASSES, as an extension does: draw it through the "
+            "a page writes only hq.platform.core.template_contract.CLASSES, as an extension does: draw it through the "
             "shared part that writes it, or grow that part an option; a widget with no part becomes one",
         )
 

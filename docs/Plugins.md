@@ -125,7 +125,7 @@ derived read is kept with `hq_sdk.reads.derivation` ([Derived
 reads](#derived-reads)). The check refuses four habits, the first three by the
 host's `cell-read-by-its-text`, `absent-text-read-from-the-text` and
 `page-read-by-what-it-says` rules (`tools/lint/ast-grep/rules`) and the last
-by `python -m hq_sdk.validation src`:
+by the host's source check (`hq.platform.application.plugin_validation`):
 
 | Refused | Why | Instead |
 | --- | --- | --- |
@@ -798,9 +798,8 @@ callback or host edit.
 ## Shared UI contract
 
 An extension renders HQ's design system and ships no stylesheet or script of
-its own. Its templates use only the public pieces below.
-`python -m hq_sdk.validation src` (part of `plugin:check`) reads every file
-under a `templates` directory and refuses anything else:
+its own. Its templates use only the public pieces below. `plugin:check`
+reads every file under a `templates` directory and refuses anything else:
 
 - a frame or block not listed;
 - a private partial;
@@ -812,10 +811,10 @@ under a `templates` directory and refuses anything else:
   through a public partial (`partials/_allocation.html`, the charts).
 
 The check derives what is public from the host it was handed, its own
-templates and tags, as it runs (`hq_sdk.template_contract`), with no extension
-installed, so nothing the package ships stands in for the host's. The tables
-of what is public, [Shared UI](Shared-UI.md), are written from the same
-derivation.
+templates and tags, as it runs (`hq.platform.core.template_contract`), with
+no extension installed, so nothing the package ships stands in for the
+host's. The tables of what is public, [Shared UI](Shared-UI.md), are written
+from the same derivation.
 
 Every view model `hq_sdk.ui` hands an extension says its values in words. It
 raises `ValueError` where it is built on a date-time
