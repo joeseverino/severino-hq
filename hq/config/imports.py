@@ -34,6 +34,9 @@ EAGER = (
     # Each generated _pb2 module adds its file to protobuf's descriptor pool as it loads, after the
     # files it imports, which must be in the pool first; the span exporter encodes through them.
     "opentelemetry.proto",
+    # The API property suite's: its hook specifications register as the module that names them
+    # loads, and a hook is refused by name until they have.
+    "schemathesis.hooks",
 )
 
 

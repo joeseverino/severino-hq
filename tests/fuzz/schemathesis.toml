@@ -1,0 +1,21 @@
+# How the API property suite generates and judges (tests/fuzz/api_properties.py),
+# read by its path: Schemathesis's own discovery climbs past a worktree's root.
+
+[generation]
+# Cases per operation and per mode.
+max-examples = 10
+# The bearer is the configured auth alone; ignored_auth holds what HQ answers
+# without it, so no generated case spends its one mutation there.
+with-security-parameters = false
+
+# Every built-in check runs, these two held to HQ's answers.
+
+# A valid request is answered, or held for a person (202); a drawn identifier
+# names no record, so 404 is the one refusal it may meet.
+[checks.positive_data_acceptance]
+expected-statuses = ["2xx", "404"]
+
+# An invalid one is refused as invalid: neither as forbidden, nor as a conflict
+# with what is stored, nor by failing.
+[checks.negative_data_rejection]
+expected-statuses = ["400", "401", "404", "405", "413", "415"]
