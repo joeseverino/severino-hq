@@ -18,7 +18,7 @@ from hq.domains.control_plane.models import OperationRequest
 from hq.domains.control_plane.observations.contract import READERS, READING_FACETS
 from hq.domains.control_plane.provider_adapters.contracts import REFUSALS
 
-from .answer_fields import AsRead, ObservedAt, Since, UpdatedAt
+from .answer_fields import AsRead, DateTime, ObservedAt, Since, UpdatedAt
 from .conditions import DEGRADED, DRIFTED, READY
 from .credential_sight import STATE_LABELS
 from .describe import Describe, listed
@@ -74,8 +74,10 @@ type OperationAction = Annotated[str, Describe(ended(f"What it does: {listed(Ope
 type OperationState = Annotated[str, Describe(ended(f"Where it stands: {listed(OperationRequest.State.values)}"))]
 type RequestedActor = Annotated[str, Describe("Who asked for it, by the name HQ knows them by.")]
 type RequestedInterface = Annotated[str, Describe("Which door it was asked through, such as `api` or `web`.")]
-type AskedAt = Annotated[str, Describe("When it was asked for, an ISO 8601 date-time.")]
-type CompletedAt = Annotated[str | None, Describe("When it finished, an ISO 8601 date-time; null until it has.")]
+type AskedAt = Annotated[str, DateTime(), Describe("When it was asked for, an ISO 8601 date-time.")]
+type CompletedAt = Annotated[
+    Annotated[str, DateTime()] | None, Describe("When it finished, an ISO 8601 date-time; null until it has.")
+]
 type AttemptCount = Annotated[int, Describe("How many times a controller has tried it.")]
 
 

@@ -30,11 +30,20 @@ class Pinned:
         return {**handler(schema), "const": self.value}
 
 
+@dataclass(frozen=True, slots=True)
+class DateTime:
+    """A text that is an ISO 8601 date-time, said as the schema's ``format`` so a
+    client parses it as one and a generator draws one."""
+
+    def __get_pydantic_json_schema__(self, schema: CoreSchema, handler: GetJsonSchemaHandler) -> dict[str, Any]:
+        return {**handler(schema), "format": "date-time"}
+
+
 type Outcome = Annotated[bool, Describe("Whether HQ did what was asked: true beside `data`, false beside `error`.")]
 # Where nothing has read it yet a use says how, by its own type: ``ObservedAt |
 # None`` for null, a default of "" for empty.
-type ObservedAt = Annotated[str, Describe("When it was last read from its source, an ISO 8601 date-time.")]
-type UpdatedAt = Annotated[str, Describe("When it last changed in HQ, an ISO 8601 date-time.")]
+type ObservedAt = Annotated[str, DateTime(), Describe("When it was last read from its source, an ISO 8601 date-time.")]
+type UpdatedAt = Annotated[str, DateTime(), Describe("When it last changed in HQ, an ISO 8601 date-time.")]
 # The one sentence a write says of what it did: every door carries it, and a
 # page shows it once the write runs (``web_writes.said``).
 type CallMessage = Annotated[str, Describe("What the call did, in a sentence.")]

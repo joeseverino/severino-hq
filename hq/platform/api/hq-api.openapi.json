@@ -3842,6 +3842,7 @@
       },
       "AskedAt": {
         "description": "When it was asked for, an ISO 8601 date-time.",
+        "format": "date-time",
         "type": "string"
       },
       "AskedMessage": {
@@ -5379,6 +5380,7 @@
       "CompletedAt": {
         "anyOf": [
           {
+            "format": "date-time",
             "type": "string"
           },
           {
@@ -11137,6 +11139,7 @@
       },
       "ObservedAt": {
         "description": "When it was last read from its source, an ISO 8601 date-time.",
+        "format": "date-time",
         "type": "string"
       },
       "ObservedPart": {
@@ -16047,6 +16050,7 @@
       },
       "UpdatedAt": {
         "description": "When it last changed in HQ, an ISO 8601 date-time.",
+        "format": "date-time",
         "type": "string"
       },
       "Updates": {
