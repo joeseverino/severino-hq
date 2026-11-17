@@ -45,7 +45,6 @@ UNWALKED = frozenset(
         "controller_findings",
         "credential_findings",
         "delivery_findings",
-        "dns_findings",
         "docker_estate",
         "github_findings",
         "machine_findings",
@@ -55,8 +54,6 @@ UNWALKED = frozenset(
         "reference_findings",
         "registration_findings",
         "repository_findings",
-        "tailnet_device_findings",
-        "tailnet_findings",
     }
 )
 

@@ -10,7 +10,7 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection
 from hq.platform.application.markup_testing import texts
 
-from ..findings import finding_key, findings
+from ..findings import findings
 from ..inventory_testing import store
 from ..security import Capability, Principal
 from ..tailnet import TAILNET_KIND, WELL_KNOWN_PORTS, grant_ports
@@ -44,15 +44,6 @@ class DeviceApprovalTests(TestCase):
     def setUp(self):
         tailnet_connection()
 
-    def test_approval_off_is_an_attention_finding(self):
-        policy(settings={"devicesApprovalOn": False}, grants=[{"src": ["*"], "dst": ["*"]}])
-
-        (finding,) = raised("devices-join-without-approval")
-
-        self.assertEqual(finding["severity"], "attention")
-        self.assertEqual(finding["title"], "New devices join the tailnet without approval")
-        self.assertIn("auth key", finding["explanation"])
-
     def test_the_tailnet_page_marks_the_setting_and_links_the_problem(self):
         from ..tailnet_context import tailnet_context
 
@@ -74,135 +65,6 @@ class DeviceApprovalTests(TestCase):
             {row.tag["name"]: row.unworn for row in found.tags},
             {"tag:server": False, "tag:spare": True},
         )
-
-    def test_approval_on_or_unread_says_nothing(self):
-        policy(settings={"devicesApprovalOn": True})
-        self.assertEqual(raised("devices-join-without-approval"), [])
-        policy(settings={})
-        self.assertEqual(raised("devices-join-without-approval"), [])
-
-    def test_tailnet_lock_is_approval_by_signature_so_it_says_nothing(self):
-        """Under lock a new node is filtered out until a signing key vouches
-        for it, and Tailscale will not turn device approval on beside it."""
-
-        policy(
-            settings={"devicesApprovalOn": False},
-            lock={"enabled": True, "signers": [{"key": "tlpub:01"}, {"key": "tlpub:02"}]},
-        )
-        self.assertEqual(raised("devices-join-without-approval"), [])
-        policy(settings={"devicesApprovalOn": False}, lock={"enabled": False})
-        self.assertEqual(len(raised("devices-join-without-approval")), 1)
-
-    def test_it_reaches_the_action_items(self):
-        from ..attention import infrastructure
-
-        policy(settings={"devicesApprovalOn": False})
-
-        keys = [finding_key(item) for item in tuple(infrastructure())]
-
-        self.assertTrue(any(key.startswith("finding:devices-join-without-approval") for key in keys))
-
-
-class EmptyGroupTests(TestCase):
-    def setUp(self):
-        tailnet_connection()
-
-    def test_an_empty_group_a_grant_names_is_a_cleanup_hint(self):
-        policy(
-            groups=[
-                {"name": "group:empty", "members": []},
-                {"name": "group:admins", "members": ["someone@example.com"]},
-                {"name": "group:unused", "members": []},
-            ],
-            grants=[{"src": ["group:empty", "group:admins"], "dst": ["tag:server"], "ip": ["tcp:22"]}],
-        )
-
-        (finding,) = raised("empty-group-granted")
-
-        self.assertEqual(finding["severity"], "neutral")
-        self.assertEqual(finding["title"], "group:empty has no members but is still granted access")
-        self.assertEqual(finding["evidence"], [{"label": "Empty group", "value": "group:empty"}])
-
-    def test_a_shell_rule_counts_as_a_grant(self):
-        policy(
-            groups=[{"name": "group:ops", "members": []}],
-            ssh_rules=[{"action": "check", "src": ["group:ops"], "dst": ["tag:server"], "users": ["root"]}],
-        )
-
-        self.assertEqual(len(raised("empty-group-granted")), 1)
-
-    def test_several_empty_groups_are_counted_and_each_is_named_in_the_step(self):
-        policy(
-            groups=[{"name": "group:one", "members": []}, {"name": "group:two", "members": []}],
-            grants=[{"src": ["group:one", "group:two"], "dst": ["tag:server"], "ip": ["tcp:22"]}],
-        )
-
-        (finding,) = raised("empty-group-granted")
-
-        self.assertTrue(finding["title"].startswith("2 groups have"))
-        (step,) = finding["steps"]
-        self.assertIn("group:one, group:two", step["text"])
-
-
-class TagGrantedToNobodyTests(TestCase):
-    def setUp(self):
-        tailnet_connection()
-        store(TAILNET_KIND, {"name": "example-box", "tags": ["tag:worn"]})
-
-    def _grant(self, *tags):
-        policy(grants=[{"src": ["autogroup:member"], "dst": [f"{tag}:443" for tag in tags], "ip": ["tcp:443"]}])
-        return raised("tag-granted-to-nobody")
-
-    def test_one_unworn_tag_is_named(self):
-        (finding,) = self._grant("tag:worn", "tag:unworn")
-
-        self.assertEqual(finding["severity"], "neutral")
-        self.assertTrue(finding["title"].startswith("tag:unworn "))
-        self.assertIn("tag:unworn", finding["explanation"])
-        self.assertEqual(finding["evidence"], [{"label": "Tag", "value": "tag:unworn"}])
-
-    def test_several_unworn_tags_are_counted_and_each_is_named_in_the_step(self):
-        (finding,) = self._grant("tag:one", "tag:two")
-
-        self.assertTrue(finding["title"].startswith("2 tags are"))
-        self.assertNotIn("tag:one", finding["explanation"])
-        (step,) = finding["steps"]
-        self.assertIn("tag:one, tag:two", step["text"])
-
-
-class RefusedConnectionTests(TestCase):
-    def test_a_credential_refusal_says_refused(self):
-        from hq.domains.control_plane.provider_adapters.contracts import CREDENTIAL_REFUSAL
-
-        tailnet_connection("example-cf", provider="cloudflare_api")
-        store(
-            "cloudflare.pages_project",
-            reachable=False,
-            refusal=CREDENTIAL_REFUSAL,
-            error="Invalid API token",
-        )
-
-        (finding,) = raised("connection-not-answering")
-
-        self.assertEqual(finding["title"], "example-cf: credential refused")
-        self.assertIn("Invalid API token", finding["explanation"])
-        self.assertIn({"label": "State", "value": "Refused"}, finding["evidence"])
-
-    def test_an_unreachable_connection_still_says_not_answering(self):
-        ProviderConnection.objects.create(
-            connection_ref="example-ssh",
-            controller_id="example-controller",
-            provider="ssh",
-            endpoint="192.0.2.9:22",
-            reachable=False,
-            probed=True,
-            detail="Timed out",
-            observed_at=timezone.now(),
-        )
-
-        (finding,) = raised("connection-not-answering")
-
-        self.assertEqual(finding["title"], "example-ssh is not answering")
 
 
 class PortNameTests(TestCase):
@@ -429,28 +291,6 @@ class GrantReachesOnlyLoopbackTests(TestCase):
 
         return ("example-proxy", {"port_bindings": [{"container_port": "443/tcp", "host_ip": "", "host_port": "443"}]})
 
-    def test_hqs_own_port_on_its_machine_is_raised_with_the_fix(self):
-        import json
-
-        self.containers(self.proxy())
-
-        with _own("100.64.0.5"):
-            (finding,) = raised(self.RULE)
-
-        self.assertEqual(finding["severity"], "neutral")
-        self.assertIn("HQ listens on 8000 only on loopback", finding["explanation"])
-        self.assertNotIn("443", finding["title"])
-        self.assertIn({"label": "Port", "value": "example-host tcp:8000"}, finding["evidence"])
-        grant, test = (json.loads(step["command"]) for step in finding["steps"] if step["kind"] == "run")
-        # The grant as written, every key kept, without the port.
-        self.assertEqual(
-            grant,
-            {"src": ["example-mac"], "dst": ["example-host"], "ip": ["tcp:443"], "srcPosture": ["posture:latest"]},
-        )
-        self.assertEqual(
-            test, {"src": "example-mac", "proto": "tcp", "accept": ["example-host:443"], "deny": ["example-host:8000"]}
-        )
-
     def test_hqs_own_host_network_container_does_not_count_as_serving_it(self):
         from types import SimpleNamespace
 
@@ -464,47 +304,6 @@ class GrantReachesOnlyLoopbackTests(TestCase):
             ),
         ):
             self.assertEqual(len(raised(self.RULE)), 1)
-
-    def test_a_port_every_container_binds_to_loopback_is_raised(self):
-        policy(hosts={"example-host": "100.64.0.5"}, grants=[{**self.GRANT, "ip": ["tcp:443", "tcp:5432"]}])
-        self.containers(
-            self.proxy(),
-            (
-                "example-db",
-                {"port_bindings": [{"container_port": "5432/tcp", "host_ip": "127.0.0.1", "host_port": "5432"}]},
-            ),
-        )
-
-        with _own():
-            (finding,) = raised(self.RULE)
-
-        self.assertIn("binds it to loopback", finding["explanation"])
-        self.assertIn({"label": "Port", "value": "example-host tcp:5432"}, finding["evidence"])
-
-    def test_a_port_something_serves_on_another_address_says_nothing(self):
-        policy(hosts={"example-host": "100.64.0.5"}, grants=[{**self.GRANT, "ip": ["tcp:5432"]}])
-        bound = {"container_port": "5432/tcp", "host_port": "5432"}
-        for other in (
-            {"port_bindings": [{**bound, "host_ip": "0.0.0.0"}]},
-            {"port_bindings": [{**bound, "host_ip": "100.64.0.5"}]},
-            {"network_mode": "host", "exposed_ports": [5432]},
-        ):
-            with self.subTest(other=other):
-                self.containers(
-                    ("example-db", {"port_bindings": [{**bound, "host_ip": "127.0.0.1"}]}), ("example-other", other)
-                )
-                with _own():
-                    self.assertEqual(raised(self.RULE), [])
-
-    def test_hqs_port_where_another_host_network_container_exposes_it_says_nothing(self):
-        self.containers(("example-app", {"network_mode": "host", "exposed_ports": [8000]}))
-
-        with _own("100.64.0.5"):
-            self.assertEqual(raised(self.RULE), [])
-
-    def test_a_machine_whose_containers_were_not_read_says_nothing(self):
-        with _own("100.64.0.5"):
-            self.assertEqual(raised(self.RULE), [])
 
 
 class FunnelSettingTests(TestCase):
