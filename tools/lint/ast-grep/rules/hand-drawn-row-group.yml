@@ -1,7 +1,7 @@
 # A group of a table's rows is headed by {% row_group %} alone, so every group
 # row spans its table, keeps the rows' edge and folds alike. A group row is
-# known by its class or by its heading's scope. No fix: the tag takes the
-# group's count.
+# known by its heading's scope; its class is the page-class check's. No fix:
+# the tag takes the group's count.
 id: hand-drawn-row-group
 language: html
 severity: error
@@ -17,6 +17,4 @@ rule:
       - kind: self_closing_tag
     has:
       kind: attribute
-      any:
-        - regex: '(?:^|\})class=["''](?:[^"'']*\W)?row-group(?:\W|$)'
-        - regex: '(?:^|\})scope=["'']rowgroup["'']'
+      regex: '(?:^|\})scope=["'']rowgroup["'']'

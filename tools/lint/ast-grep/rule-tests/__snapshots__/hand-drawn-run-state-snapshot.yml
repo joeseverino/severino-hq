@@ -2,16 +2,10 @@ id: hand-drawn-run-state
 snapshots:
   "<span class=\"job-state\" data-ask-label>{{ job.seen_state_display }}</span>":
     labels:
-    - source: class="job-state"
+    - source: data-ask-label
       style: primary
-      start: 6
-      end: 23
-  <span class="muted job-state">Running</span>:
-    labels:
-    - source: class="muted job-state"
-      style: primary
-      start: 6
-      end: 29
+      start: 24
+      end: 38
   "<span>Started {% status \"Running\" tone=\"attention\" %}</span>":
     labels:
     - source: Started {% status "Running" tone="attention" %}

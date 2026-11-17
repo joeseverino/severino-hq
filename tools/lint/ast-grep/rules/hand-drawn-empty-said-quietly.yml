@@ -1,8 +1,7 @@
 # An empty line is the empty state part, or a section's {% empty %}, also
-# when it is said in the muted voice by the muted tag: the twin of
-# hand-drawn-empty-line, which reads the class written by hand. It is read by
-# its opening words, No, Nothing, None or There is no. No fix: the words may
-# hold values.
+# when it is said in the muted voice by the muted tag; the muted class written
+# by hand is the page-class check's. It is read by its opening words, No,
+# Nothing, None or There is no. No fix: the words may hold values.
 id: hand-drawn-empty-said-quietly
 language: html
 severity: error

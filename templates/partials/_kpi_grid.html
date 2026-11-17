@@ -1,6 +1,4 @@
-{% comment %}
-<!-- ast-grep-ignore: hand-drawn-figure --> the figure part itself
-{% endcomment %}<div class="kpi-grid{% if featured %} is-featured{% endif %}" data-band{% if label %} role="group" aria-label="{{ label }}"{% endif %}>
+<div class="kpi-grid{% if featured %} is-featured{% endif %}" data-band{% if label %} role="group" aria-label="{{ label }}"{% endif %}>
   {% for item in items %}
     {% with drawing=item.drawing %}
     {% comment %}
@@ -9,9 +7,7 @@
     cannot be: a link does not hold links. Its value links to the figure's
     page instead, and each of the others to its own.
     {% endcomment %}
-    {% if item.url and not item.holds_links %}{% comment %}
-    <!-- ast-grep-ignore: hand-drawn-figure --> the figure part itself
-    {% endcomment %}<a class="kpi {% if item.is_zero %}is-zero{% endif %}" href="{{ item.url }}">{% else %}<div class="kpi {% if item.is_zero %}is-zero{% endif %}">{% endif %}
+    {% if item.url and not item.holds_links %}<a class="kpi {% if item.is_zero %}is-zero{% endif %}" href="{{ item.url }}">{% else %}<div class="kpi {% if item.is_zero %}is-zero{% endif %}">{% endif %}
       <span class="label">{% if item.icon %}{% include "partials/_icon.html" with name=item.icon only %}{% endif %}{{ item.label|breakable }}</span>
       <span class="kpi-figure">
         {% if item.url and item.holds_links %}<a class="value" data-hit href="{{ item.url }}">{% else %}<span class="value">{% endif %}{% if item.tone %}{% status item.value tone=item.tone pill=False %}{% else %}{{ item.value|breakable }}{% endif %}{% if item.url and item.holds_links %}</a>{% else %}</span>{% endif %}

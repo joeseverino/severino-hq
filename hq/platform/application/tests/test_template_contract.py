@@ -45,7 +45,7 @@ OUTSIDE = {
     # A class beside a tag is still written, and one built from a value is
     # its prefix's.
     "templates/example/beside.html": (
-        '<b class="{% if a %}chip{% endif %}"></b>\n<i class="list-rows {% if b %}kpi{% endif %}"></i>\n'
+        '<b class="{% if a %}chip{% endif %}"></b>\n<i class="compact {% if b %}kpi{% endif %}"></i>\n'
         '<s class="tone-{{ t }}"></s>'
     ),
     "templates/example/parts.html": (

@@ -5,8 +5,6 @@ valid:
   - '<form class="filters"></form>'
   - '<form method="get"><input type="text" name="reason"></form>'
 invalid:
-  - '<form class="filter-bar"></form>'
-  - '<div class="toolbar filter-bar"></div>'
   - '<form method="get"><input type="search" name="q"></form>'
   - '<input type=search name="q">'
   - '<form method="post"><select name="kind"></select></form>'

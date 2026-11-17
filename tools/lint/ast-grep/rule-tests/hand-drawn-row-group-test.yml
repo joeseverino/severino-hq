@@ -3,5 +3,4 @@ valid:
   - '{% row_group "Group" 2 %}<tr class="row-groupish"></tr>'
   - '<th scope="row">A</th>'
 invalid:
-  - '<tr class="queue row-group"><th>Group</th></tr>'
   - '<tr><th colspan="3" scope="rowgroup">Group</th></tr>'

@@ -559,9 +559,9 @@ address is a link whole. A fact's detail is running words. Its lines are the
 ones its markup declares: a `<small>` each, or a `detail=` given as a list.
 What a fact holds past its lines (its record list, a disclosure of what runs
 now) follows them in the detail, so a page's summary cards are a band of facts
-too, never a grid of its own. A fact drawn by hand (a page's own band) is
-refused by the `hand-drawn-facts` rule, and so is a figure set bold apart from
-the words that count it.
+too, never a grid of its own. A fact drawn by hand (a page's own band) writes
+the part's classes, which no page may, and a figure set bold apart from the
+words that count it is refused by the `hand-drawn-split-count` rule.
 
 What names a value (`.fact-label`, a tile's label, a `<dt>`) is sentence case
 in the muted voice. Words in that voice anywhere else (a context line beside
@@ -587,7 +587,6 @@ A run of whole parts read across one line (a fact's links, a row's context
 line, a band's details) is `{% dot_list %}`, each part an `<li>`, with
 `muted=True` for one said quietly. The stylesheet draws the dot in the gap
 before each part, so no template writes a separator and no line opens on one.
-*Gate:* `hand-drawn-dot-list`.
 `below="Label"` makes it a block the open row shows under that label.
 
 A block of code to paste somewhere else (a container's compose change) is `{%
@@ -693,8 +692,6 @@ label, help, errors and required mark come with it; one posted with a button
 outside the form names that form in its widget's `form` attribute. A row of
 buttons that stands on its own (a confirmation's, a card's decisions, a page's
 way on) is `{% button_row %}`, which the closing row draws through too.
-*Gate:* `lint:ast-grep` (`hand-drawn-field.yml`), which refuses a `field` or
-`form-actions` class written in a template.
 
 A form that asks one question is one visible field of a line (words, a number,
 a date, one choice) closed by its verb alone. It draws its button on the
@@ -1924,11 +1921,12 @@ Decoration:
 1. Find the primitive. Most pages are a head, a band or card of facts, and a
    table or list.
 2. If one almost fits, extend it in its sheet and its partial, with a comment
-   saying what it covers and why. A page writes no class of its own: only
-   CLASSES and the classes of a shared part, one under `templates/partials/`
-   that code or two pages draw. A widget drawn once in the product is drawn
-   from those, or named with its reason in `hand_rolled.ONE_OF_A_KIND`, a
-   list that only shrinks.
+   saying what it covers and why. A page writes only the public classes
+   (`hq_sdk.template_contract.CLASSES`), as an extension does; a shared
+   part's own classes (one under `templates/partials/` that code or two
+   pages draw) reach it only through the part. A widget drawn once in the
+   product is drawn from those, or named with its reason in
+   `hand_rolled.ONE_OF_A_KIND`, a list that only shrinks.
 3. A new container of content is a surface: add its selector to the surface
    list, write only its layout.
 4. A new state of a page (empty, failing, waiting, crowded) gets a fixture in

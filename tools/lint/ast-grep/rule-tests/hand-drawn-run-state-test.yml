@@ -7,6 +7,5 @@ valid:
 invalid:
   - '<span class="job-state" data-ask-label>{{ job.seen_state_display }}</span>'
   - '<strong data-ask-label>{{ job.seen_state_display }}</strong>'
-  - '<span class="muted job-state">Running</span>'
   - '<span>{% if failed %}Refresh failed{% endif %}</span>'
   - '<span>Started {% status "Running" tone="attention" %}</span>'

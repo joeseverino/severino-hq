@@ -60,8 +60,6 @@ class FormErrorsTests(SimpleTestCase):
 class SectionHeadTests(SimpleTestCase):
     """The head ``{% section %}`` draws (partials/_section_head.html)."""
 
-    PARTIAL = "partials/_section_head.html"
-
     def test_what_sits_beside_the_heading_is_one_box_of_the_head(self):
         """A count, a dot and a link beside the heading wrap as one line of
         text, never as items of the head's row a dot is stranded between."""
@@ -104,8 +102,6 @@ class SectionHeadTests(SimpleTestCase):
 
 
 class CardTests(SimpleTestCase):
-    PARTIAL = "partials/_card.html"
-
     def test_a_card_frames_what_it_holds_under_its_heading(self):
         html = _render(
             '{% card css="example-card" heading="example-heading" %}'
@@ -253,8 +249,6 @@ class RecordLinkTests(SimpleTestCase):
 
 
 class ReadingTests(SimpleTestCase):
-    PARTIALS = ("partials/_reading.html", "partials/_readings.html")
-
     def test_a_reading_leads_to_its_page_marked_as_its_part_of_a_region(self):
         html = _render(
             '{% readings %}{% reading icon="network" url="/example/" modal="example" tone="attention" '
@@ -315,21 +309,6 @@ class SharedMarkupTemplateTests(SimpleTestCase):
     def test_only_the_partial_prints_a_form_s_own_errors(self):
         found = _written_by_hand(r"\.non_field_errors", FormErrorsTests.PARTIAL)
         self.assertEqual(found, [], f'include "{FormErrorsTests.PARTIAL}" instead')
-
-    def test_only_the_tag_draws_a_section_head(self):
-        found = _written_by_hand(r'class="section-head[" ]', SectionHeadTests.PARTIAL)
-        self.assertEqual(found, [], "write {% section %} instead")
-
-    def test_only_the_tag_draws_a_card(self):
-        found = _written_by_hand(r'\bclass="(?:[^"]*[\s}])?card[\s"{]', CardTests.PARTIAL)
-        self.assertEqual(found, [], "write {% card %} instead")
-
-    def test_only_the_tags_draw_a_reading(self):
-        # A reading's classes are a shared part's, so the page-class check
-        # lets a page write them; this is what keeps them the tags' own.
-        reading = r'\bclass="(?:[^"]*[\s}])?reading(?:s|-head|-mark|-lead|-lines|-standing|-panel[a-z-]*)?[\s"{]'
-        found = [name for name, text in _templates() if name not in ReadingTests.PARTIALS and re.search(reading, text)]
-        self.assertEqual(found, [], "write {% readings %} and {% reading %} instead")
 
     def test_no_template_decides_a_fact_s_tone(self):
         # The tag refuses the part when a page renders; this reads every
