@@ -1,44 +1,18 @@
-import difflib
-from argparse import ArgumentParser
-from typing import Any, override
+from pathlib import Path
+from typing import override
 
-from django.core.management.base import BaseCommand, CommandError
-
+from hq.platform.core.management.derived import DerivedFileCommand
 lazy from hq.platform.api.openapi import DOCUMENT_PATH, document, render
 
 
-class Command(BaseCommand):
-    help = "Write hq_api/hq-api.openapi.json from the API's routes and registries, or --check it for drift."
+class Command(DerivedFileCommand):
+    help = "Write hq-api.openapi.json from the API's routes and registries, or --check it for drift."
+    source = "the API's routes and registries"
 
     @override
-    def add_arguments(self, parser: ArgumentParser) -> None:
-        parser.add_argument(
-            "--check",
-            action="store_true",
-            help="Exit 1 when the committed document differs from the derived one.",
-        )
+    def target(self) -> Path:
+        return DOCUMENT_PATH
 
     @override
-    def handle(self, *args: Any, **options: Any) -> None:
-        current = render(document())
-        if options["check"]:
-            committed = DOCUMENT_PATH.read_text(encoding="utf-8") if DOCUMENT_PATH.exists() else ""
-            if committed != current:
-                self.stderr.write(
-                    "".join(
-                        difflib.unified_diff(
-                            committed.splitlines(keepends=True),
-                            current.splitlines(keepends=True),
-                            f"committed/{DOCUMENT_PATH.name}",
-                            f"derived/{DOCUMENT_PATH.name}",
-                        )
-                    ),
-                    ending="",
-                )
-                raise CommandError(
-                    f"{DOCUMENT_PATH.name} is behind the API; run `mise run manage -- api_openapi` and commit the result."
-                )
-            self.stdout.write(f"{DOCUMENT_PATH.name} is current.")
-            return
-        DOCUMENT_PATH.write_text(current, encoding="utf-8")
-        self.stdout.write(f"Wrote {DOCUMENT_PATH}.")
+    def derive(self) -> str:
+        return render(document())

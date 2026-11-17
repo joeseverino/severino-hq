@@ -1,5 +1,6 @@
 """A derived file's command writes it, and with --check fails while the
-committed copy is behind, writing nothing (``DerivedFileCommand``)."""
+committed copy is behind, writing nothing and printing the difference
+(``DerivedFileCommand``)."""
 
 import tempfile
 from io import StringIO
@@ -44,9 +45,11 @@ class DerivedFileCommandTests(SimpleTestCase):
                 if committed is not None:
                     path.write_text(committed, encoding="utf-8")
 
+                err = StringIO()
                 with self.assertRaises(CommandError) as raised:
-                    call_command(Example(path), "--check", stdout=StringIO())
+                    call_command(Example(path), "--check", stdout=StringIO(), stderr=err)
 
+                self.assertIn("+What the declarations say now.", err.getvalue())
                 self.assertIn(run, str(raised.exception))
                 self.assertIn("the example declarations", str(raised.exception))
                 self.assertEqual(path.read_text(encoding="utf-8") if path.exists() else None, committed)
