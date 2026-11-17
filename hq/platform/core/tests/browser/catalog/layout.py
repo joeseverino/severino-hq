@@ -4,7 +4,7 @@ of the browser harness."""
 
 from typing import override
 
-from hq.platform.core.tests.browser.catalog import CATALOG, PAGES, left_out_on, page
+from hq.platform.core.tests.browser.catalog import PAGES, left_out_on, page, premise_of
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
 from hq.platform.core.tests.browser.shards import sweep
 from hq.platform.core.tests.browser.widths import ENTRY, SCRIPTED_ENTRY
@@ -35,7 +35,7 @@ class EntryLayoutTests(LayoutBrowserTests):
                 if not self.loaded(name, width, **where):
                     continue
                 self.settle()
-                self.hold(name, width, [self.draws_the_state_it_stands_for, self.every_layout_check_holds], **where)
+                self.hold(name, width, [self.every_layout_check_holds], **where)
                 # A palette is a color per token, the same at every width, so
                 # the narrowest and widest read every part either draws.
                 if not self.runs_script and width in (judged.widths[0], judged.widths[-1]):
@@ -50,9 +50,9 @@ class EntryLayoutTests(LayoutBrowserTests):
     def left_out_on(self, path):
         return left_out_on(path)
 
-    def draws_the_state_it_stands_for(self, name):
-        if name in CATALOG and (premise := CATALOG[name].premise):
-            self.assertEqual(self.read([premise])[0], [], f"{name} does not draw the state it stands for")
+    @override
+    def premise_on(self, path):
+        return premise_of(path)
 
 
 class CatalogLayoutTests(EntryLayoutTests):

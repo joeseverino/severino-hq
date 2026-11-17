@@ -128,3 +128,10 @@ def left_out_on(name) -> tuple[str, ...]:
     """The axe rules the page ``name`` of ``PAGES`` leaves out."""
 
     return tuple(GALLERY_LEAVES_OUT) if name == GALLERY else ()
+
+
+def premise_of(name):
+    """The probe of what the page ``name`` of ``PAGES`` must draw to stand
+    for its state (`Entry.premise`), or None."""
+
+    return CATALOG[name].premise if name in CATALOG else None

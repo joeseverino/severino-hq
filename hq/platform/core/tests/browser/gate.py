@@ -473,6 +473,10 @@ HIDE_POPOVER = """(place) => {
 CHECK_COSTS = "Browser checks, time in the page"
 RULE_COSTS = "Browser rules, time per subtest"
 
+# The finding of a catalog entry's page that does not draw the state it is
+# drawn to stand for (`Entry.premise`), so held nothing the checks could find.
+PREMISE = "the state it stands for"
+
 
 def findings_in(said, check):
     """A failure's findings by check, when it says them as findings do (a
@@ -1101,11 +1105,15 @@ class BrowserGate(SimpleTestCase):
         """What the layout rules find in HQ's own markup, checks that found
         nothing left out: the geometry and the palette checks in the palette
         loaded, and the fills in both; on a page with no script, only those
-        that hold without it. The vendored markup is stood in for while they
-        read, and put back however they end: each probe runs on its own."""
+        that hold without it, and what a catalog entry's page must draw to
+        stand for its state (``premise_on``). The vendored markup is stood in
+        for while they read, and put back however they end: each probe runs
+        on its own."""
 
+        premise = self.premise_on(path)
         found = self.checked(
             {
+                **({PREMISE: premise} if premise else {}),
                 "stand in": (STAND_IN, SELECTORS["vendored"]),
                 **self.geometry_on(path, self.runs_script),
                 **palette_probes(),
@@ -1125,6 +1133,12 @@ class BrowserGate(SimpleTestCase):
         says."""
 
         return catalog.left_out_on(catalog.GALLERY) if path == reverse("design") else ()
+
+    def premise_on(self, path):
+        """The probe of what the page at ``path`` must draw to stand for the
+        state it is read for (`Entry.premise`): none but a catalog entry's."""
+
+        return
 
     def checked(self, probes):
         """Each check's findings, read in one round trip, each check's time

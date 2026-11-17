@@ -48,8 +48,9 @@ class Entry:
     """A part as a template writes it, with what it is given.
 
     ``premise`` is what the entry must draw to stand for its state, as a probe
-    and its argument returning what falls short of it: a value meant to wrap
-    that fits on one line holds nothing the survey could find wrong.
+    and its argument returning what falls short of it, which the survey finds
+    (`BrowserGate.premise_on`): a value meant to wrap that fits on one line
+    holds nothing the survey could find wrong.
     ``heads_the_page`` says the part is a page's own head; any other is drawn
     under one, as every HQ page is. ``frame`` says the part is the page
     frame's own, which base.html draws beside the page's main rather than in

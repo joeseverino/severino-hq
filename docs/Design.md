@@ -1965,7 +1965,8 @@ Decoration:
    catalog's `__init__.py` and listed in `test_browser_probes.py`'s `MODULES`.
    The entry is drawn through the part's own partial or tag, and held by the
    whole survey. An entry whose state is not on the page by itself says so as
-   its premise. An entry's page loads HQ's scripts, and the gate holds it
+   its premise, a finding of the survey wherever the entry is read. An
+   entry's page loads HQ's scripts, and the gate holds it
    as the server drew it and once they have run, with every row a reader
    can open opened and its tables read at every width. Without script a
    table entry is held by every check but those declared `scripted`, and

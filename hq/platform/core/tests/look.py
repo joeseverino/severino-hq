@@ -1505,6 +1505,10 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
     def left_out_on(self, path):
         return catalog.left_out_on(path) if path in self.entries else super().left_out_on(path)
 
+    @override
+    def premise_on(self, path):
+        return catalog.premise_of(path) if path in self.entries else None
+
     def draw_with_script(self, scripted):
         self.start(java_script_enabled=scripted, color_scheme="dark" if _asked().switch("dark") else "light")
 

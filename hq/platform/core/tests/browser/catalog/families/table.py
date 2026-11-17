@@ -3,6 +3,12 @@
 from hq.platform.application.pages import PageAction
 from hq.platform.core.tests.browser.catalog.common import Entry
 
+# Each drawn heading of a table of the page named ``label``: the premise of an
+# entry whose column of that name holds nothing, so is drawn nowhere.
+_HEADINGS_DRAWN = """(label) => [...document.querySelectorAll('main thead th')]
+  .filter((heading) => heading.checkVisibility() && heading.textContent.trim() === label)
+  .map((heading) => `the column "${label}" is drawn, though it holds nothing`)"""
+
 ENTRIES = {
     # What the table region derives from its headings, each in a table of its
     # own: a figure's column aligned under its heading, body and totals, with
@@ -140,6 +146,55 @@ ENTRIES = {
                 ("example-03", tuple(f"example-part-{at:02}" for at in range(1, 10))),
             )
         },
+    ),
+    # Identifiers beside sentences, as a service's path draws its steps: an
+    # address with a port, a host name and a list of networks, in tables with
+    # ranked columns to let go, so a narrow box lets a column leave before it
+    # breaks a name at its seams.
+    "table/identifiers": Entry(
+        '{% section "Example steps" %}{% table_region "Example steps" %}<table class="data-table"><thead><tr>'
+        '{% table_heading "Step" gutter=True %}{% table_heading "Name" "identifier" %}'
+        '{% table_heading "State" "status" %}{% table_heading "Since" drop=3 %}{% table_heading "Impact" drop=2 %}'
+        '{% table_heading "Read from" drop=1 %}</tr></thead><tbody>'
+        '<tr><td>Proxy host</td><td><a href="/example/" data-entity="Proxy host">{{ address|breakable }}</a></td>'
+        '<td>{% status "Up" tone="good" %}</td><td>1 day</td>'
+        "<td>If it is removed, the name stops reaching the app it serves.</td>"
+        "<td>Read from the proxy's own list of hosts, a minute ago</td></tr>"
+        '<tr><td>Forwards to</td><td>{{ address|breakable }}</td><td>{% status "Up" tone="good" %}</td>'
+        "<td>1 day</td><td>If nothing listens there, a reader gets a gateway error.</td>"
+        "<td>Read from the container's ports</td></tr>"
+        '<tr><td>Service</td><td><span data-entity="Service">{{ host|breakable }}</span></td><td></td>'
+        "<td>1 day</td><td>The service stops answering at this name.</td><td>Declared in HQ</td></tr>"
+        "</tbody></table>{% endtable_region %}{% endsection %}"
+        '{% section "Example access" %}{% table_region "Example access" %}<table class="data-table"><thead><tr>'
+        '{% table_heading "Access list" gutter=True %}{% table_heading "Admits by" drop=3 %}'
+        '{% table_heading "Addresses" drop=2 %}{% table_heading "Logins" drop=1 %}</tr></thead><tbody>'
+        "<tr><td>office only</td><td>Address rules</td><td>{{ networks|breakable }}</td>"
+        "<td>{{ logins|breakable }}</td></tr></tbody></table>{% endtable_region %}{% endsection %}",
+        {
+            "address": "203.0.113.214:8000",
+            "host": "status.example.com",
+            "networks": "allow 198.51.100.0/24; allow 2001:db8:a1e0::/48",
+            "logins": "none",
+        },
+    ),
+    # A column of dashes beside a column of marks with no words and a column
+    # of short words: the server marks the dashes' column blank and it is not
+    # drawn, the marks are, and no short word is split however its column's
+    # width rounds.
+    "table/blank-column": Entry(
+        '{% section "Example runbooks" %}{% table_region "Example runbooks" %}<table class="data-table"><thead><tr>'
+        '{% table_heading "Title" %}{% table_heading "Type" %}{% table_heading "Nothing" %}'
+        '{% table_heading "Runs" %}{% table_heading "Note" %}</tr></thead><tbody>'
+        "<tr><td>Upgrade an example container to a new release</td><td>Runbook</td><td>{{ missing|or_empty }}</td>"
+        '<td><span class="kpi-dots"><span class="kpi-dot is-filled" title="Succeeded"></span></span></td>'
+        "<td>A sentence long enough to take the room it is given and wrap.</td></tr>"
+        "<tr><td>Rotate the example signing keys</td><td>Runbook</td><td>–</td>"
+        '<td><span class="kpi-dots"><span class="kpi-dot is-filled" title="Succeeded"></span></span></td>'
+        "<td>Another sentence that wraps in its column.</td></tr>"
+        "</tbody></table>{% endtable_region %}{% endsection %}",
+        {"missing": None},
+        premise=(_HEADINGS_DRAWN, "Nothing"),
     ),
 }
 
