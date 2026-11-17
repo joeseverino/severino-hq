@@ -42,6 +42,22 @@ request-parameter-min-length-set info Reason: a run's correlation and machine we
 
 request-parameter-pattern-added info Reason: a capability catalog's name is a capability's dotted name or a prefix of whole segments, so a name outside the pattern matched no capability, the infrastructure list's kinds are each a kind its kind filter lists, which the query's validator already refused outside, and each other pattern is the query type's own, which the server already refused outside
 
+request-property-removed info Reason: a manifest entry is now one of three shapes, a vault doc, a draft and site content, each taking every field the entry took; the one key gone, system_service, the importer read only where system was absent, and the frontmatter the manifest copies names system
+
+request-parameter-enum-value-removed info Reason: the generic read of one record lists only the resources found by text; one found by an integer refused a text identifier, and its own path, typed as it declares, still reads it at the same address
+
+request-property-became-required info Reason: a TLS certificate's domains and install_on were refused empty by its spec's validator, so a declaration without them was never stored
+
+request-property-min-items-set info Reason: a TLS certificate's domains and install_on were refused empty by its spec's validator; the schema now says the bound it held
+
+request-property-pattern-changed info Reason: a URL's bracketed host is now an IPv6 address in the forms Django's URLValidator takes, and its user and password hold no bracket; the validator refused any other bracketed text after the call was validated
+
+request-property-property-names-added info Reason: a container's by_design keys were refused outside the container standard's checks by its spec's validator; the schema now lists them
+
+response-property-any-of-added info Reason: a list's items are its row or, under a mask of `*` or a record's path, its record, which the server already answered; every item is still an object, and the row's type is one of the two
+
+response-property-type-changed info Reason: the same change: a list's items are typed as their row or their record, each an object, in place of the row alone
+
 - error at hq/platform/api/hq-api.openapi.json, in API GET /api/v2/resources/action_items/ removed the enum value `hq.docs` from the property `anyOf[subschema #1]` of the `query` request parameter `source` [request-parameter-property-enum-value-removed]. Reason: docs raised one item, their review date, which HQ no longer tracks, so the source holds nothing to list; a client that filtered on hq.docs is refused where it had read an empty list
 - error at hq/platform/api/hq-api.openapi.json, in API POST /api/v2/capabilities/dashboard.panels.refresh/ removed the required property `data/requested_at` from the response with the `200` status [response-required-property-removed]. Reason: the time the panels were asked is the answer's standing (`data/standing`), which every ask now answers in one shape; no client acted on the timestamp
 - error at hq/platform/api/hq-api.openapi.json, in API POST /api/v2/capabilities/dashboard.panels.refresh_due/ removed the required property `data/requested_at` from the response with the `200` status [response-required-property-removed]. Reason: the time the panels were asked is the answer's standing (`data/standing`), which every ask now answers in one shape; no client acted on the timestamp
