@@ -41,7 +41,7 @@ OUTSIDE = {
     ),
     "templates/example/markup.html": (
         '<div class="compact invented {{ chosen }}">\n<p data-secret>x</p><svg data-chart></svg></div>\n'
-        '<span class="nowrap" style="--part: {{ width }}">x</span>'
+        '<span class="nowrap" style="--part: {{ width }}">x</span>\n<H1 id="own">{{ title }}</H1>'
     ),
     # A class beside a tag is still written, and one built from a value is
     # its prefix's.
@@ -90,6 +90,7 @@ class TemplateValidationTests(SimpleTestCase):
             "markup.html:1": "invented",
             "markup.html:2": "data-secret",
             "markup.html:3": "style attribute",
+            "markup.html:4": "h1",
             "beside.html:1": "class chip ",
             "beside.html:2": "class kpi ",
             "beside.html:3": "class tone-* ",
