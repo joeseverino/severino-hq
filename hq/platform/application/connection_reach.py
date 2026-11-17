@@ -15,6 +15,7 @@ from hq.domains.control_plane.names import normalized_hostname
 from .entity_links import EntityLink, entity_link
 from .reach import network_of
 lazy from . import connections
+lazy from .connection_records import ReachPart
 lazy from .locate import Machines, host_of, machines_index, observed_answers
 lazy from .machines import Machine
 
@@ -79,7 +80,7 @@ class ConnectionReach:
         line = f"{self.label} {self.machine_word} {self.machine.label}" if self.machine else self.label
         return f"{line}, {self.relay}" if self.relay else line
 
-    def as_dict(self) -> dict[str, Any]:
+    def as_dict(self) -> ReachPart:
         presence = self.presence if self.peer_path else None
         return {
             "network": self.network or None,

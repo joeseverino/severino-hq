@@ -631,7 +631,8 @@ class MachineServesAgreesTests(TestCase):
         from types import SimpleNamespace
 
         from ..machine_context import serves_links
-        from ..relationships import RelationGroup, Relationship, Relationships
+        from ..relationships import Relationships
+        from ..topology_model import RelationGroup, Relationship
 
         panel = Relationships(
             node_id="machine:example-edge",
@@ -695,13 +696,14 @@ class RelationListTests(TestCase):
     def render(self, *items):
         from django.template.loader import render_to_string
 
-        from ..relationships import RelationGroup, Relationships
+        from ..relationships import Relationships
+        from ..topology_model import RelationGroup
 
         panel = Relationships(node_id="machine:example", groups=(RelationGroup("Carries", 10, items),))
         return render_to_string("partials/_relationships.html", {"relationships": panel})
 
     def test_a_relation_is_named_once_with_every_end(self):
-        from ..relationships import Relationship
+        from ..topology_model import Relationship
 
         html = self.render(*(Relationship(EntityLink(name)) for name in ("alpha", "beta", "gamma")))
 
@@ -712,7 +714,7 @@ class RelationListTests(TestCase):
     def test_one_source_for_every_end_is_said_once(self):
         from django.utils import timezone
 
-        from ..relationships import Relationship
+        from ..topology_model import Relationship
 
         source = EntityLink("example-reader")
         html = self.render(
@@ -725,7 +727,7 @@ class RelationListTests(TestCase):
     def test_ends_read_by_different_sources_each_say_theirs(self):
         from django.utils import timezone
 
-        from ..relationships import Relationship
+        from ..topology_model import Relationship
 
         html = self.render(
             Relationship(EntityLink("alpha"), EntityLink("example-reader"), timezone.now()),

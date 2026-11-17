@@ -14,6 +14,7 @@ from .projection import projection_scope, window
 from .record_errors import RecordNotFound
 lazy from .containers import containers
 lazy from .derived_reads import serialize_measurement
+lazy from .resource_records import ContainerRecord, RepositoryPart, UpgradeRecord, UsagePart
 lazy from .upgrades import plans
 
 
@@ -21,7 +22,7 @@ def _moment(value: Any) -> str | None:
     return value.isoformat() if value is not None else None
 
 
-def _repository(repo: Any) -> dict[str, Any] | None:
+def _repository(repo: Any) -> RepositoryPart | None:
     """What the GitHub App says about the repository that builds this image:
     what production runs, where the default branch is, and what is open."""
 
@@ -82,7 +83,7 @@ def _supply_chain(standing: Any) -> dict[str, Any]:
     }
 
 
-def _usage(usage: Any) -> dict[str, Any] | None:
+def _usage(usage: Any) -> UsagePart | None:
     """What it uses beside its limits, when its sweep sampled it: bytes and
     how they were counted, CPU as a share of one core since the sweep before."""
 
@@ -99,7 +100,7 @@ def _usage(usage: Any) -> dict[str, Any] | None:
     }
 
 
-def serialize_container(item: Any) -> dict[str, Any]:
+def serialize_container(item: Any) -> ContainerRecord:
     standing = item.standing
     return {
         "address": item.address,
@@ -184,7 +185,7 @@ def get_container(address: str) -> dict[str, Any]:
     return _one(containers, address, serialize_container)
 
 
-def serialize_plan(plan: Any) -> dict[str, Any]:
+def serialize_plan(plan: Any) -> UpgradeRecord:
     def advisories(items):
         return [{key: item.get(key, "") for key in ("id", "severity", "summary", "url")} for item in items]
 

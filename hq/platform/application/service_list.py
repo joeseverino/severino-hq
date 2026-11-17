@@ -27,6 +27,7 @@ lazy from . import connections, zones
 lazy from .derived_reads import serialize_path
 lazy from .facts import readings
 lazy from .hq_self import hq_service
+lazy from .resource_records import ServiceItem, ServiceRecord
 
 
 def listed_services(favorites: tuple[str, ...] = ()) -> tuple[Service, ...]:
@@ -74,7 +75,7 @@ def observed_names() -> tuple[str, ...]:
     return tuple(sorted(found))
 
 
-def serialize_service(service: Service) -> dict[str, Any]:
+def serialize_service(service: Service) -> ServiceItem:
     return {
         "hostname": service.hostname,
         "mark": service.mark,
@@ -104,7 +105,7 @@ def list_services() -> dict[str, Any]:
     return complete(items)
 
 
-def get_service(hostname: str) -> dict[str, Any]:
+def get_service(hostname: str) -> ServiceRecord:
     """One listed hostname, with the resources behind each facet and its request path."""
 
     wanted = normalized_hostname(hostname)

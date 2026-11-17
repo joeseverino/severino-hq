@@ -9,68 +9,18 @@ relationship: an edge is either in the graph or not on the page.
 
 import json
 from dataclasses import dataclass
-from typing import Annotated, Any
-
-from pydantic import ConfigDict, with_config
+from typing import Any
 
 from hq.domains.control_plane.observations import OBSERVATIONS
 
-from .describe import Describe
 from .entity_links import EntityLink, entity_link, node_link
 from .facts import readings, unreadable_labels
-from .json_schemas import ObservedMoment
 from .moments import moment
 from .security import Principal
 from .tone import Tone
-from .topology_model import RELATIONS, TopologyEdge, relation_rank
+from .topology import relation_graph
+from .topology_model import RELATIONS, RelationGroup, Relationship, TopologyEdge, relation_rank
 lazy from .action_links import topology_url
-lazy from .topology import relation_graph
-
-
-@with_config(ConfigDict(extra="forbid"))
-@dataclass(frozen=True, slots=True)
-class Relationship:
-    """One thing a node is related to, who says so, and when they last read it."""
-
-    entity: EntityLink
-    source: Annotated[EntityLink | None, Describe("The reading it came from; null when nothing says.")] = None
-    observed_at: ObservedMoment | None = None
-    stale: Annotated[bool, Describe("Whether the reading it came from is out of date.")] = False
-
-
-@with_config(ConfigDict(extra="forbid"))
-@dataclass(frozen=True, slots=True)
-class RelationGroup:
-    phrase: Annotated[str, Describe("What each relationship in it says from the node, such as `runs on`.")]
-    rank: Annotated[int, Describe("Where the group falls in page order, lowest first.")]
-    items: Annotated[tuple[Relationship, ...], Describe("The other end of each relationship it holds.")]
-
-    @property
-    def bare(self) -> bool:
-        """Whether every end is only its name: nothing says who read it or when.
-
-        Such ends are a list, and read across on one line rather than taking a
-        row apiece to say nothing beside each.
-        """
-
-        return all(
-            item.source is None and item.observed_at is None and not item.stale and not item.entity.detail
-            for item in self.items
-        )
-
-    @property
-    def shared(self) -> Relationship | None:
-        """Who read every end and when, where one source read them all.
-
-        Said once under the group, as its oldest reading, rather than beside
-        each end. None where the ends have no source or more than one.
-        """
-
-        sources = {(item.source.label, item.source.url) if item.source else None for item in self.items}
-        if len(sources) != 1 or None in sources:
-            return None
-        read = [item.observed_at for item in self.items if item.observed_at is not None]
-        return Relationship(self.items[0].entity, self.items[0].source, min(read) if read else None)
 
 
 @dataclass(frozen=True, slots=True)

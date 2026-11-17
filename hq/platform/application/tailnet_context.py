@@ -36,6 +36,7 @@ from .tailnet import (
 )
 from .tailnet_signers import Signer, signers
 from .topology import derive_topology
+lazy from .connection_records import PolicyRulePart, Tailnet, UnreadPart
 
 TAILNET_KINDS = (TAILNET_KIND, TAILNET_POLICY_KIND)
 
@@ -99,7 +100,7 @@ class TailnetContext:
 
         return len(self.policy.groups) + len(self.tags)
 
-    def as_dict(self) -> dict[str, Any]:
+    def as_dict(self) -> Tailnet:
         """The derived facts, for the API, MCP, CLI and SDK."""
 
         found = self.policy
@@ -151,7 +152,7 @@ def _names(names: tuple[PolicyName, ...]) -> list[dict[str, Any]]:
     return [as_written(name) for name in names]
 
 
-def _rule(item: NamedRule, *, ports: bool = False) -> dict[str, Any]:
+def _rule(item: NamedRule, *, ports: bool = False) -> PolicyRulePart:
     shown = {key: value for key, value in item.rule.items() if key not in ("src", "dst", "ports")}
     if ports:
         shown["ports"] = [{"entry": entry, "name": name} for entry, name in item.rule.get("ports") or ()]
@@ -164,7 +165,7 @@ def _rule(item: NamedRule, *, ports: bool = False) -> dict[str, Any]:
     }
 
 
-def _unread(sight: Sight) -> dict[str, Any]:
+def _unread(sight: Sight) -> UnreadPart:
     return {
         "kind": sight.kind,
         "label": sight.label,

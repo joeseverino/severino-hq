@@ -7,7 +7,6 @@ so none can be returned.
 """
 
 from collections.abc import Callable, Sequence
-from dataclasses import asdict
 from datetime import datetime
 from typing import Any
 
@@ -26,6 +25,7 @@ from .standards import CheckResult, Measurement
 lazy from . import connections, dashboard, estate, machines, request_context
 lazy from .action_items import filter_items
 lazy from .command_center import estate_search
+lazy from .connection_records import CredentialRecord, SightPart
 lazy from .credential_sight import credential_sight, sight
 lazy from .entity_links import entity_link
 lazy from .estate import estate_reading
@@ -35,7 +35,20 @@ lazy from .machine_context import header_addresses
 lazy from .paths import path_to
 lazy from .relationships import readout_records, relationships_for
 lazy from .request_path import request_path, serialize_request_path
-lazy from .resource_records import CheckPart, MeasurementPart
+lazy from .resource_records import (
+    CheckPart,
+    DomainRecord,
+    DomainRow,
+    HopRow,
+    JoinedReadingPart,
+    MachineRecord,
+    MeasurementPart,
+    PathRecord,
+    PresencePart,
+    ReadingItem,
+    ReadingRecord,
+    RelationshipsRecord,
+)
 lazy from .search import global_search
 lazy from .service_list import services_by_zone
 lazy from .topology import relation_graph
@@ -96,7 +109,7 @@ def list_action_items(
 # ----- Machines ---------------------------------------------------------------
 
 
-def _presence(presence: Any) -> dict[str, Any] | None:
+def _presence(presence: Any) -> PresencePart | None:
     if presence is None:
         return None
     return {
@@ -122,7 +135,7 @@ def _presence(presence: Any) -> dict[str, Any] | None:
     }
 
 
-def serialize_machine(machine: Any) -> dict[str, Any]:
+def serialize_machine(machine: Any) -> MachineRecord:
     return {
         "name": machine.name,
         "node": f"machine:{machine.name}",
@@ -168,7 +181,7 @@ def list_machines(*, limit: int = 50) -> dict[str, Any]:
         return _collection(connections.machines_once(), limit, serialize_machine)
 
 
-def get_machine(name: str) -> dict[str, Any]:
+def get_machine(name: str) -> MachineRecord:
     with projection_scope():
         found = machines.machine(name)
         if found is None:
@@ -179,7 +192,7 @@ def get_machine(name: str) -> dict[str, Any]:
 # ----- Domains ----------------------------------------------------------------
 
 
-def _domains() -> list[dict[str, Any]]:
+def _domains() -> list[DomainRow]:
     estate = estate_reading()
     declared = {
         normalized_hostname(resource.spec.get("zone")): resource.key
@@ -221,7 +234,7 @@ def list_domains(*, limit: int = 50) -> dict[str, Any]:
         return _collection(_domains(), limit)
 
 
-def get_domain(name: str) -> dict[str, Any]:
+def get_domain(name: str) -> DomainRecord:
     """One domain as the list has it, with its records, connection and insights."""
 
     wanted = normalized_hostname(name)
@@ -265,7 +278,7 @@ def get_domain(name: str) -> dict[str, Any]:
 # ----- Relationships ----------------------------------------------------------
 
 
-def get_relationships(node: str, *, principal: Principal) -> dict[str, Any]:
+def get_relationships(node: str, *, principal: Principal) -> RelationshipsRecord:
     """One node's edges, grouped by what each says from that node.
 
     ``node`` is a topology node id: ``machine:<name>``, ``service:<hostname>``,
@@ -277,7 +290,7 @@ def get_relationships(node: str, *, principal: Principal) -> dict[str, Any]:
         if not found.known:
             raise RecordNotFound("HQ knows no record by that name.")
         subject = relation_graph(principal=principal).subjects.get(node)
-        readings = [
+        readings: list[JoinedReadingPart] = [
             {
                 "kind": kind,
                 "label": label,
@@ -298,11 +311,11 @@ def get_relationships(node: str, *, principal: Principal) -> dict[str, Any]:
 # ----- Paths ------------------------------------------------------------------
 
 
-def serialize_hop(hop: Any) -> dict[str, Any]:
+def serialize_hop(hop: Any) -> HopRow:
     """One hop as every adapter returns it; a hop walked for a request adds
     what the request showed there and the checks decided there."""
 
-    found = {
+    found: HopRow = {
         "step": hop.step,
         "label": hop.label,
         "name": hop.name,
@@ -358,7 +371,7 @@ def serialize_measurement(found: Measurement) -> MeasurementPart:
     }
 
 
-def serialize_path(path: Any) -> dict[str, Any]:
+def serialize_path(path: Any) -> PathRecord:
     """A request path as every adapter returns it."""
 
     return {
@@ -389,7 +402,7 @@ def serialize_path(path: Any) -> dict[str, Any]:
     }
 
 
-def get_path(hostname: str) -> dict[str, Any]:
+def get_path(hostname: str) -> PathRecord:
     """The request path to one hostname, hop by hop, as the service page walks it."""
 
     if not is_hostname(hostname):
@@ -417,7 +430,7 @@ def list_request_path(*, principal: Principal | None = None) -> dict[str, Any]:
 # ----- Readings ---------------------------------------------------------------
 
 
-def _reading(kind: str, row: ProviderInventory | None) -> dict[str, Any]:
+def _reading(kind: str, row: ProviderInventory | None) -> ReadingItem:
     spec = OBSERVATIONS[kind]
     seen = sight(kind, spec.label, "reading", row, permissions=tuple(spec.requires))
     return {
@@ -450,7 +463,7 @@ def list_readings(*, provider: str | None = None, limit: int = 50) -> dict[str, 
     return _collection(kinds, limit, lambda kind: _reading(kind, rows.get(kind)))
 
 
-def get_reading(kind: str) -> dict[str, Any]:
+def get_reading(kind: str) -> ReadingRecord:
     """One reading kind with its stored records, as its schema admits them."""
 
     spec = OBSERVATIONS.get(kind)
@@ -467,7 +480,7 @@ def get_reading(kind: str) -> dict[str, Any]:
 # ----- Credentials ------------------------------------------------------------
 
 
-def serialize_provider_sight(found: Any) -> dict[str, Any]:
+def serialize_provider_sight(found: Any) -> CredentialRecord:
     return {
         "provider": found.provider,
         "label": found.label,
@@ -478,11 +491,20 @@ def serialize_provider_sight(found: Any) -> dict[str, Any]:
     }
 
 
-def serialize_sight(item: Any) -> dict[str, Any]:
+def serialize_sight(item: Any) -> SightPart:
     return {
-        **asdict(item),
-        "observed_at": _moment(item.observed_at),
+        "kind": item.kind,
+        "label": item.label,
+        "source": item.source,
+        "state": item.state,
         "state_label": item.state_label,
+        "records": item.records,
+        "observed_at": _moment(item.observed_at),
+        "error": item.error,
+        "requires": item.requires,
+        "refusal": item.refusal,
+        "permissions": list(item.permissions),
+        "parts": [as_written(part) for part in item.parts],
         "remedy": item.remedy,
     }
 
@@ -493,7 +515,7 @@ def list_credentials() -> dict[str, Any]:
     return _collection([serialize_provider_sight(found) for found in credential_sight()])
 
 
-def get_credential(provider: str) -> dict[str, Any]:
+def get_credential(provider: str) -> CredentialRecord:
     found = next((item for item in credential_sight() if item.provider == provider), None)
     if found is None:
         raise RecordNotFound("No credential is seen for that service.")

@@ -35,7 +35,7 @@ from hq.platform.application.finding_steps import Do, Run
 from hq.platform.application.freshness import CURRENT, STALE, Freshness
 from hq.platform.application.pages import Page, PageAction, PageVisit, RowMark, RowOrder
 from hq.platform.application.payload_words import ChangeRow
-from hq.platform.application.relationships import RelationGroup, Relationship, Relationships
+from hq.platform.application.relationships import Relationships
 from hq.platform.application.request_channel import NETWORK_CHANNEL, TAILNET_CHANNEL
 from hq.platform.application.request_connection import Connection, Peering
 from hq.platform.application.request_identity import Identity
@@ -46,6 +46,7 @@ from hq.platform.application.tables import TableSort
 from hq.platform.application.tailnet import Device
 from hq.platform.application.tailnet_presence import Presence
 from hq.platform.application.tone import Tone
+from hq.platform.application.topology_model import RelationGroup, Relationship
 from hq.platform.application.ui import (
     PageNavigation,
     PageSection,

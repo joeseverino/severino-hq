@@ -49,10 +49,10 @@ from .json_schemas import Written
 from .path_model import Certificate, Evidence, HopCheck, HopSource
 from .plugins import ATTENTION_ORDER
 from .record_fields import Notes, PublishedAt
-from .relationships import RelationGroup
 from .services import HQ_MARK, OBSERVED_MARK
 from .standards import INTENDED, Standing
 from .tone import Tone
+from .topology_model import RelationGroup
 from .ui import ended
 from .upgrades import HIGH, LOW, MAJOR, MEDIUM, MINOR, PATCH, UNKNOWN_CHANGE, Blocker, UpgradeStep
 from .whereabouts import Origin
