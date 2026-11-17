@@ -9,6 +9,7 @@ command is validated, at every door, and the schema says the rule. The column
 stays the one declaration of it.
 """
 
+from collections.abc import Iterable
 from dataclasses import MISSING, dataclass, fields, is_dataclass
 from decimal import Decimal
 from functools import cache
@@ -21,6 +22,7 @@ from django.core.validators import (
     MaxValueValidator,
     MinValueValidator,
     RegexValidator,
+    URLValidator,
 )
 from django.db.models import CharField, DecimalField, FloatField, IntegerField, JSONField, TextField
 from pydantic import Field, GetCoreSchemaHandler, GetJsonSchemaHandler, TypeAdapter
@@ -32,6 +34,34 @@ from .json_schemas import json_schema
 
 if TYPE_CHECKING:
     from django.db.models import Model
+
+# Django's URLValidator, said without the lookaround and the IGNORECASE flag
+# a schema's pattern cannot carry: its scheme check, user and password, IPv4,
+# bracketed IPv6 (which it checks further), a name of letters (any script),
+# digits and inner hyphens under a top-level domain or ``localhost``, a port,
+# and anything after it that is not a space.
+_ANY = r"a-zA-Z\u00a1-\uffff"
+_LABEL = rf"[{_ANY}0-9](?:[{_ANY}0-9-]{{0,61}}[{_ANY}0-9])?"
+_TOP = rf"(?:[{_ANY}][{_ANY}-]{{0,61}}[{_ANY}]|[Xx][Nn]--[a-zA-Z0-9]{{1,59}})"
+_OCTET = r"(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)"
+_HOST = (
+    rf"(?:{_OCTET}(?:\.{_OCTET}){{3}}|\[[0-9a-fA-F:.]+\]"
+    rf"|{_LABEL}(?:\.{_LABEL})*\.{_TOP}\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])"
+)
+
+
+def _anycase(word: str) -> str:
+    return "".join(f"[{letter.lower()}{letter.upper()}]" if letter.isalpha() else letter for letter in word)
+
+
+def url_pattern(schemes: Iterable[str]) -> str:
+    """What a URLValidator of ``schemes`` takes, as a schema's pattern."""
+
+    scheme = "|".join(_anycase(name) for name in schemes)
+    return (
+        rf"^(?:{scheme})://(?:[^\s:@/]+(?::[^\s:@/]*)?@)?{_HOST}"
+        r"(?::[0-9]{1,5})?(?:[/?#][^\s]*)?$"
+    )
 
 
 def held(command_type: type) -> Any:
@@ -150,6 +180,9 @@ def _column_rules(column: Any, *, empty: bool) -> tuple[Any, ...]:
             rules.append(Field(max_length=rule.limit_value))
         elif isinstance(rule, DecimalValidator):
             rules.append(Field(max_digits=rule.max_digits, decimal_places=rule.decimal_places))
+        elif isinstance(rule, URLValidator):
+            pattern = url_pattern(rule.schemes)
+            rules.append(Field(pattern=f"^$|{pattern}" if empty else pattern))
         elif type(rule) is RegexValidator and not rule.inverse_match and not rule.flags:
             # Python's \A and \Z are what the schema's and pydantic's ^ and $ mean.
             pattern = rule.regex.pattern.replace(r"\A", "^").replace(r"\Z", "$")

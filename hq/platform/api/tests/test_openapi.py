@@ -65,9 +65,10 @@ def _named(document: dict, value: dict) -> dict:
 
 
 def _unsaid(schema) -> dict:
-    """A query field's schema without its words, which its parameter carries."""
+    """A query field's schema as its parameter says it: without its words, which
+    the parameter carries, and without the ``null`` an absent field stands for."""
 
-    return {key: value for key, value in schema.items() if key != "description"}
+    return openapi._query_parameter("", schema)["schema"]
 
 
 def _operations(value: dict) -> list[tuple[str, str, dict]]:
@@ -141,7 +142,8 @@ class DocumentTests(SimpleTestCase):
             parameters = {parameter["name"]: parameter for parameter in written if parameter["name"] != "fields"}
             self.assertEqual(set(parameters), set(expected.get("properties", {})))
             # The selection sits beside the query, never inside it.
-            self.assertIn({"$ref": "#/components/parameters/Fields"}, operation["parameters"])
+            masks = [parameter for parameter in written if parameter["name"] == "fields"]
+            self.assertEqual([mask["schema"]["type"] for mask in masks], ["array"])
             for field, schema in expected.get("properties", {}).items():
                 parameter = parameters[field]
                 self.assertEqual(parameter["in"], "query")
@@ -162,7 +164,7 @@ class DocumentTests(SimpleTestCase):
         declared = {parameter["name"]: parameter["schema"] for parameter in operation["parameters"]}
         said = {parameter["name"]: parameter.get("description") for parameter in operation["parameters"]}
 
-        fields = views.findings.__hq_query_fields__
+        fields = views.findings.__hq_query_fields__()
         self.assertEqual(declared, {name: _unsaid(schema) for name, schema in fields.items()})
         self.assertEqual(said, {name: schema.get("description") for name, schema in fields.items()})
         self.assertEqual(declared["limit"]["type"], "integer")

@@ -5,9 +5,14 @@ import re
 from collections.abc import Set as AbstractSet
 from typing import Any
 
-# One DNS name that could answer: letters, digits and hyphens per label, no
-# wildcard, no metadata label.
-_HOSTNAME = re.compile(r"^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))*$")
+# One DNS name as a command may send it: 1 to 63 letters, digits and inner
+# hyphens per label, any case, a trailing dot, no wildcard, no metadata label.
+# ``normalized_hostname`` gives its one spelling. An IPv4 address fits it too;
+# ``is_hostname`` tells the two apart.
+_LABEL = r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+HOSTNAME_PATTERN = rf"^{_LABEL}(?:\.{_LABEL})*\.?$"
+HOSTNAME_LENGTH = 253
+_HOSTNAME = re.compile(HOSTNAME_PATTERN)
 
 
 # Between a name and where it leads, in a record's name: "app.example.com at
@@ -41,7 +46,7 @@ def is_hostname(name: Any) -> bool:
     """
 
     text = normalized_hostname(name)
-    if len(text) > 253 or not _HOSTNAME.fullmatch(text):
+    if len(text) > HOSTNAME_LENGTH or not _HOSTNAME.fullmatch(text):
         return False
     try:
         ipaddress.ip_address(text)

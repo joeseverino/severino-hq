@@ -17,7 +17,7 @@ from django.utils.timezone import now
 from pydantic import BeforeValidator, IPvAnyAddress, StringConstraints
 
 from hq.domains.control_plane.dns_lookup import LookupUnavailable, registry, resolve
-from hq.domains.control_plane.names import normalized_hostname
+from hq.domains.control_plane.names import HOSTNAME_LENGTH, HOSTNAME_PATTERN, normalized_hostname
 from hq.platform.core.outbound import allowed
 
 from .answer_fields import ObservedAt
@@ -32,12 +32,9 @@ lazy from . import readings
 # gateway owns, so it cannot change the shape of the request, but a name that
 # is not a name is a question not worth asking, and refusing it here means the
 # provider never sees whatever was actually typed.
-# Each label is 1 to 63 letters, digits and inner hyphens; a name is at most
-# 253 characters (``HOSTNAME_LENGTH``), which the pattern leaves to its type.
-HOSTNAME = re.compile(
-    r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*\.?$"
-)
-HOSTNAME_LENGTH = 253
+# A name is at most 253 characters (``HOSTNAME_LENGTH``), which the pattern
+# leaves to its type.
+HOSTNAME = re.compile(HOSTNAME_PATTERN)
 
 # The types HQ asks for, in the order a person reads them. The resolver matches
 # these case-sensitively and answers an unknown one with an empty list rather

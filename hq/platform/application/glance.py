@@ -270,6 +270,13 @@ def _coordinates() -> TypeAdapter[tuple[float, float]]:
     return TypeAdapter(tuple[Annotated[float, Field(ge=-90, le=90)], Annotated[float, Field(ge=-180, le=180)]])
 
 
+_LATITUDE = r"[+-]?(?:90(?:\.0+)?|[1-8]?[0-9](?:\.[0-9]+)?)"
+_LONGITUDE = r"[+-]?(?:180(?:\.0+)?|(?:1[0-7][0-9]|[1-9]?[0-9])(?:\.[0-9]+)?)"
+# A point as text: latitude,longitude in decimal degrees, each within its
+# range, or nothing.
+POINT = rf"^\s*(?:{_LATITUDE}\s*,\s*{_LONGITUDE}\s*)?$"
+
+
 def _as_point(value: Any) -> Any:
     """A point sent as text, as latitude,longitude each to four places, or
     empty for none; anything else is refused as its type is validated."""
@@ -288,7 +295,12 @@ class DashboardSettingsCommand:
     """Where the weather is read for, and what the glance strip calls its panels."""
 
     weather_point: Annotated[
-        str, AfterValidator(_as_point), Describe("Where the weather is read for, as latitude,longitude.")
+        str,
+        # The schema says the form; the parser refuses outside it, naming the
+        # coordinate that is wrong, which a pattern's refusal cannot.
+        Field(json_schema_extra={"pattern": POINT}),
+        AfterValidator(_as_point),
+        Describe("Where the weather is read for, as latitude,longitude."),
     ] = ""
     weather_label: Annotated[str, Describe("What the weather panel calls that place.")] = ""
     infrastructure_label: Annotated[str, Describe("What the infrastructure panel is called.")] = ""

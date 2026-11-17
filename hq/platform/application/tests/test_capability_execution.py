@@ -299,17 +299,18 @@ class CapabilityTests(TestCase):
         )
 
     def test_a_domain_refusal_names_the_field_not_the_value(self):
-        # An address only the model checks, past the command's own types.
-        secret = "hunter2-not-an-address"
+        # An end before the start, which only the model's rule checks, past the
+        # command's own types.
+        secret = "08:13:57"
 
         result = execute_capability(
-            "project.create",
-            {"name": "Domain", "slug": "domain", "repository_url": secret},
+            "calendar.entry.create",
+            {"title": "Domain", "starts_on": "2026-01-01", "starts_at": "09:00", "ends_at": secret},
             principal=cli_principal(),
         )
 
         self.assertEqual(result["error"]["code"], "invalid_input")
-        self.assertEqual(result["error"]["details"], {"repository_url": ["invalid"]})
+        self.assertEqual(list(result["error"]["details"]), ["ends_at"])
         self.assertNotIn(secret, json.dumps(result, default=repr))
 
     def test_delete_requires_exact_confirmation(self):

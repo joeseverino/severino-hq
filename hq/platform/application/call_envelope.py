@@ -16,6 +16,7 @@ from typing import Annotated, Any, NotRequired, TypedDict, cast
 from django.db.models import BigIntegerField
 from pydantic import (
     AfterValidator,
+    BeforeValidator,
     ConfigDict,
     Field,
     Strict,
@@ -49,6 +50,13 @@ def _as_its_kind(value: str | int, info: ValidationInfo) -> str | int:
         # Pydantic's own type, whose fixed words name the kind; a validator's own text is never shown.
         raise PydanticKnownError("int_parsing")
     return value
+
+
+def _whole(value: Any) -> Any:
+    """``value`` as an integer where it is a JSON number with nothing after its point, which JSON Schema's
+    ``integer`` admits (``2.0``); anything else unchanged, for the strict integer to judge."""
+
+    return int(value) if isinstance(value, float) and value.is_integer() else value
 
 
 def _moment(value: str) -> str:
@@ -88,7 +96,7 @@ class CallEnvelope(TypedDict):
     ]
     target: NotRequired[
         Annotated[
-            Annotated[RecordId, Strict()] | Annotated[StrictStr, Field(min_length=1)],
+            Annotated[RecordId, Strict(), BeforeValidator(_whole)] | Annotated[StrictStr, Field(min_length=1)],
             AfterValidator(_as_its_kind),
             Field(description="The record the command acts on, by its identifier."),
         ]

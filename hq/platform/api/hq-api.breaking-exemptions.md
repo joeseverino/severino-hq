@@ -28,7 +28,19 @@ request-property-min-set info Reason: every bound it sets declares a limit the s
 
 request-property-one-of-removed info Reason: the six are the target of contact.submission.delete, contact.submission.review, expense.delete, expense.update, receipt.delete and receipt.update, whose two branches, an integer and its digits as text, gained the id's bounds (1 to the 64-bit column's ceiling, no sign); what they now refuse named no record or was answered as a server error, so a client sends nothing that worked before
 
-request-property-pattern-added info Reason: every pattern it adds was already refused outside after the payload was taken: a slug column's pattern by the model's full_clean, a hostname, a blank pin key and a row's revision by the capability's handler; the command now refuses it as it is validated and the schema says the pattern
+request-property-pattern-added info Reason: every pattern it adds was already refused outside after the payload was taken: a slug column's pattern by the model's full_clean, a hostname, a blank pin key and a row's revision by the capability's handler, a URL column's address by its URLValidator, a run's host by the command's own check, a weather point by its parser, and a decimal's digits by pydantic's max_digits and decimal_places; the command now refuses it as it is validated and the schema says the pattern
+
+request-property-any-of-removed info Reason: receipt.update's amount keeps its two branches, a number and its digits as text, which oasdiff reads as replaced once they gained the bounds, step and pattern of the column's max_digits and decimal_places, past which pydantic already refused the amount
+
+request-parameter-became-enum info Reason: a list's choice filter was already a Literal in its query's type, refused outside its choices, and only its null branch left the document; a capability catalog's resource and a resource catalog's name are the registry's names, and one outside it named no resource
+
+request-parameter-list-of-types-narrowed info Reason: a query parameter not sent is absent, so the null its query type allows was never a value a client could send in a query string; the document now says the parameter without it
+
+request-parameter-max-length-set info Reason: every bound it sets is the query type's own max_length, which the server already refused past; only the parameter's null branch held it before, where oasdiff did not read it
+
+request-parameter-min-length-set info Reason: a run's correlation and machine were already required to be non-empty by the query type, which the parameter now says without its null branch
+
+request-parameter-pattern-added info Reason: a capability catalog's name is a capability's dotted name or a prefix of whole segments, so a name outside the pattern matched no capability, and each other pattern is the query type's own, which the server already refused outside
 
 - error at hq/platform/api/hq-api.openapi.json, in API GET /api/v2/resources/action_items/ removed the enum value `hq.docs` from the property `anyOf[subschema #1]` of the `query` request parameter `source` [request-parameter-property-enum-value-removed]. Reason: docs raised one item, their review date, which HQ no longer tracks, so the source holds nothing to list; a client that filtered on hq.docs is refused where it had read an empty list
 - error at hq/platform/api/hq-api.openapi.json, in API POST /api/v2/capabilities/dashboard.panels.refresh/ removed the required property `data/requested_at` from the response with the `200` status [response-required-property-removed]. Reason: the time the panels were asked is the answer's standing (`data/standing`), which every ask now answers in one shape; no client acted on the timestamp

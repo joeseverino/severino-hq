@@ -54,6 +54,7 @@ class PublishedSchema(GenerateJsonSchema):
     @override
     def generate(self, schema: core_schema.CoreSchema, mode: JsonSchemaMode = "validation") -> JsonSchemaValue:
         value = super().generate(schema, mode)
+        _standard_formats(value)
         _title_compositions(value.get("$defs", {}))
         _title_branches(value, value.get("$defs", {}))
         _point_inherited(value)
@@ -92,6 +93,7 @@ class PublishedSchema(GenerateJsonSchema):
     @override
     def generate_definitions(self, inputs: Any) -> tuple[dict[Any, JsonSchemaValue], dict[Any, JsonSchemaValue]]:
         refs, definitions = super().generate_definitions(inputs)
+        _standard_formats(definitions)
         _title_compositions(definitions)
         _title_branches([refs, definitions], definitions)
         _point_inherited(definitions)
@@ -122,6 +124,30 @@ class PublishedSchema(GenerateJsonSchema):
         if LABELS in kept and "enum" in json_schema:
             kept["enum"] = json_schema["enum"]
         return kept
+
+    @override
+    def decimal_schema(self, schema: core_schema.DecimalSchema) -> JsonSchemaValue:
+        value = super().decimal_schema(schema)
+        digits, places = schema.get("max_digits"), schema.get("decimal_places")
+        if digits is None or places is None or "anyOf" not in value:
+            return value
+        # Pydantic refuses past ``max_digits`` and ``decimal_places`` and says
+        # neither: a number is held to the same size by its bounds and step.
+        whole = 10 ** (digits - places)
+        number = value["anyOf"][0]
+        number.update({"exclusiveMinimum": -whole, "exclusiveMaximum": whole, "multipleOf": 10**-places})
+        return value
+
+    @override
+    def get_decimal_pattern(self, schema: core_schema.DecimalSchema) -> str | None:
+        # The digits Pydantic counts: leading zeros, and zeros ending the
+        # fraction, are none of them; an exponent is left unsaid.
+        digits, places = schema.get("max_digits"), schema.get("decimal_places")
+        if digits is None or places is None:
+            return None
+        whole = f"[0-9]{{1,{digits - places}}}" if digits > places else "0"
+        fraction = f"[0-9]{{1,{places}}}0*" if places else "0+"
+        return rf"^[+-]?(?:0*{whole}(?:\.(?:{fraction})?)?|0*\.{fraction})$"
 
     @override
     def dict_schema(self, schema: core_schema.DictSchema) -> JsonSchemaValue:
@@ -189,6 +215,23 @@ def _point_inherited(value: Any) -> None:
             value["$ref"] += "/properties/" + name.replace("~", "~0").replace("/", "~1")
         for item in value.values():
             _point_inherited(item)
+
+
+# Pydantic's own format names, which no validator reads, by the standard
+# formats that say the same: an address of either IP version.
+_STANDARD_FORMATS = {"ipvanyaddress": ("ipv4", "ipv6")}
+
+
+def _standard_formats(value: Any) -> None:
+    if isinstance(value, list):
+        for item in value:
+            _standard_formats(item)
+    elif isinstance(value, dict):
+        if isinstance(said := value.get("format"), str) and (standard := _STANDARD_FORMATS.get(said)) is not None:
+            del value["format"]
+            value["anyOf"] = [{"format": name} for name in standard]
+        for item in value.values():
+            _standard_formats(item)
 
 
 def _title_compositions(definitions: Mapping[str, JsonSchemaValue]) -> None:

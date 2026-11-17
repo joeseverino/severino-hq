@@ -19,6 +19,7 @@ from django.urls import URLPattern, reverse
 
 from hq.platform.application.capabilities import capability_registry, describe_capabilities
 from hq.platform.application.contracts import effect_glossary
+from hq.platform.application.field_masks import FIELD_PATH_PATTERN, WHOLE_RECORD, field_paths
 from hq.platform.application.held_answer import HELD, AwaitingApproval
 from hq.platform.application.integration_specs import (
     FIELD_MASK,
@@ -36,7 +37,7 @@ from hq.platform.application.integration_specs import (
 from hq.platform.application.json_schemas import LOCAL, json_schema
 from hq.platform.application.refusal_status import LATER_CODES
 from hq.platform.application.resource_operations import RunAsked
-from hq.platform.application.resources import describe_resources, resource_registry
+from hq.platform.application.resources import describe_resources, masked_kind, resource_registry
 from hq.platform.application.run_reads import RUNS
 from hq.platform.application.security import API_INTERFACE, Principal
 lazy from hq.platform.application.routes import routed
@@ -351,7 +352,8 @@ class _Builder:
                 expand(self, template, method, view)
                 continue
             query = [
-                _query_parameter(field, schema) for field, schema in getattr(view, "__hq_query_fields__", {}).items()
+                _query_parameter(field, schema)
+                for field, schema in getattr(view, "__hq_query_fields__", dict)().items()
             ]
             self.operation(
                 template,
@@ -506,7 +508,7 @@ class _Builder:
                     for part in parts
                     for field in part.get("properties", {})
                 ]
-                + [_FIELDS],
+                + [self.mask(name, listed=True)],
                 answer=self.page_of(self.resource_specs[name].row_type),
                 links=self.links(resource=name, listed=True, query=[*query, RESERVED_QUERY_FIELD]),
                 scopes=spec["required_capabilities"],
@@ -564,6 +566,19 @@ class _Builder:
         )
         return self.parameter(alias, parameter) if alias else parameter
 
+    def mask(self, name: str, *, listed: bool) -> dict[str, Any]:
+        """The ``fields`` parameter of a read of resource ``name``: the field paths of what it answers, kept
+        as the parameter component named for their type."""
+
+        kind = masked_kind(self.resource_specs[name], listed=listed)
+        if kind is None:
+            return _FIELDS
+        # A list's `*` keeps each item whole, past the row its page is typed
+        # by, so its mask lists only the row's paths, whose answer that page says.
+        paths = [*field_paths(kind), *(() if listed else (WHOLE_RECORD,))]
+        name = f"{kind.__name__}{'Page' if listed else ''}Fields"
+        return self.parameter(name, _mask({"type": "string", "enum": paths}))
+
     def resource_detail_paths(self, template: str, method: str, view: Any) -> None:
         self.operation(
             template,
@@ -616,7 +631,7 @@ class _Builder:
                             else f"The `{field}` to read it for.",
                         ),
                     ),
-                    _FIELDS,
+                    self.mask(name, listed=False),
                 ],
                 answer=self.record_of(self.resource_specs[name].record_type),
                 links=self.links(resource=name),
@@ -681,18 +696,38 @@ EXPANSIONS: dict[str, Callable[[_Builder, str, str, Any], None]] = {
 
 
 def _query_parameter(name: str, schema: Mapping[str, Any], *, required: bool = False, **style: Any) -> dict[str, Any]:
-    """A query parameter for one field of a query's schema, its words on the parameter rather than its schema."""
+    """A query parameter for one field of a query's schema, its words on the parameter rather than its schema.
 
-    parameter: dict[str, Any] = {
-        "name": name,
-        "in": "query",
-        "required": required,
-        **style,
-        "schema": {key: value for key, value in schema.items() if key != "description"},
-    }
+    A field not sent is absent, so a ``null`` its model allows is no value the
+    parameter can be, and a ``null`` default no default it has.
+    """
+
+    said = {key: value for key, value in schema.items() if key not in {"description", "anyOf"}}
+    if said.get("default", ...) is None:
+        del said["default"]
+    branches = [branch for branch in schema.get("anyOf", ()) if branch != {"type": "null"}]
+    if len(branches) == 1:
+        said = {**branches[0], **said}
+    elif branches:
+        said["anyOf"] = branches
+    parameter: dict[str, Any] = {"name": name, "in": "query", "required": required, **style, "schema": said}
     if "description" in schema:
         parameter["description"] = schema["description"]
     return parameter
+
+
+def _mask(path: dict[str, Any]) -> dict[str, Any]:
+    """The ``fields`` query parameter whose every item is a ``path``."""
+
+    return {
+        "name": RESERVED_QUERY_FIELD,
+        "in": "query",
+        "required": False,
+        "description": f"{FIELD_MASK} Sent as one comma-separated value (`observed_at,items.waiting`).",
+        "style": "form",
+        "explode": False,
+        "schema": {"type": "array", "items": path, "minItems": 1},
+    }
 
 
 def _named(kind: str, names: list[str], operation: str) -> dict[str, Any]:
@@ -766,15 +801,7 @@ def document() -> dict[str, Any]:
                             "schema": {"$ref": builder.components.add(IDEMPOTENCY_KEY, dict(IDEMPOTENCY_FIELD_SCHEMA))},
                         },
                         **builder.parameters,
-                        "Fields": {
-                            "name": RESERVED_QUERY_FIELD,
-                            "in": "query",
-                            "required": False,
-                            "description": f"{FIELD_MASK} Sent as one comma-separated value (`observed_at,items.waiting`).",
-                            "style": "form",
-                            "explode": False,
-                            "schema": {"type": "array", "items": {"type": "string"}, "minItems": 1},
-                        },
+                        "Fields": _mask({"type": "string", "pattern": FIELD_PATH_PATTERN}),
                     }.items()
                 )
             ),

@@ -16,9 +16,9 @@ from django.core.exceptions import ImproperlyConfigured, ValidationError as Djan
 from django.db import transaction
 from django.utils import timezone
 from django.utils.text import get_text_list
-from pydantic import AfterValidator, Field, StrictStr
+from pydantic import AfterValidator, Field, StrictStr, StringConstraints
 
-from hq.domains.control_plane.names import is_hostname, normalized_hostname
+from hq.domains.control_plane.names import HOSTNAME_LENGTH, HOSTNAME_PATTERN, normalized_hostname
 from hq.platform.core.digests import digest
 lazy from hq.domains.control_plane.models import (
     ApprovalRequest,
@@ -131,15 +131,15 @@ def resource_key(operation_id: str) -> str:
     return f"automation-{operation_id.replace('.', '-')}"
 
 
-def _host(name: str) -> str:
-    host = normalized_hostname(name)
-    if not is_hostname(host):
-        raise ValueError("Name a machine by its host name, such as app.example.com.")
-    return host
-
-
 type Hosts = Annotated[
-    tuple[Annotated[StrictStr, Field(min_length=1, max_length=253), AfterValidator(_host)], ...],
+    tuple[
+        Annotated[
+            StrictStr,
+            StringConstraints(strip_whitespace=True, max_length=HOSTNAME_LENGTH, pattern=HOSTNAME_PATTERN),
+            AfterValidator(normalized_hostname),
+        ],
+        ...,
+    ],
     Field(min_length=1, max_length=64),
     AfterValidator(sorted_unique),
     Names("machines"),
