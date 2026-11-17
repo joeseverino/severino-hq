@@ -1,5 +1,4 @@
 {% load static %}
-{% load stylesheet_tags %}
 {% load value_tags %}
 {% rendered_copy as saved_copy %}
 <!doctype html>
@@ -18,20 +17,7 @@
   <link rel="icon" type="image/svg+xml" href="{% static 'img/favicon.svg' %}">
   <link rel="apple-touch-icon" href="{% static 'img/apple-touch-icon.png' %}">
   {% include "partials/_color_scheme.html" %}
-  {% comment %}
-  The face the stylesheet asks for, fetched beside it so the first paint
-  already has it: the stylesheet shows it only if it is ready (optional), so
-  text never changes face, and therefore never moves, after it is drawn.
-  {% endcomment %}
-  <link rel="preload" href="{% static 'fonts/inter/inter-variable-latin.woff2' %}" as="font" type="font/woff2" crossorigin>
-  {% comment %}
-  Nothing is drawn until the content is parsed whole: Chromium may paint a
-  partly parsed page, and a table's later rows, or a toolbar's later parts,
-  would then widen what is already drawn. The target follows `</main>`, since
-  Chromium lets go once the element it names is inserted.
-  {% endcomment %}
-  <link rel="expect" href="#parsed" blocking="render">
-  {% stylesheets %}
+  {% include "partials/_first_frame.html" %}
   <script src="{% static 'js/transitions.js' %}" {% csp_nonce_attr %}></script>
   {% block head_extra %}{% endblock %}
 </head>

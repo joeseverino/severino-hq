@@ -19,7 +19,6 @@ from hq.platform.application import references
 from hq.platform.application.entity_links import EntityLink
 from hq.platform.application.pages import Page
 from hq.platform.core.templatetags import write_tags
-lazy from hq.platform.core.templatetags.stylesheet_tags import stylesheets
 
 # What names a thing, for {% referenced_by %}: the gallery is built with no
 # database, so the rows a reference is held in are these.
@@ -127,6 +126,7 @@ class _Asked(Context):
 
 HEAD = "partials/_page_head.html"
 COLOR_SCHEME = "partials/_color_scheme.html"
+FIRST_FRAME = "partials/_first_frame.html"
 MAIN = "partials/_page_main.html"
 
 
@@ -139,6 +139,6 @@ def part_page(name, markup, before="", after="", main=""):
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
-        f"{render_to_string(COLOR_SCHEME)}<title>{escape(name)}</title>{stylesheets()}</head>"
+        f"{render_to_string(COLOR_SCHEME)}<title>{escape(name)}</title>{render_to_string(FIRST_FRAME)}</head>"
         f"<body>{before}{main}{after}</body></html>"
     )

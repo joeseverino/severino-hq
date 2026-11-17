@@ -192,7 +192,7 @@ class StyleContractTests(SimpleTestCase):
         preloaded beside the stylesheet, where it usually is ready."""
 
         root = Path(__file__).resolve().parents[4]
-        head = (root / "templates" / "base.html").read_text(encoding="utf-8")
+        head = (root / "templates" / "partials" / "_first_frame.html").read_text(encoding="utf-8")
         faces = [
             (sheet, face)
             for sheet in sheet_paths()
