@@ -172,15 +172,17 @@ _MEASURE_A_COPY = """() => {
 
 
 # How the queue's table stands: whether it is in its narrow box, and the
-# width of every action cell shown.
+# width of every action cell shown as a column. A narrow box stacks the table,
+# so it has no column to keep; there an open row shows its controls in place.
 _QUEUE_COLUMNS = (
     "([queue, act]) => {"
     + DESCRIBE
     + """
   const table = document.querySelector(queue);
+  const narrow = narrowBox(table);
   return {
-    narrow: narrowBox(table),
-    acts: [...table.querySelectorAll(act)].filter((cell) => cell.checkVisibility())
+    narrow,
+    acts: narrow ? [] : [...table.querySelectorAll(act)].filter((cell) => cell.checkVisibility())
       .map((cell) => Math.round(cell.getBoundingClientRect().width)),
   };
 }"""
@@ -361,7 +363,9 @@ class ComponentLayoutTests(LayoutBrowserTests):
                         line = row.locator("xpath=following-sibling::tr[1][@data-row-detail]")
                         row.locator(SELECTORS["row_toggle"]).click()
                         self.assertEqual(row.locator(f"{SELECTORS['decision_dismiss']} >> visible=true").count(), 1)
-                        self.assertEqual(line.locator("button >> visible=true").count(), 0)
+                        # The line holds the row's steps, moved there whole with their
+                        # Copy controls; nothing else on it is a control.
+                        self.assertEqual(line.locator("button:not(.row-below button) >> visible=true").count(), 0)
                         row.locator(SELECTORS["row_toggle"]).click()
                     else:
                         self.assertEqual(shown, 1)
