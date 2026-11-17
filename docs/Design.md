@@ -540,26 +540,44 @@ its own cells (not a dialog a cell opens, not its note) and takes the tracks
 for that count, two to six (`--tracks-2-1` up to `--tracks-6-3-1`). A lone
 cell takes the band, so no page says how many it holds.
 
-A part that draws a band marks its box `data-band` (the stats, insights
-and reading ages), and the one band rule in `css/app/figures.css` draws
-every one; its cells keep their own padding. Too narrow for two cells, a band reads as a list:
-label left, value right.
+A part that draws a band marks its box `data-band` (the facts and the
+insights), and the one band rule in `css/app/figures.css` draws every one;
+its cells keep their own padding. Too narrow for two cells, a band reads as a
+list: label left, value right.
 
-A band of facts draws its edges as every band does (`data-band`), but its
+A band of facts is every run of small labeled figures: a page's status
+facts, its headline figures, a forecast's hours, the dashboard's glance. Its
 cells are sized by what they hold: a wrapping row where each cell starts at
 its own widest line, a row's cells share the room left over, and a cell takes
 the next row only when the band has no room for it. So a label wraps only in
 a band too narrow for it on one line. Each cell is its own stack, top-aligned,
-its value right under its label; a ragged line across cells is better than a
-gap inside one. Standing alone each fact keeps its own padding. In a card or
-a section the frame's padding is its inset, and its facts stand apart by a gap
-(`--band-gap`) with no edges (`--band-rules`). A fact is drawn as a figure
-is: its label with its mark before it, its value large under it, its detail
-under that. A link in a value is the value's ink with a rule under it, so
-only a toned fact's value is colored. `size="large"` sets the values as a
-page's headline figures, and a fact's `drawing` is drawn beside its value or
-under its detail as a figure's is. Under 24rem a band of status facts reads
-as a list, each fact a row of its own.
+its value right under its label, no taller than what it holds; a ragged line
+across cells is better than a gap inside one.
+
+A band draws no box of its own: a box is the card around it
+(`{% card element="div" %}`), so a band outside a card draws none. A card
+holding the band alone is its frame and nothing more: its facts keep their own
+padding and draw their edges as every band does. Anywhere else (a section's
+body, a card holding more, the page's ground) the facts stand apart by a gap
+(`--band-gap`) with no edges (`--band-rules`), their words at the content's
+edge.
+
+A fact is drawn as a figure is: its label with its mark before it, its value
+large under it, its detail under that. What a figure counts may follow it in
+a `<small>` ("9 containers"), in the label's voice. A link in a value is the
+value's ink, underlined only under the pointer and the focus, its fact tinted,
+so only a toned fact's value is colored. `size` sets the values: `small`, an
+even grid of small centered figures read across, as a forecast's hours are,
+a note under one marked; `regular`, status facts; `large`, the headline
+figures a page is read for; `lead`, headline figures led by the first, which
+stands larger and on a row of its own where the band has no room for it
+beside them. Given `items` (each a `Kpi`), the band draws each as its fact.
+A fact's `drawing` is drawn beside its value or under its detail. Given
+`{% heading %}`, `{% panel %}` and `{% foot %}` parts and an `id`, its value
+is the button that opens the panel in place, as a menu does, and each
+`data_*` option is its attribute, so a fragment region in the band holds
+facts refreshed in place as its own (`core/_dashboard_glance.html`). Under
+24rem a band of status facts reads as a list, each fact a row of its own.
 
 Every label and its value is a fact: `{% fact "Label" value=n url=...
 detail=... %}` inside `{% facts %}`, or the block form `{% fact "Label"
@@ -637,14 +655,9 @@ as Jobs draws a run's Cancel button (`automation_runs.cancel_action`); a
 section none of whose rows has one draws no column for them. *Catalog:*
 `part/run-evidence`.
 
-A row of readings beside a page's title is `{% readings %}`, each
-`{% reading icon=... %}`: its mark, its figure, its quiet lines
-(`{% lines %}`, a `<strong>` part in the attention tone) and a note on how it
-stands (`{% note %}`, `note_tone` "attention" or "stale"). A reading leads to
-its `url`, or opens a `{% panel %}` in place under its `id`; `tone` takes the
-status vocabulary, and each `data_*` option is its attribute, so a fragment
-region in the row holds readings refreshed in place as the row's own. The row
-is one line when each has room and a list when not.
+A band of facts beside a page's title (the dashboard's glance) stands on the
+page's ground: beside the title while its facts fit there, and on a line of
+its own under it, from the page's edge, where not.
 
 The facts a page states on its title's line (a record's state, a machine's
 addresses) are `{% title_meta %}`, written by the template its view names as
@@ -1113,7 +1126,7 @@ notes) is `partials/_linked_text.html`, over the text's runs that
 `application.where_it_runs.named_links` finds: each name a link as every
 mention is, and its line breaks kept.
 
-Numbers are never chips: a figure stands in a KPI cell, a numeric column or a
+Numbers are never chips: a figure stands in a band of facts, a numeric column or a
 sentence (`hq/platform/core/tests/test_template_chips.py`). One that carries a
 state says it in ink, as `.figure` with its tone class
 (`<span class="figure tone-attention">`).
@@ -1539,19 +1552,19 @@ what the items carry (`hq/platform/application/action_items.py`), so a domain th
 raising items has its section without being listed anywhere.
 Filters that match nothing offer a way back; they never imply a healthy estate.
 
-**Overview figures have a hierarchy.** The shared KPI partial accepts
-`featured=True`: a four-fact overview leads with its contributor's first fact,
-then the three supporting facts together. Values, context and links render
-once from the KPI collection. Other counts keep their even band. Overview cards fit their available width, placing three domains
-side by side when space permits; empty contributors take no space.
+**Overview figures have a hierarchy.** A domain's overview is a band of
+facts at `size="lead"`: it leads with its contributor's first figure, then the
+supporting figures together. Values, context and links render once from the
+`Kpi` collection. Other counts keep their even band. Overview cards fit their
+available width, placing three domains side by side when space permits; empty
+contributors take no space.
 
-**A figure may be drawn as well as said.** `Kpi` takes one `drawing`, or none:
+**A figure may be drawn as well as said.** `Kpi` (and `{% fact %}`) takes one `drawing`, or none:
 
 - `Dots`, a part of a whole, one dot each. `Dots.of(filled, whole)` when the
   parts are only a count; `Dots((Dot(...), ...))` when each is something with a
-  page of its own, which then names itself when pointed at and links there. The
-  figure's own link moves from the cell to its value, since a link cannot hold
-  links. Past six, dots stand in even rows at most four wide. Where the column
+  page of its own, which then names itself when pointed at and links there,
+  beside the figure's own link on its value. Past six, dots stand in even rows at most four wide. Where the column
   has no room for them beside the value they take the line under it, so a
   figure's dots never reach the figure beside it (the survey's
   `into a neighbor`). Past a dozen, dots are a texture and
@@ -1572,23 +1585,6 @@ already say, so the words stay, and one that is only decoration is not
 announced. Nothing is drawn against a measure the domain does not have: a date
 that runs out shows the date, not a bar across an invented span.
 
-In a card, a row of figures shares its lines: labels start level and values
-stand level however a label wraps, and a label wraps beside its mark, never
-under it.
-
-A figure with a page reads as one target by its tile: in any figure grid the
-tile tints under the pointer and the focus, and its label and value are never
-underlined. One whose value is its link tints the same while the value is
-pointed at or focused. In a card or an overview the tint reaches into the gap
-as a shadow, so nothing moves, and a lead that spans the frame tints a band
-across it.
-
-A run of small figures read across, as a forecast's hours are, is a tile
-strip (`partials/_tile_strip.html`), each a `StripTile`
-(`application.drawings`): what it is of, the figure, and a `note` said only
-when something stands out, and then marked. As many tiles stand to a line as the box holds, the rest on
-the lines under them.
-
 A ranked list of shares, as the pages and sources of a site's traffic are, is
 a share list (`partials/_share_list.html`): each row its label and figure on
 one line over a bar of its size against the largest row's, so a long tail
@@ -1596,13 +1592,10 @@ still reads apart. The bar is a `<meter>`, and a label past its line is cut,
 whole on hover.
 
 A figure that is itself a change takes `tone`, a status tone its value is drawn
-in, featured or not, so a rise and a fall never read alike. A figure that is a
+in, at any size, so a rise and a fall never read alike. A figure that is a
 level says how it moved in its line, which takes `detail_tone` the same way.
 `detail_url` links the line where it counts things with a page of their own
-("12 expenses"). It needs a `detail`, since a link is said by its words, and
-like dots or legend rows that lead on it moves the figure's own link from the
-cell to its value. The three supporting figures of a featured row size their
-values to their own column, so amounts never run into each other on a phone.
+("12 expenses"). It needs a `detail`, since a link is said by its words.
 
 **A saved copy never says "you" about someone else.** Anything that describes
 the reader's own connection includes `partials/_example_connection.html`. On a live
@@ -1920,9 +1913,9 @@ Alignment:
 - A chip, a change's two values and a band's facts sit on the baseline of the
   line they share, and a box set in a line that cuts what it holds is set by
   its top.
-- A band of readings or choices lays out as whole even rows, and each of its
-  cells keeps its padding; so does any filled box. A band of facts shares
-  its width in equal tracks.
+- A band of insights or choices lays out as whole even rows, and each of its
+  cells keeps its padding; so does any filled box. A band of facts sizes its
+  cells by what they hold.
 - A form fills its rows, controls in a row share one height, a wrapped bar of
   controls fills its rows, and a section of queue cards ends its buttons at
   one edge.
