@@ -309,6 +309,13 @@ unknown-field rejection, and whether an idempotency key is required. Clients
 can therefore generate and validate requests from the deployed composition's
 actual registry. An extension keeps no API document of its own.
 
+A request the schema allows is one HQ accepts, past what only the stored
+records decide (a name that matches no record, a conflict). Each rule a schema
+keyword states is in the schema: a column's own rules, and the shapes a
+command takes as `anyOf` or `oneOf` branches. A rule between a row's columns
+that no keyword states (an end after its start) is listed in its own words
+under `x-hq-rules`, on the field it is reported beside.
+
 The envelope (`payload`, `target`, `expected_updated_at`) is one type,
 `CallEnvelope` in `hq/platform/application/call_envelope.py`, and
 `request_schema` derives each capability's from it, with the command under

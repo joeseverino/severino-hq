@@ -19,7 +19,7 @@ from django.urls import URLPattern, reverse
 
 from hq.platform.application.capabilities import capability_registry, describe_capabilities
 from hq.platform.application.contracts import effect_glossary
-from hq.platform.application.field_masks import FIELD_PATH_PATTERN, WHOLE_RECORD, field_paths
+from hq.platform.application.field_masks import FIELD_PATH_PATTERN, WHOLE_RECORD
 from hq.platform.application.held_answer import HELD, AwaitingApproval
 from hq.platform.application.integration_specs import (
     FIELD_MASK,
@@ -37,7 +37,7 @@ from hq.platform.application.integration_specs import (
 from hq.platform.application.json_schemas import LOCAL, json_schema
 from hq.platform.application.refusal_status import LATER_CODES
 from hq.platform.application.resource_operations import RunAsked
-from hq.platform.application.resources import describe_resources, masked_kind, resource_registry
+from hq.platform.application.resources import describe_resources, mask_paths, masked_kinds, resource_registry
 from hq.platform.application.run_reads import RUNS
 from hq.platform.application.security import API_INTERFACE, Principal
 lazy from hq.platform.application.routes import routed
@@ -514,7 +514,7 @@ class _Builder:
                     for field in part.get("properties", {})
                 ]
                 + [self.mask(name, listed=True)],
-                answer=self.page_of(self.resource_specs[name].row_type),
+                answer=self.page_of(name),
                 links=self.links(resource=name, listed=True, query=[*query, RESERVED_QUERY_FIELD]),
                 scopes=spec["required_capabilities"],
                 **{"x-hq-resource": name},
@@ -533,14 +533,18 @@ class _Builder:
         self.components.mask(name)
         return {"$ref": SCHEMAS + name}
 
-    def page_of(self, row: type | None) -> tuple[str, dict[str, Any]] | None:
-        """A list's answer whose items are ``row``: every list's page, its items narrowed to it."""
+    def page_of(self, name: str) -> tuple[str, dict[str, Any]] | None:
+        """A list's answer whose items are what its mask answers: every list's
+        page, its items narrowed to its row, or to its record where a mask
+        (``*``, a record's path) keeps more of each."""
 
-        if row is None:
+        kinds = masked_kinds(self.resource_specs[name], listed=True)
+        if not kinds:
             return None
         page = self.data[views.resource_list.__name__]
-        items = {"type": "array", "items": self.typed(row)}
-        return f"{row.__name__}Page", {"allOf": [page], "properties": {"items": items}}
+        typed = [self.typed(kind) for kind in kinds]
+        items = {"type": "array", "items": typed[0] if len(typed) == 1 else {"anyOf": typed}}
+        return f"{kinds[0].__name__}Page", {"allOf": [page], "properties": {"items": items}}
 
     def record_of(self, record: type | None) -> tuple[str, dict[str, Any]] | None:
         """A read of one record's answer, where its kind types it; else the view's object."""
@@ -575,14 +579,16 @@ class _Builder:
         """The ``fields`` parameter of a read of resource ``name``: the field paths of what it answers, kept
         as the parameter component named for their type."""
 
-        kind = masked_kind(self.resource_specs[name], listed=listed)
-        if kind is None:
+        spec = self.resource_specs[name]
+        kinds = masked_kinds(spec, listed=listed)
+        if not kinds:
             return _FIELDS
-        # A list's `*` keeps each item whole, past the row its page is typed
-        # by, so its mask lists only the row's paths, whose answer that page says.
-        paths = [*field_paths(kind), *(() if listed else (WHOLE_RECORD,))]
-        name = f"{kind.__name__}{'Page' if listed else ''}Fields"
-        return self.parameter(name, _mask({"type": "string", "enum": paths}))
+        paths = mask_paths(spec, listed=listed)
+        if listed and masked_kinds(spec, listed=False) and set(paths) == set(mask_paths(spec, listed=False)):
+            # A list whose row's paths are all its record's keeps what one record's read keeps.
+            return self.mask(name, listed=False)
+        kind = f"{kinds[0].__name__}{'Page' if listed else ''}Fields"
+        return self.parameter(kind, _mask({"type": "string", "enum": [*paths, WHOLE_RECORD]}))
 
     def resource_detail_paths(self, template: str, method: str, view: Any) -> None:
         self.operation(
@@ -592,14 +598,19 @@ class _Builder:
             _camel(view.__name__),
             self.tags.use(API_TAG),
             parameters=[
+                # A resource found by other than text is read by its own path alone,
+                # where its identifier is typed as it declares it.
                 _named(
                     "resource",
-                    [spec["name"] for spec in self.resources if spec["operations"]["get"]],
+                    [
+                        spec["name"]
+                        for spec in self.resources
+                        if spec["operations"]["get"]
+                        and json_schema(self.resource_specs[spec["name"]].identifier_type) == _TEXT
+                    ],
                     "read of one record",
                 ),
-                _path_parameter(
-                    "identifier", {"type": "string"}, "The record's value of the field its resource is found by."
-                ),
+                _path_parameter("identifier", _TEXT, "The record's value of the field its resource is found by."),
                 _FIELDS,
             ],
         )
@@ -646,6 +657,7 @@ class _Builder:
 
 
 _FIELDS = {"$ref": "#/components/parameters/Fields"}
+_TEXT = {"type": "string"}
 # The one security scheme; an operation's requirement of it lists the capabilities a call needs
 # (OpenAPI 3.2, Security Requirement Object: role names, for a scheme other than OAuth's).
 BEARER = "bearer"

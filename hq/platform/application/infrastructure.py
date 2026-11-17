@@ -118,13 +118,14 @@ class ManagedResourceCommand:
 
 
 def list_managed_resources(*, limit: int = 50, kind: str | None = None, kinds: str | None = None) -> dict[str, Any]:
-    """List canonical public infrastructure state without provider credentials, by kind then key."""
+    """List canonical public infrastructure state without provider credentials, by kind then key.
+
+    Each filter sent narrows the list, so both keep the records of ``kind`` when it is among ``kinds``.
+    """
     resources = ManagedResource.objects.all()
-    if kind and kinds:
-        raise ValueError("Choose either kind or kinds, not both.")
     if kind:
         resources = resources.filter(kind=kind)
-    elif kinds:
+    if kinds:
         resources = resources.filter(kind__in=kinds.split(","))
     page = keyset_page(resources, ("kind", "key"), limit)
     return {**page, "items": [serialize_resource(resource) for resource in page["items"]]}

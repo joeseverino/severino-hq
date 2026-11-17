@@ -81,3 +81,16 @@ class TheApiAgreesTests(TestCase):
                     self.assertIsNone(re.fullmatch(pattern, kinds))
                     response = self.client.get(f"{KINDS}{kinds}", HTTP_AUTHORIZATION=token)
                     self.assertEqual(response.status_code, 400)
+
+    def test_kind_and_kinds_sent_together_each_narrow_the_list(self):
+        from hq.domains.control_plane.models import ManagedResource
+
+        ManagedResource.objects.create(key="example-machine", kind="machine", spec={"name": "example"})
+        ManagedResource.objects.create(key="example-network", kind="network", spec={})
+        with _serving():
+            token = f"Bearer {_token(scope='read')}"
+            for kind, kept in (("machine", ["example-machine"]), ("caddy.route", [])):
+                with self.subTest(kind=kind):
+                    response = self.client.get(f"{KINDS}machine,network&kind={kind}", HTTP_AUTHORIZATION=token)
+                    self.assertEqual(response.status_code, 200, response.content)
+                    self.assertEqual([item["key"] for item in response.json()["data"]["items"]], kept)

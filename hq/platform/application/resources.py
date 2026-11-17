@@ -216,13 +216,12 @@ InfrastructureResourceQuery = create_model(
             default=None,
             max_length=2000,
             pattern=several_of(PROVIDERS),
-            description="Several types to keep, comma-separated, each one the single type filter offers; "
-            "not sent with it.",
+            description="Several types to keep, comma-separated, each one the single type filter offers.",
         ),
     ),
     kind=(
         one_of(PROVIDERS) | None,
-        Field(default=None, description="Only the records of this type; not sent with the filter of several."),
+        Field(default=None, description="Only the records of this type."),
     ),
 )
 
@@ -908,19 +907,26 @@ def _cursor_refused(name: str, reason: str) -> InvalidResourceInput:
     return InvalidResourceInput(name, [{"type": "value_error", "loc": [PAGE_FIELD], "msg": reason}])
 
 
-def masked_kind(spec: ResourceSpec, *, listed: bool) -> type | None:
-    """The type a field mask over ``spec``'s records declares paths from: a
-    list's row, a read of one's record, else its row; None where it types neither."""
+def masked_kinds(spec: ResourceSpec, *, listed: bool) -> tuple[type, ...]:
+    """The types a field mask over ``spec``'s records declares paths from: a
+    list's row and, since ``*`` keeps each item whole, its record; a read of
+    one's record, else its row; none where it types neither."""
 
-    return spec.row_type if listed else spec.record_type or spec.row_type
+    kinds = (spec.row_type, spec.record_type) if listed else (spec.record_type or spec.row_type,)
+    return tuple(dict.fromkeys(kind for kind in kinds if kind is not None))
+
+
+def mask_paths(spec: ResourceSpec, *, listed: bool) -> tuple[str, ...]:
+    """Every field path a mask over ``spec``'s records may name, from ``masked_kinds``."""
+
+    return tuple(dict.fromkeys(path for kind in masked_kinds(spec, listed=listed) for path in field_paths(kind)))
 
 
 def _masked(spec: ResourceSpec, records: list[Any], fields: Fields, *, listed: bool) -> list[dict[str, Any]]:
     if any(not isinstance(record, dict) for record in records):
         raise TypeError(f"Resource {spec.name!r} returned a record that is not an object.")
-    kind = masked_kind(spec, listed=listed)
     try:
-        return selected(records, fields, field_paths(kind) if kind is not None else ())
+        return selected(records, fields, mask_paths(spec, listed=listed))
     except FieldMaskRefusal as exc:
         raise InvalidResourceInput(spec.name, exc.errors) from exc
 

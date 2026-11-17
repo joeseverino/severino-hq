@@ -10,7 +10,7 @@
       }
     },
     "parameters": {
-      "ActionItemRowPageFields": {
+      "ActionItemRowFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
         "in": "query",
@@ -25,7 +25,8 @@
               "detail",
               "action",
               "url",
-              "since"
+              "since",
+              "*"
             ],
             "type": "string"
           },
@@ -60,7 +61,22 @@
               "all_day",
               "state",
               "detail",
-              "url"
+              "url",
+              "uid",
+              "starts_on",
+              "ends_on",
+              "starts_at",
+              "ends_at",
+              "location",
+              "notes",
+              "repeat",
+              "repeat_label",
+              "interval",
+              "weekdays",
+              "repeat_until",
+              "about",
+              "updated_at",
+              "*"
             ],
             "type": "string"
           },
@@ -121,39 +137,7 @@
         },
         "style": "form"
       },
-      "AssetRowPageFields": {
-        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
-        "explode": false,
-        "in": "query",
-        "name": "fields",
-        "required": false,
-        "schema": {
-          "items": {
-            "enum": [
-              "slug",
-              "item_name",
-              "vendor",
-              "category",
-              "status",
-              "purchase_date",
-              "total_cost",
-              "business_use_percentage",
-              "estimated_deductible_amount",
-              "payment_method",
-              "serial_number",
-              "warranty_date",
-              "notes",
-              "infrastructure",
-              "updated_at"
-            ],
-            "type": "string"
-          },
-          "minItems": 1,
-          "type": "array"
-        },
-        "style": "form"
-      },
-      "BreakdownPageFields": {
+      "BreakdownFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
         "in": "query",
@@ -165,7 +149,8 @@
               "dimension",
               "value",
               "visits",
-              "pageviews"
+              "pageviews",
+              "*"
             ],
             "type": "string"
           },
@@ -368,33 +353,6 @@
         },
         "style": "form"
       },
-      "ConnectionStandingRowPageFields": {
-        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
-        "explode": false,
-        "in": "query",
-        "name": "fields",
-        "required": false,
-        "schema": {
-          "items": {
-            "enum": [
-              "id",
-              "connection_ref",
-              "label",
-              "kind",
-              "family",
-              "status",
-              "status_label",
-              "detail",
-              "observed_at",
-              "open_problems"
-            ],
-            "type": "string"
-          },
-          "minItems": 1,
-          "type": "array"
-        },
-        "style": "form"
-      },
       "ContactSubmissionRowFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
@@ -427,45 +385,6 @@
               "pending",
               "message_preview",
               "*"
-            ],
-            "type": "string"
-          },
-          "minItems": 1,
-          "type": "array"
-        },
-        "style": "form"
-      },
-      "ContactSubmissionRowPageFields": {
-        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
-        "explode": false,
-        "in": "query",
-        "name": "fields",
-        "required": false,
-        "schema": {
-          "items": {
-            "enum": [
-              "id",
-              "connection_ref",
-              "account_id",
-              "database_id",
-              "database",
-              "created_at",
-              "updated_at",
-              "name",
-              "email",
-              "message",
-              "status",
-              "assigned_to",
-              "admin_notes",
-              "country",
-              "ip_address",
-              "browser",
-              "device",
-              "user_agent",
-              "source_url",
-              "turnstile",
-              "pending",
-              "message_preview"
             ],
             "type": "string"
           },
@@ -530,31 +449,6 @@
         },
         "style": "form"
       },
-      "ContainerRowPageFields": {
-        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
-        "explode": false,
-        "in": "query",
-        "name": "fields",
-        "required": false,
-        "schema": {
-          "items": {
-            "enum": [
-              "address",
-              "machine",
-              "name",
-              "compose_project",
-              "url",
-              "state",
-              "status",
-              "serves"
-            ],
-            "type": "string"
-          },
-          "minItems": 1,
-          "type": "array"
-        },
-        "style": "form"
-      },
       "ContentRecordFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
@@ -580,33 +474,6 @@
               "relationships.expense_ids",
               "relationships.documentation",
               "*"
-            ],
-            "type": "string"
-          },
-          "minItems": 1,
-          "type": "array"
-        },
-        "style": "form"
-      },
-      "ContentRowPageFields": {
-        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
-        "explode": false,
-        "in": "query",
-        "name": "fields",
-        "required": false,
-        "schema": {
-          "items": {
-            "enum": [
-              "slug",
-              "title",
-              "content_type",
-              "status",
-              "topic",
-              "tags",
-              "published_url",
-              "published_at",
-              "notes",
-              "updated_at"
             ],
             "type": "string"
           },
@@ -657,29 +524,6 @@
               "sights.parts.address",
               "sights.remedy",
               "*"
-            ],
-            "type": "string"
-          },
-          "minItems": 1,
-          "type": "array"
-        },
-        "style": "form"
-      },
-      "CredentialRowPageFields": {
-        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
-        "explode": false,
-        "in": "query",
-        "name": "fields",
-        "required": false,
-        "schema": {
-          "items": {
-            "enum": [
-              "provider",
-              "label",
-              "credential_refusal",
-              "tally",
-              "tally.count",
-              "tally.state"
             ],
             "type": "string"
           },
@@ -746,37 +590,6 @@
         },
         "style": "form"
       },
-      "DocumentationRowPageFields": {
-        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
-        "explode": false,
-        "in": "query",
-        "name": "fields",
-        "required": false,
-        "schema": {
-          "items": {
-            "enum": [
-              "doc_id",
-              "title",
-              "doc_type",
-              "system",
-              "environment",
-              "status",
-              "sensitivity",
-              "obsidian_path",
-              "github_path",
-              "external_url",
-              "last_reviewed",
-              "published_at",
-              "notes",
-              "updated_at"
-            ],
-            "type": "string"
-          },
-          "minItems": 1,
-          "type": "array"
-        },
-        "style": "form"
-      },
       "DomainRecordFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
@@ -824,34 +637,6 @@
         },
         "style": "form"
       },
-      "DomainRowPageFields": {
-        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
-        "explode": false,
-        "in": "query",
-        "name": "fields",
-        "required": false,
-        "schema": {
-          "items": {
-            "enum": [
-              "name",
-              "node",
-              "url",
-              "declaration",
-              "services",
-              "services.hostname",
-              "services.status",
-              "registration",
-              "registration.expires",
-              "registration.source",
-              "registration.auto_renew"
-            ],
-            "type": "string"
-          },
-          "minItems": 1,
-          "type": "array"
-        },
-        "style": "form"
-      },
       "EntryRecordFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
@@ -886,7 +671,7 @@
         },
         "style": "form"
       },
-      "EstateFigurePageFields": {
+      "EstateFigureFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
         "in": "query",
@@ -900,7 +685,8 @@
               "value",
               "detail",
               "status",
-              "url"
+              "url",
+              "*"
             ],
             "type": "string"
           },
@@ -909,7 +695,7 @@
         },
         "style": "form"
       },
-      "ExpenseRowPageFields": {
+      "ExpenseRowFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
         "in": "query",
@@ -935,7 +721,8 @@
               "related_documentation",
               "paid_from",
               "about",
-              "updated_at"
+              "updated_at",
+              "*"
             ],
             "type": "string"
           },
@@ -996,7 +783,7 @@
         },
         "style": "form"
       },
-      "HopRowPageFields": {
+      "HopRowFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
         "in": "query",
@@ -1066,7 +853,8 @@
               "layers.evidence",
               "layers.boundary",
               "layers.mechanism",
-              "layers.rules"
+              "layers.rules",
+              "*"
             ],
             "type": "string"
           },
@@ -1209,33 +997,6 @@
         },
         "style": "form"
       },
-      "MachineRowPageFields": {
-        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
-        "explode": false,
-        "in": "query",
-        "name": "fields",
-        "required": false,
-        "schema": {
-          "items": {
-            "enum": [
-              "name",
-              "url",
-              "state",
-              "role",
-              "roles",
-              "roles.id",
-              "roles.label",
-              "addresses",
-              "hostnames",
-              "runs_hq"
-            ],
-            "type": "string"
-          },
-          "minItems": 1,
-          "type": "array"
-        },
-        "style": "form"
-      },
       "ManagedResourceRecordFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
@@ -1326,7 +1087,61 @@
               "health.reason",
               "health.message",
               "public_effect",
-              "last_observed_at"
+              "last_observed_at",
+              "resource",
+              "resource.key",
+              "resource.kind",
+              "resource.enabled",
+              "resource.in_sync",
+              "resource.health",
+              "resource.health.state",
+              "resource.health.label",
+              "resource.health.reason",
+              "resource.health.message",
+              "resource.public_effect",
+              "resource.last_observed_at",
+              "resource.id",
+              "resource.spec",
+              "resource.status",
+              "resource.conditions",
+              "resource.conditions.type",
+              "resource.conditions.status",
+              "resource.conditions.reason",
+              "resource.conditions.message",
+              "resource.conditions.since",
+              "resource.generation",
+              "resource.observed_generation",
+              "resource.updated_at",
+              "derived",
+              "operations",
+              "operations.id",
+              "operations.action",
+              "operations.action_label",
+              "operations.state",
+              "operations.state_label",
+              "operations.tone",
+              "operations.headline",
+              "operations.automatic",
+              "operations.requested_actor",
+              "operations.requested_interface",
+              "operations.by",
+              "operations.approved_by",
+              "operations.created_at",
+              "operations.completed_at",
+              "operations.attempt_count",
+              "operations.reason",
+              "operations.condition",
+              "operations.condition.type",
+              "operations.condition.status",
+              "operations.condition.reason",
+              "operations.condition.message",
+              "operations.condition.since",
+              "operations.affected",
+              "operations.evidence",
+              "operations.matched",
+              "operations.expected_fingerprint_sha256",
+              "operations.raw_result",
+              "*"
             ],
             "type": "string"
           },
@@ -1335,7 +1150,7 @@
         },
         "style": "form"
       },
-      "MatchPageFields": {
+      "MatchFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
         "in": "query",
@@ -1349,7 +1164,8 @@
               "label",
               "summary",
               "url",
-              "group"
+              "group",
+              "*"
             ],
             "type": "string"
           },
@@ -1543,29 +1359,7 @@
         },
         "style": "form"
       },
-      "PlaybookRowPageFields": {
-        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
-        "explode": false,
-        "in": "query",
-        "name": "fields",
-        "required": false,
-        "schema": {
-          "items": {
-            "enum": [
-              "playbook",
-              "title",
-              "capability",
-              "effect",
-              "reachable"
-            ],
-            "type": "string"
-          },
-          "minItems": 1,
-          "type": "array"
-        },
-        "style": "form"
-      },
-      "ProblemPageFields": {
+      "ProblemFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
         "in": "query",
@@ -1590,7 +1384,8 @@
               "subject.reason",
               "subject.recommended",
               "subject.refusal",
-              "since"
+              "since",
+              "*"
             ],
             "type": "string"
           },
@@ -1641,42 +1436,6 @@
         },
         "style": "form"
       },
-      "ProjectRowPageFields": {
-        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
-        "explode": false,
-        "in": "query",
-        "name": "fields",
-        "required": false,
-        "schema": {
-          "items": {
-            "enum": [
-              "slug",
-              "name",
-              "category",
-              "status",
-              "description",
-              "technologies",
-              "repository_url",
-              "public_url",
-              "last_push_at",
-              "dependency_updates",
-              "updated_at",
-              "updates",
-              "updates.open_pulls",
-              "updates.oldest_pull_days",
-              "updates.unmatched_alerts",
-              "updates.last_run",
-              "updates.last_run.outcome",
-              "updates.last_run.started_at",
-              "updates.last_run.finished_at"
-            ],
-            "type": "string"
-          },
-          "minItems": 1,
-          "type": "array"
-        },
-        "style": "form"
-      },
       "ProviderIdentifier": {
         "description": "The record's `provider`, as each item of the list carries it.",
         "in": "path",
@@ -1719,31 +1478,7 @@
         },
         "style": "form"
       },
-      "ReadingRowPageFields": {
-        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
-        "explode": false,
-        "in": "query",
-        "name": "fields",
-        "required": false,
-        "schema": {
-          "items": {
-            "enum": [
-              "kind",
-              "label",
-              "provider",
-              "state",
-              "records",
-              "observed_at",
-              "error"
-            ],
-            "type": "string"
-          },
-          "minItems": 1,
-          "type": "array"
-        },
-        "style": "form"
-      },
-      "ReceiptRowPageFields": {
+      "ReceiptRowFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
         "in": "query",
@@ -1763,7 +1498,8 @@
               "related_expense",
               "related_asset",
               "uploaded_at",
-              "updated_at"
+              "updated_at",
+              "*"
             ],
             "type": "string"
           },
@@ -1862,38 +1598,6 @@
         },
         "style": "form"
       },
-      "RunRowPageFields": {
-        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
-        "explode": false,
-        "in": "query",
-        "name": "fields",
-        "required": false,
-        "schema": {
-          "items": {
-            "enum": [
-              "operation_id",
-              "playbook",
-              "capability",
-              "state",
-              "state_label",
-              "headline",
-              "hosts",
-              "by",
-              "approved_by",
-              "correlation",
-              "created_at",
-              "started_at",
-              "finished_at",
-              "duration_seconds",
-              "stated"
-            ],
-            "type": "string"
-          },
-          "minItems": 1,
-          "type": "array"
-        },
-        "style": "form"
-      },
       "ScanResultFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
@@ -1918,37 +1622,6 @@
               "widens",
               "pending",
               "*"
-            ],
-            "type": "string"
-          },
-          "minItems": 1,
-          "type": "array"
-        },
-        "style": "form"
-      },
-      "ScanResultPageFields": {
-        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
-        "explode": false,
-        "in": "query",
-        "name": "fields",
-        "required": false,
-        "schema": {
-          "items": {
-            "enum": [
-              "id",
-              "revision",
-              "branch",
-              "committer",
-              "read_at",
-              "adopted",
-              "changes",
-              "changes.playbook",
-              "changes.title",
-              "changes.change",
-              "changes.refused",
-              "refused",
-              "widens",
-              "pending"
             ],
             "type": "string"
           },
@@ -2115,7 +1788,117 @@
               "origin.host",
               "origin.container",
               "project",
-              "faults"
+              "faults",
+              "service",
+              "service.hostname",
+              "service.status",
+              "service.status_label",
+              "service.origin",
+              "service.origin.address",
+              "service.origin.host",
+              "service.origin.container",
+              "service.project",
+              "service.faults",
+              "service.mark",
+              "service.facets",
+              "service.facets.id",
+              "service.facets.label",
+              "service.facets.present",
+              "service.facets.state",
+              "service.facets.resources",
+              "path",
+              "path.hostname",
+              "path.line",
+              "path.redirects_to",
+              "path.machine",
+              "path.unread",
+              "path.observed",
+              "path.observed.relation",
+              "path.observed.name",
+              "path.observed.link",
+              "path.observed.link.label",
+              "path.observed.link.url",
+              "path.observed.link.external",
+              "path.observed.link.kind",
+              "path.observed.link.kind_label",
+              "path.observed.link.title",
+              "path.observed.link.detail",
+              "path.observed.link.identity",
+              "path.observed.detail",
+              "path.observed.source",
+              "path.observed.source.kind",
+              "path.observed.source.label",
+              "path.observed.source.connection",
+              "path.observed.source.observed_at",
+              "path.observed.source.declared",
+              "path.routes",
+              "path.routes.via",
+              "path.routes.port",
+              "path.routes.line",
+              "path.routes.hops",
+              "path.routes.hops.step",
+              "path.routes.hops.label",
+              "path.routes.hops.name",
+              "path.routes.hops.link",
+              "path.routes.hops.link.label",
+              "path.routes.hops.link.url",
+              "path.routes.hops.link.external",
+              "path.routes.hops.link.kind",
+              "path.routes.hops.link.kind_label",
+              "path.routes.hops.link.title",
+              "path.routes.hops.link.detail",
+              "path.routes.hops.link.identity",
+              "path.routes.hops.detail",
+              "path.routes.hops.source",
+              "path.routes.hops.source.kind",
+              "path.routes.hops.source.label",
+              "path.routes.hops.source.connection",
+              "path.routes.hops.source.observed_at",
+              "path.routes.hops.source.declared",
+              "path.routes.hops.certificate",
+              "path.routes.hops.certificate.role",
+              "path.routes.hops.certificate.name",
+              "path.routes.hops.certificate.issuer",
+              "path.routes.hops.certificate.expiry",
+              "path.routes.hops.certificate.source",
+              "path.routes.hops.certificate.source.kind",
+              "path.routes.hops.certificate.source.label",
+              "path.routes.hops.certificate.source.connection",
+              "path.routes.hops.certificate.source.observed_at",
+              "path.routes.hops.certificate.source.declared",
+              "path.routes.hops.certificate.unread",
+              "path.routes.hops.unread",
+              "path.routes.hops.overlays",
+              "path.routes.hops.overlays.relation",
+              "path.routes.hops.overlays.link",
+              "path.routes.hops.overlays.link.label",
+              "path.routes.hops.overlays.link.url",
+              "path.routes.hops.overlays.link.external",
+              "path.routes.hops.overlays.link.kind",
+              "path.routes.hops.overlays.link.kind_label",
+              "path.routes.hops.overlays.link.title",
+              "path.routes.hops.overlays.link.detail",
+              "path.routes.hops.overlays.link.identity",
+              "path.routes.hops.check",
+              "path.routes.hops.check.state",
+              "path.routes.hops.check.label",
+              "path.routes.hops.check.detail",
+              "path.routes.hops.check.step",
+              "path.routes.hops.evidence",
+              "path.routes.hops.evidence.label",
+              "path.routes.hops.evidence.value",
+              "path.routes.hops.evidence.detail",
+              "path.routes.hops.evidence.role",
+              "path.routes.hops.layers",
+              "path.routes.hops.layers.id",
+              "path.routes.hops.layers.label",
+              "path.routes.hops.layers.state",
+              "path.routes.hops.layers.detail",
+              "path.routes.hops.layers.evidence",
+              "path.routes.hops.layers.boundary",
+              "path.routes.hops.layers.mechanism",
+              "path.routes.hops.layers.rules",
+              "*"
             ],
             "type": "string"
           },
@@ -2133,7 +1916,7 @@
           "type": "string"
         }
       },
-      "TailnetPageFields": {
+      "TailnetFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
         "in": "query",
@@ -2318,7 +2101,8 @@
               "unread.error",
               "unread.remedy",
               "unread.requires",
-              "credential_refusal"
+              "credential_refusal",
+              "*"
             ],
             "type": "string"
           },
@@ -2413,36 +2197,6 @@
               "steps.label",
               "steps.detail",
               "*"
-            ],
-            "type": "string"
-          },
-          "minItems": 1,
-          "type": "array"
-        },
-        "style": "form"
-      },
-      "UpgradeRowPageFields": {
-        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
-        "explode": false,
-        "in": "query",
-        "name": "fields",
-        "required": false,
-        "schema": {
-          "items": {
-            "enum": [
-              "address",
-              "viable",
-              "risk",
-              "change",
-              "from",
-              "from.tag",
-              "from.digest",
-              "to",
-              "to.tag",
-              "to.digest",
-              "blockers",
-              "blockers.id",
-              "blockers.reason"
             ],
             "type": "string"
           },
@@ -3992,7 +3746,14 @@
             "properties": {
               "items": {
                 "items": {
-                  "$ref": "#/components/schemas/AgendaItem"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/AgendaItem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/EntryRecord"
+                    }
+                  ]
                 },
                 "type": "array"
               }
@@ -4693,7 +4454,14 @@
             "properties": {
               "items": {
                 "items": {
-                  "$ref": "#/components/schemas/AssetRow"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/AssetRow"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AssetRecord"
+                    }
+                  ]
                 },
                 "type": "array"
               }
@@ -5161,8 +4929,7 @@
               "ends_at": {
                 "anyOf": [
                   {
-                    "format": "time",
-                    "type": "string"
+                    "$ref": "#/components/schemas/ClockTime"
                   },
                   {
                     "type": "null"
@@ -5214,8 +4981,7 @@
               "starts_at": {
                 "anyOf": [
                   {
-                    "format": "time",
-                    "type": "string"
+                    "$ref": "#/components/schemas/ClockTime"
                   },
                   {
                     "type": "null"
@@ -5358,8 +5124,7 @@
               "ends_at": {
                 "anyOf": [
                   {
-                    "format": "time",
-                    "type": "string"
+                    "$ref": "#/components/schemas/ClockTime"
                   },
                   {
                     "type": "null"
@@ -5404,8 +5169,7 @@
               "starts_at": {
                 "anyOf": [
                   {
-                    "format": "time",
-                    "type": "string"
+                    "$ref": "#/components/schemas/ClockTime"
                   },
                   {
                     "type": "null"
@@ -5783,11 +5547,18 @@
             "type": "string"
           },
           "expires_on": {
+            "anyOf": [
+              {
+                "const": ""
+              },
+              {
+                "format": "date",
+                "type": "string"
+              }
+            ],
             "default": "",
             "description": "ISO date, e.g. 2036-05-02. Blank if it does not expire.",
-            "maxLength": 10,
-            "title": "Expires",
-            "type": "string"
+            "title": "Expires"
           },
           "issued_with": {
             "default": "",
@@ -6089,8 +5860,174 @@
         },
         "type": "object"
       },
+      "ClockTime": {
+        "description": "A time of day, as the clock on the wall reads it.",
+        "pattern": "^(?:[01][0-9]|2[0-3]):[0-5][0-9](?::[0-5][0-9](?:\\.[0-9]{1,6})?)?$",
+        "type": "string"
+      },
       "CloudflareDNSRecordSpec": {
         "additionalProperties": false,
+        "anyOf": [
+          {
+            "anyOf": [
+              {
+                "properties": {
+                  "proxied": {
+                    "const": false
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "ttl": {
+                    "const": 1
+                  }
+                }
+              }
+            ],
+            "properties": {
+              "priority": {
+                "type": "null"
+              },
+              "record_type": {
+                "const": "A"
+              }
+            },
+            "required": [
+              "record_type"
+            ]
+          },
+          {
+            "anyOf": [
+              {
+                "properties": {
+                  "proxied": {
+                    "const": false
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "ttl": {
+                    "const": 1
+                  }
+                }
+              }
+            ],
+            "properties": {
+              "priority": {
+                "type": "null"
+              },
+              "record_type": {
+                "const": "AAAA"
+              }
+            },
+            "required": [
+              "record_type"
+            ]
+          },
+          {
+            "anyOf": [
+              {
+                "properties": {
+                  "proxied": {
+                    "const": false
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "ttl": {
+                    "const": 1
+                  }
+                }
+              }
+            ],
+            "properties": {
+              "priority": {
+                "type": "null"
+              },
+              "record_type": {
+                "const": "CNAME"
+              }
+            },
+            "required": [
+              "record_type"
+            ]
+          },
+          {
+            "anyOf": [
+              {
+                "properties": {
+                  "proxied": {
+                    "const": false
+                  }
+                }
+              }
+            ],
+            "properties": {
+              "priority": {
+                "type": "null"
+              },
+              "record_type": {
+                "const": "TXT"
+              }
+            },
+            "required": [
+              "record_type"
+            ]
+          },
+          {
+            "anyOf": [
+              {
+                "properties": {
+                  "proxied": {
+                    "const": false
+                  }
+                }
+              }
+            ],
+            "properties": {
+              "priority": {
+                "not": {
+                  "type": "null"
+                }
+              },
+              "record_type": {
+                "const": "MX"
+              }
+            },
+            "required": [
+              "record_type",
+              "priority"
+            ]
+          },
+          {
+            "anyOf": [
+              {
+                "properties": {
+                  "proxied": {
+                    "const": false
+                  }
+                }
+              }
+            ],
+            "properties": {
+              "content": {
+                "pattern": "^\\s*(\\d{1,3})\\s+(issue|issuewild|iodef)\\s+\"([^\"]*)\"\\s*$"
+              },
+              "priority": {
+                "type": "null"
+              },
+              "record_type": {
+                "const": "CAA"
+              }
+            },
+            "required": [
+              "record_type"
+            ]
+          }
+        ],
         "description": "One DNS record in a Cloudflare zone, as HQ keeps it.",
         "properties": {
           "content": {
@@ -6733,7 +6670,14 @@
             "properties": {
               "items": {
                 "items": {
-                  "$ref": "#/components/schemas/ConnectionStandingRow"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConnectionStandingRow"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ConnectionStandingRecord"
+                    }
+                  ]
                 },
                 "type": "array"
               }
@@ -7254,7 +7198,14 @@
             "properties": {
               "items": {
                 "items": {
-                  "$ref": "#/components/schemas/ContainerRow"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ContainerRow"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ContainerRecord"
+                    }
+                  ]
                 },
                 "type": "array"
               }
@@ -7324,7 +7275,7 @@
                 "$ref": "#/components/schemas/PublishedUrl",
                 "default": "",
                 "maxLength": 200,
-                "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\s:@/]+(?::[^\\s:@/]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[[0-9a-fA-F:.]+\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\s]*)?$"
+                "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\s:@/\\[\\]]+(?::[^\\s:@/\\[\\]]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4}|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::|::(?:[fF]{4}:)?(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3})\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\s]*)?$"
               },
               "related_assets": {
                 "default": [],
@@ -7578,7 +7529,14 @@
             "properties": {
               "items": {
                 "items": {
-                  "$ref": "#/components/schemas/ContentRow"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ContentRow"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ContentRecord"
+                    }
+                  ]
                 },
                 "type": "array"
               }
@@ -7714,7 +7672,7 @@
               "published_url": {
                 "$ref": "#/components/schemas/PublishedUrl",
                 "maxLength": 200,
-                "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\s:@/]+(?::[^\\s:@/]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[[0-9a-fA-F:.]+\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\s]*)?$"
+                "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\s:@/\\[\\]]+(?::[^\\s:@/\\[\\]]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4}|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::|::(?:[fF]{4}:)?(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3})\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\s]*)?$"
               },
               "related_assets": {
                 "description": "The assets it is about.",
@@ -8015,7 +7973,14 @@
             "properties": {
               "items": {
                 "items": {
-                  "$ref": "#/components/schemas/CredentialRow"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/CredentialRow"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CredentialRecord"
+                    }
+                  ]
                 },
                 "type": "array"
               }
@@ -8752,7 +8717,7 @@
                 "$ref": "#/components/schemas/ExternalUrl",
                 "default": "",
                 "maxLength": 200,
-                "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\s:@/]+(?::[^\\s:@/]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[[0-9a-fA-F:.]+\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\s]*)?$"
+                "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\s:@/\\[\\]]+(?::[^\\s:@/\\[\\]]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4}|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::|::(?:[fF]{4}:)?(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3})\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\s]*)?$"
               },
               "github_path": {
                 "$ref": "#/components/schemas/GithubPath",
@@ -9046,7 +9011,14 @@
             "properties": {
               "items": {
                 "items": {
-                  "$ref": "#/components/schemas/DocumentationRow"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/DocumentationRow"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DocumentationItem"
+                    }
+                  ]
                 },
                 "type": "array"
               }
@@ -9276,7 +9248,7 @@
               "external_url": {
                 "$ref": "#/components/schemas/ExternalUrl",
                 "maxLength": 200,
-                "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\s:@/]+(?::[^\\s:@/]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[[0-9a-fA-F:.]+\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\s]*)?$"
+                "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\s:@/\\[\\]]+(?::[^\\s:@/\\[\\]]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4}|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::|::(?:[fF]{4}:)?(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3})\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\s]*)?$"
               },
               "github_path": {
                 "$ref": "#/components/schemas/GithubPath",
@@ -9517,7 +9489,14 @@
             "properties": {
               "items": {
                 "items": {
-                  "$ref": "#/components/schemas/DomainRow"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/DomainRow"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DomainRecord"
+                    }
+                  ]
                 },
                 "type": "array"
               }
@@ -11502,19 +11481,67 @@
             "$ref": "#/components/schemas/BusinessUseShare"
           },
           "category": {
-            "$ref": "#/components/schemas/AssetCategory"
+            "$ref": "#/components/schemas/AssetCategory",
+            "enum": [
+              "networking",
+              "server_hardware",
+              "software",
+              "subscription",
+              "domain",
+              "hosting",
+              "camera_audio",
+              "office",
+              "tools",
+              "training",
+              "other"
+            ],
+            "x-enumDescriptions": {
+              "camera_audio": "Camera / audio",
+              "domain": "Domain",
+              "hosting": "Hosting",
+              "networking": "Networking gear",
+              "office": "Office equipment",
+              "other": "Other",
+              "server_hardware": "Server hardware",
+              "software": "Software",
+              "subscription": "Subscription",
+              "tools": "Tools",
+              "training": "Training"
+            }
           },
           "infrastructure": {
-            "$ref": "#/components/schemas/AssetInfrastructure"
+            "$ref": "#/components/schemas/AssetInfrastructure",
+            "maxLength": 300
           },
           "item_name": {
-            "$ref": "#/components/schemas/AssetName"
+            "$ref": "#/components/schemas/AssetName",
+            "maxLength": 160,
+            "minLength": 1
           },
           "notes": {
-            "$ref": "#/components/schemas/Notes"
+            "$ref": "#/components/schemas/Notes",
+            "format": "textarea"
           },
           "payment_method": {
-            "$ref": "#/components/schemas/PaymentMethod"
+            "$ref": "#/components/schemas/PaymentMethod",
+            "enum": [
+              "",
+              "cash",
+              "debit",
+              "credit",
+              "ach",
+              "paypal",
+              "other"
+            ],
+            "x-enumDescriptions": {
+              "": "Not set",
+              "ach": "ACH / bank transfer",
+              "cash": "Cash",
+              "credit": "Credit card",
+              "debit": "Debit card",
+              "other": "Other",
+              "paypal": "PayPal"
+            }
           },
           "purchase_date": {
             "$ref": "#/components/schemas/PurchaseDate"
@@ -11523,19 +11550,50 @@
             "$ref": "#/components/schemas/AssetProjects"
           },
           "serial_number": {
-            "$ref": "#/components/schemas/SerialNumber"
+            "$ref": "#/components/schemas/SerialNumber",
+            "maxLength": 120
           },
           "slug": {
-            "$ref": "#/components/schemas/RecordSlug"
+            "$ref": "#/components/schemas/RecordSlug",
+            "maxLength": 180,
+            "minLength": 1,
+            "pattern": "^[-a-zA-Z0-9_]+$"
           },
           "status": {
-            "$ref": "#/components/schemas/AssetStatus"
+            "$ref": "#/components/schemas/AssetStatus",
+            "enum": [
+              "active",
+              "retired",
+              "sold",
+              "returned",
+              "replaced"
+            ],
+            "x-enumDescriptions": {
+              "active": "Active",
+              "replaced": "Replaced",
+              "retired": "Retired",
+              "returned": "Returned",
+              "sold": "Sold"
+            }
           },
           "total_cost": {
-            "$ref": "#/components/schemas/TotalCost"
+            "$ref": "#/components/schemas/TotalCost",
+            "anyOf": [
+              {
+                "exclusiveMaximum": 10000000000,
+                "exclusiveMinimum": -10000000000,
+                "multipleOf": 0.01,
+                "type": "number"
+              },
+              {
+                "pattern": "^[+-]?(?:0*[0-9]{1,10}(?:\\.(?:[0-9]{1,2}0*)?)?|0*\\.[0-9]{1,2}0*)$",
+                "type": "string"
+              }
+            ]
           },
           "vendor": {
-            "$ref": "#/components/schemas/AssetVendor"
+            "$ref": "#/components/schemas/AssetVendor",
+            "maxLength": 120
           },
           "warranty_date": {
             "$ref": "#/components/schemas/WarrantyDate"
@@ -11551,37 +11609,95 @@
         "description": "A project to import: its slug, and the fields to lay over the project stored under it.",
         "properties": {
           "category": {
-            "$ref": "#/components/schemas/ProjectCategory"
+            "$ref": "#/components/schemas/ProjectCategory",
+            "enum": [
+              "wordpress_security",
+              "cloudflare",
+              "dns_email_security",
+              "homelab",
+              "vps",
+              "tailscale",
+              "adguard",
+              "networking",
+              "tls_certificates",
+              "automation",
+              "cybersecurity_labs",
+              "other"
+            ],
+            "x-enumDescriptions": {
+              "adguard": "AdGuard",
+              "automation": "Automation / scripts",
+              "cloudflare": "Cloudflare",
+              "cybersecurity_labs": "Cybersecurity labs",
+              "dns_email_security": "DNS / email security",
+              "homelab": "Homelab",
+              "networking": "UniFi / networking",
+              "other": "Other",
+              "tailscale": "Tailscale",
+              "tls_certificates": "TLS / certificates",
+              "vps": "VPS",
+              "wordpress_security": "WordPress security"
+            }
           },
           "deployment_notes": {
-            "$ref": "#/components/schemas/DeploymentNotes"
+            "$ref": "#/components/schemas/DeploymentNotes",
+            "format": "textarea"
           },
           "description": {
-            "$ref": "#/components/schemas/ProjectDescription"
+            "$ref": "#/components/schemas/ProjectDescription",
+            "format": "textarea"
           },
           "name": {
-            "$ref": "#/components/schemas/ProjectName"
+            "$ref": "#/components/schemas/ProjectName",
+            "maxLength": 160,
+            "minLength": 1
           },
           "notes": {
-            "$ref": "#/components/schemas/Notes"
+            "$ref": "#/components/schemas/Notes",
+            "format": "textarea"
           },
           "public_url": {
-            "$ref": "#/components/schemas/PublishedUrl"
+            "$ref": "#/components/schemas/PublishedUrl",
+            "maxLength": 200,
+            "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\s:@/\\[\\]]+(?::[^\\s:@/\\[\\]]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4}|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::|::(?:[fF]{4}:)?(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3})\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\s]*)?$"
           },
           "repository_url": {
-            "$ref": "#/components/schemas/RepositoryUrl"
+            "$ref": "#/components/schemas/RepositoryUrl",
+            "maxLength": 200,
+            "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\s:@/\\[\\]]+(?::[^\\s:@/\\[\\]]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4}|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::|::(?:[fF]{4}:)?(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3})\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\s]*)?$"
           },
           "security_notes": {
-            "$ref": "#/components/schemas/SecurityNotes"
+            "$ref": "#/components/schemas/SecurityNotes",
+            "format": "textarea"
           },
           "slug": {
-            "$ref": "#/components/schemas/RecordSlug"
+            "$ref": "#/components/schemas/RecordSlug",
+            "maxLength": 180,
+            "minLength": 1,
+            "pattern": "^[-a-zA-Z0-9_]+$"
           },
           "status": {
-            "$ref": "#/components/schemas/ProjectStatus"
+            "$ref": "#/components/schemas/ProjectStatus",
+            "enum": [
+              "idea",
+              "active",
+              "paused",
+              "completed",
+              "published",
+              "archived"
+            ],
+            "x-enumDescriptions": {
+              "active": "Active",
+              "archived": "Archived",
+              "completed": "Completed",
+              "idea": "Idea",
+              "paused": "Paused",
+              "published": "Published"
+            }
           },
           "technologies_used": {
-            "$ref": "#/components/schemas/TechnologiesUsed"
+            "$ref": "#/components/schemas/TechnologiesUsed",
+            "maxLength": 300
           }
         },
         "required": [
@@ -11625,6 +11741,70 @@
           "payload": {
             "additionalProperties": false,
             "description": "A wake-up request; with a subject, that subject is read on the next pull.\n\n``connection_ref`` forces every kind its credential reads, ``kind`` one\nkind, ``every_connection`` the whole sweep. At most one of the three.",
+            "oneOf": [
+              {
+                "properties": {
+                  "connection_ref": {
+                    "pattern": "^\\s*$"
+                  },
+                  "every_connection": {
+                    "const": false
+                  },
+                  "kind": {
+                    "const": ""
+                  }
+                },
+                "required": []
+              },
+              {
+                "properties": {
+                  "connection_ref": {
+                    "pattern": "\\S"
+                  },
+                  "every_connection": {
+                    "const": false
+                  },
+                  "kind": {
+                    "const": ""
+                  }
+                },
+                "required": [
+                  "connection_ref"
+                ]
+              },
+              {
+                "properties": {
+                  "connection_ref": {
+                    "pattern": "^\\s*$"
+                  },
+                  "every_connection": {
+                    "const": false
+                  },
+                  "kind": {
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              },
+              {
+                "properties": {
+                  "connection_ref": {
+                    "pattern": "^\\s*$"
+                  },
+                  "every_connection": {
+                    "const": true
+                  },
+                  "kind": {
+                    "const": ""
+                  }
+                },
+                "required": [
+                  "every_connection"
+                ]
+              }
+            ],
             "properties": {
               "connection_ref": {
                 "default": "",
@@ -12729,7 +12909,14 @@
             "properties": {
               "items": {
                 "items": {
-                  "$ref": "#/components/schemas/MachineRow"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/MachineRow"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MachineRecord"
+                    }
+                  ]
                 },
                 "type": "array"
               }
@@ -12975,7 +13162,14 @@
             "properties": {
               "items": {
                 "items": {
-                  "$ref": "#/components/schemas/ManagedResourceRow"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ManagedResourceRow"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ManagedResourceRecord"
+                    }
+                  ]
                 },
                 "type": "array"
               }
@@ -12996,78 +13190,50 @@
         "description": "What HQ expects of it, in the shape its type takes.",
         "type": "object"
       },
-      "ManifestEntry": {
-        "description": "One doc of the vault's manifest: its frontmatter, its path, and what it relates to.",
+      "ManifestArticleDocType": {
+        "const": "public_article_draft",
+        "description": "What type of doc it is.",
+        "type": "string"
+      },
+      "ManifestContent": {
+        "description": "Site content: a public article the site item of its slug mirrors.",
         "properties": {
           "content_type": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "For site content, what it is on the site, such as `portfolio_article` or `page`."
+            "$ref": "#/components/schemas/ManifestSiteContentType"
           },
           "description": {
             "anyOf": [
               {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "For site content, its description, which `topic` stands in for."
-          },
-          "doc_id": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/DocId"
+                "$ref": "#/components/schemas/ManifestDescription"
               },
               {
                 "type": "null"
               }
             ]
           },
+          "doc_id": {
+            "$ref": "#/components/schemas/ManifestSiteDocId"
+          },
           "doc_type": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "What type of doc it is, as its frontmatter writes it."
+            "$ref": "#/components/schemas/ManifestArticleDocType"
           },
           "environment": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Where that system runs, as its frontmatter writes it."
+            "$ref": "#/components/schemas/DocEnvironment"
           },
           "excerpt": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/ManifestExcerpt"
               },
               {
                 "type": "null"
               }
-            ],
-            "description": "For site content, its excerpt, read where it has no description."
+            ]
           },
           "external_url": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ExternalUrl"
+                "$ref": "#/components/schemas/ManifestExternalUrl"
               },
               {
                 "type": "null"
@@ -13077,7 +13243,7 @@
           "github_path": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/GithubPath"
+                "$ref": "#/components/schemas/ManifestGithubPath"
               },
               {
                 "type": "null"
@@ -13087,7 +13253,7 @@
           "last_reviewed": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/LastReviewed"
+                "$ref": "#/components/schemas/ManifestLastReviewed"
               },
               {
                 "type": "null"
@@ -13097,7 +13263,7 @@
           "notes": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Notes"
+                "$ref": "#/components/schemas/DocNotes"
               },
               {
                 "type": "null"
@@ -13107,7 +13273,7 @@
           "obsidian_path": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ObsidianPath"
+                "$ref": "#/components/schemas/ManifestObsidianPath"
               },
               {
                 "type": "null"
@@ -13117,29 +13283,27 @@
           "path": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/ManifestPath"
               },
               {
                 "type": "null"
               }
-            ],
-            "description": "Where the doc is in the vault, which `obsidian_path` stands in for."
+            ]
           },
           "published": {
             "anyOf": [
               {
-                "type": "boolean"
+                "$ref": "#/components/schemas/ManifestPublished"
               },
               {
                 "type": "null"
               }
-            ],
-            "description": "For site content, whether it is live on the site."
+            ]
           },
           "published_at": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/PublishedAt"
+                "$ref": "#/components/schemas/ManifestPublishedAt"
               },
               {
                 "type": "null"
@@ -13149,137 +13313,639 @@
           "related_assets": {
             "anyOf": [
               {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "The slugs of the assets the doc is about."
-          },
-          "related_projects": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "The slugs of the projects the doc is about."
-          },
-          "sensitivity": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Who may read it, as its frontmatter writes it."
-          },
-          "slug": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "For site content, the slug of the item it mirrors to."
-          },
-          "status": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Where the doc stands, as its frontmatter writes it."
-          },
-          "system": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "The system or service the doc is about."
-          },
-          "system_service": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "The same as `system`, under the name HQ stores it by."
-          },
-          "tags": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "The doc's tags."
-          },
-          "technologies": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "For site content, what it was built with, read as its tags."
-          },
-          "title": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/DocumentationTitle"
+                "$ref": "#/components/schemas/ManifestRelatedAssets"
               },
               {
                 "type": "null"
               }
             ]
           },
-          "topic": {
+          "related_projects": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/ManifestRelatedProjects"
               },
               {
                 "type": "null"
               }
-            ],
-            "description": "For site content, what it is about, in a line."
+            ]
+          },
+          "sensitivity": {
+            "$ref": "#/components/schemas/DocSensitivity"
+          },
+          "slug": {
+            "$ref": "#/components/schemas/ManifestSiteSlug"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DocStatus"
+          },
+          "system": {
+            "$ref": "#/components/schemas/ManifestSystem"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestTags"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "technologies": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestTechnologies"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "$ref": "#/components/schemas/ManifestTitle"
+          },
+          "topic": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestTopic"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
+        "required": [
+          "doc_id",
+          "title",
+          "doc_type",
+          "system",
+          "environment",
+          "status",
+          "sensitivity",
+          "content_type",
+          "slug",
+          "published"
+        ],
         "type": "object"
+      },
+      "ManifestContentType": {
+        "description": "For site content, what it is on the site, such as `portfolio_article` or `page`.",
+        "type": "string"
+      },
+      "ManifestDescription": {
+        "description": "For site content, its description, which `topic` stands in for.",
+        "type": "string"
+      },
+      "ManifestDoc": {
+        "description": "A doc of the vault's manifest: its frontmatter, its path, and what it relates to.",
+        "properties": {
+          "content_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestContentType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "description": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestDescription"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "doc_id": {
+            "$ref": "#/components/schemas/ManifestVaultDocId"
+          },
+          "doc_type": {
+            "$ref": "#/components/schemas/ManifestDocType"
+          },
+          "environment": {
+            "$ref": "#/components/schemas/DocEnvironment"
+          },
+          "excerpt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestExcerpt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "external_url": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestExternalUrl"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "github_path": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestGithubPath"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_reviewed": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestLastReviewed"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocNotes"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "obsidian_path": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestObsidianPath"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "path": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestPath"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "published": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestPublished"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestPublishedAt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "related_assets": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestRelatedAssets"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "related_projects": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestRelatedProjects"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sensitivity": {
+            "$ref": "#/components/schemas/DocSensitivity"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestSlug"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/DocStatus"
+          },
+          "system": {
+            "$ref": "#/components/schemas/ManifestSystem"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestTags"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "technologies": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestTechnologies"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "$ref": "#/components/schemas/ManifestTitle"
+          },
+          "topic": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestTopic"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "doc_id",
+          "title",
+          "doc_type",
+          "system",
+          "environment",
+          "status",
+          "sensitivity"
+        ],
+        "type": "object"
+      },
+      "ManifestDocType": {
+        "description": "What type of doc it is.",
+        "enum": [
+          "architecture_note",
+          "decision_record",
+          "deployment_guide",
+          "queue",
+          "recovery_procedure",
+          "report",
+          "runbook",
+          "troubleshooting_guide"
+        ],
+        "type": "string"
+      },
+      "ManifestDraft": {
+        "description": "A public article's draft in the vault, which no site item mirrors.",
+        "properties": {
+          "content_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestDraftContentType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "description": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestDescription"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "doc_id": {
+            "$ref": "#/components/schemas/ManifestVaultDocId"
+          },
+          "doc_type": {
+            "$ref": "#/components/schemas/ManifestArticleDocType"
+          },
+          "environment": {
+            "$ref": "#/components/schemas/DocEnvironment"
+          },
+          "excerpt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestExcerpt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "external_url": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestExternalUrl"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "github_path": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestGithubPath"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_reviewed": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestLastReviewed"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocNotes"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "obsidian_path": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestObsidianPath"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "path": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestPath"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "published": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestPublished"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestPublishedAt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "related_assets": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestRelatedAssets"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "related_projects": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestRelatedProjects"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sensitivity": {
+            "$ref": "#/components/schemas/DocSensitivity"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestSlug"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/DocStatus"
+          },
+          "system": {
+            "$ref": "#/components/schemas/ManifestSystem"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestTags"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "technologies": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestTechnologies"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "$ref": "#/components/schemas/ManifestTitle"
+          },
+          "topic": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestTopic"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "doc_id",
+          "title",
+          "doc_type",
+          "system",
+          "environment",
+          "status",
+          "sensitivity"
+        ],
+        "type": "object"
+      },
+      "ManifestDraftContentType": {
+        "const": "",
+        "description": "For site content, what it is on the site, such as `portfolio_article` or `page`.",
+        "type": "string"
+      },
+      "ManifestEntry": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/ManifestDoc",
+            "title": "Manifest doc"
+          },
+          {
+            "$ref": "#/components/schemas/ManifestDraft",
+            "title": "Manifest draft"
+          },
+          {
+            "$ref": "#/components/schemas/ManifestContent",
+            "title": "Manifest content"
+          }
+        ],
+        "description": "A doc of the manifest, in the shape its doc type and content take.",
+        "title": "Manifest entry"
+      },
+      "ManifestExcerpt": {
+        "description": "For site content, its excerpt, read where it has no description.",
+        "type": "string"
+      },
+      "ManifestExternalUrl": {
+        "description": "Where it is published outside HQ.",
+        "type": "string"
+      },
+      "ManifestGithubPath": {
+        "description": "Its path in a repository.",
+        "type": "string"
+      },
+      "ManifestLastReviewed": {
+        "description": "When the doc last changed in the vault.",
+        "format": "date",
+        "type": "string"
+      },
+      "ManifestObsidianPath": {
+        "description": "Its path in the vault.",
+        "type": "string"
+      },
+      "ManifestPath": {
+        "description": "Where the doc is in the vault, which `obsidian_path` stands in for.",
+        "type": "string"
+      },
+      "ManifestPublished": {
+        "description": "For site content, whether it is live on the site.",
+        "type": "boolean"
+      },
+      "ManifestPublishedAt": {
+        "description": "When it was published.",
+        "format": "date",
+        "type": "string"
+      },
+      "ManifestRelatedAssets": {
+        "description": "The slugs of the assets the doc is about.",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "ManifestRelatedProjects": {
+        "description": "The slugs of the projects the doc is about.",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "ManifestSiteContentType": {
+        "description": "For site content, what it is on the site, such as `portfolio_article` or `page`.",
+        "minLength": 1,
+        "type": "string"
+      },
+      "ManifestSiteDocId": {
+        "description": "The doc's ID in the vault.",
+        "pattern": "\\S",
+        "type": "string"
+      },
+      "ManifestSiteSlug": {
+        "description": "For site content, the slug of the item it mirrors to.",
+        "minLength": 1,
+        "type": "string"
+      },
+      "ManifestSlug": {
+        "description": "For site content, the slug of the item it mirrors to.",
+        "type": "string"
+      },
+      "ManifestSystem": {
+        "description": "The system or service the doc is about.",
+        "minLength": 1,
+        "type": "string"
+      },
+      "ManifestTags": {
+        "description": "The doc's tags.",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "ManifestTechnologies": {
+        "description": "For site content, what it was built with, read as its tags.",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "ManifestTitle": {
+        "description": "The doc's title.",
+        "minLength": 1,
+        "type": "string"
+      },
+      "ManifestTopic": {
+        "description": "For site content, what it is about, in a line.",
+        "type": "string"
+      },
+      "ManifestVaultDocId": {
+        "description": "The doc's ID in the vault.",
+        "pattern": "^\\s*(?:rb-|infra-|report-|project-|note-|task-|queue-)",
+        "type": "string"
       },
       "Match": {
         "additionalProperties": false,
@@ -13595,6 +14261,7 @@
             "description": "The range in CIDR form, e.g. 198.51.100.0/24.",
             "maxLength": 64,
             "minLength": 1,
+            "pattern": "^(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}(?:/(?:3[0-2]|[12]?[0-9]))?|(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4}|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::|::(?:[fF]{4}:)?(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3})(?:/(?:12[0-8]|1[01][0-9]|[1-9]?[0-9]))?)$",
             "title": "Range",
             "type": "string"
           },
@@ -14829,7 +15496,14 @@
             "properties": {
               "items": {
                 "items": {
-                  "$ref": "#/components/schemas/PlaybookRow"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/PlaybookRow"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PlaybookRecord"
+                    }
+                  ]
                 },
                 "type": "array"
               }
@@ -14954,9 +15628,27 @@
         "properties": {
           "by_design": {
             "additionalProperties": {
+              "pattern": "\\S",
               "type": "string"
             },
             "description": "Checks it fails on purpose, by id, each with the reason, such as DNS on the host network. HQ shows the reason instead of a problem.",
+            "propertyNames": {
+              "enum": [
+                "confined",
+                "health-checked",
+                "memory-limited",
+                "no-devices",
+                "no-docker-socket",
+                "no-new-privileges",
+                "no-powerful-capability",
+                "no-system-path-writable",
+                "not-privileged",
+                "not-root",
+                "own-network",
+                "own-process-namespace",
+                "ports-bound"
+              ]
+            },
             "title": "Checks its job requires",
             "type": "object"
           },
@@ -15013,6 +15705,7 @@
             "default": "",
             "description": "The GitHub repository its image is built from, for an image that does not say. HQ reads its releases and advisories.",
             "maxLength": 300,
+            "pattern": "^(?:https://(?:www\\.)?github\\.com/[A-Za-z0-9-]+/[A-Za-z0-9_-][A-Za-z0-9_.-]*/?)?$",
             "title": "Built from",
             "type": "string"
           }
@@ -15426,13 +16119,13 @@
             "$ref": "#/components/schemas/PublishedUrl",
             "default": "",
             "maxLength": 200,
-            "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\s:@/]+(?::[^\\s:@/]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[[0-9a-fA-F:.]+\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\s]*)?$"
+            "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\s:@/\\[\\]]+(?::[^\\s:@/\\[\\]]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4}|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::|::(?:[fF]{4}:)?(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3})\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\s]*)?$"
           },
           "repository_url": {
             "$ref": "#/components/schemas/RepositoryUrl",
             "default": "",
             "maxLength": 200,
-            "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\s:@/]+(?::[^\\s:@/]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[[0-9a-fA-F:.]+\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\s]*)?$"
+            "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\s:@/\\[\\]]+(?::[^\\s:@/\\[\\]]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4}|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::|::(?:[fF]{4}:)?(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3})\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\s]*)?$"
           },
           "security_notes": {
             "$ref": "#/components/schemas/SecurityNotes",
@@ -15787,7 +16480,14 @@
             "properties": {
               "items": {
                 "items": {
-                  "$ref": "#/components/schemas/ProjectRow"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ProjectRow"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ProjectRecord"
+                    }
+                  ]
                 },
                 "type": "array"
               }
@@ -15919,12 +16619,12 @@
               "public_url": {
                 "$ref": "#/components/schemas/PublishedUrl",
                 "maxLength": 200,
-                "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\s:@/]+(?::[^\\s:@/]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[[0-9a-fA-F:.]+\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\s]*)?$"
+                "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\s:@/\\[\\]]+(?::[^\\s:@/\\[\\]]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4}|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::|::(?:[fF]{4}:)?(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3})\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\s]*)?$"
               },
               "repository_url": {
                 "$ref": "#/components/schemas/RepositoryUrl",
                 "maxLength": 200,
-                "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\s:@/]+(?::[^\\s:@/]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[[0-9a-fA-F:.]+\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\s]*)?$"
+                "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\s:@/\\[\\]]+(?::[^\\s:@/\\[\\]]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4}|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::|::(?:[fF]{4}:)?(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3})\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\s]*)?$"
               },
               "security_notes": {
                 "$ref": "#/components/schemas/SecurityNotes",
@@ -16509,7 +17209,14 @@
             "properties": {
               "items": {
                 "items": {
-                  "$ref": "#/components/schemas/ReadingRow"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ReadingRow"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ReadingRecord"
+                    }
+                  ]
                 },
                 "type": "array"
               }
@@ -17843,7 +18550,14 @@
             "properties": {
               "items": {
                 "items": {
-                  "$ref": "#/components/schemas/RunRow"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/RunRow"
+                    },
+                    {
+                      "$ref": "#/components/schemas/RunRecord"
+                    }
+                  ]
                 },
                 "type": "array"
               }
@@ -18342,7 +19056,14 @@
             "properties": {
               "items": {
                 "items": {
-                  "$ref": "#/components/schemas/ServiceRow"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ServiceRow"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ServiceRecord"
+                    }
+                  ]
                 },
                 "type": "array"
               }
@@ -18842,6 +19563,7 @@
             "items": {
               "type": "string"
             },
+            "minItems": 1,
             "title": "Domains",
             "type": "array"
           },
@@ -18850,6 +19572,7 @@
             "items": {
               "type": "string"
             },
+            "minItems": 1,
             "title": "Install it on",
             "type": "array"
           },
@@ -18863,12 +19586,116 @@
           }
         },
         "required": [
-          "certificate_name"
+          "certificate_name",
+          "domains",
+          "install_on"
         ],
         "type": "object"
       },
       "TLSDeliveryTargetSpec": {
         "additionalProperties": false,
+        "anyOf": [
+          {
+            "properties": {
+              "certificate_directory": {
+                "maxLength": 0
+              },
+              "install_domains": {
+                "maxItems": 0
+              },
+              "item": {
+                "maxLength": 0
+              },
+              "kind": {
+                "const": "npm"
+              },
+              "vault": {
+                "maxLength": 0
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "properties": {
+              "certificate_directory": {
+                "minLength": 1
+              },
+              "discover_covered_hosts": {
+                "const": false
+              },
+              "install_domains": {
+                "maxItems": 0
+              },
+              "item": {
+                "maxLength": 0
+              },
+              "kind": {
+                "const": "caddy"
+              },
+              "vault": {
+                "maxLength": 0
+              }
+            },
+            "required": [
+              "kind",
+              "certificate_directory"
+            ]
+          },
+          {
+            "properties": {
+              "certificate_directory": {
+                "maxLength": 0
+              },
+              "discover_covered_hosts": {
+                "const": false
+              },
+              "item": {
+                "maxLength": 0
+              },
+              "kind": {
+                "const": "cpanel"
+              },
+              "vault": {
+                "maxLength": 0
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "properties": {
+              "certificate_directory": {
+                "maxLength": 0
+              },
+              "discover_covered_hosts": {
+                "const": false
+              },
+              "install_domains": {
+                "maxItems": 0
+              },
+              "item": {
+                "minLength": 1
+              },
+              "kind": {
+                "const": "onepassword"
+              },
+              "vault": {
+                "minLength": 1
+              },
+              "verify_domains": {
+                "maxItems": 0
+              }
+            },
+            "required": [
+              "kind",
+              "vault",
+              "item"
+            ]
+          }
+        ],
         "description": "One place a certificate can be installed, and how it arrives there.\n\nWhat a target needs (a Caddy host's directory, the names a cPanel account\nhosts) is true of every certificate it will ever serve, so it is stated\nonce here instead of on each certificate that installs there.",
         "properties": {
           "certificate_directory": {
@@ -20324,7 +21151,14 @@
             "properties": {
               "items": {
                 "items": {
-                  "$ref": "#/components/schemas/UpgradeRow"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/UpgradeRow"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UpgradeRecord"
+                    }
+                  ]
                 },
                 "type": "array"
               }
@@ -26268,7 +27102,7 @@
             "$ref": "#/components/parameters/Cursor"
           },
           {
-            "$ref": "#/components/parameters/ActionItemRowPageFields"
+            "$ref": "#/components/parameters/ActionItemRowFields"
           }
         ],
         "responses": {
@@ -26376,7 +27210,7 @@
             "$ref": "#/components/parameters/TopLimit"
           },
           {
-            "$ref": "#/components/parameters/BreakdownPageFields"
+            "$ref": "#/components/parameters/BreakdownFields"
           }
         ],
         "responses": {
@@ -26511,7 +27345,7 @@
             "$ref": "#/components/parameters/Cursor"
           },
           {
-            "$ref": "#/components/parameters/AssetRowPageFields"
+            "$ref": "#/components/parameters/AssetRecordFields"
           }
         ],
         "responses": {
@@ -26863,7 +27697,7 @@
         "operationId": "listConnectionsV2",
         "parameters": [
           {
-            "$ref": "#/components/parameters/ConnectionStandingRowPageFields"
+            "$ref": "#/components/parameters/ConnectionStandingRecordFields"
           }
         ],
         "responses": {
@@ -27022,7 +27856,7 @@
             "$ref": "#/components/parameters/Cursor"
           },
           {
-            "$ref": "#/components/parameters/ContactSubmissionRowPageFields"
+            "$ref": "#/components/parameters/ContactSubmissionRowFields"
           }
         ],
         "responses": {
@@ -27194,7 +28028,7 @@
             "$ref": "#/components/parameters/Cursor"
           },
           {
-            "$ref": "#/components/parameters/ContainerRowPageFields"
+            "$ref": "#/components/parameters/ContainerRecordFields"
           }
         ],
         "responses": {
@@ -27350,7 +28184,7 @@
             "$ref": "#/components/parameters/Cursor"
           },
           {
-            "$ref": "#/components/parameters/ContentRowPageFields"
+            "$ref": "#/components/parameters/ContentRecordFields"
           }
         ],
         "responses": {
@@ -27520,7 +28354,7 @@
         "operationId": "listCredentialsV2",
         "parameters": [
           {
-            "$ref": "#/components/parameters/CredentialRowPageFields"
+            "$ref": "#/components/parameters/CredentialRecordFields"
           }
         ],
         "responses": {
@@ -27669,7 +28503,7 @@
             "$ref": "#/components/parameters/Cursor"
           },
           {
-            "$ref": "#/components/parameters/DocumentationRowPageFields"
+            "$ref": "#/components/parameters/DocumentationItemFields"
           }
         ],
         "responses": {
@@ -27845,7 +28679,7 @@
             "$ref": "#/components/parameters/Cursor"
           },
           {
-            "$ref": "#/components/parameters/DomainRowPageFields"
+            "$ref": "#/components/parameters/DomainRecordFields"
           }
         ],
         "responses": {
@@ -27976,7 +28810,7 @@
         "operationId": "listEstateV2",
         "parameters": [
           {
-            "$ref": "#/components/parameters/EstateFigurePageFields"
+            "$ref": "#/components/parameters/EstateFigureFields"
           }
         ],
         "responses": {
@@ -28072,7 +28906,7 @@
             "$ref": "#/components/parameters/Cursor"
           },
           {
-            "$ref": "#/components/parameters/ExpenseRowPageFields"
+            "$ref": "#/components/parameters/ExpenseRowFields"
           }
         ],
         "responses": {
@@ -28143,7 +28977,7 @@
         "operationId": "listHqV2",
         "parameters": [
           {
-            "$ref": "#/components/parameters/ProblemPageFields"
+            "$ref": "#/components/parameters/ProblemFields"
           }
         ],
         "responses": {
@@ -28195,7 +29029,7 @@
         "operationId": "listInfrastructureV2",
         "parameters": [
           {
-            "description": "Several types to keep, comma-separated, each one the single type filter offers; not sent with it.",
+            "description": "Several types to keep, comma-separated, each one the single type filter offers.",
             "explode": true,
             "in": "query",
             "name": "kinds",
@@ -28208,7 +29042,7 @@
             "style": "form"
           },
           {
-            "description": "Only the records of this type; not sent with the filter of several.",
+            "description": "Only the records of this type.",
             "explode": true,
             "in": "query",
             "name": "kind",
@@ -28465,7 +29299,7 @@
             "$ref": "#/components/parameters/Cursor"
           },
           {
-            "$ref": "#/components/parameters/MachineRowPageFields"
+            "$ref": "#/components/parameters/MachineRecordFields"
           }
         ],
         "responses": {
@@ -28596,7 +29430,7 @@
         "operationId": "listPlaybookScansV2",
         "parameters": [
           {
-            "$ref": "#/components/parameters/ScanResultPageFields"
+            "$ref": "#/components/parameters/ScanResultFields"
           }
         ],
         "responses": {
@@ -28719,7 +29553,7 @@
         "operationId": "listPlaybooksV2",
         "parameters": [
           {
-            "$ref": "#/components/parameters/PlaybookRowPageFields"
+            "$ref": "#/components/parameters/PlaybookRecordFields"
           }
         ],
         "responses": {
@@ -28881,7 +29715,7 @@
             "$ref": "#/components/parameters/Cursor"
           },
           {
-            "$ref": "#/components/parameters/ProjectRowPageFields"
+            "$ref": "#/components/parameters/ProjectRecordFields"
           }
         ],
         "responses": {
@@ -29111,7 +29945,7 @@
             "$ref": "#/components/parameters/Cursor"
           },
           {
-            "$ref": "#/components/parameters/ReadingRowPageFields"
+            "$ref": "#/components/parameters/ReadingRecordFields"
           }
         ],
         "responses": {
@@ -29261,7 +30095,7 @@
             "$ref": "#/components/parameters/Cursor"
           },
           {
-            "$ref": "#/components/parameters/ReceiptRowPageFields"
+            "$ref": "#/components/parameters/ReceiptRowFields"
           }
         ],
         "responses": {
@@ -29387,7 +30221,7 @@
         "operationId": "listRequestPathV2",
         "parameters": [
           {
-            "$ref": "#/components/parameters/HopRowPageFields"
+            "$ref": "#/components/parameters/HopRowFields"
           }
         ],
         "responses": {
@@ -29503,7 +30337,7 @@
             "$ref": "#/components/parameters/Cursor"
           },
           {
-            "$ref": "#/components/parameters/RunRowPageFields"
+            "$ref": "#/components/parameters/RunRecordFields"
           }
         ],
         "responses": {
@@ -29654,7 +30488,7 @@
             "$ref": "#/components/parameters/SearchLimit"
           },
           {
-            "$ref": "#/components/parameters/MatchPageFields"
+            "$ref": "#/components/parameters/MatchFields"
           }
         ],
         "responses": {
@@ -29885,7 +30719,7 @@
         "operationId": "listTailnetV2",
         "parameters": [
           {
-            "$ref": "#/components/parameters/TailnetPageFields"
+            "$ref": "#/components/parameters/TailnetFields"
           }
         ],
         "responses": {
@@ -29943,7 +30777,7 @@
             "$ref": "#/components/parameters/Cursor"
           },
           {
-            "$ref": "#/components/parameters/UpgradeRowPageFields"
+            "$ref": "#/components/parameters/UpgradeRecordFields"
           }
         ],
         "responses": {
@@ -30171,7 +31005,6 @@
                 "assets",
                 "calendar",
                 "connections",
-                "contact.submissions",
                 "containers",
                 "content",
                 "credentials",
@@ -30179,7 +31012,6 @@
                 "domains",
                 "infrastructure",
                 "machines",
-                "playbook_scans",
                 "playbooks",
                 "projects",
                 "readings",
