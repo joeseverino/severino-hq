@@ -11,15 +11,16 @@ from hq.domains.assets.models import Asset
 from hq.domains.calendars.models import Entry
 from hq.domains.control_plane.models import ProviderConnection
 from hq.domains.control_plane.providers import PROVIDERS
-from hq.domains.expenses.forms import ExpenseForm
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
 from hq.platform.application import references
 from hq.platform.application.capabilities import capability_registry
 from hq.platform.application.command_forms import command_form_class
 from hq.platform.application.command_targets import record_options
+from hq.platform.application.domains import records_of
 from hq.platform.application.integration_specs import capability_schema
 from hq.platform.application.markup_testing import within
+from hq.platform.application.records import record_form
 from hq.platform.application.references import Referable, Target
 from hq.platform.application.security import Principal, web_principal
 from hq.platform.application.tests.writers import drawn_key
@@ -161,7 +162,7 @@ class GuardedReferenceTests(TestCase):
 
         spec = capability_registry()["expense.create"]
         command = command_form_class(spec, record_choices=record_options(self.schema, principal=principal))
-        record = ExpenseForm(initial=initial)
+        record = record_form(records_of("expenses"))(initial=initial)
         references.bind(record, principal=principal)
         return "paid_from" in command(initial=initial).fields, "paid_from" in record.fields
 

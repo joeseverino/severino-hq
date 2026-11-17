@@ -54,7 +54,6 @@ lazy from hq.platform.application.outbound_work import ask
 lazy from hq.platform.application.page_reads import Remedy
 lazy from hq.platform.application.standards import unmet_finding
 
-from .forms import ProjectForm
 from .models import PROJECT_CATEGORY_CHOICES, Project
 
 PROJECTS_TRAIL = (("Projects", reverse_lazy("projects:list")),)
@@ -170,6 +169,7 @@ class ProjectUpdatesRunView(AskMixin, View):
 class ProjectPage(PageMixin):
     """A page about one project, or a new one: its trail runs back to the list."""
 
+    model = Project
     page_trail = PROJECTS_TRAIL
 
     @override
@@ -276,18 +276,14 @@ class ProjectDetailView(PageMixin, DetailView):
 
 class ProjectCreateView(ProjectPage, RecordFormMixin, CreateView):
     page_title = "New project"
-    form_class = ProjectForm
 
 
 class ProjectUpdateView(ProjectPage, RecordFormMixin, UpdateView):
     page_title = "Edit project"
-    model = Project
-    form_class = ProjectForm
 
 
 class ProjectDeleteView(ProjectPage, RecordDeleteMixin, DeleteView):
     page_title = "Delete project?"
-    model = Project
     template_name = "projects/project_confirm_delete.html"
     success_url = reverse_lazy("projects:list")
     context_object_name = "project"

@@ -35,7 +35,6 @@ from hq.platform.application.web_writes import execute_posted, refused
 from hq.platform.application.writes import CapabilityFormMixin, CommandFormPage, RecordDeleteMixin
 from hq.platform.core.templatetags.value_tags import breakable
 
-from .forms import ReceiptUploadForm
 from .models import Receipt
 from .validation import (
     ALLOWED_RECEIPT_CONTENT_TYPES,
@@ -235,7 +234,6 @@ class ReceiptFormPage(CommandFormPage, ReceiptPage, CapabilityFormMixin):
     listed_route = "receipts:list"
     extra_context = FORM_PAGE
     model = Receipt
-    form_class = ReceiptUploadForm
     result_key = "receipt"
     identity_attr = "pk"
     identity_result_key = "id"

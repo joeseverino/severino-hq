@@ -142,6 +142,7 @@ type ObsidianPath = Annotated[str, Describe("Its path in the vault.", api="Empty
 type GithubPath = Annotated[str, Describe("Its path in a repository.", api="Empty for none.")]
 type ExternalUrl = Annotated[str, Describe("Where it is published outside HQ.", api="Empty for none.")]
 type LastReviewed = Annotated[date | None, Describe("When the doc last changed in the vault.", api="Null for unknown.")]
+type DocNotes = Annotated[str, Describe("Index notes only. No runbook text or secrets.")]
 
 
 # The vault's manifest copies a doc's frontmatter as it is written, so any
@@ -194,7 +195,7 @@ class DocumentationCommand:
     external_url: ExternalUrl = ""
     last_reviewed: LastReviewed = None
     published_at: PublishedAt = None
-    notes: Notes = ""
+    notes: DocNotes = ""
     related_projects: Annotated[tuple[str, ...], Names("projects"), Describe("The projects this doc covers.")] = ()
     related_assets: Annotated[tuple[str, ...], Names("assets"), Describe("The assets this doc covers.")] = ()
     related_expenses: Annotated[

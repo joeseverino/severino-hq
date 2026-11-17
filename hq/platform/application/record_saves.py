@@ -19,8 +19,9 @@ from django.db.models import Model
 
 from .answer_fields import CallMessage
 from .describe import Describe
-from .domains import Records, load, records_of
+from .domains import load, records_of
 from .integration_specs import TARGET_KINDS, Kept, keeps
+from .record_declaration import Records
 from .record_errors import RecordConflict, RecordNotFound, Sentence
 from .security import Principal
 lazy from .resources import resource_registry

@@ -22,7 +22,6 @@ from hq.platform.application.security import web_principal
 from hq.platform.application.tables import TableColumn, TableFilter, TableListMixin, TableToggle
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
 
-from .forms import ExpenseForm
 from .models import EXPENSE_CATEGORY_CHOICES, Expense
 
 
@@ -85,6 +84,7 @@ EXPENSES_TRAIL = (("Expenses", reverse_lazy("expenses:list")),)
 class ExpensePage(PageMixin):
     """A page about one expense, or a new one: its trail runs back to the list."""
 
+    model = Expense
     page_trail = EXPENSES_TRAIL
 
     @override
@@ -142,7 +142,6 @@ FORM_PAGE = {"form_note": "Deductible estimate = cost × business use. Updated w
 
 class ExpenseCreateView(ExpensePage, ReferencePickerMixin, RecordFormMixin, CreateView):
     page_title = "New expense"
-    form_class = ExpenseForm
     extra_context = FORM_PAGE
 
     @override
@@ -158,14 +157,11 @@ class ExpenseCreateView(ExpensePage, ReferencePickerMixin, RecordFormMixin, Crea
 
 class ExpenseUpdateView(ExpensePage, ReferencePickerMixin, RecordFormMixin, UpdateView):
     page_title = "Edit expense"
-    model = Expense
-    form_class = ExpenseForm
     extra_context = FORM_PAGE
 
 
 class ExpenseDeleteView(ExpensePage, RecordDeleteMixin, DeleteView):
     page_title = "Delete expense?"
-    model = Expense
     template_name = "expenses/expense_confirm_delete.html"
     success_url = reverse_lazy("expenses:list")
     context_object_name = "expense"

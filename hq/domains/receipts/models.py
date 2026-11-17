@@ -32,6 +32,7 @@ class Receipt(TimestampedModel):
 
     related_expense = models.ForeignKey(
         "expenses.Expense",
+        verbose_name="expense",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -39,6 +40,7 @@ class Receipt(TimestampedModel):
     )
     related_asset = models.ForeignKey(
         "assets.Asset",
+        verbose_name="asset",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

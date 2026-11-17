@@ -13,6 +13,7 @@ from functools import cache
 from typing import Any
 
 from django import forms
+from django.core.exceptions import ImproperlyConfigured
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db.models import Field
 from django.forms import ModelForm, modelform_factory
@@ -22,10 +23,11 @@ from .command_fields import for_agents
 from .contracts import Effect
 from .deletion import DeleteCommand, RecordDeleted, delete_record
 from .describe import meanings
-from .domains import Records, host_records, load, records_of
+from .domains import host_records, load, records_of
 from .integration_specs import TARGET_KINDS, CapabilitySpec
 from .json_schemas import choices
 from .labels import adding, lower_first, one
+from .record_declaration import Records
 from .security import Principal
 from .ui import ended
 
@@ -100,14 +102,19 @@ def _control(column: Field[Any, Any], **kwargs: Any) -> forms.Field | None:
 
 
 @cache
-def record_form(records: Records) -> type[ModelForm[Any]]:
-    """A plain record domain's form: its command's fields, each drawn from the
-    model's column of that name. A command field the model has no column for
-    is refused as the form is built (Django's ``FieldError``)."""
+def record_form(records: Records, command: type | None = None) -> type[ModelForm[Any]]:
+    """A plain record domain's form: the fields of its command (or of
+    ``command``, a page whose save runs another), each drawn from the model's
+    column of that name, on the declaration's ``form`` where it names one. A
+    command field the model has no column for is refused as the form is built
+    (Django's ``FieldError``), and so is a ``form`` that lists fields of its own."""
 
-    command = load(records.command)
+    command = command or load(records.command)
+    base = load(records.form) if records.form else ModelForm
+    if {"fields", "exclude"} & set(vars(getattr(base, "Meta", object))):
+        raise ImproperlyConfigured(f"{base.__name__} lists fields; a record's form takes its command's.")
     taken = [item.name for item in fields(command) if item.name not in for_agents(command)]
-    return modelform_factory(load(records.model), fields=taken, formfield_callback=_control)
+    return modelform_factory(load(records.model), form=base, fields=taken, formfield_callback=_control)
 
 
 def described[F: ModelForm[Any]](form: F, command: type) -> F:

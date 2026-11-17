@@ -1,7 +1,5 @@
 from django.test import TestCase
 
-from hq.domains.expenses.forms import ExpenseForm
-
 from ..business_use import MESSAGE
 from ..domains import records_of
 from ..records import record_form
@@ -10,7 +8,7 @@ from ..records import record_form
 class BusinessUseTests(TestCase):
     """The forms show the model's rule; they do not hold a copy of it."""
 
-    FORMS = (record_form(records_of("assets")), ExpenseForm)
+    FORMS = (record_form(records_of("assets")), record_form(records_of("expenses")))
 
     def test_neither_form_restates_the_rule(self):
         for form_class in self.FORMS:

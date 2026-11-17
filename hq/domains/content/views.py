@@ -21,7 +21,6 @@ from hq.platform.application.tables import TableColumn, TableFilter, TableListMi
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
 from hq.platform.core.templatetags.status_tags import status_pill
 
-from .forms import ContentItemForm
 from .models import PAGE_TYPES, WRITEUP_TYPES, ContentItem
 
 
@@ -165,6 +164,7 @@ CONTENT_TRAIL = (("Content", reverse_lazy("content:list")),)
 class ContentPage(PageMixin):
     """A page about one content item, or a new one: its trail runs back to the list."""
 
+    model = ContentItem
     page_trail = CONTENT_TRAIL
 
     @override
@@ -235,8 +235,6 @@ def noun_of(content_type: str) -> str:
 
 
 class ContentCreateView(ContentPage, RecordFormMixin, CreateView):
-    form_class = ContentItemForm
-
     @cached_property
     def chosen_type(self) -> str:
         """The type the list this form was opened from holds, when it named one."""
@@ -261,16 +259,12 @@ class ContentCreateView(ContentPage, RecordFormMixin, CreateView):
 
 
 class ContentUpdateView(ContentPage, RecordFormMixin, UpdateView):
-    model = ContentItem
-    form_class = ContentItemForm
-
     @override
     def get_page_title(self):
         return f"Edit {noun_of(self.object.content_type)}"
 
 
 class ContentDeleteView(ContentPage, RecordDeleteMixin, DeleteView):
-    model = ContentItem
     template_name = "content/content_confirm_delete.html"
 
     @override

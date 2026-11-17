@@ -20,9 +20,10 @@ from hq.platform.application.tests.writers import keyed
 
 from .. import domains
 from ..capabilities import execute_capability
-from ..domains import DomainDescriptor, Mount, Records, domain_navigation, load
+from ..domains import DomainDescriptor, Mount, domain_navigation, load
 from ..integrations import clear_integration_graph_cache, integration_graph
 from ..plugins import NavigationItem, PluginIntegration
+from ..record_declaration import Records
 from ..records import counts
 from ..security import mcp_principal, web_principal
 

@@ -29,7 +29,7 @@ from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
 from hq.platform.core.templatetags.status_tags import status_pill
 from hq.platform.core.templatetags.value_tags import breakable
 
-from .forms import DocumentationRecordForm, ManifestImportForm
+from .forms import ManifestImportForm
 from .models import DocumentationRecord
 
 DOCS_TRAIL = (("Docs", reverse_lazy("docs_index:list")),)
@@ -114,6 +114,7 @@ class DocsListView(PageMixin, TableListMixin, ListView):
 class DocsPage(PageMixin):
     """A page about one doc record, or a new one: its trail runs back to the list."""
 
+    model = DocumentationRecord
     page_trail = DOCS_TRAIL
 
     @override
@@ -173,20 +174,16 @@ class DocsDetailView(PageMixin, DetailView):
 
 class DocsCreateView(DocsPage, RecordFormMixin, CreateView):
     page_title = "New document"
-    form_class = DocumentationRecordForm
 
 
 class DocsUpdateView(DocsPage, RecordFormMixin, UpdateView):
     page_title = "Edit document"
-    model = DocumentationRecord
-    form_class = DocumentationRecordForm
     slug_field = "doc_id"
     slug_url_kwarg = "doc_id"
 
 
 class DocsDeleteView(DocsPage, RecordDeleteMixin, DeleteView):
     page_title = "Delete document?"
-    model = DocumentationRecord
     template_name = "docs_index/docs_confirm_delete.html"
     slug_field = "doc_id"
     slug_url_kwarg = "doc_id"

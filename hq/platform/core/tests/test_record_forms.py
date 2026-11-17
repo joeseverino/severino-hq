@@ -6,15 +6,17 @@ from dataclasses import dataclass, replace
 from datetime import date
 
 from django.contrib.auth import get_user_model
-from django.core.exceptions import FieldError
+from django.core.exceptions import FieldError, ImproperlyConfigured
+from django.forms import ModelForm
 from django.test import TestCase
 from django.urls import reverse
+from django.views.generic import CreateView
 
 from hq.domains.assets.models import Asset
 from hq.domains.projects.models import Project
 from hq.platform.application.capabilities import capability_registry
 from hq.platform.application.describe import meanings
-from hq.platform.application.domains import Records, records_of
+from hq.platform.application.domains import records_of
 from hq.platform.application.markup_testing import select, within
 from hq.platform.application.plugin_testing import form_keyed
 
@@ -94,7 +96,12 @@ class TakesWhatNoColumnHolds:
     nowhere: str = ""
 
 
-def declared(command: type) -> Records:
+class ListsItsOwnFields(ModelForm):
+    class Meta:
+        fields = ("item_name",)
+
+
+def declared(command: type):
     return replace(records_of("assets"), command=f"{__name__}:{command.__name__}")
 
 
@@ -134,3 +141,26 @@ class DerivedRecordFormTests(TestCase):
         )
 
         self.assertEqual(Asset.objects.get(item_name="Example asset").warranty_date, date(2030, 1, 31))
+
+    def test_a_form_beneath_it_that_lists_fields_of_its_own_is_refused(self):
+        from hq.platform.application.records import record_form
+
+        with self.assertRaises(ImproperlyConfigured):
+            record_form(replace(records_of("assets"), form=f"{__name__}:ListsItsOwnFields"))
+
+    def test_a_record_view_that_names_a_form_of_its_own_is_refused_as_it_is_declared(self):
+        from hq.platform.application.writes import RecordFormMixin
+
+        with self.assertRaises(ImproperlyConfigured):
+            type("NamesAForm", (RecordFormMixin, CreateView), {"model": Asset, "form_class": ModelForm})
+
+    def test_a_slug_sent_with_spaces_around_it_is_saved_without_them(self):
+        user = get_user_model().objects.create_superuser("example-slugger", "slugger@example.test", "x" * 20)
+        self.client.force_login(user)
+
+        self.client.post(
+            reverse("projects:create"),
+            form_keyed({"name": "Example padded", "slug": "  example-padded  ", "category": "other", "status": "idea"}),
+        )
+
+        self.assertTrue(Project.objects.filter(slug="example-padded").exists())

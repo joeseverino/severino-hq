@@ -9530,6 +9530,10 @@
         "description": "The doc's ID in the vault.",
         "type": "string"
       },
+      "DocNotes": {
+        "description": "Index notes only. No runbook text or secrets.",
+        "type": "string"
+      },
       "DocSensitivity": {
         "description": "Who may read it; a restricted doc never reaches an agent.",
         "enum": [
@@ -9648,7 +9652,7 @@
                 "default": null
               },
               "notes": {
-                "$ref": "#/components/schemas/Notes",
+                "$ref": "#/components/schemas/DocNotes",
                 "default": "",
                 "format": "textarea"
               },
@@ -10009,7 +10013,7 @@
                 "$ref": "#/components/schemas/LastReviewed"
               },
               "notes": {
-                "$ref": "#/components/schemas/Notes",
+                "$ref": "#/components/schemas/DocNotes",
                 "format": "textarea"
               },
               "obsidian_path": {
