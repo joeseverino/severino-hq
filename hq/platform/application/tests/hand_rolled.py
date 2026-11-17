@@ -1,5 +1,5 @@
-"""The page-class check's reading of the host: which templates are shared
-parts, and the classes each other template writes beyond the public ones.
+"""The page-class check's reading of the host: the classes each template
+writes beyond those it may, read from the parts that own them.
 
 A support module rather than part of the check, so ``mise run test --at``
 holds a change to the reader to the check at a ref.
@@ -10,7 +10,8 @@ import re
 from hq.platform.core.interface_text import TEMPLATE_COMMENT
 from hq.platform.core.stylesheets import STATIC
 from hq.platform.core.table_cells import ROLE_CLASSES
-from hq.platform.core.template_contract import CLASSES, PARTIALS, class_words
+from hq.platform.core.template_contract import PARTIALS, class_words, parts, public_classes
+from hq.platform.core.template_parts import Part
 
 # The host's own templates, which no extension's check reads.
 TEMPLATES = STATIC.parent / "templates"
@@ -45,7 +46,6 @@ ONE_OF_A_KIND = {
     "partials/_calendar_sources.html": "the calendar's sources, each a toggle with its color swatch",
     "projects/_repository_postures.html": "the posture page's meter of checks per repository",
     "partials/_relation_list.html": "a topology node's edges, stated from where it stands",
-    "partials/_share_list.html": "analytics' ranked shares, each a bar against the largest",
     "partials/_tile_strip.html": "the dashboard glance's row of small figures",
     "partials/_identity.html": "an account's picture, name and handle on the watching page",
     "partials/_toggle_set.html": "the topology map's filter toggles",
@@ -66,7 +66,7 @@ def _callers(templates: dict[str, str]) -> dict[str, set[str]]:
     return callers
 
 
-def parts(templates: dict[str, str]) -> set[str]:
+def parts_found(templates: dict[str, str]) -> set[str]:
     """The shared parts among the host's templates: each in ``PART_FOLDERS``
     that ``hq_sdk`` publishes to extensions, that code draws (a tag, a
     widget, a view's fragment), or that two or more pages draw, through the
@@ -97,37 +97,68 @@ def parts(templates: dict[str, str]) -> set[str]:
 
 
 def hand_rolled_classes() -> set[tuple[str, str]]:
-    """Each class a host template draws that no shared part declares, with
-    the template's name.
+    """Each class a host template writes that it may not, with the template's
+    name.
 
-    A page writes only what an extension may: a class ``hq_sdk``'s CLASSES
-    publishes, or a table role the region reads, unless it is one of a kind
-    (``ONE_OF_A_KIND``). Every other class is a shared part's (``parts``),
-    which a page draws through the part."""
+    Any template may write the public classes (``public_classes``) and a
+    table role the region reads. A part's partial writes besides them its
+    own classes and those of the parts it draws (``Part.written``); a page
+    writes nothing else, unless it is one of a kind (``ONE_OF_A_KIND``). A
+    part that declares no class yet writes what it writes (``parts_found``)."""
 
-    return {(name, word) for name, words in _own_classes().items() if name not in ONE_OF_A_KIND for word in words}
+    templates = _templates()
+    undeclared = parts_found(templates)
+    written = _written()
+    shared = public_classes() | set(ROLE_CLASSES)
+    return {
+        (name, word)
+        for name, text in templates.items()
+        if name not in ONE_OF_A_KIND and (name in written or name not in undeclared)
+        for _, word in class_words(text)
+        if word not in shared and word not in written.get(name, ())
+    }
+
+
+def needless_classes() -> set[tuple[str, str]]:
+    """Each class a part declares that its partial never writes, with the partial."""
+
+    templates = _templates()
+    return {
+        (part.partial, word)
+        for part in parts()
+        if part.partial
+        for word in part.owned() - {word for _, word in class_words(templates[_file(part)])}
+    }
 
 
 def needless_exemptions() -> set[str]:
     """Each ``ONE_OF_A_KIND`` entry that draws no class of its own any more,
     or names no template, and so leaves the list."""
 
-    own = _own_classes()
-    return {name for name in ONE_OF_A_KIND if not own.get(name)}
+    templates = _templates()
+    shared = public_classes() | set(ROLE_CLASSES)
+    return {name for name in ONE_OF_A_KIND if not {word for _, word in class_words(templates.get(name, ""))} - shared}
 
 
-def _own_classes() -> dict[str, set[str]]:
-    """Each template that is not a shared part, with the classes it draws that
-    no shared part declares."""
+def _file(part: Part) -> str:
+    """The template file a part's partial is, or holds as a fragment."""
 
-    templates = {
+    return part.partial.partition("#")[0]
+
+
+def _written() -> dict[str, frozenset[str]]:
+    """Each partial of a part that declares its classes, with the classes the
+    parts the file holds may write."""
+
+    written: dict[str, frozenset[str]] = {}
+    for part in parts():
+        if part.partial and part.written():
+            written[_file(part)] = written.get(_file(part), frozenset()) | part.written()
+    return written
+
+
+def _templates() -> dict[str, str]:
+    return {
         path.relative_to(TEMPLATES).as_posix(): path.read_text(encoding="utf-8")
         for path in sorted(TEMPLATES.rglob("*.html"))
-    }
-    shared_parts = parts(templates)
-    shared = set(CLASSES) | set(ROLE_CLASSES)
-    return {
-        name: {word for _, word in class_words(text) if word not in shared}
-        for name, text in templates.items()
-        if name not in shared_parts
     }

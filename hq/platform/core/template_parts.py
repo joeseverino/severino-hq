@@ -113,18 +113,20 @@ type Shape = Callable[[str, dict], dict]
 
 @dataclass(frozen=True, kw_only=True)
 class Part:
-    """A shared part a template writes as a tag, declared once: what it is,
-    the partial that draws it, the parts it encloses (the first follows the
-    opening tag), what it takes in order and as options, whether a page may
-    give it ``data_*`` options, and the shape that turns what a page gave into
-    the partial's variables. Everything else said about the tag (its
+    """A shared part, declared once: what it is, the partial that draws it,
+    the parts it encloses (the first follows the opening tag), what it takes
+    in order and as options, whether a page may give it ``data_*`` options,
+    the shape that turns what a page gave into the partial's variables, and
+    the classes its partial writes. Everything else said about the part (its
     parameters in the template contract, its row in docs/Shared-UI.md, the
-    check of what a page gave) is read from here. ``public`` tags are an
-    extension's to write too, and show themselves written in ``example``.
+    check of what a page gave, who may write a class) is read from here.
+    ``public`` tags are an extension's to write too, and show themselves
+    written in ``example``.
 
     A tag drawn by a Python ``function`` (a simple tag, or with a
     ``partial`` an inclusion tag) takes the options its signature declares,
-    so the Part says only what a signature cannot."""
+    so the Part says only what a signature cannot. A part with no ``name``
+    has no tag: a template includes its partial by path."""
 
     name: str
     about: str
@@ -139,10 +141,18 @@ class Part:
     public: bool = False
     example: str = ""
     shape: Shape | None = None
+    # The classes the partial writes that are this part's alone, and those of
+    # its own any template, an extension's too, may write beside it.
+    classes: tuple[str, ...] = ()
+    public_classes: tuple[str, ...] = ()
+    # The parts whose look the partial draws too, writing their classes.
+    draws: tuple[Part, ...] = ()
 
     def __post_init__(self) -> None:
+        if not (self.name or self.partial):
+            raise ValueError("A part with no tag names the partial a template includes.")
         if not self.about:
-            raise ValueError(f"The tag {self.name} says what it is.")
+            raise ValueError(f"The part {self.name or self.partial} says what it is.")
         if self.public and not self.example:
             raise ValueError(f"The public tag {self.name} shows itself written.")
         if self.function is not None:
@@ -169,6 +179,15 @@ class Part:
             ]
         )
         object.__setattr__(self, "__signature__", signature)
+
+    def owned(self) -> frozenset[str]:
+        return frozenset((*self.classes, *self.public_classes))
+
+    def written(self) -> frozenset[str]:
+        """The classes its partial may write: its own, and those of each part
+        it draws."""
+
+        return self.owned().union(*(part.owned() for part in self.draws))
 
     def __call__(self, *args, **kwargs) -> None:
         raise TypeError(f"{self.name} is a template tag, drawn by {self.partial}")

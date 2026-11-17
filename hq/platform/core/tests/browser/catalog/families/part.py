@@ -944,7 +944,7 @@ ENTRIES = {
         '{% aside %}<span class="pill pill-neutral">Example state</span>{% endsection %}{% endcard %}'
     ),
     # Muted words as a line beside a value and as a paragraph under it.
-    "part/muted": Entry(
+    "part/muted-beside-a-value": Entry(
         '{% section "Example muted words" %}<p>3 example checks {% muted %}since the last read{% endmuted %}</p>'
         '{% muted element="p" %}An example sentence under the value, long enough to wrap at a phone width.'
         "{% endmuted %}{% endsection %}"

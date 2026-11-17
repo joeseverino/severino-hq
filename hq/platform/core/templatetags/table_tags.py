@@ -608,6 +608,8 @@ slotted(
         function=row_actions,
         public=True,
         example="{% row_actions row.actions %}",
+        classes=("row-later",),
+        public_classes=("row-actions",),
     ),
     library=register,
 )

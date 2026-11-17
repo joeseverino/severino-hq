@@ -11,21 +11,39 @@ from django.template.loader import render_to_string
 from django.utils.html import escape
 
 from hq.platform.application.ui import PageNavigation, PageSection
+from hq.platform.core.template_contract import parts
 from hq.platform.core.templatetags.stylesheet_tags import stylesheets
 from hq.platform.core.tests.browser.catalog.common import Entry, head_of, part_page
 from hq.platform.core.tests.browser.catalog.families import chart, form, graph, part, status, table
 
+# The parts whose default entry is drawn from their example so far.
+DRAWN_FROM_EXAMPLE = ("muted",)
+
+
+def defaults() -> dict[str, Entry]:
+    """Each part's default entry, ``part/`` and its name: its ``Part.example``,
+    as a page writes it."""
+
+    return {f"part/{each.name}": Entry(each.example) for each in parts() if each.name in DRAWN_FROM_EXAMPLE}
+
 
 def _assembled(*families) -> dict[str, Entry]:
-    """Every family's ``ENTRIES``, each in its module's own order. A family
-    holds only names it begins, so no two modules name one entry."""
+    """Every family's ``ENTRIES``, each in its module's own order, the parts'
+    default entries first among the ``part/`` family's. A family holds only
+    names it begins, and never a part's default, so no two modules name one
+    entry."""
 
     catalog: dict[str, Entry] = {}
+    drawn = defaults()
     for family in families:
         prefix = family.__name__.rpartition(".")[2]
         if strays := [name for name in family.ENTRIES if not name.startswith(f"{prefix}/")]:
             raise ImportError(f"families/{prefix}.py holds entries of another family: {strays}")
-        catalog |= family.ENTRIES
+        if restated := sorted(drawn.keys() & family.ENTRIES.keys()):
+            raise ImportError(
+                f"families/{prefix}.py restates a part's default entry, drawn from its example: {restated}"
+            )
+        catalog |= (drawn if prefix == "part" else {}) | family.ENTRIES
     return catalog
 
 

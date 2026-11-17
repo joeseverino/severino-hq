@@ -25,6 +25,7 @@ lazy from django.template.library import import_library
 lazy from django.template.loader_tags import BlockNode, ExtendsNode, IncludeNode
 lazy from django.template.smartif import TokenBase
 
+lazy from hq.platform.core.included_parts import PARTS
 lazy from hq.platform.core.interface_text import TEMPLATE_COMMENT
 lazy from hq.platform.core.stylesheets import stylesheet
 lazy from hq.platform.core.table_cells import ROLE_CLASSES
@@ -103,8 +104,9 @@ FILTERS = (
 # Django's own libraries an extension may ``{% load %}`` beside its own.
 LIBRARIES = ("static",)
 
-# Classes an extension may write. Layout, tokens and states belong to the host;
-# a class missing here is the host's to add, never the extension's to invent.
+# The layout classes no part owns, which any template may write; with each
+# part's ``public_classes``, the classes an extension may write. A class
+# missing from both is the host's to add, never the extension's to invent.
 CLASSES = (
     "actions-col",
     "address-list",
@@ -140,7 +142,6 @@ CLASSES = (
     "page-lede",
     "primary",
     "prose",
-    "row-actions",
     "row-below",
     "row-empty",
     "row-gutter",
@@ -488,6 +489,28 @@ def _part(compile_function: Any) -> Part | None:
     return target if isinstance(target, Part) else None
 
 
+def parts() -> tuple[Part, ...]:
+    """Every shared part: each tag's, read from what it wraps, and each a
+    template includes by path. A class is one part's own, so two declaring
+    it is refused here, where every reader of a part's classes reads them."""
+
+    tags, _ = _libraries(_engine())
+    every = (*(part for compile_function in tags.values() if (part := _part(compile_function))), *PARTS)
+    owners: dict[str, list[str]] = {}
+    for part in every:
+        for word in part.owned():
+            owners.setdefault(word, []).append(part.name or part.partial)
+    if shared := sorted(f"{word} ({', '.join(names)})" for word, names in owners.items() if len(names) > 1):
+        raise ValueError(f"A class is one part's own, but parts share: {'; '.join(shared)}.")
+    return every
+
+
+def public_classes() -> set[str]:
+    """The classes any template may write: the layout classes and each part's public ones."""
+
+    return set(CLASSES).union(*(part.public_classes for part in parts()))
+
+
 def _tag(compile_function: Any, part: Part) -> dict[str, Any]:
     """A public part's tag: its parameters, the markers its later parts open
     with (``{% aside %}``), which a page writes only inside that tag, and what
@@ -592,7 +615,7 @@ def describe() -> dict[str, Any]:
         "tags": tags,
         "filters": filters,
         "django": _django(engine),
-        "classes": _checked(CLASSES, defined.__contains__, "classes"),
+        "classes": _checked(public_classes(), defined.__contains__, "classes"),
         "hooks": _checked(HOOKS, lambda hook: _read_by(scripts, hook), "hooks"),
         "styled": _checked(STYLED, lambda hook: f"[{hook}]" in sheets, "styled attributes"),
     }

@@ -11,7 +11,7 @@ from hq.platform.core.stylesheets import STATIC, sheet_paths, stylesheet
 from hq.platform.core.table_cells import ROLE_CLASSES
 from hq.platform.core.template_contract import class_words
 
-from .hand_rolled import ONE_OF_A_KIND, hand_rolled_classes, needless_exemptions
+from .hand_rolled import ONE_OF_A_KIND, hand_rolled_classes, needless_classes, needless_exemptions
 from .source import template_files
 
 
@@ -610,20 +610,24 @@ class TemplateClassStyleTests(SimpleTestCase):
 @tag("source", "tree")
 @reads("**/templates/**", "hq/**/*.py", "hq_sdk/**/*.py")
 class HandRolledClassTests(SimpleTestCase):
-    """A host page writes only the public classes, as an extension does, and a
-    part, one that code or two pages draw (hand_rolled.parts), writes its own,
-    so the Python that draws a part is read beside the templates."""
+    """A class is one part's own, declared on its ``Part``: a template writes
+    only the public classes, as an extension does, and a part's partial writes
+    besides them its own and those of the parts it draws."""
 
-    def test_host_templates_draw_only_the_shared_parts_classes(self):
-        """A host page is drawn from the shared parts, so a class of its own is
-        a hand-rolled part the survey never sees and an extension cannot draw."""
+    def test_host_templates_draw_only_the_classes_they_may(self):
+        """A class a template writes that no part lets it is a hand-rolled part
+        the survey never sees and an extension cannot draw."""
 
         self.assertEqual(
             sorted(f"templates/{name}: .{word}" for name, word in hand_rolled_classes()),
             [],
-            "a page writes only hq.platform.core.template_contract.CLASSES, as an extension does: draw it through the "
-            "shared part that writes it, or grow that part an option; a widget with no part becomes one",
+            "a page writes only the public classes (template_contract.public_classes), as an extension does: draw "
+            "it through the part that owns it, or grow that part an option; a part's partial writes only the classes "
+            "its Part declares, or those of a part it draws",
         )
+
+    def test_a_part_declares_only_the_classes_its_partial_writes(self):
+        self.assertEqual(sorted(needless_classes()), [], "remove it from the Part's classes")
 
     def test_a_one_of_a_kind_widget_is_listed_only_while_it_draws_its_own_classes(self):
         """The list of one-of-a-kind widgets only shrinks: an entry whose
