@@ -11,13 +11,16 @@ exemption file holds two kinds of line, each followed by ``Reason:`` and why cli
   lowers every change that check finds to info, which fails nothing: one line admits a correction
   made across many operations. The gate prints how many changes each one lowered.
 
-Only the lines this change adds are handed to oasdiff. A line the base already holds admitted a
-break the base already made, so it admits nothing here. This module holds every line oasdiff could
-read to its reason, and every severity line to info, before oasdiff runs.
+Only the lines the release adds are handed to oasdiff. A line the default branch already holds,
+read at its merge base with HEAD, admitted a break an earlier release made, so it admits nothing
+here. A branch stacked on another lands with it as one release, so a line the earlier branch added
+still admits the later change's breaks of the same kind. This module holds every line oasdiff
+could read to its reason, and every severity line to info, before oasdiff runs.
 
     python -m tools.openapi_breaking [base]
 
 The base is fast's: the merge base with the ref named, or else with the branch HEAD lands on.
+The breaks listed are those since that base.
 """
 
 import json
@@ -29,7 +32,7 @@ from collections import Counter
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 
-from tools.gate.chain import ROOT, merge_base
+from tools.gate.chain import ROOT, merge_base, released_fork
 
 DOCUMENT = "hq/platform/api/hq-api.openapi.json"
 EXEMPTIONS = "hq/platform/api/hq-api.breaking-exemptions.md"
@@ -104,9 +107,12 @@ def main(argv: list[str]) -> int:
 
 
 def added(lines: list[str], base: str, cwd: Path) -> list[str]:
-    """The lines of the exemption file the base does not hold: the breaks this change admits."""
+    """The lines of the exemption file the release adds: those the default branch does not hold
+    where HEAD left it, or the compared base where no default branch exists."""
 
-    held = subprocess.run(["git", "show", f"{base}:{EXEMPTIONS}"], cwd=cwd, capture_output=True, text=True, check=False)
+    released = released_fork(cwd)
+    fork = released[1] if released else base
+    held = subprocess.run(["git", "show", f"{fork}:{EXEMPTIONS}"], cwd=cwd, capture_output=True, text=True, check=False)
     before = set(held.stdout.splitlines()) if held.returncode == 0 else set()
     return [line for line in lines if line not in before]
 

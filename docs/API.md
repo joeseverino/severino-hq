@@ -760,8 +760,10 @@ take it; a line with no reason fails the gate:
   across many operations (a narrowing the server already refused, a loose
   schema made precise). The gate prints how many changes each one lowered.
 
-The gate hands oasdiff only the lines the change adds since its base, so a
-line already on main admits nothing, and any change may delete it. The controller's two documents are left out, since both of their
+The gate hands oasdiff only the lines the release adds, those not on main
+where the branch left it, so a line already on main admits nothing, and any
+change may delete it. A branch stacked on another lands with it as one
+release, so a line the earlier branch added admits the later one's breaks too. The controller's two documents are left out, since both of their
 ends ship in one image.
 
 ### The document

@@ -123,19 +123,27 @@ class VerdictTests(SimpleTestCase):
         path = f"{Path(mise('which', 'oasdiff')).parent}{os.pathsep}{os.environ.get('PATH', '')}"
         cls.enterClassContext(patch.dict(os.environ, {"PATH": path}))
 
-    def judge(self, exemptions: str, *, on_base: str = "", **revision: set[int]) -> tuple[int, list[str]]:
-        """The gate verdict with the base and proposed exemptions kept separate."""
+    def judge(
+        self, exemptions: str, *, on_base: str = "", stacked_on: str | None = None, **revision: set[int]
+    ) -> tuple[int, list[str]]:
+        """The gate verdict with the base and proposed exemptions kept separate: against a base on
+        main holding ``on_base``, or with ``stacked_on`` against a branch off main whose one commit
+        already wrote those exemptions."""
 
         from tools import openapi_breaking
 
         root = Path(self.enterContext(tempfile.TemporaryDirectory()))
         git = fixture_git(root)
-        git("init", "-q")
+        git("init", "-q", "-b", "main")
         (root / DOCUMENT).parent.mkdir(parents=True)
         (root / DOCUMENT).write_text(document(range(12)))
         (root / EXEMPTIONS).write_text(on_base)
         git("add", ".")
         git("commit", "-q", "-m", "base")
+        if stacked_on is not None:
+            git("switch", "-q", "-c", "stack")
+            (root / EXEMPTIONS).write_text(stacked_on)
+            git("commit", "-q", "-am", "an earlier change of the release")
         base = git("rev-parse", "HEAD")
         (root / DOCUMENT).write_text(document(range(12), **revision))
         (root / EXEMPTIONS).write_text(exemptions)
@@ -188,6 +196,18 @@ class VerdictTests(SimpleTestCase):
         code, lines = self.judge(line, on_base=line, removed={0, 2, 4})
         self.assertEqual(code, 1)
         self.assertEqual(len([line for line in lines if line.startswith("error at")]), 3)
+
+    def test_a_line_an_earlier_change_of_the_release_added_still_admits(self):
+        """A branch stacked on one that already added a line lands with it as one release, so that
+        line admits the later change's breaks; the earlier change made none here to admit."""
+
+        entry = f"- error at {DOCUMENT}, in API POST /api/v2/example/4/ API path removed without deprecation. Reason: none\n"
+        line = f"{LOWERING} Reason: no client calls them\n"
+        for kind, held, removed in (("entry", entry, {4}), ("severity line", line, {0, 2, 4})):
+            with self.subTest(kind):
+                code, lines = self.judge(held, stacked_on=held, removed=removed)
+                self.assertEqual(code, 0, lines)
+                self.assertFalse([line for line in lines if line.startswith("error at")])
 
     def test_a_severity_line_without_a_reason_is_refused_before_oasdiff_runs(self):
         code, lines = self.judge(f"# Admitted breaks\n\n{LOWERING}\n", removed={0, 2})

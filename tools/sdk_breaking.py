@@ -27,7 +27,7 @@ from typing import Any
 
 import griffe
 
-from tools.gate.chain import ROOT, answered, merge_base
+from tools.gate.chain import ROOT, answered, merge_base, released_fork
 from tools.pipeline.plugin_identity import PLUGINS, plugin_api_version, spoken
 
 PACKAGE = "hq_sdk"
@@ -37,8 +37,6 @@ SOURCES = (":(glob)hq_sdk/**/*.py", ":(glob)hq/**/*.py")
 # griffe prints that file as the repository names it (its diff.py, Breakage._location).
 BASE_PREFIX = "griffe-worktree-"
 _COLOR = re.compile(r"\x1b\[[0-9;]*m")
-# The branches a release is cut from, the first that exists read (chain.merge_base's defaults).
-RELEASED = ("origin/main", "main")
 
 
 class TransformedDataclasses(griffe.Extension):
@@ -112,11 +110,11 @@ def released(root: Path) -> str | None:
     """The ``PLUGIN_API_VERSION`` released extensions speak: the default branch's where HEAD left
     it, or None where no default branch exists."""
 
-    for ref in RELEASED:
-        if fork := answered("merge-base", "HEAD", ref, root=root):
-            source = answered("show", f"{fork[0]}:{PLUGINS.as_posix()}", root=root)
-            return spoken(f"{ref}:{PLUGINS.as_posix()}", "\n".join(source)) if source else None
-    return None
+    if not (released := released_fork(root)):
+        return None
+    ref, fork = released
+    source = answered("show", f"{fork}:{PLUGINS.as_posix()}", root=root)
+    return spoken(f"{ref}:{PLUGINS.as_posix()}", "\n".join(source)) if source else None
 
 
 def main(argv: list[str]) -> int:
