@@ -137,7 +137,7 @@ GATE_RERUN = "HQ_GATE_RERUN"
 # change to what was drawn. Out are the tests and the tools, lint and type
 # config (pyproject.toml, since uv.lock holds what a request imports), the
 # committed OpenAPI document, which only its drift gate reads (the served one
-# is built from the routes and openapi-examples.json), and the Go controller,
+# is built from the routes and registries), and the Go controller,
 # a separate program.
 SURVEY_INPUTS = (
     ".",

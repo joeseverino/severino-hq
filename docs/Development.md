@@ -364,14 +364,6 @@ here first and sends the tree they leave. What a tool cannot fix, its gate
 still reports. Only fast and `mise run fix` pass `--fix`, so CI's gates only
 check.
 
-A gate tagged `recording` (`lint:drift-api-examples`) is a serial run of the
-tests its run names, compared with a file. Its fix records over the file,
-which every gate would wait on, so fast runs it only once the check has
-failed; the gates and tests the rewritten files select then run again, and
-they decide the run. A run on a second machine only checks it, and its
-failure names the command that records the file here. A change to Python files alone runs a recording only
-when it selects one of the tests the recording runs.
-
 The tests it selects are:
 
 - the test modules that load a changed file: through the imports a module
@@ -639,16 +631,6 @@ Each `lint:drift-*` gate checks one against its source without writing. Its
 failure names the command that rewrites that file alone, in seconds; `fast`
 runs the ones a change reaches. A rebase conflict in one is settled by
 `mise run fix`, never by hand.
-
-The OpenAPI document's examples are responses the API's tests received,
-recorded in `hq/platform/api/openapi-examples.json`. A recording is a serial
-run of those tests under a clock that stands still, with fixed ids, so it
-reads the same every run.
-
-`lint:drift-api-examples` records one beside the file and fails when they
-differ, and `mise run fix:api-examples`, its fix mode, records them again,
-then rewrites the document; fast runs it once the check fails. It is not a
-step of `fix`, being a run of the suite.
 
 ### The extension set
 

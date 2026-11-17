@@ -11,11 +11,9 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import SimpleTestCase, tag
 
-from hq.platform.api import openapi
 from hq.platform.api.management.commands import api_openapi as command
 from hq.platform.api.openapi import document, render
-from hq.platform.application.tests.reads import reads
-from tests.mise_tasks import ROOT, mise_tasks
+from tests.mise_tasks import mise_tasks
 
 
 class CheckTests(SimpleTestCase):
@@ -54,53 +52,10 @@ class CheckTests(SimpleTestCase):
         self.assertFalse(self.path.exists())
 
     @tag("source")
-    def test_a_failure_names_the_tasks_that_bring_the_document_and_its_examples_current(self):
+    def test_a_failure_names_the_task_that_brings_the_document_current(self):
         with self.assertRaises(CommandError) as raised:
             self.check()
 
         named = set(re.findall(r"`mise run ([\w:-]+)[^`]*`", str(raised.exception)))
-        self.assertLessEqual({"manage", "fix:api-examples"}, named)
+        self.assertIn("manage", named)
         self.assertLessEqual(named, mise_tasks().keys())
-
-
-class PruneTests(SimpleTestCase):
-    setUp = CheckTests.setUp
-
-    def test_an_example_whose_operation_is_gone_is_dropped_and_the_rest_kept_as_they_were(self):
-        examples = Path(self.path.parent, "openapi-examples.json")
-        kept = {"rootV2": {"responses": {"200": {"ok": True}}}}
-        examples.write_text(render({**kept, "exampleMovedV2": {"responses": {}}}), encoding="utf-8")
-        out = StringIO()
-
-        with patch.object(openapi, "EXAMPLES_PATH", examples):
-            call_command("api_openapi", "--prune-examples", stdout=out, stderr=StringIO())
-
-        self.assertEqual(json.loads(examples.read_text(encoding="utf-8")), kept)
-        self.assertIn("exampleMovedV2", out.getvalue())
-        self.assertFalse(self.path.exists())
-
-    @tag("source")
-    def test_the_recording_drops_gone_examples_before_its_tests_read_them(self):
-        (run,) = mise_tasks()["fix:api-examples"]["run"]
-
-        self.assertLess(run.index("--prune-examples"), run.index("manage.py test"))
-
-
-@tag("source", "tree")
-@reads("**/*.py", "mise-tasks/**", "mise*.toml", "mise.lock", "tools/pipeline/toolchain.env", "controller/go.mod")
-class RecordingTests(SimpleTestCase):
-    def test_the_recording_runs_every_test_that_calls_the_api(self):
-        """A recording replaces the examples file whole, so a module it does not run loses its examples."""
-
-        (run,) = mise_tasks()["fix:api-examples"]["run"]
-        words = run.partition("manage.py test")[2].partition("&&")[0].split()
-        labels = [word for word in words if not word.startswith("-") and not word.isdigit()]
-        callers = [
-            ".".join(path.relative_to(ROOT).with_suffix("").parts)
-            for path in (ROOT / "hq").rglob("test_*.py")
-            if "ContractClient" in path.read_text(encoding="utf-8")
-        ]
-        self.assertTrue(callers)
-        for caller in callers:
-            with self.subTest(caller=caller):
-                self.assertTrue(any(caller == label or caller.startswith(f"{label}.") for label in labels), labels)

@@ -577,8 +577,6 @@ that variable names. `test_settings_env.py` holds this table to the code.
 | `HQ_BROWSER_ENGINE` | development | the engine a run of browser tests draws in, installed as the run starts: `webkit` by default, or `chromium` or `firefox` |
 | `HYPOTHESIS_PROFILE` | development | the Hypothesis profile every property runs under: `dev` by default, `ci` where Hypothesis detects CI |
 | `HQ_TEST_REPORTS` | development | the folder a gate names for a test run to write each failed test into, with its exception and traceback; set by `tools/gate/verdict.py` |
-| `HQ_API_RECORD_EXAMPLES` | development | `1`, with `--parallel 1`, writes the API responses a run receives to `openapi-examples.json`; `mise run fix:api-examples` sets it |
-| `HQ_API_RECORD_EXAMPLES_TO` | development | Where a recording writes instead of `openapi-examples.json`; `lint:drift-api-examples` sets it |
 
 ## Network exposure
 

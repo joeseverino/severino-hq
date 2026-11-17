@@ -72,9 +72,6 @@ DEP004 = [
     # hq/config/urls.py mounts the toolbar only when SEVERINO_DEBUG_TOOLBAR is
     # on, which development alone sets; the image installs no toolbar.
     "debug_toolbar",
-    # hq/platform/api/testing.py holds the clock still for a recording run of
-    # the tests (HQ_API_RECORD_EXAMPLES), which no image runs.
-    "time_machine",
     # hq/platform/core/test_runner.py registers the Hypothesis profiles when
     # the suite starts, and does nothing in the image, which has no Hypothesis.
     "hypothesis",
@@ -222,7 +219,7 @@ tools = [
     "import-linter==2.16",
     "mypy==2.4.1",
     "ruff==0.17.4",
-    # Holds the clock still while the API examples are recorded (fix:api-examples).
+    # Holds a test's clock still (test_record_life.py).
     "time-machine==3.6.0",
     "types-jsonschema==4.26.0.20261006",
     # Lists the names nothing outside tests reads (audit:dead, [tool.vulture]).

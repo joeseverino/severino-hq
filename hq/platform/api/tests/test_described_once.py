@@ -34,8 +34,8 @@ from hq.platform.mcp.shapes import answer_type
 from .. import openapi
 from ..fragments import OpenAPIError
 
-# Values the document carries rather than says: recorded data and schema values.
-_VALUES = ("examples", "example", "dataValue", "value", "const", "default", "enum")
+# Values the document carries rather than says.
+_VALUES = ("examples", "example", "const", "default", "enum")
 # The objects whose keys are names rather than keywords.
 _NAME_MAPS = (
     "properties",

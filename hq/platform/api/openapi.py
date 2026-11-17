@@ -43,11 +43,8 @@ from .refusal_names import LATER_STATUSES, codes_by_status, refusal_name
 
 OPENAPI_VERSION = "3.2.0"
 DOCUMENT_PATH = Path(__file__).with_name("hq-api.openapi.json")
-EXAMPLES_PATH = Path(__file__).with_name("openapi-examples.json")
 PARAMETERS = "#/components/parameters/"
 RESPONSES = "#/components/responses/"
-EXAMPLES = "#/components/examples/"
-HEADERS = "#/components/headers/"
 # The tag for what belongs to the API itself rather than to one domain: the
 # domain whose page this document is drawn on, so it stands where the bar has it.
 API_TAG = "hq.api"
@@ -259,33 +256,8 @@ def _scalar_slug(name: str) -> str:
     return re.sub(r"[\s_-]+", "-", slug).strip("-")
 
 
-def _json_content(schema: dict[str, Any], examples: dict[str, Any] | None = None) -> dict[str, Any]:
-    media: dict[str, Any] = {"schema": schema}
-    if examples:
-        media["examples"] = examples
-    return {"application/json": media}
-
-
-def _load_examples() -> dict[str, Any]:
-    if not EXAMPLES_PATH.exists():
-        return {}
-    loaded: dict[str, Any] = json.loads(EXAMPLES_PATH.read_text(encoding="utf-8"))
-    return loaded
-
-
-def prune_examples(value: dict[str, Any]) -> list[str]:
-    """Drop each recorded example whose operation ``value`` no longer has, and say which.
-
-    A recording run reads the examples file before it writes the new one, so
-    an entry whose operation moved would fail that run's conformance check.
-    """
-
-    operations = {operation["operationId"] for methods in value["paths"].values() for operation in methods.values()}
-    examples = _load_examples()
-    gone = sorted(set(examples) - operations)
-    if gone:
-        EXAMPLES_PATH.write_text(render({key: entry for key, entry in examples.items() if key in operations}))
-    return gone
+def _json_content(schema: dict[str, Any]) -> dict[str, Any]:
+    return {"application/json": {"schema": schema}}
 
 
 class _Builder:
@@ -293,7 +265,6 @@ class _Builder:
         self.components = Components()
         self.paths: dict[str, dict[str, Any]] = {}
         self.operation_ids: set[str] = set()
-        self.examples = _load_examples()
         self.data = self.components.typed(
             {
                 view.__name__: view.__hq_data__
@@ -306,7 +277,6 @@ class _Builder:
         self.responses: dict[str, Any] = {}
         self.parameters: dict[str, Any] = {}
         self.headers: dict[str, Any] = {}
-        self.recordings: dict[str, Any] = {}
         # Each request body's first name, by what it says.
         self.requests: dict[str, str] = {}
         # What a token could ever run: /api/v2 is called with tokens, the
@@ -317,25 +287,13 @@ class _Builder:
         self.resource_specs = resource_registry()
         self.tags = _Tags(self.resource_specs, capability_registry())
 
-    def recorded(self, name: str, value: Any) -> dict[str, Any]:
-        """The examples of a part ``value`` was recorded for, kept as the component ``name``.
-
-        Each recording is its operation's own, so two operations recorded
-        alike still answer apart.
-        """
-
-        self.recordings[name] = {"summary": "Recorded by HQ's test suite.", "dataValue": value}
-        return {"recorded": {"$ref": EXAMPLES + name}}
-
     def _responses(
         self,
         view: Any,
-        operation_id: str,
         codes: Iterable[str],
         answer: tuple[str, dict[str, Any]] | None,
         held: Any,
     ) -> dict[str, Any]:
-        recorded = self.examples.get(operation_id, {}).get("responses", {})
         schema: dict[str, Any]
         if answer is not None:
             envelope = self.components.schemas["Success"]
@@ -350,51 +308,39 @@ class _Builder:
         else:
             envelope = self.components.schemas["Success"]
             schema = {**envelope, "properties": {**envelope["properties"], "data": self.data.get(view.__name__, {})}}
-        success: dict[str, Any] = {"description": "Success."}
-        if "200" in recorded:
-            success["content"] = _json_content(schema, self.recorded(f"{operation_id}OK", recorded["200"]))
-        else:
-            # Named for the type its data is, which every view answering it shares.
-            kind = view.__hq_data__
-            name = (
-                f"{answer[0]}Success"
-                if answer is not None
-                else f"{_pascal(view.__name__)}Success"
-                if kind is None
-                else f"{kind.__name__}Success"
-                if isinstance(kind, (type, TypeAliasType))
-                else "ObjectSuccess"
-            )
-            success = self.component("responses", self.responses, name, {**success, "content": _json_content(schema)})
+        # Named for the type its data is, which every view answering it shares.
+        kind = view.__hq_data__
+        name = (
+            f"{answer[0]}Success"
+            if answer is not None
+            else f"{_pascal(view.__name__)}Success"
+            if kind is None
+            else f"{kind.__name__}Success"
+            if isinstance(kind, (type, TypeAliasType))
+            else "ObjectSuccess"
+        )
+        success = self.component(
+            "responses", self.responses, name, {"description": "Success.", "content": _json_content(schema)}
+        )
         responses: dict[str, Any] = {"200": success}
         if held is not None:
-            responses[str(views.HELD_STATUS)] = self.held(operation_id, held, recorded)
+            responses[str(views.HELD_STATUS)] = self.held(held)
         for status, answered in codes_by_status(codes).items():
-            name = self.refusal(status, answered)
-            if str(status) in recorded:
-                example = self.recorded(f"{operation_id}{_pascal(HTTPStatus(status).phrase)}", recorded[str(status)])
-                responses[str(status)] = {
-                    **self.responses[name],
-                    "content": _json_content({"$ref": f"{SCHEMAS}{name}Refusal"}, example),
-                }
-            else:
-                responses[str(status)] = {"$ref": RESPONSES + name}
+            responses[str(status)] = {"$ref": RESPONSES + self.refusal(status, answered)}
         return responses
 
-    def held(self, operation_id: str, kind: Any, recorded: Mapping[str, Any]) -> dict[str, Any]:
+    def held(self, kind: Any) -> dict[str, Any]:
         """The answer at ``views.HELD_STATUS`` of a call held for a person, its data ``kind``."""
 
-        name, status, phrase = kind.__name__, str(views.HELD_STATUS), _pascal(views.HELD_STATUS.phrase)
+        name, phrase = kind.__name__, _pascal(views.HELD_STATUS.phrase)
         envelope = self.components.schemas["Success"]
         data = self.components.typed({name: kind})[name]
         schema = {**envelope, "properties": {**envelope["properties"], "data": data}}
-        response: dict[str, Any] = {"description": "Accepted: held for approval in HQ. Nothing has happened yet."}
-        if status in recorded:
-            example = self.recorded(f"{operation_id}{phrase}", recorded[status])
-            return {**response, "content": _json_content(schema, example)}
-        return self.component(
-            "responses", self.responses, f"{name}{phrase}", {**response, "content": _json_content(schema)}
-        )
+        response = {
+            "description": "Accepted: held for approval in HQ. Nothing has happened yet.",
+            "content": _json_content(schema),
+        }
+        return self.component("responses", self.responses, f"{name}{phrase}", response)
 
     def refusal(self, status: int, codes: list[str]) -> str:
         """The response, and its schema, for refusing at ``status`` with ``codes``, named for them."""
@@ -420,11 +366,12 @@ class _Builder:
             "content": _json_content({"$ref": SCHEMAS + schema}),
         }
         if status == HTTPStatus.UNAUTHORIZED:
-            response["headers"] = self.header(
-                name,
-                "WWW-Authenticate",
-                {"description": "How to authenticate.", "schema": {"type": "string", "const": views.REALM}},
-            )
+            response["headers"] = {
+                "WWW-Authenticate": {
+                    "description": "How to authenticate.",
+                    "schema": {"type": "string", "const": views.REALM},
+                }
+            }
         if "insufficient_scope" in codes:
             # One component every 403 that can answer the code shares.
             response["headers"] = {
@@ -442,15 +389,13 @@ class _Builder:
                 )
             }
         if later:
-            response["headers"] = self.header(
-                name,
-                "Retry-After",
-                {
+            response["headers"] = {
+                "Retry-After": {
                     "description": "Whole seconds to wait before retrying, the same as `error.retry_after`.",
                     "required": waits,
                     "schema": {"type": "integer", "minimum": 1},
-                },
-            )
+                }
+            }
         if self.responses.setdefault(name, response) != response:
             raise OpenAPIError(f"Two responses claim the component name {name!r}.")
         return name
@@ -465,15 +410,6 @@ class _Builder:
 
     def parameter(self, name: str, value: dict[str, Any]) -> dict[str, Any]:
         return self.component("parameters", self.parameters, name, value)
-
-    def header(self, response: str, header: str, value: dict[str, Any]) -> dict[str, Any]:
-        """``header`` of the response component ``response``, kept as a component of its own,
-        since a recorded copy of the response sends it too."""
-
-        name = response + _pascal(header)
-        if self.headers.setdefault(name, value) != value:
-            raise OpenAPIError(f"Two headers claim the component name {name!r}.")
-        return {header: {"$ref": HEADERS + name}}
 
     def operation(
         self,
@@ -494,10 +430,6 @@ class _Builder:
         if operation_id in self.operation_ids:
             raise OpenAPIError(f"Operation id {operation_id!r} is derived twice.")
         self.operation_ids.add(operation_id)
-        request = self.examples.get(operation_id, {}).get("request")
-        if request is not None and "requestBody" in fields:
-            for media in fields["requestBody"]["content"].values():
-                media["examples"] = self.recorded(f"{operation_id}Request", request)
         # A view's title names it and its docstring says what it answers; an
         # expansion states both for the concrete operation it derives.
         summary = fields.pop("summary", None)
@@ -511,7 +443,7 @@ class _Builder:
             "summary": summary,
             **({"tags": [tag]} if tag else {}),
             **fields,
-            "responses": self._responses(view, operation_id, codes, answer, held),
+            "responses": self._responses(view, codes, answer, held),
         }
         self.paths.setdefault(path, {})[method.lower()] = operation
 
@@ -908,7 +840,6 @@ def document() -> dict[str, Any]:
             ),
             "responses": dict(sorted(builder.responses.items())),
             "headers": dict(sorted(builder.headers.items())),
-            "examples": dict(sorted(builder.recordings.items())),
             "schemas": dict(sorted(builder.components.sparse().items())),
         },
     }

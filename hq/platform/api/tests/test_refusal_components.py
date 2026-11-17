@@ -111,5 +111,4 @@ class RefusalComponentTests(SimpleTestCase):
                 always = waits and codes <= LATER_CODES
                 self.assertEqual("retry_after" in error["required"], always)
                 if waits:
-                    header = self.components["headers"][_last(response["headers"]["Retry-After"]["$ref"])]
-                    self.assertEqual(header["required"], always)
+                    self.assertEqual(response["headers"]["Retry-After"]["required"], always)

@@ -30,7 +30,7 @@ from hq.platform.core.test_runner import no_default_role
 
 from .. import openapi, views
 from ..components import Components
-from ..testing import Contract, ContractClient
+from ..testing import ContractClient
 from .tokens import ISSUER, OTHER_KEY, RESOURCE, _serving, _token
 
 # A list that matched nothing, with every field the collection contract requires.
@@ -328,26 +328,6 @@ class DocumentTests(SimpleTestCase):
     def test_a_parameterised_route_without_an_expansion_fails_the_build(self):
         with patch.dict(openapi.EXPANSIONS, clear=True), self.assertRaises(openapi.OpenAPIError):
             openapi.document()
-
-    def test_recorded_examples_conform_to_their_operations(self):
-        contract = Contract(self.document)
-        operations = {
-            operation["operationId"]: (path, method) for path, method, operation in _operations(self.document)
-        }
-        examples = json.loads(openapi.EXAMPLES_PATH.read_text(encoding="utf-8"))
-        self.assertTrue(examples)
-        stale = "an example no longer fits its operation: `mise run fix:api-examples` records them again"
-        for operation_id, entry in examples.items():
-            with self.subTest(stale, operation=operation_id):
-                path, method = operations[operation_id]
-                for status, body in entry.get("responses", {}).items():
-                    with self.subTest(stale, operation=operation_id, status=status):
-                        contract.validate(contract.response_pointer(path, method, int(status)), body)
-                if "request" in entry:
-                    contract.validate(
-                        ["paths", path, method, "requestBody", "content", "application/json", "schema"],
-                        entry["request"],
-                    )
 
 
 @override_settings(
