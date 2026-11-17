@@ -98,6 +98,29 @@ ENTRIES = {
             )
         },
     ),
+    # A table with no headings, as the action queue draws, whose rows each
+    # offer several actions with long labels beside words that wrap: the
+    # actions keep their line while the region has room and wrap between
+    # them where it has not.
+    "table/many-actions": Entry(
+        '{% section "Example findings" %}{% table_region "Example findings" %}<table class="data-table"><tbody>'
+        "{% for row in rows %}<tr><td><strong>{{ row.0 }}</strong><p>{{ row.1 }}</p></td>"
+        "{% row_actions row.2 %}</tr>{% endfor %}</tbody></table>{% endtable_region %}{% endsection %}",
+        {
+            "rows": tuple(
+                (
+                    f"example-{at:02} was started outside its compose project",
+                    "An example note long enough to wrap over several lines beside the row's actions.",
+                    (
+                        PageAction(f"Mark example-{at:02} as meant to run", f"/example/{at}/edit/"),
+                        PageAction("Open example containers", "/example/containers/"),
+                        PageAction._built(label="Check again", url=f"/example/{at}/check/", method="post"),
+                    ),
+                )
+                for at in (1, 2)
+            )
+        },
+    ),
     # Values set side by side ({% table_region compare=True %}): each row's
     # field, then its two values sharing the room evenly, one long enough to
     # wrap.

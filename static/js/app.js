@@ -130,7 +130,7 @@ document.addEventListener("change", (event) => {
 // posts, since what they cover is the server's to say.
 document.addEventListener("click", (event) => {
   // The row's own Dismiss or Restore posts the row's key (action_tags.triage).
-  const button = event.target.closest('[data-attention-item] .row-actions > button[name="key"][formaction]');
+  const button = event.target.closest('[data-attention-item] .row-actions button[name="key"][formaction]');
   if (!button || event.defaultPrevented) return;
   const row = button.closest("[data-attention-item]");
   const form = document.getElementById(button.getAttribute("form"));

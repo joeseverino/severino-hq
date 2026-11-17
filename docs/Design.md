@@ -174,9 +174,10 @@ table. No width is computed in Python. A column whose values keep their line
 (a status, a figure, a row's controls, a date) is as wide as its widest
 (`inline-size: 1px` on its heading), and the columns that wrap share the rest
 as the browser shares it. Each column's share is its region's width over one
-more than the count of columns it shows (`--share`, tables.css: a column with
-nothing in any row, or one ranked to leave at the region's width, is not
-counted), the one more
+more than the count of columns it shows (`--share`, tables.css, over the count
+the region writes, `data-columns`: its headings, or in a table with none its
+widest row; a column with nothing in any row, or one ranked to leave at the
+region's width, is not counted), the one more
 kept for what a column asks past its share, and no column asks more than its
 share to hold a value whole, so the columns together never ask more than the
 region. A value longer than a line of words (`data-long` on its cell and
@@ -253,7 +254,10 @@ row's record ends the row as `{% row_actions actions %}`, under a heading of
 kind `control`. Each is a `PageAction` drawn as a compact control with its
 middle on the first line's. A page never draws a button in a cell (*Gate:* the
 `hand-drawn-row-actions` rule). A row's controls stand side by side on one
-line, which their column asks for, and the words beside them wrap first.
+line, which their column asks for, and the words beside them wrap first. The
+line is held to the room the column is sure of, its own share and the one kept
+spare (`cell-controls`, `table_cells`); past it the controls wrap between
+them, so no row of controls holds its table wider than its region.
 Every row's controls end on one edge, and each draws its edge of its own but
 the last, which is quiet only when it sets the row aside (`put_away`, a
 button). A cell of the row's actions is a control whatever its heading says.

@@ -38,6 +38,12 @@ lazy from hq.platform.application import history
 register = template.Library()
 
 _TAG_NAME = re.compile(r"<\w+")
+# The box of the region's own each kind of cell's content is held in (`Cells.boxes`).
+_BOXES = {
+    "cell-clamp": '<div class="cell-clamp">',
+    "cell-short": '<div class="cell-short">',
+    "cell-controls": '<div class="cell-controls">',
+}
 # The order a mark lists its roles in.
 _ROLES = ("name", "prose", "data")
 _END_TAG = re.compile(r"</\s*\w+\s*>")
@@ -160,7 +166,7 @@ def mark_cells(markup: str, *, sorts: bool = True) -> str | None:
     cells.close()
     if cells.bodies and not any(cells.bodies):
         return None
-    if not any((cells.marks, cells.details, cells.roles, cells.cuts, cells.classed, cells.toggles, cells.shorts)):
+    if not any((cells.marks, cells.details, cells.roles, cells.cuts, cells.classed, cells.toggles, cells.boxes)):
         return markup
     text = _Markup(markup)
     cuts = sorted((text.point(start), text.point(end)) for start, end in cells.cuts)
@@ -197,10 +203,10 @@ def _inserts(cells: Cells, markup: str, text: _Markup) -> list[tuple[int, str]]:
             inserts.append((after_name(point[0]), f' class="{" ".join(names)}"'))
         else:
             inserts.append((text.point(point), "".join(f"{name} " for name in names)))
-    for opened, closed in cells.clamps:
-        inserts += [(text.at(opened), '<div class="cell-clamp">'), (text.at(closed), "</div>")]
-    for opened, closed in cells.shorts:
-        inserts += [(text.at(opened), '<div class="cell-short">'), (text.at(closed), "</div>")]
+    for mark, spans in cells.boxes.items():
+        inserts += [
+            each for opened, closed in spans for each in ((text.at(opened), _BOXES[mark]), (text.at(closed), "</div>"))
+        ]
     if cells.toggles:
         # A row drawn open (its editor open) says so on its toggle.
         toggles = {shown: render_to_string("partials/_row_toggle.html", {"open": shown}) for shown in (False, True)}

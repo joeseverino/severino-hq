@@ -48,7 +48,7 @@ SELECTORS = {
     # A table's own rows of records, the lines beneath them left out.
     "own_records": ":scope > tbody > tr:not(.row-detail)",
     # Read inside one row of the queue, so it names nothing above the row's own cell.
-    "decision_dismiss": 'td.row-actions > button[name="key"]',
+    "decision_dismiss": 'td.row-actions button[name="key"]',
     "decision_title": "[data-attention-title]",
     "decision_steps": ".resolution-workflow",
     # What an item means: never cut.

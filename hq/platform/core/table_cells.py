@@ -41,6 +41,9 @@ _HELD = frozenset({"row-more", "line-rest", "narrow-more"})
 # How many widths of its region a table's columns leave at, one rule each in
 # tables.css.
 RANKS = 6
+# How many columns at most a table's share is counted over (`data-columns`),
+# one rule each in tables.css.
+COUNTED = 10
 
 # The tags that end a line of a cell.
 _LINE_ENDS = frozenset({"br", "div", "p", "li", "dt", "dd"})
@@ -209,11 +212,11 @@ class Cells(HTMLParser):
         self.table_at: Position = (0, 0)
         # Where each element or cell with a role starts, and its roles.
         self.roles: dict[tuple[int, int], set[str]] = {}
-        # Each long cell's content, held to a few lines (`cell-clamp`), and
-        # each short one's, held whole up to its column's share (`cell-short`),
-        # where a box of the region's own holds it.
-        self.clamps: list[Span] = []
-        self.shorts: list[Span] = []
+        # The content of each cell a box of the region's own holds, by the
+        # box's class: a long one held to a few lines (`cell-clamp`), a short
+        # one held whole up to its column's share (`cell-short`), and a row's
+        # controls held to theirs (`cell-controls`).
+        self.boxes: dict[str, list[Span]] = {}
         # Each row's open line: where it goes, how many columns it spans, the
         # blocks it shows whole and the entries it names.
         self.details: list[tuple[Position, int, list[Span], list[LineEntry]]] = []
@@ -430,6 +433,12 @@ class Cells(HTMLParser):
             place for row in records for place, cell in _placed(row) if "colspan" not in cell.attrs and _long(cell)
         }
         width = _width(heads, records)
+        # How many columns stand while every one does, each column's share
+        # (tables.css): its last row of headings, or with none its widest
+        # row, less the columns with nothing in any row.
+        counted = heads[-1] if heads else max((row.cells for row in records), key=len, default=[])
+        if (columns := min(COUNTED, sum(index not in empty for index in range(len(counted))))) > 1:
+            self.marks.setdefault(self.table_at, []).append(f' data-columns="{columns}"')
         names, drops, gutter = _columns(heads[-1] if heads else [])
         # The columns that never leave, whatever rank their heading gives
         # them: what a row is (a cell said by its pills alone; a pill beside a
@@ -562,6 +571,12 @@ class Cells(HTMLParser):
             # value's span (ended at a toggle) would leave out.
             elif cell.longest <= SHORT and cell.closed and not cell.folds:
                 self._box(cell, kind, "cell-short")
+        # A row's controls, more than one, keep their line up to their share
+        # and past it wrap between them, so no row of buttons holds its table
+        # wider than its region (tables.css).
+        controls = kind == "control" and cell.controls and len(cell.tops) > 1
+        if body and controls and not cell.fields and cell.closed:
+            self._box(cell, kind, "cell-controls")
         return marks
 
     def _box(self, cell: _Cell, kind: str, mark: str) -> None:
@@ -577,7 +592,7 @@ class Cells(HTMLParser):
         elif mark == "cell-short" and sole and cell.top_tag in _LISTS:
             self._class(cell.top_class, mark)
         else:
-            (self.clamps if mark == "cell-clamp" else self.shorts).append((cell.opened, cell.value_end))
+            self.boxes.setdefault(mark, []).append((cell.opened, cell.value_end))
 
     def _class(self, at: Point, name: str) -> None:
         """Add ``name`` to the class of the element whose start tag is at
