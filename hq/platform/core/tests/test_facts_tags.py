@@ -1,7 +1,5 @@
 """Facts: every label and its value a page shows is one part, in a band or a list."""
 
-import re
-
 from django.template import Context, Template, TemplateSyntaxError
 from django.test import SimpleTestCase
 
@@ -116,18 +114,3 @@ class FactsTagTests(SimpleTestCase):
         # The fact's projection says its tone; the tag has no part for it.
         with self.assertRaises(TemplateSyntaxError):
             Template('{% facts %}{% fact "A" %}1{% tone %}good{% endfact %}{% endfacts %}')
-
-
-class FactsBandWidthTests(SimpleTestCase):
-    def test_a_band_turns_into_a_list_at_the_width_its_tracks_do(self):
-        """A band of two facts switches to one track (`--tracks-2-1`) and its
-        facts to the list's rows (the `band` container query) at one width,
-        below it and not at it: a band exactly that wide, as a dialog's is,
-        otherwise lays out list rows in narrow tracks, a letter a line."""
-
-        from hq.platform.core.stylesheets import stylesheet
-
-        css = stylesheet()
-        (track,) = re.findall(r"--tracks-2-1:\s*clamp\([^,]+,\s*\(([\d.]+rem)\s*-\s*100%\)", css)
-        queries = re.findall(r"@container band\s*\(([^)]*)\)", css)
-        self.assertEqual(queries, [f"width < {track}"])

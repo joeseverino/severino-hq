@@ -245,23 +245,20 @@
   @media (scripting: none) { .row-fold { display: none; } }
 
   /* A band of status facts too narrow for two cells is a list, like every
-     other summary: each fact one row, its label and its value at the right
-     edge, the detail under both. Asked of the band's own width, so a band in
-     a narrow card reads the same as one on a phone, at the width its tracks
-     hold one cell to a row (`--tracks-2-1`). Headline figures (`is-large`)
-     keep their size, each its own cell. */
+     other summary: each fact a row of its own, its label and its value at
+     the right edge, the detail under both. Asked of the band's own width, so
+     a band in a narrow card reads the same as one on a phone. Headline
+     figures (`is-large`) keep their size and their cells. */
   @container band (width < 24rem) {
     /* The label keeps its words up to three fifths of the row and wraps past
        that, and the value never narrows past its longest run that cannot
        break (`min-content`, a count bound to its noun), so a long label never
        squeezes its value to a letter a line or parts a number from its unit. */
-    /* One fact to a row has no neighbor to share its lines with, so it lays out its own rows: rows the band sized would be asked of the fact before its columns have widths, a letter a line. */
-    /* Each fact takes the whole row, however many tracks a band of its count still holds at this width. */
-    .facts-band:not(.is-large) > .fact { grid-column: 1 / -1; grid-row: auto; grid-template-rows: none; grid-template-columns: fit-content(60%) minmax(min-content, 1fr); align-items: baseline; column-gap: var(--space-4); padding-block: var(--space-5); }
+    .facts-band:not(.is-large) > .fact { flex-basis: 100%; display: grid; grid-template-columns: fit-content(60%) minmax(min-content, 1fr); align-items: baseline; gap: var(--space-2) var(--space-4); padding-block: var(--space-5); }
     :is(.card, .section-body) > .facts-band:not(.is-large) > .fact { padding-block: 0; }
-    .facts-band:not(.is-large) dt { grid-row: 1; grid-column: 1; align-self: baseline; font-size: var(--text-sm); }
-    .facts-band:not(.is-large) .fact-value { grid-row: 1; grid-column: 2; text-align: right; font-size: var(--text-md); }
-    .facts-band:not(.is-large) .fact-detail { grid-row: 2; grid-column: 1 / -1; }
+    .facts-band:not(.is-large) dt { font-size: var(--text-sm); }
+    .facts-band:not(.is-large) .fact-value { text-align: right; font-size: var(--text-md); }
+    .facts-band:not(.is-large) .fact-detail { grid-column: 1 / -1; }
   }
 
   /* On paper a pill in a section's head is a link, which cannot be followed
