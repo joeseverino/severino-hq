@@ -285,7 +285,7 @@ def run_there(task: str, host: str, checkout: str, values: dict[str, str], took:
     asked = [sent.id, sender(), checkout, sent.tree, sent.commit, *composed, "env", *handed, "mise", "run", task]
     # Its input closing is what stops the run there.
     stream = subprocess.Popen(
-        [*host_half(host, "run", *asked), *sent.argv],
+        host_half(host, "run", *asked, *sent.argv),
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
