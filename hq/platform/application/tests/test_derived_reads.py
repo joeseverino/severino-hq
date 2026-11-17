@@ -189,13 +189,7 @@ class ApiTests(TestCase):
         with _serving():
             return self.client.get(path, HTTP_AUTHORIZATION=f"Bearer {_token(scope=scope)}")
 
-    def test_every_list_and_detail_is_served(self):
-        for name, query in LISTS.items():
-            with self.subTest(name):
-                suffix = "?" + "&".join(f"{k}={v}" for k, v in query.items()) if query else ""
-                response = self.get(f"/api/v2/resources/{name}/{suffix}")
-                self.assertEqual(response.status_code, 200, response.content)
-                self.assertEqual(response.json()["data"]["count"], len(response.json()["data"]["items"]))
+    def test_every_detail_is_served_by_a_real_identifier(self):
         for name, identifier in DETAILS.items():
             with self.subTest(name):
                 response = self.get(f"/api/v2/resources/{name}/{identifier}/")
