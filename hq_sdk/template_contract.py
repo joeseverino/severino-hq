@@ -24,6 +24,7 @@ lazy from django.template.library import import_library
 lazy from django.template.loader_tags import BlockNode, ExtendsNode, IncludeNode
 lazy from django.template.smartif import TokenBase
 
+lazy from hq.platform.core.interface_text import TEMPLATE_COMMENT
 lazy from hq.platform.core.stylesheets import stylesheet
 lazy from hq.platform.core.table_cells import ROLE_CLASSES
 lazy from hq.platform.core.templatetags.part_tags import SectionTakes
@@ -193,6 +194,76 @@ CLASSES = (
     "visually-hidden",
     "whole",
 )
+
+_VARIABLE = re.compile(r"\{\{.*?\}\}", re.DOTALL)
+_BLOCK = re.compile(r"\{%.*?%\}", re.DOTALL)
+_CLASS_ATTRIBUTE = re.compile(r'\bclass="([^"]*)"')
+# A tag's option that hands it class names (``css``, ``link_css``).
+_CLASS_OPTION = re.compile(r"""\b(?:\w+_)?css=(["'])(.*?)\1""")
+_PREFIX = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*-")
+
+
+def _blanked(pattern: re.Pattern[str], mark: str, text: str) -> str:
+    """Each match as one mark, keeping its line breaks so lines still count."""
+
+    return pattern.sub(lambda match: mark + "\n" * match.group().count("\n"), text)
+
+
+def _named(pieces: list[str], built: bool) -> Iterator[str]:
+    if not built:
+        if pieces[0]:
+            yield pieces[0]
+    elif _PREFIX.fullmatch(pieces[0]):
+        yield f"{pieces[0]}*"
+
+
+def _words(value: str) -> Iterator[str]:
+    """The class names in one attribute, ``\\0`` marking a variable and ``\\1`` a tag.
+
+    A variable is decided at render time, so a word joined to one is built
+    (``pill-{{ tone }}``, named ``pill-*``). A tag only chooses which words
+    are written, so it ends the word before it and starts the one after,
+    unless a hyphen joins the word across it (``tone-{% if a %}ok{% endif %}``),
+    which is built too.
+    """
+
+    for word in value.split():
+        pieces = re.split("([\0\1])", word)
+        name, built = [pieces[0]], False
+        for mark, piece in zip(pieces[1::2], pieces[2::2], strict=True):
+            if mark == "\0" or name[-1].endswith("-") or piece.startswith("-"):
+                name.append(piece)
+                built = True
+            else:
+                yield from _named(name, built)
+                name, built = [piece], False
+        yield from _named(name, built)
+
+
+def class_words(text: str) -> list[tuple[int, str]]:
+    """``(line, name)`` for each class a template writes outside its comments:
+    in a class attribute, or as a tag's ``css`` option. A class built at
+    render time is named by its prefix and ``*``.
+
+    The one reader of a template's classes, for the host's pages and an
+    extension's alike, so what one is refused the other is too.
+    """
+
+    text = _blanked(TEMPLATE_COMMENT, "", text)
+    found = [
+        (text.count("\n", 0, tag.start()) + 1, word)
+        for tag in _BLOCK.finditer(text)
+        for option in _CLASS_OPTION.finditer(tag.group())
+        for word in option.group(2).split()
+    ]
+    markup = _blanked(_BLOCK, "\1", _blanked(_VARIABLE, "\0", text))
+    found += [
+        (markup.count("\n", 0, attribute.start()) + 1, word)
+        for attribute in _CLASS_ATTRIBUTE.finditer(markup)
+        for word in _words(attribute.group(1))
+    ]
+    return found
+
 
 # ``data-`` attributes the host's scripts act on that an extension may write.
 HOOKS = (
@@ -421,16 +492,8 @@ def _tag_parts(compile_function: Any) -> list[str]:
     return list(target.parts[1:]) if isinstance(target, (Takes, SectionTakes)) else []
 
 
-def _class_options(parameters: list[str]) -> list[str]:
-    """The options that hand the tag class names (``css``), held
-    to the public classes as a ``class`` attribute is."""
-
-    return [name.rstrip("=") for name in parameters if re.fullmatch(r"(\w+_)?css=?", name)]
-
-
 def _tag(compile_function: Any) -> dict[str, Any]:
-    parameters = _tag_parameters(compile_function)
-    record = {"parameters": parameters, "parts": _tag_parts(compile_function), "classes": _class_options(parameters)}
+    record = {"parameters": _tag_parameters(compile_function), "parts": _tag_parts(compile_function)}
     target = getattr(compile_function, "__wrapped__", None)
     bare_with = target.bare_with if isinstance(target, Takes) else ""
     return record | ({"bare_with": bare_with} if bare_with else {})

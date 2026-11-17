@@ -217,8 +217,6 @@ _CONTINUATIONS = frozenset({"else", "elif", "empty", "plural"})
 _QUOTED = re.compile(r"\"[^\"]*\"|'[^']*'")
 _FILTER = re.compile(r"\|\s*(\w+)(\s*:)?")
 _TEMPLATE_TAG = re.compile(r"\{[{%#].*?[}%#]\}", re.DOTALL)
-_CLASS = re.compile(r"\bclass=\"([^\"]*)\"")
-_LITERAL = re.compile(r"([\"'])(.*)\1")
 _HOOK = re.compile(r"\s(data-[a-z][a-z0-9-]*)")
 _STYLE = re.compile(r"\sstyle\s*=", re.IGNORECASE)
 
@@ -375,24 +373,11 @@ class _Template:
         problem = _signature_problem(host["parameters"], bits)
         if problem:
             self.problem(line, f"{{% {tag} %}} {problem}")
-        # A class handed over as an option is held as a class attribute is; one
-        # given as a variable is decided when it renders.
-        for bit in bits:
-            option, _, value = bit.partition("=")
-            literal = _LITERAL.fullmatch(value)
-            if option in host["classes"] and literal:
-                self._classes(literal.group(2).split(), line)
         # A later part ({% aside %}) is written only inside its own tag, and a
         # tag given the option that makes it stand alone encloses nothing.
         bare = host.get("bare_with") and any(bit.partition("=")[0] == host["bare_with"] for bit in bits)
         if host["parts"] and not bare:
             self.enclosing.append(tag)
-
-    def _classes(self, words: list[str], line: int) -> None:
-        public = self.contract["classes"]
-        for word in words:
-            if word not in public:
-                self.problem(line, f"class {word} is not public")
 
     def _extends(self, bits: list[str], line: int) -> None:
         parent = bits[1].strip("\"'") if len(bits) > 1 else ""
@@ -457,13 +442,9 @@ class _Template:
         markup = _TEMPLATE_TAG.sub(lambda tag: "\0" + "\n" * tag.group().count("\n"), text)
         classes = set(self.contract["classes"])
         hooks = set(self.contract["hooks"]) | set(self.contract["styled"])
-        for match in _CLASS.finditer(markup):
-            line = markup.count("\n", 0, match.start()) + 1
-            # A name built around a value (``pill-{{ tone }}``) is decided when
-            # it renders; the whole names around it are still checked.
-            for word in match.group(1).split():
-                if "\0" not in word and word not in classes:
-                    self.problem(line, f"class {word} is not public")
+        for line, word in template_contract.class_words(text):
+            if word not in classes:
+                self.problem(line, f"class {word} is not public")
         for match in _HOOK.finditer(markup):
             if match.group(1) not in hooks:
                 line = markup.count("\n", 0, match.start()) + 1

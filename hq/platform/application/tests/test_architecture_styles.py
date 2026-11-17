@@ -9,8 +9,9 @@ from django.test import SimpleTestCase, tag
 from hq.platform.application.tests.reads import reads
 from hq.platform.core.stylesheets import STATIC, sheet_paths, stylesheet
 from hq.platform.core.table_cells import ROLE_CLASSES
+from hq_sdk.template_contract import class_words
 
-from .hand_rolled import ONE_OF_A_KIND, hand_rolled_classes, literal_classes, needless_exemptions
+from .hand_rolled import ONE_OF_A_KIND, hand_rolled_classes, needless_exemptions
 from .source import template_files
 
 
@@ -579,8 +580,8 @@ class TemplateClassStyleTests(SimpleTestCase):
         offenders = sorted(
             f"{name}: .{word}"
             for name, path in template_files()
-            for word in literal_classes(path.read_text(encoding="utf-8"))
-            if word not in defined
+            for _, word in class_words(path.read_text(encoding="utf-8"))
+            if not word.endswith("*") and word not in defined
         )
         self.assertEqual(offenders, [], "define the class where its part is styled, or delete it")
 
@@ -603,27 +604,6 @@ class TemplateClassStyleTests(SimpleTestCase):
             [f"{name}: size={size!r}" for name, size in sizes if f"modal-{size}" not in defined],
             [],
             "name a size the dialog offers (partials/_modal.html), or add it beside .modal-wide in forms.css",
-        )
-
-    def test_literal_classes_reads_attributes_and_tag_options(self):
-
-        self.assertEqual(
-            literal_classes(
-                '<p class="note {{ tone }} tone-{{ x }}{% if a == "b" %} on {% endif %}">{% card css="frame wide" %}'
-                '{% comment %}<b class="gone">{% endcomment %}{# class="gone" #}'
-            ),
-            {"note", "on", "frame", "wide"},
-        )
-
-    def test_literal_classes_reads_a_word_glued_to_a_tag(self):
-
-        self.assertEqual(
-            literal_classes(
-                '<a class="tab{% if a %} tab-current{% endif %}"><b class="{% if a %}band{% else %}list{% endif %}">'
-                '<i class="table{% if dense %} is-dense{% endif %}"><s class="series-{{ slot }}{% if a %} is-start{% endif %}">'
-                '<u class="tone-{% if a %}ok{% endif %} mark-{% if a %}{% endif %}">'
-            ),
-            {"tab", "tab-current", "band", "list", "table", "is-dense", "is-start"},
         )
 
 
