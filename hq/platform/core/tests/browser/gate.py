@@ -687,8 +687,13 @@ class BrowserGate(SimpleTestCase):
         route.fulfill(headers={"Content-Type": content_type, **self.policy}, body=body)
 
     def settle(self):
-        """Wait until the page has drawn what it just did and nothing is moving."""
+        """Wait until the page has drawn what it just did and nothing is
+        moving. A page without script runs no frame callback or timer, so a
+        wait on one never ends; nothing there moves but an animation, which a
+        check or a shot finishes itself."""
 
+        if not self.runs_script:
+            return
         self.page.evaluate(PAINTED)
         self.page.wait_for_function(STILL)
 

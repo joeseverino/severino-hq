@@ -60,13 +60,6 @@ def settled(source):
     return f"async (arg) => {{ ({FINISH_TRANSITIONS})(); return ({source})(arg); }}"
 
 
-# The disclosures a page loads closed, and closing them again: a rule opens
-# them to lay out what they hold, and the page read at its next width is the
-# page as it loaded.
-KEEP_CLOSED = "() => { window.hqLoadedClosed = [...document.querySelectorAll('details:not([open])')]; }"
-
-CLOSE_AGAIN = "() => window.hqLoadedClosed.forEach((details) => { details.open = false; })"
-
 # Press every one of these a reader can see: one drawn but not offered is not.
 PRESS_EVERY_SHOWN = "(controls) => controls.forEach((control) => control.checkVisibility() && control.click())"
 

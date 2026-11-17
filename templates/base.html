@@ -18,7 +18,6 @@
   <link rel="apple-touch-icon" href="{% static 'img/apple-touch-icon.png' %}">
   {% include "partials/_color_scheme.html" %}
   {% include "partials/_first_frame.html" %}
-  <script src="{% static 'js/transitions.js' %}" {% csp_nonce_attr %}></script>
   {% block head_extra %}{% endblock %}
 </head>
 <body data-sign-in="{% url 'login' %}" data-ask-refreshing="{% refreshing %}">
@@ -59,12 +58,7 @@
     {% endif %}
   {% endif %}
 
-  {# A script that clones frames loads with them, through its part. #}
-  {% include "scripts/fragment.html" %}
-  <script src="{% static 'js/tables.js' %}" {% csp_nonce_attr %} defer></script>
-  <script src="{% static 'js/app.js' %}" {% csp_nonce_attr %} defer></script>
-  {% include "scripts/ask.html" %}
-  {% include "scripts/connection.html" %}
+  {% include "scripts/page.html" %}
   {% block scripts_extra %}{% endblock %}
 </body>
 </html>

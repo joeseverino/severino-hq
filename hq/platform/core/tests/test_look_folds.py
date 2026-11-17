@@ -51,6 +51,8 @@ class _FoldLens:
     a defect in each fold that is open."""
 
     css, script, dialogs, on_reference, lists = "", "", [], False, ()
+    # A page drawn with script, as the look draws one unless --no-script.
+    runs_script, tables_swept = True, frozenset()
 
     def __init__(self, page):
         self.page, self.judging, self.shown = page, [], []
@@ -75,9 +77,9 @@ class _FoldLens:
 
 @tag("source")
 class FoldsOpenTests(SimpleTestCase):
-    def looked(self, page, rule="survey", folds="true", unscripted=()):
+    def looked(self, page, rule="survey", folds="true", entries=()):
         lens = _FoldLens(page)
-        lens.unscripted = frozenset(unscripted)
+        lens.entries = frozenset(entries)
         asked = {**ASKED, "usage_open_folds": folds}
         with mock.patch.dict(os.environ, asked), mock.patch("sys.stdout", new_callable=io.StringIO):
             return lens, lens.look("example/one", 402, rule)
@@ -111,14 +113,22 @@ class FoldsOpenTests(SimpleTestCase):
         self.assertEqual(lens.judging, [[]])
 
     def test_a_page_its_gate_reads_open_is_judged_open_unasked(self):
-        """A catalog entry is drawn without script, and its gate judges it
-        again with every fold open, so the survey does too."""
+        """A catalog entry's gate judges it again with every fold open, so
+        the survey does too."""
 
         page = _Folded()
-        lens, said = self.looked(page, folds="false", unscripted=["example/one"])
-        self.assertEqual(lens.judging[-1], ["example-inner", "example-outer", "example-region"])
+        lens, said = self.looked(page, folds="false", entries=["example/one"])
+        self.assertIn(["example-inner", "example-outer", "example-region"], lens.judging)
         self.assertIn("with every fold open: cells: cut in example-outer", said)
         self.assertFalse(any(page.open.values()))
+
+    def test_a_page_whose_gate_reads_its_tables_at_every_width_is_read_so_once_from_its_first_width(self):
+        lens = _FoldLens(_Folded(folds=()))
+        lens.entries = frozenset({"example/one"})
+        with mock.patch.dict(os.environ, ASKED), mock.patch("sys.stdout", new_callable=io.StringIO):
+            first, second = (lens.look("example/one", width, "survey") for width in (320, 402))
+        self.assertIn("at every width: frames: a box beneath", first)
+        self.assertEqual(second, ["frames: a box beneath"])
 
     def test_a_rule_of_one_check_judges_the_page_as_its_gate_does_with_its_folds_closed(self):
         page = _Folded()

@@ -1218,11 +1218,12 @@ gallery as its content, drawn by a checkout's server from the catalog it runs on
 read from the image build's copy in the image. An entry is answered from memory as a gate page is, with no
 server or estate behind it, so a look at one entry is the quick way to see a
 change to a shared part, ahead of the catalog's whole browser class. A name that begins entries
-(`part/notice`, `table`) is each of them, in the catalog's order. The gate
-reads the catalog without script, so a look draws an entry without it too, in
-a context of its own beside a real page's, which keeps script unless
-`--no-script`. A page drawn without script runs no frame or timer, so the
-look waits on none there: `--eval`, `--css` and `--open` read it as it stands.
+(`part/notice`, `table`) is each of them, in the catalog's order. An
+entry's page loads HQ's scripts as base.html does (`scripts/page.html`), and
+the gate reads it twice, as the server drew it and once its scripts have run,
+so a look draws an entry with script, as any page, unless `--no-script`. A
+page drawn without script runs no frame or timer, so the look waits on none
+there: `--eval`, `--css` and `--open` read it as it stands.
 The catalog builds its entries as it is imported, so a look reads it only
 for `all` or a name no other page is: a `--base` whose parts' constructors this
 checkout's catalog does not fit still looks at every other page.
@@ -1290,10 +1291,14 @@ none of it. It reads each page as its gate does (`Judged` in
 its widths, `WIDE_TABLES` among them on a page that draws a table, and where
 the gate opens a page (a catalog entry, a list, a page without script),
 again with every fold open, a fold within a fold and one a region brings in
-included (`survey.open_every_fold`), saying only what that adds under "with
+included (`survey.open_every_fold`), and with script every row a reader
+can open opened by its own toggle, saying only what that adds under "with
 every fold open", and with each anchored popover shown at the widths the
 gate shows one. `--open-folds` opens a page with script the same way. The
-folds close again before a dialog opens.
+folds close again before a dialog opens. Where the gate reads a page's
+tables at every window width (a catalog entry and a dense page with script),
+the survey does too, from the first width it looks at, under "at every
+width".
 
 A run that judges takes no screenshots, since a shot and its bands cost more
 than the rule that reads the page: `--shots` takes them too, and `--base`,

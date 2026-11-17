@@ -56,7 +56,17 @@ from hq.platform.core.tests.browser.survey import (
     palette_probes,
     survey_checks,
 )
-from hq.platform.core.tests.browser.widths import ENTRY, LIST, PHONE_SCREEN, SCRIPTED, UNSCRIPTED, WIDTHS, Judged
+from hq.platform.core.tests.browser.widths import (
+    DENSE,
+    ENTRY,
+    LIST,
+    PHONE_SCREEN,
+    SCRIPTED,
+    SCRIPTED_ENTRY,
+    UNSCRIPTED,
+    WIDTHS,
+    Judged,
+)
 from hq.platform.core.tests.look_posts import Posted, is_post, post_names, posted
 from hq.platform.core.tests.look_records import EstatePages
 from hq.platform.core.tests.look_reference import (
@@ -84,6 +94,7 @@ from hq.platform.core.tests.look_report import (
 )
 from hq.platform.core.tests.look_tables import COLUMNS, TABLES, columns_line
 from hq.platform.core.tests.task import PREFIX, TEMPLATE, Usage, estate_name, estate_path, is_estate, usage
+from hq.platform.core.tests.test_browser_dense_fixtures import DENSE_PAGES
 from hq.platform.core.tests.test_browser_derived_fixtures import derived_pages
 lazy from hq.platform.core.example_estate import REQUEST
 lazy from hq.platform.core.example_estate.agents import example_viewer
@@ -1228,8 +1239,10 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
     on_reference = False
     # Whether the run takes its screenshots, as ``asked_for`` decides.
     shooting = True
-    # The catalog entries asked, which are drawn without script (``scripted_for``).
-    unscripted: frozenset[str] = frozenset()
+    # The catalog entries asked, judged as the catalog's gate judges them (``judged_as``).
+    entries: frozenset[str] = frozenset()
+    # The pages whose tables were read at every width (``at_every_width``).
+    tables_swept: frozenset[str] = frozenset()
     # The lists asked, filled with the longest values their models hold (``judged_as``).
     lists: tuple[str, ...] = ()
     # A look's record is its findings and shots; a trace would snapshot the
@@ -1355,7 +1368,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         cls.addresses = {name: estate_path(name) for name in {*estate, *filter(is_estate, pages)}}
         cls.addresses |= {name: posted(name).address() for name in filter(is_post, pages)}
         entries = catalog_pages(pages)
-        cls.unscripted = frozenset(entries)
+        cls.entries = frozenset(entries)
         cls.lists = tuple(name for name in derived_pages() if name in pages)
         rendered = stress_pages(pages) | entries
         if set(pages) & set(REFERENCE_PAGES):
@@ -1467,8 +1480,6 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
 
     @override
     def open(self, name, width):
-        # Every page, since one after a catalog entry would be drawn as it was.
-        self.draw_scripted_as(name)
         if is_estate(name):
             self.visit(self.addresses[name], width)
         elif is_post(name):
@@ -1492,33 +1503,10 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
 
     @override
     def left_out_on(self, path):
-        return catalog.left_out_on(path) if path in self.unscripted else super().left_out_on(path)
-
-    def scripted_for(self, name) -> bool:
-        """Whether ``name`` is drawn with script: a page is unless
-        ``--no-script``, and a catalog entry never is, as the catalog's gate
-        judges it (``CatalogLayoutTests``), so a look at one sees the state
-        that gate does."""
-
-        return not _asked().switch("no_script") and name not in self.unscripted
-
-    def draw_scripted_as(self, name):
-        """A context that runs script as ``name`` is drawn with, started
-        afresh only when the one open does not."""
-
-        if (scripted := self.scripted_for(name)) != self.runs_script:
-            self.draw_with_script(scripted)
+        return catalog.left_out_on(path) if path in self.entries else super().left_out_on(path)
 
     def draw_with_script(self, scripted):
         self.start(java_script_enabled=scripted, color_scheme="dark" if _asked().switch("dark") else "light")
-
-    @override
-    def settle(self):
-        # A page without script runs no frame callback or timer, so a wait on
-        # one never ends; nothing there moves but an animation, which the shot
-        # finishes itself (``animations="disabled"``).
-        if self.runs_script:
-            BrowserGate.settle(self)
 
     def test_look(self):
         rule = self.asked_for()
@@ -1719,15 +1707,18 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         return rule
 
     def judged_as(self, name) -> Judged:
-        """How the gate that reads ``name`` judges it, as drawn here: a
-        catalog entry, a page without script, a list filled with its longest
-        values, or a page once its script has run."""
+        """How the gate that reads ``name`` judges it, as drawn here, with
+        script unless ``--no-script``: a catalog entry, a page without script,
+        a list filled with its longest values, a dense page, or a page once its
+        script has run."""
 
-        if name in self.unscripted:
-            return ENTRY
-        if not self.scripted_for(name):
+        if name in self.entries:
+            return SCRIPTED_ENTRY if self.runs_script else ENTRY
+        if not self.runs_script:
             return UNSCRIPTED
-        return LIST if name in self.lists else SCRIPTED
+        if name in self.lists:
+            return LIST
+        return DENSE if name in DENSE_PAGES else SCRIPTED
 
     def widths_of(self, name):
         """The widths ``--widths`` names, or else each its gate judges
@@ -1757,7 +1748,20 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         said += self.with_each_dialog(name, width, rule, said)
         if self.on_reference and _asked().switch("open"):
             said += self.with_each_tag_opened(name, width, rule, said)
+        # Last, since the sweep leaves every fold open: the next width loads afresh.
+        said += self.at_every_width(name, width, rule)
         return said
+
+    def at_every_width(self, name, width, rule) -> list[str]:
+        """What the survey finds in the page's tables at every window width,
+        from the first width it is looked at, where its gate reads them so
+        (``Judged.every_width``)."""
+
+        if rule != "survey" or not self.judged_as(name).every_width or name in self.tables_swept:
+            return []
+        self.tables_swept = self.tables_swept | {name}
+        stall_watch.mark(f"dev:look {name} at every width from {width}")
+        return [f"at every width: {line}" for line in self.judged(name, width, "a_table_fits_its_box_at_every_width")]
 
     def judged(self, name, width, rule) -> list[str]:
         """What ``rule`` finds on the page as it stands."""

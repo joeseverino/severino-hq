@@ -3,6 +3,7 @@
 import re
 from pathlib import Path
 
+from django.template.loader import render_to_string
 from django.test import SimpleTestCase, tag
 
 from hq.platform.application.tests.reads import reads
@@ -57,7 +58,7 @@ class ScriptLoadingTests(SimpleTestCase):
         self.assertEqual(unnonced, [])
 
     def test_the_one_loads_in_the_head_without_waiting(self):
-        base = (ROOT / "templates" / "base.html").read_text(encoding="utf-8")
+        base = render_to_string("base.html")
         head = base[: base.index("</head>")]
         for name in BEFORE_DRAWING:
             with self.subTest(script=name):
@@ -77,7 +78,7 @@ class ScriptLoadingTests(SimpleTestCase):
         self.assertEqual([found.group() for found in MEASURES.finditer(script)], [])
 
     def test_a_page_script_loads_wherever_its_element_is_drawn(self):
-        base = (ROOT / "templates" / "base.html").read_text(encoding="utf-8")
+        base = render_to_string("base.html")
         for script, hook in PAGE_SCRIPTS.items():
             with self.subTest(script=script):
                 self.assertNotIn(script, base)

@@ -19,6 +19,7 @@ from hq.platform.application import references
 from hq.platform.application.entity_links import EntityLink
 from hq.platform.application.pages import Page
 from hq.platform.core.templatetags import write_tags
+from hq.platform.core.tests.browser.serving import NONCE
 
 # What names a thing, for {% referenced_by %}: the gallery is built with no
 # database, so the rows a reference is held in are these.
@@ -128,17 +129,22 @@ HEAD = "partials/_page_head.html"
 COLOR_SCHEME = "partials/_color_scheme.html"
 FIRST_FRAME = "partials/_first_frame.html"
 MAIN = "partials/_page_main.html"
+SCRIPTS = "scripts/page.html"
 
 
 def part_page(name, markup, before="", after="", main=""):
-    """A page titled ``name``, of HQ's stylesheets, with ``markup`` alone in
-    the content column base.html draws, or ``main`` drawn as that column, and
-    the frame's parts it draws before and after it."""
+    """A page titled ``name``, of HQ's stylesheets and scripts, as base.html
+    loads them, with ``markup`` alone in the content column base.html draws,
+    or ``main`` drawn as that column, and the frame's parts it draws before
+    and after it. A browser with script off has the page as the server drew
+    it, one with script on the page a reader has: one document, both states."""
 
     main = main or render_to_string(MAIN, {"content": mark_safe(markup)})  # noqa: S308 - the catalog's own rendered markup
+    # The nonce the gates answer a page a test put together with (gate.policy).
+    nonce = {"csp_nonce": NONCE}
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
-        f"{render_to_string(COLOR_SCHEME)}<title>{escape(name)}</title>{render_to_string(FIRST_FRAME)}</head>"
-        f"<body>{before}{main}{after}</body></html>"
+        f"{render_to_string(COLOR_SCHEME)}<title>{escape(name)}</title>{render_to_string(FIRST_FRAME, nonce)}</head>"
+        f"<body>{before}{main}{after}{render_to_string(SCRIPTS, nonce)}</body></html>"
     )
