@@ -5,15 +5,16 @@ about them is here.
 """
 
 import re
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
 from pydantic import Field, field_validator
 
 from hq.platform.application.command_fields import RequiredText
+from hq.platform.application.container_standard import CHECK_IDS
 from hq.platform.application.describe import Describe
 from hq.platform.application.github_public import GitHubRepositoryURL
+from hq.platform.application.record_fields import one_of
 from hq.platform.application.ui import ended
-lazy from hq.platform.application.container_standard import CHECK_IDS
 
 from ..connection_shapes import API_TOKEN
 from ..observations import portainer as readings
@@ -29,6 +30,13 @@ from ..provider_spec import (
 
 CONTAINER_KIND = "portainer.container"
 CONTAINER_STACK_KIND = "portainer.stack"
+
+# A check of the container standard, by id. The set is read at run time, so a
+# type checker reads the key as text.
+if TYPE_CHECKING:
+    type CheckId = str
+else:
+    CheckId = one_of(sorted(CHECK_IDS))
 
 
 class PortainerContainerSpec(ProviderModel):
@@ -64,7 +72,7 @@ class PortainerContainerSpec(ProviderModel):
         title="Holds the Docker socket",
         description="A socket proxy or agent whose job is Docker. Its socket access is listed, not flagged.",
     )
-    by_design: dict[str, str] = Field(
+    by_design: dict[CheckId, Annotated[str, Field(pattern=r"\S")]] = Field(
         default_factory=dict,
         title="Checks its job requires",
         description=(
@@ -97,13 +105,8 @@ class PortainerContainerSpec(ProviderModel):
 
     @field_validator("by_design")
     @classmethod
-    def _known_checks_with_reasons(cls, value: dict[str, str]) -> dict[str, str]:
-        unknown = sorted(set(value) - CHECK_IDS)
-        if unknown:
-            raise ValueError(f"Not a check of the container standard: {', '.join(unknown)}.")
-        if any(not str(reason).strip() for reason in value.values()):
-            raise ValueError("Each check needs the reason its job requires it.")
-        return {check: str(reason).strip() for check, reason in value.items()}
+    def _reasons_trimmed(cls, value: dict[str, str]) -> dict[str, str]:
+        return {check: reason.strip() for check, reason in value.items()}
 
 
 class PortainerStackEnvVar(ProviderModel):

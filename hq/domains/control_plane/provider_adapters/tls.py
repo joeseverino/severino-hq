@@ -98,16 +98,14 @@ class TLSCertificateSpec(ProviderModel):
         title="Certificate name",
         description="Lowercase, no spaces.",
     )
-    domains: list[str] = Field(
-        default_factory=list,
+    domains: Annotated[list[str], NonEmpty()] = Field(
         title="Domains",
         description=(
             "Wildcards are allowed. Each domain must be in a Cloudflare zone "
             "HQ can edit, for the Let's Encrypt DNS challenge."
         ),
     )
-    install_on: list[str] = Field(
-        default_factory=list,
+    install_on: Annotated[list[str], NonEmpty()] = Field(
         title="Install it on",
         description=("Where the certificate is deployed. Delivery settings are on each target."),
     )
@@ -121,20 +119,6 @@ class TLSCertificateSpec(ProviderModel):
             "Days before expiry that renewal starts. HQ also renews at once if a site serves the wrong certificate."
         ),
     )
-
-    @model_validator(mode="after")
-    def a_certificate_needs_names_and_somewhere_to_go(self) -> TLSCertificateSpec:
-        missing = [
-            label
-            for label, value in (
-                ("the names it covers", self.domains),
-                ("somewhere to install it", self.install_on),
-            )
-            if not value
-        ]
-        if missing:
-            raise ValueError(f"{self.certificate_name} still needs " + " and ".join(missing) + ".")
-        return self
 
 
 class ResolvedTLSCertificateSpec(ProviderModel):

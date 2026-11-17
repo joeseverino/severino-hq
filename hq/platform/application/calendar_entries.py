@@ -15,7 +15,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.db.models.functions import Coalesce
 from django.utils import timezone
-from pydantic import Field
+from pydantic import AfterValidator, Field, WithJsonSchema
 
 from hq.domains.calendars.models import INTERVAL_MAXIMUM, INTERVAL_MINIMUM, Entry, Preference
 from hq.platform.application.labels import dotted
@@ -213,6 +213,23 @@ type CalendarEntryWeekdays = Annotated[
 type CalendarEntryRepeatUntil = Annotated[
     date | None, Describe("The last day it repeats.", api="Null for no last day.")
 ]
+
+
+def _of_the_clock(value: time) -> time:
+    # A time column stores a time of day and no offset: SQLite refuses one.
+    if value.tzinfo is not None:
+        raise ValueError("A time of day takes no offset.")
+    return value
+
+
+type ClockTime = Annotated[
+    time,
+    AfterValidator(_of_the_clock),
+    WithJsonSchema(
+        {"type": "string", "pattern": r"^(?:[01][0-9]|2[0-3]):[0-5][0-9](?::[0-5][0-9](?:\.[0-9]{1,6})?)?$"}
+    ),
+    Describe("A time of day, as the clock on the wall reads it."),
+]
 type CalendarEntryAbout = Annotated[
     str, Refers(Entry, "about"), Describe("What it is about.", api="A `type:key` reference; empty for nothing.")
 ]
@@ -226,8 +243,8 @@ class EntryCommand:
     title: CalendarEntryTitle
     starts_on: CalendarEntryStartsOn
     ends_on: CalendarEntryEndsOn = None
-    starts_at: Annotated[time | None, Describe("The time it starts; blank for all day.")] = None
-    ends_at: Annotated[time | None, Describe("The time it ends.")] = None
+    starts_at: Annotated[ClockTime | None, Describe("The time it starts; blank for all day.")] = None
+    ends_at: Annotated[ClockTime | None, Describe("The time it ends.")] = None
     location: CalendarEntryLocation = ""
     notes: Notes = ""
     repeat: CalendarEntryRepeat = ""

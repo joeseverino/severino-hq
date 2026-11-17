@@ -16,14 +16,15 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Exists, F, Max, OuterRef, Q
 from django.utils import timezone
-from pydantic import Field
+from pydantic import Field, GetJsonSchemaHandler
+from pydantic_core import CoreSchema
 
 from hq.domains.control_plane.models import (
     OPERATION_LAPSE,
@@ -87,6 +88,36 @@ class ControllerSweepCommand:
         Field(title="Type of reading"),
     ] = ""
     every_connection: Annotated[bool, Describe("Read every connection now.")] = False
+
+    @classmethod
+    def __get_pydantic_json_schema__(cls, schema: CoreSchema, handler: GetJsonSchemaHandler) -> dict[str, Any]:
+        # The subject each shape of the command names, said beside its fields.
+        declared: dict[str, Any] = handler(schema)
+        handler.resolve_ref_schema(declared)["oneOf"] = [_naming(subject) for subject in (None, *_UNNAMED)]
+        return declared
+
+
+# Each subject a sweep names, and what it holds when it names none: a blank
+# connection, no kind, not every connection.
+_UNNAMED: dict[str, dict[str, Any]] = {
+    "connection_ref": {"pattern": r"^\s*$"},
+    "kind": {"const": ""},
+    "every_connection": {"const": False},
+}
+_NAMED: dict[str, dict[str, Any]] = {
+    "connection_ref": {"pattern": r"\S"},
+    "kind": {"minLength": 1},
+    "every_connection": {"const": True},
+}
+
+
+def _naming(subject: str | None) -> dict[str, Any]:
+    """The shape of a sweep that names ``subject`` alone, or none."""
+
+    return {
+        "properties": {field: (_NAMED if field == subject else _UNNAMED)[field] for field in _UNNAMED},
+        "required": [subject] if subject else [],
+    }
 
 
 def _seconds(name: str) -> int:
