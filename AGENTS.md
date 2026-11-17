@@ -211,11 +211,9 @@ A piece of work is done when `mise run fast` passes on its tip, with the
 tests its change touches (`mise run test <labels>`). A change to what a page
 shows also needs `mise run dev:look` on each page its templates draw.
 
-The whole-tree runs belong to the branch the work lands on. A change to what
-pages draw is followed there by `mise run dev:look --rule survey all` in
-WebKit and in Chromium (`--engine`), since a shared sheet or part reaches
-pages the change never named.
-The browser suite and the release check run once before the branch ships.
+The whole-tree runs belong to CI. A shared sheet or part reaches pages the
+change never named, so the browser suite on the pushed branch judges every
+page in both engines; no whole-tree run is repeated on the Mac.
 
 That branch is ready when `mise run check --release` exits 0, or
 `mise run check --release --remote` for a pushed commit: every CI gate, the
@@ -227,7 +225,7 @@ says how to verify it.
 - Tests cover success, denial, invalid input, and the regression class where
   applicable, not only the happy path.
 - A change to templates or CSS is walked in a real browser through the
-  workflow it serves, and the branch it lands on passes `mise run browser`.
+  workflow it serves, and the branch it lands on passes CI's browser suite.
 - Docs change when a supported contract changes.
 - No private identifiers, generated artifacts, secrets, or unrelated edits
   enter the diff.
