@@ -165,8 +165,7 @@ _ENTRY_FIELDS: dict[str, tuple[Any, Describe] | TypeAliasType] = {
     "environment": DocEnvironment,
     "status": DocStatus,
     "sensitivity": DocSensitivity,
-    "path": (str, Describe("Where the doc is in the vault, which `obsidian_path` stands in for.")),
-    "obsidian_path": (str, Describe("Its path in the vault.")),
+    "path": (str, Describe("Where the doc is in the vault.")),
     "github_path": (str, Describe("Its path in a repository.")),
     "external_url": (str, Describe("Where it is published outside HQ.")),
     "last_reviewed": (date, Describe("When the doc last changed in the vault.")),
@@ -178,10 +177,7 @@ _ENTRY_FIELDS: dict[str, tuple[Any, Describe] | TypeAliasType] = {
     "slug": (str, Describe("For site content, the slug of the item it mirrors to.")),
     "published": (bool, Describe("For site content, whether it is live on the site.")),
     "topic": (str, Describe("For site content, what it is about, in a line.")),
-    "description": (str, Describe("For site content, its description, which `topic` stands in for.")),
-    "excerpt": (str, Describe("For site content, its excerpt, read where it has no description.")),
     "tags": (list[str], Describe("The doc's tags.")),
-    "technologies": (list[str], Describe("For site content, what it was built with, read as its tags.")),
 }
 # A vault doc's id begins with one of the vault's prefixes; a content entry's
 # belongs to the site, so it need only hold something. A prefix's hyphen is

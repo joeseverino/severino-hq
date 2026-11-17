@@ -13201,16 +13201,6 @@
           "content_type": {
             "$ref": "#/components/schemas/ManifestSiteContentType"
           },
-          "description": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ManifestDescription"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "doc_id": {
             "$ref": "#/components/schemas/ManifestSiteDocId"
           },
@@ -13219,16 +13209,6 @@
           },
           "environment": {
             "$ref": "#/components/schemas/DocEnvironment"
-          },
-          "excerpt": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ManifestExcerpt"
-              },
-              {
-                "type": "null"
-              }
-            ]
           },
           "external_url": {
             "anyOf": [
@@ -13264,16 +13244,6 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/DocNotes"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "obsidian_path": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ManifestObsidianPath"
               },
               {
                 "type": "null"
@@ -13352,16 +13322,6 @@
               }
             ]
           },
-          "technologies": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ManifestTechnologies"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "title": {
             "$ref": "#/components/schemas/ManifestTitle"
           },
@@ -13394,10 +13354,6 @@
         "description": "For site content, what it is on the site, such as `portfolio_article` or `page`.",
         "type": "string"
       },
-      "ManifestDescription": {
-        "description": "For site content, its description, which `topic` stands in for.",
-        "type": "string"
-      },
       "ManifestDoc": {
         "description": "A doc of the vault's manifest: its frontmatter, its path, and what it relates to.",
         "properties": {
@@ -13405,16 +13361,6 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/ManifestContentType"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "description": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ManifestDescription"
               },
               {
                 "type": "null"
@@ -13429,16 +13375,6 @@
           },
           "environment": {
             "$ref": "#/components/schemas/DocEnvironment"
-          },
-          "excerpt": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ManifestExcerpt"
-              },
-              {
-                "type": "null"
-              }
-            ]
           },
           "external_url": {
             "anyOf": [
@@ -13474,16 +13410,6 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/DocNotes"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "obsidian_path": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ManifestObsidianPath"
               },
               {
                 "type": "null"
@@ -13563,16 +13489,6 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/ManifestTags"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "technologies": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ManifestTechnologies"
               },
               {
                 "type": "null"
@@ -13631,16 +13547,6 @@
               }
             ]
           },
-          "description": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ManifestDescription"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "doc_id": {
             "$ref": "#/components/schemas/ManifestVaultDocId"
           },
@@ -13649,16 +13555,6 @@
           },
           "environment": {
             "$ref": "#/components/schemas/DocEnvironment"
-          },
-          "excerpt": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ManifestExcerpt"
-              },
-              {
-                "type": "null"
-              }
-            ]
           },
           "external_url": {
             "anyOf": [
@@ -13694,16 +13590,6 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/DocNotes"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "obsidian_path": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ManifestObsidianPath"
               },
               {
                 "type": "null"
@@ -13789,16 +13675,6 @@
               }
             ]
           },
-          "technologies": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ManifestTechnologies"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "title": {
             "$ref": "#/components/schemas/ManifestTitle"
           },
@@ -13847,10 +13723,6 @@
         "description": "A doc of the manifest, in the shape its doc type and content take.",
         "title": "Manifest entry"
       },
-      "ManifestExcerpt": {
-        "description": "For site content, its excerpt, read where it has no description.",
-        "type": "string"
-      },
       "ManifestExternalUrl": {
         "description": "Where it is published outside HQ.",
         "type": "string"
@@ -13864,12 +13736,8 @@
         "format": "date",
         "type": "string"
       },
-      "ManifestObsidianPath": {
-        "description": "Its path in the vault.",
-        "type": "string"
-      },
       "ManifestPath": {
-        "description": "Where the doc is in the vault, which `obsidian_path` stands in for.",
+        "description": "Where the doc is in the vault.",
         "type": "string"
       },
       "ManifestPublished": {
@@ -13921,13 +13789,6 @@
       },
       "ManifestTags": {
         "description": "The doc's tags.",
-        "items": {
-          "type": "string"
-        },
-        "type": "array"
-      },
-      "ManifestTechnologies": {
-        "description": "For site content, what it was built with, read as its tags.",
         "items": {
           "type": "string"
         },

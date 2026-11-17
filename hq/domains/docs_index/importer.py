@@ -133,7 +133,7 @@ def _build_record_defaults(entry: dict) -> dict:
         "environment": _validate_choice(entry, "environment", default="other"),
         "status": _validate_choice(entry, "status"),
         "sensitivity": _validate_choice(entry, "sensitivity", default="internal"),
-        "obsidian_path": entry.get("path") or entry.get("obsidian_path") or "",
+        "obsidian_path": entry.get("path") or "",
         "github_path": entry.get("github_path") or "",
         "external_url": entry.get("external_url") or "",
         "last_reviewed": _coerce_date(entry.get("last_reviewed")),
@@ -218,14 +218,14 @@ def _upsert_content_item(
 
     item_status = ContentItem.Status.PUBLISHED if entry["published"] else ContentItem.Status.DRAFT
 
-    tags = entry.get("tags") or entry.get("technologies") or []
+    tags = entry.get("tags") or []
     tags_str = ", ".join(t for t in tags if t) if isinstance(tags, list) else str(tags)
 
     content_defaults = {
         "title": defaults["title"],
         "content_type": content_type,
         "status": item_status,
-        "topic": (entry.get("topic") or entry.get("description") or entry.get("excerpt") or entry.get("system") or ""),
+        "topic": entry.get("topic") or entry.get("system") or "",
         "tags": tags_str,
         "published_url": defaults.get("external_url") or "",
         "published_at": defaults.get("published_at"),
@@ -255,7 +255,7 @@ def _upsert_content_item(
 
 
 def _tag_list(entry: dict) -> list[str]:
-    tags = entry.get("tags") or entry.get("technologies") or []
+    tags = entry.get("tags") or []
     if isinstance(tags, list):
         return [str(tag).strip() for tag in tags if str(tag).strip()]
     if isinstance(tags, str):
