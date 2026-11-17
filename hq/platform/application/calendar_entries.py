@@ -207,7 +207,7 @@ type CalendarEntryInterval = Annotated[
     Describe("How far apart its times are, in what it repeats by: 2 with weekly is every other week."),
 ]
 type CalendarEntryWeekdays = Annotated[
-    Sequence[int],
+    Sequence[Annotated[int, Field(ge=month_lengths.MONDAY, le=month_lengths.SUNDAY)]],
     Describe("For one that repeats weekly, the days of the week it falls on, Monday as 0.", api="Empty otherwise."),
 ]
 type CalendarEntryRepeatUntil = Annotated[

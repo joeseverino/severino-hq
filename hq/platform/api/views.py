@@ -262,8 +262,10 @@ def _operator(request: HttpRequest) -> AbstractBaseUser | None:
 def _target(kind: str, words: str) -> dict[str, Any]:
     """The target's schema for a capability whose target is of ``kind``, said in its own words."""
 
+    # An id is the envelope's own (``RecordId``), whose definition the body's schema carries.
+    number = ENVELOPE_SCHEMA["properties"]["target"]["anyOf"][0]
     schema: dict[str, Any] = (
-        {"oneOf": [{"type": "integer"}, {"type": "string", "pattern": INTEGER_TARGET}], "examples": [42]}
+        {"oneOf": [number, {"type": "string", "pattern": INTEGER_TARGET}], "examples": [42]}
         if kind == "integer"
         else {"type": "string", "minLength": 1, "examples": [f"example-{kind.replace('_', '-')}"]}
     )

@@ -56,6 +56,10 @@ class CallEnvelopeTests(TestCase):
             "expense.update": [
                 {"payload": {}, "target": f"{SECRET}"},
                 {"payload": {}, "target": True},
+                {"payload": {}, "target": 0},
+                {"payload": {}, "target": "-7"},
+                {"payload": {}, "target": 2**63},
+                {"payload": {}, "target": str(2**63)},
             ],
             "project.update": [
                 {"payload": {}, "target": ""},
@@ -87,7 +91,7 @@ class CallEnvelopeTests(TestCase):
 
     def test_an_integer_target_may_be_its_digits(self):
         validator = _envelope("expense.update")
-        for target in (7, "7", "-7"):
+        for target in (7, "7"):
             with self.subTest(target=target):
                 self.assertTrue(validator.is_valid({"payload": {}, "target": target}))
                 self.assertEqual(

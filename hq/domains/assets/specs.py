@@ -6,7 +6,6 @@ from pydantic import Field, create_model
 
 from hq.platform.application import assets
 from hq.platform.application.answer_fields import (
-    BusinessUseShare,
     DeductibleAmount,
     LinkedContent,
     LinkedDocs,
@@ -15,6 +14,7 @@ from hq.platform.application.answer_fields import (
     TotalCostAmount,
     UpdatedAt,
 )
+from hq.platform.application.business_use import BusinessUseShare
 from hq.platform.application.describe import Describe
 from hq.platform.application.integration_specs import ResourceSpec
 from hq.platform.application.record_fields import Notes

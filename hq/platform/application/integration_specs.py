@@ -441,7 +441,8 @@ class ResourceSpec(Requires):
     list_query_type: type[BaseModel] | None = None
     detail_handler: Callable[..., object] | None = None
     identifier: str | None = None
-    identifier_type: type = str
+    # A type, or one an ``Annotated`` bounds (``RecordId``).
+    identifier_type: Any = str
     # RecordNotFound is answered as not found without being listed; these are
     # the other types a detail handler raises for a missing record, such as an
     # extension model's DoesNotExist.

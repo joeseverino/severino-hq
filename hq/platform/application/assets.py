@@ -8,7 +8,7 @@ from typing import Annotated, Any
 
 from hq.domains.assets.models import ASSET_CATEGORY_CHOICES, PAYMENT_METHOD_CHOICES, Asset
 
-from .answer_fields import BusinessUseShare
+from .business_use import BusinessUseShare
 from .command_fields import Describe, Names, Refers
 from .entity_links import EntityLink, entity_link
 from .projection import addressable, iso, listing

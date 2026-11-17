@@ -17,7 +17,7 @@ from hq.domains.projects.models import Project
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
 
-from .answer_fields import BusinessUseShare, RecordSlug
+from .answer_fields import RecordSlug
 from .assets import (
     AssetCategory,
     AssetInfrastructure,
@@ -30,6 +30,7 @@ from .assets import (
     SerialNumber,
     WarrantyDate,
 )
+from .business_use import BusinessUseShare
 from .command_fields import Describe
 from .describe import listed
 from .domains import load, records_of

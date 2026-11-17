@@ -12,8 +12,17 @@ from datetime import date
 from decimal import Decimal
 from typing import Annotated, Any, Literal
 
+from django.db.models import BigIntegerField
+from pydantic import Field
+
 from .command_fields import Describe
 
+# A record's id, as every input that names one takes it: from 1 to the most a
+# BigAutoField holds, which is SQLite's integer, so one past it is refused as
+# invalid before it reaches the database. The one plain alias here: a call's
+# target is one, and a door copies the target's schema whole, so each schema
+# says the bounds where it stands rather than by a reference.
+RecordId = Annotated[int, Field(ge=1, le=BigIntegerField.MAX_BIGINT)]
 type Notes = Annotated[str, Describe("Anything else worth keeping.")]
 type Slug = Annotated[str, Describe("Its address in HQ; blank derives one from the name.")]
 type TotalCost = Annotated[Decimal, Describe("What it cost in all.")]

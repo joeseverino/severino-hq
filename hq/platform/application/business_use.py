@@ -6,15 +6,27 @@ field, a command names the field and bound), and ``in_range`` as a check
 constraint, so a row written around both still cannot store one.
 """
 
+from typing import Annotated
+
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import F
 from django.db.models.functions import Round
+from pydantic import Field
+
+from .describe import Describe
 
 FIELD = "business_use_percentage"
 MINIMUM = 0
 MAXIMUM = 100
 MESSAGE = f"Must be between {MINIMUM} and {MAXIMUM}."
+
+# What an asset and an expense take and answer as their share.
+type BusinessUseShare = Annotated[
+    int,
+    Field(ge=MINIMUM, le=MAXIMUM),
+    Describe(f"How much of it is for the business, a whole percentage from {MINIMUM} to {MAXIMUM}."),
+]
 
 VALIDATORS = [
     MinValueValidator(MINIMUM, message=MESSAGE),

@@ -13,11 +13,12 @@ import re
 from collections.abc import Mapping
 from typing import Annotated, Any, NotRequired, TypedDict, cast
 
+from django.db.models import BigIntegerField
 from pydantic import (
     AfterValidator,
     ConfigDict,
     Field,
-    StrictInt,
+    Strict,
     StrictStr,
     TypeAdapter,
     ValidationError as PydanticValidationError,
@@ -30,15 +31,18 @@ from pydantic_core import PydanticKnownError
 from .integration_specs import CapabilitySpec
 from .json_schemas import json_schema
 from .moments import moment
+from .record_fields import RecordId
 from .refusal_status import Refusal, refusal_of
 
-# What an integer target may be sent as besides a number: its digits.
-INTEGER_TARGET = r"^-?[0-9]+$"
+# What an integer target may be sent as besides a number: the digits of an
+# id, a digit fewer than the most a record's id may be, so every one is an id
+# the number form takes.
+INTEGER_TARGET = rf"^[1-9][0-9]{{0,{len(str(BigIntegerField.MAX_BIGINT)) - 2}}}$"
 _INTEGER_DIGITS = re.compile(INTEGER_TARGET)
 
 
 def _as_its_kind(value: str | int, info: ValidationInfo) -> str | int:
-    """``value``, refused where the capability's target is an integer and it is text of anything but digits."""
+    """``value``, refused where the capability's target is an integer and it is text of anything but an id's digits."""
 
     kind = (info.context or {}).get("target_kind")
     if kind == "integer" and isinstance(value, str) and not _INTEGER_DIGITS.fullmatch(value):
@@ -84,7 +88,7 @@ class CallEnvelope(TypedDict):
     ]
     target: NotRequired[
         Annotated[
-            StrictInt | Annotated[StrictStr, Field(min_length=1)],
+            Annotated[RecordId, Strict()] | Annotated[StrictStr, Field(min_length=1)],
             AfterValidator(_as_its_kind),
             Field(description="The record the command acts on, by its identifier."),
         ]

@@ -21,6 +21,7 @@ from .describe import Describe
 from .integration_specs import CommandFact, ResourceSpec
 from .projection import complete, iso
 from .record_errors import RecordNotFound
+from .record_fields import RecordId
 from .resources import EmptyQuery
 from .security import Capability, Principal
 
@@ -203,7 +204,7 @@ def resources() -> tuple[ResourceSpec, ...]:
             EmptyQuery,
             get_scan,
             "id",
-            identifier_type=int,
+            identifier_type=RecordId,
             web_route=PAGE,
             row_type=ScanResult,
             record_type=ScanResult,

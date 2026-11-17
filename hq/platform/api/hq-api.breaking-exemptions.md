@@ -10,6 +10,16 @@ check finds to info. A line oasdiff could read that gives no reason fails the
 gate. Only lines added since the comparison base admit a break; lines already
 on that base admit nothing.
 
+request-parameter-max-set info Reason: every bound it sets declares a limit the server already held: an id past the 64-bit column's ceiling was answered as a server error, and a findings limit is a page, at most 100 as every list in the API pages, while the summary still counts every finding
+
+request-parameter-min-set info Reason: an id is a positive integer, and one below 1 named no record, so a client sent nothing that read one
+
+request-property-max-set info Reason: every bound it sets declares a limit the server already refused past: an id past the 64-bit column's ceiling was answered as a server error, a weekday past 6 and a business-use share past 100 were refused by the model
+
+request-property-min-set info Reason: every bound it sets declares a limit the server already refused below: an id below 1 named no record, a weekday below 0 and a business-use share below 0 were refused by the model
+
+request-property-one-of-removed info Reason: the six are the target of contact.submission.delete, contact.submission.review, expense.delete, expense.update, receipt.delete and receipt.update, whose two branches, an integer and its digits as text, gained the id's bounds (1 to the 64-bit column's ceiling, no sign); what they now refuse named no record or was answered as a server error, so a client sends nothing that worked before
+
 - error at hq/platform/api/hq-api.openapi.json, in API GET /api/v2/resources/action_items/ removed the enum value `hq.docs` from the property `anyOf[subschema #1]` of the `query` request parameter `source` [request-parameter-property-enum-value-removed]. Reason: docs raised one item, their review date, which HQ no longer tracks, so the source holds nothing to list; a client that filtered on hq.docs is refused where it had read an empty list
 - error at hq/platform/api/hq-api.openapi.json, in API POST /api/v2/capabilities/dashboard.panels.refresh/ removed the required property `data/requested_at` from the response with the `200` status [response-required-property-removed]. Reason: the time the panels were asked is the answer's standing (`data/standing`), which every ask now answers in one shape; no client acted on the timestamp
 - error at hq/platform/api/hq-api.openapi.json, in API POST /api/v2/capabilities/dashboard.panels.refresh_due/ removed the required property `data/requested_at` from the response with the `200` status [response-required-property-removed]. Reason: the time the panels were asked is the answer's standing (`data/standing`), which every ask now answers in one shape; no client acted on the timestamp

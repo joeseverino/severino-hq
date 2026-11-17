@@ -61,15 +61,19 @@ def pydantic_refusal(subject: str, errors: Iterable[Mapping[str, Any]]) -> Input
 
     # Pydantic's ``input``, ``url`` and ``ctx`` are dropped: ``ctx`` can hold
     # the exception a validator raised, text and all.
+    sent = list(map(_unknown_as_extra, errors))
     details = [
         {
             "type": error.get("type", ""),
             "loc": list(error.get("loc", ())),
             "msg": _safe_msg(error) or _OPAQUE_MSG,
         }
-        for error in map(_unknown_as_extra, errors)
+        for error in sent
     ]
-    problems = [(_path(error["loc"]), _pydantic_reason(error)) for error in details]
+    problems = [
+        (_path(error["loc"]), _pydantic_reason(error, original.get("ctx") or {}))
+        for error, original in zip(details, sent, strict=True)
+    ]
     return InputRefusal(_message(subject, problems), details)
 
 
@@ -142,7 +146,7 @@ def _safe_msg(error: Mapping[str, Any]) -> str:
     return _ERROR_CLAUSE.split(str(error.get("msg", "")), maxsplit=1)[0]
 
 
-def _pydantic_reason(error: Mapping[str, Any]) -> str:
+def _pydantic_reason(error: Mapping[str, Any], context: Mapping[str, Any]) -> str:
     kind = error["type"]
     if kind == "missing":
         return "is required"
@@ -157,6 +161,12 @@ def _pydantic_reason(error: Mapping[str, Any]) -> str:
             if choice.strip()
         ]
         return f"must be one of {', '.join(choices)}"
+    # A bound, a number the schema declares, reads as the model's refusal of
+    # it does, whichever of the two answers first.
+    if kind == "less_than_equal" and "le" in context:
+        return f"must be at most {context['le']}"
+    if kind == "greater_than_equal" and "ge" in context:
+        return f"must be at least {context['ge']}"
     if msg and msg != _OPAQUE_MSG:
         return _SHOULD.sub("must ", msg)
     return "is invalid"

@@ -23,7 +23,7 @@ from .entity_links import EntityLink, entity_link
 from .labels import plural
 from .projection import listing
 from .record_errors import PolicyError
-from .record_fields import Notes, PublishedAt, one_of
+from .record_fields import Notes, PublishedAt, RecordId, one_of
 from .record_saves import Held, Link, linked_saver
 from .references import Mention, Mentions
 from .refusal_status import RefusalEnvelope, refuse
@@ -199,7 +199,7 @@ class DocumentationCommand:
     related_projects: Annotated[tuple[str, ...], Names("projects"), Describe("The projects this doc covers.")] = ()
     related_assets: Annotated[tuple[str, ...], Names("assets"), Describe("The assets this doc covers.")] = ()
     related_expenses: Annotated[
-        tuple[int, ...], Names("expenses", key="id"), Describe("The expenses this doc records.")
+        tuple[RecordId, ...], Names("expenses", key="id"), Describe("The expenses this doc records.")
     ] = ()
 
 

@@ -9,8 +9,8 @@ from django.db.models import Sum
 
 from hq.domains.expenses.models import DEFAULT_CATEGORY, EXPENSE_CATEGORY_CHOICES, Expense
 
-from .answer_fields import BusinessUseShare
 from .assets import PaymentMethod
+from .business_use import BusinessUseShare
 from .card_items import Kpi
 from .command_fields import Describe, Names, Refers
 from .money import money

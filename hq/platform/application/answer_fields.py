@@ -73,9 +73,6 @@ type RecordSlug = Annotated[
 type TotalCostAmount = Annotated[
     str, Describe("What it cost in all, a decimal string with two places.", examples=("12.50",))
 ]
-type BusinessUseShare = Annotated[
-    int, Describe("How much of it is for the business, a whole percentage from 0 to 100.")
-]
 type DeductibleAmount = Annotated[
     str,
     Describe(

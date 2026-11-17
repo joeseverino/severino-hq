@@ -102,6 +102,8 @@
         "name": "identifier",
         "required": true,
         "schema": {
+          "maximum": 9223372036854775807,
+          "minimum": 1,
           "type": "integer"
         }
       },
@@ -4518,6 +4520,8 @@
       },
       "BusinessUseShare": {
         "description": "How much of it is for the business, a whole percentage from 0 to 100.",
+        "maximum": 100,
+        "minimum": 0,
         "type": "integer"
       },
       "CalendarEntryAbout": {
@@ -4795,6 +4799,8 @@
       "CalendarEntryWeekdays": {
         "description": "For one that repeats weekly, the days of the week it falls on, Monday as 0. Empty otherwise.",
         "items": {
+          "maximum": 6,
+          "minimum": 0,
           "type": "integer"
         },
         "type": "array"
@@ -5939,10 +5945,12 @@
             ],
             "oneOf": [
               {
+                "maximum": 9223372036854775807,
+                "minimum": 1,
                 "type": "integer"
               },
               {
-                "pattern": "^-?[0-9]+$",
+                "pattern": "^[1-9][0-9]{0,17}$",
                 "type": "string"
               }
             ]
@@ -5987,10 +5995,12 @@
             ],
             "oneOf": [
               {
+                "maximum": 9223372036854775807,
+                "minimum": 1,
                 "type": "integer"
               },
               {
-                "pattern": "^-?[0-9]+$",
+                "pattern": "^[1-9][0-9]{0,17}$",
                 "type": "string"
               }
             ]
@@ -6321,6 +6331,8 @@
                 "default": [],
                 "description": "The expenses it accounts for.",
                 "items": {
+                  "maximum": 9223372036854775807,
+                  "minimum": 1,
                   "type": "integer"
                 },
                 "type": "array",
@@ -6575,6 +6587,8 @@
               "related_expenses": {
                 "description": "The expenses it accounts for.",
                 "items": {
+                  "maximum": 9223372036854775807,
+                  "minimum": 1,
                   "type": "integer"
                 },
                 "type": "array",
@@ -7266,6 +7280,8 @@
                 "default": [],
                 "description": "The expenses this doc records.",
                 "items": {
+                  "maximum": 9223372036854775807,
+                  "minimum": 1,
                   "type": "integer"
                 },
                 "type": "array",
@@ -7622,6 +7638,8 @@
               "related_expenses": {
                 "description": "The expenses this doc records.",
                 "items": {
+                  "maximum": 9223372036854775807,
+                  "minimum": 1,
                   "type": "integer"
                 },
                 "type": "array",
@@ -8284,10 +8302,12 @@
             ],
             "oneOf": [
               {
+                "maximum": 9223372036854775807,
+                "minimum": 1,
                 "type": "integer"
               },
               {
-                "pattern": "^-?[0-9]+$",
+                "pattern": "^[1-9][0-9]{0,17}$",
                 "type": "string"
               }
             ]
@@ -8535,10 +8555,12 @@
             ],
             "oneOf": [
               {
+                "maximum": 9223372036854775807,
+                "minimum": 1,
                 "type": "integer"
               },
               {
-                "pattern": "^-?[0-9]+$",
+                "pattern": "^[1-9][0-9]{0,17}$",
                 "type": "string"
               }
             ]
@@ -13297,10 +13319,12 @@
             ],
             "oneOf": [
               {
+                "maximum": 9223372036854775807,
+                "minimum": 1,
                 "type": "integer"
               },
               {
-                "pattern": "^-?[0-9]+$",
+                "pattern": "^[1-9][0-9]{0,17}$",
                 "type": "string"
               }
             ]
@@ -13315,6 +13339,8 @@
       "ReceiptExpense": {
         "anyOf": [
           {
+            "maximum": 9223372036854775807,
+            "minimum": 1,
             "type": "integer"
           },
           {
@@ -13471,10 +13497,12 @@
             ],
             "oneOf": [
               {
+                "maximum": 9223372036854775807,
+                "minimum": 1,
                 "type": "integer"
               },
               {
-                "pattern": "^-?[0-9]+$",
+                "pattern": "^[1-9][0-9]{0,17}$",
                 "type": "string"
               }
             ]
@@ -21284,6 +21312,8 @@
                   "target": {
                     "anyOf": [
                       {
+                        "maximum": 9223372036854775807,
+                        "minimum": 1,
                         "type": "integer"
                       },
                       {
@@ -21499,11 +21529,12 @@
             }
           },
           {
-            "description": "How many problems to return, most severe first; the summary still counts every one.",
+            "description": "How many problems to return, 1 to 100, most severe first; the summary still counts every one.",
             "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
+              "maximum": 100,
               "minimum": 1,
               "type": "integer"
             }

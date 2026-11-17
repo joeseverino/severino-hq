@@ -80,7 +80,7 @@ from .first_seen import recorded
 from .integration_validation import required_capability_names
 from .integrations import IntegrationGraph, held_graph, integration_graph
 from .json_schemas import Written
-from .projection import QUERY
+from .projection import MAX_PAGE_SIZE, QUERY
 from .security import Principal
 from .tone import Tone
 from .topology import derive_topology
@@ -793,7 +793,11 @@ FindingsQuery = create_model(
         Field(
             None,
             ge=1,
-            description="How many problems to return, most severe first; the summary still counts every one.",
+            le=MAX_PAGE_SIZE,
+            description=(
+                f"How many problems to return, 1 to {MAX_PAGE_SIZE}, most severe first; the summary still counts "
+                "every one."
+            ),
         ),
     ),
 )

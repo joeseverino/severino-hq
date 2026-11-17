@@ -5,8 +5,9 @@ from typing import Annotated, TypedDict
 from pydantic import Field, create_model
 
 from hq.platform.application import expenses, read_models
-from hq.platform.application.answer_fields import BusinessUseShare, DeductibleAmount, TotalCostAmount, UpdatedAt
+from hq.platform.application.answer_fields import DeductibleAmount, TotalCostAmount, UpdatedAt
 from hq.platform.application.assets import PaymentMethod
+from hq.platform.application.business_use import BusinessUseShare
 from hq.platform.application.describe import Describe
 from hq.platform.application.integration_specs import ResourceSpec
 from hq.platform.application.record_fields import Notes

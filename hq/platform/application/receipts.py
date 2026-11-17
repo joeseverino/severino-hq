@@ -23,7 +23,7 @@ from .command_fields import Describe, Names, Upload
 from .integration_specs import Kept, keeps
 from .projection import iso
 from .record_errors import InputError, RecordNotFound
-from .record_fields import Notes
+from .record_fields import Notes, RecordId
 from .record_saves import Held, as_sent, found, held, written
 from .security import Principal
 lazy from .record_answers import ReceiptSaved, ReceiptUploaded
@@ -39,7 +39,7 @@ _RECEIPT = Held("That receipt was not found.", "That receipt changed after it wa
 
 # The records a receipt is matched to, as its command writes them and its row reads them back.
 type ReceiptExpense = Annotated[
-    int | None,
+    RecordId | None,
     Names("expenses", key="id"),
     Describe("The expense this receipt proves.", api="Its id; null for none."),
 ]
