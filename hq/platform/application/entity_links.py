@@ -337,7 +337,8 @@ def declared_link(label: str, url: str = "", kind: str = "target") -> EntityLink
 class Addressed(Protocol):
     """A record with a page of its own, as Django declares one."""
 
-    def get_absolute_url(self) -> str: ...
+    def get_absolute_url(self) -> str:
+        """The address of the record's own page."""
 
 
 def record_link(row: Addressed, section: str = "") -> EntityLink:
