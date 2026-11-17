@@ -63,7 +63,7 @@ def others_spent(estate: FindingEstate) -> tuple[Finding, ...]:
                 Finding(
                     rule=RULE,
                     subject=node.id,
-                    scope=account,
+                    part=account,
                     title=f"Something besides HQ spent {spent} GitHub requests{on}",
                     severity=Tone.ATTENTION,
                     explanation=(
