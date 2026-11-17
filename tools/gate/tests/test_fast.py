@@ -40,16 +40,16 @@ class FixedFirstTests(SimpleTestCase):
                 return subprocess.CompletedProcess(command, 0)
 
             screen = io.StringIO()
+            # As a run here: one sent to another machine writes no fix.
             with (
-                # As a run here: one sent to another machine writes no fix.
                 mock.patch.dict("os.environ", {chain.SENT: ""}),
                 mock.patch.object(chain, "ROOT", root),
                 mock.patch.object(verdict, "VERDICTS", Path(folder, "verdicts")),
                 mock.patch.object(fast, "quick_tasks", return_value={}),
                 mock.patch.object(fast, "fixers", return_value=("example:drift",)),
                 mock.patch.object(fast.subprocess, "run", side_effect=writer),
-                mock.patch.object(fast, "record_pass") as recorded,
                 contextlib.redirect_stdout(screen),
+                mock.patch.object(fast, "record_pass") as recorded,
             ):
                 gate = Gate("fast", root)
                 paths, fixed = fast.fixed_first(gate, ("example:drift",), base, ([], []))
