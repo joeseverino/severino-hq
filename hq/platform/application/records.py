@@ -7,7 +7,7 @@ and never listed here. Every door, the web's forms included
 through its capability, which ends in the model's own ``full_clean``.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import fields
 from functools import cache
 from typing import Any
@@ -24,10 +24,10 @@ from .contracts import Effect
 from .deletion import DeleteCommand, RecordDeleted, delete_record
 from .describe import meanings
 from .domains import host_records, load, records_of
-from .integration_specs import TARGET_KINDS, CapabilitySpec
+from .integration_specs import TARGET_KINDS, CapabilitySpec, command_schema
 from .json_schemas import choices
 from .labels import adding, lower_first, one
-from .record_declaration import Records
+from .record_declaration import Control, Records
 from .security import Principal
 from .ui import ended
 
@@ -80,25 +80,35 @@ def records_for(model: type) -> Records:
     raise LookupError(f"No host domain declares records for {model.__name__}.")
 
 
-# The control a kind of column is drawn in on a record's form, where Django's
-# own says less than the browser offers: a date or time picker, a text box of
-# a few lines, a list tall enough to choose several from.
-_CONTROLS: dict[str, Callable[[], forms.Widget]] = {
-    "DateField": lambda: forms.DateInput(attrs={"type": "date"}),
-    "TimeField": lambda: forms.TimeInput(attrs={"type": "time"}),
-    "TextField": lambda: forms.Textarea(attrs={"rows": 4}),
-    "ManyToManyField": lambda: forms.SelectMultiple(attrs={"size": 6}),
+# Each control a record's form draws, where Django's own says less than the
+# browser offers: a date or time picker, a text box of a few lines, a list
+# tall enough to choose several from.
+_CONTROLS: dict[Control, Callable[[], forms.Widget]] = {
+    Control.DATE: lambda: forms.DateInput(attrs={"type": "date"}),
+    Control.TIME: lambda: forms.TimeInput(attrs={"type": "time"}),
+    Control.LINES: lambda: forms.Textarea(attrs={"rows": 4}),
+    Control.CHOOSE_SEVERAL: lambda: forms.SelectMultiple(attrs={"size": 6}),
+}
+# The control each kind of column takes unless its declaration names another.
+_BY_KIND = {
+    "DateField": Control.DATE,
+    "TimeField": Control.TIME,
+    "TextField": Control.LINES,
+    "ManyToManyField": Control.CHOOSE_SEVERAL,
 }
 
 
-def _control(column: Field[Any, Any], **kwargs: Any) -> forms.Field | None:
-    """A column's form field, in the control its kind of column takes; one
-    limited to choices keeps Django's list."""
+def _controlled(named: Mapping[str, Control]) -> Callable[..., forms.Field | None]:
+    """The form field of a column, in the control ``named`` gives it or its
+    kind takes; one limited to choices keeps Django's list."""
 
-    control = _CONTROLS.get(column.get_internal_type())
-    if control is not None and not column.choices:
-        kwargs.setdefault("widget", control())
-    return column.formfield(**kwargs)
+    def field(column: Field[Any, Any], **kwargs: Any) -> forms.Field | None:
+        control = named.get(column.name) or _BY_KIND.get(column.get_internal_type())
+        if control is not None and not column.choices:
+            kwargs.setdefault("widget", _CONTROLS[control]())
+        return column.formfield(**kwargs)
+
+    return field
 
 
 @cache
@@ -114,7 +124,15 @@ def record_form(records: Records, command: type | None = None) -> type[ModelForm
     if {"fields", "exclude"} & set(vars(getattr(base, "Meta", object))):
         raise ImproperlyConfigured(f"{base.__name__} lists fields; a record's form takes its command's.")
     taken = [item.name for item in fields(command) if item.name not in for_agents(command)]
-    return modelform_factory(load(records.model), form=base, fields=taken, formfield_callback=_control)
+    # A field's title is its label wherever it is drawn, the command's own page included.
+    titled = {name: said["title"] for name, said in command_schema(command)["properties"].items() if "title" in said}
+    return modelform_factory(
+        load(records.model),
+        form=base,
+        fields=taken,
+        labels=titled,
+        formfield_callback=_controlled(dict(records.controls)),
+    )
 
 
 def described[F: ModelForm[Any]](form: F, command: type) -> F:

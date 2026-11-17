@@ -4,13 +4,15 @@ field's help the command's meaning."""
 
 from dataclasses import dataclass, replace
 from datetime import date
+from typing import Annotated
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import FieldError, ImproperlyConfigured
-from django.forms import ModelForm
+from django.forms import ModelForm, Textarea
 from django.test import TestCase
 from django.urls import reverse
 from django.views.generic import CreateView
+from pydantic import Field
 
 from hq.domains.assets.models import Asset
 from hq.domains.projects.models import Project
@@ -96,6 +98,11 @@ class TakesWhatNoColumnHolds:
     nowhere: str = ""
 
 
+@dataclass(frozen=True, slots=True)
+class TitlesItsName:
+    item_name: Annotated[str, Field(title="Example title")]
+
+
 class ListsItsOwnFields(ModelForm):
     class Meta:
         fields = ("item_name",)
@@ -164,3 +171,16 @@ class DerivedRecordFormTests(TestCase):
         )
 
         self.assertTrue(Project.objects.filter(slug="example-padded").exists())
+
+    def test_a_column_its_declaration_names_as_lines_is_drawn_as_lines(self):
+        from hq.platform.application.record_declaration import Control
+        from hq.platform.application.records import record_form
+
+        records = replace(declared(TakesAWarranty), controls=(("item_name", Control.LINES),))
+
+        self.assertIsInstance(record_form(records)().fields["item_name"].widget, Textarea)
+
+    def test_a_fields_title_on_its_command_is_its_label_on_the_form(self):
+        from hq.platform.application.records import record_form
+
+        self.assertEqual(record_form(declared(TitlesItsName))().fields["item_name"].label, "Example title")

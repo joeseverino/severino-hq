@@ -31,7 +31,10 @@ from `hq/platform/application/writes.py` and name only their model. The form
 is the command's fields, each drawn from the model's column of that name
 (`records.record_form`), so a field added to the command and the model is on
 the form with no form of its own to edit. A label is the column's
-`verbose_name` and a help text the command field's `Describe`. What a column
+`verbose_name`, or the command field's title where it declares one, and a
+help text the command field's `Describe`. A column whose kind draws the wrong
+control (a short column written in sentences) is named in the declaration's
+`controls` with a `Control`. What a column
 cannot say (a file's control and the check of what it holds) goes on a
 `ModelForm` the declaration names as `form`, which lists no fields.
 

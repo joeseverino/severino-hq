@@ -1,8 +1,18 @@
 """The declaration of a plain record domain, which a host section names as its ``records``."""
 
 from dataclasses import dataclass
+from enum import Enum
 
 from django.utils.text import capfirst
+
+
+class Control(Enum):
+    """The controls a record's form draws a column in (``records.record_form``)."""
+
+    DATE = "date"
+    TIME = "time"
+    LINES = "lines"
+    CHOOSE_SEVERAL = "choose several"
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +56,9 @@ class Records:
     # file's control and the check of what it holds); its fields are still
     # the command's, so it lists none.
     form: str = ""
+    # (field, control) for a column whose kind draws the wrong one: a short
+    # column a person writes sentences in takes ``Control.LINES``.
+    controls: tuple[tuple[str, Control], ...] = ()
 
     @property
     def called(self) -> str:

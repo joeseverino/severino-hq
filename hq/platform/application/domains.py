@@ -28,7 +28,7 @@ from .plugins import (
     ordered_attention,
     source_cards,
 )
-from .record_declaration import Records
+from .record_declaration import Control, Records
 from .routes import reverse
 lazy from . import attention
 lazy from .security import Capability, Principal, could_hold
@@ -320,6 +320,8 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
                 ("create", "writeup", "Add a writeup"),
                 ("create", "page", "Add a page"),
             ),
+            # Its description is written in sentences.
+            controls=(("topic", Control.LINES),),
         ),
     ),
     DomainDescriptor(
