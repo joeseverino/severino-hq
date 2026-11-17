@@ -630,9 +630,9 @@ class TemplateClassStyleTests(SimpleTestCase):
 @tag("source", "tree")
 @reads("**/templates/**", "hq/**/*.py", "hq_sdk/**/*.py")
 class HandRolledClassTests(SimpleTestCase):
-    """A host page writes only the classes the shared parts declare, and a
-    part is one that code or two pages draw (hand_rolled.parts), so the
-    Python that draws a part is read beside the templates."""
+    """A host page writes only the public classes, as an extension does, and a
+    part, one that code or two pages draw (hand_rolled.parts), writes its own,
+    so the Python that draws a part is read beside the templates."""
 
     def test_host_templates_draw_only_the_shared_parts_classes(self):
         """A host page is drawn from the shared parts, so a class of its own is
@@ -641,8 +641,8 @@ class HandRolledClassTests(SimpleTestCase):
         self.assertEqual(
             sorted(f"templates/{name}: .{word}" for name, word in hand_rolled_classes()),
             [],
-            "draw it with a shared part or one of its options (hq_sdk.template_contract.CLASSES, or a part "
-            "under templates/partials/ that two pages or a tag draw); a widget with no part becomes one",
+            "a page writes only hq_sdk.template_contract.CLASSES, as an extension does: draw it through the "
+            "shared part that writes it, or grow that part an option; a widget with no part becomes one",
         )
 
     def test_a_one_of_a_kind_widget_is_listed_only_while_it_draws_its_own_classes(self):

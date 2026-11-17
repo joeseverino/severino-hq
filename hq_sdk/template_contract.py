@@ -170,6 +170,7 @@ CLASSES = (
     "optional-col",
     "page-lede",
     "primary",
+    "prose",
     "row-actions",
     "row-below",
     "row-empty",

@@ -97,8 +97,6 @@ What it is read with is how HQ knows: the relationships card's last line.
 {% include "partials/_relationships.html" %}
 {% referenced_by "zone" zone.zone %}
 </div>
-{% if read_with and not relationships %}
-  {% muted element="p" css="relation-source" %}Read with {% for link in read_with %}{% entity link mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}{% endmuted %}
-{% endif %}
+{% if read_with and not relationships %}{% include "partials/_relationships.html#rest" %}{% endif %}
 {% comment %}Reads what is due from the public registries once the page is up.{% endcomment %}
 {% endblock %}

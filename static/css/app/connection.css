@@ -88,14 +88,15 @@ textarea.code {
 
 /* ----- This connection -------------------------------------------------- */
 
-/* The panel is read in a dialog and on a page of its own, so what it does when
-   it is narrow is asked of the panel, not the screen. */
-.conn { container: conn / inline-size; }
+/* The panel is the connection region, read in a dialog and on a page of its
+   own, so what it does when it is narrow is asked of the panel, not the
+   screen. */
+[data-fragment-name="connection"] { container: conn / inline-size; }
 /* Its parts a stack gap apart. Margins rather than a grid's gap, so the
    bottom margin a flow of its sections keeps collapses into the gap instead
    of adding to it. */
-.conn > * { margin-block: 0 var(--stack-gap); }
-.conn > :last-child { margin-block-end: 0; }
+[data-fragment-name="connection"] > * { margin-block: 0 var(--stack-gap); }
+[data-fragment-name="connection"] > :last-child { margin-block-end: 0; }
 /* The dialog's shell is the panel before it arrives, so it is the same box;
    its line's own margins, which the panel's stack takes, are kept in its
    padding. */

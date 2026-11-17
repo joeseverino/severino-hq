@@ -141,10 +141,10 @@ def hand_rolled_classes() -> set[tuple[str, str]]:
     """Each class a host template draws that no shared part declares, with
     the template's name.
 
-    A shared class is one ``hq_sdk``'s CLASSES publishes, a table role the
-    region reads, or one a shared part (``parts``) writes or builds. Every
-    other template is a page, which writes only those, unless it is one of
-    a kind (``ONE_OF_A_KIND``)."""
+    A page writes only what an extension may: a class ``hq_sdk``'s CLASSES
+    publishes, or a table role the region reads, unless it is one of a kind
+    (``ONE_OF_A_KIND``). Every other class is a shared part's (``parts``),
+    which a page draws through the part."""
 
     return {(name, word) for name, words in _own_classes().items() if name not in ONE_OF_A_KIND for word in words}
 
@@ -167,8 +167,6 @@ def _own_classes() -> dict[str, set[str]]:
     }
     shared_parts = parts(templates)
     shared = set(CLASSES) | set(ROLE_CLASSES)
-    for name in shared_parts:
-        shared |= literal_classes(templates[name]) | built_prefixes(templates[name])
     return {
         name: {word for word in literal_classes(text) | built_prefixes(text) if word not in shared}
         for name, text in templates.items()

@@ -96,12 +96,14 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
     def _calendar(self) -> dict:
         today = timezone.localdate()
         month = month_of(self.request.GET.get("month"), today)
+        calendar = calendar_month(month, choices=calendar_choices(self.request.user), today=today)
         return {
-            "calendar": calendar_month(month, choices=calendar_choices(self.request.user), today=today),
+            "calendar": calendar,
             "calendar_paging": {
                 "previous": f"?month={(month - timedelta(days=1)):%Y-%m}",
                 "next": f"?month={(month + timedelta(days=32)):%Y-%m}",
-                "today": "?",
+                # Today leads back only from another month.
+                "today": "" if calendar.is_current else "?",
             },
         }
 
