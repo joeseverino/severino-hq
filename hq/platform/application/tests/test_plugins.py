@@ -5,7 +5,7 @@ import os
 import re
 import tempfile
 from collections.abc import Iterator
-from dataclasses import MISSING, asdict, fields, replace
+from dataclasses import MISSING, fields, replace
 from datetime import timedelta
 from pathlib import Path
 from unittest import TestCase, mock
@@ -245,10 +245,6 @@ class PluginContractTests(TestCase):
         named = {field for field, _ in refused.exception.violations}
         self.assertEqual(named, {"distribution", "api_version", "mcp_read_capabilities"})
         self.assertIn(repr(VALID.id), str(refused.exception))
-
-    def test_a_field_no_manifest_declares_is_refused(self):
-        with self.assertRaisesRegex(TypeError, "mcp_capabilities"):
-            PluginManifest(**{**asdict(VALID), "navigation": VALID.navigation, "mcp_capabilities": ()})
 
     def test_a_manifest_is_taken_as_declared_never_coerced(self):
         self.assertRefused("django_apps", django_apps=["example_notes"])

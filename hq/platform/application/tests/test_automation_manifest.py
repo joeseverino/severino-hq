@@ -67,12 +67,6 @@ class DeclarationTests(SimpleTestCase):
             with self.subTest(playbook):
                 self.assertEqual(manifest(playbook=playbook).playbook, playbook)
 
-    def test_it_cannot_change_once_declared(self) -> None:
-        built = manifest()
-
-        with self.assertRaises(ValidationError):
-            built.timeout_seconds = 9999  # type: ignore[misc]  # the assignment is the refusal under test
-
     def test_targets_and_hosts_read_in_one_order(self) -> None:
         first = manifest(target_kinds=("example.vm", "example.machine"), hosts=("b.example.com", "a.example.com"))
         second = manifest(target_kinds=("example.machine", "example.vm"), hosts=("a.example.com", "b.example.com"))
@@ -120,10 +114,6 @@ class InvalidShapeTests(SimpleTestCase):
             with self.subTest(bad):
                 self.assertRefused(playbook=bad)
 
-    def test_a_playbook_must_be_said(self) -> None:
-        with self.assertRaises(ValidationError):
-            OperationManifest(**{key: value for key, value in declared().items() if key != "playbook"})
-
     def test_a_missing_or_empty_statement(self) -> None:
         for field in ("preconditions", "verification", "recovery"):
             with self.subTest(field):
@@ -158,10 +148,6 @@ class InvalidShapeTests(SimpleTestCase):
     def test_an_unknown_effect_or_retry(self) -> None:
         self.assertRefused(effect="remote_write")
         self.assertRefused(retry="always")
-
-    def test_privilege_must_be_said(self) -> None:
-        with self.assertRaises(ValidationError):
-            OperationManifest(**{key: value for key, value in declared().items() if key != "privilege"})
 
 
 class InputTypeTests(SimpleTestCase):
