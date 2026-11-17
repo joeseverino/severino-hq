@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import re
 from collections.abc import Callable, Iterable, Mapping
 from typing import Annotated, Any, Literal, NotRequired, TypedDict, override
 
@@ -14,7 +15,6 @@ from pydantic import (
     TypeAdapter,
     ValidationError,
     create_model,
-    field_validator,
     with_config,
 )
 
@@ -42,7 +42,7 @@ from .connection_records import (
     CredentialRow,
     Tailnet,
 )
-from .contracts import DOTTED_NAME, Closed
+from .contracts import Closed
 from .describe import Describe
 from .field_masks import FieldMaskRefusal, Fields, asks_whole, field_paths, selected
 from .input_errors import pydantic_refusal
@@ -198,31 +198,28 @@ def one_of(values: Iterable[str]) -> Any:
     return Literal[chosen]
 
 
-class _KindsQuery(BoundedQuery):
-    kinds: str | None = Field(
-        default=None,
-        max_length=2000,
-        description="Several types to keep, comma-separated, each one the single type filter offers; not sent with it.",
-    )
+def several_of(values: Iterable[str]) -> str:
+    """The pattern of a comma-separated text whose every part is one of
+    ``values``: a query field held to it lists them in its schema and refuses
+    any other part, as ``one_of`` does for one."""
 
-    @field_validator("kinds")
-    @classmethod
-    def valid_kinds(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        kinds = value.split(",")
-        if not kinds or any(not DOTTED_NAME.fullmatch(kind) for kind in kinds):
-            raise ValueError("kinds must be comma-separated dotted resource kinds")
-        if len(kinds) != len(set(kinds)):
-            raise ValueError("kinds must not repeat a resource kind")
-        if any(kind not in PROVIDERS for kind in kinds):
-            raise ValueError("kinds must each be a resource kind the kind field lists")
-        return value
+    either = "|".join(re.escape(value) for value in dict.fromkeys(values))
+    return rf"^(?:{either})(?:,(?:{either}))*$"
 
 
 InfrastructureResourceQuery = create_model(
     "InfrastructureResourceQuery",
-    __base__=_KindsQuery,
+    __base__=BoundedQuery,
+    kinds=(
+        str | None,
+        Field(
+            default=None,
+            max_length=2000,
+            pattern=several_of(PROVIDERS),
+            description="Several types to keep, comma-separated, each one the single type filter offers; "
+            "not sent with it.",
+        ),
+    ),
     kind=(
         one_of(PROVIDERS) | None,
         Field(default=None, description="Only the records of this type; not sent with the filter of several."),

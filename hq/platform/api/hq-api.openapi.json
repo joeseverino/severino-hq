@@ -28171,6 +28171,7 @@
             "required": false,
             "schema": {
               "maxLength": 2000,
+              "pattern": "^(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|portainer\\.stack|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source)(?:,(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|portainer\\.stack|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source))*$",
               "type": "string"
             },
             "style": "form"

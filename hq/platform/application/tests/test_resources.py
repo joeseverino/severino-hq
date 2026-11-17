@@ -108,8 +108,8 @@ class ResourceExecutionTests(TestCase):
 
         self.assertEqual({item["key"] for item in listed["items"]}, {"device", "policy"})
 
-    def test_infrastructure_kinds_filter_rejects_invalid_or_repeated_kinds(self):
-        for value in ("not a kind", "tailscale.device,tailscale.device"):
+    def test_infrastructure_kinds_filter_rejects_a_kind_it_does_not_list(self):
+        for value in ("not a kind", "tailscale.device,not.a.kind", "tailscale.device,"):
             with self.subTest(value=value), self.assertRaises(InvalidResourceInput):
                 list_resource("infrastructure", {"kinds": value}, principal=READ)
 
