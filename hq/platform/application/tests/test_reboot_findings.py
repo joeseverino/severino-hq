@@ -8,11 +8,8 @@ from django.utils import timezone
 from hq.domains.control_plane.bridge_contract import contract
 from hq.domains.control_plane.observations import OBSERVATIONS
 
-from ..derivation_testing import frozen, uncached
 from ..findings import derive_findings
-from ..freshness import stale_after
 from ..inventory_testing import store
-from ..moments import moment, when
 from ..projection import projection_scope
 from ..topology import derive_topology
 from .test_tailnet_posture import EVERYTHING, raised, tailnet_connection
@@ -102,48 +99,6 @@ class WaitingTests(TestCase):
     def setUp(self):
         tailnet_connection()
 
-    def test_a_waiting_restart_says_since_when_and_for_what(self):
-        record = reading()
-        sweep(record)
-
-        (finding,) = raised(RULE)
-
-        self.assertEqual(finding["severity"], "attention")
-        said = evidence(finding)
-        self.assertEqual(said.get("Waiting since"), when(moment(record["since"])))
-        self.assertIn("linux-image-generic", said.get("Packages", ""))
-        self.assertIn("libc6", said.get("Packages", ""))
-        self.assertNotIn("Scheduled", said)
-
-    def test_its_steps_read_the_packages_then_schedule_the_restart(self):
-        sweep(reading())
-
-        commands = steps()
-
-        self.assertEqual(len(commands), 2)
-        self.assertIn("/run/reboot-required.pkgs", commands[0])
-        self.assertIn("shutdown -r", commands[1])
-
-    def test_a_scheduled_restart_says_when(self):
-        at = stamp(-timedelta(hours=5))
-        sweep(reading(scheduled_action="reboot", scheduled_at=at))
-
-        (finding,) = raised(RULE)
-
-        self.assertIn(when(moment(at)), evidence(finding).get("Scheduled", ""))
-        self.assertIn(when(moment(at)), finding["title"])
-        self.assertTrue(any("shutdown --show" in command for command in steps()))
-        self.assertFalse(any("shutdown -r" in command for command in steps()))
-
-    def test_a_restart_scheduled_with_nothing_waiting_is_said_too(self):
-        at = stamp(-timedelta(hours=5))
-        sweep(reading(pending=False, scheduled_action="reboot", scheduled_at=at))
-
-        (finding,) = raised(RULE)
-
-        self.assertIn(when(moment(at)), finding["title"])
-        self.assertNotIn("Waiting since", evidence(finding))
-
     def test_the_machine_the_controller_runs_on_shows_it_on_its_page(self):
         from django.contrib.auth import get_user_model
         from django.urls import reverse
@@ -184,42 +139,3 @@ class WaitingTests(TestCase):
         self.assertTrue(all("example-edge" in command for command in commands), commands)
         self.assertIn("/run/reboot-required.pkgs", commands[0])
         self.assertIn("shutdown -r", commands[1])
-
-    def test_a_controller_on_its_own_edge_waits_once_as_its_newer_reading_says(self):
-        edge()
-        # The controller runs on the edge and reports as it; both readings of
-        # the one machine say it waits, each read at its own time.
-        for older, newer in ((KIND, EDGE_KIND), (EDGE_KIND, KIND)):
-            with self.subTest(newer=newer):
-                for kind, package, age in (
-                    (older, "linux-image-older", timedelta(hours=1)),
-                    (newer, "linux-image-newer", timedelta(0)),
-                ):
-                    said = {"connection_ref": "example-edge"} if kind == EDGE_KIND else {}
-                    sweep(reading(packages=[package], **said), kind=kind, age=age, controller_id="example-edge")
-
-                (finding,) = raised(RULE)
-
-                self.assertIn("example-edge", finding["title"])
-                self.assertIn("linux-image-newer", evidence(finding).get("Packages", ""))
-
-    def test_nothing_waiting_raises_nothing(self):
-        sweep(reading(pending=False))
-
-        self.assertEqual(raised(RULE), [])
-
-    def test_a_reading_that_failed_raises_nothing_of_its_own(self):
-        store(KIND, reachable=False)
-
-        self.assertEqual(raised(RULE), [])
-
-    def test_a_reading_out_of_date_is_withheld(self):
-        aged = stale_after(KIND) + timedelta(minutes=10)
-        sweep(reading(read_at=stamp(aged)), age=aged)
-
-        with frozen(timezone.now()), uncached():
-            raised_now = [
-                found.rule for found in derive_findings(derive_topology(principal=EVERYTHING), principal=EVERYTHING)
-            ]
-
-        self.assertNotIn(RULE, raised_now)

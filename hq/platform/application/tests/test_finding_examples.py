@@ -47,20 +47,16 @@ UNWALKED = frozenset(
         "delivery_findings",
         "dns_findings",
         "docker_estate",
-        "filesystem_findings",
         "github_findings",
         "machine_findings",
         "perimeter_findings",
         "posture",
-        "reboot_findings",
         "record_findings",
         "reference_findings",
         "registration_findings",
-        "render_status_findings",
         "repository_findings",
         "tailnet_device_findings",
         "tailnet_findings",
-        "unit_findings",
     }
 )
 
