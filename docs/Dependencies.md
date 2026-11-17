@@ -12,7 +12,7 @@ Where every pin lives, and how to move one.
 | Go and its modules | the release `controller/go.mod`'s `toolchain` line names, which `mise.toml` reads; modules in `go.sum` | `lint:toolchain`, `lint:controller`, `test:controller`, `lint:audit`; `MiseConfigTravelsTests`, every image that copies `mise.toml` copies `go.mod` beside it |
 | The Python base image, every stage's start | `Dockerfile` and `composition/Dockerfile`, by digest | `image:build`; `lint:toolchain` refuses any other image |
 | GitHub Actions | each workflow, by commit with its version beside it | `ActionPinTests` |
-| Hosted runner image | each workflow's `runs-on`, one versioned label | `JobLimitTests` |
+| Hosted runner image | each workflow's `runs-on`, a versioned label | `lint:workflows`, jactionlint's `mutable-runner-label` |
 | Python matrix, coverage floor, Cordon commit | [`tools/pipeline/toolchain.env`](../tools/pipeline/toolchain.env) | `PythonVersionTests` |
 | cosign, on the host, in every workflow and in an extension's admission | `mise.toml`, checksums in `mise.lock`; the host's verifier, `controller/host/verifier.gen.go`, is generated from that lock's linux-x64 entry, and an admission installs it from the host checkout's lock | `lint:controller`, which fails a stale `verifier.gen.go`; `hq-host install` checks the download against its digest |
 | The API reference bundle | `static/vendor/scalar/standalone.js`, version and SHA-256 in `UPSTREAM` | a test |

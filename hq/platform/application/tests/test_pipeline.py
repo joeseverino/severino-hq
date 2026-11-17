@@ -277,29 +277,6 @@ def toolchain() -> dict[str, str]:
 
 
 @tag("source")
-class JobLimitTests(SimpleTestCase):
-    def test_every_hosted_job_runs_on_one_versioned_runner_image(self):
-        """``ubuntu-latest`` moves to a new OS on GitHub's schedule; Renovate moves a
-        versioned label in every workflow at once."""
-        runners = [job["runs-on"] for _, _, job in all_jobs() if "runs-on" in job]
-        hosted = {runner for runner in runners if "self-hosted" not in runner}
-        self.assertEqual(len(hosted), 1, hosted)
-        self.assertNotIn("latest", hosted.pop())
-
-    def test_every_job_has_a_timeout(self):
-        """Without one a hung job holds its runner for GitHub's six-hour default. A job
-        that calls a reusable workflow cannot take one; the workflow it calls is checked."""
-        timed = 0
-        for path, name, job in all_jobs():
-            if "uses" in job:
-                continue
-            timed += 1
-            with self.subTest(workflow=path, job=name):
-                self.assertIn("timeout-minutes", job)
-        self.assertGreater(timed, 3)
-
-
-@tag("source")
 class PythonVersionTests(SimpleTestCase):
     """What cannot read ``PYTHON_VERSIONS`` is held to it. Its first, oldest, version is
     the one the images run and the floor of requires-python, where ruff and mypy take

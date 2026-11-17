@@ -2,6 +2,13 @@
 # zizmor's, so the stricter default profile would count it twice.
 profile: correctness
 
+rules:
+  # Without one a hung job holds its runner for GitHub's six-hour default.
+  missing-timeout: error
+  # ubuntu-latest moves to a new OS on GitHub's schedule; Renovate moves a
+  # versioned label in every workflow at once.
+  mutable-runner-label: error
+
 # The homelab deploy runner, and the hosted image every workflow names while
 # the bundled label list predates it. Declared so jactionlint stops
 # reporting them as unknown on every workflow that uses them.
