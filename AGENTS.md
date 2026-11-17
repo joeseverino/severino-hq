@@ -139,9 +139,10 @@ architecture test, a glob) fails when its path matches nothing.
   `business_use.deductible` does: SQLite holds a decimal as a double, where a
   half cent is inexact. A test holds it to `quantize_money` over every cent.
 - A change to `hq_sdk`'s shape reaches every extension: a break fails
-  `lint:sdk-breaking` until `PLUGIN_API_VERSION` moves with it, and a new
-  export gets a case in `tests/sdk_consumer/consumer.py`
-  ([Plugins](docs/Plugins.md)).
+  `lint:sdk-breaking` until `PLUGIN_API_VERSION` moves with it, and mypy over
+  the extensions holds what each export accepts and returns. A use an
+  extension must not be able to write gets a case in
+  `tests/sdk_consumer/consumer.py` ([Plugins](docs/Plugins.md)).
 - The shared mechanisms (a list view's table, a command's link, the derived
   files, plugin imports) are held by the architecture tests, the
   `lint:drift-*` gates and `hq.platform.application.plugin_validation`, whose

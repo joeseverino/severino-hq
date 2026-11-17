@@ -148,11 +148,12 @@ pydantic field turning required, a class attribute's default type and a name
 dropped from `__all__` while still importable are not held by it; the
 composed suite runs every extension against the host.
 
-What the annotations promise is held from an extension's side by
-`tests/sdk_consumer/consumer.py`, which mypy checks: a valid call pins its
-return with `assert_type`, and a call an extension must not make carries the
-`# type: ignore[code]` mypy must report for it. A new export gets a case
-there; an annotation that slides to `Any` fails it.
+What an export accepts and returns is held by `lint:sdk-breaking` and by mypy
+over the extensions that call it. What an extension must not be able to write
+is held by `tests/sdk_consumer/consumer.py`, which mypy checks: each such call
+carries the `# type: ignore[code]` mypy must report for it, and
+`warn_unused_ignores` fails the day one stops being an error. A new refusal
+the types promise gets a case there.
 
 A capability's command is a frozen dataclass or a TypedDict, which HQ closes
 at every depth, so an unknown JSON key fails at the boundary instead of being
