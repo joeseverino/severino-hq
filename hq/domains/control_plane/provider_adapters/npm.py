@@ -1,9 +1,10 @@
 """Nginx Proxy Manager: the proxy hosts HQ declares. The controller reads and writes them."""
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import Field
 
+from hq.platform.application.describe import Describe
 from hq.platform.application.ui import ended
 from hq.platform.core.network import split_host_port
 
@@ -55,6 +56,8 @@ def served_certificate(record: dict[str, Any]) -> ServedCertificate | None:
 
 
 class NPMProxyHostSpec(ProviderModel):
+    """A proxy host in Nginx Proxy Manager: the names it serves and the service behind them."""
+
     domain_names: list[str] = Field(
         min_length=1,
         title="Hostnames",
@@ -70,7 +73,9 @@ class NPMProxyHostSpec(ProviderModel):
         title="Send traffic to",
         description="The service's address, usually an internal IP.",
     )
-    forward_port: int = Field(ge=1, le=65535, title="Port")
+    forward_port: Annotated[int, Describe("", api="The port the service listens on at that address.")] = Field(
+        ge=1, le=65535, title="Port"
+    )
     certificate_resource: str = Field(
         default="",
         title="Certificate",
@@ -81,13 +86,17 @@ class NPMProxyHostSpec(ProviderModel):
         title="Force HTTPS",
         description="Redirect HTTP to HTTPS.",
     )
-    http2: bool = Field(default=True, title="HTTP/2")
+    http2: Annotated[bool, Describe("", api="Whether the proxy serves these names over HTTP/2.")] = Field(
+        default=True, title="HTTP/2"
+    )
     websocket: bool = Field(
         default=False,
         title="Allow websockets",
         description="Needed for live updates, terminals and chat.",
     )
-    caching_enabled: bool = Field(default=False, title="Cache assets")
+    caching_enabled: Annotated[bool, Describe("", api="Whether the proxy caches static assets.")] = Field(
+        default=False, title="Cache assets"
+    )
     block_exploits: bool = Field(
         default=True,
         title="Block common exploits",
@@ -104,10 +113,12 @@ class NPMProxyHostSpec(ProviderModel):
         title="Extra nginx configuration",
         description="Passed through as-is. Usually blank.",
     )
-    hsts_enabled: bool = False
-    hsts_subdomains: bool = False
-    trust_forwarded_proto: bool = False
-    serving: bool = True
+    hsts_enabled: Annotated[bool, Describe("", api="Whether the proxy sends Strict-Transport-Security.")] = False
+    hsts_subdomains: Annotated[bool, Describe("", api="Whether that header covers every subdomain.")] = False
+    trust_forwarded_proto: Annotated[
+        bool, Describe("", api="Whether the proxy trusts the X-Forwarded-Proto header sent to it.")
+    ] = False
+    serving: Annotated[bool, Describe("", api="Whether Nginx Proxy Manager has the host switched on.")] = True
 
 
 class ResolvedNPMProxyHostSpec(NPMProxyHostSpec):

@@ -1,12 +1,13 @@
 """Infrastructure desired state and policy-gated operation requests."""
 
-from dataclasses import dataclass
-from typing import Annotated, Any
+from dataclasses import asdict, dataclass
+from functools import cache
+from typing import TYPE_CHECKING, Annotated, Any, Literal, TypedDict, Union
 
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
-from pydantic import Field
+from pydantic import ConfigDict, Field, TypeAdapter, ValidationInfo, ValidatorFunctionWrapHandler, WrapValidator
 lazy from django.utils.text import slugify
 
 from hq.domains.control_plane.desired_state import advance_dependents, desired_fingerprint
@@ -30,7 +31,7 @@ lazy from hq.domains.control_plane.provider_spec import ProviderResolutionContex
 from .adoption import Live, live_read, require_writable
 from .command_fields import Choices, Describe
 from .conditions import DEGRADED, DRIFTED, READY, holding
-from .integration_specs import Kept, keeps
+from .integration_specs import Kept, command_adapter, keeps
 from .labels import lower_first
 from .projection import keyset_page, read_once
 from .record_errors import PolicyError
@@ -46,15 +47,58 @@ lazy from .resource_capabilities import kind_converges
 lazy from .resource_operations import OperationItem, ResourceSaved, queue_reconcile
 lazy from .resource_records import HealthPart, ManagedResourceItem
 
+if TYPE_CHECKING:
+    from pydantic import GetJsonSchemaHandler
+    from pydantic_core import CoreSchema
+
 # Each field a managed record is created and updated by, said once for both.
 type ManagedResourceKey = Annotated[str, Describe("The key the record is stored under.")]
+# The kinds a declaration may be written as here: every registered one but a
+# withheld kind, which only the domain that owns it writes, since this writer
+# echoes its spec back to the caller.
+DECLARABLE = tuple(kind for kind, provider in PROVIDERS.items() if not provider.withheld)
 type ManagedResourceKind = Annotated[
-    str,
-    # The registry's kinds, the only ones validate_spec accepts.
-    Choices((kind, registry_label(kind)) for kind in PROVIDERS),
-    Describe("What type of record it is."),
+    str, Choices((kind, registry_label(kind)) for kind in DECLARABLE), Describe("What type of record it is.")
 ]
-type ManagedResourceSpec = Annotated[dict[str, Any], Describe("What HQ expects of it, in the shape its type takes.")]
+
+
+def _of_its_kind(spec: Any, validate: ValidatorFunctionWrapHandler, info: ValidationInfo) -> dict[str, Any]:
+    """The spec as its kind's provider validates it, its refusals under ``spec``."""
+
+    validated: dict[str, Any] = validate(spec)
+    # No kind is there when its own field was refused.
+    kind = info.data.get("kind")
+    return validate_spec(kind, validated) if kind in DECLARABLE else validated
+
+
+type ManagedResourceSpec = Annotated[
+    dict[str, Any], WrapValidator(_of_its_kind), Describe("What HQ expects of it, in the shape its type takes.")
+]
+
+
+@cache
+def _declarations() -> TypeAdapter[Any]:
+    """Each kind beside the spec it takes, the union the command's schema
+    publishes beside its fields (``ManagedResourceCommand``), built from the
+    same registry ``_of_its_kind`` validates by.
+
+    Every branch leaves both fields optional: the command requires them, and
+    an update that leaves ``kind`` out keeps its record's, so then every
+    branch holds and the branches are ``anyOf``, never ``oneOf``.
+    """
+
+    branches = []
+    for kind in DECLARABLE:
+        spec_type = PROVIDERS[kind].spec_type
+        branch: Any = TypedDict(  # type: ignore[misc]  # built per registered kind
+            f"Declared{spec_type.__name__}",
+            {"kind": Annotated[Literal[kind], Describe("What type of record it is.")], "spec": spec_type},
+            total=False,
+        )
+        # The branch says only what its kind's spec is; the command says the rest.
+        branch.__pydantic_config__ = ConfigDict(extra="allow")
+        branches.append(branch)
+    return TypeAdapter(Union[tuple(branches)])  # noqa: UP007 - built from a tuple of types
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +107,13 @@ class ManagedResourceCommand:
     kind: Annotated[ManagedResourceKind, Field(title="Type")]
     spec: Annotated[ManagedResourceSpec, Field(title="Config")]
     enabled: Annotated[bool, Describe("Whether HQ keeps the live record as it expects.")] = True
+
+    @classmethod
+    def __get_pydantic_json_schema__(cls, schema: CoreSchema, handler: GetJsonSchemaHandler) -> dict[str, Any]:
+        # The spec each kind takes, said beside the fields it depends on.
+        declared: dict[str, Any] = handler(schema)
+        handler.resolve_ref_schema(declared)["anyOf"] = handler(_declarations().core_schema)["anyOf"]
+        return declared
 
 
 def list_managed_resources(*, limit: int = 50, kind: str | None = None, kinds: str | None = None) -> dict[str, Any]:
@@ -366,12 +417,11 @@ def _can_change_the_public_internet(kind: str) -> bool:
     return any(action_kind == kind for action_kind, _ in enabled_controller_actions())
 
 
-def _refuse_withheld(kind: str, held_kind: str) -> None:
-    """A withheld kind is written only by the domain that owns it, under its
-    own capability: this writer would echo its spec back to the caller. Asked
-    of the kind to be written and of the record's kind as it is locked."""
+def _refuse_withheld(held_kind: str) -> None:
+    """Refuse to rewrite a record of a withheld kind, which the command's kinds
+    leave out (``DECLARABLE``), as it is locked."""
 
-    if spec_withheld(kind) or spec_withheld(held_kind):
+    if spec_withheld(held_kind):
         raise PolicyError("This record is changed from its own page, not here.")
 
 
@@ -481,10 +531,13 @@ def _save(
     )
     # HQ's copy as the change found it, which an apply by hand may only replace.
     replaced = {} if created else dict(resource.spec)
-    if not created:
-        command = ManagedResourceCommand(**{**as_sent(resource, ManagedResourceCommand, {}), **written(command, sent)})
-    _refuse_withheld(command.kind, resource.kind)
-    validated_spec = validate_spec(command.kind, command.spec)
+    _refuse_withheld(resource.kind)
+    # The declaration as it will be written, validated whole by its type: a
+    # caller's fields over the record as locked, or a command built in HQ.
+    command = command_adapter(ManagedResourceCommand).validate_python(
+        asdict(command) if created else {**as_sent(resource, ManagedResourceCommand, {}), **written(command, sent)}
+    )
+    validated_spec = command.spec
     if consented is not None:
         _refuse_authored(command, resource.kind, validated_spec, consented=consented)
     provider = PROVIDERS[command.kind]

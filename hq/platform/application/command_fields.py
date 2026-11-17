@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, Any, TypeAliasType, get_args, get_origin, get_type_hints
 
 from django.core.exceptions import ValidationError
+lazy from pydantic_core import PydanticCustomError, core_schema
 
 from .describe import Describe
 
@@ -25,7 +26,7 @@ lazy from .json_schemas import choices
 
 if TYPE_CHECKING:
     from django.db.models import Model
-    from pydantic import GetJsonSchemaHandler
+    from pydantic import GetCoreSchemaHandler, GetJsonSchemaHandler
     from pydantic_core import CoreSchema
 
 # The JSON Schema extension a record-naming field carries.
@@ -80,12 +81,25 @@ class Among:
 class Choices:
     """A field whose value is one of a fixed set declared elsewhere, each with
     the words a person reads for it: ``Choices(Appearance.Theme.choices)``.
-    The form offers only these; the handler refuses any other on every path."""
+    The form offers only these, and the command refuses any other as it is
+    validated, before anything else is done with it."""
 
     options: tuple[tuple[str, str], ...]
 
     def __init__(self, options: Iterable[tuple[Any, Any]]) -> None:
         object.__setattr__(self, "options", tuple((str(value), str(label)) for value, label in options))
+
+    def __get_pydantic_core_schema__(self, source: Any, handler: GetCoreSchemaHandler) -> CoreSchema:
+        allowed = frozenset(value for value, _label in self.options)
+        # Worded as pydantic words a Literal's refusal, which input_errors says as "must be one of".
+        expected = " or ".join(", ".join(repr(value) for value, _label in self.options).rsplit(", ", 1))
+
+        def one_of(value: Any) -> Any:
+            if str(value) not in allowed:
+                raise PydanticCustomError("literal_error", "Input should be {expected}", {"expected": expected})
+            return value
+
+        return core_schema.no_info_after_validator_function(one_of, handler(source))
 
     def __get_pydantic_json_schema__(self, schema: CoreSchema, handler: GetJsonSchemaHandler) -> dict[str, Any]:
         return {**handler(schema), **choices(self.options)}

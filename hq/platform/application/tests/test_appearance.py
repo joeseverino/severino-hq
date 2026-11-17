@@ -88,9 +88,9 @@ class ThemeServiceTests(TestCase):
     def test_an_unknown_theme_is_refused(self):
         for theme in ("", "sepia", "DARK", "system "):
             with self.subTest(theme=theme):
-                self.assertEqual(
-                    self.choose(theme)["error"], {"code": "invalid_input", "message": "Choose system, light or dark."}
-                )
+                refused = self.choose(theme)["error"]
+                self.assertEqual(refused["code"], "invalid_input")
+                self.assertEqual([detail["loc"] for detail in refused["details"]], [["theme"]])
         self.assertFalse(Appearance.objects.exists())
 
     def test_the_choice_does_not_happen_without_its_record(self):
@@ -135,7 +135,7 @@ class ThemeSwitchTests(TestCase):
             with self.subTest(theme=theme):
                 refused = self.choose(theme)
                 self.assertEqual(refused.status_code, 400)
-                self.assertEqual(refused.content, b"Choose system, light or dark.")
+                self.assertIn(b"theme", refused.content)
         self.assertEqual(self.client.post(reverse("theme"), form_keyed()).status_code, 400)
         self.assertEqual(theme_for(self.user), "dark")
 

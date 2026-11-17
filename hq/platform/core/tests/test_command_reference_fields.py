@@ -131,7 +131,9 @@ class ReferenceFieldTests(TestCase):
     def test_the_kind_offers_every_kind_hq_can_create(self):
         page = self.client.get("/commands/infrastructure.resource.create/")
 
-        self.assertEqual(set(offered(page, "kind")), set(PROVIDERS))
+        # A withheld kind is written only from its own page.
+        writable = {kind for kind, provider in PROVIDERS.items() if not provider.withheld}
+        self.assertEqual(set(offered(page, "kind")), writable)
 
 
 class GuardedReferenceTests(TestCase):

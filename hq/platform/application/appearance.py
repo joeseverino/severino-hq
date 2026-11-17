@@ -11,7 +11,6 @@ from typing import Annotated, Literal, TypedDict
 from django.db import transaction
 from django.utils import timezone
 
-from hq.platform.application.record_errors import InputError
 from hq.platform.application.security import Principal, person
 from hq.platform.core.models import Appearance
 
@@ -52,8 +51,6 @@ def set_theme(command: ThemeCommand, *, principal: Principal) -> ThemeSet:
 
     user = person(principal)
     theme = command.theme
-    if theme not in Theme.values:
-        raise InputError("Choose system, light or dark.")
 
     with transaction.atomic():
         row = Appearance.objects.select_for_update().filter(user=user).first() or Appearance(user=user)

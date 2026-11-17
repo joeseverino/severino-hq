@@ -631,8 +631,8 @@ class NoteCommand:
   (several, for a list), offered as a choice from what the caller may list;
   `key` names the item field the value is, where that is not the identifier.
 - `Choices(options)` offers a fixed set of `(value, words)` pairs. The form
-  offers only these; the command still refuses any other value itself, with a
-  `Literal` type or in its handler.
+  offers only these, and the command refuses any other value as it is
+  validated, before a person is asked to approve it or the handler runs.
 - `Refers(model, field)` makes the field a reference the model's
   `ReferenceField` of that name holds ([References](#references)), offered
   as the grouped picker the record's own form shows, with what this caller

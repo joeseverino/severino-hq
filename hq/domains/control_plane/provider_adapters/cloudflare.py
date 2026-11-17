@@ -6,6 +6,7 @@ from typing import Annotated, Any, Literal, get_args
 
 from pydantic import Field, model_validator
 
+from hq.platform.application.describe import Describe
 from hq.platform.application.routes import reverse
 
 from ..connection_shapes import API_TOKEN
@@ -145,6 +146,8 @@ _CAA_VALUE_PARTS = r'^\s*(\d{1,3})\s+(issue|issuewild|iodef)\s+"([^"]*)"\s*$'
 
 
 class CloudflareDNSRecordSpec(ProviderModel):
+    """One DNS record in a Cloudflare zone, as HQ keeps it."""
+
     zone: str = Field(
         min_length=1,
         max_length=253,
@@ -157,7 +160,7 @@ class CloudflareDNSRecordSpec(ProviderModel):
         title="Hostname",
         description="The full name, e.g. app.example.com.",
     )
-    record_type: DNSRecordTypeId = Field(title="Record type")
+    record_type: Annotated[DNSRecordTypeId, Describe("", api="The record's DNS type.")] = Field(title="Record type")
     content: str = Field(
         min_length=1,
         max_length=2048,

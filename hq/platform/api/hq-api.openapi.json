@@ -3522,6 +3522,31 @@
         },
         "type": "object"
       },
+      "AdGuardRewriteSpec": {
+        "additionalProperties": false,
+        "description": "A name AdGuard answers on your network with an address of HQ's choosing.",
+        "properties": {
+          "answer": {
+            "description": "The IP address this hostname resolves to.",
+            "maxLength": 253,
+            "minLength": 1,
+            "title": "Points at",
+            "type": "string"
+          },
+          "domain": {
+            "description": "The name that should resolve on your network.",
+            "maxLength": 253,
+            "minLength": 1,
+            "title": "Hostname",
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain",
+          "answer"
+        ],
+        "type": "object"
+      },
       "AddressLookedUp": {
         "additionalProperties": false,
         "description": "What the public internet says about one address, or HQ where it is not public.",
@@ -4581,6 +4606,39 @@
         "minimum": 0,
         "type": "integer"
       },
+      "CaddyRouteSpec": {
+        "additionalProperties": false,
+        "description": "One name Caddy serves, and where it hands each request off to.",
+        "properties": {
+          "connection_ref": {
+            "default": "",
+            "description": "The connection to the host that serves this route.",
+            "maxLength": 160,
+            "title": "Caddy",
+            "type": "string"
+          },
+          "domain": {
+            "description": "The name this route answers for.",
+            "maxLength": 253,
+            "minLength": 1,
+            "pattern": "^(?:\\*\\.)?[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*\\.?$",
+            "title": "Hostname",
+            "type": "string"
+          },
+          "upstream": {
+            "default": "",
+            "description": "Where Caddy sends the request, usually a container and port.",
+            "maxLength": 253,
+            "pattern": "^(?:|(?:(?:https?|h2c)://)?[A-Za-z0-9](?:[A-Za-z0-9._-]*|\\[[0-9A-Fa-f:.]+\\])(?::[0-9]{1,5})?)$",
+            "title": "Hands off to",
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain"
+        ],
+        "type": "object"
+      },
       "CalendarEntryAbout": {
         "description": "What it is about. A `type:key` reference; empty for nothing.",
         "type": "string",
@@ -5163,6 +5221,51 @@
         ],
         "type": "object"
       },
+      "CertificateAuthoritySpec": {
+        "additionalProperties": false,
+        "description": "A certificate authority this estate trusts, and where its key lives.\n\nNot `tls.certificate`: that is a certificate HQ renews and installs. This is\nthe authority a certificate was issued *by*, including one HQ can never\nreach, because the whole point of an offline root is that nothing can. An\nauthority nothing sweeps still has an expiry, and an expiry nobody is\nwatching is the failure this records.",
+        "properties": {
+          "covers": {
+            "default": "",
+            "description": "One line. The certificates this authority signs.",
+            "maxLength": 300,
+            "title": "Issues",
+            "type": "string"
+          },
+          "expires_on": {
+            "default": "",
+            "description": "ISO date, e.g. 2036-05-02. Blank if it does not expire.",
+            "maxLength": 10,
+            "title": "Expires",
+            "type": "string"
+          },
+          "issued_with": {
+            "default": "",
+            "description": "The signing tool, if any.",
+            "maxLength": 160,
+            "title": "Issued with",
+            "type": "string"
+          },
+          "key_location": {
+            "default": "",
+            "description": "Where the private key is stored. Never paste the key.",
+            "maxLength": 300,
+            "title": "Key location",
+            "type": "string"
+          },
+          "name": {
+            "description": "The issuer name, as it appears in certificates.",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Authority",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
       "CertificatePart": {
         "additionalProperties": false,
         "properties": {
@@ -5434,6 +5537,107 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "CloudflareDNSRecordSpec": {
+        "additionalProperties": false,
+        "description": "One DNS record in a Cloudflare zone, as HQ keeps it.",
+        "properties": {
+          "content": {
+            "description": "An IP address for A and AAAA, a hostname for CNAME and MX, quoted text for TXT. For CAA, a value such as 0 issue \"letsencrypt.org\".",
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Value",
+            "type": "string"
+          },
+          "name": {
+            "description": "The full name, e.g. app.example.com.",
+            "maxLength": 253,
+            "minLength": 1,
+            "title": "Hostname",
+            "type": "string"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "maximum": 65535,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "MX only. Lower numbers are tried first.",
+            "title": "Priority"
+          },
+          "proxied": {
+            "default": false,
+            "description": "A, AAAA and CNAME only. On: Cloudflare answers, hides your address and adds caching, WAF and its certificate. Off: visitors reach your address directly.",
+            "title": "Proxy through Cloudflare",
+            "type": "boolean"
+          },
+          "record_type": {
+            "description": "The record's DNS type.",
+            "enum": [
+              "A",
+              "AAAA",
+              "CNAME",
+              "TXT",
+              "MX",
+              "CAA"
+            ],
+            "title": "Record type",
+            "type": "string"
+          },
+          "ttl": {
+            "default": 1,
+            "description": "Seconds resolvers may cache this. 1 is automatic.",
+            "maximum": 86400,
+            "minimum": 1,
+            "title": "TTL",
+            "type": "integer"
+          },
+          "zone": {
+            "description": "The record's domain, e.g. example.com.",
+            "maxLength": 253,
+            "minLength": 1,
+            "title": "Zone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "zone",
+          "name",
+          "record_type",
+          "content"
+        ],
+        "type": "object"
+      },
+      "CloudflareZoneSpec": {
+        "additionalProperties": false,
+        "description": "A domain HQ is responsible for, and the connection that serves it.\n\nThe credential sees every zone on the account, and a parked domain looks\nlike a live one to a token, so declaring a zone is how an operator makes it\nHQ's business. No settings yet: zone posture (TLS mode, minimum version,\nHSTS) is read through `cloudflare_api`, and declaring it is the next field\nset here.",
+        "properties": {
+          "connection_ref": {
+            "description": "The connection that holds this zone.",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Served by",
+            "type": "string"
+          },
+          "zone": {
+            "description": "The domain itself, e.g. example.com.",
+            "maxLength": 253,
+            "minLength": 1,
+            "title": "Domain",
+            "type": "string"
+          }
+        },
+        "required": [
+          "zone",
+          "connection_ref"
+        ],
         "type": "object"
       },
       "CommandAnswer": {
@@ -7127,6 +7331,240 @@
           "reason",
           "message"
         ],
+        "type": "object"
+      },
+      "DeclaredAdGuardRewriteSpec": {
+        "properties": {
+          "kind": {
+            "const": "adguard.rewrite",
+            "description": "What type of record it is.",
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/AdGuardRewriteSpec"
+          }
+        },
+        "type": "object"
+      },
+      "DeclaredCaddyRouteSpec": {
+        "properties": {
+          "kind": {
+            "const": "caddy.route",
+            "description": "What type of record it is.",
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/CaddyRouteSpec"
+          }
+        },
+        "type": "object"
+      },
+      "DeclaredCertificateAuthoritySpec": {
+        "properties": {
+          "kind": {
+            "const": "pki.authority",
+            "description": "What type of record it is.",
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/CertificateAuthoritySpec"
+          }
+        },
+        "type": "object"
+      },
+      "DeclaredCloudflareDNSRecordSpec": {
+        "properties": {
+          "kind": {
+            "const": "cloudflare.dns_record",
+            "description": "What type of record it is.",
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/CloudflareDNSRecordSpec"
+          }
+        },
+        "type": "object"
+      },
+      "DeclaredCloudflareZoneSpec": {
+        "properties": {
+          "kind": {
+            "const": "cloudflare.zone",
+            "description": "What type of record it is.",
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/CloudflareZoneSpec"
+          }
+        },
+        "type": "object"
+      },
+      "DeclaredGitHubDeliverySpec": {
+        "properties": {
+          "kind": {
+            "const": "github.delivery",
+            "description": "What type of record it is.",
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/GitHubDeliverySpec"
+          }
+        },
+        "type": "object"
+      },
+      "DeclaredMachineSpec": {
+        "properties": {
+          "kind": {
+            "const": "machine",
+            "description": "What type of record it is.",
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/MachineSpec"
+          }
+        },
+        "type": "object"
+      },
+      "DeclaredNPMProxyHostSpec": {
+        "properties": {
+          "kind": {
+            "const": "npm.proxy_host",
+            "description": "What type of record it is.",
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/NPMProxyHostSpec"
+          }
+        },
+        "type": "object"
+      },
+      "DeclaredNetworkSpec": {
+        "properties": {
+          "kind": {
+            "const": "network",
+            "description": "What type of record it is.",
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/NetworkSpec"
+          }
+        },
+        "type": "object"
+      },
+      "DeclaredOperationSpec": {
+        "properties": {
+          "kind": {
+            "const": "automation.operation",
+            "description": "What type of record it is.",
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/OperationSpec"
+          }
+        },
+        "type": "object"
+      },
+      "DeclaredPortainerContainerSpec": {
+        "properties": {
+          "kind": {
+            "const": "portainer.container",
+            "description": "What type of record it is.",
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/PortainerContainerSpec"
+          }
+        },
+        "type": "object"
+      },
+      "DeclaredPortainerStackSpec": {
+        "properties": {
+          "kind": {
+            "const": "portainer.stack",
+            "description": "What type of record it is.",
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/PortainerStackSpec"
+          }
+        },
+        "type": "object"
+      },
+      "DeclaredSourceSpec": {
+        "properties": {
+          "kind": {
+            "const": "automation.source",
+            "description": "What type of record it is.",
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/SourceSpec"
+          }
+        },
+        "type": "object"
+      },
+      "DeclaredTLSCertificateSpec": {
+        "properties": {
+          "kind": {
+            "const": "tls.certificate",
+            "description": "What type of record it is.",
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/TLSCertificateSpec"
+          }
+        },
+        "type": "object"
+      },
+      "DeclaredTLSDeliveryTargetSpec": {
+        "properties": {
+          "kind": {
+            "const": "tls.delivery_target",
+            "description": "What type of record it is.",
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/TLSDeliveryTargetSpec"
+          }
+        },
+        "type": "object"
+      },
+      "DeclaredTailnetDeviceSpec": {
+        "properties": {
+          "kind": {
+            "const": "tailscale.device",
+            "description": "What type of record it is.",
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/TailnetDeviceSpec"
+          }
+        },
+        "type": "object"
+      },
+      "DeclaredTailnetPolicySpec": {
+        "properties": {
+          "kind": {
+            "const": "tailscale.policy",
+            "description": "What type of record it is.",
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/TailnetPolicySpec"
+          }
+        },
+        "type": "object"
+      },
+      "DeclaredUploadedCertificateSpec": {
+        "properties": {
+          "kind": {
+            "const": "tls.uploaded_certificate",
+            "description": "What type of record it is.",
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/UploadedCertificateSpec"
+          }
+        },
         "type": "object"
       },
       "DeductibleAmount": {
@@ -9071,6 +9509,43 @@
         ],
         "type": "object"
       },
+      "GitHubDeliverySpec": {
+        "additionalProperties": false,
+        "description": "The repository and workflow that deploy HQ, which HQ checks production against.",
+        "properties": {
+          "branch": {
+            "default": "main",
+            "description": "The branch the workflow deploys from.",
+            "pattern": "^[A-Za-z0-9_./-]+$",
+            "title": "Branch",
+            "type": "string"
+          },
+          "production": {
+            "const": "Every extension's latest admission, confirmed on GitHub",
+            "default": "Every extension's latest admission, confirmed on GitHub",
+            "description": "What production is held to.",
+            "title": "Production",
+            "type": "string"
+          },
+          "repository": {
+            "description": "The repository whose deploy workflow deploys HQ.",
+            "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+            "title": "Repository",
+            "type": "string"
+          },
+          "workflow": {
+            "default": ".github/workflows/compose.yml",
+            "description": "The workflow file, in the repository, that deploys HQ.",
+            "pattern": "^\\.github/workflows/[A-Za-z0-9_.-]+\\.ya?ml$",
+            "title": "Deploy workflow",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repository"
+        ],
+        "type": "object"
+      },
       "GithubPath": {
         "description": "Its path in a repository. Empty for none.",
         "type": "string"
@@ -9900,6 +10375,80 @@
           },
           "payload": {
             "additionalProperties": false,
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DeclaredTLSCertificateSpec",
+                "title": "Declared tlscertificate spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredUploadedCertificateSpec",
+                "title": "Declared uploaded certificate spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredNPMProxyHostSpec",
+                "title": "Declared npmproxy host spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredGitHubDeliverySpec",
+                "title": "Declared git hub delivery spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredPortainerStackSpec",
+                "title": "Declared portainer stack spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredPortainerContainerSpec",
+                "title": "Declared portainer container spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredTailnetDeviceSpec",
+                "title": "Declared tailnet device spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredTailnetPolicySpec",
+                "title": "Declared tailnet policy spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredNetworkSpec",
+                "title": "Declared network spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredCertificateAuthoritySpec",
+                "title": "Declared certificate authority spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredMachineSpec",
+                "title": "Declared machine spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredTLSDeliveryTargetSpec",
+                "title": "Declared tlsdelivery target spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredCaddyRouteSpec",
+                "title": "Declared caddy route spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredAdGuardRewriteSpec",
+                "title": "Declared ad guard rewrite spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredCloudflareDNSRecordSpec",
+                "title": "Declared cloudflare dnsrecord spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredCloudflareZoneSpec",
+                "title": "Declared cloudflare zone spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredOperationSpec",
+                "title": "Declared operation spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredSourceSpec",
+                "title": "Declared source spec"
+              }
+            ],
             "description": "The command: the fields its input schema names.",
             "properties": {
               "enabled": {
@@ -10025,6 +10574,80 @@
           },
           "payload": {
             "additionalProperties": false,
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DeclaredTLSCertificateSpec",
+                "title": "Declared tlscertificate spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredUploadedCertificateSpec",
+                "title": "Declared uploaded certificate spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredNPMProxyHostSpec",
+                "title": "Declared npmproxy host spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredGitHubDeliverySpec",
+                "title": "Declared git hub delivery spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredPortainerStackSpec",
+                "title": "Declared portainer stack spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredPortainerContainerSpec",
+                "title": "Declared portainer container spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredTailnetDeviceSpec",
+                "title": "Declared tailnet device spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredTailnetPolicySpec",
+                "title": "Declared tailnet policy spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredNetworkSpec",
+                "title": "Declared network spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredCertificateAuthoritySpec",
+                "title": "Declared certificate authority spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredMachineSpec",
+                "title": "Declared machine spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredTLSDeliveryTargetSpec",
+                "title": "Declared tlsdelivery target spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredCaddyRouteSpec",
+                "title": "Declared caddy route spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredAdGuardRewriteSpec",
+                "title": "Declared ad guard rewrite spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredCloudflareDNSRecordSpec",
+                "title": "Declared cloudflare dnsrecord spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredCloudflareZoneSpec",
+                "title": "Declared cloudflare zone spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredOperationSpec",
+                "title": "Declared operation spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredSourceSpec",
+                "title": "Declared source spec"
+              }
+            ],
             "description": "The command: the fields its input schema names.",
             "properties": {
               "enabled": {
@@ -10675,6 +11298,39 @@
         },
         "type": "object"
       },
+      "MachineSpec": {
+        "additionalProperties": false,
+        "description": "A machine HQ should know about, whether or not it can reach one.\n\nMost machines need no declaration: a swept Portainer names the ones it\nmanages, and a connection names what it points at. This is for the rest\n(the printer, the offline CA, the phone) and for saying what an address\nbelongs to, which is the difference between a proxy forwarding to a machine\nand a proxy forwarding into the dark.",
+        "properties": {
+          "addresses": {
+            "description": "Any address it answers on. Whatever forwards to one is linked to this machine.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Addresses",
+            "type": "array"
+          },
+          "name": {
+            "description": "The machine's name in HQ. No slashes.",
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "^[^/]+$",
+            "title": "Name",
+            "type": "string"
+          },
+          "role": {
+            "default": "",
+            "description": "One line. Shown wherever the machine is listed.",
+            "maxLength": 200,
+            "title": "Purpose",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
       "ManagedResourceItem": {
         "additionalProperties": false,
         "description": "One managed record whole: what HQ expects of it and what was last read.",
@@ -10756,7 +11412,6 @@
           "adguard.rewrite",
           "cloudflare.dns_record",
           "cloudflare.zone",
-          "cloudflare.contact_inbox",
           "automation.operation",
           "automation.source"
         ],
@@ -10766,7 +11421,6 @@
           "automation.operation": "Playbook",
           "automation.source": "Playbooks",
           "caddy.route": "Caddy route",
-          "cloudflare.contact_inbox": "Contact inbox",
           "cloudflare.dns_record": "Public DNS record",
           "cloudflare.zone": "Domain",
           "github.delivery": "HQ deploys",
@@ -11220,6 +11874,120 @@
         },
         "type": "object"
       },
+      "NPMProxyHostSpec": {
+        "additionalProperties": false,
+        "description": "A proxy host in Nginx Proxy Manager: the names it serves and the service behind them.",
+        "properties": {
+          "access_list_id": {
+            "default": 0,
+            "description": "An Nginx Proxy Manager access list id. 0 means none.",
+            "minimum": 0,
+            "title": "Access list",
+            "type": "integer"
+          },
+          "advanced_config": {
+            "default": "",
+            "description": "Passed through as-is. Usually blank.",
+            "title": "Extra nginx configuration",
+            "type": "string"
+          },
+          "block_exploits": {
+            "default": true,
+            "description": "Nginx Proxy Manager's built-in request filtering.",
+            "title": "Block common exploits",
+            "type": "boolean"
+          },
+          "caching_enabled": {
+            "default": false,
+            "description": "Whether the proxy caches static assets.",
+            "title": "Cache assets",
+            "type": "boolean"
+          },
+          "certificate_resource": {
+            "default": "",
+            "description": "Secures these names. Required when Force HTTPS is on.",
+            "title": "Certificate",
+            "type": "string"
+          },
+          "domain_names": {
+            "description": "One per line.",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Hostnames",
+            "type": "array"
+          },
+          "force_ssl": {
+            "default": true,
+            "description": "Redirect HTTP to HTTPS.",
+            "title": "Force HTTPS",
+            "type": "boolean"
+          },
+          "forward_host": {
+            "description": "The service's address, usually an internal IP.",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Send traffic to",
+            "type": "string"
+          },
+          "forward_port": {
+            "description": "The port the service listens on at that address.",
+            "maximum": 65535,
+            "minimum": 1,
+            "title": "Port",
+            "type": "integer"
+          },
+          "forward_scheme": {
+            "description": "How the proxy connects to your service.",
+            "enum": [
+              "http",
+              "https"
+            ],
+            "title": "Reach it over",
+            "type": "string"
+          },
+          "hsts_enabled": {
+            "default": false,
+            "description": "Whether the proxy sends Strict-Transport-Security.",
+            "type": "boolean"
+          },
+          "hsts_subdomains": {
+            "default": false,
+            "description": "Whether that header covers every subdomain.",
+            "type": "boolean"
+          },
+          "http2": {
+            "default": true,
+            "description": "Whether the proxy serves these names over HTTP/2.",
+            "title": "HTTP/2",
+            "type": "boolean"
+          },
+          "serving": {
+            "default": true,
+            "description": "Whether Nginx Proxy Manager has the host switched on.",
+            "type": "boolean"
+          },
+          "trust_forwarded_proto": {
+            "default": false,
+            "description": "Whether the proxy trusts the X-Forwarded-Proto header sent to it.",
+            "type": "boolean"
+          },
+          "websocket": {
+            "default": false,
+            "description": "Needed for live updates, terminals and chat.",
+            "title": "Allow websockets",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "domain_names",
+          "forward_scheme",
+          "forward_host",
+          "forward_port"
+        ],
+        "type": "object"
+      },
       "NameAnswer": {
         "additionalProperties": false,
         "description": "One record a resolver returned for a name.",
@@ -11273,6 +12041,45 @@
           "resolver",
           "answers",
           "resolves"
+        ],
+        "type": "object"
+      },
+      "NetworkSpec": {
+        "additionalProperties": false,
+        "description": "A range of addresses this estate is built on, and what it means.\n\nDeclared, because nothing sweeps a network. HQ learns addresses from the\nthings that answer at them (a container's published port, a device's\ntailnet address) and never learns what range they belong to or what that\nrange implies. An address on the LAN and one on the tailnet are reachable\nby different people, and only the ranges say which is which.",
+        "properties": {
+          "cidr": {
+            "description": "The range in CIDR form, e.g. 198.51.100.0/24.",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Range",
+            "type": "string"
+          },
+          "gateway": {
+            "default": "",
+            "description": "The range's router, if it has one.",
+            "maxLength": 64,
+            "title": "Gateway",
+            "type": "string"
+          },
+          "name": {
+            "description": "A short name for this range.",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "purpose": {
+            "default": "",
+            "description": "One line. What uses this range.",
+            "maxLength": 300,
+            "title": "Purpose",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "cidr"
         ],
         "type": "object"
       },
@@ -11539,6 +12346,126 @@
       "OperationReason": {
         "description": "Why it is done, in the asker's words; empty for none.",
         "type": "string"
+      },
+      "OperationSpec": {
+        "additionalProperties": false,
+        "description": "One adopted playbook: every field but its input type, which its schema's digest stands for.",
+        "properties": {
+          "effect": {
+            "description": "What running it does.",
+            "enum": [
+              "read",
+              "infrastructure_change",
+              "destructive"
+            ],
+            "title": "Effect",
+            "type": "string"
+          },
+          "hosts": {
+            "description": "The machines the playbook may run on. Empty for any machine a target names.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Machines",
+            "type": "array"
+          },
+          "input_schema_sha256": {
+            "description": "The SHA-256 digest of the playbook's input schema.",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Input schema",
+            "type": "string"
+          },
+          "operation": {
+            "description": "The playbook's id, as its sidecar names it.",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Playbook ID",
+            "type": "string"
+          },
+          "playbook": {
+            "description": "The playbook's path in the repository.",
+            "maxLength": 200,
+            "pattern": "^(?:[A-Za-z0-9_][A-Za-z0-9_.-]*/)*[A-Za-z0-9_][A-Za-z0-9_.-]*\\.yml$",
+            "title": "Playbook file",
+            "type": "string"
+          },
+          "preconditions": {
+            "description": "What must hold before it runs.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Preconditions",
+            "type": "array"
+          },
+          "privilege": {
+            "default": "",
+            "description": "The privilege profile it runs with. Empty for none.",
+            "maxLength": 160,
+            "title": "Privilege",
+            "type": "string"
+          },
+          "recovery": {
+            "description": "What to do when a run fails.",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Recovery",
+            "type": "array"
+          },
+          "retry": {
+            "description": "Whether a run that did not finish may be run again.",
+            "enum": [
+              "never",
+              "observe_first",
+              "safe"
+            ],
+            "title": "Retry",
+            "type": "string"
+          },
+          "revision": {
+            "description": "The commit of the repository the playbook was reviewed at.",
+            "pattern": "^[0-9a-f]{40}$",
+            "title": "Reviewed commit",
+            "type": "string"
+          },
+          "target_kinds": {
+            "description": "The record types the playbook runs against.",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Record types",
+            "type": "array"
+          },
+          "timeout_seconds": {
+            "description": "How many seconds a run may take.",
+            "maximum": 3600,
+            "minimum": 1,
+            "title": "Timeout",
+            "type": "integer"
+          },
+          "verification": {
+            "description": "What it checks once it has run.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Verification",
+            "type": "array"
+          }
+        },
+        "required": [
+          "operation",
+          "revision",
+          "playbook",
+          "input_schema_sha256",
+          "target_kinds",
+          "effect",
+          "timeout_seconds",
+          "recovery",
+          "retry"
+        ],
+        "type": "object"
       },
       "OperationState": {
         "description": "Where it stands: `queued`, `claimed`, `succeeded`, `failed` or `cancelled`.",
@@ -12253,6 +13180,176 @@
             "type": "array"
           }
         },
+        "type": "object"
+      },
+      "PortainerContainerSpec": {
+        "additionalProperties": false,
+        "description": "One container HQ is responsible for keeping up, not for defining.\n\nIdentity and nothing else: its definition lives in whatever compose file\ncreated it, which HQ does not see, so declaring one says \"this is mine to\nwatch and to cycle\", and reconciliation is locked with nothing to converge.",
+        "properties": {
+          "by_design": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Checks it fails on purpose, by id, each with the reason, such as DNS on the host network. HQ shows the reason instead of a problem.",
+            "title": "Checks its job requires",
+            "type": "object"
+          },
+          "connection_ref": {
+            "description": "The Portainer that manages this machine.",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Portainer",
+            "type": "string"
+          },
+          "hidden": {
+            "default": false,
+            "description": "Collapse it on the machine's page. HQ still watches and controls it.",
+            "title": "Collapse on machine page",
+            "type": "boolean"
+          },
+          "holds_docker_socket": {
+            "default": false,
+            "description": "A socket proxy or agent whose job is Docker. Its socket access is listed, not flagged.",
+            "title": "Holds the Docker socket",
+            "type": "boolean"
+          },
+          "host": {
+            "description": "The machine the container runs on.",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Runs on",
+            "type": "string"
+          },
+          "name": {
+            "description": "The container name, as Docker reports it.",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Container",
+            "type": "string"
+          },
+          "on_demand": {
+            "default": false,
+            "description": "Usually stopped and removed, so HQ does not flag it as missing.",
+            "title": "Runs on demand",
+            "type": "boolean"
+          },
+          "serves_ports": {
+            "description": "Host-network containers only. Docker reports no ports for them, so list the ports here to link a proxy to it.",
+            "items": {
+              "type": "integer"
+            },
+            "title": "Answers on",
+            "type": "array"
+          },
+          "source": {
+            "default": "",
+            "description": "The GitHub repository its image is built from, for an image that does not say. HQ reads its releases and advisories.",
+            "maxLength": 300,
+            "title": "Built from",
+            "type": "string"
+          }
+        },
+        "required": [
+          "connection_ref",
+          "host",
+          "name"
+        ],
+        "type": "object"
+      },
+      "PortainerStackEnvVar": {
+        "additionalProperties": false,
+        "description": "One environment variable a stack is deployed with.",
+        "properties": {
+          "name": {
+            "description": "The variable's name.",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "value": {
+            "default": "",
+            "description": "The variable's value.",
+            "maxLength": 4000,
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "PortainerStackSpec": {
+        "additionalProperties": false,
+        "description": "A compose stack Portainer deploys on one machine.",
+        "properties": {
+          "compose": {
+            "description": "The docker compose file, as it would be on disk.",
+            "minLength": 1,
+            "title": "Compose file",
+            "type": "string"
+          },
+          "connection_ref": {
+            "description": "The Portainer environment this runs in.",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Portainer",
+            "type": "string"
+          },
+          "environment": {
+            "description": "Values the compose file reads. Keep secrets in 1Password.",
+            "items": {
+              "$ref": "#/components/schemas/PortainerStackEnvVar"
+            },
+            "title": "Environment",
+            "type": "array"
+          },
+          "host": {
+            "description": "The machine the stack runs on.",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Runs on",
+            "type": "string"
+          },
+          "hostnames": {
+            "description": "Hostnames that reach this stack from outside, if any.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Serves",
+            "type": "array"
+          },
+          "name": {
+            "description": "Lowercase and hyphenated. Used as the compose project name.",
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "title": "Stack name",
+            "type": "string"
+          },
+          "port": {
+            "anyOf": [
+              {
+                "maximum": 65535,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The port on the machine. Needed only for host-network containers. Published ports are read from the running container.",
+            "title": "Answers on port"
+          }
+        },
+        "required": [
+          "connection_ref",
+          "host",
+          "name",
+          "compose"
+        ],
         "type": "object"
       },
       "PresencePart": {
@@ -15105,6 +16202,20 @@
         "description": "Its address in HQ; blank derives one from the name.",
         "type": "string"
       },
+      "SourceSpec": {
+        "additionalProperties": false,
+        "description": "Where the source's repository is named: the host's configuration\n(``automation`` in its host.json), never HQ's, which holds no repository.",
+        "properties": {
+          "named_by": {
+            "const": "host",
+            "default": "host",
+            "description": "Where the repository is named.",
+            "title": "Repository named by",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "SourcesChosen": {
         "additionalProperties": false,
         "description": "Which calendar sources you show, as the call left them.",
@@ -15233,6 +16344,134 @@
       },
       "SyncStats": {
         "description": "Docs created, updated and skipped, links to records HQ does not hold, and orphans found or pruned.",
+        "type": "object"
+      },
+      "TLSCertificateSpec": {
+        "additionalProperties": false,
+        "description": "One certificate HQ issues, deploys and keeps renewed.\n\nEverything about it is stated here: what it is called, which names it\ncovers, and where it installs. Adding a name is saving the form.\n\nTitles and descriptions live on the model because the form is generated\nfrom it.",
+        "properties": {
+          "certificate_name": {
+            "description": "Lowercase, no spaces.",
+            "maxLength": 160,
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "title": "Certificate name",
+            "type": "string"
+          },
+          "domains": {
+            "description": "Wildcards are allowed. Each domain must be in a Cloudflare zone HQ can edit, for the Let's Encrypt DNS challenge.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Domains",
+            "type": "array"
+          },
+          "install_on": {
+            "description": "Where the certificate is deployed. Delivery settings are on each target.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Install it on",
+            "type": "array"
+          },
+          "renewal_window_days": {
+            "default": 30,
+            "description": "Days before expiry that renewal starts. HQ also renews at once if a site serves the wrong certificate.",
+            "maximum": 60,
+            "minimum": 1,
+            "title": "Renew this many days early",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "certificate_name"
+        ],
+        "type": "object"
+      },
+      "TLSDeliveryTargetSpec": {
+        "additionalProperties": false,
+        "description": "One place a certificate can be installed, and how it arrives there.\n\nWhat a target needs (a Caddy host's directory, the names a cPanel account\nhosts) is true of every certificate it will ever serve, so it is stated\nonce here instead of on each certificate that installs there.",
+        "properties": {
+          "certificate_directory": {
+            "default": "",
+            "description": "Caddy only. The directory the certificate and key are written to.",
+            "maxLength": 500,
+            "title": "Certificate directory",
+            "type": "string"
+          },
+          "certificate_resource": {
+            "default": "",
+            "description": "The certificate that uses the name above. Blank if none.",
+            "maxLength": 160,
+            "title": "Certificate using this name",
+            "type": "string"
+          },
+          "connection_ref": {
+            "description": "The connection HQ uses to reach this target.",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Connection",
+            "type": "string"
+          },
+          "discover_covered_hosts": {
+            "default": false,
+            "description": "Nginx Proxy Manager only. Also check every proxy host this certificate covers.",
+            "title": "Check every proxy host it covers",
+            "type": "boolean"
+          },
+          "install_domains": {
+            "description": "cPanel only. Each site holds one certificate, shared by its aliases. Leave empty to install on every site serving a name it is checked at.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Install only on the sites serving these names",
+            "type": "array"
+          },
+          "item": {
+            "default": "",
+            "description": "1Password only. An existing item HQ writes the certificate's details to.",
+            "maxLength": 160,
+            "title": "Item",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Sets how the certificate is delivered and verified.",
+            "enum": [
+              "npm",
+              "caddy",
+              "cpanel",
+              "onepassword"
+            ],
+            "title": "Type",
+            "type": "string"
+          },
+          "name": {
+            "description": "The certificate's name on the target. Used only by the certificate below.",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Name at target",
+            "type": "string"
+          },
+          "vault": {
+            "default": "",
+            "description": "1Password only. The vault that holds the item.",
+            "maxLength": 160,
+            "title": "Vault",
+            "type": "string"
+          },
+          "verify_domains": {
+            "description": "Names HQ connects to here to confirm the certificate arrived. Leave empty to check every name it covers.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Check these names",
+            "type": "array"
+          }
+        },
+        "required": [
+          "kind",
+          "connection_ref",
+          "name"
+        ],
         "type": "object"
       },
       "TagPart": {
@@ -15393,6 +16632,36 @@
         },
         "type": "object"
       },
+      "TailnetDeviceSpec": {
+        "additionalProperties": false,
+        "description": "A machine on the tailnet whose settings HQ keeps, not one it created.\n\nLike a watched container, it joined by somebody running `tailscale up` on\nit. HQ holds the few decisions about it that are made once, then forgotten,\nand have no symptom until the day they matter.",
+        "properties": {
+          "connection_ref": {
+            "default": "",
+            "description": "The connection HQ uses to change this device.",
+            "maxLength": 160,
+            "title": "Tailscale",
+            "type": "string"
+          },
+          "key_expiry_disabled": {
+            "default": false,
+            "description": "Otherwise the device goes offline when its key expires.",
+            "title": "Disable key expiry",
+            "type": "boolean"
+          },
+          "name": {
+            "description": "The device name, as the tailnet reports it.",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Device",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
       "TailnetPolicyRemoveEmptyGroupsRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
@@ -15415,6 +16684,26 @@
         "required": [
           "target"
         ],
+        "type": "object"
+      },
+      "TailnetPolicySpec": {
+        "additionalProperties": false,
+        "description": "The tailnet's access policy, as HQ last read it.\n\nNot something an operator adds here: it exists because a tailnet does.\n``created_from`` keeps it out of the \"add a resource\" picker for that\nreason: there is exactly one, and it arrived with the credential.",
+        "properties": {
+          "connection_ref": {
+            "default": "",
+            "description": "The Tailscale connection the policy is read through.",
+            "maxLength": 160,
+            "title": "Tailscale",
+            "type": "string"
+          },
+          "document": {
+            "default": "",
+            "description": "The tailnet's access policy.",
+            "title": "Policy",
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "TailnetReachAllowRequest": {
@@ -16477,6 +17766,42 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "UploadedCertificateSpec": {
+        "additionalProperties": false,
+        "description": "A certificate generated elsewhere, that HQ installs and keeps.\n\nSeparate from ``tls.certificate`` because the lifecycle is different, not\nbecause the certificate is. This one cannot be renewed by HQ (the CA that\nsigns it is deliberately air-gapped) so it has no renewal window and no\nautomatic renew action, and pretending otherwise would put a countdown on a\nthing HQ cannot act on.",
+        "properties": {
+          "certificate_name": {
+            "description": "The certificate's name where it is installed.",
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9.-]*$",
+            "title": "Name",
+            "type": "string"
+          },
+          "domains": {
+            "description": "Read from the certificate on each upload. Remove names HQ should not treat as covered.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Names it covers",
+            "type": "array"
+          },
+          "install_on": {
+            "description": "Where to deploy it. You can add more later.",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Install it on",
+            "type": "array"
+          }
+        },
+        "required": [
+          "certificate_name",
+          "install_on"
+        ],
         "type": "object"
       },
       "UsagePart": {

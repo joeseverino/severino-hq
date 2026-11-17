@@ -5,10 +5,11 @@ about them is here.
 """
 
 import re
-from typing import Any
+from typing import Annotated, Any
 
 from pydantic import Field, field_validator
 
+from hq.platform.application.describe import Describe
 from hq.platform.application.github_public import GitHubRepositoryURL
 from hq.platform.application.ui import ended
 lazy from hq.platform.application.container_standard import CHECK_IDS
@@ -47,7 +48,7 @@ class PortainerContainerSpec(ProviderModel):
         min_length=1,
         max_length=160,
         title="Runs on",
-        description="The machine this runs on.",
+        description="The machine the container runs on.",
     )
     name: str = Field(
         min_length=1,
@@ -115,11 +116,15 @@ class PortainerContainerSpec(ProviderModel):
 
 
 class PortainerStackEnvVar(ProviderModel):
-    name: str = Field(min_length=1, max_length=200, title="Name")
-    value: str = Field(default="", max_length=4000, title="Value")
+    """One environment variable a stack is deployed with."""
+
+    name: Annotated[str, Describe("", api="The variable's name.")] = Field(min_length=1, max_length=200, title="Name")
+    value: Annotated[str, Describe("", api="The variable's value.")] = Field(default="", max_length=4000, title="Value")
 
 
 class PortainerStackSpec(ProviderModel):
+    """A compose stack Portainer deploys on one machine."""
+
     connection_ref: str = Field(
         min_length=1,
         max_length=160,
@@ -130,7 +135,7 @@ class PortainerStackSpec(ProviderModel):
         min_length=1,
         max_length=160,
         title="Runs on",
-        description="The machine this runs on.",
+        description="The machine the stack runs on.",
     )
     name: str = Field(
         min_length=1,

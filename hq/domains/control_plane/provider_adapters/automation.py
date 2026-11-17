@@ -7,12 +7,13 @@ to, and what a held run is measured against. Nothing sweeps a playbook, and
 the controller runs none of it: HQ's runner claims each run.
 """
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import Field
 
 from hq.platform.application.automation_manifest import PLAYBOOK, PLAYBOOK_LONGEST, REVISION, PlaybookEffect
 from hq.platform.application.contracts import Effect
+from hq.platform.application.describe import Describe
 from hq.platform.application.ui import ended
 lazy from hq.platform.application.action_links import command_url
 lazy from hq.platform.application.automation_runs import (
@@ -40,21 +41,46 @@ SCAN = "scan"
 class OperationSpec(ProviderModel):
     """One adopted playbook: every field but its input type, which its schema's digest stands for."""
 
-    operation: str = Field(min_length=1, max_length=160, title="Playbook ID")
-    revision: str = Field(pattern=REVISION, title="Reviewed commit")
+    operation: Annotated[str, Describe("", api="The playbook's id, as its sidecar names it.")] = Field(
+        min_length=1, max_length=160, title="Playbook ID"
+    )
+    revision: Annotated[str, Describe("", api="The commit of the repository the playbook was reviewed at.")] = Field(
+        pattern=REVISION, title="Reviewed commit"
+    )
     # Inside the project the host's configuration names at that commit.
-    playbook: str = Field(pattern=PLAYBOOK, max_length=PLAYBOOK_LONGEST, title="Playbook file")
-    input_schema_sha256: str = Field(pattern=r"^[0-9a-f]{64}$", title="Input schema")
-    target_kinds: list[str] = Field(min_length=1, title="Record types")
-    hosts: list[str] = Field(default_factory=list, title="Machines")
-    privilege: str = Field(default="", max_length=160, title="Privilege")
-    effect: PlaybookEffect = Field(title="Effect")
-    timeout_seconds: int = Field(ge=1, le=3600, title="Timeout")
+    playbook: Annotated[str, Describe("", api="The playbook's path in the repository.")] = Field(
+        pattern=PLAYBOOK, max_length=PLAYBOOK_LONGEST, title="Playbook file"
+    )
+    input_schema_sha256: Annotated[str, Describe("", api="The SHA-256 digest of the playbook's input schema.")] = Field(
+        pattern=r"^[0-9a-f]{64}$", title="Input schema"
+    )
+    target_kinds: Annotated[list[str], Describe("", api="The record types the playbook runs against.")] = Field(
+        min_length=1, title="Record types"
+    )
+    hosts: Annotated[
+        list[str], Describe("", api="The machines the playbook may run on. Empty for any machine a target names.")
+    ] = Field(default_factory=list, title="Machines")
+    privilege: Annotated[str, Describe("", api="The privilege profile it runs with. Empty for none.")] = Field(
+        default="", max_length=160, title="Privilege"
+    )
+    effect: Annotated[PlaybookEffect, Describe("", api="What running it does.")] = Field(title="Effect")
+    timeout_seconds: Annotated[int, Describe("", api="How many seconds a run may take.")] = Field(
+        ge=1, le=3600, title="Timeout"
+    )
     # A read may assert nothing before or after it (``OperationManifest``).
-    preconditions: list[str] = Field(default_factory=list, title="Preconditions")
-    verification: list[str] = Field(default_factory=list, title="Verification")
-    recovery: list[str] = Field(min_length=1, title="Recovery")
-    retry: Literal["never", "observe_first", "safe"] = Field(title="Retry")
+    preconditions: Annotated[list[str], Describe("", api="What must hold before it runs.")] = Field(
+        default_factory=list, title="Preconditions"
+    )
+    verification: Annotated[list[str], Describe("", api="What it checks once it has run.")] = Field(
+        default_factory=list, title="Verification"
+    )
+    recovery: Annotated[list[str], Describe("", api="What to do when a run fails.")] = Field(
+        min_length=1, title="Recovery"
+    )
+    retry: Annotated[
+        Literal["never", "observe_first", "safe"],
+        Describe("", api="Whether a run that did not finish may be run again."),
+    ] = Field(title="Retry")
 
 
 def _readout(spec: dict[str, Any], _status: dict[str, Any]) -> tuple[tuple[str, str, str], ...]:
@@ -116,7 +142,9 @@ class SourceSpec(ProviderModel):
     """Where the source's repository is named: the host's configuration
     (``automation`` in its host.json), never HQ's, which holds no repository."""
 
-    named_by: Literal["host"] = Field(default="host", title="Repository named by")
+    named_by: Annotated[Literal["host"], Describe("", api="Where the repository is named.")] = Field(
+        default="host", title="Repository named by"
+    )
 
 
 SOURCE = ProviderSpec(

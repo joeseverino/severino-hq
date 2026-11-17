@@ -42,6 +42,8 @@ def _seed(context: Any) -> dict[str, Any]:
 
 
 class AdGuardRewriteSpec(ProviderModel):
+    """A name AdGuard answers on your network with an address of HQ's choosing."""
+
     domain: str = Field(
         min_length=1,
         max_length=253,

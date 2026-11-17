@@ -91,6 +91,8 @@ def _resolve(authored: dict[str, Any], context: Any) -> dict[str, Any]:
 
 
 class CaddyRouteSpec(ProviderModel):
+    """One name Caddy serves, and where it hands each request off to."""
+
     connection_ref: str = Field(
         default="",
         max_length=160,

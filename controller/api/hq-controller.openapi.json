@@ -3605,6 +3605,7 @@
       },
       "GitHubDeliverySpec": {
         "additionalProperties": false,
+        "description": "A github.delivery declaration. The defaults are the declaration a sweep reports and HQ adopts.",
         "properties": {
           "repository": {
             "description": "The repository whose deploy workflow deploys HQ.",
@@ -3613,11 +3614,13 @@
           },
           "workflow": {
             "default": ".github/workflows/compose.yml",
+            "description": "The workflow file, in the repository, that deploys HQ.",
             "pattern": "^\\.github/workflows/[A-Za-z0-9_.-]+\\.ya?ml$",
             "type": "string"
           },
           "branch": {
             "default": "main",
+            "description": "The branch the workflow deploys from.",
             "pattern": "^[A-Za-z0-9_./-]+$",
             "type": "string"
           },
@@ -3631,8 +3634,7 @@
           "branch",
           "production"
         ],
-        "type": "object",
-        "description": "A github.delivery declaration. The defaults are the declaration a sweep reports and HQ adopts."
+        "type": "object"
       },
       "GitHubDependencyRunRecord": {
         "description": "One account's update run: what root reported of it, never its log.",

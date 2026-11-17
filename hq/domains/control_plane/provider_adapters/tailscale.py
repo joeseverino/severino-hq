@@ -2,12 +2,13 @@
 
 import json
 from collections.abc import Mapping
-from typing import Any
+from typing import Annotated, Any
 
 from django.utils.text import capfirst
 from pydantic import Field
 
 from hq.config.networks import TAILNET_RANGES
+from hq.platform.application.describe import Describe
 from hq.platform.application.ui import ended
 
 from ..connection_shapes import OAUTH_CLIENT
@@ -71,7 +72,9 @@ class TailnetPolicySpec(ProviderModel):
     reason: there is exactly one, and it arrived with the credential.
     """
 
-    connection_ref: str = Field(default="", max_length=160, title="Tailscale")
+    connection_ref: Annotated[str, Describe("", api="The Tailscale connection the policy is read through.")] = Field(
+        default="", max_length=160, title="Tailscale"
+    )
     document: str = Field(
         default="",
         title="Policy",
