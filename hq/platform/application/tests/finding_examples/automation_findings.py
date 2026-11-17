@@ -1,0 +1,38 @@
+from datetime import timedelta
+
+from hq.domains.control_plane.models import ManagedResource
+from hq.platform.core.models import UpstreamReading
+
+from ... import readings
+from ...cadence import AUTOMATION_HEARTBEAT
+from ...tone import Tone
+from . import AT, Example, Examples, Raised
+
+
+def worker(seen: timedelta | None = None, *, source: bool = True, raises: tuple[Raised | str, ...] = ()) -> Example:
+    """HQ's playbook worker last arrived ``seen`` ago, or never, with a playbook source unless not ``source``."""
+
+    def given() -> None:
+        if source:
+            ManagedResource.objects.create(key="automation-source", kind="automation.source", spec={})
+        if seen is not None:
+            readings.record(AUTOMATION_HEARTBEAT, {})
+            UpstreamReading.objects.filter(key=AUTOMATION_HEARTBEAT).update(observed_at=AT - seen)
+
+    return Example(given=given, raises=raises)
+
+
+EXAMPLES = (
+    Examples(
+        "automation-worker-absent",
+        fires=(
+            worker(raises=("HQ's playbook worker is not set up",)),
+            worker(
+                timedelta(hours=3),
+                raises=(Raised(title="HQ's playbook worker has stopped reporting", severity=Tone.SERIOUS),),
+            ),
+        ),
+        # Where nobody set automation up, and where it arrived within its interval.
+        quiet=(worker(source=False), worker(timedelta(minutes=20))),
+    ),
+)

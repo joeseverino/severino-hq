@@ -37,7 +37,6 @@ LOOPBACK = ("127.0.0.1", "::1")
 # examples of its own; the list only shrinks.
 UNWALKED = frozenset(
     {
-        "automation_findings",
         "container_findings",
         "contradiction_findings",
         "controller_findings",
@@ -202,7 +201,9 @@ class EveryRuleTests(TestCase):
             self.assertIn(finding.severity, rule.bars)
             self.assertIn(rule.bars[finding.severity], finding_why(finding, rule))
             self.assertTrue(finding.steps, "it leaves a step to take")
-            self.assertTrue(finding.presses or finding.subject, "it has something to press or a subject to open")
+            self.assertTrue(
+                finding.presses or finding.subject or finding.primary, "it has something to press or a page to open"
+            )
             gate = read_gate(finding, walked.subjects.get(finding.subject))
             self.assertIsNotNone(gate, "its read gate is derived from what it is about")
             self.assertEqual(finding.read_capabilities, gate)

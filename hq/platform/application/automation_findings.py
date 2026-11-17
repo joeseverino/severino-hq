@@ -12,12 +12,13 @@ order docs/Deployment.md gives it, for any operator's host.
 
 from typing import Any
 
-from .finding_model import Finding, FindingEstate, FindingRule
+from .finding_model import Finding, FindingEstate, FindingRule, opens
 from .finding_steps import Run
 from .moments import ago
 from .security import Capability, Principal
 from .tone import Tone
 lazy from .problems import About, problems_by_part
+lazy from .routes import reverse
 
 RULE = "automation-worker-absent"
 # Who is told: whoever may read the Playbooks page. It is about no record or
@@ -62,6 +63,8 @@ def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
     worker = estate.topology.automation_worker
     if worker is None or not worker.cannot("refresh", now=estate.now):
         return ()
+    # The page whose Refresh and runs it refuses, where its setup is shown.
+    playbooks = opens("Open playbooks", reverse("control_plane:playbooks"))
     if worker.seen_at is None:
         return (
             Finding(
@@ -73,6 +76,7 @@ def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
                 explanation="Refresh and playbook runs are refused until it is set up on HQ's machine.",
                 evidence=(("Last seen", "never"),),
                 steps=(_ENTRY, _START),
+                primary=playbooks,
             ),
         )
     return (
@@ -85,6 +89,7 @@ def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
             explanation="Refresh and playbook runs are refused until it reports again; start it on HQ's machine.",
             evidence=(("Last seen", ago(worker.seen_at, now=estate.now)),),
             steps=(_START, _LOG),
+            primary=playbooks,
         ),
     )
 
