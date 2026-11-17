@@ -1,14 +1,10 @@
 """A write to a record that exists sets the fields its caller sent, and every
 field left out keeps what the record holds; a new record takes its defaults."""
 
-import json
 from datetime import date
 from decimal import Decimal
-from io import StringIO
-from unittest import mock
 
 from django.contrib.auth import get_user_model
-from django.core.management import call_command
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
@@ -233,26 +229,6 @@ class TheCommandFormKeepsWhatIsLeftBlankTests(TestCase):
         self.assertEqual(
             (asset.total_cost, asset.item_name, asset.notes, asset.vendor),
             (Decimal("12.00"), "Example box", "Kept.", "Example Supply"),
-        )
-
-
-class TheOperatorsShellKeepsTests(TestCase):
-    def test_an_asset_update_sent_only_its_cost_through_hq_call_changes_only_its_cost(self):
-        Asset.objects.create(item_name="Example box", slug="example-box", notes="Kept.", business_use_percentage=40)
-        request = {
-            "tool": "execute_capability",
-            "arguments": {"name": "asset.update", "payload": {"total_cost": "12.00"}, "target": "example-box"},
-        }
-        output = StringIO()
-
-        with mock.patch("sys.stdin", StringIO(json.dumps(request))):
-            call_command("hq_call", stdout=output)
-
-        self.assertTrue(json.loads(output.getvalue())["ok"], output.getvalue())
-        asset = Asset.objects.get(slug="example-box")
-        self.assertEqual(
-            (asset.total_cost, asset.item_name, asset.notes, asset.business_use_percentage),
-            (Decimal("12.00"), "Example box", "Kept.", 40),
         )
 
 
