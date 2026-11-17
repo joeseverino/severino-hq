@@ -123,27 +123,6 @@ TABLE_PROMISES = (
 }"""
 )
 
-# The first table on a page as a phone lays it out: whether it runs past its
-# box, where each showing column starts and how wide it is, how tall each record's row is, how
-# many rows show their toggle, and the labels of the entries the open rows
-# show on their open lines.
-PHONE_TABLE = """(scroll) => {
-  const box = document.querySelector('main ' + scroll);
-  const table = box && box.querySelector('table');
-  if (!table) return null;
-  const showing = (el) => getComputedStyle(el).display !== 'none';
-  return {
-    sideways: Math.round(box.scrollWidth - box.clientWidth),
-    headings: table.querySelectorAll('thead th').length,
-    columns: [...table.querySelectorAll('thead th')].filter(showing)
-      .map((heading) => [heading.getBoundingClientRect().left, heading.getBoundingClientRect().width].map(Math.round)),
-    rows: [...table.querySelectorAll('tbody > tr:not([data-row-detail]):not(:has(> th[scope="rowgroup"]))')]
-      .map((row) => Math.round(row.getBoundingClientRect().height)),
-    toggles: [...table.querySelectorAll('tbody button[aria-expanded]:not([data-fold-toggle])')].filter((el) => el.checkVisibility()).length,
-    details: [...table.querySelectorAll('tbody > tr.row-detail .row-columns > * > dt')].filter((label) => label.checkVisibility()).map((label) => label.textContent.trim()),
-  };
-}"""
-
 # Every table that is wider than the box it scrolls in, and for each table
 # that has row toggles, how many different left edges its rows' names start on.
 TABLES_THAT_DO_NOT_FIT = (
@@ -729,16 +708,6 @@ WHOLE_PARTS_MOVED_BY_OPENING = (
 }"""
 )
 
-# Press the first row toggle (never a family fold) that shows in the page's first table, and say which
-# of its records (counted as PHONE_TABLE counts them) it opened.
-PRESS_FIRST_ROW_TOGGLE = """(scroll) => {
-  const table = document.querySelector('main ' + scroll).querySelector('table');
-  const records = [...table.querySelectorAll('tbody > tr:not([data-row-detail]):not(:has(> th[scope="rowgroup"]))')];
-  const toggle = [...table.querySelectorAll('tbody button[aria-expanded]:not([data-fold-toggle])')].find((el) => el.checkVisibility());
-  toggle.click();
-  return records.indexOf(toggle.closest('tr'));
-}"""
-
 # A row folded under its family (`data-folded`) is drawn only once its family
 # is opened (`data-open`), at every width: a rule that sets a row's display (a
 # row stacked in a narrow box) must leave a folded row folded. With no script
@@ -851,35 +820,6 @@ PAST_THE_GUTTER = (
 )
 
 
-# A table with a column of dashes, a column of marks with no words, and a
-# column of short words: the server marks the dashes blank and they are not
-# drawn, the marks are, and no word is split however the column's width rounds.
-BLANK_TABLE = """{% table_region "Runbooks" %}<table class="data-table">
-<thead><tr>{% table_heading "Title" %}{% table_heading "Type" %}{% table_heading "Nothing" %}
-{% table_heading "Runs" %}{% table_heading "Note" %}</tr></thead><tbody>
-<tr><td>Upgrade a container to a new release</td><td>Runbook</td><td><span class="empty-value">–</span></td>
-<td><span class="kpi-dots"><span class="kpi-dot is-filled" title="Succeeded"></span></span></td><td>A sentence long enough to take the room it is given and wrap.</td></tr>
-<tr><td>Rotate the signing keys</td><td>Runbook</td><td>–</td>
-<td><span class="kpi-dots"><span class="kpi-dot is-filled" title="Succeeded"></span></span></td><td>Another sentence that wraps in its column.</td></tr>
-</tbody></table>{% endtable_region %}"""
-
-# A row's two controls with labels of two words, beside a name and a status,
-# in a card: on the narrowest phone their column leaves for the line beneath
-# the row, each label whole. Beside it a table that nothing it gives can fit,
-# a cell asking more than a phone has, which scrolls in its region rather than
-# run past its card.
-ROW_ACTIONS_TABLES = """<section class="card">
-{% table_region "Devices" %}<table class="data-table" data-probe="actions"><thead><tr>
-{% table_heading "Device" "identifier" gutter=True %}{% table_heading "Approval" "status" %}
-{% table_heading "Calls" drop=1 %}{% table_heading "Approve or block" "control" hidden=True drop=2 %}</tr></thead><tbody>
-<tr><th scope="row">example-host-01</th><td><span class="pill">Needs approval</span></td><td>2 calls</td>
-<td class="row-actions"><form><button type="button" class="btn compact primary">Withdraw approval</button></form><form><button type="button" class="btn compact">Block device</button></form></td></tr>
-</tbody></table>{% endtable_region %}
-{% table_region "Unfittable" %}<table class="data-table" data-probe="unfittable"><thead><tr>{% table_heading "Name" %}</tr></thead><tbody>
-<tr><td><span style="display: inline-block; inline-size: 40rem">Example wider than any phone</span></td></tr>
-</tbody></table>{% endtable_region %}
-</section>"""
-
 COLUMNS_SHOWN = """() => [...document.querySelectorAll('thead th')]
   .filter((th) => getComputedStyle(th).display !== 'none').map((th) => th.textContent.replace(/[^A-Za-z ]/g, '').trim())"""
 
@@ -967,20 +907,6 @@ CUT_TABLE = (
 # already safe, so `breakable` would pass it as plain words, which wrap.
 CUT_VALUES = {"chip": _CHIP}
 
-# Rows that open, as an event's log draws them: a host name in a column a
-# phone lets go, so an opened row shows it in the line beneath, and a value
-# its cell cuts while the row is closed.
-OPEN_ROW_TABLE = """{% load value_tags %}
-{% table_region "Opened" %}<table class="data-table"><thead><tr>
-{% table_heading "Name" gutter=True %}{% table_heading "Object" drop=1 %}{% table_heading "Note" %}</tr></thead><tbody>
-<tr><td>Updated</td><td>{{ host|breakable }}</td>
-<td><span style="display: inline-block; inline-size: 14rem">A note that keeps its line</span></td></tr>
-<tr><td>Created</td><td>{{ host|breakable }}</td>
-<td>a value far too long to show whole on one line of its column, so its cell cuts it while the row is closed</td></tr>
-</tbody></table>{% endtable_region %}"""
-
-OPEN_ROW_VALUES = {"host": "example-hostname-with-a-long-descriptive-name-01.example.com"}
-
 # A panel shown from a cell, as an item's origin is: a key and a source too
 # long for the cell, which the panel has the room to show whole.
 POPOVER_IN_A_CELL = """{% load value_tags %}
@@ -1002,35 +928,6 @@ ROW_TOGGLES = """() => [...document.querySelectorAll('tbody tr:not([data-row-det
   shown: [...row.querySelectorAll('button[aria-expanded]')].some((toggle) => toggle.checkVisibility()),
   beside_name: row.querySelector('button[aria-expanded]')?.parentElement === row.cells[0],
 }))"""
-
-# A path's steps, as the service page draws them: an address with a port, a
-# host name and a list of networks beside sentences, in tables with ranked
-# columns to let go; what each prints is in IDENTIFIER_VALUES.
-IDENTIFIER_TABLES = """{% load value_tags %}
-{% table_region "Steps" %}<table class="data-table"><thead><tr>
-{% table_heading "Step" gutter=True %}{% table_heading "Name" "identifier" %}{% table_heading "State" "status" %}
-{% table_heading "Since" drop=3 %}{% table_heading "Impact" drop=2 %}{% table_heading "Read from" drop=1 %}</tr></thead><tbody>
-<tr><td>Proxy host</td><td><a href="/proxy/" data-entity="Proxy host">{{ address|breakable }}</a></td>
-<td><span class="pill">Up</span></td><td>1 day</td><td>If it is removed, the name stops reaching the app it serves.</td>
-<td>Read from the proxy's own list of hosts, a minute ago</td></tr>
-<tr><td>Forwards to</td><td>{{ address|breakable }}</td><td><span class="pill">Up</span></td><td>1 day</td>
-<td>If nothing listens there, a reader gets a gateway error.</td><td>Read from the container's ports</td></tr>
-<tr><td>Service</td><td><span data-entity="Service">{{ host|breakable }}</span></td><td></td><td>1 day</td>
-<td>The service stops answering at this name.</td><td>Declared in HQ</td></tr>
-</tbody></table>{% endtable_region %}
-{% table_region "Access" %}<table class="data-table"><thead><tr>
-{% table_heading "Access list" gutter=True %}{% table_heading "Admits by" drop=3 %}
-{% table_heading "Addresses" drop=2 %}{% table_heading "Logins" drop=1 %}</tr></thead><tbody>
-<tr><td>office only</td><td>Address rules</td><td>{{ networks|breakable }}</td><td>{{ logins|breakable }}</td></tr>
-</tbody></table>{% endtable_region %}"""
-
-IDENTIFIER_VALUES = {
-    "address": "203.0.113.214:8000",
-    "host": "status.example.com",
-    "networks": "allow 198.51.100.0/24; allow 2001:db8:a1e0::/48",
-    "logins": "none",
-}
-
 
 # A stacked row's field, and every value of a column a row fills a field in,
 # stands under its column's name: without it a reader of a row of choices

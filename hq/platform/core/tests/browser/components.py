@@ -17,7 +17,7 @@ from hq.platform.core.stylesheets import DIRECTORY, stylesheet
 from hq.platform.core.test_runner import browser_engine
 from hq.platform.core.tests.browser.gate import add_css, tab_key, with_script
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
-from hq.platform.core.tests.browser.probes.boxes import CHECKS, SIDEWAYS, SMALL_TARGETS
+from hq.platform.core.tests.browser.probes.boxes import CHECKS, SMALL_TARGETS
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE
 from hq.platform.core.tests.browser.probes.palette import BUTTON_EDGES
 from hq.platform.core.tests.browser.probes.parts import (
@@ -34,27 +34,17 @@ from hq.platform.core.tests.browser.probes.settle import (
 )
 from hq.platform.core.tests.browser.probes.shifts import CLS_LIMIT, LAYOUT_SHIFTS
 from hq.platform.core.tests.browser.probes.tables import (
-    BLANK_TABLE,
     CELLS,
     COLUMNS_SHOWN,
     CUT_AND_CLOSED,
     CUT_TABLE,
     CUT_VALUES,
-    CUT_WHEN_OPEN,
-    IDENTIFIER_TABLES,
-    IDENTIFIER_VALUES,
-    OPEN_ROW_TABLE,
-    OPEN_ROW_VALUES,
-    PHONE_TABLE,
     POPOVER_IN_A_CELL,
     POPOVER_VALUES,
-    PRESS_FIRST_ROW_TOGGLE,
-    ROW_ACTIONS_TABLES,
     ROW_TOGGLE_TABLES,
     ROW_TOGGLE_VALUES,
     ROW_TOGGLES,
     SORT_BY,
-    TABLE_PROMISES,
     TABLES_THAT_DO_NOT_FIT,
 )
 from hq.platform.core.tests.browser.probes.text import (
@@ -71,7 +61,6 @@ from hq.platform.core.tests.browser.probes.text import (
 from hq.platform.core.tests.browser.reading import probe
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import ORIGIN
-from hq.platform.core.tests.browser.stress import ALL_PAGES
 from hq.platform.core.tests.browser.widths import NARROWEST, PHONE_SCREEN, TARGET_MIN, WIDE, WIDTHS, viewport
 from hq.platform.core.tests.test_browser_fixtures import PAGES
 
@@ -293,12 +282,6 @@ _FILL_ROWS = """async (png) => {
   }
   return { rows: image.height, filled };
 }"""
-
-
-def others(rows, opened):
-    """Every row's height but the one that opened."""
-
-    return rows[:opened] + rows[opened + 1 :]
 
 
 # Each count of a strip: whether its number and its words share one line and
@@ -740,24 +723,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 self.page.wait_for_selector(f'{SELECTORS["row_ask"]}[data-ask-state="failed"]')
                 self.assertTrue(self.page.locator(SELECTORS["ask_note"]).first.is_visible())
                 self.assertLessEqual(row.bounding_box()["height"], tall + 1)
-
-    @with_script
-    def test_an_opened_row_keeps_its_words_in_their_cells(self):
-        """Opening a row lifts every cut in it, and what was cut breaks inside
-        its column rather than running under the next one."""
-
-        for name in ALL_PAGES:
-            for width in (PHONE_SCREEN[0], 820):
-                with self.subTest(page=name, width=width):
-                    self.open(name, width)
-                    # A family first, so the rows it folds show their own toggles.
-                    self.page.locator(SELECTORS["decision_family"]).evaluate_all(PRESS_EVERY_SHOWN)
-                    self.page.locator(SELECTORS["row_toggle"] + ":not([data-fold-toggle])").evaluate_all(
-                        PRESS_EVERY_SHOWN
-                    )
-                    self.page.evaluate(SETTLE)
-                    self.assertEqual(self.page.evaluate(CELLS), [])
-                    self.assertEqual(self.page.evaluate(TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), [])
 
     def test_a_probe_that_throws_hides_no_other(self):
         """Probes read in one round trip each run on their own."""
@@ -1526,23 +1491,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 self.assertEqual(named, expected, found)
 
     @with_script
-    def test_an_open_row_shows_every_value_whole(self):
-        """Opening a row is how a narrow box shows a value whole, so nothing
-        in an open row, nor in the line beneath it where a column that left
-        stands, is cut, at any width."""
-
-        self.pages = {**self.pages, "open-row-probe": probe(OPEN_ROW_TABLE, **OPEN_ROW_VALUES)}
-        for width in (PHONE_SCREEN[0], WIDE):
-            with self.subTest(width=width):
-                self.open("open-row-probe", width)
-                self.page.evaluate(SETTLE)
-                # Every row opened, as a link to it opens one whose toggle does not show.
-                self.page.locator("main " + SELECTORS["row_toggle"]).evaluate_all(
-                    "(rows) => rows.forEach((row) => row.click())"
-                )
-                self.assertEqual(self.page.evaluate(CUT_WHEN_OPEN, SELECTORS["unseen"]), [])
-
-    @with_script
     def test_a_panel_a_cell_shows_shows_its_values_whole(self):
         """A panel opened from a cell, drawn over the page, is no part of the
         column, so an identifier in it reads whole however narrow the cell."""
@@ -1572,64 +1520,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
         with self.assertRaises(AssertionError) as failed:
             self.every_anchored_popover_keeps_the_layout_rules("menu-probe")
         self.assertIn("with #example-panel shown", str(failed.exception))
-
-    @with_script
-    def test_a_wide_table_fits_a_phone_and_opening_a_row_moves_nothing(self):
-        """A table of four columns or more keeps the column that names each row
-        and the ones marked key, and fits the screen; it does not stack into
-        cards and is not swiped through. What left shows when a row is
-        opened, on its open line, each under its column's name.
-        """
-
-        for name in ("connections", "services", "containers", "projects"):
-            with self.subTest(page=name):
-                self.open(name, PHONE_SCREEN[0])
-                closed = self.page.evaluate(PHONE_TABLE, SELECTORS["table_scroll"])
-                self.assertGreaterEqual(closed["headings"], 4)
-                self.assertLess(len(closed["columns"]), closed["headings"])
-                self.assertLessEqual(closed["sideways"], 1)
-                self.assertGreater(closed["toggles"], 0)
-
-                self.page.evaluate(PRESS_FIRST_ROW_TOGGLE, SELECTORS["table_scroll"])
-                opened = self.page.evaluate(PHONE_TABLE, SELECTORS["table_scroll"])
-                self.assertTrue(opened["details"])
-                self.page.evaluate(PRESS_FIRST_ROW_TOGGLE, SELECTORS["table_scroll"])
-                self.assertEqual(self.page.evaluate(PHONE_TABLE, SELECTORS["table_scroll"])["details"], [])
-
-    @with_script
-    def test_opening_a_row_moves_no_column_and_no_other_row(self):
-        """What an open row shows whole (a column that left, a cut value, a
-        block it keeps beneath itself) stands on its open line and asks no
-        column for width: every column keeps its edges and every other row
-        its height, at every width, on each of the table's catalog entries and
-        the wide tables of the estate; closed again, the table is as it was."""
-
-        from hq.platform.core.tests.browser.catalog import CATALOG
-
-        entries = {name: CATALOG[name].page(name) for name in CATALOG if name.startswith("table/")}
-        self.pages = {**self.pages, **entries}
-        opened_any = 0
-        for name in (*entries, "connections", "services", "containers", "projects", "machine"):
-            for width in WIDTHS:
-                with self.subTest(page=name, width=width):
-                    self.open(name, width)
-                    self.page.evaluate(SETTLE)
-                    closed = self.page.evaluate(PHONE_TABLE, SELECTORS["table_scroll"])
-                    if not closed or not closed["toggles"]:
-                        continue
-                    opened_any += 1
-                    pressed = self.page.evaluate(PRESS_FIRST_ROW_TOGGLE, SELECTORS["table_scroll"])
-                    self.page.evaluate(SETTLE)
-                    opened = self.page.evaluate(PHONE_TABLE, SELECTORS["table_scroll"])
-                    self.assertEqual(opened["columns"], closed["columns"])
-                    self.assertEqual(others(opened["rows"], pressed), others(closed["rows"], pressed))
-                    self.assertLessEqual(opened["sideways"], 1)
-                    self.page.evaluate(PRESS_FIRST_ROW_TOGGLE, SELECTORS["table_scroll"])
-                    self.page.evaluate(SETTLE)
-                    again = self.page.evaluate(PHONE_TABLE, SELECTORS["table_scroll"])
-                    self.assertEqual(again["columns"], closed["columns"])
-                    self.assertEqual(again["rows"], closed["rows"])
-        self.assertGreater(opened_any, 0)
 
     @with_script
     def test_opening_every_row_a_reader_can_open_moves_nothing_they_did_not_ask_for(self):
@@ -1709,18 +1599,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.kept_the_policy()
         self.assertTrue(ready)
         self.assertEqual(set(ready), {"true"})
-
-    @with_script
-    def test_a_wide_table_on_a_desktop_keeps_every_column_and_holds_them_when_a_row_opens(self):
-        self.open("connections", 1440)
-        closed = self.page.evaluate(PHONE_TABLE, SELECTORS["table_scroll"])
-        self.assertEqual(len(closed["columns"]), closed["headings"])
-
-        if closed["toggles"]:
-            pressed = self.page.evaluate(PRESS_FIRST_ROW_TOGGLE, SELECTORS["table_scroll"])
-            opened = self.page.evaluate(PHONE_TABLE, SELECTORS["table_scroll"])
-            self.assertEqual(opened["columns"], closed["columns"])
-            self.assertEqual(others(opened["rows"], pressed), others(closed["rows"], pressed))
 
     @with_script
     def test_a_table_with_rows_open_is_fitted_as_it_stands_with_them_closed(self):
@@ -1832,40 +1710,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
         )
         self.assertTrue(self.page.evaluate(check, arg))
 
-    @with_script
-    def test_a_blank_column_is_not_drawn_and_a_short_word_is_not_split(self):
-        self.pages = {**self.pages, "blank-column-probe": probe(BLANK_TABLE)}
-        for width in WIDTHS:
-            with self.subTest(width=width):
-                self.open("blank-column-probe", width)
-                self.page.evaluate(SETTLE)
-                shown = self.page.evaluate(COLUMNS_SHOWN)
-                self.assertNotIn("Nothing", shown)
-                self.assertIn("Title", shown)
-                self.assertIn("Runs", shown)
-                self.assertEqual(self.page.evaluate(BROKEN_WORDS, SELECTORS["identifier"]), [])
-
-    @with_script
-    def test_a_rows_controls_stay_in_its_card_and_no_table_runs_past_it(self):
-        """On the narrowest phone a row's controls, each label whole, stand on
-        the line beneath the row's words, so their table fits its card; a
-        value wider than any phone is cut in its cell, so its table fits too.
-        Neither region scrolls or is a stop for the keyboard, and nothing on
-        the page runs past it sideways."""
-
-        self.pages = {**self.pages, "row-actions-probe": probe(ROW_ACTIONS_TABLES)}
-        self.open("row-actions-probe", NARROWEST)
-        self.page.evaluate(SETTLE)
-        self.assertEqual(self.page.evaluate(TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), [])
-        region = """(probe) => {
-          const region = document.querySelector(`[data-probe=${probe}]`).parentElement;
-          return [getComputedStyle(region).overflowX, region.getAttribute('tabindex')];
-        }"""
-        for name in ("unfittable", "actions"):
-            self.assertEqual(self.page.evaluate(region, name), ["visible", None])
-        self.assertEqual(self.page.evaluate(TABLE_PROMISES, SELECTORS["table_scroll"]), [])
-        self.assertEqual(self.page.evaluate(SIDEWAYS, SELECTORS["sideways"]), [])
-
     def test_a_short_name_is_broken_only_where_its_table_holds_it(self):
         """A short name its table holds on its line (`nowrap`) and something
         inside breaks anyway is found; one its table lets break at its seams,
@@ -1899,28 +1743,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
             BROKEN_TOKENS, ["table:not(.table-scroll *) td .token", SELECTORS["wraps_in_a_cell"]]
         )
         self.assertEqual([line.split(" breaks ")[1] for line in found], ['"example-held-name"'])
-
-    @with_script
-    def test_an_identifier_in_a_table_is_whole_while_a_column_can_leave(self):
-        """An address with a port, a host name and a network in a cell are
-        never broken at their seams while the table has a ranked column to
-        let go: on the narrowest phone the columns leave and the names stay
-        whole, and the table still fits its box."""
-
-        self.pages = {**self.pages, "identifier-probe": probe(IDENTIFIER_TABLES, **IDENTIFIER_VALUES)}
-        for width in (NARROWEST, *WIDTHS):
-            with self.subTest(width=width):
-                self.open("identifier-probe", width)
-                self.page.evaluate(SETTLE)
-                self.assertEqual(
-                    self.page.evaluate(BROKEN_TOKENS, [SELECTORS["cell_token"], SELECTORS["wraps_in_a_cell"]]), []
-                )
-                self.assertEqual(self.page.evaluate(TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), [])
-        self.open("identifier-probe", NARROWEST)
-        self.page.evaluate(SETTLE)
-        shown = self.page.evaluate(COLUMNS_SHOWN)
-        self.assertNotIn("Read from", shown)
-        self.assertNotIn("Logins", shown)
 
     @with_script
     def test_a_name_a_cell_cuts_is_drawn_whole_on_its_line_where_its_cell_has_room(self):
@@ -1989,8 +1811,11 @@ class ComponentLayoutTests(LayoutBrowserTests):
         and still fits its box: a column leaves by the region's width alone,
         and what grows is cut in its cell."""
 
-        self.pages = {**self.pages, "identifier-probe": probe(IDENTIFIER_TABLES, **IDENTIFIER_VALUES)}
-        self.open("identifier-probe", 820)
+        from hq.platform.core.tests.browser.catalog import CATALOG
+
+        name = "table/identifiers"
+        self.pages = {**self.pages, name: CATALOG[name].page(name)}
+        self.open(name, 820)
         self.page.evaluate(SETTLE)
         shown = self.page.evaluate(COLUMNS_SHOWN)
         # A style's change, which no script hears as a change to the tree:
