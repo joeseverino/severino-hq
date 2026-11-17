@@ -22,9 +22,9 @@ from .json_schemas import ObservedMoment
 from .moments import moment
 from .security import Principal
 from .tone import Tone
-from .topology import relation_graph
 from .topology_model import RELATIONS, TopologyEdge, relation_rank
 lazy from .action_links import topology_url
+lazy from .topology import relation_graph
 
 
 @with_config(ConfigDict(extra="forbid"))

@@ -1,13 +1,16 @@
 """Where an address is served: the machine it belongs to and, when certain, the container answering on it."""
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Annotated, Any
+
+from pydantic import ConfigDict, Field, with_config
 
 from hq.config.networks import is_loopback
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.platform.application.labels import dotted
 
+from .describe import Describe
 from .entity_links import EntityLink, entity_link
 from .infrastructure import declared_machines
 from .locate import Machines, host_of, machines_index, split_endpoint
@@ -16,13 +19,17 @@ lazy from .known_hosts import operator
 lazy from .reach import is_documentation, network_of
 
 
+@with_config(ConfigDict(extra="forbid"))
 @dataclass(frozen=True, slots=True)
 class Origin:
-    """Where a request for this hostname is finally served."""
+    """Where a request for the name is finally served, and what serves it there."""
 
-    address: str
-    host: str = ""
-    container: str = ""
+    address: Annotated[
+        str,
+        Describe("Where a request for the name is finally served: the address a proxy forwards to or a record names."),
+    ]
+    host: Annotated[str, Describe("The machine at that address; empty when it matches none.")] = ""
+    container: Annotated[str, Describe("The container serving it there; empty when none is known.")] = ""
     # Whether an ingress declared this, or a record merely pointed here. Both
     # are origins and they are not the same sentence: an ingress *forwards* to
     # somewhere, while a record says the name simply answers there. Rendered
@@ -31,10 +38,10 @@ class Origin:
     #
     # Defaults true: an origin comes from an ingress unless a record says
     # otherwise.
-    routed: bool = True
+    routed: Annotated[bool, Field(exclude=True)] = True
     # What readings joined to the origin name as serving it: a Pages project,
     # the holder of a public address.
-    serving: tuple[str, ...] = ()
+    serving: Annotated[tuple[str, ...], Field(exclude=True)] = ()
 
     @property
     def parked(self) -> bool:

@@ -298,31 +298,6 @@ def get_relationships(node: str, *, principal: Principal) -> dict[str, Any]:
 # ----- Paths ------------------------------------------------------------------
 
 
-def _source(source: Any) -> dict[str, Any] | None:
-    if source is None:
-        return None
-    return {
-        "kind": source.kind,
-        "label": source.label,
-        "connection": source.connection,
-        "observed_at": _moment(source.observed_at),
-        "declared": source.declared,
-    }
-
-
-def _certificate(certificate: Any) -> dict[str, Any] | None:
-    if certificate is None:
-        return None
-    return {
-        "role": certificate.role,
-        "name": certificate.name,
-        "issuer": certificate.issuer,
-        "expiry": certificate.expiry,
-        "source": _source(certificate.source),
-        "unread": certificate.unread,
-    }
-
-
 def serialize_hop(hop: Any) -> dict[str, Any]:
     """One hop as every adapter returns it; a hop walked for a request adds
     what the request showed there and the checks decided there."""
@@ -333,8 +308,8 @@ def serialize_hop(hop: Any) -> dict[str, Any]:
         "name": hop.name,
         "link": as_written(hop.link) if hop.link else None,
         "detail": hop.detail,
-        "source": _source(hop.source),
-        "certificate": _certificate(hop.certificate),
+        "source": as_written(hop.source) if hop.source else None,
+        "certificate": as_written(hop.certificate) if hop.certificate else None,
         "unread": hop.unread,
         "overlays": [
             {"relation": relation, "link": as_written(link) if link else None} for relation, link in hop.overlays
@@ -344,12 +319,7 @@ def serialize_hop(hop: Any) -> dict[str, Any]:
         return found
     return {
         **found,
-        "check": {
-            "state": hop.check.state,
-            "label": hop.check.label,
-            "detail": hop.check.detail,
-            "step": hop.check.step,
-        },
+        "check": as_written(hop.check),
         "evidence": [as_written(item) for item in hop.evidence],
         "layers": [serialize_check(result) for result in hop.checks],
     }
@@ -403,7 +373,7 @@ def serialize_path(path: Any) -> dict[str, Any]:
                 "name": hop.name,
                 "link": as_written(hop.link) if hop.link else None,
                 "detail": hop.detail,
-                "source": _source(hop.source),
+                "source": as_written(hop.source) if hop.source else None,
             }
             for hop in path.observed
         ],

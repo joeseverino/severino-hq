@@ -1003,10 +1003,10 @@
               "detail",
               "source",
               "source.kind",
-              "source.label",
               "source.connection",
               "source.observed_at",
               "source.declared",
+              "source.label",
               "certificate",
               "certificate.role",
               "certificate.name",
@@ -1014,10 +1014,10 @@
               "certificate.expiry",
               "certificate.source",
               "certificate.source.kind",
-              "certificate.source.label",
               "certificate.source.connection",
               "certificate.source.observed_at",
               "certificate.source.declared",
+              "certificate.source.label",
               "certificate.unread",
               "unread",
               "overlays",
@@ -1033,9 +1033,9 @@
               "overlays.link.identity",
               "check",
               "check.state",
-              "check.label",
               "check.detail",
               "check.step",
+              "check.label",
               "evidence",
               "evidence.label",
               "evidence.value",
@@ -1405,10 +1405,10 @@
               "observed.detail",
               "observed.source",
               "observed.source.kind",
-              "observed.source.label",
               "observed.source.connection",
               "observed.source.observed_at",
               "observed.source.declared",
+              "observed.source.label",
               "routes",
               "routes.via",
               "routes.port",
@@ -1429,10 +1429,10 @@
               "routes.hops.detail",
               "routes.hops.source",
               "routes.hops.source.kind",
-              "routes.hops.source.label",
               "routes.hops.source.connection",
               "routes.hops.source.observed_at",
               "routes.hops.source.declared",
+              "routes.hops.source.label",
               "routes.hops.certificate",
               "routes.hops.certificate.role",
               "routes.hops.certificate.name",
@@ -1440,10 +1440,10 @@
               "routes.hops.certificate.expiry",
               "routes.hops.certificate.source",
               "routes.hops.certificate.source.kind",
-              "routes.hops.certificate.source.label",
               "routes.hops.certificate.source.connection",
               "routes.hops.certificate.source.observed_at",
               "routes.hops.certificate.source.declared",
+              "routes.hops.certificate.source.label",
               "routes.hops.certificate.unread",
               "routes.hops.unread",
               "routes.hops.overlays",
@@ -1459,9 +1459,9 @@
               "routes.hops.overlays.link.identity",
               "routes.hops.check",
               "routes.hops.check.state",
-              "routes.hops.check.label",
               "routes.hops.check.detail",
               "routes.hops.check.step",
+              "routes.hops.check.label",
               "routes.hops.evidence",
               "routes.hops.evidence.label",
               "routes.hops.evidence.value",
@@ -2017,10 +2017,10 @@
               "path.observed.detail",
               "path.observed.source",
               "path.observed.source.kind",
-              "path.observed.source.label",
               "path.observed.source.connection",
               "path.observed.source.observed_at",
               "path.observed.source.declared",
+              "path.observed.source.label",
               "path.routes",
               "path.routes.via",
               "path.routes.port",
@@ -2041,10 +2041,10 @@
               "path.routes.hops.detail",
               "path.routes.hops.source",
               "path.routes.hops.source.kind",
-              "path.routes.hops.source.label",
               "path.routes.hops.source.connection",
               "path.routes.hops.source.observed_at",
               "path.routes.hops.source.declared",
+              "path.routes.hops.source.label",
               "path.routes.hops.certificate",
               "path.routes.hops.certificate.role",
               "path.routes.hops.certificate.name",
@@ -2052,10 +2052,10 @@
               "path.routes.hops.certificate.expiry",
               "path.routes.hops.certificate.source",
               "path.routes.hops.certificate.source.kind",
-              "path.routes.hops.certificate.source.label",
               "path.routes.hops.certificate.source.connection",
               "path.routes.hops.certificate.source.observed_at",
               "path.routes.hops.certificate.source.declared",
+              "path.routes.hops.certificate.source.label",
               "path.routes.hops.certificate.unread",
               "path.routes.hops.unread",
               "path.routes.hops.overlays",
@@ -2071,9 +2071,9 @@
               "path.routes.hops.overlays.link.identity",
               "path.routes.hops.check",
               "path.routes.hops.check.state",
-              "path.routes.hops.check.label",
               "path.routes.hops.check.detail",
               "path.routes.hops.check.step",
+              "path.routes.hops.check.label",
               "path.routes.hops.evidence",
               "path.routes.hops.evidence.label",
               "path.routes.hops.evidence.value",
@@ -5814,6 +5814,50 @@
         ],
         "type": "object"
       },
+      "Certificate": {
+        "additionalProperties": false,
+        "description": "The certificate one hop presents, or why HQ cannot say.",
+        "properties": {
+          "expiry": {
+            "default": "",
+            "description": "When it runs out, as read; empty when not read.",
+            "type": "string"
+          },
+          "issuer": {
+            "default": "",
+            "description": "Who issued it, or 'uploaded' for one uploaded to the proxy that serves it; empty when not read.",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "description": "The name the certificate is for; empty when not read.",
+            "type": "string"
+          },
+          "role": {
+            "description": "What the certificate is at the hop, such as the edge's or the origin's.",
+            "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HopSource",
+                "title": "Hop source"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Where HQ read the certificate; null when nothing says."
+          },
+          "unread": {
+            "default": "",
+            "description": "Why HQ cannot say what certificate the hop presents; empty when it can.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "CertificateAuthoritySpec": {
         "additionalProperties": false,
         "description": "A certificate authority this estate trusts, and where its key lives.\n\nNot `tls.certificate`: that is a certificate HQ renews and installs. This is\nthe authority a certificate was issued *by*, including one HQ can never\nreach, because the whole point of an offline root is that nothing can. An\nauthority nothing sweeps still has an expiry, and an expiry nobody is\nwatching is the failure this records.",
@@ -5864,44 +5908,6 @@
         "required": [
           "name"
         ],
-        "type": "object"
-      },
-      "CertificatePart": {
-        "additionalProperties": false,
-        "properties": {
-          "expiry": {
-            "description": "When it runs out, as read; empty when not read.",
-            "type": "string"
-          },
-          "issuer": {
-            "description": "Who issued it, or 'uploaded' for one uploaded to the proxy that serves it; empty when not read.",
-            "type": "string"
-          },
-          "name": {
-            "description": "The name the certificate is for; empty when not read.",
-            "type": "string"
-          },
-          "role": {
-            "description": "What the certificate is at the hop, such as the edge's or the origin's.",
-            "type": "string"
-          },
-          "source": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/HopSourcePart",
-                "title": "Hop source part"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Where HQ read the certificate; null when nothing says."
-          },
-          "unread": {
-            "description": "Why HQ cannot say what certificate the hop presents; empty when it can.",
-            "type": "string"
-          }
-        },
         "type": "object"
       },
       "CertificateRenewRequest": {
@@ -11378,7 +11384,7 @@
         ],
         "type": "object"
       },
-      "HopCheckPart": {
+      "HopCheck": {
         "additionalProperties": false,
         "properties": {
           "detail": {
@@ -11387,13 +11393,14 @@
           },
           "label": {
             "description": "That, in the words the hop shows.",
+            "readOnly": true,
             "type": "string"
           },
           "state": {
-            "description": "Whether the request agrees with the readings at the hop: `met`, `unmet` or `unavailable`, the last when the request does not show it.",
-            "type": "string"
+            "$ref": "#/components/schemas/Standing"
           },
           "step": {
+            "default": "",
             "description": "What you do to settle a disagreement; empty for none.",
             "type": "string"
           }
@@ -11407,8 +11414,8 @@
           "certificate": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/CertificatePart",
-                "title": "Certificate part"
+                "$ref": "#/components/schemas/Certificate",
+                "title": "Certificate"
               },
               {
                 "type": "null"
@@ -11417,8 +11424,8 @@
             "description": "The certificate the hop presents, or why HQ cannot say; null when it presents none."
           },
           "check": {
-            "$ref": "#/components/schemas/HopCheckPart",
-            "description": "Whether what the request showed here agrees with what was read. Present only on a hop the calling request walked."
+            "$ref": "#/components/schemas/HopCheck",
+            "description": "Whether what the request showed here agrees with what was read, its `state` `unavailable` where the request does not show it. Present only on a hop the calling request walked."
           },
           "detail": {
             "description": "A line on what it does there, such as where it forwards; empty when there is nothing to add.",
@@ -11468,8 +11475,8 @@
           "source": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/HopSourcePart",
-                "title": "Hop source part"
+                "$ref": "#/components/schemas/HopSource",
+                "title": "Hop source"
               },
               {
                 "type": "null"
@@ -11518,15 +11525,17 @@
         ],
         "type": "object"
       },
-      "HopSourcePart": {
+      "HopSource": {
         "additionalProperties": false,
         "description": "Where HQ read a hop: a reading, or HQ's own record.",
         "properties": {
           "connection": {
+            "default": "",
             "description": "The connection the reading came through; empty for HQ's own record.",
             "type": "string"
           },
           "declared": {
+            "default": "",
             "description": "The key of HQ's record it comes from, when HQ holds it rather than reads it; else empty.",
             "type": "string"
           },
@@ -11536,6 +11545,7 @@
           },
           "label": {
             "description": "That type, in words.",
+            "readOnly": true,
             "type": "string"
           },
           "observed_at": {
@@ -11546,7 +11556,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "default": null
           }
         },
         "type": "object"
@@ -14627,8 +14638,8 @@
           "source": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/HopSourcePart",
-                "title": "Hop source part"
+                "$ref": "#/components/schemas/HopSource",
+                "title": "Hop source"
               },
               {
                 "type": "null"
@@ -15059,7 +15070,7 @@
         },
         "type": "object"
       },
-      "OriginPart": {
+      "Origin": {
         "additionalProperties": false,
         "description": "Where a request for the name is finally served, and what serves it there.",
         "properties": {
@@ -15068,10 +15079,12 @@
             "type": "string"
           },
           "container": {
+            "default": "",
             "description": "The container serving it there; empty when none is known.",
             "type": "string"
           },
           "host": {
+            "default": "",
             "description": "The machine at that address; empty when it matches none.",
             "type": "string"
           }
@@ -19212,8 +19225,8 @@
           "origin": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/OriginPart",
-                "title": "Origin part"
+                "$ref": "#/components/schemas/Origin",
+                "title": "Origin"
               },
               {
                 "type": "null"
@@ -19467,6 +19480,15 @@
           "data"
         ],
         "type": "object"
+      },
+      "Standing": {
+        "description": "Where one check stands: every word a page says of it is a view of this.",
+        "enum": [
+          "met",
+          "unmet",
+          "unavailable"
+        ],
+        "type": "string"
       },
       "StandingAnswer": {
         "additionalProperties": false,

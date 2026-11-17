@@ -46,15 +46,16 @@ from .documentation import (
 from .entity_links import EntityLink
 from .finding_steps import WrittenCheck, WrittenReason, WrittenSteps
 from .json_schemas import Written
+from .path_model import Certificate, Evidence, HopCheck, HopSource
 from .plugins import ATTENTION_ORDER
 from .record_fields import Notes, PublishedAt
 from .relationships import RelationGroup
-from .request_path import Evidence
 from .services import HQ_MARK, OBSERVED_MARK
 from .standards import INTENDED, Standing
 from .tone import Tone
 from .ui import ended
 from .upgrades import HIGH, LOW, MAJOR, MEDIUM, MINOR, PATCH, UNKNOWN_CHANGE, Blocker, UpgradeStep
+from .whereabouts import Origin
 from .workflows import WrittenAction
 
 # What stands in the way of an upgrade, as ``Blocker`` says it.
@@ -195,17 +196,6 @@ class ManagedResourceRecord(TypedDict):
 # ----- Services and paths -----------------------------------------------------
 
 
-class OriginPart(TypedDict):
-    """Where a request for the name is finally served, and what serves it there."""
-
-    address: Annotated[
-        str,
-        Describe("Where a request for the name is finally served: the address a proxy forwards to or a record names."),
-    ]
-    host: Annotated[str, Describe("The machine at that address; empty when it matches none.")]
-    container: Annotated[str, Describe("The container serving it there; empty when none is known.")]
-
-
 class ServiceRow(TypedDict):
     hostname: Annotated[str, Describe("The service's hostname, which a read of one names it by.")]
     status: Annotated[
@@ -216,7 +206,7 @@ class ServiceRow(TypedDict):
         ),
     ]
     status_label: Annotated[str, Describe("The service's health in the words its row shows, such as `Working`.")]
-    origin: OriginPart | None
+    origin: Annotated[dict[str, Any], Written(Origin)] | None
     project: Annotated[str | None, Describe("The name of the project published at this name; null for none.")]
     faults: Annotated[list[str], Describe("What is not set up right, each a sentence; empty when nothing is.")]
 
@@ -250,47 +240,13 @@ class ServiceItem(ServiceRow):
     ]
 
 
-class HopSourcePart(TypedDict):
-    """Where HQ read a hop: a reading, or HQ's own record."""
-
-    kind: Annotated[str, Describe("The type of the reading or record it was read from.")]
-    label: Annotated[str, Describe("That type, in words.")]
-    connection: Annotated[str, Describe("The connection the reading came through; empty for HQ's own record.")]
-    observed_at: ObservedAt | None
-    declared: Annotated[
-        str, Describe("The key of HQ's record it comes from, when HQ holds it rather than reads it; else empty.")
-    ]
-
-
-class CertificatePart(TypedDict):
-    role: Annotated[str, Describe("What the certificate is at the hop, such as the edge's or the origin's.")]
-    name: Annotated[str, Describe("The name the certificate is for; empty when not read.")]
-    issuer: Annotated[
-        str, Describe("Who issued it, or 'uploaded' for one uploaded to the proxy that serves it; empty when not read.")
-    ]
-    expiry: Annotated[str, Describe("When it runs out, as read; empty when not read.")]
-    source: Annotated[HopSourcePart | None, Describe("Where HQ read the certificate; null when nothing says.")]
-    unread: Annotated[str, Describe("Why HQ cannot say what certificate the hop presents; empty when it can.")]
+# Where HQ read a hop, as ``HopSource`` says it.
+WrittenSource = Annotated[dict[str, Any], Written(HopSource)]
 
 
 class OverlayPart(TypedDict):
     relation: Annotated[str, Describe("What it is to the hop, such as an access gate.")]
     link: WrittenLink | None
-
-
-class HopCheckPart(TypedDict):
-    state: Annotated[
-        str,
-        Describe(
-            ended(
-                f"Whether the request agrees with the readings at the hop: {listed(Standing)}, "
-                "the last when the request does not show it"
-            )
-        ),
-    ]
-    label: Annotated[str, Describe("That, in the words the hop shows.")]
-    detail: Annotated[str, Describe("What the request showed beside what was read.")]
-    step: Annotated[str, Describe("What you do to settle a disagreement; empty for none.")]
 
 
 class CheckPart(TypedDict):
@@ -327,7 +283,7 @@ class ObservedPart(TypedDict):
     name: Annotated[str, Describe("What answers for the hostname, by name.")]
     link: WrittenLink | None
     detail: Annotated[str, Describe("A line on what it does for the hostname; empty for none.")]
-    source: Annotated[HopSourcePart | None, Describe("Where HQ read it; null when nothing says.")]
+    source: Annotated[WrittenSource | None, Describe("Where HQ read it; null when nothing says.")]
 
 
 class RoutePart(TypedDict):
@@ -379,17 +335,20 @@ class HopRow(TypedDict):
     detail: Annotated[
         str, Describe("A line on what it does there, such as where it forwards; empty when there is nothing to add.")
     ]
-    source: Annotated[HopSourcePart | None, Describe("Where HQ read the hop; null when nothing says.")]
+    source: Annotated[WrittenSource | None, Describe("Where HQ read the hop; null when nothing says.")]
     certificate: Annotated[
-        CertificatePart | None,
+        Annotated[dict[str, Any], Written(Certificate)] | None,
         Describe("The certificate the hop presents, or why HQ cannot say; null when it presents none."),
     ]
     unread: Annotated[str, Describe("What HQ could not read about the hop, a sentence; empty when nothing is missing.")]
     overlays: Annotated[list[OverlayPart], Describe("What sits over the hop, such as an access gate.")]
     check: NotRequired[
         Annotated[
-            HopCheckPart,
-            Describe(f"Whether what the request showed here agrees with what was read. {_WALKED}"),
+            Annotated[dict[str, Any], Written(HopCheck)],
+            Describe(
+                "Whether what the request showed here agrees with what was read, its `state` `unavailable` "
+                f"where the request does not show it. {_WALKED}"
+            ),
         ]
     ]
     evidence: NotRequired[

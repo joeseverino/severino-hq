@@ -58,8 +58,7 @@ lazy from hq.platform.application.dashboard import finding_rows
 lazy from hq.platform.application.finding_model import Finding
 lazy from hq.platform.application.github_estate import Repository
 lazy from hq.platform.application.github_posture import posture_of
-lazy from hq.platform.application.path_model import Certificate, Hop, Route
-lazy from hq.platform.application.request_path import HopCheck
+lazy from hq.platform.application.path_model import Certificate, Hop, HopCheck, Route
 lazy from hq.platform.application.work_runs import RunEvidence, outcome_tone
 
 # The fields of an example record, as a change sets them and as two records hold them.

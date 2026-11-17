@@ -9,10 +9,9 @@ the one projection the connection page, the API and MCP read.
 import re
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Any
 
 from django.utils.text import capfirst
-from pydantic import ConfigDict, with_config
 
 from hq.domains.control_plane.names import is_hostname, normalized_hostname
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND
@@ -20,9 +19,8 @@ from hq.domains.control_plane.providers import PROVIDERS, operator_label
 from hq.platform.application.labels import dotted
 from hq.platform.core.network import IGNORED, JUDGED, PROXY, split_host_port
 
-from .describe import Describe
 from .entity_links import entity_link
-from .path_model import Hop, HopSource, Route, ServicePath, last_machine
+from .path_model import Evidence, Hop, HopCheck, HopSource, Route, ServicePath, last_machine
 from .paths import hq_path, why_unread
 from .reach import NETWORKS, network_of
 from .request_addresses import Address, addresses_of, addresses_of_hq
@@ -44,63 +42,12 @@ lazy from .hq_self import own_addresses, served_at, served_port, site_label
 lazy from .locate import index_of
 lazy from .projection import complete, iso
 
-# A hop's check in the words the hop shows.
-_CHECK_LABELS = {
-    Standing.MET: "Confirmed by this request",
-    Standing.UNMET: "This request disagrees",
-    Standing.UNAVAILABLE: "Not confirmed",
-}
-
 # How each role in the forwarded chain was decided.
 _CHAIN_DETAIL = {
     PROXY: "A trusted proxy. HQ takes your address from it.",
     JUDGED: "Your address, as HQ sees it.",
     IGNORED: "Ignored: anyone can write this part of the header.",
 }
-
-
-@dataclass(frozen=True, slots=True)
-class HopCheck:
-    """Whether the request agrees with what the readings say about one hop."""
-
-    state: Standing
-    detail: str
-    # The operator step that resolves a contradiction.
-    step: str = ""
-
-    @property
-    def label(self) -> str:
-        return _CHECK_LABELS[self.state]
-
-    @property
-    def contradicted(self) -> bool:
-        """The request disagrees with the readings here, so the hop is shown opened."""
-
-        return self.state is Standing.UNMET
-
-
-# A forwarded hop's role as the tone its pill takes.
-_ROLE_TONES = {JUDGED: Tone.GOOD, IGNORED: Tone.SERIOUS}
-
-
-@with_config(ConfigDict(extra="forbid"))
-@dataclass(frozen=True, slots=True)
-class Evidence:
-    """One thing the request itself carried, at the hop it belongs to."""
-
-    label: Annotated[str, Describe("What the request carried, such as a header or an address.")]
-    value: Annotated[str, Describe("Its value, as the request carried it.")]
-    detail: Annotated[str, Describe("A line on what HQ makes of it; empty for none.")] = ""
-    role: Annotated[
-        str,
-        Describe("For an address the request was forwarded through: `judged`, `proxy` or `ignored`; else empty."),
-    ] = ""
-
-    @property
-    def tone(self) -> Tone:
-        """The address HQ judges by stands out, one it ignores reads as a warning."""
-
-        return _ROLE_TONES.get(self.role, Tone.NEUTRAL)
 
 
 # ----- The forwarded chain ----------------------------------------------------

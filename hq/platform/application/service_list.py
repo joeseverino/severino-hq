@@ -10,6 +10,7 @@ from typing import Any
 
 from hq.domains.control_plane.names import is_hostname, normalized_hostname
 
+from .json_schemas import as_written
 from .projection import complete, projection_scope, read_once
 from .record_errors import RecordNotFound
 from .service_facets import zone_holding
@@ -89,15 +90,7 @@ def serialize_service(service: Service) -> dict[str, Any]:
             }
             for facet in service.facets
         ],
-        "origin": (
-            {
-                "address": service.origin.address,
-                "host": service.origin.host,
-                "container": service.origin.container,
-            }
-            if service.origin
-            else None
-        ),
+        "origin": as_written(service.origin) if service.origin else None,
         "project": service.project["name"] if service.project else None,
         "faults": list(service.faults),
     }
