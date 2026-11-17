@@ -395,7 +395,12 @@ class _Builder:
             view,
             _camel(view.__name__),
             self.tags.use(API_TAG),
-            parameters=[_named("capability", [spec["name"] for spec in self.capabilities], "call")],
+            # A parameter cannot depend on the path's name, so the key is said
+            # here as every change's own operation says it: taken, never required.
+            parameters=[
+                _named("capability", [spec["name"] for spec in self.capabilities], "call"),
+                {"$ref": f"#/components/parameters/{IDEMPOTENCY_KEY}"},
+            ],
             requestBody=_body(generic),
         )
         registry = capability_registry()
@@ -451,7 +456,7 @@ class _Builder:
                 links=self.links(answering=answer_type(registry[name])),
                 summary=spec["label"],
                 description=spec["summary"],
-                parameters=([{"$ref": "#/components/parameters/IdempotencyKey"}] if spec["effect"].changes else []),
+                parameters=([{"$ref": f"#/components/parameters/{IDEMPOTENCY_KEY}"}] if spec["effect"].changes else []),
                 requestBody=_body(body),
                 codes=views.execute_codes(registry[name]),
                 answer=self.answer_of(registry[name]),
@@ -794,7 +799,7 @@ def document() -> dict[str, Any]:
             "parameters": dict(
                 sorted(
                     {
-                        "IdempotencyKey": {
+                        IDEMPOTENCY_KEY: {
                             "name": IDEMPOTENCY_HEADER,
                             "in": "header",
                             "required": False,

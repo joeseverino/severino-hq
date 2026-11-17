@@ -189,6 +189,13 @@ class DocumentTests(SimpleTestCase):
             refs = [parameter.get("$ref", "") for parameter in operation["parameters"]]
             self.assertEqual(refs, ["#/components/parameters/IdempotencyKey"], path)
 
+    def test_the_call_by_any_name_takes_the_retry_key(self):
+        """Its name may be a change's, so it takes the key every change's own operation takes."""
+
+        operation = self.document["paths"]["/api/v2/capabilities/{name}/"]["post"]
+        refs = [parameter.get("$ref", "") for parameter in operation["parameters"]]
+        self.assertIn("#/components/parameters/IdempotencyKey", refs)
+
     def test_the_request_body_is_the_one_the_view_validates(self):
         spec = next(
             spec
