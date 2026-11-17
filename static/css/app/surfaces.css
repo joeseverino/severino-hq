@@ -28,7 +28,6 @@
      it draws the edge. */
   :where(
   .table-scroll:has(> .data-table), .card, .section:not(.section .section, [data-head="above"], :not([data-head="inside"], .two-col:has(> .section > .section-body > :not(.table-scroll:only-child)) > *, .section-flow > *):has(> .section-body > .table-scroll:only-child)), .two-col > section:not(.section), .two-col > div, .section-flow > section:not(.section),
-  .facts-band,
   .filter-bar, .kpi-grid, .insight-grid,
   .form,
   .topology-workspace,
@@ -255,7 +254,7 @@
        break (`min-content`, a count bound to its noun), so a long label never
        squeezes its value to a letter a line or parts a number from its unit. */
     .facts-band:not(.is-large) > .fact { flex-basis: 100%; display: grid; grid-template-columns: fit-content(60%) minmax(min-content, 1fr); align-items: baseline; gap: var(--space-2) var(--space-4); padding-block: var(--space-5); }
-    :is(.card, .section-body) > .facts-band:not(.is-large) > .fact { padding-block: 0; }
+    :is(.section-body > .facts-band, .card:not(.section-body) > .facts-band:not(:only-child)):not(.is-large) > .fact { padding-block: 0; }
     .facts-band:not(.is-large) dt { font-size: var(--text-sm); }
     .facts-band:not(.is-large) .fact-value { text-align: right; font-size: var(--text-md); }
     .facts-band:not(.is-large) .fact-detail { grid-column: 1 / -1; }

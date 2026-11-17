@@ -6,7 +6,7 @@ connected, what it read and when, when it reads next, and the changes waiting
 for it. Nothing here asks it anything.
 {% endcomment %}
 {% with standing=controller.standing %}
-{% facts layout="band" label="Controller status" %}
+{% card element="div" %}{% facts layout="band" label="Controller status" %}
   {% fact "Controller" icon="activity" tone=controller.standing_tone %}
     {% if not standing.known %}Never run{% elif standing.silent %}Not heard from for {{ standing.seen_at|when:"length" }}{% else %}Running{% endif %}
   {% detail %}
@@ -33,7 +33,7 @@ for it. Nothing here asks it anything.
   {% detail %}
     {% if controller.asked %}<small>{% words "infrastructure.controller.refresh" %} asked for {% for read in controller.asked %}{% with mark=forloop.last|then:".|," %}{{ read.subject|breakable:mark }}{% endwith %}{% if not forloop.last %} {% endif %}{% endfor %}</small>{% elif controller.queue %}<small>{% waiting %}</small>{% endif %}
   {% endfact %}
-{% endfacts %}
+{% endfacts %}{% endcard %}
 {% comment %}
 Never run: what the controller is, and how to start it and see why it has not
 arrived, from the unit HQ ships (deploy/systemd/severino-hq-controller.*).

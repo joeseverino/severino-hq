@@ -1339,55 +1339,55 @@ ENTRIES = {
     # zero beside a linked count stands on its value's line, as the Agents
     # card's counts do.
     "part/facts-band": Entry(
-        '{% facts layout="band" label="Example status" %}'
+        '{% card element="div" %}{% facts layout="band" label="Example status" %}'
         '{% fact "Example rules" value=0 %}'
         '{% fact "Example held for approval" value=2 url="/example/?held=1" tone="attention" %}'
         '{% fact "Example refused in the last day" value=13 url="/example/?refused=1" detail="An example detail" %}'
-        "{% endfacts %}"
+        "{% endfacts %}{% endcard %}"
     ),
     "part/facts-band-icons": Entry(
-        '{% facts layout="band" %}'
+        '{% card element="div" %}{% facts layout="band" %}'
         '{% fact "Example running" icon="container" %}12{% detail %}<small>on 3 example machines</small>{% endfact %}'
         '{% fact "Example version" icon="layers" %}<code>example-1.2.3</code>{% detail %}'
         "<small>example.com/example/image</small><small>Tag only</small>{% endfact %}"
         '{% fact "An example label long enough to wrap onto a second line in its cell" icon="shield" tone="serious" %}'
         '<a href="/example/">{{ "2\u00a0example findings"|breakable }}</a>{% detail %}<small>An example detail</small>{% endfact %}'
         '{% fact "Example checks" icon="check-circle" tone="good" value="Passing" %}'
-        "{% endfacts %}"
+        "{% endfacts %}{% endcard %}"
     ),
     # An identifier longer than its fact's bound beside a plain value, then
     # one linked outside, as a container's Version and Update facts draw
     # them: each wraps a chip to a line and stands on its row's baseline.
     "part/facts-band-code": Entry(
-        '{% facts layout="band" %}'
+        '{% card element="div" %}{% facts layout="band" %}'
         '{% fact "Example running" icon="activity" value="Up 1 week" %}'
         '{% fact "Example version" icon="layers" %}<code>{{ tag|breakable }}</code>{% endfact %}'
-        "{% endfacts %}"
-        '{% facts layout="band" %}'
+        "{% endfacts %}{% endcard %}"
+        '{% card element="div" %}{% facts layout="band" %}'
         '{% fact "Example running" icon="activity" value="Up 1 week" %}'
         '{% fact "Example update" icon="deploy" %}{% entity url|outside label=tag code=True %}{% endfact %}'
-        "{% endfacts %}",
+        "{% endfacts %}{% endcard %}",
         {"tag": "2024.11.3-example2404-ls45-example-build", "url": "https://example.com/releases/2024.11.3"},
     ),
     # A band of one kind of value, as a machine's load is drawn: each a plain
     # reading under its mark, with a line saying what it is of.
     "part/facts-band-readings": Entry(
-        '{% facts layout="band" %}'
+        '{% card element="div" %}{% facts layout="band" %}'
         '{% fact "Example containers" icon="container" value="9 of 9 running" detail="1 has an update" %}'
         '{% fact "Example memory" icon="activity" value="48%" detail="3.8 GB of 8.0 GB" %}'
         '{% fact "Example storage" icon="layers" value="38.2 GB" detail="Layers, volumes and build cache" %}'
         '{% fact "Example uptime" icon="clock" value="12 days" detail="Since Nov 5" %}'
-        "{% endfacts %}"
+        "{% endfacts %}{% endcard %}"
     ),
     # A page's headline figures (`size="large"`), two drawn as well as said,
     # standing alone and in a section's frame.
     "part/facts-band-figures": Entry(
-        '{% facts layout="band" size="large" label="Example estate" %}'
+        '{% card element="div" %}{% facts layout="band" size="large" label="Example estate" %}'
         '{% fact "Example hosts online" icon="server" value="3 of 5" detail="2 example hosts offline" drawing=hosts %}'
         '{% fact "Example runs" icon="activity" value="4 of 6" detail="The last six example runs" drawing=runs %}'
         '{% fact "Example certificate" icon="lock" value="24 days" detail="example-com · Dec 11" %}'
         '{% fact "Example connections" icon="network" value=12 url="/example/" %}'
-        "{% endfacts %}"
+        "{% endfacts %}{% endcard %}"
         '{% section "Example estate" %}{% facts layout="band" size="large" %}'
         '{% fact "Example hosts online" icon="server" value="3 of 5" detail="2 example hosts offline" drawing=hosts %}'
         '{% fact "Example runs" icon="activity" value="4 of 6" detail="The last six example runs" drawing=runs %}'
@@ -1405,12 +1405,12 @@ ENTRIES = {
     ),
     # A detail given as lines, one of them holding a link among its words.
     "part/facts-band-lines": Entry(
-        '{% facts layout="band" %}'
+        '{% card element="div" %}{% facts layout="band" %}'
         '{% fact "Example certificate" value="example-com" url="/example/" detail=lines icon="lock" %}'
         '{% fact "Example health" icon="activity" tone="good" %}Passing{% detail %}'
         '<small>Forwards to example-app on <a href="/example/host/">example-host-01</a>.</small>'
         "<small>Read an example minute ago</small>{% endfact %}"
-        "{% endfacts %}",
+        "{% endfacts %}{% endcard %}",
         {"lines": ("Example issuer", "24 example days left")},
     ),
     # A card's summary line under its head: a zero, a linked count, a toned

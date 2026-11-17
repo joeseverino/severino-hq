@@ -243,7 +243,7 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .kpi-grid > .kpi { flex-basis: var(--band-cell, 150px); }
 
 /* A band of facts (`{% facts layout="band" %}`): the few figures that sum up a page or a part, each a cell drawn as a figure is (cards.css `.kpi`): its label, its mark before it, over its value over its detail. `size="large"` sets the values as a page's headline figures. */
-/* Its cells are sized by what they hold, a wrapping flex row of cells whose basis is their content (`flex: 1 1 auto`), as a cluster layout wraps its items: each starts at its own widest line, the room left over is shared among a row's cells, and a cell takes the next row only when the band has no room for it, so a label wraps only in a band too narrow for it on one line. Each cell is its own stack, top-aligned, its value right under its label. The band draws its edges as every band does (`data-band`, above). In a frame (a card, a section's body) the facts stand apart by gaps and draw no edges, the frame's padding their inset, as a card's figures do. */
+/* Its cells are sized by what they hold, a wrapping flex row of cells whose basis is their content (`flex: 1 1 auto`), as a cluster layout wraps its items: each starts at its own widest line, the room left over is shared among a row's cells, and a cell takes the next row only when the band has no room for it, so a label wraps only in a band too narrow for it on one line. Each cell is its own stack, top-aligned, its value right under its label. The band draws its edges as every band does (`data-band`, above). In a frame with more in it (a section's body, a card that holds more than the band) the facts stand apart by gaps and draw no edges, the frame's padding their inset, as a card's figures do. */
 .facts-band {
   display: flex;
   flex-wrap: wrap;
@@ -253,7 +253,10 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
   flex: 1 1 100%;
 }
 /* stylelint-disable-next-line declaration-property-value-disallowed-list -- a framed band has no rim to clip, and a linked fact's tint reaches past it */
-:is(.card, .section-body) > .facts-band { --band-gap: var(--space-8) var(--space-16); --band-rules: none; overflow: visible; }
+:is(.section-body > .facts-band, .card:not(.section-body) > .facts-band:not(:only-child)) { --band-gap: var(--space-8) var(--space-16); --band-rules: none; overflow: visible; }
+/* The band draws no box of its own: a box is the card around it. A card holding the band alone is its frame and nothing more, so its facts keep their own padding and edges; on a page's ground the band's outer cells start at the content's edge, their padding reaching past it into the page's own. */
+.card:not(.section-body):has(> .facts-band:only-child) { padding: 0; }
+.facts-band:not(.card > *, .section-body > *) { margin-inline: calc(-1 * var(--space-8)); }
 .facts-band > .fact {
   display: flex;
   flex: 1 1 auto;
@@ -262,7 +265,7 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
   min-width: 0;
   padding: var(--space-6) var(--space-8);
 }
-:is(.card, .section-body) > .facts-band > .fact { padding: 0; }
+:is(.section-body > .facts-band, .card:not(.section-body) > .facts-band:not(:only-child)) > .fact { padding: 0; }
 /* What names a value is sentence case in the muted voice; capitals are for a kicker over a group (`.eyebrow`), never a value's name. Its mark is quieter than its words, and a label too long for its cell wraps beside its mark, never under it. */
 .facts-band dt { display: flex; align-items: flex-start; gap: var(--space-3); min-width: 0; color: var(--muted); font-size: var(--text-xs); }
 .facts-band .fact-label { min-width: 0; }
@@ -284,7 +287,7 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .facts-band .fact:is(.tone-good, .tone-attention, .tone-serious) :is(.band-icon .icon, .fact-value) { color: var(--tone-ink); }
 /* A linked fact tints under the pointer and the focus on its value, as a linked figure does (cards.css `a.kpi`); in a frame the tint reaches into the gap as a shadow, so nothing moves. */
 .facts-band > .fact:has(> .fact-value a:is(:hover, :focus-visible)) { background: var(--surface-2); }
-:is(.card, .section-body) > .facts-band > .fact:has(> .fact-value a:is(:hover, :focus-visible)) { border-radius: var(--radius-sm); box-shadow: 0 0 0 var(--space-3) var(--surface-2); }
+:is(.section-body > .facts-band, .card:not(.section-body) > .facts-band:not(:only-child)) > .fact:has(> .fact-value a:is(:hover, :focus-visible)) { border-radius: var(--radius-sm); box-shadow: 0 0 0 var(--space-3) var(--surface-2); }
 /* Under the value, running words: its lines are the ones its markup declares, small print (`<small>`, a `detail=` given as lines), read by their color. A flex or grid box would make each run of words between two elements a row of its own. */
 .facts-band .fact-detail { min-width: 0; margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.4; }
 .facts-band .fact-detail > small { display: block; font-size: inherit; }

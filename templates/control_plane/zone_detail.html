@@ -50,7 +50,7 @@ what the value already names. The dialog is an enhancement over a real link,
 never a replacement: the href reaches a page that answers the same question,
 so the fact still works if the dialog does not open.
 {% endcomment %}
-{% facts layout="band" label=zone.zone %}
+{% card element="div" %}{% facts layout="band" label=zone.zone %}
   {% for insight in zone.cards %}
     {% fact insight.label tone=insight.concern|yesno:"attention," %}{% if insight.url %}<a href="{{ insight.url }}"{% if insight.rows %} data-modal-open="{{ insight.modal_id }}"{% endif %}>{{ insight.value|breakable }}</a>{% else %}{{ insight.value|breakable }}{% endif %}{% detail %}
       {% if insight.concern %}<small>{% status "Needs attention" tone="attention" %}</small>{% endif %}
@@ -60,7 +60,7 @@ so the fact still works if the dialog does not open.
       {% if insight.note %}<small{% if insight.note_title %} title="{{ insight.note_title }}"{% endif %}>{{ insight.note|breakable }}</small>{% endif %}
     {% endfact %}
   {% endfor %}
-{% endfacts %}
+{% endfacts %}{% endcard %}
 {% for insight in zone.cards %}{% if insight.rows %}
   {% include "partials/_modal.html" with id=insight.modal_id title=insight.label lede=insight.detail body_template="partials/_record_list.html" rows=insight.rows %}
 {% endif %}{% endfor %}

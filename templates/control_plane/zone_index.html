@@ -10,7 +10,7 @@ one situation it is ever seen in.
     HQ can see these domains at Cloudflare and manages none of them yet.
     Managing one changes nothing at Cloudflare.
   </p>
-  {% facts layout="band" label="Domains at Cloudflare" %}
+  {% card element="div" %}{% facts layout="band" label="Domains at Cloudflare" %}
     {% for zone in zones %}
       {% fact zone.zone %}<a href="{{ zone.url }}">{{ zone.records|length|counted:"record" }}</a>{% detail %}
         {% if zone.adopt_token %}
@@ -21,7 +21,7 @@ one situation it is ever seen in.
         {% endif %}
       {% endfact %}
     {% endfor %}
-  {% endfacts %}
+  {% endfacts %}{% endcard %}
 {% else %}
   {% include "partials/_empty_state.html" with message="No domains yet." remedy=page.remedy %}
 {% endif %}
