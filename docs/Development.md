@@ -356,19 +356,20 @@ Ruff's fixes and format, `lint:css` with Stylelint's, `lint:js` with
 ESLint's, `lint:mise-format` with `mise fmt`, `lint:ast-grep` with each
 rule's `fix:`, `lint:controller` with gofmt, `go fix` and `go generate`, and
 each `lint:drift-*` gate with its file's writer), and the run names the files
-they rewrote. A run whose fixes rewrote a file then fails on them, before any
-test, so the tree a run passes is always the tree it was given, the one a
-landing compares with the commit: the fixed files are in the checkout, ready
-to commit, and the next run judges them. `mise run fast --fix` judges the tree
-the fixes leave in the same run instead. What a tool cannot fix, its gate
+they rewrote. The run then judges the tree the fixes left, and its verdict
+line ends by naming the files they rewrote, which the checkout holds
+uncommitted: a commit of them is the tree the run judged, the one a landing
+compares with the commit. A run sent to a second machine has its fixes run
+here first and sends the tree they leave. What a tool cannot fix, its gate
 still reports. Only fast and `mise run fix` pass `--fix`, so CI's gates only
 check.
 
 A gate tagged `recording` (`lint:drift-api-examples`) is a serial run of the
 tests its run names, compared with a file. Its fix records over the file,
-which every gate would wait on, so `fast --fix` runs it only once the check
-has failed; the gates and tests the rewritten files select then run again,
-and they decide the run. Without `--fix`, its failure stands. A change to Python files alone runs a recording only
+which every gate would wait on, so fast runs it only once the check has
+failed; the gates and tests the rewritten files select then run again, and
+they decide the run. A run on a second machine only checks it, and its
+failure names the command that records the file here. A change to Python files alone runs a recording only
 when it selects one of the tests the recording runs.
 
 The tests it selects are:
@@ -911,7 +912,7 @@ A run kept here or left waiting says why, with each machine's free tokens:
 
 A machine that does not answer within five seconds leaves the run here, after
 one line saying so; so does a run inside a turn here, one whose flag acts on
-this machine (`--open`, `--docs`, `browser --linux`, `perf --image`, `fast --fix`), and one
+this machine (`--open`, `--docs`, `browser --linux`, `perf --image`), and one
 typed with `HQ_GATE_REMOTE=` before it. A task the release check runs that
 reads a secret or the deploy host (`failure-logs`, `mint`, the host check)
 never asks.
@@ -946,7 +947,8 @@ How a run goes (`tools/gate/remote.py`, and `tools/gate/remote-host.sh` there):
    since the run there writes to no terminal. Every other variable a gate
    reads is named in `LEFT` with why the run there reads its own. Closing the
    connection stops it.
-   The run only checks, as CI's gates do: fast writes no fix there, and a
+   The run only checks, as CI's gates do: fast's fixes ran here before the
+   tree was sent, its line naming what they rewrote follows the verdict, and a
    run that leaves the worktree holding any tree but the one sent fails,
    naming each file it changed.
 4. What it wrote comes back, archived there as the run ends, while the

@@ -29,7 +29,7 @@ from typing import NamedTuple
 
 from hq.platform.core.tests.task import RefError, Usage, commit_of, git
 from tools.dev import extension_set
-from tools.gate import chain, room
+from tools.gate import chain, fast, room
 from tools.gate.room import GATE, LOCK, lock_file
 from tools.gate.tree import working_tree
 from tools.gate.turn import ALL, held_locks, inside
@@ -40,8 +40,8 @@ ROOT = chain.ROOT
 SETTING = "HQ_GATE_REMOTE"
 # The status that has the task run here (EX_TEMPFAIL).
 HERE = 75
-# Flags whose run acts on this machine (its browser, tracked files, Docker, fast --fix), so it stays here.
-STAYS = {"open", "docs", "linux", "image", "fix"}
+# Flags whose run acts on this machine (its browser, tracked files, Docker), so it stays here.
+STAYS = {"open", "docs", "linux", "image"}
 # Arguments that name a commit: resolved here, since a branch there is not this one, and sent with the tree.
 REFS = {"base", "at"}
 # Tasks that compose the extension set: fast, whose change may call for the composed suite, and perf.
@@ -187,7 +187,7 @@ def as_here(line: bytes, task: str, where: str, home: str) -> bytes:
 class Sent(NamedTuple):
     """A tree sent there: its commit, the arguments that ask for the task again, the run's id there (what it
     staged and what it keeps for back), and the extension checkout there and commit a composed run
-    composes, with its packages' paths in it, or none."""
+    composes, with its packages' paths in it, or none, and the files fast's fixes rewrote here first."""
 
     tree: str
     commit: str
@@ -195,6 +195,7 @@ class Sent(NamedTuple):
     id: str
     extension: tuple[str, str] | None
     packages: str
+    fixed: list[str]
 
 
 class Where(NamedTuple):
@@ -227,6 +228,11 @@ def composes(task: str, values: dict[str, str]) -> bool:
 def send(task: str, host: str, checkout: str, values: dict[str, str]) -> Sent:
     """Send this checkout's tree, and the commits its arguments name, and make it ready there."""
 
+    # fast reads its default base from the passes and branches here, which the machine there lacks.
+    if task == "fast" and "base" not in values:
+        values["base"] = chain.fast_base(None)[0]
+    # fast's fixes write this checkout, so they run here and the tree they leave is the one sent.
+    fixed = fast.fixed_before_sending(values["base"]) if task == "fast" else []
     tree = working_tree(ROOT)
     commit = gate_commit(ROOT, tree)
     # Refs named for the run, so runs sending one tree at once (the extension's, from several worktrees) never
@@ -235,9 +241,6 @@ def send(task: str, host: str, checkout: str, values: dict[str, str]) -> Sent:
     refs = {f"refs/gate/{run}": commit}
     for name in sorted(REFS & values.keys()):
         values[name] = refs[f"refs/gate/{run}-{name}"] = commit_of(values[name])
-    # fast reads its default base from the passes and branches here, which the machine there lacks.
-    if task == "fast" and "base" not in values:
-        values["base"] = chain.fast_base(None)[0]
     remote = f"{host}:{checkout}"
     push(ROOT, remote, [f"{sha}:{ref}" for ref, sha in refs.items()])
     # A run that composes composes this machine's extension checkout, sent as the tree is, from its clone beside
@@ -267,7 +270,7 @@ def send(task: str, host: str, checkout: str, values: dict[str, str]) -> Sent:
         print(f"[{task}] {chain.fetch_map()}", file=sys.stderr, flush=True)
     if folders := [str(folder) for folder in (chain.passes(), chain.maps()) if folder.is_dir()]:
         done(["rsync", "-a", "-e", shlex.join(SSH), *folders, f"{remote}/.git/severino/"])
-    return Sent(tree, commit, argv, run, extension, packages)
+    return Sent(tree, commit, argv, run, extension, packages, fixed)
 
 
 def run_there(task: str, host: str, checkout: str, values: dict[str, str], took: Callable[[str], None]) -> int:
@@ -308,6 +311,8 @@ def run_there(task: str, host: str, checkout: str, values: dict[str, str], took:
         raise RefError(f"{host} made no worktree of tree {sent.tree[:9]}")
     back = subprocess.run(host_half(host, "back", sent.id), capture_output=True, check=False).stdout
     bring_back(back, sent, there, host, task)
+    if sent.fixed:
+        print(f"[{task}] {fast.rewrote(sent.fixed)}", flush=True)
     return status
 
 
