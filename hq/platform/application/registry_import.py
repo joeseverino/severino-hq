@@ -7,7 +7,7 @@ value wins over an imported one: docs/Derived-Facts.md#one-time-import.
 """
 
 from dataclasses import asdict, dataclass, field, fields
-from typing import Annotated, Any, Literal, NotRequired, TypedDict
+from typing import Annotated, Any, Literal, TypedDict
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
@@ -18,38 +18,17 @@ from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
 
 from .answer_fields import RecordSlug
-from .assets import (
-    AssetCategory,
-    AssetInfrastructure,
-    AssetName,
-    AssetProjects,
-    AssetStatus,
-    AssetVendor,
-    PaymentMethod,
-    PurchaseDate,
-    SerialNumber,
-    WarrantyDate,
-)
-from .business_use import BusinessUseShare
+from .assets import AssetCommand
 from .command_fields import Describe
 from .describe import listed
 from .domains import load, records_of
 from .integration_specs import command_adapter
-from .projects import (
-    DeploymentNotes,
-    ProjectCategory,
-    ProjectDescription,
-    ProjectName,
-    ProjectStatus,
-    RepositoryUrl,
-    SecurityNotes,
-    TechnologiesUsed,
-)
+from .projects import ProjectCommand
 from .record_declaration import Records
 from .record_errors import RecordConflict, RecordNotFound
-from .record_fields import Notes, PublishedUrl, TotalCost
 from .refusal_status import RefusalEnvelope, refuse
 from .security import Principal
+from .stored_columns import laid_over
 from .ui import counted, ended
 
 MAX_IMPORT_RECORDS = 1000
@@ -66,39 +45,20 @@ REQUIRED_CAPABILITIES = (records_of("projects").write, records_of("assets").writ
 
 # A record of the document is laid over the one stored under its slug, so
 # every field but the slug may be left out.
-class ImportedProject(TypedDict):
-    """A project to import: its slug, and the fields to lay over the project stored under it."""
-
-    slug: RecordSlug
-    name: NotRequired[ProjectName]
-    category: NotRequired[ProjectCategory]
-    status: NotRequired[ProjectStatus]
-    description: NotRequired[ProjectDescription]
-    technologies_used: NotRequired[TechnologiesUsed]
-    repository_url: NotRequired[RepositoryUrl]
-    public_url: NotRequired[PublishedUrl]
-    deployment_notes: NotRequired[DeploymentNotes]
-    security_notes: NotRequired[SecurityNotes]
-    notes: NotRequired[Notes]
-
-
-class ImportedAsset(TypedDict):
-    """An asset to import: its slug, and the fields to lay over the asset stored under it."""
-
-    slug: RecordSlug
-    item_name: NotRequired[AssetName]
-    vendor: NotRequired[AssetVendor]
-    category: NotRequired[AssetCategory]
-    purchase_date: NotRequired[PurchaseDate]
-    total_cost: NotRequired[TotalCost]
-    business_use_percentage: NotRequired[BusinessUseShare]
-    payment_method: NotRequired[PaymentMethod]
-    serial_number: NotRequired[SerialNumber]
-    warranty_date: NotRequired[WarrantyDate]
-    status: NotRequired[AssetStatus]
-    notes: NotRequired[Notes]
-    related_projects: NotRequired[AssetProjects]
-    infrastructure: NotRequired[AssetInfrastructure]
+ImportedProject = laid_over(
+    ProjectCommand,
+    name="ImportedProject",
+    doc="A project to import: its slug, and the fields to lay over the project stored under it.",
+    key="slug",
+    key_type=RecordSlug,
+)
+ImportedAsset = laid_over(
+    AssetCommand,
+    name="ImportedAsset",
+    doc="An asset to import: its slug, and the fields to lay over the asset stored under it.",
+    key="slug",
+    key_type=RecordSlug,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -165,11 +125,7 @@ def _existing(kind: Records, records: list[Any]) -> dict[str, Any]:
 def _slug_errors(slug: str, seen: set[str]) -> list[str]:
     """A record's slug errors; records the slug as seen."""
 
-    errors = []
-    if not slug:
-        errors.append("slug is required.")
-    elif slug in seen:
-        errors.append("slug appears twice in this document.")
+    errors = ["slug appears twice in this document."] if slug in seen else []
     seen.add(slug)
     return errors
 

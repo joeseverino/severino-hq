@@ -118,7 +118,7 @@ class ValidationTests(TestCase):
         self.assertEqual([problem["loc"] for problem in result["error"]["details"]], [["projects", 0, "slug"]])
 
     def test_a_blank_slug_is_refused(self):
-        self.assert_refused({"projects": [{"slug": " ", "name": "Blank slug"}]}, "slug is required")
+        self.assert_refused({"projects": [{"slug": " ", "name": "Blank slug"}]}, '["projects", 0, "slug"]')
 
     def test_a_slug_twice_is_refused(self):
         self.assert_refused(

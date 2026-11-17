@@ -16,9 +16,22 @@ beside, read from the rule itself (``row_rules``).
 from collections.abc import Iterable
 from dataclasses import MISSING, dataclass, fields, is_dataclass
 from decimal import Decimal
-from functools import cache
+from functools import cache, partial
 from types import NoneType, UnionType
-from typing import TYPE_CHECKING, Annotated, Any, Literal, TypeAliasType, Union, get_args, get_origin, get_type_hints
+from typing import (
+    TYPE_CHECKING,
+    Annotated,
+    Any,
+    Literal,
+    NotRequired,
+    Required,
+    TypeAliasType,
+    TypedDict,
+    Union,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 
 from django.core.validators import (
     DecimalValidator,
@@ -31,7 +44,7 @@ from django.core.validators import (
 from django.db.models import CharField, DecimalField, F, FloatField, IntegerField, JSONField, Q, TextField
 from django.db.models.constants import LOOKUP_SEP
 from django.db.models.expressions import BaseExpression
-from pydantic import Field, GetCoreSchemaHandler, GetJsonSchemaHandler, TypeAdapter
+from pydantic import AfterValidator, Field, GetCoreSchemaHandler, GetJsonSchemaHandler, TypeAdapter
 from pydantic_core import CoreSchema, core_schema
 
 from hq.platform.core.rules import Rule
@@ -49,15 +62,36 @@ ROW_RULES = "x-hq-rules"
 
 # Django's URLValidator, said without the lookaround and the IGNORECASE flag
 # a schema's pattern cannot carry: its scheme check, user and password, IPv4,
-# bracketed IPv6 (which it checks further), a name of letters (any script),
+# bracketed IPv6, a name of letters (any script),
 # digits and inner hyphens under a top-level domain or ``localhost``, a port,
 # and anything after it that is not a space.
 _ANY = r"a-zA-Z\u00a1-\uffff"
 _LABEL = rf"[{_ANY}0-9](?:[{_ANY}0-9-]{{0,61}}[{_ANY}0-9])?"
 _TOP = rf"(?:[{_ANY}][{_ANY}-]{{0,61}}[{_ANY}]|[Xx][Nn]--[a-zA-Z0-9]{{1,59}})"
 _OCTET = r"(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)"
+IPV4 = rf"{_OCTET}(?:\.{_OCTET}){{3}}"
+# RFC 3986's IPv6address in hexadecimal groups, and an IPv4 address mapped
+# into one: the forms Django's check and ``ipaddress`` take, within Django's
+# 39 characters. Each is unanchored, for a pattern to place.
+_H16 = "[0-9a-fA-F]{1,4}"
+IPV6 = (
+    "(?:"
+    + "|".join(
+        (
+            rf"(?:{_H16}:){{7}}{_H16}",
+            *(
+                rf"(?:(?:{_H16}:){{0,{before - 1}}}{_H16})?::(?:{_H16}:){{0,{6 - before}}}{_H16}"
+                for before in range(1, 7)
+            ),
+            rf"::(?:{_H16}:){{0,6}}{_H16}",
+            rf"(?:(?:{_H16}:){{0,6}}{_H16})?::",
+            rf"::(?:[fF]{{4}}:)?{IPV4}",
+        )
+    )
+    + ")"
+)
 _HOST = (
-    rf"(?:{_OCTET}(?:\.{_OCTET}){{3}}|\[[0-9a-fA-F:.]+\]"
+    rf"(?:{IPV4}|\[{IPV6}\]"
     rf"|{_LABEL}(?:\.{_LABEL})*\.{_TOP}\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])"
 )
 
@@ -71,7 +105,7 @@ def url_pattern(schemes: Iterable[str]) -> str:
 
     scheme = "|".join(_anycase(name) for name in schemes)
     return (
-        rf"^(?:{scheme})://(?:[^\s:@/]+(?::[^\s:@/]*)?@)?{_HOST}"
+        rf"^(?:{scheme})://(?:[^\s:@/\[\]]+(?::[^\s:@/\[\]]*)?@)?{_HOST}"
         r"(?::[0-9]{1,5})?(?:[/?#][^\s]*)?$"
     )
 
@@ -81,10 +115,42 @@ def held(command_type: type) -> Any:
     rules, and described with the row's rules between columns, or the type
     itself where none is."""
 
+    markers = _markers(command_type)
+    return Annotated[command_type, _Stored(command_type, tuple(markers.items()))] if markers else command_type
+
+
+def laid_over(command_type: type, *, name: str, doc: str, key: str, key_type: Any) -> Any:
+    """A record laid over the one stored under its ``key``: a ``TypedDict``
+    of ``command_type``'s fields, each held as the command holds it and
+    optional, but ``key``, which it must send holding a value its column
+    takes."""
+
+    hints = get_type_hints(command_type, include_extras=True)
+    markers = _markers(command_type)
+    model = _model_of(command_type)
+    column = model._meta.get_field(key) if model is not None else None
+    rules = _column_rules(column, empty=False) if column is not None else ()
+    keyed = Annotated[key_type, StoredColumn(str, rules)] if rules else key_type
+    record: Any = TypedDict(  # type: ignore[misc]  # built from the command's fields
+        name,
+        {
+            item.name: Required[keyed]
+            if item.name == key
+            else NotRequired[
+                Annotated[hints[item.name], *markers[item.name]] if item.name in markers else hints[item.name]
+            ]
+            for item in fields(command_type)
+        },
+    )
+    record.__doc__ = doc
+    return record
+
+
+def _markers(command_type: type) -> dict[str, tuple[Any, ...]]:
     markers: dict[str, tuple[Any, ...]] = {}
     for name, marker in (*stored_rules(command_type), *row_rules(command_type)):
         markers[name] = (*markers.get(name, ()), marker)
-    return Annotated[command_type, _Stored(command_type, tuple(markers.items()))] if markers else command_type
+    return markers
 
 
 def row_rules(command_type: type) -> tuple[tuple[str, Between], ...]:
@@ -225,6 +291,7 @@ def _column_rules(column: Any, *, empty: bool) -> tuple[Any, ...]:
             rules.append(Field(max_length=rule.limit_value))
         elif isinstance(rule, DecimalValidator):
             rules.append(Field(max_digits=rule.max_digits, decimal_places=rule.decimal_places))
+            rules.append(AfterValidator(partial(_to_places, rule.decimal_places)))
         elif isinstance(rule, URLValidator):
             pattern = url_pattern(rule.schemes)
             rules.append(Field(pattern=f"^$|{pattern}" if empty else pattern))
@@ -235,6 +302,14 @@ def _column_rules(column: Any, *, empty: bool) -> tuple[Any, ...]:
     if isinstance(column, TextField):
         rules.append(Field(json_schema_extra={"format": "textarea"}))
     return tuple(rules)
+
+
+def _to_places(places: int, value: Decimal) -> Decimal:
+    """``value`` written to the column's places, which pydantic has held it
+    within: Django counts the zeros ending a fraction, as pydantic does not."""
+
+    step = Decimal(1).scaleb(-places)
+    return value.quantize(step) if value.as_tuple().exponent < -places else value
 
 
 @dataclass(frozen=True, slots=True)
@@ -254,9 +329,7 @@ class StoredColumn:
 
         def check(value: Any) -> Any:
             # A null the field's own type admits is the column's to allow.
-            if value is not None:
-                held.validate_python(value)
-            return value
+            return value if value is None else held.validate_python(value)
 
         return core_schema.no_info_after_validator_function(check, handler(source))
 

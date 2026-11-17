@@ -35,6 +35,17 @@ URLS = (
     "https://example",
     "https://256.1.1.1",
     "https://example.com:123456",
+    "https://[1:2:3:4:5:6:7:8]/",
+    "https://[1:2:3:4:5:6:7::]/",
+    "https://[::]/",
+    "https://[::ffff:192.0.2.1]/",
+    "https://[1]/",
+    "https://[2001:db8:::1]/",
+    "https://[1:2:3:4:5:6:7:8:9]/",
+    "ftp://user@[919d69ecb01f84dAB]:0?",
+    "ftp://a]@example.com",
+    "ftp://a[@example.com",
+    "ftp://u:p]@example.com",
 )
 
 
