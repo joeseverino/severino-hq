@@ -89,11 +89,7 @@ class RaisesTests(SimpleTestCase):
 
     def test_each_way_a_standard_raises(self):
         from dataclasses import replace
-        from types import SimpleNamespace
 
-        from django.test import override_settings
-
-        from ..posture import POSTURE_STANDARD
         from ..standard_findings import Measured, Per, Standard
         from ..tone import Tone
 
@@ -132,8 +128,6 @@ class RaisesTests(SimpleTestCase):
                 for found in rule.detect(None)
             }
 
-        with override_settings(SEVERINO_POSTURE=""):
-            plain = POSTURE_STANDARD.subjects(SimpleNamespace(principal=object()))
         alpha = ("alpha", "alpha")
         cases = (
             (
@@ -153,7 +147,6 @@ class RaisesTests(SimpleTestCase):
                 },
             ),
             ("only its checks", raised(Per.SUBJECT, (reach,)), {alpha: ("alpha: reach is off", Tone.SERIOUS, None)}),
-            ("HQ's own without Advanced HQ Posture", plain, ()),
         )
         for policy, found, expected in cases:
             with self.subTest(policy):

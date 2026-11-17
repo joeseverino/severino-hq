@@ -17,6 +17,8 @@ lazy from hq.domains.control_plane.observations import OBSERVATIONS
 lazy from hq.domains.control_plane.observations.host import FIREWALL_KIND, TAILNET_LOCK_KIND
 lazy from hq.domains.control_plane.providers import PROVIDERS, registry_label
 
+from .action_links import ActionLink
+from .finding_model import opens
 from .labels import dotted
 from .standard_findings import Measured, Per, Standard
 from .standards import Check, Measurement, Reading, Standing, measure
@@ -341,6 +343,12 @@ def _hq(estate) -> tuple[Measured, ...]:
     return (Measured(measurement=estate_posture(connection_catalog(principal=estate.principal))),)
 
 
+def _connections() -> ActionLink:
+    """The page that shows each check of HQ's standard."""
+
+    return opens("Open connections", reverse("control_plane:connections"))
+
+
 POSTURE_STANDARD = Standard(
     name="posture-unmet",
     title="A check of HQ's standard is not met",
@@ -351,5 +359,6 @@ POSTURE_STANDARD = Standard(
     operator_action="Meet the check, or turn Advanced HQ Posture off.",
     no_help_reason="HQ does not change these settings.",
     bars={Tone.ATTENTION: "a check of the standard HQ holds itself to is not met"},
+    primary=_connections,
 )
 RULES = (POSTURE_STANDARD.rule(read_through="connections"),)
