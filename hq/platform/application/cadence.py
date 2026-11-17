@@ -44,7 +44,7 @@ lazy from hq.platform.core.doorbell import ask_soon
 
 from . import readings
 from .asks import Asked, AskedAnswer, Standing, asked_read
-from .command_fields import Describe, Names
+from .command_fields import Choices, Describe, Names
 from .derivations import asked_ahead, holds_until, passed, present, since
 from .integration_specs import requested
 from .moments import duration
@@ -57,6 +57,14 @@ lazy from .adoption import manages_through, observes_only
 lazy from .capabilities import command_spec
 lazy from .credential_sight import fed_kinds
 lazy from .facts import stored_snapshots
+
+# A kind HQ stores readings of, or none. Read as a schema is first built, so
+# declaring the command loads no registry.
+type SweptKind = Annotated[
+    str,
+    Choices([("", "None"), *((kind, registry_label(kind)) for kind in sorted({*OBSERVATIONS, *PROVIDERS}))]),
+    Describe("The one type of reading to read now, from every connection."),
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,10 +82,9 @@ class ControllerSweepCommand:
         Describe("The connection to read now, every type its credential reads."),
     ] = ""
     kind: Annotated[
-        str,
+        SweptKind,
         Names("readings"),
         Field(title="Type of reading"),
-        Describe("The one type of reading to read now, from every connection."),
     ] = ""
     every_connection: Annotated[bool, Describe("Read every connection now.")] = False
 
@@ -591,11 +598,12 @@ def settle_read_requests() -> int:
 def _read_subject(command: ControllerSweepCommand) -> tuple[str, str] | None:
     """``(connection_ref, kind)`` the command forces, or None for a bare wake-up.
 
-    Fails closed: a ref no controller reported, or a kind HQ does not store.
+    Fails closed: a ref no controller reported. The command's type holds its
+    kind to one HQ stores.
     """
 
     ref = command.connection_ref.strip()
-    kind = command.kind.strip()
+    kind = command.kind
     named = [field for field, value in (("connection_ref", ref), ("kind", kind)) if value]
     if command.every_connection:
         named.append("every_connection")
@@ -603,8 +611,6 @@ def _read_subject(command: ControllerSweepCommand) -> tuple[str, str] | None:
         raise ValidationError(dict.fromkeys(named, "Name one of connection_ref, kind or every_connection."))
     if ref and not connection_providers(ref):
         raise ValidationError({"connection_ref": ValidationError("No such connection.", code="invalid_choice")})
-    if kind and kind not in OBSERVATIONS and kind not in PROVIDERS:
-        raise ValidationError({"kind": ValidationError("No such type.", code="invalid_choice")})
     return (ref, kind) if named else None
 
 

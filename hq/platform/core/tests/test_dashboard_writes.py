@@ -69,9 +69,9 @@ class DashboardSettingsTests(TestCase):
 
     def test_a_location_that_is_not_one_is_refused_on_the_page(self):
         for point, said in (
-            ("north", "Weather location must be latitude, longitude."),
-            ("a, b", "Weather coordinates must be numbers."),
-            ("91, 0", "Weather coordinates are outside the valid range."),
+            ("north", "weather_point[0] must be a valid number; weather_point[1] is required."),
+            ("a, b", "weather_point[0] must be a valid number; weather_point[1] must be a valid number."),
+            ("91, 0", "weather_point[0] must be at most 90."),
         ):
             with self.subTest(point=point):
                 self.assertIn(said, text(self.save(weather_point=point)))

@@ -79,7 +79,7 @@ class PortainerContainerSpec(ProviderModel):
         title="Collapse on machine page",
         description=("Collapse it on the machine's page. HQ still watches and controls it."),
     )
-    serves_ports: list[int] = Field(
+    serves_ports: list[Annotated[int, Field(ge=1, le=65535)]] = Field(
         default_factory=list,
         title="Answers on",
         description=(
@@ -106,13 +106,6 @@ class PortainerContainerSpec(ProviderModel):
         if any(not str(reason).strip() for reason in value.values()):
             raise ValueError("Each check needs the reason its job requires it.")
         return {check: str(reason).strip() for check, reason in value.items()}
-
-    @field_validator("serves_ports")
-    @classmethod
-    def ports_are_ports(cls, value: list[int]) -> list[int]:
-        if any(port < 1 or port > 65535 for port in value):
-            raise ValueError("Ports must be between 1 and 65535.")
-        return value
 
 
 class PortainerStackEnvVar(ProviderModel):

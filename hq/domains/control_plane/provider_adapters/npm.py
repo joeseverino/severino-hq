@@ -105,6 +105,8 @@ class NPMProxyHostSpec(ProviderModel):
     access_list_id: int = Field(
         default=0,
         ge=0,
+        # The controller holds it as Go's int, 64 bits on every host it runs on.
+        le=2**63 - 1,
         title="Access list",
         description="An Nginx Proxy Manager access list id. 0 means none.",
     )

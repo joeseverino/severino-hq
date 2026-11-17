@@ -152,6 +152,9 @@ def _pydantic_reason(error: Mapping[str, Any], context: Mapping[str, Any]) -> st
         return "is required"
     if kind == "extra_forbidden":
         return "is not a known field"
+    if kind == "string_pattern_mismatch":
+        # The pattern is for a machine; its details and the schema carry it.
+        return "is not in the form its schema's pattern gives"
     msg = error["msg"]
     if kind in _CHOICE and msg.startswith("Input should be "):
         # Pydantic phrases the declared choices as "'a', 'b' or 'c'".

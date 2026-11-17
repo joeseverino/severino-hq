@@ -115,6 +115,15 @@ class PublishedSchema(GenerateJsonSchema):
         return value
 
     @override
+    def handle_ref_overrides(self, json_schema: JsonSchemaValue) -> JsonSchemaValue:
+        kept = super().handle_ref_overrides(json_schema)
+        # Pydantic drops a sibling the referred definition already says, but
+        # labels are read beside the enum they label (``labeled_choices``).
+        if LABELS in kept and "enum" in json_schema:
+            kept["enum"] = json_schema["enum"]
+        return kept
+
+    @override
     def dict_schema(self, schema: core_schema.DictSchema) -> JsonSchemaValue:
         value = _unsaid(super().dict_schema(schema))
         # Pydantic refuses a key outside its pattern but writes the pattern as

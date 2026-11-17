@@ -9,7 +9,8 @@ from typing import Annotated, Any, TypedDict
 
 from django.core.files.uploadedfile import SimpleUploadedFile, UploadedFile
 from django.db import transaction
-from pydantic import Field
+from pydantic import Base64Encoder, EncodedBytes, Field
+from pydantic_core import PydanticCustomError
 
 from hq.domains.assets.models import Asset
 from hq.domains.expenses.models import Expense
@@ -19,10 +20,10 @@ from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
 lazy from hq.domains.receipts.specs import ReceiptRow
 
-from .command_fields import Describe, Names, Upload
+from .command_fields import Describe, Names, Upload, stored_in
 from .integration_specs import Kept, keeps
 from .projection import iso
-from .record_errors import InputError, RecordNotFound
+from .record_errors import RecordNotFound
 from .record_fields import Notes, RecordId
 from .record_saves import Held, as_sent, found, held, written
 from .security import Principal
@@ -58,6 +59,18 @@ class ReceiptMetadataCommand:
     related_asset: ReceiptAsset = None
 
 
+class _Base64(Base64Encoder):
+    """Base64 that refuses a character outside its alphabet, which the
+    standard decoder drops."""
+
+    @classmethod
+    def decode(cls, data: bytes) -> bytes:
+        try:
+            return base64.b64decode(data, validate=True)
+        except ValueError as error:
+            raise PydanticCustomError("base64_decode", "Input is not base64") from error
+
+
 @dataclass(frozen=True, slots=True)
 class ReceiptFile:
     """A receipt's file as JSON carries it. Its bytes are stored as the
@@ -68,9 +81,15 @@ class ReceiptFile:
     content_type: str
     # Bounded before it is decoded, so a file over the limit is refused
     # without its bytes ever being held.
-    content: Annotated[str, Field(max_length=MAX_RECEIPT_BASE64_CHARS, description="The file's bytes, base64-encoded.")]
+    content: Annotated[
+        bytes,
+        Field(max_length=MAX_RECEIPT_BASE64_CHARS),
+        EncodedBytes(_Base64),
+        Field(description="The file's bytes, base64-encoded."),
+    ]
 
 
+@stored_in(Receipt)
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ReceiptUploadCommand(ReceiptMetadataCommand):
     file: Annotated[ReceiptFile, Upload(), Describe("The receipt's file.")]
@@ -112,16 +131,12 @@ def _relations(command: ReceiptMetadataCommand):
     return expense, asset
 
 
-def _decoded(file: ReceiptFile) -> tuple[UploadedFile, str]:
+def _received(file: ReceiptFile) -> tuple[UploadedFile, str]:
     """The file as an upload the receipt rules hold, and its SHA-256 digest."""
 
-    try:
-        content = base64.b64decode(file.content, validate=True)
-    except ValueError as exc:
-        raise InputError("The file's content is not base64.") from exc
-    upload = SimpleUploadedFile(file.name, content, content_type=file.content_type)
+    upload = SimpleUploadedFile(file.name, file.content, content_type=file.content_type)
     validate_receipt_file(upload)
-    return upload, hashlib.sha256(content).hexdigest()
+    return upload, hashlib.sha256(file.content).hexdigest()
 
 
 def _save(
@@ -217,7 +232,7 @@ def replace_receipt(
     """The ``receipt.replace`` capability, which authorizes it."""
 
     del principal
-    upload, sha256 = _decoded(command.file)
+    upload, sha256 = _received(command.file)
     receipt = _save(command, current_id=current_id, expected_updated_at=expected_updated_at, sent=sent, upload=upload)
     return {
         "ok": True,
@@ -233,7 +248,7 @@ def upload_receipt(command: ReceiptUploadCommand, *, principal: Principal) -> Re
     """The ``receipt.upload`` capability, which authorizes it."""
 
     del principal
-    upload, sha256 = _decoded(command.file)
+    upload, sha256 = _received(command.file)
     expense, asset = _relations(command)
     receipt = Receipt(
         vendor=command.vendor,

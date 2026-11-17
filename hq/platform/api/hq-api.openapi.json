@@ -3458,9 +3458,12 @@
               },
               "rows": {
                 "additionalProperties": {
-                  "type": "string"
+                  "$ref": "#/components/schemas/RowRevision"
                 },
                 "description": "Items as the queue drew them, each as it stood then.",
+                "propertyNames": {
+                  "$ref": "#/components/schemas/RowKey"
+                },
                 "type": "object"
               }
             },
@@ -3960,9 +3963,7 @@
         "properties": {
           "business_use_percentage": {
             "$ref": "#/components/schemas/BusinessUseShare",
-            "default": 100,
-            "maximum": 100,
-            "minimum": 0
+            "default": 100
           },
           "category": {
             "$ref": "#/components/schemas/AssetCategory",
@@ -3999,10 +4000,13 @@
           },
           "infrastructure": {
             "$ref": "#/components/schemas/AssetInfrastructure",
-            "default": ""
+            "default": "",
+            "maxLength": 300
           },
           "item_name": {
-            "$ref": "#/components/schemas/AssetName"
+            "$ref": "#/components/schemas/AssetName",
+            "maxLength": 160,
+            "minLength": 1
           },
           "notes": {
             "$ref": "#/components/schemas/Notes",
@@ -4041,11 +4045,14 @@
           },
           "serial_number": {
             "$ref": "#/components/schemas/SerialNumber",
-            "default": ""
+            "default": "",
+            "maxLength": 120
           },
           "slug": {
             "$ref": "#/components/schemas/Slug",
-            "default": ""
+            "default": "",
+            "maxLength": 180,
+            "pattern": "^$|^[-a-zA-Z0-9_]+$"
           },
           "status": {
             "$ref": "#/components/schemas/AssetStatus",
@@ -4071,7 +4078,8 @@
           },
           "vendor": {
             "$ref": "#/components/schemas/AssetVendor",
-            "default": ""
+            "default": "",
+            "maxLength": 120
           },
           "warranty_date": {
             "$ref": "#/components/schemas/WarrantyDate",
@@ -4323,9 +4331,7 @@
             "description": "The command: the fields its input schema names.",
             "properties": {
               "business_use_percentage": {
-                "$ref": "#/components/schemas/BusinessUseShare",
-                "maximum": 100,
-                "minimum": 0
+                "$ref": "#/components/schemas/BusinessUseShare"
               },
               "category": {
                 "$ref": "#/components/schemas/AssetCategory",
@@ -4360,10 +4366,13 @@
                 "$ref": "#/components/schemas/IdempotencyKey"
               },
               "infrastructure": {
-                "$ref": "#/components/schemas/AssetInfrastructure"
+                "$ref": "#/components/schemas/AssetInfrastructure",
+                "maxLength": 300
               },
               "item_name": {
-                "$ref": "#/components/schemas/AssetName"
+                "$ref": "#/components/schemas/AssetName",
+                "maxLength": 160,
+                "minLength": 1
               },
               "notes": {
                 "$ref": "#/components/schemas/Notes",
@@ -4397,10 +4406,13 @@
                 "$ref": "#/components/schemas/AssetProjects"
               },
               "serial_number": {
-                "$ref": "#/components/schemas/SerialNumber"
+                "$ref": "#/components/schemas/SerialNumber",
+                "maxLength": 120
               },
               "slug": {
-                "$ref": "#/components/schemas/Slug"
+                "$ref": "#/components/schemas/Slug",
+                "maxLength": 180,
+                "pattern": "^$|^[-a-zA-Z0-9_]+$"
               },
               "status": {
                 "$ref": "#/components/schemas/AssetStatus",
@@ -4423,7 +4435,8 @@
                 "$ref": "#/components/schemas/TotalCost"
               },
               "vendor": {
-                "$ref": "#/components/schemas/AssetVendor"
+                "$ref": "#/components/schemas/AssetVendor",
+                "maxLength": 120
               },
               "warranty_date": {
                 "$ref": "#/components/schemas/WarrantyDate"
@@ -4660,7 +4673,8 @@
             "properties": {
               "about": {
                 "$ref": "#/components/schemas/CalendarEntryAbout",
-                "default": ""
+                "default": "",
+                "maxLength": 300
               },
               "ends_at": {
                 "anyOf": [
@@ -4688,11 +4702,13 @@
               },
               "location": {
                 "$ref": "#/components/schemas/CalendarEntryLocation",
-                "default": ""
+                "default": "",
+                "maxLength": 200
               },
               "notes": {
                 "$ref": "#/components/schemas/Notes",
-                "default": ""
+                "default": "",
+                "format": "textarea"
               },
               "repeat": {
                 "$ref": "#/components/schemas/CalendarEntryRepeat",
@@ -4719,7 +4735,9 @@
                 "$ref": "#/components/schemas/CalendarEntryStartsOn"
               },
               "title": {
-                "$ref": "#/components/schemas/CalendarEntryTitle"
+                "$ref": "#/components/schemas/CalendarEntryTitle",
+                "maxLength": 160,
+                "minLength": 1
               },
               "weekdays": {
                 "$ref": "#/components/schemas/CalendarEntryWeekdays",
@@ -4838,7 +4856,8 @@
             "description": "One entry, as every surface states it.",
             "properties": {
               "about": {
-                "$ref": "#/components/schemas/CalendarEntryAbout"
+                "$ref": "#/components/schemas/CalendarEntryAbout",
+                "maxLength": 300
               },
               "ends_at": {
                 "anyOf": [
@@ -4862,10 +4881,12 @@
                 "$ref": "#/components/schemas/CalendarEntryInterval"
               },
               "location": {
-                "$ref": "#/components/schemas/CalendarEntryLocation"
+                "$ref": "#/components/schemas/CalendarEntryLocation",
+                "maxLength": 200
               },
               "notes": {
-                "$ref": "#/components/schemas/Notes"
+                "$ref": "#/components/schemas/Notes",
+                "format": "textarea"
               },
               "repeat": {
                 "$ref": "#/components/schemas/CalendarEntryRepeat"
@@ -4889,7 +4910,9 @@
                 "$ref": "#/components/schemas/CalendarEntryStartsOn"
               },
               "title": {
-                "$ref": "#/components/schemas/CalendarEntryTitle"
+                "$ref": "#/components/schemas/CalendarEntryTitle",
+                "maxLength": 160,
+                "minLength": 1
               },
               "weekdays": {
                 "$ref": "#/components/schemas/CalendarEntryWeekdays"
@@ -6563,7 +6586,8 @@
               },
               "published_url": {
                 "$ref": "#/components/schemas/PublishedUrl",
-                "default": ""
+                "default": "",
+                "maxLength": 200
               },
               "related_assets": {
                 "default": [],
@@ -6616,6 +6640,8 @@
               "slug": {
                 "default": "",
                 "description": "Its address in HQ; blank derives one from the title.",
+                "maxLength": 220,
+                "pattern": "^$|^[-a-zA-Z0-9_]+$",
                 "type": "string"
               },
               "status": {
@@ -6635,14 +6661,18 @@
               "tags": {
                 "default": "",
                 "description": "Tags, separated by commas.",
+                "maxLength": 300,
                 "type": "string"
               },
               "title": {
-                "$ref": "#/components/schemas/ContentTitle"
+                "$ref": "#/components/schemas/ContentTitle",
+                "maxLength": 200,
+                "minLength": 1
               },
               "topic": {
                 "$ref": "#/components/schemas/ContentTopic",
-                "default": ""
+                "default": "",
+                "maxLength": 300
               }
             },
             "required": [
@@ -6881,7 +6911,8 @@
                 "$ref": "#/components/schemas/PublishedAt"
               },
               "published_url": {
-                "$ref": "#/components/schemas/PublishedUrl"
+                "$ref": "#/components/schemas/PublishedUrl",
+                "maxLength": 200
               },
               "related_assets": {
                 "description": "The assets it is about.",
@@ -6929,6 +6960,8 @@
               },
               "slug": {
                 "description": "Its address in HQ; blank derives one from the title.",
+                "maxLength": 220,
+                "pattern": "^$|^[-a-zA-Z0-9_]+$",
                 "type": "string"
               },
               "status": {
@@ -6946,13 +6979,17 @@
               },
               "tags": {
                 "description": "Tags, separated by commas.",
+                "maxLength": 300,
                 "type": "string"
               },
               "title": {
-                "$ref": "#/components/schemas/ContentTitle"
+                "$ref": "#/components/schemas/ContentTitle",
+                "maxLength": 200,
+                "minLength": 1
               },
               "topic": {
-                "$ref": "#/components/schemas/ContentTopic"
+                "$ref": "#/components/schemas/ContentTopic",
+                "maxLength": 300
               }
             },
             "type": "object"
@@ -7736,7 +7773,10 @@
             "description": "The command: the fields its input schema names.",
             "properties": {
               "doc_id": {
-                "$ref": "#/components/schemas/DocId"
+                "$ref": "#/components/schemas/DocId",
+                "maxLength": 80,
+                "minLength": 1,
+                "pattern": "^[-a-zA-Z0-9_]+$"
               },
               "doc_type": {
                 "$ref": "#/components/schemas/DocType",
@@ -7792,11 +7832,13 @@
               },
               "external_url": {
                 "$ref": "#/components/schemas/ExternalUrl",
-                "default": ""
+                "default": "",
+                "maxLength": 200
               },
               "github_path": {
                 "$ref": "#/components/schemas/GithubPath",
                 "default": "",
+                "maxLength": 400,
                 "title": "GitHub path"
               },
               "idempotency_key": {
@@ -7813,7 +7855,8 @@
               },
               "obsidian_path": {
                 "$ref": "#/components/schemas/ObsidianPath",
-                "default": ""
+                "default": "",
+                "maxLength": 400
               },
               "published_at": {
                 "$ref": "#/components/schemas/PublishedAt",
@@ -7890,10 +7933,13 @@
               "system_service": {
                 "default": "",
                 "description": "The system or service it is about.",
+                "maxLength": 120,
                 "type": "string"
               },
               "title": {
-                "$ref": "#/components/schemas/DocumentationTitle"
+                "$ref": "#/components/schemas/DocumentationTitle",
+                "maxLength": 200,
+                "minLength": 1
               }
             },
             "required": [
@@ -8172,7 +8218,10 @@
             "description": "The command: the fields its input schema names.",
             "properties": {
               "doc_id": {
-                "$ref": "#/components/schemas/DocId"
+                "$ref": "#/components/schemas/DocId",
+                "maxLength": 80,
+                "minLength": 1,
+                "pattern": "^[-a-zA-Z0-9_]+$"
               },
               "doc_type": {
                 "$ref": "#/components/schemas/DocType",
@@ -8225,10 +8274,12 @@
                 }
               },
               "external_url": {
-                "$ref": "#/components/schemas/ExternalUrl"
+                "$ref": "#/components/schemas/ExternalUrl",
+                "maxLength": 200
               },
               "github_path": {
                 "$ref": "#/components/schemas/GithubPath",
+                "maxLength": 400,
                 "title": "GitHub path"
               },
               "idempotency_key": {
@@ -8242,7 +8293,8 @@
                 "format": "textarea"
               },
               "obsidian_path": {
-                "$ref": "#/components/schemas/ObsidianPath"
+                "$ref": "#/components/schemas/ObsidianPath",
+                "maxLength": 400
               },
               "published_at": {
                 "$ref": "#/components/schemas/PublishedAt"
@@ -8312,10 +8364,13 @@
               },
               "system_service": {
                 "description": "The system or service it is about.",
+                "maxLength": 120,
                 "type": "string"
               },
               "title": {
-                "$ref": "#/components/schemas/DocumentationTitle"
+                "$ref": "#/components/schemas/DocumentationTitle",
+                "maxLength": 200,
+                "minLength": 1
               }
             },
             "type": "object"
@@ -8781,17 +8836,17 @@
             "properties": {
               "about": {
                 "$ref": "#/components/schemas/ExpenseAbout",
-                "default": ""
+                "default": "",
+                "maxLength": 300
               },
               "business_purpose": {
                 "$ref": "#/components/schemas/BusinessPurpose",
-                "default": ""
+                "default": "",
+                "maxLength": 300
               },
               "business_use_percentage": {
                 "$ref": "#/components/schemas/BusinessUseShare",
-                "default": 100,
-                "maximum": 100,
-                "minimum": 0
+                "default": 100
               },
               "category": {
                 "$ref": "#/components/schemas/ExpenseCategory",
@@ -8832,7 +8887,9 @@
                 "$ref": "#/components/schemas/IdempotencyKey"
               },
               "item": {
-                "$ref": "#/components/schemas/ExpenseItem"
+                "$ref": "#/components/schemas/ExpenseItem",
+                "maxLength": 200,
+                "minLength": 1
               },
               "notes": {
                 "$ref": "#/components/schemas/Notes",
@@ -8841,7 +8898,8 @@
               },
               "paid_from": {
                 "$ref": "#/components/schemas/PaidFrom",
-                "default": ""
+                "default": "",
+                "maxLength": 300
               },
               "payment_method": {
                 "$ref": "#/components/schemas/PaymentMethod",
@@ -8886,7 +8944,9 @@
                 "default": "0.00"
               },
               "vendor": {
-                "$ref": "#/components/schemas/ExpenseVendor"
+                "$ref": "#/components/schemas/ExpenseVendor",
+                "maxLength": 160,
+                "minLength": 1
               }
             },
             "required": [
@@ -9071,15 +9131,15 @@
             "description": "The command: the fields its input schema names.",
             "properties": {
               "about": {
-                "$ref": "#/components/schemas/ExpenseAbout"
+                "$ref": "#/components/schemas/ExpenseAbout",
+                "maxLength": 300
               },
               "business_purpose": {
-                "$ref": "#/components/schemas/BusinessPurpose"
+                "$ref": "#/components/schemas/BusinessPurpose",
+                "maxLength": 300
               },
               "business_use_percentage": {
-                "$ref": "#/components/schemas/BusinessUseShare",
-                "maximum": 100,
-                "minimum": 0
+                "$ref": "#/components/schemas/BusinessUseShare"
               },
               "category": {
                 "$ref": "#/components/schemas/ExpenseCategory",
@@ -9119,14 +9179,17 @@
                 "$ref": "#/components/schemas/IdempotencyKey"
               },
               "item": {
-                "$ref": "#/components/schemas/ExpenseItem"
+                "$ref": "#/components/schemas/ExpenseItem",
+                "maxLength": 200,
+                "minLength": 1
               },
               "notes": {
                 "$ref": "#/components/schemas/Notes",
                 "format": "textarea"
               },
               "paid_from": {
-                "$ref": "#/components/schemas/PaidFrom"
+                "$ref": "#/components/schemas/PaidFrom",
+                "maxLength": 300
               },
               "payment_method": {
                 "$ref": "#/components/schemas/PaymentMethod",
@@ -9165,7 +9228,9 @@
                 "$ref": "#/components/schemas/TotalCost"
               },
               "vendor": {
-                "$ref": "#/components/schemas/ExpenseVendor"
+                "$ref": "#/components/schemas/ExpenseVendor",
+                "maxLength": 160,
+                "minLength": 1
               }
             },
             "type": "object"
@@ -10281,10 +10346,9 @@
                 "$ref": "#/components/schemas/IdempotencyKey"
               },
               "kind": {
+                "$ref": "#/components/schemas/SweptKind",
                 "default": "",
-                "description": "The one type of reading to read now, from every connection.",
                 "title": "Type of reading",
-                "type": "string",
                 "x-hq-records": {
                   "resource": "readings"
                 }
@@ -10460,14 +10524,20 @@
                 "$ref": "#/components/schemas/IdempotencyKey"
               },
               "key": {
-                "$ref": "#/components/schemas/ManagedResourceKey"
+                "$ref": "#/components/schemas/ManagedResourceKey",
+                "maxLength": 180,
+                "minLength": 1,
+                "pattern": "^[-a-zA-Z0-9_]+$"
               },
               "kind": {
                 "$ref": "#/components/schemas/ManagedResourceKind",
+                "maxLength": 64,
+                "minLength": 1,
                 "title": "Type"
               },
               "spec": {
                 "$ref": "#/components/schemas/ManagedResourceSpec",
+                "minProperties": 1,
                 "title": "Config"
               }
             },
@@ -10658,14 +10728,20 @@
                 "$ref": "#/components/schemas/IdempotencyKey"
               },
               "key": {
-                "$ref": "#/components/schemas/ManagedResourceKey"
+                "$ref": "#/components/schemas/ManagedResourceKey",
+                "maxLength": 180,
+                "minLength": 1,
+                "pattern": "^[-a-zA-Z0-9_]+$"
               },
               "kind": {
                 "$ref": "#/components/schemas/ManagedResourceKind",
+                "maxLength": 64,
+                "minLength": 1,
                 "title": "Type"
               },
               "spec": {
                 "$ref": "#/components/schemas/ManagedResourceSpec",
+                "minProperties": 1,
                 "title": "Config"
               }
             },
@@ -11051,6 +11127,7 @@
             "properties": {
               "address": {
                 "description": "The IP address to look up.",
+                "format": "ipvanyaddress",
                 "type": "string"
               },
               "refresh": {
@@ -11083,6 +11160,8 @@
             "properties": {
               "name": {
                 "description": "The hostname to resolve.",
+                "maxLength": 253,
+                "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*\\.?$",
                 "type": "string"
               }
             },
@@ -11881,6 +11960,7 @@
           "access_list_id": {
             "default": 0,
             "description": "An Nginx Proxy Manager access list id. 0 means none.",
+            "maximum": 9223372036854775807,
             "minimum": 0,
             "title": "Access list",
             "type": "integer"
@@ -12863,8 +12943,18 @@
               },
               "kind": {
                 "description": "What type of pins to set.",
+                "enum": [
+                  "domain",
+                  "service",
+                  "dashboard_link"
+                ],
                 "title": "Type",
-                "type": "string"
+                "type": "string",
+                "x-enumDescriptions": {
+                  "dashboard_link": "Dashboard link",
+                  "domain": "Domain",
+                  "service": "Service"
+                }
               }
             },
             "required": [
@@ -12898,12 +12988,23 @@
               },
               "key": {
                 "description": "Which pin.",
+                "pattern": "\\S",
                 "type": "string"
               },
               "kind": {
                 "description": "What type of pin to move.",
+                "enum": [
+                  "domain",
+                  "service",
+                  "dashboard_link"
+                ],
                 "title": "Type",
-                "type": "string"
+                "type": "string",
+                "x-enumDescriptions": {
+                  "dashboard_link": "Dashboard link",
+                  "domain": "Domain",
+                  "service": "Service"
+                }
               },
               "up": {
                 "default": false,
@@ -12939,12 +13040,23 @@
               },
               "key": {
                 "description": "The one to pin or unpin.",
+                "pattern": "\\S",
                 "type": "string"
               },
               "kind": {
                 "description": "What type of thing to pin.",
+                "enum": [
+                  "domain",
+                  "service",
+                  "dashboard_link"
+                ],
                 "title": "Type",
-                "type": "string"
+                "type": "string",
+                "x-enumDescriptions": {
+                  "dashboard_link": "Dashboard link",
+                  "domain": "Domain",
+                  "service": "Service"
+                }
               }
             },
             "required": [
@@ -13236,6 +13348,8 @@
           "serves_ports": {
             "description": "Host-network containers only. Docker reports no ports for them, so list the ports here to link a proxy to it.",
             "items": {
+              "maximum": 65535,
+              "minimum": 1,
               "type": "integer"
             },
             "title": "Answers on",
@@ -13598,7 +13712,9 @@
             "$ref": "#/components/schemas/IdempotencyKey"
           },
           "name": {
-            "$ref": "#/components/schemas/ProjectName"
+            "$ref": "#/components/schemas/ProjectName",
+            "maxLength": 160,
+            "minLength": 1
           },
           "notes": {
             "$ref": "#/components/schemas/Notes",
@@ -13607,11 +13723,13 @@
           },
           "public_url": {
             "$ref": "#/components/schemas/PublishedUrl",
-            "default": ""
+            "default": "",
+            "maxLength": 200
           },
           "repository_url": {
             "$ref": "#/components/schemas/RepositoryUrl",
-            "default": ""
+            "default": "",
+            "maxLength": 200
           },
           "security_notes": {
             "$ref": "#/components/schemas/SecurityNotes",
@@ -13620,7 +13738,9 @@
           },
           "slug": {
             "$ref": "#/components/schemas/Slug",
-            "default": ""
+            "default": "",
+            "maxLength": 180,
+            "pattern": "^$|^[-a-zA-Z0-9_]+$"
           },
           "status": {
             "$ref": "#/components/schemas/ProjectStatus",
@@ -13644,7 +13764,8 @@
           },
           "technologies_used": {
             "$ref": "#/components/schemas/TechnologiesUsed",
-            "default": ""
+            "default": "",
+            "maxLength": 300
           }
         },
         "required": [
@@ -14020,24 +14141,30 @@
                 "$ref": "#/components/schemas/IdempotencyKey"
               },
               "name": {
-                "$ref": "#/components/schemas/ProjectName"
+                "$ref": "#/components/schemas/ProjectName",
+                "maxLength": 160,
+                "minLength": 1
               },
               "notes": {
                 "$ref": "#/components/schemas/Notes",
                 "format": "textarea"
               },
               "public_url": {
-                "$ref": "#/components/schemas/PublishedUrl"
+                "$ref": "#/components/schemas/PublishedUrl",
+                "maxLength": 200
               },
               "repository_url": {
-                "$ref": "#/components/schemas/RepositoryUrl"
+                "$ref": "#/components/schemas/RepositoryUrl",
+                "maxLength": 200
               },
               "security_notes": {
                 "$ref": "#/components/schemas/SecurityNotes",
                 "format": "textarea"
               },
               "slug": {
-                "$ref": "#/components/schemas/Slug"
+                "$ref": "#/components/schemas/Slug",
+                "maxLength": 180,
+                "pattern": "^$|^[-a-zA-Z0-9_]+$"
               },
               "status": {
                 "$ref": "#/components/schemas/ProjectStatus",
@@ -14059,7 +14186,8 @@
                 }
               },
               "technologies_used": {
-                "$ref": "#/components/schemas/TechnologiesUsed"
+                "$ref": "#/components/schemas/TechnologiesUsed",
+                "maxLength": 300
               }
             },
             "type": "object"
@@ -14780,6 +14908,7 @@
               },
               "vendor": {
                 "description": "Who issued the receipt.",
+                "maxLength": 160,
                 "type": "string"
               }
             },
@@ -15478,6 +15607,17 @@
           }
         },
         "type": "object"
+      },
+      "RowKey": {
+        "description": "The item's key.",
+        "maxLength": 200,
+        "minLength": 1,
+        "type": "string"
+      },
+      "RowRevision": {
+        "description": "The revision the row was drawn at.",
+        "pattern": "^[A-Za-z0-9]{1,16}$",
+        "type": "string"
       },
       "RunRecord": {
         "additionalProperties": false,
@@ -16341,6 +16481,142 @@
           }
         },
         "type": "object"
+      },
+      "SweptKind": {
+        "description": "The one type of reading to read now, from every connection.",
+        "enum": [
+          "",
+          "adguard.client",
+          "adguard.dns",
+          "adguard.query_summary",
+          "adguard.rewrite",
+          "automation.operation",
+          "automation.source",
+          "caddy.route",
+          "cloudflare.access_app",
+          "cloudflare.access_service_token",
+          "cloudflare.contact_inbox",
+          "cloudflare.contact_submission",
+          "cloudflare.d1_database",
+          "cloudflare.dns_record",
+          "cloudflare.edge_certificate",
+          "cloudflare.pages_project",
+          "cloudflare.redirect",
+          "cloudflare.tunnel",
+          "cloudflare.zone",
+          "github.allowance",
+          "github.delivery",
+          "github.dependency_run",
+          "github.profile",
+          "github.repository",
+          "host.edge_reboot",
+          "host.filesystem",
+          "host.firewall",
+          "host.perimeter",
+          "host.reboot",
+          "host.render_status",
+          "host.tailnet_lock",
+          "host.unit",
+          "hq.request_path",
+          "machine",
+          "network",
+          "npm.access_list",
+          "npm.certificate",
+          "npm.dead_host",
+          "npm.proxy_host",
+          "npm.redirect",
+          "npm.stream",
+          "pki.authority",
+          "portainer.compose_project",
+          "portainer.container",
+          "portainer.environment",
+          "portainer.image",
+          "portainer.network",
+          "portainer.runtime",
+          "portainer.stack",
+          "portainer.volume",
+          "registry.address",
+          "registry.digest",
+          "registry.domain",
+          "registry.image",
+          "registry.upstream",
+          "registry.vulnerabilities",
+          "tailscale.device",
+          "tailscale.dns",
+          "tailscale.policy",
+          "tailscale.settings",
+          "tailscale.user",
+          "tls.certificate",
+          "tls.delivery_target",
+          "tls.uploaded_certificate"
+        ],
+        "type": "string",
+        "x-enumDescriptions": {
+          "": "None",
+          "adguard.client": "DNS client",
+          "adguard.dns": "DNS server",
+          "adguard.query_summary": "DNS lookups",
+          "adguard.rewrite": "Internal DNS record",
+          "automation.operation": "Playbook",
+          "automation.source": "Playbooks",
+          "caddy.route": "Caddy route",
+          "cloudflare.access_app": "Access application",
+          "cloudflare.access_service_token": "Access service token",
+          "cloudflare.contact_inbox": "Contact inbox",
+          "cloudflare.contact_submission": "Contact message",
+          "cloudflare.d1_database": "D1 database",
+          "cloudflare.dns_record": "Public DNS record",
+          "cloudflare.edge_certificate": "Edge certificate",
+          "cloudflare.pages_project": "Pages project",
+          "cloudflare.redirect": "Redirect",
+          "cloudflare.tunnel": "Tunnel",
+          "cloudflare.zone": "Domain",
+          "github.allowance": "GitHub hourly allowance",
+          "github.delivery": "HQ deploys",
+          "github.dependency_run": "Dependency update run",
+          "github.profile": "GitHub profile",
+          "github.repository": "GitHub repository",
+          "host.edge_reboot": "Pending restart on an edge",
+          "host.filesystem": "Disk space",
+          "host.firewall": "Host firewall",
+          "host.perimeter": "Open-port test",
+          "host.reboot": "Pending restart",
+          "host.render_status": "Credentials refresh",
+          "host.tailnet_lock": "Tailnet lock",
+          "host.unit": "Background jobs",
+          "hq.request_path": "Requests reaching HQ",
+          "machine": "Machine",
+          "network": "Network",
+          "npm.access_list": "NPM access list",
+          "npm.certificate": "NPM certificate",
+          "npm.dead_host": "NPM dead host",
+          "npm.proxy_host": "Proxy host",
+          "npm.redirect": "NPM redirect",
+          "npm.stream": "NPM stream",
+          "pki.authority": "Certificate authority",
+          "portainer.compose_project": "Compose project",
+          "portainer.container": "Container",
+          "portainer.environment": "Docker environment",
+          "portainer.image": "Docker image",
+          "portainer.network": "Docker network",
+          "portainer.runtime": "Container settings",
+          "portainer.stack": "Container stack",
+          "portainer.volume": "Volumes and mounts",
+          "registry.address": "Address owner",
+          "registry.digest": "Image signatures",
+          "registry.domain": "Domain registration",
+          "registry.image": "Published image",
+          "registry.upstream": "Upstream releases",
+          "registry.vulnerabilities": "Known vulnerabilities",
+          "tailscale.device": "Tailnet device",
+          "tailscale.dns": "Tailnet DNS",
+          "tailscale.policy": "Tailnet policy",
+          "tailscale.settings": "Tailnet settings",
+          "tailscale.user": "Tailnet user",
+          "tls.certificate": "TLS certificate",
+          "tls.delivery_target": "Certificate target",
+          "tls.uploaded_certificate": "Uploaded certificate"
+        }
       },
       "SyncStats": {
         "description": "Docs created, updated and skipped, links to records HQ does not hold, and orphans found or pruned.",

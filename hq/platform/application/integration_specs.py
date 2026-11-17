@@ -16,7 +16,7 @@ from .json_schemas import fields, json_schema
 from .search_contracts import SearchDefinition
 from .security import Capability, Principal, Requires
 from .ui import ended
-lazy from . import records
+lazy from . import records, stored_columns
 lazy from .labels import human_label, lower_first
 lazy from .refusal_status import RefusalEnvelope
 
@@ -53,10 +53,11 @@ def command_adapter(command_type: type) -> TypeAdapter[Any]:
     of whatever holds it, so the command and every such type inside it take
     this one. Pydantic accepts a config only for a type that has none of its
     own to hold, which an alias of the command is. A command is such a type;
-    ``CapabilitySpec`` refuses one whose own config leaves it open.
+    ``CapabilitySpec`` refuses one whose own config leaves it open. A field a
+    model stores is held to its column's rules as well (``stored_columns``).
     """
 
-    alias: Any = TypeAliasType(command_type.__name__, command_type)
+    alias: Any = TypeAliasType(command_type.__name__, stored_columns.held(command_type))
     return TypeAdapter(alias, config=ConfigDict(extra="forbid"))
 
 
@@ -196,13 +197,12 @@ def capability_schema(spec: CapabilitySpec) -> dict[str, Any]:
 
     A capability whose effect is not ``read`` takes an optional
     ``idempotency_key``, whether or not its command type declares the field,
-    and never requires it. A ``read`` takes none. A record command's fields
-    say what its model allows (``records.as_its_model_declares``), and one
-    that keeps what it is not sent of the record it targets requires no field
-    the record holds and gives none a default (``records.as_an_update_declares``).
+    and never requires it. A ``read`` takes none. One that keeps what it is
+    not sent of the record it targets requires no field the record holds and
+    gives none a default (``records.as_an_update_declares``).
     """
 
-    schema = records.as_its_model_declares(spec.command_type, command_schema(spec.command_type))
+    schema = command_schema(spec.command_type)
     if kept := kept_by(spec):
         schema = records.as_an_update_declares(schema, kept.always_sent)
     if not spec.effect.changes:

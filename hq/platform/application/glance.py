@@ -2,12 +2,13 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass, replace
+from functools import cache
 from typing import Annotated, Any, Literal, TypedDict
 
 from django.db import transaction
 from django.db.models import Max
 from django.utils import timezone
-from pydantic import BaseModel, ValidationError
+from pydantic import AfterValidator, BaseModel, Field, TypeAdapter, ValidationError
 
 from hq.domains.control_plane.glance_shapes import GlanceObservation, Hour, Machine, Weather
 from hq.domains.control_plane.models import (
@@ -31,7 +32,7 @@ from .drawings import StripTile
 from .freshness import DASHBOARD_GLANCE, freshness
 from .labels import dotted, human_bytes
 from .moments import moment, when_hour
-from .record_errors import InputError, PolicyError, RecordNotFound
+from .record_errors import PolicyError, RecordNotFound
 from .security import Capability, Principal
 from .tone import Tone
 from .ui import MISSING, counted, measured, severity_tone
@@ -264,19 +265,18 @@ def select_dashboard_machine(
     return {"ok": True, "machine": resource.key if command.selected else ""}
 
 
-def _clean_point(value: str) -> str:
-    point = value.strip()
-    if not point:
-        return ""
-    parts = point.split(",")
-    if len(parts) != 2:
-        raise InputError("Weather location must be latitude, longitude.")
-    try:
-        latitude, longitude = (float(part.strip()) for part in parts)
-    except ValueError as exc:
-        raise InputError("Weather coordinates must be numbers.") from exc
-    if not -90 <= latitude <= 90 or not -180 <= longitude <= 180:
-        raise InputError("Weather coordinates are outside the valid range.")
+@cache
+def _coordinates() -> TypeAdapter[tuple[float, float]]:
+    return TypeAdapter(tuple[Annotated[float, Field(ge=-90, le=90)], Annotated[float, Field(ge=-180, le=180)]])
+
+
+def _as_point(value: Any) -> Any:
+    """A point sent as text, as latitude,longitude each to four places, or
+    empty for none; anything else is refused as its type is validated."""
+
+    if not isinstance(value, str) or not value.strip():
+        return value.strip() if isinstance(value, str) else value
+    latitude, longitude = _coordinates().validate_python([part.strip() for part in value.split(",")])
     return f"{latitude:.4f},{longitude:.4f}"
 
 
@@ -287,7 +287,9 @@ DASHBOARD_SETTINGS = "dashboard.settings.update"
 class DashboardSettingsCommand:
     """Where the weather is read for, and what the glance strip calls its panels."""
 
-    weather_point: Annotated[str, Describe("Where the weather is read for, as latitude,longitude.")] = ""
+    weather_point: Annotated[
+        str, AfterValidator(_as_point), Describe("Where the weather is read for, as latitude,longitude.")
+    ] = ""
     weather_label: Annotated[str, Describe("What the weather panel calls that place.")] = ""
     infrastructure_label: Annotated[str, Describe("What the infrastructure panel is called.")] = ""
 
@@ -302,9 +304,8 @@ class DashboardSettingsSaved(TypedDict):
 @transaction.atomic
 def save_dashboard_settings(command: DashboardSettingsCommand, *, principal: Principal) -> DashboardSettingsSaved:
     del principal
-    point = _clean_point(command.weather_point)
     configuration = DashboardConfiguration.objects.select_for_update().filter(pk=1).first() or DashboardConfiguration()
-    configuration.weather_point = point
+    configuration.weather_point = command.weather_point
     configuration.weather_label = command.weather_label.strip()[:40] or "Weather"
     configuration.infrastructure_label = command.infrastructure_label.strip()[:40] or "Homelab"
     configuration.audit_said = "Dashboard settings saved"

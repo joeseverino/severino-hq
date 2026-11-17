@@ -12,9 +12,9 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Annotated, Any, Literal, TypedDict
 
-from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
+from pydantic import Field
 
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import ActionItemRead, AuditLog
@@ -35,13 +35,25 @@ FORGET_AFTER = timedelta(days=30)
 SET_ASIDE = "action_item.set_aside"
 RESTORE = "action_item.restore"
 AUDIT_LABEL = "Needs you"
+# The longest key an item has, and the longest revision a row names.
+ITEM_KEY_LENGTH = 200
+REVISION_LENGTH = 16
+
+
+# What one row names: the item's key (``item_key``) and the revision it was drawn at.
+type RowKey = Annotated[str, Field(min_length=1, max_length=ITEM_KEY_LENGTH), Describe("The item's key.")]
+type RowRevision = Annotated[
+    str,
+    Field(pattern=f"^[A-Za-z0-9]{{1,{REVISION_LENGTH}}}$"),
+    Describe("The revision the row was drawn at."),
+]
 
 
 @dataclass(frozen=True, slots=True)
 class SetAsideCommand:
     # Rows as each was drawn, key to revision (``row_value``): set aside at that revision.
     rows: Annotated[
-        dict[str, str],
+        dict[RowKey, RowRevision],
         Describe("Items as the queue drew them, each as it stood then."),
     ] = field(default_factory=dict)
     # Items by key, set aside at the revision the queue holds now.
@@ -57,7 +69,7 @@ class RestoreCommand:
 
 def item_key(source_id: str, key: str) -> str:
     # An item is identified by what it is about: its source and its finding's key (``findings.finding_key``).
-    return f"{source_id}:{key}"[:200]
+    return f"{source_id}:{key}"[:ITEM_KEY_LENGTH]
 
 
 def item_revision(item: Any) -> str:
@@ -72,7 +84,7 @@ def item_revision(item: Any) -> str:
     # A set-aside revision is stored as this digest of spaced JSON; on
     # digest's form every item set aside would come back.
     # ast-grep-ignore: json-digest-by-digests
-    return hashlib.sha256(json.dumps(seen).encode()).hexdigest()[:16]
+    return hashlib.sha256(json.dumps(seen).encode()).hexdigest()[:REVISION_LENGTH]
 
 
 def sortable(item: dict[str, Any]) -> bool:
@@ -249,7 +261,7 @@ def named_rows(values) -> dict[str, str]:
     named: dict[str, str] = {}
     for value in values:
         revision, _, key = str(value).partition(" ")
-        if key and len(key) <= 200 and 0 < len(revision) <= 16 and revision.isalnum():
+        if key and len(key) <= ITEM_KEY_LENGTH and 0 < len(revision) <= REVISION_LENGTH and revision.isalnum():
             named[key] = revision
     return named
 
@@ -320,8 +332,6 @@ def set_items_aside(command: SetAsideCommand, *, principal: Principal) -> ItemsA
     and only for them.
     """
 
-    if named_rows(f"{revision} {key}" for key, revision in command.rows.items()) != command.rows:
-        raise ValidationError({"rows": ValidationError("Each row names itself as it was drawn.", code="invalid")})
     user = person(principal)
     with transaction.atomic():
         dismiss_rows(user, command.rows)

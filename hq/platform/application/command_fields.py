@@ -148,6 +148,22 @@ def among_now(kind: type) -> dict[str, Callable[[], Iterable[str]]]:
     return {name: marker.values for name, marker in found.items() if isinstance(marker, AmongNow)}
 
 
+# Where ``stored_in`` puts the model on the command it declares.
+STORED_IN = "__stored_in__"
+
+
+def stored_in[Command: type](model: type[Model]) -> Callable[[Command], Command]:
+    """Declare the model a command that is no record domain's writes, so each
+    of its fields named for one of the model's columns is held to that
+    column's rules as the command is validated (``records.stored_rules``)."""
+
+    def declare(command: Command) -> Command:
+        setattr(command, STORED_IN, model)
+        return command
+
+    return declare
+
+
 @dataclass(frozen=True, slots=True)
 class ForAgents:
     """A field a client sends and a person is never asked, such as an agent's
@@ -250,4 +266,5 @@ __all__ = [
     "is_upload",
     "named_records",
     "referred",
+    "stored_in",
 ]

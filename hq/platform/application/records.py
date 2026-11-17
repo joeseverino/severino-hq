@@ -14,7 +14,6 @@ from typing import Any
 
 from django import forms
 from django.core.exceptions import ImproperlyConfigured
-from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db.models import Field
 from django.forms import ModelForm, modelform_factory
 from django.utils.text import capfirst
@@ -25,7 +24,6 @@ from .deletion import DeleteCommand, RecordDeleted, delete_record
 from .describe import meanings
 from .domains import host_records, load, records_of
 from .integration_specs import TARGET_KINDS, CapabilitySpec, command_schema
-from .json_schemas import choices
 from .labels import adding, lower_first, one
 from .record_declaration import Control, Records
 from .security import Principal
@@ -148,27 +146,6 @@ def described[F: ModelForm[Any]](form: F, command: type) -> F:
     return form
 
 
-def as_its_model_declares(command_type: type, schema: dict[str, Any]) -> dict[str, Any]:
-    """A record command's schema with what its model says of each field.
-
-    A field the model limits to choices lists them, each value with its label
-    (``json_schemas.choices``), and one it holds as long text is
-    ``format: textarea``. The model is the one declaration: its ``full_clean``
-    refuses any other value on every path, so the schema only says so. Any
-    other command's schema is returned as it is.
-    """
-
-    model = next((load(records.model) for records in host_records() if load(records.command) is command_type), None)
-    if model is None:
-        return schema
-    names = {field.name: field for field in model._meta.get_fields() if field.concrete}
-    properties = {
-        name: _as_field_declares(names[name], declared) if name in names else declared
-        for name, declared in schema.get("properties", {}).items()
-    }
-    return {**schema, "properties": properties}
-
-
 def as_an_update_declares(schema: dict[str, Any], always_sent: frozenset[str] = frozenset()) -> dict[str, Any]:
     """A command's schema as an update on a record that exists takes it: a
     field left out keeps what the record holds, so none has a default and only
@@ -185,26 +162,6 @@ def as_an_update_declares(schema: dict[str, Any], always_sent: frozenset[str] = 
     else:
         updated.pop("required", None)
     return updated
-
-
-def _bounds(field: Any) -> dict[str, Any]:
-    """The tightest bounds a model field's validators hold a number to, as JSON Schema says them."""
-
-    lows = [v.limit_value for v in field.validators if isinstance(v, MinValueValidator)]
-    highs = [v.limit_value for v in field.validators if isinstance(v, MaxValueValidator)]
-    return {**({"minimum": max(lows)} if lows else {}), **({"maximum": min(highs)} if highs else {})}
-
-
-def _as_field_declares(field: Any, declared: dict[str, Any]) -> dict[str, Any]:
-    declared = {**declared, **_bounds(field)}
-    if field.choices:
-        allowed = [(value, str(label)) for value, label in field.flatchoices]
-        if field.blank and all(value != "" for value, _label in allowed):
-            allowed.insert(0, ("", "Not set"))
-        return {**declared, **choices(allowed)}
-    if field.get_internal_type() == "TextField":
-        return {**declared, "format": "textarea"}
-    return declared
 
 
 def _specs(records: Records) -> tuple[CapabilitySpec, ...]:

@@ -29,7 +29,7 @@ from hq.domains.control_plane.providers import (
 lazy from hq.domains.control_plane.provider_spec import ProviderResolutionContext
 
 from .adoption import Live, live_read, require_writable
-from .command_fields import Choices, Describe
+from .command_fields import Choices, Describe, stored_in
 from .conditions import DEGRADED, DRIFTED, READY, holding
 from .integration_specs import Kept, command_adapter, keeps
 from .labels import lower_first
@@ -101,6 +101,7 @@ def _declarations() -> TypeAdapter[Any]:
     return TypeAdapter(Union[tuple(branches)])  # noqa: UP007 - built from a tuple of types
 
 
+@stored_in(ManagedResource)
 @dataclass(frozen=True, slots=True)
 class ManagedResourceCommand:
     key: ManagedResourceKey

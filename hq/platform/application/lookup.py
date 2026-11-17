@@ -11,10 +11,10 @@ import json
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
-from ipaddress import ip_address
 from typing import Annotated, Any, Literal, NotRequired, TypedDict
 
 from django.utils.timezone import now
+from pydantic import BeforeValidator, IPvAnyAddress, StringConstraints
 
 from hq.domains.control_plane.dns_lookup import LookupUnavailable, registry, resolve
 from hq.domains.control_plane.names import normalized_hostname
@@ -22,9 +22,9 @@ from hq.platform.core.outbound import allowed
 
 from .answer_fields import ObservedAt
 from .command_fields import Describe
+from .integration_specs import command_adapter
 from .projection import iso
 from .reach import is_documentation, is_public, network_of
-from .record_errors import InputError
 from .security import Capability, Principal
 lazy from . import readings
 
@@ -32,10 +32,12 @@ lazy from . import readings
 # gateway owns, so it cannot change the shape of the request, but a name that
 # is not a name is a question not worth asking, and refusing it here means the
 # provider never sees whatever was actually typed.
+# Each label is 1 to 63 letters, digits and inner hyphens; a name is at most
+# 253 characters (``HOSTNAME_LENGTH``), which the pattern leaves to its type.
 HOSTNAME = re.compile(
-    r"^(?=.{1,253}$)(?!-)[A-Za-z0-9-]{1,63}(?<!-)"
-    r"(?:\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*\.?$"
+    r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*\.?$"
 )
+HOSTNAME_LENGTH = 253
 
 # The types HQ asks for, in the order a person reads them. The resolver matches
 # these case-sensitively and answers an unknown one with an empty list rather
@@ -47,11 +49,19 @@ LOOK_UP_NAME = "lookup.name.read"
 LOOK_UP_ADDRESS = "lookup.address.read"
 
 
+def _stripped(value: Any) -> Any:
+    return value.strip() if isinstance(value, str) else value
+
+
 @dataclass(frozen=True, slots=True)
 class NameCommand:
     """A name to ask a public resolver about."""
 
-    name: Annotated[str, Describe("The hostname to resolve.")]
+    name: Annotated[
+        str,
+        StringConstraints(strip_whitespace=True, max_length=HOSTNAME_LENGTH, pattern=HOSTNAME.pattern),
+        Describe("The hostname to resolve."),
+    ]
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,7 +75,7 @@ class AddressCommand:
     discloses, every time, which addresses HQ is interested in.
     """
 
-    address: Annotated[str, Describe("The IP address to look up.")]
+    address: Annotated[IPvAnyAddress, BeforeValidator(_stripped), Describe("The IP address to look up.")]
     refresh: Annotated[bool, Describe("Ask again rather than reading the stored answer.")] = False
 
 
@@ -187,9 +197,7 @@ def look_up_name(
     """What a resolver outside this network returns for a name."""
 
     del principal
-    wanted = normalized_hostname(command.name or "")
-    if not wanted or not HOSTNAME.match(wanted):
-        raise InputError("That is not a hostname.")
+    wanted = normalized_hostname(command.name)
     # The gateways are injected defaults, so no test here opens a socket.
     # Resolve at execution time so scoped replacements also cover registry calls.
     resolver = resolver or resolve
@@ -240,10 +248,7 @@ def _address_answer(command: AddressCommand) -> tuple[Any, dict[str, Any] | None
     when only the registries could say.
     """
 
-    try:
-        parsed = ip_address(str(command.address or "").strip())
-    except ValueError as exc:
-        raise InputError("That is not an IP address.") from exc
+    parsed = command.address
     if not is_public(str(parsed)):
         return parsed, {
             "ok": True,
@@ -258,13 +263,14 @@ def _address_answer(command: AddressCommand) -> tuple[Any, dict[str, Any] | None
     return parsed, None
 
 
-def stored_address(command: AddressCommand, *, principal: Principal) -> dict[str, Any] | None:
+def stored_address(address: str, *, principal: Principal) -> dict[str, Any] | None:
     """What HQ already holds about an address. Asks no one and writes nothing."""
 
     # The address panel's GET reads this outside the runner, so it checks here
-    # what LOOK_UP_ADDRESS's spec checks for the capability.
+    # what LOOK_UP_ADDRESS's spec checks for the capability, and validates the
+    # address as its command does.
     principal.require(Capability.LOOK_UP_PUBLIC_RECORDS)
-    return _address_answer(command)[1]
+    return _address_answer(command_adapter(AddressCommand).validate_python({"address": address}))[1]
 
 
 class AddressLookedUp(TypedDict):

@@ -98,4 +98,4 @@ class RecordRefusalTransportTests(TestCase):
             )
 
         self.assertEqual(response.status_code, 400, response.content)
-        self.assertEqual(response.json()["error"], {"code": "invalid_input", "message": "That is not an IP address."})
+        self.assertEqual(response.json()["error"]["message"], "lookup.address.read: address is invalid.")

@@ -12,14 +12,19 @@ from .doors import OPERATOR, Caller, at_the_door, each_door
 AGENT = Caller("example-agent", "read manage_infrastructure")
 READER = Caller("example-agent", "read")
 CREATE = "infrastructure.resource.create"
+ZONE = {"zone": "example.com", "connection_ref": "example-dns"}
 # A kind no provider declares, a kind only its own domain writes, and
 # declarations of a kind that waits for a person (a zone's, which changes what
-# the public internet sees) whose spec its kind does not take.
+# the public internet sees) whose spec its kind does not take, or whose key
+# the record's column does not.
 MALFORMED = (
     {"kind": "__not_in_enum__", "key": "a", "spec": {}},
     {"kind": "cloudflare.contact_inbox", "key": "a", "spec": {}},
     {"kind": "cloudflare.zone", "key": "a", "spec": {"junk": 1}},
     {"kind": "cloudflare.zone", "key": "", "spec": {}},
+    {"kind": "cloudflare.zone", "key": "", "spec": ZONE},
+    {"kind": "cloudflare.zone", "key": "not a key", "spec": ZONE},
+    {"kind": "cloudflare.zone", "key": "k" * 181, "spec": ZONE},
 )
 
 

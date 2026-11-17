@@ -22,7 +22,7 @@ from hq.platform.application.labels import dotted
 from hq.platform.application.routes import reverse
 
 from .calendar import CalendarEvent, CalendarSource, gather
-from .command_fields import Choices, Describe, Refers
+from .command_fields import Choices, Describe, Refers, stored_in
 from .derivations import derivation
 from .integration_specs import Kept, keeps
 from .moments import when_day
@@ -218,6 +218,7 @@ type CalendarEntryAbout = Annotated[
 ]
 
 
+@stored_in(Entry)
 @dataclass(frozen=True, slots=True)
 class EntryCommand:
     """One entry, as every surface states it."""
