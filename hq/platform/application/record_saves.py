@@ -13,7 +13,7 @@ from dataclasses import asdict, dataclass, fields
 from functools import cache
 from typing import Annotated, Any, Literal, TypedDict
 
-from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import transaction
 from django.db.models import Model
 
@@ -107,7 +107,7 @@ def found(model: type[Model], refusals: Held, lookup: Mapping[str, Any], *, lock
     rows = model._default_manager.select_for_update() if locked else model._default_manager
     try:
         return rows.get(**lookup)
-    except (ObjectDoesNotExist, ValueError) as exc:
+    except (ObjectDoesNotExist, ValidationError, ValueError) as exc:
         raise refusals.not_found() from exc
 
 
@@ -245,5 +245,5 @@ def _linked_one(model: type[Model], link: Link, value: Any) -> Any:
         return None
     try:
         return model._default_manager.get(**{link.key: value})
-    except ObjectDoesNotExist as exc:
+    except (ObjectDoesNotExist, ValidationError, ValueError) as exc:
         raise link.not_found() from exc

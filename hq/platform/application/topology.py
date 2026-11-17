@@ -42,7 +42,8 @@ from .derived_inputs import ESTATE_READS, estate_variant
 from .entity_links import entity_link, kind_label, node_name, record_name
 from .infrastructure import ResourceState, resource_health
 from .integration_validation import required_capability_names
-from .projection import QUERY, QueryRefusal, projection_scope
+from .projection import QUERY, projection_scope
+from .record_errors import RecordNotFound
 from .resource_capabilities import REMOVAL_CAPABILITY, UPDATE_CAPABILITY, removals_pending, resource_capabilities
 from .resource_context import record_summary, shared_names
 from .security import Capability, Principal
@@ -603,10 +604,6 @@ def _governs_edges(groups, resources, edges: dict[str, TopologyEdge]) -> None:
                     edges[relation.id] = relation
 
 
-class InvalidTopologyQuery(QueryRefusal):
-    """A focus the topology holds no node for; ``reason`` says where ids come from."""
-
-
 # Built from the declarations, so a type checker reads each as a value.
 _LENS: Any = Literal[tuple(lens.name for lens in TOPOLOGY_LENSES)]
 _DIRECTION: Any = Literal[TRACE_DIRECTIONS]
@@ -682,7 +679,7 @@ def topology(*, principal: Principal, **narrowing: object) -> TopologyAnswer:
     if selected is not None:
         projection = apply_lens(projection, selected)
     if focus and focus not in {node.id for node in projection.nodes}:
-        raise InvalidTopologyQuery(
+        raise RecordNotFound(
             "The focus names no node on the map; it is a node's id, as a lens's answer gives each one."
         )
     projection, trace = apply_trace(projection, focus, direction=query["direction"], depth=query["depth"])
