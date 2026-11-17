@@ -1,13 +1,11 @@
 {% comment %}
 A switch, drawn by {% switch label="Domains" %}{% choice url=u current=True %}example.com{% endchoice %}{% endswitch %}:
-a row of links to the same view, the current one marked. label names the
-navigation; each choice is given url, current, and optionally count (drawn
-beside its chip, since a figure is never a chip), note (a quiet word inside
-the chip) and mark (a symbol before its words, hidden from a screen reader).
-The {% summary %} part, when given, says what the current choice is, under
-the row. Marked up as GOV.UK's sub-navigation and Primer's UnderlineNav are:
-a labeled nav around a list, the current link aria-current="page", its count
-inside the link (switch_tags.py).
+a row of links to the same view, the current one marked. A choice's count is
+drawn beside its chip, since a figure is never a chip. The {% summary %} part,
+when given, says what the current choice is, under the row. Marked up as
+GOV.UK's sub-navigation and Primer's UnderlineNav are: a labeled nav around a
+list, the current link aria-current="page", its count inside the link. Its
+options and each choice's are their Parts' (switch_tags).
 {% endcomment %}<div class="switch">
   <nav aria-label="{{ label }}"><ul role="list">{{ content|safe }}</ul></nav>
   {% if summary %}{% muted element="p" %}{{ summary|safe }}{% endmuted %}{% endif %}

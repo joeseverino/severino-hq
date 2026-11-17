@@ -13,8 +13,7 @@ show is the browser's to say (docs/Design.md, A table fits its box).
 
 import inspect
 import re
-from functools import wraps
-from typing import Any
+from typing import Annotated, Any
 
 from django import template
 from django.template.base import token_kwargs
@@ -23,6 +22,7 @@ from django.utils.html import escape, format_html
 from django.utils.safestring import SafeString, mark_safe
 from django.utils.text import slugify
 
+from hq.platform.application.describe import Describe
 from hq.platform.application.page_parts import html_attributes
 from hq.platform.application.tables import TableColumn, check_drop, column_kind, ranked
 from hq.platform.core.table_cells import (
@@ -33,6 +33,7 @@ from hq.platform.core.table_cells import (
     Span,
     without_ids,
 )
+from hq.platform.core.template_parts import Part, slotted
 lazy from hq.platform.application import history
 
 register = template.Library()
@@ -223,18 +224,18 @@ def _cut(markup: str, start: int, end: int, cuts: list[tuple[int, int]]) -> str:
 
 
 def _region(
-    label: str,
+    label: Annotated[str, Describe("What the table holds, the name its box is a stop by.")],
     *,
-    css: str = "",
-    chart: bool = False,
-    pane: bool = False,
-    compare: bool = False,
-    empty: str = "",
-    remedy: Any = None,
-    action_url: str = "",
-    action_label: str = "",
-    filtered: bool = False,
-    clear: str = "",
+    css: Annotated[str, Describe("The classes of where it stands.")] = "",
+    chart: Annotated[bool, Describe("A chart's table, read whole in the chart's order and scrolled.")] = False,
+    pane: Annotated[bool, Describe("A box of its own height, which scrolls.")] = False,
+    compare: Annotated[bool, Describe("Two values side by side in each row, after the row's name.")] = False,
+    empty: Annotated[str, Describe("With no rows, what is missing.")] = "",
+    remedy: Annotated[Any, Describe("With no rows, what would fill it: a `label` and a `url`.")] = None,
+    action_url: Annotated[str, Describe("With no rows, where the link that fills it leads.")] = "",
+    action_label: Annotated[str, Describe("That link's label.")] = "",
+    filtered: Annotated[bool, Describe("Its own search narrows it, so no rows says nothing matches.")] = False,
+    clear: Annotated[str, Describe("The way back from that search.")] = "",
 ) -> dict[str, Any]:
     """The region a table sits in: the box it fits, named by ``label``.
 
@@ -316,7 +317,6 @@ class RegionNode(template.Node):
 
 
 @register.tag("table_region")
-@wraps(_region)
 def table_region(parser: Any, token: Any) -> RegionNode:
     bits = token.split_contents()
     options = token_kwargs(bits[2:], parser)
@@ -329,6 +329,19 @@ def table_region(parser: Any, token: Any) -> RegionNode:
     nodelist = parser.parse(("endtable_region",))
     parser.delete_first_token()
     return RegionNode(nodelist, parser.compile_filter(bits[1]), options)
+
+
+# The template contract reads a tag's declaration from what it wraps.
+table_region.__wrapped__ = Part(  # type: ignore[attr-defined]  # a function's attribute, which typeshed does not declare
+    name="table_region",
+    about=(
+        "The box a table fits, which draws what follows from its headings, and, with no rows, the one empty "
+        "state in its place."
+    ),
+    function=_region,
+    public=True,
+    example='{% table_region "Hosts" empty="No hosts yet." %}<table>...</table>{% endtable_region %}',
+)
 
 
 def _server_sort(context: Any, ascending: str, descending: str) -> dict[str, str]:
@@ -344,22 +357,25 @@ def _server_sort(context: Any, ascending: str, descending: str) -> dict[str, str
     }
 
 
-@register.inclusion_tag("partials/_table_heading.html", takes_context=True)
 def table_heading(
     context: Any,
-    label: str,
-    kind: str = "",  # one of COLUMN_KINDS, or follows from css when left out
+    label: Annotated[str, Describe("The column's name.")],
+    kind: Annotated[str, Describe("What the column holds, one of `COLUMN_KINDS`; left out, its classes say.")] = "",
     *,
-    css: str = "",
-    drop: int = 0,
-    beneath: bool = False,  # in a narrow box its cells stand beneath the row's words, under its name
-    sort: str = "",
-    descending: str = "",
-    local_sort: bool | None = None,  # left out, it follows from what the column holds
-    hidden: bool = False,  # the label for assistive technology only
-    title: str = "",
-    gutter: bool = False,  # its column's cells stand in the gutter and hold each row's toggle
-    select_all: bool = False,  # the tick-box that selects every row
+    css: Annotated[str, Describe("The column's classes.")] = "",
+    drop: Annotated[int, Describe("The rank it leaves by when the table is too wide, 1 first.")] = 0,
+    beneath: Annotated[
+        bool, Describe("In a narrow box its cells stand beneath the row's words, under its name.")
+    ] = False,
+    sort: Annotated[str, Describe("The field a server-sorted list orders this column by.")] = "",
+    descending: Annotated[str, Describe("Its reverse, when that is not `-field`.")] = "",
+    local_sort: Annotated[
+        bool | None, Describe("Sorts the rows on the page; left out, it follows from what the column holds.")
+    ] = None,
+    hidden: Annotated[bool, Describe("The name for assistive technology only.")] = False,
+    title: Annotated[str, Describe("Its `title`.")] = "",
+    gutter: Annotated[bool, Describe("Its cells stand in the gutter and hold each row's toggle.")] = False,
+    select_all: Annotated[bool, Describe("The tick-box that selects every row.")] = False,
 ) -> dict[str, Any]:
     """One column heading.
 
@@ -401,9 +417,13 @@ def table_heading(
     }
 
 
-@register.inclusion_tag("partials/_row_group.html")
 def row_group(
-    label: str, count: int | None = None, *, folds: str = "", href: str = "", attention: bool = False
+    label: Annotated[str, Describe("The group's name.")],
+    count: Annotated[int | None, Describe("How many rows it holds.")] = None,
+    *,
+    folds: Annotated[str, Describe("The row's id, for a group that starts folded away.")] = "",
+    href: Annotated[str, Describe("The page its rows are dealt with on together, which its name links to.")] = "",
+    attention: Annotated[bool, Describe("A group a reader should weigh before the rest.")] = False,
 ) -> dict[str, Any]:
     """The heading row of one group of a table's rows, first in that group's
     ``tbody``: its name and, given one, how many rows it holds. It spans every
@@ -452,8 +472,13 @@ def history_row_attributes(row: Any, folds: str = "") -> SafeString:
     return html_attributes({"id": row.fold, "data-folds": True}) if row.grouped else SafeString("")
 
 
-@register.inclusion_tag("partials/_row_actions.html")
-def row_actions(actions: Any = (), *, gap: Any = None, first: int = 0, put_away: Any = None) -> dict[str, Any]:
+def row_actions(
+    actions: Annotated[Any, Describe("What can be done to the row's record, each a `PageAction`.")] = (),
+    *,
+    gap: Annotated[Any, Describe("A `WriteGap` standing in for every action the connection cannot make.")] = None,
+    first: Annotated[int, Describe("How many show; the rest wait in the row's open line.")] = 0,
+    put_away: Annotated[Any, Describe("The reader's own way to set the row aside, last of its buttons.")] = None,
+) -> dict[str, Any]:
     """The cell that ends a row with what can be done to its record: each of
     ``actions`` (a ``PageAction``, as a ``ListRow``'s are) a compact control
     drawn by ``_page_action.html``, so a row's buttons look like every other
@@ -471,7 +496,6 @@ def row_actions(actions: Any = (), *, gap: Any = None, first: int = 0, put_away:
     return {"actions": shown, "later": later, "gap": gap, "put_away": put_away}
 
 
-@register.inclusion_tag("partials/_row_toggle.html")
 def row_toggle() -> dict[str, Any]:
     """The toggle that opens a row to all it holds, last in the cell that names
     the row, in a table with no headings; under a heading that keeps the gutter
@@ -552,3 +576,49 @@ def line_list(parser: Any, token: Any) -> LineListNode:
     nodelist = parser.parse(("endline_list",))
     parser.delete_first_token()
     return LineListNode(nodelist, parser.compile_filter(bits[1]), bits[3], options.get("list"))
+
+
+slotted(
+    Part(
+        name="table_heading",
+        about="One column heading of a table: its kind, the rank it leaves by and its sort control.",
+        partial="partials/_table_heading.html",
+        function=table_heading,
+        public=True,
+        example='{% table_heading "Updated" "status" drop=2 %}',
+    ),
+    library=register,
+)
+slotted(
+    Part(
+        name="row_group",
+        about="The heading row of one group of a table's rows, first in its `tbody`: its name and how many rows.",
+        partial="partials/_row_group.html",
+        function=row_group,
+        public=True,
+        example='<tbody>{% row_group "Example group" 3 %}...</tbody>',
+    ),
+    library=register,
+)
+slotted(
+    Part(
+        name="row_actions",
+        about="The cell that ends a row with what can be done to its record, each a compact control.",
+        partial="partials/_row_actions.html",
+        function=row_actions,
+        public=True,
+        example="{% row_actions row.actions %}",
+    ),
+    library=register,
+)
+slotted(
+    Part(
+        name="row_toggle",
+        about="The toggle that opens a row to all it holds, last in the cell that names it, in a table with no headings.",
+        partial="partials/_row_toggle.html",
+        function=row_toggle,
+        public=True,
+        example="<td>{{ row.name }}{% row_toggle %}</td>",
+    ),
+    library=register,
+)

@@ -1,9 +1,9 @@
 {% comment %}
 One fact, drawn by {% fact %} inside {% facts %}: its label, its value, and
 the detail under the value, flowing words or, given as lines, a line each. The value and its link are one element, so a
-count of 0 and a linked count of 13 stand alike. url is an address in HQ; an
-outside one is written in the block form, its value {% entity url|outside %}
-in the fact. A tone, when there is one, colors the fact by what it means.
+count of 0 and a linked count of 13 stand alike. An outside link is written
+in the block form, its value {% entity url|outside %} in the fact. Its
+options are its Part's (facts_tags, docs/Shared-UI.md).
 {% endcomment %}<div class="fact{% if tone %} tone-{{ tone }}{% endif %}">
   <dt>{% if icon %}<span class="band-icon">{% include "partials/_icon.html" with name=icon only %}</span>{% endif %}<span class="fact-label">{{ label|breakable }}</span></dt>
   <dd class="fact-value">{% present value %}{% if url %}<a href="{{ url }}">{{ value|breakable }}</a>{% else %}{{ value|breakable }}{% endif %}{% endpresent %}</dd>

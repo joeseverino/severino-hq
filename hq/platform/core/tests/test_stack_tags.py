@@ -65,6 +65,6 @@ class DotListTagTests(SimpleTestCase):
             Template('{% dot_list css="example" %}{% enddot_list %}')
 
     def test_an_extension_may_write_it(self):
-        from hq.platform.core.template_contract import TAGS
+        from hq.platform.core.template_contract import describe
 
-        self.assertIn("dot_list", TAGS)
+        self.assertIn("dot_list", describe()["tags"])

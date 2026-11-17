@@ -1,47 +1,60 @@
 """The check ladder: checks read down one after another, each a rung that
-is met, unmet or unavailable (``standards.Standing``), and opens to say why.
-
-``{% check_ladder route=True %}{% check_rung state="met" kind="Device" %}example-laptop{% more %}2 checks{% body %}...{% endcheck_rung %}{% endcheck_ladder %}``
-draws ``partials/_check_ladder.html``, each rung ``partials/_check_rung.html``:
-the connection panel's path to HQ, and inside each of its hops the checks
-it rests on.
-"""
+is met, unmet or unavailable (``standards.Standing``), and opens to say why:
+the connection panel's path to HQ, and inside each of its hops the checks it
+rests on."""
 
 from django import template
 
 from hq.platform.application.page_parts import html_attributes
 from hq.platform.application.standards import Standing
-from hq.platform.core.templatetags.value_tags import Option, Part, slotted
+from hq.platform.core.template_parts import Option, Part, slotted
 
 register = template.Library()
 
 
-def rung_frame(name: str, given: dict) -> dict:
+def rung_frame(_name: str, given: dict) -> dict:
     """What a rung's partial draws from what a page gave: its standing,
     unavailable unless given, and its disclosure's attributes, opened when
     ``open`` and each ``data_*`` option."""
 
-    state = given.get("state") or Standing.UNAVAILABLE
-    if state not in Standing:
-        raise template.TemplateSyntaxError(f"{name} state= is one of {', '.join(Standing)}")
     return {
-        "state": state,
-        "kind": given.get("kind") or "",
-        "evidence": given.get("evidence") or "",
+        "state": given["state"] or Standing.UNAVAILABLE,
+        "kind": given["kind"] or "",
+        "evidence": given["evidence"] or "",
         "attributes": html_attributes(
-            {"open": bool(given.get("open"))}
+            {"open": bool(given["open"])}
             | {option.replace("_", "-"): value for option, value in given.items() if option.startswith("data_")}
         ),
     }
 
 
-slotted(Part(name="check_ladder", partial="partials/_check_ladder.html", options={"route": Option()}), library=register)
+slotted(
+    Part(
+        name="check_ladder",
+        partial="partials/_check_ladder.html",
+        about="Checks read down one after another, each a `{% check_rung %}` opening to say why it stands as it does.",
+        options={
+            "route": Option(about="The stops of a route, from where a request starts to where it ends, on one line.")
+        },
+    ),
+    library=register,
+)
 slotted(
     Part(
         name="check_rung",
         partial="partials/_check_rung.html",
+        about=(
+            "One rung of a `{% check_ladder %}`: its tick, its statement with any `detail` part, and its `more` "
+            "part saying what opening it shows; it opens to its `body` part, after the `page` part's link to "
+            "what it is about."
+        ),
         parts=("content", "detail", "more", "page", "body"),
-        options={"state": Option(), "kind": Option(), "evidence": Option(), "open": Option()},
+        options={
+            "state": Option(choices=("", *Standing), about="How its check stands, unavailable when not read."),
+            "kind": Option(about="What kind of check it is."),
+            "evidence": Option(about="What it was read from."),
+            "open": Option(about="Drawn opened."),
+        },
         data=True,
         shape=rung_frame,
     ),

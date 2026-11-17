@@ -1,15 +1,9 @@
 """The code patch: a block of code to paste somewhere else, with what to know
-about it.
-
-``{% patch id="hardening" %}services: ...{% title %}Add to <code>compose.yaml</code>{% detail %}Then run it.{% notes %}<li>A note</li>{% endpatch %}``
-draws ``partials/_patch.html``: the title beside a Copy button, the code in a
-``<pre>`` the button copies, the words under it, and the notes list. With no
-code it draws the notes alone.
-"""
+about it."""
 
 from django import template
 
-from hq.platform.core.templatetags.value_tags import Option, Part, slotted
+from hq.platform.core.template_parts import Option, Part, slotted
 
 register = template.Library()
 
@@ -17,6 +11,15 @@ PATCH_PARTIAL = "partials/_patch.html"
 
 
 slotted(
-    Part(name="patch", partial=PATCH_PARTIAL, parts=("content", "title", "detail", "notes"), options={"id": Option()}),
+    Part(
+        name="patch",
+        partial=PATCH_PARTIAL,
+        about=(
+            "A block of code to paste somewhere else: its `title` part beside the button that copies it, the "
+            "`detail` part's words under it, then its `notes` part's `<li>`s; with no code the notes stand alone."
+        ),
+        parts=("content", "title", "detail", "notes"),
+        options={"id": Option(about="The anchor a link to it names.")},
+    ),
     library=register,
 )

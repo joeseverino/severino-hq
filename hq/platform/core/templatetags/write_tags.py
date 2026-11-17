@@ -14,6 +14,7 @@ asks one question).
 """
 
 import copy
+from typing import Annotated, Any
 
 from django import template
 from django.forms.widgets import Input, Select
@@ -21,6 +22,8 @@ from django.template.defaulttags import CsrfTokenNode
 from django.utils.html import format_html
 from django.utils.text import slugify
 
+from hq.platform.application.describe import Describe
+from hq.platform.core.template_parts import Part, slotted
 lazy from hq.platform.application.web_writes import RETRY_KEY_FIELD, new_key
 
 register = template.Library()
@@ -29,7 +32,6 @@ register = template.Library()
 ROW_EDIT = "edit"
 
 
-@register.simple_tag(takes_context=True)
 def write_token(context):
     key = format_html('<input type="hidden" name="{}" value="{}">', RETRY_KEY_FIELD, new_key())
     # The CSRF node draws safe markup, or a plain empty string where no token
@@ -57,8 +59,16 @@ def asks_one_question(form):
     return isinstance(widget, Input) and widget.input_type not in _NOT_ONE_LINE
 
 
-@register.inclusion_tag("partials/_row_editor.html", takes_context=True)
-def row_editor(context, form, key, *, label, action, verb, **initial):
+def row_editor(
+    context,
+    form: Annotated[Any, Describe("The one form the view declares for the table's editors.")],
+    key: Annotated[Any, Describe("The row's key, which its ids and the address that opens it carry.")],
+    *,
+    label: Annotated[str, Describe("The words of the way in.")],
+    action: Annotated[str, Describe("Where the editor posts.")],
+    verb: Annotated[str, Describe("Its button's words.")],
+    **initial: Annotated[Any, Describe("The row's values, each by its field's name.")],
+):
     """The way into a row's editor, and the editor itself where the page's
     address opens it (``?edit=<key>``).
 
@@ -97,3 +107,26 @@ def row_editor(context, form, key, *, label, action, verb, **initial):
         "action": action,
         "verb": verb,
     }
+
+
+slotted(
+    Part(
+        name="write_token",
+        about="What every write form carries in place of `{% csrf_token %}`, so the form sent twice acts once.",
+        function=write_token,
+        public=True,
+        example='<form method="post">{% write_token %}...</form>',
+    ),
+    library=register,
+)
+slotted(
+    Part(
+        name="row_editor",
+        about="The way into a row's editor, and the editor itself under the row where the page's address opens it.",
+        partial="partials/_row_editor.html",
+        function=row_editor,
+        public=True,
+        example='{% row_editor form row.pk label="Edit" action=row.edit_url verb="Save" name=row.name %}',
+    ),
+    library=register,
+)

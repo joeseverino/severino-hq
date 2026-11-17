@@ -9,17 +9,13 @@ down. The arguments are still read by Django's own ``parse_bits``.
 """
 
 from dataclasses import Field, fields
-from enum import Enum
-from itertools import chain
-from types import UnionType
-from typing import Any, Literal, Union, get_args, get_origin
 
 from django import template
 from django.template.library import TagHelperNode, parse_bits
 from django.utils.safestring import mark_safe
 
 from hq.platform.application.page_parts import LAST_LEVEL, SECTION_PARTIAL, TOP_LEVEL, SectionPart
-from hq.platform.core.templatetags.value_tags import Option, Part
+from hq.platform.core.template_parts import Option, Part, choices_of
 
 register = template.Library()
 
@@ -34,20 +30,6 @@ _IDS = "hq.part_tags.ids"
 # its heading first, its parts, its data_* options and its level, and the body
 # code draws in place of the tag's own.
 _FILLED = frozenset({"heading", "data", "level", "template", "context"})
-
-
-def choices_of(annotation: Any) -> tuple[object, ...]:
-    """The values a field typed ``annotation`` holds, when the type names them
-    all (a ``Literal``, an enum, a union of those); else none."""
-
-    if get_origin(annotation) is Literal:
-        return get_args(annotation)
-    if isinstance(annotation, type) and issubclass(annotation, Enum):
-        return tuple(member.value for member in annotation)
-    if isinstance(annotation, UnionType) or get_origin(annotation) is Union:
-        each = [choices_of(member) for member in get_args(annotation)]
-        return tuple(chain.from_iterable(each)) if all(each) else ()
-    return ()
 
 
 def _option(field: Field) -> Option:

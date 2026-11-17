@@ -2,8 +2,8 @@
 A dot list, drawn by {% dot_list %}: {% dot_list %}<li>A link</li><li>A value</li>{% enddot_list %}.
 A run of whole parts on one line, each an <li>, wrapping whole with a dot in
 the gap before each that the stylesheet draws, so no line opens on a dot and
-a reader never hears one. muted=True says the run quietly; an item of it that
-reads as a sentence, a link among its words, is a <li class="prose">. Each
-data_* option is a data- attribute (True draws it bare).
+a reader never hears one; an item of it that reads as a sentence, a link
+among its words, is a <li class="prose">. Its options are its Part's
+(stack_tags, docs/Shared-UI.md).
 <!-- ast-grep-ignore: muted-said-by-muted-tag --> the part itself, which says a quiet run in the muted voice
 {% endcomment %}<ul class="{% if muted %}muted {% endif %}dot-list"{{ data }}>{{ content|safe }}</ul>

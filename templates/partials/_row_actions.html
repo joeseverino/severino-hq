@@ -1,6 +1,6 @@
 {% comment %}
 A row's actions, from `{% row_actions %}` (table_tags.row_actions): one cell,
-each action a compact control, the reader's own way to set the row aside
-(`put_away`, the queue's Dismiss) the last of them and quiet, and those past
-the first few moved to the row's open line (`row-later`).
+each action a compact control, the reader's own way to set the row aside the
+last of them and quiet, and those past the first few moved to the row's open
+line (`row-later`).
 {% endcomment %}<td class="row-actions">{% if gap %}{% include "partials/_write_gap.html" with gap=gap only %}{% else %}{% for action in actions %}{% include "partials/_page_action.html" with action=action extra="compact" only %}{% endfor %}{% endif %}{% if put_away %}{% include "partials/_page_action.html" with action=put_away extra="compact ghost" only %}{% endif %}{% if later and not gap %}<div class="row-later">{% for action in later %}{% include "partials/_page_action.html" with action=action extra="compact" only %}{% endfor %}</div>{% endif %}</td>

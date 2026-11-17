@@ -1,16 +1,11 @@
 {% comment %}
 One reading of a {% readings %} row, drawn by {% reading %}:
 {% reading icon="network" url=... %}Loopback{% lines %}<span>TLS 1.3</span>{% note %}A check failed{% endreading %}.
-Its mark, its figure (the first part, set large, `unit` the words after it
-and `title` what pointing at it says), its quiet lines (each child a part of
-the line, a dot between them, a `<strong>` one in the attention tone) and
-under them a note on how it stands: `note_tone` "attention" for a problem,
-"stale" for a reading past its time. `tone` is how the reading stands, in the
-status vocabulary ({% status %}'s), and marks one that needs attention. A
-reading leads to `url` (a dialog's opener with `modal`), or, given a `panel`,
-opens it in place as a menu does: a popover `id` names, its `heading` over it
-and its `foot` under it. Each `data_*` option is an attribute of the reading,
-a `data-fragment-part` included.
+Its mark, its figure (the first part, set large), its quiet lines (each child
+a part of the line, a dot between them, a `<strong>` one in the attention
+tone) and under them a note on how it stands. A reading leads to a page, or,
+given a `panel`, opens it in place as a menu does, its `heading` over it and
+its `foot` under it. Its options are its Part's (value_tags).
 {% endcomment %}{% partialdef face %}<span class="reading-mark">{% include "partials/_icon.html" with name=icon only %}</span>
   <span class="reading-lead"{% if title %} title="{{ title }}"{% endif %}><strong>{{ lead|safe }}</strong>{% if unit %} {{ unit|breakable }}{% endif %}</span>
   {% if lines %}<span class="reading-lines">{{ lines|safe }}</span>{% endif %}

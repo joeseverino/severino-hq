@@ -1,20 +1,14 @@
 {% load filter_tags %}{% comment %}
 A filter bar, drawn by {% filter_bar search="Filter by name" query=q filtered=narrowed clear=every_url shown=3 total=12 %}{% choices %}{% select "kind" kinds every="kind" %}{% summary %}...{% endfilter_bar %}.
-The page's search (search, the words it is named by and shows empty, sent as q with query
-its value, taking focus with autofocus) and any controls of its own, then its choices, then the one button that sends them
-(verb, Filter unless told; Apply beside choices) and Clear filters back to clear while anything
-narrows (filtered), then the summary: shown of total, what the page holds
-back (held, each counted) with the one link that shows it (more), and the
-page's facts about what shows. id names the bar where a page draws two whose
-choices send the same names, so each fold is its own. Choices beside a search fold behind one
-Filters control, the panel it opens, when the bar has no room for them on
-the search's row; the sizer is their copy at the room they take unfolded,
-which no one sees, sends or reaches. It is a query (method get), sent to
-action when it asks another page; css a class of the page's beside the
-part's; each data_* option a data- attribute, as the table toolbar's
-data-table-toolbar is (filter_tags.py); keep, the query's other fields, each sent again
-as it stands. How it lays out and what each
-option says: docs/Design.md, "One filter bar".
+The page's search and any controls of its own, then its choices, then the one
+button that sends them and Clear filters while anything narrows, then the
+summary: shown of total, what the page holds back with the one link that
+shows it, and the page's facts about what shows. Choices beside a search fold
+behind one Filters control, the panel it opens, when the bar has no room for
+them on the search's row; the sizer is their copy at the room they take
+unfolded, which no one sees, sends or reaches. It is a query (method get).
+Its options are its Part's (filter_tags, docs/Shared-UI.md); how it lays out:
+docs/Design.md, "One filter bar".
 {% endcomment %}<search><form class="{{ classes }}" method="get"{% if action %} action="{{ action }}"{% endif %}{{ data }}>
   {% for field, value in kept %}<input type="hidden" name="{{ field }}" value="{{ value }}">{% endfor %}
   {% if choices %}{% with fold=choices|folded:named verb=applies %}<div class="filter-bar-query">

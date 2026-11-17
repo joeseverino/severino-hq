@@ -3,7 +3,7 @@ A code patch, drawn by {% patch %}: {% patch id="hardening" %}services: ...{% ti
 The title beside the Copy button that copies the code (`data-copy`, app.js),
 the code wrapped rather than scrolled so a long path stays on screen, the
 words under it, then the notes, a stack list of <li>s. With no code the notes
-stand alone. `id` is the anchor a link to it names.
+stand alone. Its options are its Part's (patch_tags).
 {% endcomment %}<div{% if id %} id="{{ id }}"{% endif %} class="patch">
   {% if content %}
   <div class="patch-head">

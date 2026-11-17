@@ -28,7 +28,8 @@ lazy from django.template.smartif import TokenBase
 lazy from hq.platform.core.interface_text import TEMPLATE_COMMENT
 lazy from hq.platform.core.stylesheets import stylesheet
 lazy from hq.platform.core.table_cells import ROLE_CLASSES
-lazy from hq.platform.core.templatetags.value_tags import Part, PresentNode
+lazy from hq.platform.core.template_parts import Part
+lazy from hq.platform.core.templatetags.value_tags import PresentNode
 
 # The frames a page may extend, and the blocks of each it may fill. Every
 # public block is an empty slot, so an override never needs ``block.super``.
@@ -82,37 +83,8 @@ PARTIALS: dict[str, str] = {
     "partials/_week_plan.html": "Which days of the week a thing is scheduled for, from `hq_sdk.ui.WeekPlan`.",
 }
 
-# The host's own tags and filters an extension may use, beside each tag its
-# ``Part`` declares public. Django's are public too; they are recorded from
-# Django itself.
-TAGS = (
-    "arrow",
-    "button_row",
-    "card",
-    "dot",
-    "dot_list",
-    "empty_value",
-    "entity",
-    "fact",
-    "facts",
-    "filter_bar",
-    "notice",
-    "outside_link",
-    "button",
-    "present",
-    "prose_list",
-    "reference",
-    "referenced_by",
-    "row_actions",
-    "row_editor",
-    "row_group",
-    "row_toggle",
-    "status",
-    "table_heading",
-    "table_region",
-    "words",
-    "write_token",
-)
+# The host's own filters an extension may use. Its tags are each its ``Part``
+# declares public, and Django's are public too, recorded from Django itself.
 FILTERS = (
     "breakable",
     "counted",
@@ -516,29 +488,29 @@ def _part(compile_function: Any) -> Part | None:
     return target if isinstance(target, Part) else None
 
 
-def _tag(compile_function: Any) -> dict[str, Any]:
-    """A tag's parameters and, for a part, the markers its later parts open
-    with (``{% aside %}``), which a page writes only inside that tag."""
+def _tag(compile_function: Any, part: Part) -> dict[str, Any]:
+    """A public part's tag: its parameters, the markers its later parts open
+    with (``{% aside %}``), which a page writes only inside that tag, and what
+    its Part says of it and of each option."""
 
-    record: dict[str, Any] = {"parameters": _tag_parameters(compile_function), "parts": []}
-    part = _part(compile_function)
-    if part is None:
-        return record
-    record["parts"] = list(part.parts[1:])
-    if part.bare_with:
-        record["bare_with"] = part.bare_with
-    if part.public:
-        record |= {
-            "about": part.about,
-            "example": part.example,
-            "data": part.data,
-            "ordered": list(part.ordered),
-            "options": {
-                name: {"default": option.default, "choices": list(option.choices), "about": option.about}
-                for name, option in (part.ordered | part.options).items()
-            },
-        }
-    return record
+    record: dict[str, Any] = {
+        "parameters": _tag_parameters(compile_function),
+        "parts": list(part.parts[1:]),
+        "about": part.about,
+        "example": part.example,
+        "data": part.data,
+        "ordered": list(part.ordered),
+        "options": {
+            name: {
+                "default": option.default,
+                "choices": list(option.choices),
+                "about": option.about,
+                "required": option.required,
+            }
+            for name, option in (part.ordered | part.options).items()
+        },
+    }
+    return record | ({"bare_with": part.bare_with} if part.bare_with else {})
 
 
 def _libraries(engine: Any) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -552,15 +524,14 @@ def _libraries(engine: Any) -> tuple[dict[str, Any], dict[str, Any]]:
 
 def _host_tags(engine: Any) -> tuple[dict[str, Any], dict[str, Any]]:
     tags, filters = _libraries(engine)
-    missing = [name for name in TAGS if name not in tags] + [name for name in FILTERS if name not in filters]
+    missing = [name for name in FILTERS if name not in filters]
     if missing:
-        raise ValueError(f"Public tags or filters the host no longer has: {', '.join(missing)}.")
+        raise ValueError(f"Public filters the host no longer has: {', '.join(missing)}.")
     public = {
-        *TAGS,
-        *(name for name, compile_function in tags.items() if (part := _part(compile_function)) and part.public),
+        name: part for name, compile_function in tags.items() if (part := _part(compile_function)) and part.public
     }
     return (
-        {name: _tag(tags[name]) for name in sorted(public)},
+        {name: _tag(tags[name], public[name]) for name in sorted(public)},
         {name: {"argument": _filter_argument(filters[name])} for name in FILTERS},
     )
 
@@ -651,29 +622,36 @@ def hand_drawn_rules() -> list[dict[str, str]]:
 
 
 def _literal(value: Any) -> str:
-    """A default as a template writes it."""
+    """A default as a template writes it; nothing for one that is empty."""
 
-    return "" if value == "" else json.dumps(value) if isinstance(value, str) else str(value)
+    return "" if value in ("", []) else json.dumps(value) if isinstance(value, str) else str(value)
+
+
+# Where an option a tag takes in order stands among them.
+_ORDINALS = ("first", "second", "third")
 
 
 def _tags_table(tags: dict[str, Any]) -> list[str]:
     """Each part's tag, then the options it takes."""
 
-    declared = {name: tag for name, tag in tags.items() if "about" in tag}
     lines = ["| Tag | Later parts | What it is | Written |", "| --- | --- | --- | --- |"]
-    for name, tag in declared.items():
-        example = tag["example"].replace("|", "\\|")
-        lines.append(f"| `{{% {name} %}}` | {_code(tag['parts'])} | {tag['about']} | `{example}` |")
+    for name, tag in tags.items():
+        example, about = (tag[key].replace("|", "\\|") for key in ("example", "about"))
+        lines.append(f"| `{{% {name} %}}` | {_code(tag['parts'])} | {about} | `{example}` |")
     lines += ["", "| Tag | Option | Default | Choices | What it does |", "| --- | --- | --- | --- | --- |"]
-    for name, tag in declared.items():
+    for name, tag in tags.items():
         ordered = tag["ordered"]
-        for option in sorted(tag["options"], key=lambda option: option not in ordered):
+
+        # Those taken in order first, as they are written, then by name, and what the tag gathers last.
+        def place(option: str, ordered: list[str] = ordered) -> tuple[int, int, str]:
+            return (0, ordered.index(option), "") if option in ordered else (1 + option.startswith("*"), 0, option)
+
+        for option in sorted(tag["options"], key=place):
             shape, default = tag["options"][option], _literal(tag["options"][option]["default"])
-            said = f"`{option}`, first and unnamed" if option in ordered else f"`{option}`"
-            lines.append(
-                f"| `{name}` | {said} | {f'`{default}`' if default else ''} | "
-                f"{_code(map(str, filter(None, shape['choices']))) if shape['choices'] else ''} | {shape['about']} |"
-            )
+            said = f"`{option}`, {_ORDINALS[ordered.index(option)]} and unnamed" if option in ordered else f"`{option}`"
+            written = "required" if shape["required"] else f"`{default}`" if default else ""
+            choices = _code(str(choice) for choice in shape["choices"] if choice != "") if shape["choices"] else ""
+            lines.append(f"| `{name}` | {said} | {written} | {choices} | {shape['about'].replace('|', '\\|')} |")
         if tag["data"]:
             lines.append(f"| `{name}` | `data_*` | | | Each a `data-` attribute. |")
     return lines
@@ -700,7 +678,6 @@ def markdown(templates: dict[str, Any]) -> str:
     for name, partial in templates["partials"].items():
         lines.append(f"| `{name}` | {_code(partial['required'])} | {_code(partial['optional'])} | {partial['about']} |")
     lines += ["", *_tags_table(templates["tags"])]
-    tags = ", ".join(f"`{{% {name} %}}`" for name, tag in templates["tags"].items() if "about" not in tag)
     filters = ", ".join(
         f"`|{name}" + {"none": "", "optional": "[:arg]", "required": ":arg"}[shape["argument"]] + "`"
         for name, shape in templates["filters"].items()
@@ -708,7 +685,7 @@ def markdown(templates: dict[str, Any]) -> str:
     lines += [
         "",
         (
-            f"Host tags: {tags}. Host filters: {filters}. Django's own tags and filters, and "
+            f"Host filters: {filters}. Django's own tags and filters, and "
             f"`{{% load %}}` of {_code(templates['django']['libraries'])} or the extension's own libraries."
         ),
         "",

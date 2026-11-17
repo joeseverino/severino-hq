@@ -41,11 +41,95 @@ fails when this file falls behind. The rules around it are in
 
 | Tag | Later parts | What it is | Written |
 | --- | --- | --- | --- |
+| `{% arrow %}` | nothing | The arrow that ends a link onward, written straight after its last word. | `<a href="/example/">All of them{% arrow %}</a>` |
+| `{% button %}` | nothing | Every control that looks like a button: a link, a post through the page's one shared form, its form's own, or one a script acts on. | `{% button "Restart" url post=True look="primary" %}` |
+| `{% button_row %}` | nothing | A row of buttons that stands on its own: a form's closing row, a card's decisions, a page's way on. | `{% button_row %}{% button "Save" submit=True look="primary" %}{% endbutton_row %}` |
+| `{% card %}` | nothing | The frame a page's content is grouped in; a titled part of a page is a `{% section %}`. | `{% card label="Hosts" %}<p>Body</p>{% endcard %}` |
+| `{% dot %}` | nothing | The middle dot between two parts of one line, written straight after the first. | `{{ count }}{% dot %}{{ age }}` |
+| `{% dot_list %}` | nothing | A run of whole parts on one line, each an `<li>`, a dot between each that no line opens on: a fact's links, a row's context line, a band's details. | `{% dot_list %}<li>{% entity link %}</li><li>2 days ago</li>{% enddot_list %}` |
+| `{% empty_value %}` | nothing | The mark for a value that is not there, where there is no value to test; `\|or_empty` tests one. | `{% empty_value %}` |
+| `{% entity %}` | nothing | One thing named, as the link builder answered for it: a link to its page, or its name. | `{% entity "machine"\|entity_of:name %}` |
+| `{% fact %}` | `detail` | One fact of a `{% facts %}`: its label, its value and the detail under it. Given `value=` it encloses nothing; a value in markup is its block, its detail after `{% detail %}`. | `{% fact "Version" icon="layers" %}<code>{{ tag }}</code>{% detail %}Tag only{% endfact %}` |
+| `{% facts %}` | nothing | Every label and its value a page shows, each a `{% fact %}`. | `{% facts layout="band" %}{% fact "Running" value=n url=u %}{% endfacts %}` |
+| `{% filter_bar %}` | `choices`, `summary` | Every query a page asks of what it lists, in one bar: its search and any controls of its own, its `choices` part, the one button that sends them, then its `summary` part. A list's table toolbar is the same bar. | `{% filter_bar search="Filter by name" query=q filtered=narrowed clear=every_url %}{% choices %}{% select "kind" kinds every="kind" %}{% endfilter_bar %}` |
 | `{% muted %}` | nothing | Words said quietly beside what they are about: a context line, a sentence under a value. A cell or a list item holds it; a run of parts said quietly is `{% dot_list muted=True %}`. | `{% muted element="p" %}A sentence under it.{% endmuted %}` |
+| `{% notice %}` | `title` | Every banner and message a page shows, in one of its tones; a message among the page's messages is the same part in a toast's placement. A title the page composes is its `{% title %}` part, after the body. | `{% notice tone="warning" title="2 jobs failed" %}<p>What to do.</p>{% endnotice %}` |
+| `{% outside_link %}` | nothing | A link to a page outside HQ around markup of the page's own (a chip, an icon, a card); a name is `{% entity url\|outside label=name %}`. | `{% outside_link url %}<span class="tag">Docs</span>{% endoutside_link %}` |
+| `{% present %}` | nothing | What it encloses, drawn only when the value is there, else the mark for a missing value. | `{% present repo.release %}<code>{{ repo.release }}</code>{% endpresent %}` |
+| `{% prose_list %}` | nothing | A list of sentences, each an `<li>` marked as the browser marks it. | `{% prose_list %}<li>A sentence.</li>{% endprose_list %}` |
+| `{% reference %}` | nothing | The link for the reference a record holds, for `{% entity %}`, or none the viewer may not see. | `{% reference expense "paid_from" as account %}` |
+| `{% referenced_by %}` | nothing | Everything that names a thing, for that thing's page, a card per kind of reference. | `{% referenced_by "machine" machine.name %}` |
+| `{% row_actions %}` | nothing | The cell that ends a row with what can be done to its record, each a compact control. | `{% row_actions row.actions %}` |
+| `{% row_editor %}` | nothing | The way into a row's editor, and the editor itself under the row where the page's address opens it. | `{% row_editor form row.pk label="Edit" action=row.edit_url verb="Save" name=row.name %}` |
+| `{% row_group %}` | nothing | The heading row of one group of a table's rows, first in its `tbody`: its name and how many rows. | `<tbody>{% row_group "Example group" 3 %}...</tbody>` |
+| `{% row_toggle %}` | nothing | The toggle that opens a row to all it holds, last in the cell that names it, in a table with no headings. | `<td>{{ row.name }}{% row_toggle %}</td>` |
 | `{% section %}` | `aside`, `empty`, `foot` | A titled part of a page in its frame, its head on the page and its body in the frame. | `{% section "Agents" count=n %}<p>Body</p>{% aside %}A line.{% empty %}None yet.{% endsection %}` |
+| `{% status %}` | nothing | One short state, drawn in its tone and said in sentence case, the one way a page draws a state. | `{% status "Blocked" tone="attention" %}` |
+| `{% table_heading %}` | nothing | One column heading of a table: its kind, the rank it leaves by and its sort control. | `{% table_heading "Updated" "status" drop=2 %}` |
+| `{% table_region %}` | nothing | The box a table fits, which draws what follows from its headings, and, with no rows, the one empty state in its place. | `{% table_region "Hosts" empty="No hosts yet." %}<table>...</table>{% endtable_region %}` |
+| `{% words %}` | nothing | What a button for a command says, from its declaration, for prose that names the one to press. | `Press {% words "example.restart" %}.` |
+| `{% write_token %}` | nothing | What every write form carries in place of `{% csrf_token %}`, so the form sent twice acts once. | `<form method="post">{% write_token %}...</form>` |
 
 | Tag | Option | Default | Choices | What it does |
 | --- | --- | --- | --- | --- |
+| `button` | `label`, first and unnamed | required |  | Its words. |
+| `button` | `arrow` | `False` |  | Ends with the arrow of a link onward. |
+| `button` | `count` | `None` |  | A count of what it holds, after its words. |
+| `button` | `css` |  |  | Classes in place of its look, for a control not drawn as a button. |
+| `button` | `current` | `False` |  | It names the page being drawn. |
+| `button` | `disabled` | `False` |  | Neither a link nor a form, kept in the tab order. |
+| `button` | `fields` | `None` |  | What a posting one sends besides its own field, as a form of its own. |
+| `button` | `hit` | `False` |  | Drawn smaller than a target, so it asks for its hit area. |
+| `button` | `icon` |  |  | The icon its words open with. |
+| `button` | `look` |  |  | How it looks, its words from `ui.BUTTON_LOOKS`. |
+| `button` | `modal` |  |  | The dialog a link opens where script runs. |
+| `button` | `name` |  |  | The field it sends. |
+| `button` | `post` | `False` |  | Posts to its url. |
+| `button` | `pressed` | `None` |  | A toggle, and which way it stands. |
+| `button` | `submit` | `False` |  | Sends its own form. |
+| `button` | `title` |  |  | Its `title`, read where it stands. |
+| `button` | `url` |  |  | Where it leads, or with `post` where it posts. |
+| `button` | `value` |  |  | That field's value. |
+| `button` | `**attributes` |  |  | Each `data_*` hook, and the popover, dialog command or `hidden` a script acts on. |
+| `button_row` | `bar` |  |  | Pinned to the bottom of the screen once its form has changed. |
+| `card` | `alone` |  |  | The whole of a page that stands outside the page frame (sign-in). |
+| `card` | `busy` |  |  | Its content is still coming. |
+| `card` | `css` |  |  | The classes of where it stands. |
+| `card` | `element` | `"section"` | `section`, `article`, `figure`, `details`, `div` | The element it is. |
+| `card` | `heading` |  |  | The id of the heading that names it. |
+| `card` | `id` |  |  | Its `id`. |
+| `card` | `label` |  |  | What it holds, for a card with no heading. |
+| `card` | `open` |  |  | A `details` card drawn open. |
+| `card` | `data_*` | | | Each a `data-` attribute. |
+| `dot_list` | `muted` | `False` | `False`, `True` | Said quietly. |
+| `dot_list` | `data_*` | | | Each a `data-` attribute. |
+| `entity` | `link`, first and unnamed | required |  | The thing's link, as the link builder answered for it. |
+| `entity` | `code` | `False` |  | Its name drawn as code. |
+| `entity` | `label` |  |  | The words it is named by, in place of its own. |
+| `entity` | `mark` |  |  | The punctuation after the name, held to it, or a list's `forloop`. |
+| `fact` | `label`, first and unnamed | required |  | Its label. |
+| `fact` | `detail` |  |  | The words under the value, or a list of them, a line each. |
+| `fact` | `icon` |  |  | The icon beside it. |
+| `fact` | `tone` |  |  | A status tone the fact is colored by, for what it means. |
+| `fact` | `url` |  |  | The page in HQ its value links to; an outside one is the block form's `{% entity %}`. |
+| `fact` | `value` |  |  | Its value, which makes it one tag with no end. |
+| `facts` | `label` |  |  | What the whole is, for a reader, when nothing on the page heads it. |
+| `facts` | `layout` | `"list"` | `list`, `band`, `inline` | A list, each label beside its value; a band, the few facts that sum up a page, each a cell; a line (`inline`), a card's summary, each fact its value then its words. |
+| `filter_bar` | `action` |  |  | The page it asks, when that is another. |
+| `filter_bar` | `autofocus` |  |  | The search takes focus. |
+| `filter_bar` | `clear` |  |  | Where Clear filters leads: the page with nothing narrowed. |
+| `filter_bar` | `css` |  |  | The classes of where it stands. |
+| `filter_bar` | `filtered` |  |  | Something narrows the list, so Clear filters shows. |
+| `filter_bar` | `held` |  |  | What the page holds back, each counted. |
+| `filter_bar` | `id` |  |  | Its name, where a page draws two whose choices send the same names. |
+| `filter_bar` | `keep` |  |  | The query's other fields, each sent again as it stands. |
+| `filter_bar` | `more` |  |  | The page that shows what it holds back. |
+| `filter_bar` | `query` |  |  | The search's value. |
+| `filter_bar` | `search` |  |  | The words the search is named by and shows empty; it is sent as `q`. |
+| `filter_bar` | `shown` | `None` |  | How many it shows, of `total`. |
+| `filter_bar` | `total` | `None` |  | How many there are. |
+| `filter_bar` | `verb` |  |  | The words of the button that sends it, Filter unless told. |
+| `filter_bar` | `data_*` | | | Each a `data-` attribute. |
 | `muted` | `css` |  |  | The classes of where it stands (`narrow-more`, `row-more`, `cell-part`). |
 | `muted` | `element` | `"span"` | `span`, `p`, `div` | A line among other words, a paragraph or a block. |
 | `muted` | `hidden` |  |  | Drawn hidden, for a line a script shows. |
@@ -54,6 +138,39 @@ fails when this file falls behind. The rules around it are in
 | `muted` | `tip` |  |  | What a press or a hover shows, as a status's tip is. |
 | `muted` | `title` |  |  | Its `title`. |
 | `muted` | `data_*` | | | Each a `data-` attribute. |
+| `notice` | `css` |  |  | The classes of where it stands. |
+| `notice` | `title` |  |  | Its first line, in bold. |
+| `notice` | `tone` |  | `info`, `success`, `warning`, `error` | Its tone, none for a neutral notice; an error is an alert. |
+| `notice` | `data_*` | | | Each a `data-` attribute. |
+| `outside_link` | `css` |  |  | The classes of where it stands. |
+| `outside_link` | `entity` |  |  | The kind of thing it names, as `data-entity`. |
+| `outside_link` | `label` |  |  | The name a reader hears, for a link whose markup says none. |
+| `outside_link` | `modal` |  |  | The dialog it opens where script runs, the page being its fallback. |
+| `outside_link` | `tip` |  |  | What a press or a hover shows, in place of the page it opens. |
+| `outside_link` | `title` |  |  | Its `title`, which otherwise names the page it opens. |
+| `outside_link` | `tone` |  |  | A status tone its words are drawn in. |
+| `outside_link` | `url` |  |  | Where it leads; anything but a web address draws what it holds, unlinked. |
+| `present` | `value`, first and unnamed | required |  | The value whose markup it holds. |
+| `prose_list` | `numbered` |  |  | Each numbered, for items read in order. |
+| `reference` | `row`, first and unnamed | required |  | The record that holds the reference. |
+| `reference` | `field`, second and unnamed | required |  | The field it is held in. |
+| `referenced_by` | `thing`, first and unnamed | required |  | A record, or the kind of thing it is. |
+| `referenced_by` | `identity` |  |  | Given a kind, what its page is addressed by. |
+| `row_actions` | `actions` |  |  | What can be done to the row's record, each a `PageAction`. |
+| `row_actions` | `first` | `0` |  | How many show; the rest wait in the row's open line. |
+| `row_actions` | `gap` | `None` |  | A `WriteGap` standing in for every action the connection cannot make. |
+| `row_actions` | `put_away` | `None` |  | The reader's own way to set the row aside, last of its buttons. |
+| `row_editor` | `form`, first and unnamed | required |  | The one form the view declares for the table's editors. |
+| `row_editor` | `key`, second and unnamed | required |  | The row's key, which its ids and the address that opens it carry. |
+| `row_editor` | `action` | required |  | Where the editor posts. |
+| `row_editor` | `label` | required |  | The words of the way in. |
+| `row_editor` | `verb` | required |  | Its button's words. |
+| `row_editor` | `**initial` |  |  | The row's values, each by its field's name. |
+| `row_group` | `label`, first and unnamed | required |  | The group's name. |
+| `row_group` | `attention` | `False` |  | A group a reader should weigh before the rest. |
+| `row_group` | `count` | `None` |  | How many rows it holds. |
+| `row_group` | `folds` |  |  | The row's id, for a group that starts folded away. |
+| `row_group` | `href` |  |  | The page its rows are dealt with on together, which its name links to. |
 | `section` | `heading`, first and unnamed |  |  | Plain words; with none, the moment it names is the heading. |
 | `section` | `count` | `None` |  | How many things it holds, beside the heading. |
 | `section` | `css` |  |  | The classes of where it stands. |
@@ -71,8 +188,45 @@ fails when this file falls behind. The rules around it are in
 | `section` | `remedy_url` |  |  | Where the empty line's link leads. |
 | `section` | `when` |  |  | The `when` form the moment is drawn in. |
 | `section` | `data_*` | | | Each a `data-` attribute. |
+| `status` | `*parts`, first and unnamed |  |  | Its words, several being one label, only the first sentence-cased. |
+| `status` | `chip` | `False` |  | A neutral chip for a name, never a state. |
+| `status` | `css` |  |  | The classes of where it stands. |
+| `status` | `dot` | `False` |  | Its words after a steady dot in its tone. |
+| `status` | `href` |  |  | Where it leads. |
+| `status` | `icon` |  |  | Its words after an icon in its tone, beside `pill=False`. |
+| `status` | `ink` | `"tone"` | `tone`, `context` | Whose ink its words take beside a dot or an icon: its tone's or the text's. |
+| `status` | `pill` | `True` |  | A pill; with `False`, its words in its tone. |
+| `status` | `tip` |  |  | What a press or a hover shows. |
+| `status` | `title` |  |  | Its `title`. |
+| `status` | `tone` |  |  | Its tone, or a subject's state in its own words and tone. |
+| `status` | `**data` |  |  | Each a `data-` attribute. |
+| `table_heading` | `label`, first and unnamed | required |  | The column's name. |
+| `table_heading` | `beneath` | `False` |  | In a narrow box its cells stand beneath the row's words, under its name. |
+| `table_heading` | `css` |  |  | The column's classes. |
+| `table_heading` | `descending` |  |  | Its reverse, when that is not `-field`. |
+| `table_heading` | `drop` | `0` |  | The rank it leaves by when the table is too wide, 1 first. |
+| `table_heading` | `gutter` | `False` |  | Its cells stand in the gutter and hold each row's toggle. |
+| `table_heading` | `hidden` | `False` |  | The name for assistive technology only. |
+| `table_heading` | `kind` |  |  | What the column holds, one of `COLUMN_KINDS`; left out, its classes say. |
+| `table_heading` | `local_sort` | `None` |  | Sorts the rows on the page; left out, it follows from what the column holds. |
+| `table_heading` | `select_all` | `False` |  | The tick-box that selects every row. |
+| `table_heading` | `sort` |  |  | The field a server-sorted list orders this column by. |
+| `table_heading` | `title` |  |  | Its `title`. |
+| `table_region` | `label`, first and unnamed | required |  | What the table holds, the name its box is a stop by. |
+| `table_region` | `action_label` |  |  | That link's label. |
+| `table_region` | `action_url` |  |  | With no rows, where the link that fills it leads. |
+| `table_region` | `chart` | `False` |  | A chart's table, read whole in the chart's order and scrolled. |
+| `table_region` | `clear` |  |  | The way back from that search. |
+| `table_region` | `compare` | `False` |  | Two values side by side in each row, after the row's name. |
+| `table_region` | `css` |  |  | The classes of where it stands. |
+| `table_region` | `empty` |  |  | With no rows, what is missing. |
+| `table_region` | `filtered` | `False` |  | Its own search narrows it, so no rows says nothing matches. |
+| `table_region` | `pane` | `False` |  | A box of its own height, which scrolls. |
+| `table_region` | `remedy` | `None` |  | With no rows, what would fill it: a `label` and a `url`. |
+| `words` | `capability`, first and unnamed | required |  | The command, by name. |
+| `words` | `variant` |  |  | Which of its words, where it has more than one. |
 
-Host tags: `{% arrow %}`, `{% button %}`, `{% button_row %}`, `{% card %}`, `{% dot %}`, `{% dot_list %}`, `{% empty_value %}`, `{% entity %}`, `{% fact %}`, `{% facts %}`, `{% filter_bar %}`, `{% notice %}`, `{% outside_link %}`, `{% present %}`, `{% prose_list %}`, `{% reference %}`, `{% referenced_by %}`, `{% row_actions %}`, `{% row_editor %}`, `{% row_group %}`, `{% row_toggle %}`, `{% status %}`, `{% table_heading %}`, `{% table_region %}`, `{% words %}`, `{% write_token %}`. Host filters: `|breakable[:arg]`, `|counted:arg`, `|measured:arg`, `|money[:arg]`, `|or_empty`, `|outside`, `|readout`, `|record[:arg]`, `|span`, `|web_url`, `|when[:arg]`, `|when_text[:arg]`. Django's own tags and filters, and `{% load %}` of `static` or the extension's own libraries.
+Host filters: `|breakable[:arg]`, `|counted:arg`, `|measured:arg`, `|money[:arg]`, `|or_empty`, `|outside`, `|readout`, `|record[:arg]`, `|span`, `|web_url`, `|when[:arg]`, `|when_text[:arg]`. Django's own tags and filters, and `{% load %}` of `static` or the extension's own libraries.
 
 Classes: `actions-col`, `address-list`, `allocation`, `allocation-legend`, `cell-data`, `cell-part`, `cell-whole`, `code-list`, `compact`, `compact-table`, `count`, `danger`, `data-table`, `date-col`, `domain-charts`, `errors`, `eyebrow`, `finding`, `form`, `ghost`, `help`, `icon-link`, `inline`, `key-col`, `keyboard-only`, `name-line`, `narrow-more`, `narrow-only`, `nowrap`, `one-line`, `optional-col`, `page-lede`, `primary`, `prose`, `row-actions`, `row-below`, `row-empty`, `row-gutter`, `row-less`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-flow`, `section-foot`, `split`, `stacked`, `subtle-link`, `table-clamp`, `table-scroll`, `tight-col`, `two-col`, `visually-hidden`, `whole`.
 

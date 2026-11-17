@@ -1,10 +1,7 @@
 {% comment %}
 A card, the frame a page's content is grouped in, drawn by {% card %}:
 {% card css="example" label="Hosts" %}...{% endcard %}. A titled part of a page is a {% section %}.
-A section by default; element= says when it is an article, figure, details
-or div. heading names its heading's id, label says what it holds when it has
-none, busy says its content is still coming, open says a details starts open, alone says the card is the
-whole of a page that stands outside the page frame (sign-in), and each data_* option is a
-data- attribute (True draws it bare). The tags are built by value_tags._card.
+Its options are its Part's (value_tags, docs/Shared-UI.md), and its tags are
+built by value_tags.card_frame.
 {% endcomment %}
 {{ opening|safe }}{{ content|safe }}{{ closing|safe }}

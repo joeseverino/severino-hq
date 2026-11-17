@@ -1,21 +1,10 @@
-"""Facts: every label and its value a page shows, drawn by one part.
-
-``{% facts layout="band" %}{% fact "Running" value=n url=u detail=d tone=t icon="container" %}{% endfacts %}``
-draws ``partials/_facts.html`` around each ``partials/_fact.html``. A band is
-the few facts that sum up a page or a part, each a cell of its own; a list
-(the default) is the facts about one thing, each label beside its value; a
-line (``inline``) is a card's summary, each fact read as one phrase, its value
-then its words. A ``detail=`` given as a list is its lines, one under another.
-A fact whose value is markup is written as a block, its detail after
-``{% detail %}``:
-``{% fact "Version" icon="layers" %}<code>{{ tag }}</code>{% detail %}<small>Tag only</small>{% endfact %}``.
-Given ``value=``, a fact is one tag with no end.
-"""
+"""Facts: every label and its value a page shows, drawn by one part, its
+``{% facts %}`` around each ``{% fact %}``."""
 
 from django import template
 from django.template.base import token_kwargs
 
-from hq.platform.core.templatetags.value_tags import Option, Part, SlotsNode
+from hq.platform.core.template_parts import Option, Part, SlotsNode
 
 register = template.Library()
 
@@ -41,15 +30,40 @@ class FactTakes(Part):
 FACTS = Part(
     name="facts",
     partial=FACTS_PARTIAL,
-    options={"layout": Option(default="list", choices=LAYOUTS), "label": Option()},
+    about="Every label and its value a page shows, each a `{% fact %}`.",
+    options={
+        "layout": Option(
+            default="list",
+            choices=LAYOUTS,
+            about=(
+                "A list, each label beside its value; a band, the few facts that sum up a page, each a cell; "
+                "a line (`inline`), a card's summary, each fact its value then its words."
+            ),
+        ),
+        "label": Option(about="What the whole is, for a reader, when nothing on the page heads it."),
+    },
+    public=True,
+    example='{% facts layout="band" %}{% fact "Running" value=n url=u %}{% endfacts %}',
 )
 FACT = FactTakes(
     name="fact",
     partial=FACT_PARTIAL,
+    about=(
+        "One fact of a `{% facts %}`: its label, its value and the detail under it. Given `value=` it encloses "
+        "nothing; a value in markup is its block, its detail after `{% detail %}`."
+    ),
     parts=("value", "detail"),
-    ordered={"label": Option(required=True)},
-    options=dict.fromkeys(("value", "url", "detail", "tone", "icon"), Option()),
+    ordered={"label": Option(required=True, about="Its label.")},
+    options={
+        "value": Option(about="Its value, which makes it one tag with no end."),
+        "url": Option(about="The page in HQ its value links to; an outside one is the block form's `{% entity %}`."),
+        "detail": Option(about="The words under the value, or a list of them, a line each."),
+        "tone": Option(about="A status tone the fact is colored by, for what it means."),
+        "icon": Option(about="The icon beside it."),
+    },
     bare_with="value",
+    public=True,
+    example='{% fact "Version" icon="layers" %}<code>{{ tag }}</code>{% detail %}Tag only{% endfact %}',
 )
 
 
