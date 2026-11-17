@@ -15,7 +15,7 @@ band's details. ``muted=True`` says it quietly.
 from django import template
 
 from hq.platform.application.page_parts import html_attributes
-from hq.platform.core.templatetags.value_tags import slotted
+from hq.platform.core.templatetags.value_tags import Option, Part, slotted
 
 register = template.Library()
 
@@ -42,25 +42,23 @@ def dot_list_frame(name: str, given: dict) -> dict:
     """Whether the run is said quietly, ``True`` or ``False`` and never a word
     that would read as one, and its ``data-`` attributes."""
 
-    muted = given.get("muted", False)
+    muted = given["muted"]
     if not isinstance(muted, bool):
         raise template.TemplateSyntaxError(f"{name} muted= is True or False, not {muted!r}")
     return {"muted": muted, "data": data_attributes(given)}
 
 
 slotted(
-    "stack_list",
-    STACK_LIST_PARTIAL,
-    ("content",),
-    frozenset(("below",)),
-    shape=stack_list_frame,
+    Part(name="stack_list", partial=STACK_LIST_PARTIAL, options={"below": Option()}, data=True, shape=stack_list_frame),
     library=register,
 )
 slotted(
-    "dot_list",
-    DOT_LIST_PARTIAL,
-    ("content",),
-    frozenset(("muted",)),
-    shape=dot_list_frame,
+    Part(
+        name="dot_list",
+        partial=DOT_LIST_PARTIAL,
+        options={"muted": Option(default=False)},
+        data=True,
+        shape=dot_list_frame,
+    ),
     library=register,
 )

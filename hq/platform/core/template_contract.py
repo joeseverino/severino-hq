@@ -28,8 +28,7 @@ lazy from django.template.smartif import TokenBase
 lazy from hq.platform.core.interface_text import TEMPLATE_COMMENT
 lazy from hq.platform.core.stylesheets import stylesheet
 lazy from hq.platform.core.table_cells import ROLE_CLASSES
-lazy from hq.platform.core.templatetags.part_tags import SectionTakes
-lazy from hq.platform.core.templatetags.value_tags import PresentNode, Takes
+lazy from hq.platform.core.templatetags.value_tags import Part, PresentNode
 
 # The frames a page may extend, and the blocks of each it may fill. Every
 # public block is an empty slot, so an override never needs ``block.super``.
@@ -83,8 +82,9 @@ PARTIALS: dict[str, str] = {
     "partials/_week_plan.html": "Which days of the week a thing is scheduled for, from `hq_sdk.ui.WeekPlan`.",
 }
 
-# The host's own tags and filters an extension may use. Django's are public
-# too; they are recorded from Django itself.
+# The host's own tags and filters an extension may use, beside each tag its
+# ``Part`` declares public. Django's are public too; they are recorded from
+# Django itself.
 TAGS = (
     "arrow",
     "button_row",
@@ -96,7 +96,6 @@ TAGS = (
     "fact",
     "facts",
     "filter_bar",
-    "muted",
     "notice",
     "outside_link",
     "button",
@@ -108,7 +107,6 @@ TAGS = (
     "row_editor",
     "row_group",
     "row_toggle",
-    "section",
     "status",
     "table_heading",
     "table_region",
@@ -513,19 +511,34 @@ def _tag_parameters(compile_function: Any) -> list[str]:
     return parameters[1:] if parameters[:1] == ["content"] else parameters
 
 
-def _tag_parts(compile_function: Any) -> list[str]:
-    """The markers a block tag's later parts open with (``{% aside %}``), which
-    a page writes only inside that tag. The first part follows the opening tag."""
-
+def _part(compile_function: Any) -> Part | None:
     target = getattr(compile_function, "__wrapped__", None)
-    return list(target.parts[1:]) if isinstance(target, (Takes, SectionTakes)) else []
+    return target if isinstance(target, Part) else None
 
 
 def _tag(compile_function: Any) -> dict[str, Any]:
-    record = {"parameters": _tag_parameters(compile_function), "parts": _tag_parts(compile_function)}
-    target = getattr(compile_function, "__wrapped__", None)
-    bare_with = target.bare_with if isinstance(target, Takes) else ""
-    return record | ({"bare_with": bare_with} if bare_with else {})
+    """A tag's parameters and, for a part, the markers its later parts open
+    with (``{% aside %}``), which a page writes only inside that tag."""
+
+    record: dict[str, Any] = {"parameters": _tag_parameters(compile_function), "parts": []}
+    part = _part(compile_function)
+    if part is None:
+        return record
+    record["parts"] = list(part.parts[1:])
+    if part.bare_with:
+        record["bare_with"] = part.bare_with
+    if part.public:
+        record |= {
+            "about": part.about,
+            "example": part.example,
+            "data": part.data,
+            "ordered": list(part.ordered),
+            "options": {
+                name: {"default": option.default, "choices": list(option.choices), "about": option.about}
+                for name, option in (part.ordered | part.options).items()
+            },
+        }
+    return record
 
 
 def _libraries(engine: Any) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -542,8 +555,12 @@ def _host_tags(engine: Any) -> tuple[dict[str, Any], dict[str, Any]]:
     missing = [name for name in TAGS if name not in tags] + [name for name in FILTERS if name not in filters]
     if missing:
         raise ValueError(f"Public tags or filters the host no longer has: {', '.join(missing)}.")
+    public = {
+        *TAGS,
+        *(name for name, compile_function in tags.items() if (part := _part(compile_function)) and part.public),
+    }
     return (
-        {name: _tag(tags[name]) for name in TAGS},
+        {name: _tag(tags[name]) for name in sorted(public)},
         {name: {"argument": _filter_argument(filters[name])} for name in FILTERS},
     )
 
@@ -633,6 +650,35 @@ def hand_drawn_rules() -> list[dict[str, str]]:
     ]
 
 
+def _literal(value: Any) -> str:
+    """A default as a template writes it."""
+
+    return "" if value == "" else json.dumps(value) if isinstance(value, str) else str(value)
+
+
+def _tags_table(tags: dict[str, Any]) -> list[str]:
+    """Each part's tag, then the options it takes."""
+
+    declared = {name: tag for name, tag in tags.items() if "about" in tag}
+    lines = ["| Tag | Later parts | What it is | Written |", "| --- | --- | --- | --- |"]
+    for name, tag in declared.items():
+        example = tag["example"].replace("|", "\\|")
+        lines.append(f"| `{{% {name} %}}` | {_code(tag['parts'])} | {tag['about']} | `{example}` |")
+    lines += ["", "| Tag | Option | Default | Choices | What it does |", "| --- | --- | --- | --- | --- |"]
+    for name, tag in declared.items():
+        ordered = tag["ordered"]
+        for option in sorted(tag["options"], key=lambda option: option not in ordered):
+            shape, default = tag["options"][option], _literal(tag["options"][option]["default"])
+            said = f"`{option}`, first and unnamed" if option in ordered else f"`{option}`"
+            lines.append(
+                f"| `{name}` | {said} | {f'`{default}`' if default else ''} | "
+                f"{_code(map(str, filter(None, shape['choices']))) if shape['choices'] else ''} | {shape['about']} |"
+            )
+        if tag["data"]:
+            lines.append(f"| `{name}` | `data_*` | | | Each a `data-` attribute. |")
+    return lines
+
+
 def markdown(templates: dict[str, Any]) -> str:
     """The shared UI contract as docs/Plugins.md states it."""
 
@@ -653,7 +699,8 @@ def markdown(templates: dict[str, Any]) -> str:
     ]
     for name, partial in templates["partials"].items():
         lines.append(f"| `{name}` | {_code(partial['required'])} | {_code(partial['optional'])} | {partial['about']} |")
-    tags = ", ".join(f"`{{% {name} %}}`" for name in templates["tags"])
+    lines += ["", *_tags_table(templates["tags"])]
+    tags = ", ".join(f"`{{% {name} %}}`" for name, tag in templates["tags"].items() if "about" not in tag)
     filters = ", ".join(
         f"`|{name}" + {"none": "", "optional": "[:arg]", "required": ":arg"}[shape["argument"]] + "`"
         for name, shape in templates["filters"].items()

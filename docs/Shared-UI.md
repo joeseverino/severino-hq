@@ -39,7 +39,40 @@ fails when this file falls behind. The rules around it are in
 | `partials/_timeline.html` | nothing | `timeline` | Chronological linked events, from `hq_sdk.ui.Timeline`. |
 | `partials/_week_plan.html` | `plan` | nothing | Which days of the week a thing is scheduled for, from `hq_sdk.ui.WeekPlan`. |
 
-Host tags: `{% arrow %}`, `{% button %}`, `{% button_row %}`, `{% card %}`, `{% dot %}`, `{% dot_list %}`, `{% empty_value %}`, `{% entity %}`, `{% fact %}`, `{% facts %}`, `{% filter_bar %}`, `{% muted %}`, `{% notice %}`, `{% outside_link %}`, `{% present %}`, `{% prose_list %}`, `{% reference %}`, `{% referenced_by %}`, `{% row_actions %}`, `{% row_editor %}`, `{% row_group %}`, `{% row_toggle %}`, `{% section %}`, `{% status %}`, `{% table_heading %}`, `{% table_region %}`, `{% words %}`, `{% write_token %}`. Host filters: `|breakable[:arg]`, `|counted:arg`, `|measured:arg`, `|money[:arg]`, `|or_empty`, `|outside`, `|readout`, `|record[:arg]`, `|span`, `|web_url`, `|when[:arg]`, `|when_text[:arg]`. Django's own tags and filters, and `{% load %}` of `static` or the extension's own libraries.
+| Tag | Later parts | What it is | Written |
+| --- | --- | --- | --- |
+| `{% muted %}` | nothing | Words said quietly beside what they are about: a context line, a sentence under a value. A cell or a list item holds it; a run of parts said quietly is `{% dot_list muted=True %}`. | `{% muted element="p" %}A sentence under it.{% endmuted %}` |
+| `{% section %}` | `aside`, `empty`, `foot` | A titled part of a page in its frame, its head on the page and its body in the frame. | `{% section "Agents" count=n %}<p>Body</p>{% aside %}A line.{% empty %}None yet.{% endsection %}` |
+
+| Tag | Option | Default | Choices | What it does |
+| --- | --- | --- | --- | --- |
+| `muted` | `css` |  |  | The classes of where it stands (`narrow-more`, `row-more`, `cell-part`). |
+| `muted` | `element` | `"span"` | `span`, `p`, `div` | A line among other words, a paragraph or a block. |
+| `muted` | `hidden` |  |  | Drawn hidden, for a line a script shows. |
+| `muted` | `id` |  |  | Its `id`. |
+| `muted` | `role` |  |  | Its `role`, for a line a script shows and a reader hears. |
+| `muted` | `tip` |  |  | What a press or a hover shows, as a status's tip is. |
+| `muted` | `title` |  |  | Its `title`. |
+| `muted` | `data_*` | | | Each a `data-` attribute. |
+| `section` | `heading`, first and unnamed |  |  | Plain words; with none, the moment it names is the heading. |
+| `section` | `count` | `None` |  | How many things it holds, beside the heading. |
+| `section` | `css` |  |  | The classes of where it stands. |
+| `section` | `edge` |  | `serious`, `attention`, `neutral`, `good` | Its frame's starting edge in a status tone, while it stands out from those beside it. |
+| `section` | `figure` | `False` |  | Drawn as a figure, its head the caption. |
+| `section` | `fold` | `False` |  | Drawn closed, its heading the toggle. |
+| `section` | `head` |  | `above`, `inside` | Where its head stands; left empty, the stylesheet decides. |
+| `section` | `id` |  |  | Its own `id`, for a link to it or a region refreshed in place. |
+| `section` | `lede` |  |  | A line under the heading. |
+| `section` | `moment` | `None` |  | A moment the heading names, drawn after its words. |
+| `section` | `more_label` |  |  | The label of the aside's link to the whole of what it shows part of. |
+| `section` | `more_url` |  |  | Where that link leads, drawn only when there is somewhere to go. |
+| `section` | `open` | `False` |  | A folded section drawn open. |
+| `section` | `remedy_label` |  |  | The label of the link the empty line offers. |
+| `section` | `remedy_url` |  |  | Where the empty line's link leads. |
+| `section` | `when` |  |  | The `when` form the moment is drawn in. |
+| `section` | `data_*` | | | Each a `data-` attribute. |
+
+Host tags: `{% arrow %}`, `{% button %}`, `{% button_row %}`, `{% card %}`, `{% dot %}`, `{% dot_list %}`, `{% empty_value %}`, `{% entity %}`, `{% fact %}`, `{% facts %}`, `{% filter_bar %}`, `{% notice %}`, `{% outside_link %}`, `{% present %}`, `{% prose_list %}`, `{% reference %}`, `{% referenced_by %}`, `{% row_actions %}`, `{% row_editor %}`, `{% row_group %}`, `{% row_toggle %}`, `{% status %}`, `{% table_heading %}`, `{% table_region %}`, `{% words %}`, `{% write_token %}`. Host filters: `|breakable[:arg]`, `|counted:arg`, `|measured:arg`, `|money[:arg]`, `|or_empty`, `|outside`, `|readout`, `|record[:arg]`, `|span`, `|web_url`, `|when[:arg]`, `|when_text[:arg]`. Django's own tags and filters, and `{% load %}` of `static` or the extension's own libraries.
 
 Classes: `actions-col`, `address-list`, `allocation`, `allocation-legend`, `cell-data`, `cell-part`, `cell-whole`, `code-list`, `compact`, `compact-table`, `count`, `danger`, `data-table`, `date-col`, `domain-charts`, `errors`, `eyebrow`, `finding`, `form`, `ghost`, `help`, `icon-link`, `inline`, `key-col`, `keyboard-only`, `name-line`, `narrow-more`, `narrow-only`, `nowrap`, `one-line`, `optional-col`, `page-lede`, `primary`, `prose`, `row-actions`, `row-below`, `row-empty`, `row-gutter`, `row-less`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-flow`, `section-foot`, `split`, `stacked`, `subtle-link`, `table-clamp`, `table-scroll`, `tight-col`, `two-col`, `visually-hidden`, `whole`.
 

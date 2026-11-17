@@ -15,7 +15,7 @@ from django.utils.html import escape
 from django.utils.safestring import SafeString, mark_safe
 
 from hq.platform.application.page_parts import html_attributes
-from hq.platform.core.templatetags.value_tags import slotted
+from hq.platform.core.templatetags.value_tags import Option, Part, slotted
 
 register = template.Library()
 
@@ -61,28 +61,29 @@ def filter_bar_frame(name: str, given: dict) -> dict:
 
 
 slotted(
-    "filter_bar",
-    FILTER_BAR_PARTIAL,
-    ("content", "choices", "summary"),
-    frozenset(
-        (
-            "filtered",
-            "clear",
-            "verb",
-            "action",
-            "css",
-            "shown",
-            "total",
-            "held",
-            "more",
-            "id",
-            "search",
-            "query",
-            "keep",
-            "autofocus",
-        )
+    Part(
+        name="filter_bar",
+        partial=FILTER_BAR_PARTIAL,
+        parts=("content", "choices", "summary"),
+        options={
+            "filtered": Option(),
+            "clear": Option(),
+            "verb": Option(),
+            "action": Option(),
+            "css": Option(),
+            "shown": Option(),
+            "total": Option(),
+            "held": Option(),
+            "more": Option(),
+            "id": Option(),
+            "search": Option(),
+            "query": Option(),
+            "keep": Option(),
+            "autofocus": Option(),
+        },
+        data=True,
+        shape=filter_bar_frame,
     ),
-    shape=filter_bar_frame,
     library=register,
 )
 

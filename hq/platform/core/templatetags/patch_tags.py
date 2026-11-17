@@ -9,11 +9,14 @@ code it draws the notes alone.
 
 from django import template
 
-from hq.platform.core.templatetags.value_tags import slotted
+from hq.platform.core.templatetags.value_tags import Option, Part, slotted
 
 register = template.Library()
 
 PATCH_PARTIAL = "partials/_patch.html"
 
 
-slotted("patch", PATCH_PARTIAL, ("content", "title", "detail", "notes"), frozenset(("id",)), library=register)
+slotted(
+    Part(name="patch", partial=PATCH_PARTIAL, parts=("content", "title", "detail", "notes"), options={"id": Option()}),
+    library=register,
+)

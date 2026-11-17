@@ -61,6 +61,6 @@ class MutedTests(SimpleTestCase):
                 drawn(source)
 
     def test_an_extension_may_write_it(self):
-        from hq.platform.core.template_contract import TAGS
+        from hq.platform.core.template_contract import describe
 
-        self.assertIn("muted", TAGS)
+        self.assertIn("muted", describe()["tags"])

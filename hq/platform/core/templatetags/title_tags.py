@@ -9,7 +9,7 @@ that wraps whole.
 from django import template
 
 from hq.platform.application.page_parts import html_attributes
-from hq.platform.core.templatetags.value_tags import slotted
+from hq.platform.core.templatetags.value_tags import Part, slotted
 
 register = template.Library()
 
@@ -37,11 +37,4 @@ def title_parts(content: str) -> str:
     return content
 
 
-slotted(
-    "title_meta",
-    TITLE_META_PARTIAL,
-    ("content",),
-    frozenset(),
-    shape=title_meta_frame,
-    library=register,
-)
+slotted(Part(name="title_meta", partial=TITLE_META_PARTIAL, data=True, shape=title_meta_frame), library=register)

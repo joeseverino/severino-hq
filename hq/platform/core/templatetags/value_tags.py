@@ -1,6 +1,7 @@
 import inspect
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from numbers import Number
 from urllib.parse import parse_qs, unquote, urlsplit
@@ -623,131 +624,159 @@ class SlotsNode(template.Node):
     """A block tag drawn by its partial, each part it encloses handed over as
     the variable it is named for (``slotted``)."""
 
-    def __init__(self, takes: Takes, parts: dict[str, template.NodeList], options: dict) -> None:
-        self.takes = takes
+    def __init__(self, part: Part, parts: dict[str, template.NodeList], options: dict) -> None:
+        self.part = part
         self.options = options
         self.child_nodelists = tuple(f"nodelist_{name}" for name in parts)
         for name, nodelist in parts.items():
             setattr(self, f"nodelist_{name}", nodelist)
 
     def render(self, context) -> str:
-        values = self.takes.values({name: value.resolve(context) for name, value in self.options.items()})
+        values = self.part.values({name: value.resolve(context) for name, value in self.options.items()})
         for attribute in self.child_nodelists:
             # Rendered by the page's own template, so escaped already. A part
             # left empty leaves an option of its name as it is.
-            part = mark_safe(getattr(self, attribute).render(context).strip())  # noqa: S308 - the template's own escaped output
+            drawn = mark_safe(getattr(self, attribute).render(context).strip())  # noqa: S308 - the template's own escaped output
             name = attribute.removeprefix("nodelist_")
-            if part or name not in values:
-                values[name] = part
-        return context.template.engine.get_template(self.takes.partial).render(context.new(values)).strip()
+            if drawn or name not in values:
+                values[name] = drawn
+        return context.template.engine.get_template(self.part.partial).render(context.new(values)).strip()
 
 
-class Takes:
-    """What a slotted tag takes: its parts, its options, whether a page may
-    give it ``data_*`` options, and how the options become the partial's
-    variables. Its signature and the parts after its first are what the
-    template contract records for the tag."""
+@dataclass(frozen=True, kw_only=True)
+class Option:
+    """One option a part takes: the value it has when a page gives none, the
+    values it may be given (any, when there are no ``choices``), and what it
+    does. A ``required`` one has no default."""
 
-    # The option that, given, makes the tag stand alone, enclosing nothing.
-    bare_with = ""
-    # What the tag takes in order after its content, each required.
-    ordered: tuple[str, ...] = ()
+    default: object = ""
+    choices: tuple[object, ...] = ()
+    about: str = ""
+    required: bool = False
 
-    def __init__(
-        self, name: str, partial: str, parts: tuple[str, ...], options: frozenset[str], shape: Shape | None
-    ) -> None:
-        self.name = name
-        self.partial = partial
-        self.parts = parts
-        self.options = options
-        self.shape = shape
-        keyword, ordered = inspect.Parameter.KEYWORD_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD
-        self.__signature__ = inspect.Signature(
-            [
-                inspect.Parameter("content", ordered),
-                *(inspect.Parameter(name, ordered) for name in self.ordered),
-                *(inspect.Parameter(option, keyword, default="") for option in sorted(options)),
-                *([inspect.Parameter("data", inspect.Parameter.VAR_KEYWORD)] if shape else []),
-            ]
-        )
-
-    def __call__(self, *args, **kwargs) -> None:
-        raise TypeError(f"{self.name} is a template tag, drawn by {self.partial}")
-
-    def admits(self, names: set[str]) -> bool:
-        return all(name in self.options or (self.shape and name.startswith("data_")) for name in names)
-
-    def values(self, given: dict) -> dict:
-        return self.shape(self.name, given) if self.shape else given
+    def __post_init__(self) -> None:
+        if self.choices and not self.required and self.default not in self.choices:
+            raise ValueError(f"An option's default {self.default!r} is one of its choices.")
 
 
 type Shape = Callable[[str, dict], dict]
 
 
-def slotted(
-    name: str,
-    partial: str,
-    parts: tuple[str, ...],
-    options: frozenset[str],
-    *,
-    shape: Shape | None = None,
-    library: template.Library = register,
-) -> None:
-    """Register ``{% name option=value %}first{% second %}...{% endname %}``:
-    markup a page would otherwise write by hand, drawn by ``partial`` with
-    each part as the variable it is named for. The first part follows the
-    opening tag; the others may be left out, and come in ``parts``' order.
-    A tag with a ``shape`` also takes ``data_*`` options, and its shape turns
-    what a page gave into the partial's variables. ``library`` is the one
-    it is registered in."""
+@dataclass(frozen=True, kw_only=True)
+class Part:
+    """A shared part a template writes as a tag, declared once: what it is,
+    the partial that draws it, the parts it encloses (the first follows the
+    opening tag), what it takes in order and as options, whether a page may
+    give it ``data_*`` options, and the shape that turns what a page gave into
+    the partial's variables. Everything else said about the tag (its
+    parameters in the template contract, its row in docs/Shared-UI.md, the
+    check of what a page gave) is read from here. ``public`` tags are an
+    extension's to write too, and say what they are in ``about``."""
 
-    end = f"end{name}"
-    takes = Takes(name, partial, parts, options, shape)
+    name: str
+    partial: str
+    about: str = ""
+    parts: tuple[str, ...] = ("content",)
+    ordered: Mapping[str, Option] = field(default_factory=dict)
+    options: Mapping[str, Option] = field(default_factory=dict)
+    data: bool = False
+    # The option that, given, makes the tag stand alone, enclosing nothing.
+    bare_with: str = ""
+    public: bool = False
+    example: str = ""
+    shape: Shape | None = None
+
+    def __post_init__(self) -> None:
+        if self.public and not (self.about and self.example):
+            raise ValueError(f"The public tag {self.name} says what it is and shows itself written.")
+        keyword, ordered = inspect.Parameter.KEYWORD_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD
+
+        def parameter(name: str, option: Option, kind: inspect._ParameterKind) -> inspect.Parameter:
+            default = inspect.Parameter.empty if option.required else option.default
+            return inspect.Parameter(name, kind, default=default)
+
+        # What the template contract records as the tag's parameters.
+        signature = inspect.Signature(
+            [
+                inspect.Parameter("content", ordered),
+                *(parameter(name, option, ordered) for name, option in self.ordered.items()),
+                *(parameter(name, self.options[name], keyword) for name in sorted(self.options)),
+                *([inspect.Parameter("data", inspect.Parameter.VAR_KEYWORD)] if self.data else []),
+            ]
+        )
+        object.__setattr__(self, "__signature__", signature)
+
+    def __call__(self, *args, **kwargs) -> None:
+        raise TypeError(f"{self.name} is a template tag, drawn by {self.partial}")
+
+    def admits(self, names: set[str]) -> bool:
+        return all(name in self.options or (self.data and name.startswith("data_")) for name in names)
+
+    def refused(self) -> str:
+        """Why a page's options are not this tag's, as the template compiles."""
+
+        rest = ", data_*" if self.data else ""
+        return f"{self.name} takes {', '.join(sorted(self.options))}{rest} as name=value"
+
+    def values(self, given: dict) -> dict:
+        """What a page gave, each option it left out at its default and each
+        one with choices held to them, as the partial's variables."""
+
+        values = {name: option.default for name, option in (self.ordered | self.options).items()} | given
+        for name, option in self.options.items():
+            if option.choices and values[name] not in option.choices:
+                said = ", ".join(sorted(map(str, filter(None, option.choices))))
+                raise template.TemplateSyntaxError(f"{self.name} {name}= is one of {said}")
+        return self.shape(self.name, values) if self.shape else values
+
+
+def slotted(part: Part, *, library: template.Library = register) -> None:
+    """Register ``{% name option=value %}first{% second %}...{% endname %}``:
+    markup a page would otherwise write by hand, drawn by the part's partial
+    with each part as the variable it is named for. The later parts may be
+    left out, and come in their declared order. ``library`` is the one it is
+    registered in."""
+
+    end = f"end{part.name}"
 
     def compile_(parser, token) -> SlotsNode:
         bits = token.split_contents()
         given = token_kwargs(bits[1:], parser)
-        if len(given) != len(bits) - 1 or not takes.admits(set(given)):
-            rest = ", data_*" if shape else ""
-            raise template.TemplateSyntaxError(f"{name} takes {', '.join(sorted(options))}{rest} as name=value")
-        found = {part: template.NodeList() for part in parts}
-        ahead = list(parts)
+        if len(given) != len(bits) - 1 or not part.admits(set(given)):
+            raise template.TemplateSyntaxError(part.refused())
+        found = {name: template.NodeList() for name in part.parts}
+        ahead = list(part.parts)
         while True:
             found[ahead.pop(0)] = parser.parse((*ahead, end))
             marker = parser.next_token().contents
             if marker == end:
-                return SlotsNode(takes, found, given)
+                return SlotsNode(part, found, given)
             ahead = ahead[ahead.index(marker) :]
 
-    # The template contract reads a tag's parameters from what it wraps.
-    compile_.__wrapped__ = takes  # type: ignore[attr-defined]  # a function's attribute, which typeshed does not declare
-    library.tag(name, compile_)
+    # The template contract reads a tag's declaration from what it wraps.
+    compile_.__wrapped__ = part  # type: ignore[attr-defined]  # a function's attribute, which typeshed does not declare
+    library.tag(part.name, compile_)
 
 
-CARD_ELEMENTS = frozenset(("section", "article", "figure", "details", "div"))
+def framed(given: dict, own: str, named: dict) -> dict:
+    """A part's opening and closing tags, its ``element`` the one given (a
+    choice its option holds it to), its class ``own`` before the page's
+    ``css``, and each ``data_*`` option an attribute. Built here rather than
+    in its partial, since the element is a choice and every attribute but the
+    class is drawn only when it has a value, as ``html_attributes`` draws one."""
 
-
-def framed(name: str, given: dict, elements: frozenset[str], default: str, own: str, named: dict) -> dict:
-    """A part's opening and closing tags, its element one of ``elements``, its
-    class ``own`` before the page's ``css``, and each ``data_*`` option an
-    attribute. Built here rather than in its partial, since the element is a
-    choice and every attribute but the class is drawn only when it has a
-    value, as ``html_attributes`` draws one."""
-
-    element = given.get("element", default)
-    if element not in elements:
-        raise template.TemplateSyntaxError(f"{name} element= is one of {', '.join(sorted(elements))}")
+    element = given["element"]
     named = {"class": " ".join((own, given.get("css") or "")).strip(), **named}
     named |= {option.replace("_", "-"): value for option, value in given.items() if option.startswith("data_")}
-    # The element is one of ``elements``, a tag name and never text, and
-    # html_attributes escapes the attributes.
+    # The element is one of its option's choices, a tag name and never text,
+    # and html_attributes escapes the attributes.
     return {
         "opening": mark_safe(f"<{element}{html_attributes(named)}>"),  # noqa: S308 - see above
         "closing": mark_safe(f"</{element}>"),  # noqa: S308 - see above
     }
 
 
-def card_frame(name: str, given: dict) -> dict:
+def card_frame(_name: str, given: dict) -> dict:
     """A card's opening and closing tags."""
 
     named = {
@@ -758,19 +787,11 @@ def card_frame(name: str, given: dict) -> dict:
         "open": True if given.get("open") else None,
         "data-alone": True if given.get("alone") else None,
     }
-    return framed(name, given, CARD_ELEMENTS, "section", "card", named)
+    return framed(given, "card", named)
 
 
-# Words said in the muted voice: a line, a paragraph or a block, its element a
-# choice. A cell or a list item holds the tag; a run of parts said quietly is
-# ``{% dot_list muted=True %}`` (stack_tags).
-MUTED_ELEMENTS = frozenset(("span", "p", "div"))
-
-
-def muted_frame(name: str, given: dict) -> dict:
-    """Muted words' opening and closing tags. A ``tip`` is what a press or a
-    hover shows, as a status's tip is; ``hidden`` and ``role`` are for a line a
-    script shows and a reader hears."""
+def muted_frame(_name: str, given: dict) -> dict:
+    """Muted words' opening and closing tags."""
 
     tip = given.get("tip")
     named = {
@@ -781,47 +802,88 @@ def muted_frame(name: str, given: dict) -> dict:
         "tabindex": "0" if tip else None,
         "data-tip": tip,
     }
-    return framed(name, given, MUTED_ELEMENTS, "span", "muted", named)
+    return framed(given, "muted", named)
 
 
-# Words said quietly beside what they are about (a context line, a sentence
-# under a value), the one way a page or an extension writes muted text.
 slotted(
-    "muted",
-    "partials/_muted.html",
-    ("content",),
-    frozenset(("element", "css", "id", "title", "tip", "hidden", "role")),
-    shape=muted_frame,
+    Part(
+        name="muted",
+        partial="partials/_muted.html",
+        about=(
+            "Words said quietly beside what they are about: a context line, a sentence under a value. "
+            "A cell or a list item holds it; a run of parts said quietly is `{% dot_list muted=True %}`."
+        ),
+        options={
+            "element": Option(
+                default="span", choices=("span", "p", "div"), about="A line among other words, a paragraph or a block."
+            ),
+            "css": Option(about="The classes of where it stands (`narrow-more`, `row-more`, `cell-part`)."),
+            "id": Option(about="Its `id`."),
+            "title": Option(about="Its `title`."),
+            "tip": Option(about="What a press or a hover shows, as a status's tip is."),
+            "hidden": Option(about="Drawn hidden, for a line a script shows."),
+            "role": Option(about="Its `role`, for a line a script shows and a reader hears."),
+        },
+        data=True,
+        public=True,
+        example='{% muted element="p" %}A sentence under it.{% endmuted %}',
+        shape=muted_frame,
+    )
 )
-
-
 slotted(
-    "outside_link",
-    OUTSIDE_LINK,
-    ("content",),
-    frozenset(("url", "css", "tone", "tip", "title", "label", "modal", "entity")),
+    Part(
+        name="outside_link",
+        partial=OUTSIDE_LINK,
+        options={
+            "url": Option(),
+            "css": Option(),
+            "tone": Option(),
+            "tip": Option(),
+            "title": Option(),
+            "label": Option(),
+            "modal": Option(),
+            "entity": Option(),
+        },
+    )
 )
 # A list of short steps or checks, read down its columns, or numbered when
 # they are done in order, and one step of it: its icon, toned by how it
 # stands, or its number, then what it says.
-slotted("steps", "partials/_steps.html", ("content",), frozenset(("numbered",)))
-slotted("step", "partials/_step.html", ("content",), frozenset(("icon", "tone", "done", "title")))
+slotted(Part(name="steps", partial="partials/_steps.html", options={"numbered": Option()}))
+slotted(
+    Part(
+        name="step",
+        partial="partials/_step.html",
+        options={"icon": Option(), "tone": Option(), "done": Option(), "title": Option()},
+    )
+)
 # A list of sentences, each marked as the browser marks it, or numbered when
 # they are read in order.
-slotted("prose_list", "partials/_prose_list.html", ("content",), frozenset(("numbered",)))
+slotted(Part(name="prose_list", partial="partials/_prose_list.html", options={"numbered": Option()}))
 # A row of links, each a chip of its own.
-slotted("link_chips", "partials/_link_chips.html", ("content",), frozenset())
+slotted(Part(name="link_chips", partial="partials/_link_chips.html"))
 # A row of buttons standing on its own, a form's closing row among them.
-slotted("button_row", "partials/_button_row.html", ("content",), frozenset(("bar",)))
+slotted(Part(name="button_row", partial="partials/_button_row.html", options={"bar": Option()}))
 # The content column of the page frame, which base.html and the component
 # catalog draw in.
-slotted("page_main", "partials/_page_main.html", ("content", "print_footer"), frozenset())
+slotted(Part(name="page_main", partial="partials/_page_main.html", parts=("content", "print_footer")))
 slotted(
-    "card",
-    "partials/_card.html",
-    ("content",),
-    frozenset(("element", "id", "css", "heading", "label", "busy", "open", "alone")),
-    shape=card_frame,
+    Part(
+        name="card",
+        partial="partials/_card.html",
+        options={
+            "element": Option(default="section", choices=("section", "article", "figure", "details", "div")),
+            "id": Option(),
+            "css": Option(),
+            "heading": Option(),
+            "label": Option(),
+            "busy": Option(),
+            "open": Option(),
+            "alone": Option(),
+        },
+        data=True,
+        shape=card_frame,
+    )
 )
 
 
@@ -850,11 +912,23 @@ def reading_frame(name: str, given: dict) -> dict:
 
 # A row of readings and one reading of it: its mark, its figure, its quiet
 # lines and a note on how it stands, leading to a page or opening a panel.
-slotted("readings", "partials/_readings.html", ("content",), frozenset())
+slotted(Part(name="readings", partial="partials/_readings.html"))
 slotted(
-    "reading",
-    "partials/_reading.html",
-    ("lead", "lines", "note", "heading", "panel", "foot"),
-    frozenset(("icon", "url", "modal", "id", "title", "unit", "tone", "note_tone")),
-    shape=reading_frame,
+    Part(
+        name="reading",
+        partial="partials/_reading.html",
+        parts=("lead", "lines", "note", "heading", "panel", "foot"),
+        options={
+            "icon": Option(),
+            "url": Option(),
+            "modal": Option(),
+            "id": Option(),
+            "title": Option(),
+            "unit": Option(),
+            "tone": Option(),
+            "note_tone": Option(),
+        },
+        data=True,
+        shape=reading_frame,
+    )
 )

@@ -1,15 +1,6 @@
 """The page parts a template writes as tags, each drawn by the partial its
 ``page_parts`` dataclass draws through, so a page built in a template and one
-built in code look the same.
-
-``{% section "Agents" count=n lede="..." %}body{% aside %}a line, a link, a
-control{% empty %}What is missing.{% foot %}How to read the body.{% endsection %}``:
-a section in its frame (``page_parts.SectionPart``). Its aside, empty and
-foot parts may be left out; with no body and no empty part it draws nothing.
-``remedy_label`` and ``remedy_url`` are the link the empty line offers,
-``more_label`` and ``more_url`` the aside's link to the rest, and ``moment``
-(in the ``when`` form) the moment its heading names, which stands for the
-heading when the tag is given none.
+built in code look the same, and the tag's options are the dataclass's fields.
 
 Not ``Library.simple_block_tag``: Django's parses only up to its end tag, so
 it cannot take the later parts, and it renders the body before the tag's
@@ -17,13 +8,18 @@ function runs, so a section inside a section could not head itself a level
 down. The arguments are still read by Django's own ``parse_bits``.
 """
 
-import inspect
+from dataclasses import Field, fields
+from enum import Enum
+from itertools import chain
+from types import UnionType
+from typing import Any, Literal, Union, get_args, get_origin
 
 from django import template
 from django.template.library import TagHelperNode, parse_bits
 from django.utils.safestring import mark_safe
 
 from hq.platform.application.page_parts import LAST_LEVEL, SECTION_PARTIAL, TOP_LEVEL, SectionPart
+from hq.platform.core.templatetags.value_tags import Option, Part
 
 register = template.Library()
 
@@ -34,46 +30,47 @@ _LEVEL = "hq.part_tags.level"
 _IDS = "hq.part_tags.ids"
 
 
-class SectionTakes:
-    """What ``{% section %}`` takes: its heading, its options and ``data_*``
-    attributes, and the parts after its body, which the template contract
-    records as its parameters and parts."""
+# The fields of SectionPart the tag fills itself rather than take as options:
+# its heading first, its parts, its data_* options and its level, and the body
+# code draws in place of the tag's own.
+_FILLED = frozenset({"heading", "data", "level", "template", "context"})
 
+
+def choices_of(annotation: Any) -> tuple[object, ...]:
+    """The values a field typed ``annotation`` holds, when the type names them
+    all (a ``Literal``, an enum, a union of those); else none."""
+
+    if get_origin(annotation) is Literal:
+        return get_args(annotation)
+    if isinstance(annotation, type) and issubclass(annotation, Enum):
+        return tuple(member.value for member in annotation)
+    if isinstance(annotation, UnionType) or get_origin(annotation) is Union:
+        each = [choices_of(member) for member in get_args(annotation)]
+        return tuple(chain.from_iterable(each)) if all(each) else ()
+    return ()
+
+
+def _option(field: Field) -> Option:
+    return Option(default=field.default, choices=choices_of(field.type), about=field.doc or "")
+
+
+def _section() -> Part:
+    named = {field.name: field for field in fields(SectionPart)}
     parts = ("content", "aside", "empty", "foot")
-    options = (
-        "count",
-        "lede",
-        "id",
-        "fold",
-        "open",
-        "css",
-        "remedy_label",
-        "remedy_url",
-        "more_label",
-        "more_url",
-        "figure",
-        "moment",
-        "when",
-        "head",
-        "edge",
+    return Part(
+        name="section",
+        partial=SECTION_PARTIAL,
+        about="A titled part of a page in its frame, its head on the page and its body in the frame.",
+        parts=parts,
+        ordered={"heading": _option(named["heading"])},
+        options={name: _option(field) for name, field in named.items() if name not in _FILLED | set(parts)},
+        data=True,
+        public=True,
+        example='{% section "Agents" count=n %}<p>Body</p>{% aside %}A line.{% empty %}None yet.{% endsection %}',
     )
 
-    def __init__(self) -> None:
-        keyword, ordered = inspect.Parameter.KEYWORD_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD
-        self.__signature__ = inspect.Signature(
-            [
-                inspect.Parameter("content", ordered),
-                inspect.Parameter("heading", ordered, default=""),
-                *(inspect.Parameter(option, keyword, default="") for option in self.options),
-                inspect.Parameter("data", inspect.Parameter.VAR_KEYWORD),
-            ]
-        )
 
-    def __call__(self, *args, **kwargs) -> None:
-        raise TypeError(f"section is a template tag, drawn by {SECTION_PARTIAL}")
-
-
-SECTION = SectionTakes()
+SECTION = _section()
 
 
 class SectionNode(TagHelperNode):
@@ -103,7 +100,7 @@ class SectionNode(TagHelperNode):
         values = part.drawn(body=body, aside=aside, empty=empty, foot=foot, heading_id=_unique(root, part.heading_id))
         if values is None:
             return ""
-        return context.template.engine.get_template(SECTION_PARTIAL).render(context.new(values)).strip()
+        return context.template.engine.get_template(SECTION.partial).render(context.new(values)).strip()
 
 
 def _unique(root: dict, heading_id: str) -> str:
@@ -125,19 +122,18 @@ def compile_section(parser, token) -> SectionNode:
     args, kwargs = parse_bits(
         parser,
         token.split_contents()[1:],
-        ["heading"],
+        list(SECTION.ordered),
         None,
         "data",
-        ("",),
+        tuple(option.default for option in SECTION.ordered.values()),
         options,
-        dict.fromkeys(options, ""),
+        {name: option.default for name, option in SECTION.options.items()},
         "section",
     )
     if not args and "moment" not in kwargs:
         raise template.TemplateSyntaxError("section takes its heading, or the moment= its heading names")
     if unknown := sorted(name for name in kwargs if name not in options and not name.startswith("data_")):
-        given = ", ".join(unknown)
-        raise template.TemplateSyntaxError(f"section takes {', '.join(options)} and data_* options, not {given}")
+        raise template.TemplateSyntaxError(f"{SECTION.refused()}, not {', '.join(unknown)}")
     found = {name: template.NodeList() for name in SECTION.parts}
     ahead = list(SECTION.parts)
     while True:
@@ -148,7 +144,7 @@ def compile_section(parser, token) -> SectionNode:
         ahead = ahead[ahead.index(marker) :]
 
 
-# The template contract reads a tag's parameters from what it wraps.
+# The template contract reads a tag's declaration from what it wraps.
 compile_section.__wrapped__ = SECTION  # type: ignore[attr-defined]  # a function's attribute, which typeshed does not declare
 
 

@@ -11,7 +11,7 @@ from django import template
 
 from hq.platform.application.page_parts import html_attributes
 from hq.platform.application.standards import Standing
-from hq.platform.core.templatetags.value_tags import slotted
+from hq.platform.core.templatetags.value_tags import Option, Part, slotted
 
 register = template.Library()
 
@@ -35,12 +35,15 @@ def rung_frame(name: str, given: dict) -> dict:
     }
 
 
-slotted("check_ladder", "partials/_check_ladder.html", ("content",), frozenset(("route",)), library=register)
+slotted(Part(name="check_ladder", partial="partials/_check_ladder.html", options={"route": Option()}), library=register)
 slotted(
-    "check_rung",
-    "partials/_check_rung.html",
-    ("content", "detail", "more", "page", "body"),
-    frozenset(("state", "kind", "evidence", "open")),
-    shape=rung_frame,
+    Part(
+        name="check_rung",
+        partial="partials/_check_rung.html",
+        parts=("content", "detail", "more", "page", "body"),
+        options={"state": Option(), "kind": Option(), "evidence": Option(), "open": Option()},
+        data=True,
+        shape=rung_frame,
+    ),
     library=register,
 )

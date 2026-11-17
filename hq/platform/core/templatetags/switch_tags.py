@@ -9,7 +9,7 @@ and inside its link, and the summary, when given, under the row.
 
 from django import template
 
-from hq.platform.core.templatetags.value_tags import slotted
+from hq.platform.core.templatetags.value_tags import Option, Part, slotted
 
 register = template.Library()
 
@@ -51,12 +51,24 @@ def choice_frame(name: str, given: dict) -> dict:
     }
 
 
-slotted("switch", SWITCH_PARTIAL, ("content", "summary"), frozenset(("label",)), shape=switch_frame, library=register)
 slotted(
-    "choice",
-    CHOICE_PARTIAL,
-    ("content",),
-    frozenset(("url", "current", "count", "note", "mark")),
-    shape=choice_frame,
+    Part(
+        name="switch",
+        partial=SWITCH_PARTIAL,
+        parts=("content", "summary"),
+        options={"label": Option()},
+        data=True,
+        shape=switch_frame,
+    ),
+    library=register,
+)
+slotted(
+    Part(
+        name="choice",
+        partial=CHOICE_PARTIAL,
+        options={"url": Option(), "current": Option(), "count": Option(), "note": Option(), "mark": Option()},
+        data=True,
+        shape=choice_frame,
+    ),
     library=register,
 )

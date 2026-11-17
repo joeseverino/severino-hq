@@ -15,7 +15,7 @@ Given ``value=``, a fact is one tag with no end.
 from django import template
 from django.template.base import token_kwargs
 
-from hq.platform.core.templatetags.value_tags import SlotsNode, Takes
+from hq.platform.core.templatetags.value_tags import Option, Part, SlotsNode
 
 register = template.Library()
 
@@ -26,43 +26,37 @@ FACT_PARTIAL = "partials/_fact.html"
 LAYOUTS = ("list", "band", "inline")
 
 
-class FactsTakes(Takes):
-    """What ``{% facts %}`` takes, and the layout it draws."""
-
-    def values(self, given: dict) -> dict:
-        layout = given.get("layout") or "list"
-        if layout not in LAYOUTS:
-            raise template.TemplateSyntaxError(f"facts layout= is one of {', '.join(sorted(LAYOUTS))}")
-        return {"layout": layout, "label": given.get("label") or ""}
-
-
-class FactTakes(Takes):
+class FactTakes(Part):
     """What ``{% fact %}`` takes: its label first, then its options. Given
     ``value``, the option ``bare_with`` names, it encloses nothing."""
 
-    bare_with = "value"
-    ordered = ("label",)
-
-    def __init__(self) -> None:
-        super().__init__(
-            "fact", FACT_PARTIAL, ("value", "detail"), frozenset(("value", "url", "detail", "tone", "icon")), None
-        )
-
     def values(self, given: dict) -> dict:
+        given = super().values(given)
         detail = given.get("detail")
         if isinstance(detail, list | tuple):
             return {**given, "detail": "", "lines": tuple(line for line in detail if line)}
         return given
 
 
-FACTS = FactsTakes("facts", FACTS_PARTIAL, ("content",), frozenset(("layout", "label")), None)
-FACT = FactTakes()
+FACTS = Part(
+    name="facts",
+    partial=FACTS_PARTIAL,
+    options={"layout": Option(default="list", choices=LAYOUTS), "label": Option()},
+)
+FACT = FactTakes(
+    name="fact",
+    partial=FACT_PARTIAL,
+    parts=("value", "detail"),
+    ordered={"label": Option(required=True)},
+    options=dict.fromkeys(("value", "url", "detail", "tone", "icon"), Option()),
+    bare_with="value",
+)
 
 
-def _options(takes: Takes, bits: list[str], parser) -> dict:
+def _options(part: Part, bits: list[str], parser) -> dict:
     given = token_kwargs(list(bits), parser)
-    if len(given) != len(bits) or not takes.admits(set(given)):
-        raise template.TemplateSyntaxError(f"{takes.name} takes {', '.join(sorted(takes.options))} as name=value")
+    if len(given) != len(bits) or not part.admits(set(given)):
+        raise template.TemplateSyntaxError(part.refused())
     return given
 
 

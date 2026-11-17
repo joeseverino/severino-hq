@@ -10,7 +10,7 @@ never a second part.
 from django import template
 
 from hq.platform.application.page_parts import html_attributes
-from hq.platform.core.templatetags.value_tags import slotted
+from hq.platform.core.templatetags.value_tags import Option, Part, slotted
 
 register = template.Library()
 
@@ -47,10 +47,13 @@ def notice_frame(name: str, given: dict) -> dict:
 
 
 slotted(
-    "notice",
-    NOTICE_PARTIAL,
-    ("content", "title"),
-    frozenset(("tone", "title", "css")),
-    shape=notice_frame,
+    Part(
+        name="notice",
+        partial=NOTICE_PARTIAL,
+        parts=("content", "title"),
+        options={"tone": Option(), "title": Option(), "css": Option()},
+        data=True,
+        shape=notice_frame,
+    ),
     library=register,
 )
