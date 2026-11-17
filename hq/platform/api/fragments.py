@@ -17,3 +17,10 @@ def pascal(name: str) -> str:
     """``name``'s words run together, each capitalized: ``asset.create`` is ``AssetCreate``."""
 
     return "".join(capfirst(part) for part in re.split(r"[^0-9A-Za-z]+", name) if part)
+
+
+def camel(name: str) -> str:
+    """``name`` as ``pascal`` writes it, its first letter lowercased: ``asset.create`` is ``assetCreate``."""
+
+    said = pascal(name)
+    return said[:1].lower() + said[1:]

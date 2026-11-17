@@ -9,6 +9,7 @@ from hq.platform.application.plugin_testing import installed, sibling
 from hq.platform.application.plugins import NavigationGroup, NavigationItem
 
 from .. import openapi
+from ..tags import Tags
 
 
 class DescribedTests(SimpleTestCase):
@@ -70,7 +71,7 @@ class AnExtensionSaysWhatItHoldsTests(SimpleTestCase):
             navigation_groups=(group,),
         )
         with installed(extension, alone=True):
-            tags = openapi._Tags({}, {})
+            tags = Tags({}, {})
             tags.use("example.alpha")
             rendered = {tag["name"]: tag for tag in tags.render()}
         domain = rendered["example.alpha"]

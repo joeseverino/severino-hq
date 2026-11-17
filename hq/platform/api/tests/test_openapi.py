@@ -30,6 +30,7 @@ from hq.platform.core.test_runner import no_default_role
 
 from .. import openapi, views
 from ..components import Components
+from ..tags import Tags
 from ..testing import ContractClient
 from .tokens import ISSUER, OTHER_KEY, RESOURCE, _serving, _token
 
@@ -284,7 +285,7 @@ class DocumentTests(SimpleTestCase):
     def test_each_resource_and_capability_is_tagged_with_the_domain_it_belongs_to(self):
         """Its declaring domain, else the domain of its page, else of its subject; else none."""
 
-        tags = openapi._Tags(resource_registry(), capability_registry())
+        tags = Tags(resource_registry(), capability_registry())
         self.assertEqual(tags.of_resource("projects"), "hq.projects")
         self.assertEqual(tags.of_resource("services"), "hq.services")
         self.assertEqual(tags.of_resource("search"), "hq.search")

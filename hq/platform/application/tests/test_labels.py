@@ -85,5 +85,5 @@ class LowerFirstSourceTests(SimpleTestCase):
         ]
         self.assertTrue(sources)
         copies = [str(path.relative_to(hq)) for path in sources if "[:1].lower()" in path.read_text()]
-        # openapi.py camel-cases an identifier, which is no label.
-        self.assertEqual(copies, ["platform/api/openapi.py"])
+        # fragments.py camel-cases an identifier, which is no label.
+        self.assertEqual(copies, ["platform/api/fragments.py"])
