@@ -56,12 +56,79 @@
     return String(left).localeCompare(String(right), undefined, { numeric: true });
   };
 
+  // In a region that fills (`table_region ... fills=True`), the server writes
+  // each cell once, and the row's open line takes its entries from the row as
+  // it first opens: each cell of a ranked column (its `data-drop` copied, so
+  // the stylesheet still says when it shows) and each cell holding what only
+  // the open line shows (`row-more`, `line-rest`, shown at every width), under
+  // its column's name, cloned from the region's `data-open-line` frame with
+  // no id the row already draws. A row the server filled says so
+  // (`data-filled`).
+  const heldBack = (cell) =>
+    !cell.hasAttribute("data-blank") &&
+    !cell.hasAttribute("colspan") &&
+    (cell.hasAttribute("data-drop") || Boolean(cell.querySelector(".row-more, .line-rest")));
+  const columnName = (row, cell) => {
+    if (cell.dataset.label) return cell.dataset.label;
+    const heading = row.closest("table").tHead?.rows;
+    if (!heading?.length) return "";
+    let place = 0;
+    for (const each of row.cells) {
+      if (each === cell) break;
+      place += each.colSpan;
+    }
+    let at = 0;
+    for (const each of heading[heading.length - 1].cells) {
+      if (at === place) return each.textContent.trim().replace(/\s+/g, " ");
+      at += each.colSpan;
+    }
+    return "";
+  };
+  const fill = (row) => {
+    const region = row.closest(".table-scroll[data-fills]");
+    if (!region || row.hasAttribute("data-filled")) return;
+    row.toggleAttribute("data-filled", true);
+    const held = [...row.cells].filter(heldBack);
+    if (!held.length) return;
+    const line = region.querySelector("template[data-open-line]").content.firstElementChild.cloneNode(true);
+    const list = line.querySelector(".row-columns");
+    const frame = list.firstElementChild;
+    frame.remove();
+    held.forEach((cell) => {
+      const entry = frame.cloneNode(true);
+      if (cell.dataset.drop && !cell.querySelector(".row-more, .line-rest")) entry.dataset.drop = cell.dataset.drop;
+      entry.querySelector("dt").textContent = columnName(row, cell);
+      const value = entry.querySelector("dd");
+      [...cell.childNodes].forEach((node) => {
+        if (!node.matches?.("[data-row-toggle]")) value.append(node.cloneNode(true));
+      });
+      // A copy names no row and draws no id twice.
+      value.querySelectorAll("[id]").forEach((each) => each.removeAttribute("id"));
+      value.querySelectorAll('[data-cell~="name"]').forEach((each) => {
+        const roles = each.dataset.cell.split(" ").filter((role) => role !== "name");
+        if (roles.length) each.dataset.cell = roles.join(" ");
+        else delete each.dataset.cell;
+      });
+      list.append(entry);
+    });
+    const detail = row.nextElementSibling?.matches("[data-row-detail]") ? row.nextElementSibling : null;
+    if (!detail) {
+      line.cells[0].colSpan = [...row.cells].reduce((width, cell) => width + cell.colSpan, 0);
+      row.after(line);
+      return;
+    }
+    const drawn = detail.cells[0].querySelector(":scope > .row-columns");
+    if (drawn) drawn.prepend(...list.children);
+    else detail.cells[0].append(list);
+  };
+
   // A row opens to all it holds: a column its region let go, a value cut at
   // its column, a part that waits for it. How it shows them is the
   // stylesheet's (tables.css), which lays them out on lines of their own
   // under the row, so opening moves no column. `button` is its toggle, which
   // a row that heads a fold has none of.
   const setExpanded = (row, expanding, button = null) => {
+    if (expanding) fill(row);
     row.classList.toggle("is-expanded", expanding);
     button?.setAttribute("aria-expanded", String(expanding));
     button?.setAttribute("aria-label", expanding ? "Show less of this row" : "Show all of this row");

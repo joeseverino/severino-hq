@@ -220,6 +220,7 @@ fails when this file falls behind. The rules around it are in
 | `table_region` | `compare` | `False` |  | Two values side by side in each row, after the row's name. |
 | `table_region` | `css` |  |  | The classes of where it stands. |
 | `table_region` | `empty` |  |  | With no rows, what is missing. |
+| `table_region` | `fills` | `False` |  | A row's open line is filled from the row's own cells as it opens, each cell written once. |
 | `table_region` | `filtered` | `False` |  | Its own search narrows it, so no rows says nothing matches. |
 | `table_region` | `pane` | `False` |  | A box of its own height, which scrolls. |
 | `table_region` | `remedy` | `None` |  | With no rows, what would fill it: a `label` and a `url`. |

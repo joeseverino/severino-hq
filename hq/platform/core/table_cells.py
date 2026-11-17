@@ -136,8 +136,9 @@ class _Cell:
     sort_mark: Position | None = None
     # A heading's drop rank, as the span that takes it off again.
     drop: tuple[Point, Point] | None = None
-    # Whether it holds a field a reader fills in.
+    # Whether it holds a field a reader fills in, and a button.
     fields: bool = False
+    presses: bool = False
 
 
 @dataclass(slots=True)
@@ -171,10 +172,14 @@ class Cells(HTMLParser):
     and what the stylesheet is to read off it. Only the region's own tables: a
     table inside a cell is that cell's content, and says something."""
 
-    def __init__(self, *, sorts: bool = True) -> None:
+    def __init__(self, *, sorts: bool = True, fills: bool = False) -> None:
         super().__init__(convert_charrefs=True)
-        # Whether its tables' rows may sort on the page at all.
+        # Whether its tables' rows may sort on the page at all, and whether a
+        # row's open line is filled from its own cells as it opens (tables.js).
         self.sorts = sorts
+        self.fills = fills
+        # Whether a row of the table being read can open (`data-rows-can-open`).
+        self.opens = False
         self.tables = 0
         # How many rows each of the region's own tables holds outside its head.
         self.bodies: list[int] = []
@@ -282,6 +287,11 @@ class Cells(HTMLParser):
             cell.controls = True
         if tag in ("select", "textarea") or (tag == "input" and given.get("type") not in _UNFILLED):
             cell.fields = True
+        pressed = tag == "button" or given.get("role") == "button"
+        if (
+            pressed or (tag == "input" and given.get("type") in ("submit", "button"))
+        ) and "data-row-toggle" not in given:
+            cell.presses = True
         if "data-row-toggle" in given:
             cell.toggled = True
             cell.toggle_at = cell.toggle_at or self.getpos()
@@ -437,6 +447,7 @@ class Cells(HTMLParser):
         if len(order) > RANKS:
             raise ValueError(f"A table's columns leave in at most {RANKS} ranks.")
         levels = {at: order.index(rank) + 1 for at, rank in ranked.items()}
+        self.opens = False
         self.cuts += [cell.drop for row in self.rows if row.section == "thead" for cell in row.cells if cell.drop]
         if not (self.sorts and _sorts(records)):
             self.cuts += _sort_controls(heads)
@@ -452,6 +463,8 @@ class Cells(HTMLParser):
                 self._gutter(row, gutter)
             if row.section == "tbody" and row.end:
                 self._detail(row, width, leaving, names, levels)
+        if self.opens:
+            self.marks.setdefault(self.table_at, []).append(" data-rows-can-open")
 
     def _open_row(self, row: _Row) -> None:
         """Mark the row open: its editor stands open on the line beneath it."""
@@ -561,17 +574,25 @@ class Cells(HTMLParser):
         shown at every width for a part the row never shows, and otherwise
         only where its column has left (`data-drop`) or a narrow box has let
         its part go (`data-narrow`). A clamped value is never copied: an open
-        row releases its clamp in place (cuts.css)."""
+        row releases its clamp in place (cuts.css).
+
+        A region that ``fills`` writes no copy: tables.js fills the line from
+        the row's own cells as it opens, and a narrow box shows the row's
+        controls and `narrow-more` parts in place, where it stacks the row.
+        Only a row drawn open, or one whose held cells hold a button or a
+        field, which a copy would send twice, keeps its copies, and says so
+        (`data-filled`)."""
 
         blocks: list[Span] = []
         entries: list[LineEntry] = []
+        held: list[_Cell] = []
         always = False
         for at, cell in _placed(row):
             if "colspan" in cell.attrs or not cell.closed:
                 continue
             # The row's controls leave it in a narrow box, as a column does,
             # for a copy on its open line.
-            if at in leaving and not cell.says_nothing:
+            if at in leaving and not cell.says_nothing and not self.fills:
                 entries.insert(0, LineEntry(None, (cell.opened, cell.value_end), whole=False, marks=" data-narrow"))
             # The row's editor leads its line, moved there: its ids are its own.
             editors = [span for _, span in _finished(cell, "editor")]
@@ -581,14 +602,25 @@ class Cells(HTMLParser):
             blocks += [span for label, span in moved if not label]
             always = always or bool(moved)
             shown = bool(cell.holds & {"row-more", "line-rest"})
-            narrow = "narrow-more" in cell.holds
+            narrow = "narrow-more" in cell.holds and not self.fills
             if not cell.says_nothing and (shown or at in levels or narrow):
                 when = "" if shown else f' data-drop="{levels[at]}"' if at in levels else ""
                 when += " data-narrow" if narrow and not shown else ""
                 label = names[at] if 0 <= at < len(names) else ""
                 entries.append(LineEntry(label, (cell.opened, cell.value_end), whole=False, marks=when))
+                held.append(cell)
                 always = always or shown
             entries += [LineEntry(label, span) for label, span in moved if label]
+        drawn_open = any(_finished(cell, "editor") for cell in row.cells)
+        # A row of a region that fills can open for what it holds in its own
+        # cells: its controls and `narrow-more` parts in a narrow box too.
+        narrows = any(at in leaving or "narrow-more" in cell.holds for at, cell in _placed(row))
+        self.opens = self.opens or (self.fills and bool(held or narrows))
+        if self.fills and held:
+            if drawn_open or any(cell.presses or cell.fields for cell in held):
+                self.marks.setdefault(row.start, []).append(" data-filled")
+            else:
+                entries = [entry for entry in entries if entry.whole]
         if always:
             self.marks.setdefault(row.start, []).append(" data-below")
         if blocks or entries:

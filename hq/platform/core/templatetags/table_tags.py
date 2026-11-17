@@ -123,6 +123,11 @@ def _open_line(width: int, held: str, listed: list[tuple[str, str, str]]) -> str
     return f'<tr class="row-detail" data-row-detail><td colspan="{width}">{held}{columns}</td></tr>'
 
 
+# The open line a region that fills draws once, which tables.js clones for a
+# row as it opens, an entry for each cell it holds back.
+_LINE_FRAME = f"<template data-open-line>{_open_line(1, '', [('', '', '')])}</template>"
+
+
 @register.simple_block_tag
 def open_line(content):
     """``{% open_line %}value{% endopen_line %}``: an open line holding one
@@ -143,7 +148,7 @@ def _unnamed(roles: list[tuple[int, str]]) -> list[tuple[int, str]]:
     return [(offset, " ".join(role for role in each.split() if role != "name")) for offset, each in roles]
 
 
-def mark_cells(markup: str, *, sorts: bool = True) -> str | None:
+def mark_cells(markup: str, *, sorts: bool = True, fills: bool = False) -> str | None:
     """The region's tables with each cell marked for what the stylesheet reads.
 
     A blank body cell is ``data-blank``, a cell of a column blank in every
@@ -157,10 +162,11 @@ def mark_cells(markup: str, *, sorts: bool = True) -> str | None:
     ``name`` for what names the row, else the role its class declares
     (``table_cells.ROLE_CLASSES``), so the stylesheet never reads a cell's content.
     Without ``sorts`` no row sorts on the page, so no heading keeps its control.
+    With ``fills`` a row's open line copies none of its cells (``Cells._detail``).
     None when the region holds tables and none of them a row beneath its head.
     """
 
-    cells = Cells(sorts=sorts)
+    cells = Cells(sorts=sorts, fills=fills)
     cells.feed(markup)
     cells.close()
     if cells.bodies and not any(cells.bodies):
@@ -236,6 +242,9 @@ def _region(
     action_label: Annotated[str, Describe("That link's label.")] = "",
     filtered: Annotated[bool, Describe("Its own search narrows it, so no rows says nothing matches.")] = False,
     clear: Annotated[str, Describe("The way back from that search.")] = "",
+    fills: Annotated[
+        bool, Describe("A row's open line is filled from the row's own cells as it opens, each cell written once.")
+    ] = False,
 ) -> dict[str, Any]:
     """The region a table sits in: the box it fits, named by ``label``.
 
@@ -268,7 +277,14 @@ def _region(
             "action_url": action_url,
             "action_label": action_label,
         }
-    return {"label": label, "css": " ".join(classes), "chart": chart, "scrolls": pane or chart, "empty": nothing}
+    return {
+        "label": label,
+        "css": " ".join(classes),
+        "chart": chart,
+        "scrolls": pane or chart,
+        "fills": fills,
+        "empty": nothing,
+    }
 
 
 class RegionNode(template.Node):
@@ -287,7 +303,7 @@ class RegionNode(template.Node):
         # asked only of a table with no rows, which is the only one to show it.
         options = {name: value.resolve(context) for name, value in self.options.items() if name != "remedy"}
         region = _region(label, **options)
-        content = mark_cells(self.nodelist.render(context), sorts=not region["chart"])
+        content = mark_cells(self.nodelist.render(context), sorts=not region["chart"], fills=region["fills"])
         if content is None:
             # A table with no rows would draw its headings over nothing, so the
             # region says it has nothing instead (docs/Design.md, Nothing empty
@@ -305,14 +321,17 @@ class RegionNode(template.Node):
         # in place.
         edits = "data-row-edit" in content
         return format_html(
-            '<div class="table-scroll{}"{}{}{}>{}</div>',
+            '<div class="table-scroll{}"{}{}{}{}>{}{}</div>',
             f" {region['css']}" if region["css"] else "",
             format_html(' role="group" aria-label="{}" tabindex="0"', region["label"]) if region["scrolls"] else "",
             mark_safe(" data-chart") if region["chart"] else "",
+            mark_safe(" data-fills") if region["fills"] else "",
             format_html(' id="table-{}" data-fragment=""', slugify(region["label"])) if edits else "",
             # The region's own content, rendered and escaped already; the mark
             # adds an attribute and nothing else.
             mark_safe(content),  # noqa: S308 - rendered and escaped already
+            # The open line and its entry a row's cells fill as it opens (tables.js).
+            mark_safe(_LINE_FRAME) if region["fills"] else "",  # noqa: S308 - a constant, its label escaped by _open_line
         )
 
 

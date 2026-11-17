@@ -340,6 +340,17 @@ says when it shows: where its column has left (`data-drop`), in a narrow box
 shows). So every column keeps its edges and every other row its height. *Gate:*
 `test_opening_a_row_moves_no_column_and_no_other_row`.
 
+A region that fills (`table_region ... fills=True`) writes each cell once.
+The browser's table layout cannot set a cell on a line beneath its row, so
+the line still shows a copy, but tables.js makes it as the row first opens.
+It clones each held cell into an entry of the region's one frame
+(`template[data-open-line]`), keeps its `data-drop` mark and draws no id twice.
+In a narrow box, where the row stacks, its controls and `narrow-more` parts
+show in place instead. Only a row drawn open, or one whose held cell holds a
+button or a field, keeps the server's copies (`data-filled`). *Gates:*
+`test_a_region_that_fills_writes_each_cell_once`, and the byte budgets
+`ROW_BYTES` and `CHROME_BYTES` in `test_table_fills.py`.
+
 - A `row-below` block, which the row's line never shows, and the row's editor
   are moved into a line the server draws after the row (`tr.row-detail`,
   `table_tags._detail_row`), shown while the row is open: the blocks first,
