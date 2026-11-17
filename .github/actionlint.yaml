@@ -8,6 +8,12 @@ rules:
   # ubuntu-latest moves to a new OS on GitHub's schedule; Renovate moves a
   # versioned label in every workflow at once.
   mutable-runner-label: error
+  # A docker:// action by digest, tagged or not, where zizmor refuses a
+  # tagged one only at its pedantic persona.
+  unpinned-uses: error
+  # The version beside a pinned commit is what Renovate rewrites with it, and
+  # what a reader checks.
+  missing-version-comment: error
 
 # The homelab deploy runner, and the hosted image every workflow names while
 # the bundled label list predates it. Declared so jactionlint stops

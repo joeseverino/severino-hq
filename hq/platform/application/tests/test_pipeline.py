@@ -1,9 +1,10 @@
 """What the pipeline promises: one pin per action, least privilege, sealed logs, and releases only from main.
 
-lint:workflows runs zizmor, which holds what any workflow should: actions pinned
-to a commit, no persisted checkout credentials, no expression expanded into a
-script, no dangerous trigger, no App token with every permission. These hold
-HQ's own promises, read through a YAML parser.
+lint:workflows runs jactionlint and zizmor, which hold what any workflow should:
+actions pinned to a commit with its version beside it, every job's timeout, no
+persisted checkout credentials, no expression expanded into a script, no
+dangerous trigger, no App token with every permission. These hold HQ's own
+promises, read through a YAML parser.
 """
 
 import json
@@ -173,15 +174,6 @@ def label(step: Node) -> str:
 
 @tag("source")
 class ActionPinTests(SimpleTestCase):
-    def test_every_docker_action_is_pinned_by_digest(self):
-        """zizmor's unpinned-images refuses an untagged ``docker://`` action at
-        its default persona and a tagged one only at pedantic."""
-        for path in [*workflows(), *composite_actions()]:
-            for action in uses(load(path)):
-                if action.startswith("docker://"):
-                    with self.subTest(file=path.name, action=action):
-                        self.assertRegex(action, r"@sha256:[0-9a-f]{64}$")
-
     def test_every_action_has_one_version_across_workflows_and_composite_actions(self):
         pins: dict[str, set[str]] = {}
         for path in [*workflows(), *composite_actions()]:
@@ -190,21 +182,6 @@ class ActionPinTests(SimpleTestCase):
                     pins.setdefault(match.group(1), set()).add(match.group(2))
         self.assertGreater(len(pins), 5)
         self.assertEqual({action: shas for action, shas in pins.items() if len(shas) > 1}, {})
-
-    def test_every_pinned_commit_carries_its_version_beside_it(self):
-        """The comment is what Renovate rewrites with the commit, and what a reader
-        checks. zizmor's ref-version-mismatch asks GitHub's API, so the offline
-        run skips it. A comment is no part of the parsed document, so this reads lines."""
-        pinned = [
-            (path.name, line.strip())
-            for path in [*workflows(), *composite_actions()]
-            for line in path.read_text().splitlines()
-            if re.search(r"uses:\s*[\w.-]+/\S*@[0-9a-f]{40}", line)
-        ]
-        self.assertGreater(len(pinned), 10)
-        for name, line in pinned:
-            with self.subTest(file=name, line=line):
-                self.assertRegex(line, r"@[0-9a-f]{40} # v\d+(\.\d+){0,2}$")
 
 
 BROWSER_SETUP = "setup:browser"
