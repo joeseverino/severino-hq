@@ -443,9 +443,11 @@ value where its row opens, at any width. A row with no toggle (a table with
 no gutter heading, a fold's head) clamps nothing, so its value wraps whole,
 and no cell carries its value again as a title. Only words are held: each
 part of words in it (`data-cell`) is clamped on its own, so a pill or a
-toggle beside them stays whole. A value of words of 32 characters at most
+toggle beside them stays whole, and a cell holding such parts is the clamp
+itself, with no box drawn around them. A value of words of 32 characters at most
 (`table_cells.SHORT`: an address and its port, a host, a project's name) is
-one box (`cell-short`) as wide as the value up to its column's share, and as
+one box (`cell-short`, the value's own list where it is one) as wide as the
+value up to its column's share, and as
 wide as its column where that is more, so its column holds it whole while the
 table is laid out as one, and past its share it wraps inside its box. Its
 column still asks for the value whole (`calc-size` holds only the share as

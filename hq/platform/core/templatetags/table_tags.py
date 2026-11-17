@@ -140,10 +140,11 @@ def mark_cells(markup: str, *, sorts: bool = True) -> str | None:
 
     A blank body cell is ``data-blank``, a cell of a column blank in every
     row ``data-blank-column``; a cell says the width its column leaves at
-    (``data-drop``), a body cell its column's kind and a cut one its whole
-    value in its title, a long one held to a few lines (``cell-clamp``), a
-    short one held whole up to its column's share (``cell-short``), and
-    a group's heading row spans every declared column. After each row that
+    (``data-drop``), a body cell its column's kind, a long one held to a
+    few lines (``cell-clamp``), a short one held whole up to its column's
+    share (``cell-short``), each in a box of the region's own only where no
+    element of the cell can be it (``Cells._box``), and a group's heading
+    row spans every declared column. After each row that
     holds something back is its open line (``_detail_row``).
     What a part of a cell is, which decides how it wraps, is its ``data-cell``:
     ``name`` for what names the row, else the role its class declares
@@ -159,7 +160,7 @@ def mark_cells(markup: str, *, sorts: bool = True) -> str | None:
     cells.close()
     if cells.bodies and not any(cells.bodies):
         return None
-    if not any((cells.marks, cells.details, cells.roles, cells.cuts, cells.gutters, cells.toggles, cells.shorts)):
+    if not any((cells.marks, cells.details, cells.roles, cells.cuts, cells.classed, cells.toggles, cells.shorts)):
         return markup
     text = _Markup(markup)
     cuts = sorted((text.point(start), text.point(end)) for start, end in cells.cuts)
@@ -191,8 +192,11 @@ def _inserts(cells: Cells, markup: str, text: _Markup) -> list[tuple[int, str]]:
     inserts += [(offset, f' data-cell="{role}"') for offset, role in roles]
     # A copy on the open line keeps what each part is, but names no row there.
     text.marks = sorted((offset, f' data-cell="{role}"') for offset, role in _unnamed(roles) if role)
-    for point, mark in cells.gutters + cells.opened:
-        inserts.append((after_name(point[0]) if point[1] is None else text.point(point), mark))
+    for point, names in cells.classed.items():
+        if point[1] is None:
+            inserts.append((after_name(point[0]), f' class="{" ".join(names)}"'))
+        else:
+            inserts.append((text.point(point), "".join(f"{name} " for name in names)))
     for opened, closed in cells.clamps:
         inserts += [(text.at(opened), '<div class="cell-clamp">'), (text.at(closed), "</div>")]
     for opened, closed in cells.shorts:

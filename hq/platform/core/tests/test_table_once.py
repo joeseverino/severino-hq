@@ -14,7 +14,7 @@ from .signed_in_case import _AuthedTestCase
 
 # The bytes a row of `test_a_rows_bytes_hold_to_their_budget`'s table
 # may draw, its cells and their marks written once.
-ROW_BYTES = 1_600
+ROW_BYTES = 1_410
 # The bytes a signed-in page of a list with no rows may draw: the page's
 # chrome, every frame it carries for its scripts, and the list's empty state.
 CHROME_BYTES = 17_200

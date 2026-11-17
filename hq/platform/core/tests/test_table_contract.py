@@ -504,6 +504,28 @@ class TableTagTests(SimpleTestCase):
         boxed = re.findall(r'data-col="(\w+)"[^>]*>\s*<div class="cell-short">', _render(source))
         self.assertEqual(boxed, ["name", "proxy"])
 
+    def test_a_box_is_drawn_only_where_no_element_of_the_cell_can_be_it(self):
+        """A short value said by one list is its own box, and a long value
+        whose parts its clamp holds each on their own is clamped by its cell:
+        the region wraps neither in a box of its own."""
+
+        long = "a sentence long enough to stand several lines tall in a narrow column"
+        source = (
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" gutter=True %}'
+            '{% table_heading "Reads" %}</tr></thead><tbody>'
+            f'<tr><td data-col="named"><strong>{long}</strong></td>'
+            '<td data-col="list"><ul class="dot-list"><li>DNS</li><li>Mail</li></ul></td></tr>'
+            "</tbody></table>{% endtable_region %}"
+        )
+        found = all_elements(_render(source))
+        boxes = {
+            name: [(each.tag, each.attrs.get("data-col")) for each in found if name in each.classes]
+            for name in ("cell-short", "cell-clamp")
+        }
+
+        self.assertEqual(boxes, {"cell-short": [("ul", None)], "cell-clamp": [("td", "named")]})
+        self.assertFalse([each for each in found if each.tag == "div" and "td" in [up.tag for up in each.ancestors]])
+
     def test_a_row_that_holds_something_back_has_its_line_beneath(self):
         """After a row is the line its toggle opens: the blocks it keeps
         beneath itself, then each labeled block under its label. What a cell

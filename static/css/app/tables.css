@@ -96,8 +96,8 @@
 .data-table:has(> thead > tr:last-child > :nth-child(8 of :not([data-blank-column]))) { --columns: 8; }
 .data-table:has(> thead > tr:last-child > :nth-child(9 of :not([data-blank-column]))) { --columns: 9; }
 .data-table:has(> thead > tr:last-child > :nth-child(10 of :not([data-blank-column]))) { --columns: 10; }
-/* A short value's box (below) is no box in a stacked row or on the open line. */
-.cell-short { display: contents; }
+/* A short value's box (below) is no box in a stacked row or on the open line, unless it is the value's own list. */
+.cell-short:not(ul, ol) { display: contents; }
 /* Laid out as a table (a narrow box stacks it, below): a state keeps its line. A short value of words keeps its line up to its share; a longer one (past `table_cells.SHORT`, or a state or figure longer than a line of words, `data-long`) wraps at its words in a line of `--row-words`, or its share where that is less, so no column of words is set a word to a line. */
 @container table-region (width >= 36rem) {
   .data-table > tbody > tr:not(.row-detail) > [data-kind="status"]:not([data-long]) { white-space: nowrap; }
@@ -105,8 +105,9 @@
   .data-table > tbody > tr:not(.row-detail) > :is(td, th):is([data-long], :is([data-kind="name"], [data-kind="prose"], [data-kind="identifier"]):not([data-blank], :has(> .cell-short))) {
     box-sizing: content-box; min-inline-size: min(var(--row-words), var(--share));
   }
-  /* A short value of words (`cell-short`, table_cells) is one box as wide as it says, up to its share, so its column holds it whole: broken, a project's name or an address and its port reads as two. Past its share it wraps inside its box. The box fills its cell, so a column given more than its share (the room a table has past every column's needs) holds the value on that wider line. */
-  .data-table > tbody > tr:not(.row-detail) > :is(td, th) > .cell-short { display: inline-block; inline-size: max-content; max-inline-size: var(--share); min-inline-size: 100%; vertical-align: top; baseline-source: first; }
+  /* A short value of words (`cell-short`, table_cells) is one box as wide as it says, up to its share, so its column holds it whole: broken, a project's name or an address and its port reads as two. Past its share it wraps inside its box. The box fills its cell, so a column given more than its share (the room a table has past every column's needs) holds the value on that wider line. A value that is one list is its own box, a block already. */
+  .data-table > tbody > tr:not(.row-detail) > :is(td, th) > .cell-short { inline-size: max-content; max-inline-size: var(--share); min-inline-size: 100%; }
+  .data-table > tbody > tr:not(.row-detail) > :is(td, th) > .cell-short:not(ul, ol) { display: inline-block; vertical-align: top; baseline-source: first; }
   /* Where an engine sizes by a box's own content (`calc-size`), only the room a short value is sure of is held to its share: its column still asks for the value whole, so a table with room past every column's needs gives it there rather than to a column already whole. */
   @supports (min-inline-size: calc-size(max-content, size)) {
     .data-table > tbody > tr:not(.row-detail) > :is(td, th) > .cell-short { inline-size: 100%; max-inline-size: none; min-inline-size: calc-size(max-content, min(size, var(--share))); }
@@ -347,7 +348,7 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
     & > * > tr:not(.row-detail) { display: flex; }
     /* A cell is as wide as its row's line, and a box wider than that line (a value set to a width of its own) is held to it and wraps there, so nothing in a stacked row runs past its card. A short value's box is no box here, so what it holds is held. */
     & > * > tr:not(.row-detail) > * { min-inline-size: 0; }
-    & > * > tr > * > *, & > * > tr > * > .cell-short > * { max-inline-size: 100%; }
+    & > * > tr > * > *, & > * > tr > * > .cell-short:not(ul, ol) > * { max-inline-size: 100%; }
   }
   .table-scroll:not([data-chart]) > .data-table:not([data-marks]) {
     & > tbody > tr.is-expanded + tr.row-detail { display: block; }

@@ -117,6 +117,13 @@ class _Cell:
     # there beside them: a cell said by its pills alone is what a row is.
     tops: list[bool] = field(default_factory=list)
     loose: bool = False
+    # Its first element at its top, and where a class goes on that element:
+    # a value said by one list is its own short value's box.
+    top_tag: str = ""
+    top_class: Point | None = None
+    # Whether an element in what it shows on its row's line carries a part's
+    # role (`data-cell`), each of which a clamp holds on its own.
+    parted: bool = False
     # Whether it holds a row's toggle, and one that opens a folded group,
     # which is the row's own.
     toggled: bool = False
@@ -203,7 +210,8 @@ class Cells(HTMLParser):
         # Where each element or cell with a role starts, and its roles.
         self.roles: dict[tuple[int, int], set[str]] = {}
         # Each long cell's content, held to a few lines (`cell-clamp`), and
-        # each short one's, held whole up to its column's share (`cell-short`).
+        # each short one's, held whole up to its column's share (`cell-short`),
+        # where a box of the region's own holds it.
         self.clamps: list[Span] = []
         self.shorts: list[Span] = []
         # Each row's open line: where it goes, how many columns it spans, the
@@ -212,13 +220,13 @@ class Cells(HTMLParser):
         # What is taken out: the sort control of a table with too few rows, a
         # heading's rank, and what a row moves to its open line.
         self.cuts: list[tuple[Point, Point]] = []
-        # Where a gutter cell's class gets `row-gutter`, and where its row's
-        # toggle goes.
-        self.gutters: list[tuple[Point, str]] = []
+        # Where a class is added to an element's own: a gutter cell's
+        # `row-gutter`, an open row's `is-expanded` (a row whose editor is
+        # open), and the mark of a clamp or a short value's box that an
+        # element of the cell can be itself (``_box``).
+        self.classed: dict[Point, list[str]] = {}
         # Where each row's toggle goes, and whether its row is drawn open.
         self.toggles: list[tuple[Position, bool]] = []
-        # Where an open row's class gets `is-expanded`: a row whose editor is open.
-        self.opened: list[tuple[Point, str]] = []
         # Whether the sort control being read has its mark open.
         self.sorting: bool = False
 
@@ -305,6 +313,15 @@ class Cells(HTMLParser):
         self.children[-1] += 1
         if len(self.open) == 1:
             cell.tops.append("pill" in classes)
+            if len(cell.tops) == 1:
+                found = _CLASS_VALUE.search(self.get_starttag_text() or "")
+                cell.top_tag, cell.top_class = tag, (self.getpos(), found and found.end())
+        if (
+            self.off_line is None
+            and self.part is None
+            and ("data-cell" in given or not ROLE_CLASSES.keys().isdisjoint(classes))
+        ):
+            cell.parted = True
         # The row's name is what a cell leads with in bold, itself or as its
         # link's words: the row header of a table that has none.
         leads = len(self.open) == 1 or (len(self.open) == 2 and self.open[1] == "a" and self.firsts[1])
@@ -468,10 +485,7 @@ class Cells(HTMLParser):
     def _open_row(self, row: _Row) -> None:
         """Mark the row open: its editor stands open on the line beneath it."""
 
-        if row.class_at is None:
-            self.opened.append(((row.start, None), ' class="is-expanded"'))
-        else:
-            self.opened.append(((row.start, row.class_at), "is-expanded "))
+        self._class((row.start, row.class_at), "is-expanded")
 
     def _gutter(self, row: _Row, place: int) -> None:
         """The cell of a row in the column whose heading keeps the gutter
@@ -482,10 +496,7 @@ class Cells(HTMLParser):
         if cell is None:
             return
         if "row-gutter" not in _classes(cell.attrs):
-            if cell.class_at is None:
-                self.gutters.append(((cell.start, None), ' class="row-gutter"'))
-            else:
-                self.gutters.append(((cell.start, cell.class_at), "row-gutter "))
+            self._class((cell.start, cell.class_at), "row-gutter")
         if row.section != "tbody" or cell.folds:
             return
         if cell.toggled:
@@ -546,12 +557,34 @@ class Cells(HTMLParser):
         if body and words and not cell.says_nothing:
             if _long(cell):
                 if self.toggled and cell.closed:
-                    self.clamps.append((cell.opened, cell.value_end))
+                    self._box(cell, kind, "cell-clamp")
             # A fold's toggle is drawn before its head's value, which the
             # value's span (ended at a toggle) would leave out.
             elif cell.longest <= SHORT and cell.closed and not cell.folds:
-                self.shorts.append((cell.opened, cell.value_end))
+                self._box(cell, kind, "cell-short")
         return marks
+
+    def _box(self, cell: _Cell, kind: str, mark: str) -> None:
+        """Hold the cell's value in its clamp or its short value's box, the
+        region's own box only where no element of the cell can be it. A clamp
+        holds each part with a role on its own (cuts.css), so around parts
+        the cell is the clamp; a value that is one list (a block of its own)
+        is its own short value's box."""
+
+        sole = len(cell.tops) == 1 and not cell.loose and cell.top_class is not None
+        if mark == "cell-clamp" and (cell.parted or (cell.names and kind not in _HELD_KINDS)):
+            self._class((cell.start, cell.class_at), mark)
+        elif mark == "cell-short" and sole and cell.top_tag in _LISTS:
+            self._class(cell.top_class, mark)
+        else:
+            (self.clamps if mark == "cell-clamp" else self.shorts).append((cell.opened, cell.value_end))
+
+    def _class(self, at: Point, name: str) -> None:
+        """Add ``name`` to the class of the element whose start tag is at
+        ``at``: past its class value's start (``at``'s count), or where it
+        has none, a class attribute of its own."""
+
+        self.classed.setdefault(at, []).append(name)
 
     def _name(self, row: _Row, kinds: dict[int, str], named: int) -> None:
         """Mark what names the row, in each cell of words that leads with it:
@@ -759,5 +792,9 @@ def _empty_columns(heads: list[list[_Cell]], named: int, body: list[_Row]) -> se
             empty.add(index)
     return empty
 
+
+# The elements that are a block of their own, so a value said by one alone is
+# its own short value's box (tables.css).
+_LISTS = frozenset({"ul", "ol"})
 
 _VOID = frozenset({"area", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"})
