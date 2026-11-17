@@ -436,10 +436,13 @@ contexts make the run much slower, so no gate records; nothing waits on the
 job, and its failure never fails CI. It keeps the map, coverage's own
 `contexts_by_lineno` read back by test module, as the artifact `fast-map` of
 the commit it checked out. From the same recording, `mise run audit:tests`
-names each test whose lines other tests of its app or package also cover,
-and the job keeps that report as the artifact `test-audit`: candidates to
-read before deleting a test, since two tests running the same lines may
-assert different outcomes. fast fetches through gh the map of the nearest
+names each test whose lines a test of its module (its class, in a large
+module) also covers, and the tests of its app or package that run the same
+lines, ranked by the lines each runs past its setup, and leaves out the
+tests tagged `source` or `tree` and those of `tools/`, whose lines coverage
+does not measure. The job keeps that report as the artifact `test-audit`:
+candidates to read before deleting a test, since two tests running the same
+lines may assert different outcomes. fast fetches through gh the map of the nearest
 commit on HEAD's first-parent history, as far back as `MAP_REACH` in
 `tools/gate/chain.py`, into `$(git rev-parse --git-common-dir)/severino/fast-line-maps/`
 (`tools/gate/testmap.py`), and says where its map came from, or that none
