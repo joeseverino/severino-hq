@@ -46,18 +46,6 @@ from hq.platform.core.tests.browser.estate import ExampleEstateBrowserTests, est
 from hq.platform.core.tests.browser.gate import LIFTED, BrowserGate, add_css
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
 from hq.platform.core.tests.browser.probes.audit import AUDIT
-from hq.platform.core.tests.browser.reference import (
-    REFERENCE,
-    REFERENCE_DARK,
-    OpenedTag,
-    draw_whole_reference,
-    open_tag,
-    opened_operation,
-    opened_walk,
-    render_reference,
-    served_document,
-    wait_for_reference,
-)
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.shots import TALLEST, extent_of, shoot_page
 from hq.platform.core.tests.browser.stress import ALL_PAGES, stress_pages
@@ -71,6 +59,18 @@ from hq.platform.core.tests.browser.survey import (
 from hq.platform.core.tests.browser.widths import PHONE_SCREEN
 from hq.platform.core.tests.look_posts import Posted, is_post, post_names, posted
 from hq.platform.core.tests.look_records import EstatePages
+from hq.platform.core.tests.look_reference import (
+    REFERENCE,
+    REFERENCE_DARK,
+    OpenedTag,
+    draw_whole_reference,
+    open_tag,
+    opened_operation,
+    opened_walk,
+    render_reference,
+    served_document,
+    wait_for_reference,
+)
 from hq.platform.core.tests.look_report import (
     Found,
     Measured,

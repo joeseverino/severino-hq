@@ -57,7 +57,7 @@ THEMES = ("light", "dark")
 _REFUSED = "/example-refused/"
 _STYLED = '<!doctype html><html><head><meta charset="utf-8"><style>p { color: red }</style></head><body><p>Example</p></body></html>'
 # The API reference mounts a vendored viewer, whose markup is not HQ's to hold
-# to these rules; ReferenceBrowserTests holds only what HQ gives the page.
+# to these rules.
 _NOT_HQS_MARKUP = {"api_reference:reference"}
 # Reached from the header on every page rather than from the navigation.
 _HEADER = ("action_items",)

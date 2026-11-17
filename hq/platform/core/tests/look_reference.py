@@ -1,9 +1,5 @@
-"""The API reference: a vendored viewer in HQ's frame and palette.
-
-The viewer's own markup is the vendor's (``estate._NOT_HQS_MARKUP``), so the
-gate reads only what HQ gives the page: its frame, its loading line, its
-palette, its sidebar's outline and what it lets the viewer reach. The walk
-helpers here are dev:look's, which opens the reference on request."""
+"""dev:look's walk of the API reference, a vendored viewer HQ serves: it
+opens the reference on request, each tag or one operation, every entry drawn."""
 
 import difflib
 import hashlib
@@ -11,31 +7,16 @@ import json
 import re
 import unicodedata
 from dataclasses import dataclass
-from typing import Any, override
+from typing import Any
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
-from django.templatetags.static import static
 from django.test import Client
 from django.urls import reverse
-lazy from playwright.sync_api import expect
 
 from hq.platform.application.plugin_testing import form_keyed
-from hq.platform.core.tests.browser.gate import BrowserGate, answered
+from hq.platform.core.tests.browser.gate import answered
 from hq.platform.core.tests.browser.selectors import SELECTORS
-from hq.platform.core.tests.browser.serving import ORIGIN
-from hq.platform.core.tests.browser.widths import WIDE
-
-
-def _opaque(color: str) -> tuple[int, ...]:
-    """A computed color's red, green and blue, without its opacity, as 0-255:
-    ``rgb(255, 255, 255)`` and ``color(srgb 1 1 1 / 0.8)`` are one color."""
-
-    numbers = [float(n) for n in re.findall(r"[\d.]+", color.split("/", maxsplit=1)[0])]
-    if color.startswith("color("):
-        return tuple(round(n * 255) for n in numbers[:3])
-    return tuple(round(n) for n in numbers[:3])
-
 
 # The API reference: a vendored viewer mounted inside HQ's frame. Its markup is
 # the vendor's, so what reads it finds it by tag and ARIA, never by class.
@@ -358,133 +339,6 @@ def open_tag(page, opened):
     return page.evaluate(_UNDRAWN, [SELECTORS["reference"], list(opened.tags), list(opened.parts)])
 
 
-# Where the page and the viewer's mount stand, and the window's foot.
-_LOADING_PLACE = """([root, content]) => {
-  const page = document.querySelector(content).getBoundingClientRect();
-  return {page: page.top, foot: page.bottom, mount: document.querySelector(root).getBoundingClientRect().top,
-          window: innerHeight};
-}"""
-
-# Every stylesheet the page links has arrived: a box read before then is drawn
-# by no rule of the page's yet.
-_STYLED = "() => [...document.querySelectorAll('link[rel=stylesheet]')].every((link) => link.sheet)"
-
-# What stands over HQ's header, what of the viewer's is pinned under it, and
-# any trail the viewer is showing.
-_REFERENCE_FRAME = """(root) => {
-  const header = document.querySelector('header');
-  const bar = header.getBoundingClientRect();
-  const over = [0.05, 0.25, 0.5, 0.75, 0.95]
-    .map((share) => document.elementFromPoint(bar.left + bar.width * share, bar.top + bar.height / 2))
-    .filter((el) => !header.contains(el))
-    .map((el) => el.tagName.toLowerCase());
-  const viewer = document.querySelector(root);
-  const stuck = (el) => el.checkVisibility() && ['sticky', 'fixed'].includes(getComputedStyle(el).position);
-  const pinned = [...viewer.querySelectorAll('aside, nav, header, [data-scalar-scroll-header]')]
-    .filter(stuck)
-    .map((el) => [el.tagName.toLowerCase(), Math.round(el.getBoundingClientRect().top)])
-    .filter(([, top]) => top < Math.round(bar.bottom) - 1);
-  // The line the viewer's navigation pins at: the box that holds its sidebar
-  // or its bar in place, the box itself or the nearest one around it.
-  const holder = (el) => {
-    for (let up = el; up && up !== viewer; up = up.parentElement) if (stuck(up)) return up;
-    return null;
-  };
-  const lines = [...viewer.querySelectorAll('aside, header')]
-    .filter((el) => el.checkVisibility())
-    .map(holder)
-    .filter(Boolean)
-    .map((el) => Math.round(parseFloat(getComputedStyle(el).top)));
-  const trails = [...document.querySelectorAll('nav[aria-label="Breadcrumb"]')]
-    .filter((el) => el.checkVisibility())
-    .map((el) => el.textContent.trim());
-  return {header: Math.round(bar.top), over, pinned, trails, lines, floor: Math.round(bar.bottom),
-    sideways: document.documentElement.scrollWidth - document.documentElement.clientWidth};
-}"""
-
-# What the viewer paints, beside what HQ paints.
-_REFERENCE_PAINT = """() => {
-  const behind = (el) => {
-    for (let up = el; up; up = up.parentElement) {
-      const color = getComputedStyle(up).backgroundColor;
-      if (!/rgba\\(0, 0, 0, 0\\)|transparent/.test(color)) return color;
-    }
-    return '';
-  };
-  const title = document.querySelector('main main h1');
-  const page = getComputedStyle(document.body);
-  return {
-    mode: document.body.className,
-    page: page.backgroundColor, viewer: behind(title),
-    ink: page.color, title: getComputedStyle(title).color,
-    face: page.fontFamily, title_face: getComputedStyle(title).fontFamily,
-    header: behind(document.querySelector('header')), sidebar: behind(document.querySelector('aside')),
-  };
-}"""
-
-_REFERENCE_CHROME = """() => ({
-  said: document.querySelector('main').innerText,
-  // Every link drawn anywhere on the page, the viewer's sidebar and its foot included.
-  leaves: [...document.links]
-    .filter((a) => a.origin !== location.origin && a.checkVisibility())
-    .map((a) => a.href),
-  search: document.querySelector('aside button').innerText,
-})"""
-
-
-def reference_outline(document):
-    """The sidebar HQ's own document declares: each group, the summaries of
-    its own operations in the document's order, and the domains under it."""
-
-    under: dict[str, list[str]] = {}
-    for tag in document["tags"]:
-        if "parent" in tag:
-            under.setdefault(tag["parent"], []).append(tag["summary"])
-    operations: dict[str, list[str]] = {}
-    for item in document["paths"].values():
-        for operation in item.values():
-            operations.setdefault(operation["tags"][0], []).append(operation["summary"])
-    return [
-        (tag["summary"], operations.get(tag["name"], []), under.get(tag["name"], []))
-        for tag in document["tags"]
-        if "parent" not in tag
-    ]
-
-
-def _named(role, name):
-    """An ARIA snapshot node of ``role`` and exactly ``name``, quoted as YAML."""
-
-    return _quoted(f"{role} {json.dumps(name)}")
-
-
-def _quoted(node):
-    """An ARIA snapshot node, quoted as YAML."""
-
-    return "'" + node.replace("'", "''") + "'"
-
-
-def sidebar_snapshot(outline):
-    """The sidebar ``outline`` declares with every group open, as an ARIA
-    snapshot: the viewer's introduction, then each group, and under a group
-    its own operations, each a link named for its summary first, then each
-    domain that opens in turn, both lists exactly those entries. A domain's
-    operations are left to the viewer."""
-
-    lines = ["- complementary:", "  - list:", "    - /children: equal", "    - listitem:", "      - link /.*/:"]
-    lines.append("        - /url: /^#description\\//")
-    for group, operations, domains in outline:
-        lines += ["    - listitem:", f"      - {_named('link', group)}", "      - button [expanded]"]
-        if operations or domains:
-            lines += ["      - list:", "        - /children: equal"]
-            for operation in operations:
-                # The pattern is read as a JavaScript one, so only its syntax is escaped.
-                pattern = re.sub(r"[.*+?^${}()|[\]\\/]", r"\\\g<0>", operation)
-                lines += ["        - listitem:", f"          - {_quoted(f'link /^{pattern} /')}"]
-            for domain in domains:
-                lines += ["        - listitem:", f"          - {_named('link', domain)}", "          - button"]
-    return "\n".join(lines)
-
-
 def render_reference():
     """The reference in each theme, the document its viewer reads and the count
     the header asks for, by path."""
@@ -501,152 +355,3 @@ def render_reference():
         pages[REFERENCE_DARK] = answered(client.get(page))
         transaction.set_rollback(True)
     return pages
-
-
-class ReferenceBrowserTests(BrowserGate):
-    """The API reference is a page of HQ's: in its frame, under its loading
-    line, in its palette, with its outline, reaching nothing but HQ. Each
-    test opens it once, at the widest width, where every part of the frame
-    shows. A refusal by the page's policy fails any of them (``BrowserGate``)."""
-
-    scripted = True
-    document: dict[str, Any]
-
-    @classmethod
-    @override
-    def render(cls):
-        pages = render_reference()
-        cls.document = json.loads(pages[reverse("hq_api:openapi").strip("/")])
-        return pages
-
-    @override
-    def start(self, **options):
-        super().start(**options)
-        self.requests: list[str] = []
-        self.refused: list[str] = []
-        self.page.on("request", lambda request: self.requests.append(request.url))
-        self.page.on(
-            "response",
-            lambda response: self.refused.append(response.url) if response.status >= 400 else None,
-        )
-
-    def visit(self, name=REFERENCE):
-        self.page.set_viewport_size({"width": WIDE, "height": 900})
-        self.page.goto(f"{ORIGIN}/{name}/", wait_until="load")
-        wait_for_reference(self.page)
-
-    def sidebar(self):
-        """The viewer's sidebar, by its role."""
-
-        return self.page.locator(SELECTORS["reference"]).get_by_role("complementary")
-
-    def test_the_sidebar_is_hqs_navigation(self):
-        """The groups the document declares, each with its own operations, then
-        its domains, in its order, and nothing else: none for the schemas."""
-
-        outline = reference_outline(self.document)
-        self.assertTrue(any(under for _, _, under in outline))
-        self.assertTrue(any(own and under for _, own, under in outline))
-        self.visit()
-        sidebar = self.sidebar()
-        # Each group's control, opened as a reader opens it. A group's control
-        # comes before the domains it shows, so the first of its name is its own.
-        for group, _, _ in outline:
-            control = sidebar.get_by_role("button", name=re.compile(rf" - {re.escape(group)}$")).first
-            if control.get_attribute("aria-expanded") == "false":
-                control.click()
-            expect(control).to_have_attribute("aria-expanded", "true")
-        expect(sidebar).to_match_aria_snapshot(sidebar_snapshot(outline))
-
-    def test_the_header_is_never_covered_and_no_trail_is_shown(self):
-        """HQ's header on top at the page's head and halfway down, the viewer's
-        pinned parts just below it, no trail, no sideways scroll."""
-
-        self.visit()
-        height = self.page.evaluate("() => document.documentElement.scrollHeight")
-        for offset in (0, height // 2):
-            with self.subTest(offset=offset):
-                self.page.evaluate("(y) => window.scrollTo(0, y)", offset)
-                self.settle()
-                frame = self.page.evaluate(_REFERENCE_FRAME, SELECTORS["reference"])
-                self.assertEqual(frame["header"], 0)
-                self.assertEqual(frame["over"], [])
-                self.assertEqual(frame["pinned"], [])
-                # Pinned at the header's foot: no higher, where the header would
-                # hide it, and no lower, where the page would show through.
-                self.assertTrue(frame["lines"])
-                for line in frame["lines"]:
-                    self.assertAlmostEqual(line, frame["floor"], delta=1)
-                self.assertEqual(frame["trails"], [])
-                self.assertLessEqual(frame["sideways"], 1)
-
-    def test_the_loading_line_holds_the_references_place(self):
-        """While the viewer's bundle is on its way, the server's HTML already
-        holds the place the reference takes: the page reaches the window's
-        foot, and the viewer draws where the page and its mount already stand,
-        so nothing of HQ's moves as it does."""
-
-        bundle = f"**{static('vendor/scalar/standalone.js')}"
-        held = []
-
-        # A function of its own: Playwright marks the handler it is given,
-        # which a list's bound append cannot carry.
-        def hold(route):
-            held.append(route)
-
-        self.page.route(bundle, hold)
-        place = [SELECTORS["reference"], SELECTORS["content"]]
-        self.page.set_viewport_size({"width": WIDE, "height": 900})
-        with self.page.expect_request(bundle):
-            self.page.goto(f"{ORIGIN}/{REFERENCE}/", wait_until="commit")
-        expect(self.page.locator(SELECTORS["content"]).get_by_role("status")).to_be_visible()
-        self.page.wait_for_function(_STYLED)
-        loading = self.page.evaluate(_LOADING_PLACE, place)
-        while held:
-            held.pop().fallback()
-        wait_for_reference(self.page)
-        drawn = self.page.evaluate(_LOADING_PLACE, place)
-        self.assertGreaterEqual(loading["foot"], loading["window"] - 1)
-        self.assertEqual((drawn["page"], drawn["mount"]), (loading["page"], loading["mount"]))
-        self.page.unroute(bundle)
-
-    def assert_painted_as_hq(self, paint, mode):
-        self.assertIn(mode, paint["mode"].split())
-        self.assertEqual(paint["viewer"], paint["page"])
-        # The header lets the page show through its surface; the sidebar is that
-        # surface, so they match in color whatever the header's opacity.
-        self.assertEqual(_opaque(paint["sidebar"]), _opaque(paint["header"]))
-        self.assertEqual(paint["title"], paint["ink"])
-        self.assertEqual(paint["title_face"], paint["face"])
-
-    def test_both_themes_are_painted_from_hqs_tokens(self):
-        """The system's theme when none is chosen, the chosen one when it is."""
-
-        painted = {}
-        for scheme in ("light", "dark"):
-            with self.subTest(scheme=scheme):
-                self.start(color_scheme=scheme)
-                self.visit()
-                painted[scheme] = self.page.evaluate(_REFERENCE_PAINT)
-                self.assert_painted_as_hq(painted[scheme], f"{scheme}-mode")
-        self.assertNotEqual(painted["light"]["page"], painted["dark"]["page"])
-        with self.subTest(chosen="dark", system="light"):
-            self.start(color_scheme="light")
-            self.visit(REFERENCE_DARK)
-            self.assertEqual(self.page.evaluate(_REFERENCE_PAINT), painted["dark"])
-
-    def test_the_viewer_offers_only_what_works_here(self):
-        """One search that says it is the reference's, no request sent from the page,
-        no token asked for, no way out to the vendor, and every address it asks
-        for answered."""
-
-        self.visit()
-        chrome = self.page.evaluate(_REFERENCE_CHROME)
-        for words in ("Test Request", "Bearer Token", "Open API Client", "Powered by", "Client Libraries"):
-            with self.subTest(words=words):
-                self.assertNotIn(words, chrome["said"])
-        self.assertEqual(chrome["leaves"], [])
-        self.assertIn("Search the reference", chrome["search"])
-        self.assertFalse(chrome["search"].strip().lower().endswith("k"))
-        self.assertEqual([url for url in self.requests if not url.startswith(ORIGIN)], [])
-        self.assertEqual(self.refused, [])

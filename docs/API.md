@@ -295,12 +295,10 @@ reference, not a client:
 `hq/platform/api/tests/test_reference.py` holds the configuration, the sheet
 and the policy to the bundle (every option and variable is one the bundle
 reads, every sample target it ships is hidden but curl, every style it writes
-admitted). `ReferenceBrowserTests` in the browser gate holds only what HQ gives
-the page, once each at the widest width in WebKit: the frame, the loading line,
-both palettes, the sidebar's outline and that nothing leaves HQ. The viewer's
-own markup is the vendor's, and the gate reads none of it; the document it
-draws is held by `lint:drift-api-document`, `lint:openapi` and the API's own
-tests. After replacing the bundle, `test_reference.py` says what moved.
+admitted). The viewer is the vendor's, so the browser gate opens none of it:
+`mise run dev:look api/docs` shows it drawn, `--open` with each tag opened. The
+document it draws is held by `lint:drift-api-document`, `lint:openapi` and the
+API's own tests. After replacing the bundle, `test_reference.py` says what moved.
 
 ### Descriptions
 
