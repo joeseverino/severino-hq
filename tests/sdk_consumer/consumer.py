@@ -259,6 +259,32 @@ def may_use(spec: capabilities.CapabilitySpec, principal: capabilities.Principal
     spec.permitted_to("example.write")  # type: ignore[arg-type]
 
 
+@dataclass(frozen=True, slots=True)
+class _ThingCommand:
+    name: str = ""
+
+
+def keeping(thing: models.Model) -> None:
+    # An update that keeps what it is not sent reads the record as a caller sends it.
+    assert_type(capabilities.as_sent(thing, _ThingCommand, {}), dict[str, Any])
+    assert_type(capabilities.KEPT, str)
+    kept = capabilities.Kept(lambda key: capabilities.as_sent(thing, _ThingCommand, {}))
+    assert_type(kept.always_sent, frozenset[str])
+
+    @capabilities.keeps(kept)
+    def update(
+        command: _ThingCommand, *, principal: capabilities.Principal, sent: frozenset[str] | None = None
+    ) -> dict[str, Any]:
+        # The fields it sets: those sent, laid over the row it holds, never the read before.
+        return {"ok": True, **capabilities.written(command, sent)}
+
+    assert_type(update(_ThingCommand(), principal=capabilities.cli_principal()), dict[str, Any])
+
+    capabilities.keeps(lambda key: {})  # type: ignore[arg-type]
+    capabilities.as_sent(thing, _ThingCommand)  # type: ignore[call-arg]
+    capabilities.written(_ThingCommand(), ["name"])  # type: ignore[arg-type]
+
+
 def from_a_form(request: HttpRequest) -> None:
     # A view's write runs as the signed-in person, under the key their form posted.
     assert_type(capabilities.execute_posted(request, "example.do", {"name": "x"}), dict[str, Any])

@@ -686,6 +686,16 @@ HQ gives every capability that writes an `idempotency_key`
 ([API](API.md#safe-retries)); a command type declares the field only when its
 handler keeps the key itself.
 
+A command that changes the record it targets, with the command a create also
+takes, keeps every field it is not sent. Its handler takes `sent` and is
+declared `@keeps(Kept(read))`, where `read` answers the stored record by its
+target as a caller sends it (`as_sent(record, Command, {})`); HQ lays what was
+sent over that before it builds the command. The handler sets only
+`written(command, sent)` on the record, locked, so a field changed since the
+caller's read and not sent stands. Its summary ends with `KEPT`. All five
+come from `hq_sdk.capabilities`, and the host's composed suite refuses an
+update that would reset a field it was not sent.
+
 **Resources.** A `ResourceSpec` may expose a list handler with a
 `ResourceQuery` subclass, a detail handler with one stable identifier, a
 `SearchDefinition`, or any combination. HQ validates names, permissions, query

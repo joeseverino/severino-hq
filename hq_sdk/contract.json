@@ -405,6 +405,20 @@
           }
         }
       },
+      "KEPT": {
+        "kind": "value",
+        "type": "str"
+      },
+      "Kept": {
+        "bases": [],
+        "constructor": [
+          "read",
+          "always_sent="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
       "Names": {
         "bases": [],
         "constructor": [
@@ -460,6 +474,14 @@
         "kind": "dataclass",
         "members": {}
       },
+      "as_sent": {
+        "kind": "function",
+        "parameters": [
+          "record",
+          "command",
+          "keys"
+        ]
+      },
       "capability_registry": {
         "kind": "function",
         "parameters": []
@@ -499,6 +521,12 @@
           "expected_updated_at="
         ]
       },
+      "keeps": {
+        "kind": "function",
+        "parameters": [
+          "kept"
+        ]
+      },
       "mcp_principal": {
         "kind": "function",
         "parameters": []
@@ -522,6 +550,13 @@
         "kind": "function",
         "parameters": [
           "user"
+        ]
+      },
+      "written": {
+        "kind": "function",
+        "parameters": [
+          "command",
+          "sent"
         ]
       }
     },

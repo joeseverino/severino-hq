@@ -11,8 +11,10 @@ from hq.platform.application.capabilities import (
 )
 from hq.platform.application.command_fields import Choices, Describe, Names, Refers
 from hq.platform.application.contracts import Effect
-from hq.platform.application.integration_specs import ON_ITS_PAGE, CommandAbout, CommandFact
+from hq.platform.application.integration_specs import ON_ITS_PAGE, CommandAbout, CommandFact, Kept, keeps
 from hq.platform.application.record_errors import InputError
+from hq.platform.application.record_saves import as_sent, written
+from hq.platform.application.records import KEPT
 from hq.platform.application.security import (
     AuthorizationError,
     Capability,
@@ -24,6 +26,7 @@ from hq.platform.application.security import (
 from hq.platform.application.web_writes import execute_posted, refusal_response, refused
 
 __all__ = [
+    "KEPT",
     "ON_ITS_PAGE",
     "AuthorizationError",
     "Capability",
@@ -34,16 +37,20 @@ __all__ = [
     "Describe",
     "Effect",
     "InputError",
+    "Kept",
     "Names",
     "Principal",
     "Refers",
+    "as_sent",
     "capability_registry",
     "cli_principal",
     "describe_capabilities",
     "execute_capability",
     "execute_posted",
+    "keeps",
     "mcp_principal",
     "refusal_response",
     "refused",
     "web_principal",
+    "written",
 ]
