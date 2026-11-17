@@ -4,7 +4,7 @@ from typing import override
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-lazy from hq_sdk import contract, template_contract, text_contract
+lazy from hq_sdk import contract, template_contract
 
 BEGIN = "<!-- sdk_contract: shared UI contract, written by `mise run fix` from hq_sdk/template_contract.py -->"
 END = "<!-- /sdk_contract -->"
@@ -26,8 +26,8 @@ def documented(text: str, section: str) -> str:
 
 class Command(BaseCommand):
     help = (
-        "Write hq_sdk/contract.json, hq_sdk/text_examples.json and docs/Plugins.md's shared UI "
-        "contract from the SDK and the host's templates, or --check them for drift."
+        "Write hq_sdk/contract.json and docs/Plugins.md's shared UI contract from the SDK and the "
+        "host's templates, or --check them for drift."
     )
 
     @override
@@ -41,14 +41,12 @@ class Command(BaseCommand):
     @override
     def handle(self, *args, **options):
         current = contract.describe()
-        examples = text_contract.describe()
         doc = plugins_doc()
         text = doc.read_text(encoding="utf-8")
-        written = documented(text, template_contract.markdown(current["templates"]))
+        written = documented(text, template_contract.markdown(template_contract.describe()))
         if options["check"]:
             differences = [
                 *contract.drift(contract.load_committed(), current),
-                *text_contract.drift(text_contract.load_committed(), examples),
                 *(["~ docs/Plugins.md: shared UI contract"] if written != text else []),
             ]
             if differences:
@@ -61,6 +59,5 @@ class Command(BaseCommand):
             self.stdout.write("hq_sdk contract is current.")
             return
         contract.CONTRACT_PATH.write_text(contract.render(current), encoding="utf-8")
-        text_contract.EXAMPLES_PATH.write_text(text_contract.render(examples), encoding="utf-8")
         doc.write_text(written, encoding="utf-8")
-        self.stdout.write(f"Wrote {contract.CONTRACT_PATH.name}, {text_contract.EXAMPLES_PATH.name} and {doc.name}.")
+        self.stdout.write(f"Wrote {contract.CONTRACT_PATH.name} and {doc.name}.")

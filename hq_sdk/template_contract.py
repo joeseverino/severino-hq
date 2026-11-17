@@ -1,12 +1,13 @@
-"""What an extension's templates may use from the host, recorded in contract.json.
+"""What an extension's templates may use from the host.
 
 A host template is an interface as much as an export is: an override of a block
 the frame no longer defines, or a parameter a partial stopped reading, renders
 and raises nothing. So the public pieces are declared here, what each one is is
-derived from the host by ``manage.py sdk_contract``, and ``hq_sdk.validation``
-holds an extension's templates to the record.
+derived from the host's templates and tags as it is asked for, and
+``hq_sdk.validation`` holds an extension's templates to it.
 """
 
+import json
 import re
 from collections.abc import Iterable, Iterator
 from pathlib import Path
@@ -496,14 +497,15 @@ def _checked(names: Iterable[str], present: Any, what: str) -> list[str]:
 
 
 def describe() -> dict[str, Any]:
-    """The template contract, derived from the host's templates, tags and assets."""
+    """The template contract, derived from the host's templates, tags and assets,
+    as plain JSON data in name order, so docs/Plugins.md's tables keep one order."""
 
     engine = _engine()
     tags, filters = _host_tags(engine)
     defined = _defined_classes()
     scripts = _scripts()
     sheets = stylesheet()
-    return {
+    contract = {
         "frames": _frames(engine),
         "partials": _partials(engine),
         "tags": tags,
@@ -513,35 +515,8 @@ def describe() -> dict[str, Any]:
         "hooks": _checked(HOOKS, lambda hook: _read_by(scripts, hook), "hooks"),
         "styled": _checked(STYLED, lambda hook: f"[{hook}]" in sheets, "styled attributes"),
     }
-
-
-def _section_drift(section: str, old: Any, new: Any) -> list[str]:
-    if isinstance(old, list) and isinstance(new, list):
-        return [f"+ templates.{section}: {name}" for name in sorted(set(new) - set(old))] + [
-            f"- templates.{section}: {name}" for name in sorted(set(old) - set(new))
-        ]
-    if not (isinstance(old, dict) and isinstance(new, dict)):
-        return [f"~ templates.{section}"]
-    lines = []
-    for name in sorted(set(old) | set(new)):
-        if name not in old:
-            lines.append(f"+ templates.{section}: {name}")
-        elif name not in new:
-            lines.append(f"- templates.{section}: {name}")
-        elif old[name] != new[name]:
-            lines.append(f"~ templates.{section}: {name}: {old[name]} -> {new[name]}")
-    return lines
-
-
-def drift(before: dict[str, Any], after: dict[str, Any]) -> list[str]:
-    """Each public template piece added, removed or reshaped, one line each."""
-
-    return [
-        line
-        for section in sorted(set(before) | set(after))
-        if before.get(section) != after.get(section)
-        for line in _section_drift(section, before.get(section), after.get(section))
-    ]
+    plain: dict[str, Any] = json.loads(json.dumps(contract, sort_keys=True))
+    return plain
 
 
 def _code(names: Iterable[str]) -> str:

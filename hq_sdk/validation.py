@@ -1,8 +1,9 @@
 """For an extension's source tree: the static checks it must pass.
 
-Each read without importing the extension or configuring Django: its templates
-use only the public pieces of the host's (``contract.json``'s ``templates``
-section) and no page sentence closes on a value by hand. What its Python
+Each read without importing the extension: its templates use only the public
+pieces of the host's, derived from the host's own templates and tags as the
+check runs (``template_contract.describe``), and no page sentence closes on a
+value by hand. What its Python
 imports is Ruff's to hold (tools/pipeline/extension-imports.toml), and the
 host's ast-grep rules ``plugin:check`` names hold the rest
 (tools/pipeline/check-plugin.sh).
@@ -10,13 +11,16 @@ host's ast-grep rules ``plugin:check`` names hold the rest
 
 import argparse
 import ast
-import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+lazy import django
+lazy from django.apps import apps
 lazy from django.template.base import Lexer, TokenType
+
+lazy from hq_sdk import template_contract
 
 # Sentence checks ------------------------------------------------------------
 
@@ -207,7 +211,6 @@ def sentence_closes(source_root: str | Path) -> list[str]:
 
 # Template checks -----------------------------------------------------------
 
-_CONTRACT = Path(__file__).with_name("contract.json")
 _REGISTERS = frozenset({"filter", "simple_tag", "inclusion_tag", "tag", "simple_block_tag"})
 # Tags that continue or close another rather than standing alone.
 _CONTINUATIONS = frozenset({"else", "elif", "empty", "plural"})
@@ -472,11 +475,11 @@ class _Template:
             self.problem(line, "writes a style attribute, which HQ's policy refuses; draw it through a public partial")
 
 
-def template_violations(source_root: str | Path, contract: dict[str, Any] | None = None) -> list[str]:
+def template_violations(source_root: str | Path) -> list[str]:
     """Return stable ``path:line: problem`` lines for templates outside the public contract."""
 
     root = Path(source_root).resolve()
-    templates = (contract or json.loads(_CONTRACT.read_text(encoding="utf-8")))["templates"]
+    templates = template_contract.describe()
     own_templates = _own_templates(root)
     own_libraries = _own_libraries(root)
     found: list[tuple[str, int, str]] = []
@@ -517,6 +520,10 @@ def main() -> int:
         # A root that holds no package would pass every check by checking nothing.
         print(f"{args.source_root} holds no Python package to check.")
         return 2
+    # The host's declarations are read from its own engine, configured from
+    # DJANGO_SETTINGS_MODULE; a test that calls main has configured it already.
+    if not apps.ready:
+        django.setup()
     refused = [
         _report(
             "Templates outside HQ's public template contract (docs/Plugins.md, Shared UI contract):",

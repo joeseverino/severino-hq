@@ -810,9 +810,10 @@ under a `templates` directory and refuses anything else:
 - a style attribute, which HQ's policy refuses: a value drawn to scale goes
   through a public partial (`partials/_allocation.html`, the charts).
 
-The record is the `templates` section of `hq_sdk/contract.json`, derived from
-the host's own templates by `manage.py sdk_contract`, which writes these tables
-too.
+The check derives what is public from the host it was handed, its own
+templates and tags, as it runs (`hq_sdk.template_contract`), with no extension
+installed, so nothing the package ships stands in for the host's. The tables
+below are written from the same derivation.
 
 Every view model `hq_sdk.ui` hands an extension says its values in words. It
 raises `ValueError` where it is built on a date-time
@@ -1057,9 +1058,9 @@ or markup into an extension is a contract failure. The rules the classes follow 
 in [Design](Design.md).
 
 What the host writes for a value is pinned by example in
-`hq_sdk/text_examples.json`: `span`, `when`, `when_day`, `counted`,
-`measured`, `money`, `signed_number`, `ended` and `ago`, regenerated and reviewed like the
-contract.
+`hq/platform/application/tests/test_sdk_text.py`: `span`, `when`, `when_day`,
+`counted`, `measured`, `money`, `signed_number`, `ended` and `ago`, so a change
+of wording is reviewed in that test's diff.
 
 An extension's test asserts what it composed from them
 (`f"Due in {span(days)}"`), or reads a page through `hq_sdk.testing.plain`,

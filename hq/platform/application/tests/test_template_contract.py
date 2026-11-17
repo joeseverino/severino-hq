@@ -1,4 +1,4 @@
-"""The host's templates as a contract: what an extension may use, and the record of it."""
+"""The host's templates as a contract: what an extension may use."""
 
 import io
 from contextlib import redirect_stdout
@@ -8,9 +8,9 @@ from unittest import mock
 
 from django.template import engines
 from django.template.loader import render_to_string
-from django.test import RequestFactory, SimpleTestCase, override_settings, tag
+from django.test import RequestFactory, SimpleTestCase, override_settings
 
-from hq_sdk import contract, template_contract, text_contract, validation
+from hq_sdk import contract, template_contract, validation
 from hq_sdk.money import money
 from hq_sdk.pages import PageAction, PageDialog, page_context
 from hq_sdk.site import host
@@ -181,20 +181,6 @@ class TemplateRecordTests(SimpleTestCase):
 
         self.assertEqual(members["table_empty"], {"kind": "attribute", "type": "str"})
         self.assertEqual(members["table_columns"], {"kind": "attribute", "type": "tuple"})
-
-    def test_the_rendered_text_examples_are_current(self):
-        differences = text_contract.drift(text_contract.load_committed(), text_contract.describe())
-
-        self.assertEqual(differences, [], "Run `mise run fix` and review the words that changed.")
-
-    @tag("source")
-    def test_plugins_md_states_the_recorded_contract(self):
-        from hq.platform.core.management.commands.sdk_contract import documented, plugins_doc
-
-        text = plugins_doc().read_text(encoding="utf-8")
-        section = template_contract.markdown(contract.load_committed()["templates"])
-
-        self.assertEqual(documented(text, section), text, "Run `mise run fix`.")
 
 
 class PageDialogTests(SimpleTestCase):

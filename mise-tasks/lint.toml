@@ -367,7 +367,7 @@ run = "go tool govulncheck -test ./..."
 # writes.
 
 ["lint:drift-sdk-contract"]
-description = "hq_sdk's committed shape, text examples and docs/Plugins.md table are what the SDK offers"
+description = "hq_sdk's committed shape and docs/Plugins.md table are what the SDK offers"
 hide = true
 tags = ["fast", "derived"]
 sources = [
@@ -375,7 +375,15 @@ sources = [
   "hq_sdk/**",
   "docs/Plugins.md",
   "hq/domains/control_plane/bridge_base.json",
-  "templates/**",
+  # The frames and partials docs/Plugins.md's table reads; an extension's
+  # check derives the rest of the template contract as it runs.
+  "templates/page.html",
+  "templates/list_page.html",
+  "templates/confirm_page.html",
+  "templates/form_page.html",
+  "templates/partials/**",
+  # Each public class and hook the table lists is held to the stylesheet and
+  # scripts that still define it.
   "static/css/**",
   "static/js/**",
   "tools/lint/ast-grep/rules/hand-drawn-*.yml",
@@ -390,7 +398,7 @@ sources = [
 outputs = []
 extends = "django"
 usage = 'flag "--fix" help="Rewrite the file instead of checking: fast runs it first"'
-vars = { writes = "hq_sdk/contract.json hq_sdk/text_examples.json", writes_part_of = "docs/Plugins.md" }
+vars = { writes = "hq_sdk/contract.json", writes_part_of = "docs/Plugins.md" }
 run = 'if [ "${usage_fix:-}" = true ]; then uv run python manage.py sdk_contract; else uv run python manage.py sdk_contract --check; fi'
 
 ["lint:drift-api-document"]
