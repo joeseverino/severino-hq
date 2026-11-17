@@ -34,63 +34,27 @@ through `run_posted`, as every other door does, and the save runs the model's
 `full_clean`. So put a field rule on the model (a validator or a constraint),
 never on the form or the service.
 
-## Steps
+## Rules
 
-What a new host domain has to do before the gate passes. Every row names the
-test that enforces it, in `Class.method` form. An extension takes its own
-path: [Extensions](Plugins.md).
+What a new host domain has to do before the gate passes, and what holds for
+every change. Each rule is a test class, and the class docstring is the rule:
 
-`hq/platform/application/tests/test_new_domain.py` fails if an architecture
-rule exists that this page does not name, or names one that is gone, so edit
-this page in the same commit as the rule.
+- `hq/platform/application/tests/test_domain_declaration.py` and
+  `test_domains.py` there: the declaration alone, and no second roster of
+  sections;
+- `test_architecture.py`, `test_architecture_pages.py`,
+  `test_architecture_primitives.py` and `test_architecture_styles.py` there:
+  delivery, pages, the shared primitives and the stylesheet;
+- `hq/platform/application/tests/test_view_writes.py` and
+  `hq/platform/core/tests/test_speculation.py`: what a view may write, and
+  that a GET writes nothing.
 
-| Do | Enforced by |
-|---|---|
-| Views never call `.save()`, `.delete()` or a manager's or queryset's bulk write. They reach a domain write only through `run_posted` (or `execute_posted`, its answer alone), an installed extension's as the host's. The rule reads the module of every routed view and its bases, whatever the module is called | `hq/platform/application/tests/test_view_writes.py` |
-| A view with `paginate_by` takes `TableListMixin` | `DeliveryAdapterArchitectureTests.test_paginated_list_views_use_the_shared_table_engine` |
-| `hq/platform/mcp/services.py` stays free of models and `.objects`; expose reads through `hq/platform/application/resources.py` and read models | `lint:ast-grep` (`tools/lint/ast-grep/rules/mcp-services-reach-no-model.yml`) |
-| Keep the workflow layering: `workflow_contracts.py` imports nothing of HQ, `ui.py` never reaches `workflows`, `workflows.py` never reaches `action_links` | `lint:imports`, the contracts in `pyproject.toml`'s `[tool.importlinter]` |
-| Serve static assets from the shared delivery path. The ASGI mount is the only server of `/static/`, before Django. Versioned files are immutable and sent as the brotli copy the image build wrote, or as they are to a client that takes no brotli | `DeliveryAdapterArchitectureTests.test_asgi_routes_static_assets_before_django`, `DeliveryAdapterArchitectureTests.test_static_assets_have_one_server`, `DeliveryAdapterArchitectureTests.test_versioned_static_assets_are_compressed_and_immutable` |
-| Resolve URLs with `hq.platform.application.routes.reverse`, never `django.urls.reverse`, in `hq/platform/application/` and `hq/domains/control_plane/` | `RouteOwnerTests.test_the_application_resolves_routes_through_its_one_owner`, `RouteOwnerTests.test_a_remembered_route_is_djangos_and_follows_the_url_configuration` |
-| Every template sets `{% block title %}` to the page's own name, without the site name | `PageTitleTests.test_every_page_names_itself`, `PageTitleTests.test_no_page_appends_the_site_name_itself`, `PageTitleTests.test_the_layout_is_what_appends_it` |
-| Link a command's form with `command_url`, never `reverse("command")` or `{% url "command" %}` | `OnePrimitiveTests.test_a_command_is_linked_through_command_url` |
-| List what a record is related to through `partials/_related.html`, its groups built by `application.related` | `lint:ast-grep` (`hand-drawn-heading.yml`) |
-| Name hosts with `normalized_hostname` and zone membership with `in_zone` | `OnePrimitiveTests.test_hostnames_are_spelled_by_normalized_hostname`, `OnePrimitiveTests.test_zone_membership_is_asked_of_in_zone` |
-| Templates show dates with `when` (HQ's engine has no other way to write one) (`when_text` where a `<time>` cannot stand), byte counts with `bytes` (`human_bytes` in Python), amounts with `money` (`hq.platform.application.money.money` in Python) and name entities with the entity tag; Python links entities with `entity_link` | `OnePrimitiveTests.test_templates_say_byte_counts_through_the_bytes_filter`, `OnePrimitiveTests.test_templates_write_amounts_through_the_money_filter`, `lint:ast-grep` (`byte-counts-said-by-human-bytes.yml`, `amount-written-by-money.yml`, `hand-drawn-record-link.yml`), `OnePrimitiveTests.test_entity_pages_are_addressed_by_entity_link` |
-| Write an identifier (an address, a path, a key, an image) through `breakable`, in code or as a link's text, so it wraps only at its seams | `OnePrimitiveTests.test_an_identifier_is_written_as_a_breakable_token` |
-| Declare the domain once in `HOST_DOMAINS` (`hq/platform/application/domains.py`): a unique `hq.<name>` id, nav routes that resolve, grouped nav at order 100 or above (machinery at 900) | `DomainRegistryTests.test_domain_ids_are_unique`, `DomainRegistryTests.test_every_declared_route_resolves`, `DomainRegistryTests.test_host_sections_never_squat_the_extension_order_band`, `DomainRegistryTests.test_machinery_sorts_after_every_section_that_holds_work` |
-| Keep no second roster of sections: no nav list in `hq/platform/core/context_processors.py`, no code-to-URL table in a core view | `DomainRegistryTests.test_the_registry_is_the_only_list_of_sections`, `DomainRegistryTests.test_the_view_keeps_no_code_to_url_table` |
-| List its apps and mounts on the descriptor, never in `hq/config/settings.py` or `hq/config/urls.py` | `DomainRegistryTests.test_apps_and_urls_are_read_off_the_declarations` |
-| Declare a record domain's create, update and delete and its permissions as `records`, never as entries in `core_capabilities.py` or members of `Capability` | `DomainRegistryTests.test_record_commands_and_permissions_are_derived_not_listed` |
-| A part of a page that is fetched, refreshed or polled is a `data-fragment` region answered from a `{% partialdef %}` in the page's own template (`hq.platform.application.fragments`, `static/js/fragment.js`); a script never parses a response or keeps a timer of its own | `lint:js` (`tools/lint/eslint.config.mjs`), `FragmentPrimitiveTests.test_the_primitive_loads_before_the_scripts_that_use_it`, `FragmentPrimitiveTests.test_every_part_a_template_names_is_one_a_template_defines` |
-| A GET has no effect. One that must record or reach out is refused to a speculative request by the audit writer and the outbound boundary (`hq.platform.core.speculation`) | `hq/platform/core/tests/test_speculation.py`, which prefetches every page and fails on one that writes |
-| A view answers from what HQ holds and never waits on a network, a process or a timer: it asks the controller for a reading or starts a job, answers at once (`hq.platform.application.asks`), and draws the control with `partials/_ask.html`. A place a request must wait is a named entry in `hq.platform.core.outbound.ALLOWED` with its reason | `RequestNeverWaitsTests.test_every_request_is_served_under_the_rule`, `RequestNeverWaitsTests.test_an_exception_is_declared_with_its_reason_and_entered_only_where_listed` with `lint:ast-grep` (`request-waits-only-where-listed.yml`), `RequestNeverWaitsTests.test_only_a_job_leaves_the_request_that_started_it`, `RequestNeverWaitsTests.test_asked_for_work_is_followed_by_one_script_behavior` |
-| The declaration alone installs the app, mounts its URLs, puts it on the bar, registers its resource and commands, grants its permissions, deletes and counts it, and puts it in the API document | `NewDomainDeclarationTests.test_its_app_is_installed_and_its_urls_are_mounted`, `NewDomainDeclarationTests.test_it_is_on_the_bar`, `NewDomainDeclarationTests.test_its_resource_and_commands_are_registered`, `NewDomainDeclarationTests.test_its_permissions_are_granted_where_record_permissions_are`, `NewDomainDeclarationTests.test_it_is_created_counted_and_deleted_through_its_commands`, `NewDomainDeclarationTests.test_its_commands_and_resource_are_in_the_api_document` |
+The lint gates hold the rest, each rule with its reason in its own file:
+`lint:ast-grep` (`tools/lint/ast-grep/rules`), `lint:imports` (the contracts
+in `pyproject.toml`'s `[tool.importlinter]`), `lint:js`, `lint:css`,
+`lint:prose` and `lint:deptry`. An extension takes its own path:
+[Extensions](Plugins.md).
 
-Outside the architecture tests, `mise run check` also needs its migrations
-committed (`makemigrations --check`), the API document regenerated
-(`manage.py api_openapi`; `api_openapi --check`), and its tests in its `tests/`
-package.
-
-## Always on
-
-Rules that hold for every change, not a domain in particular; the class
-docstring is the rule.
-
-| Rule | What it holds |
-| --- | --- |
-| `lint:css` | Stylelint under `tools/lint/stylelint.config.mjs`: tokens, spacing, color |
-| `StyleContractTests`, `TemplateClassStyleTests`, `HandRolledClassTests` | CSS, layers |
-| `TemplateCommentTests` | what a `{# #}` comment left open is |
-| `FileSizeTests` | no source or test file past `SEVERINO_FILE_LINE_LIMIT` |
-| `PageReadCapabilityTests` | every routed page reads under `read` and the one capability it declares (`required_capability`), refused before its view; a route that answers without a session authorizes itself |
-| `PageTrailTests` | a view declares `page_trail`, every crumb above it, and `trail_label`, not a `get_page_trail` that restates them |
-| `lint:ast-grep` | the rules under `tools/lint/ast-grep`. Among them, a setting is read as `settings.NAME`, never with a default. An operation is queued through `resource_operations.enqueue`, whose unique key settles two writers. Who a request's session signed in is `request_identity.signed_in`. A module-level name is assigned once. A table cell is read by its text, never by the tag that closes it, in HQ or an extension |
-| `CountedTests` | plurals |
-| `InterfaceTextTests` | no hand-built plural, nested form, `counted` phrase that cannot agree or `{# #}` comment that spans lines, in HQ or an extension; no system check reads source |
-| `lint:prose` | Vale under `tools/lint/vale/.vale.ini`: no comment narrates history, no em dash or hedged plural, and no word HQ keeps to itself in what its owner reads, with what to say instead |
-| `PostButtonTests` | the shared post button |
-| `ComposedQueueTests` | a domain's attention items and cards reach the shared queue |
-| `TestPlacementTests` | every test module is in its package's `tests/` |
-| `lint:deptry` | host code imports only its declared runtime dependencies, each of them imported, or a reason in `pyproject.toml` |
-| `RuntimeDependencyTests` | each finding `lint:deptry` ignores is one it would report |
+Outside these, `mise run check` also needs the domain's migrations committed
+(`makemigrations --check`), the API document regenerated (`manage.py
+api_openapi`; `api_openapi --check`), and its tests in its `tests/` package.
