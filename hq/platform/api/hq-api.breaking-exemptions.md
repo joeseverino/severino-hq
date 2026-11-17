@@ -1,11 +1,14 @@
 # Client breaks the machine API admits
 
 lint:openapi-breaking fails a change to hq-api.openapi.json that breaks a
-client, unless a line here names it. oasdiff reads this file as its
-`--err-ignore` list. An entry is a list item: the line the gate printed for
-the change, then `Reason:` and why clients can take the break. A line oasdiff
-could match that gives no reason fails the gate. Only entries added since the
-comparison base admit a break; entries already on that base admit nothing.
+client, unless a line here names it. An entry is a list item: the line the
+gate printed for the change, then `Reason:` and why clients can take the
+break; oasdiff reads entries as its `--err-ignore` list, which admits one
+change of one operation. A severity line, `<check-id> info` then `Reason:`
+and why, goes to oasdiff's `--severity-levels` and lowers every change that
+check finds to info. A line oasdiff could read that gives no reason fails the
+gate. Only lines added since the comparison base admit a break; lines already
+on that base admit nothing.
 
 - error at hq/platform/api/hq-api.openapi.json, in API GET /api/v2/resources/action_items/ removed the enum value `hq.docs` from the property `anyOf[subschema #1]` of the `query` request parameter `source` [request-parameter-property-enum-value-removed]. Reason: docs raised one item, their review date, which HQ no longer tracks, so the source holds nothing to list; a client that filtered on hq.docs is refused where it had read an empty list
 - error at hq/platform/api/hq-api.openapi.json, in API POST /api/v2/capabilities/dashboard.panels.refresh/ removed the required property `data/requested_at` from the response with the `200` status [response-required-property-removed]. Reason: the time the panels were asked is the answer's standing (`data/standing`), which every ask now answers in one shape; no client acted on the timestamp

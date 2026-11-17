@@ -52,6 +52,14 @@ class ExemptionReasonTests(SimpleTestCase):
     def test_prose_oasdiff_cannot_match_needs_no_reason(self):
         self.assertEqual(unexplained(["# Client breaks", "", "An entry is a list item."]), [])
 
+    def test_a_severity_line_needs_a_reason(self):
+        self.assertEqual(unexplained([LOWERING, f"{LOWERING} Reason: the server refused it already"]), [1])
+
+
+# A severity line: every change of one check lowered to info.
+CHECK = "api-path-removed-without-deprecation"
+LOWERING = f"{CHECK} info"
+
 
 DOCUMENT = "hq/platform/api/hq-api.openapi.json"
 EXEMPTIONS = "hq/platform/api/hq-api.breaking-exemptions.md"
@@ -166,6 +174,32 @@ class VerdictTests(SimpleTestCase):
         code, lines = self.judge(entry, on_base=entry, removed={4})
         self.assertEqual(code, 1)
         self.assertTrue([line for line in lines if "/api/v2/example/4/" in line and line.startswith("error at")])
+
+    def test_a_severity_line_lowers_every_change_of_its_check_and_says_how_many(self):
+        code, lines = self.judge(f"{LOWERING} Reason: no client calls them\n", removed={0, 2, 4, 6, 8})
+        self.assertEqual(code, 0)
+        self.assertFalse([line for line in lines if line.startswith("error at")])
+        counted = [line for line in lines if CHECK in line]
+        self.assertEqual(len(counted), 1)
+        self.assertRegex(counted[0], r"\b5\b")
+
+    def test_a_severity_line_the_base_already_holds_lowers_nothing(self):
+        line = f"{LOWERING} Reason: no client calls them\n"
+        code, lines = self.judge(line, on_base=line, removed={0, 2, 4})
+        self.assertEqual(code, 1)
+        self.assertEqual(len([line for line in lines if line.startswith("error at")]), 3)
+
+    def test_a_severity_line_without_a_reason_is_refused_before_oasdiff_runs(self):
+        code, lines = self.judge(f"# Admitted breaks\n\n{LOWERING}\n", removed={0, 2})
+        self.assertEqual(code, 1)
+        self.assertTrue(lines[0].startswith(f"{EXEMPTIONS}:3:"))
+        self.assertFalse([line for line in lines if line.startswith("error at")])
+
+    def test_a_severity_line_that_does_not_lower_to_info_is_refused(self):
+        code, lines = self.judge(f"{CHECK} warn Reason: no client calls them\n", removed={0, 2})
+        self.assertEqual(code, 1)
+        self.assertTrue(lines[0].startswith(f"{EXEMPTIONS}:1:"))
+        self.assertFalse([line for line in lines if line.startswith("error at")])
 
     def test_warnings_alone_pass(self):
         code, lines = self.judge("# Admitted breaks\n", trimmed={1, 3})

@@ -741,12 +741,20 @@ copy (fast's base; in CI the commit the change lands on) through oasdiff. It
 fails on each change that breaks a client: a removed path, operation or
 response field, a parameter or request field made required, a narrowed enum, a
 changed type. Each line it prints is oasdiff's account of one break. A
-deliberate break is admitted by copying that line into
-`hq/platform/api/hq-api.breaking-exemptions.md`, oasdiff's own `--err-ignore`
-file, followed by `Reason:` and why clients can take it; an entry with no
-reason fails the gate. The gate hands oasdiff only the lines the change adds
-since its base, so an entry already on main admits nothing, and any change may
-delete it. The controller's two documents are left out, since both of their
+deliberate break is admitted in `hq/platform/api/hq-api.breaking-exemptions.md`
+by one of two kinds of line, each followed by `Reason:` and why clients can
+take it; a line with no reason fails the gate:
+
+- the printed line itself, copied in, which goes to oasdiff's `--err-ignore`
+  and admits that one change of that one operation, since oasdiff matches it
+  by its exact path, operation and text;
+- `<check-id> info`, which goes to oasdiff's `--severity-levels` and lowers
+  every change that check finds to info, so one line admits a correction made
+  across many operations (a narrowing the server already refused, a loose
+  schema made precise). The gate prints how many changes each one lowered.
+
+The gate hands oasdiff only the lines the change adds since its base, so a
+line already on main admits nothing, and any change may delete it. The controller's two documents are left out, since both of their
 ends ship in one image.
 
 ### The document
