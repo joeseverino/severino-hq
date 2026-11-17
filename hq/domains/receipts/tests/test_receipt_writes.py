@@ -139,78 +139,54 @@ class UploadCapabilityTests(_PrivateMedia):
         self.assertEqual(denials(UPLOAD), 2)
 
 
-class CreateViewTests(_PrivateMedia):
-    def post(self, content_type="application/pdf", content=CONTENT):
+def a_new_file(content_type: str = "image/png", content: bytes = b"\x89PNG new") -> SimpleUploadedFile:
+    return SimpleUploadedFile("photo.png", content, content_type=content_type)
+
+
+class _ReceiptForms(_PrivateMedia):
+    """The create and edit forms, beside a receipt the edit form changes."""
+
+    def setUp(self):
+        super().setUp()
+        self.receipt = Receipt.objects.create(vendor="Example Host", content_type="application/pdf")
+        self.receipt.file.save("old.pdf", ContentFile(b"%PDF-1.4 old"))
+        self.old = self.receipt.file.name
+
+    def create(self, **fields):
         return self.client.post(
             reverse("receipts:create"),
-            form_keyed(
-                {
-                    "vendor": "Example Host",
-                    "amount": "12.00",
-                    "notes": "",
-                    "file": SimpleUploadedFile("scan.pdf", content, content_type=content_type),
-                }
-            ),
+            form_keyed({"vendor": "Example Host", "amount": "12.00", "notes": "", "file": a_new_file(), **fields}),
         )
 
-    def test_an_upload_is_kept_and_recorded_under_the_operator(self):
-        response = self.post()
+    def edit(self, **fields):
+        return self.client.post(
+            reverse("receipts:edit", args=[self.receipt.pk]),
+            form_keyed({"vendor": "Example Host", "amount": "12.00", "notes": "Paid", **fields}),
+        )
 
-        receipt = self.stored()
+    def assertUnchanged(self):
+        self.assertEqual(Receipt.objects.count(), 1)
+        self.receipt.refresh_from_db()
+        self.assertEqual((self.receipt.notes, self.receipt.file.name), ("", self.old))
+
+
+class CreateViewTests(_ReceiptForms):
+    def test_an_upload_is_kept_and_recorded_under_the_operator(self):
+        response = self.create(file=SimpleUploadedFile("scan.pdf", CONTENT, content_type="application/pdf"))
+
+        receipt = Receipt.objects.exclude(pk=self.receipt.pk).get()
+        receipt.file.open("rb")
+        self.addCleanup(receipt.file.close)
         self.assertRedirects(response, receipt.get_absolute_url(), fetch_redirect_response=False)
         self.assertEqual(receipt.file.read(), CONTENT)
         uploaded = AuditLog.objects.get(action=AuditLog.Action.UPLOADED)
         self.assertEqual((uploaded.metadata["actor"], uploaded.metadata["operation"]), ("op", UPLOAD))
         self.assertEqual(uploaded.metadata["sha256"], hashlib.sha256(CONTENT).hexdigest())
 
-    def test_a_token_and_an_operator_without_the_grant_are_refused_on_the_form(self):
-        for principal in (*CREDENTIALS, operator_without(Capability.UPLOAD_RECEIPT)):
-            with self.subTest(interface=principal.interface), as_principal(principal):
-                response = self.post()
 
-                self.assertEqual(response.status_code, 403)
-                self.assertTrue(response.context["form"].non_field_errors())
-        self.assertFalse(Receipt.objects.exists())
-        self.assertEqual(denials(UPLOAD), 3)
-
-    def test_a_file_a_receipt_cannot_be_is_refused_on_the_form(self):
-        for content_type, content, said in (
-            ("text/html", b"markup", "A receipt cannot be this type of file."),
-            ("application/pdf", b"x" * (validation.MAX_RECEIPT_BYTES + 1), "The limit is 15 MB."),
-        ):
-            with self.subTest(content_type=content_type):
-                response = self.post(content_type, content)
-
-                self.assertEqual(response.status_code, 200)
-                self.assertIn(said, text(response))
-        self.assertFalse(Receipt.objects.exists())
-
-    def test_the_capabilitys_refusal_is_said_on_the_form(self):
-        refusal = {"ok": False, "error": {"code": "not_found", "message": "A related expense or asset was not found."}}
-        with mock.patch("hq.platform.application.writes.run_posted", return_value=Ran(refusal)):
-            response = self.post()
-
-        self.assertIn("A related expense or asset was not found.", text(response))
-
-
-class EditViewTests(_PrivateMedia):
-    def setUp(self):
-        super().setUp()
-        self.receipt = Receipt.objects.create(vendor="Example Host", content_type="application/pdf")
-        self.receipt.file.save("old.pdf", ContentFile(b"%PDF-1.4 old"))
-        self.url = reverse("receipts:edit", args=[self.receipt.pk])
-        self.old = self.receipt.file.name
-
-    def post(self, **fields):
-        return self.client.post(
-            self.url, form_keyed({"vendor": "Example Host", "amount": "12.00", "notes": "Paid", **fields})
-        )
-
-    def a_new_file(self, content_type="image/png", content=b"\x89PNG new"):
-        return SimpleUploadedFile("photo.png", content, content_type=content_type)
-
+class EditViewTests(_ReceiptForms):
     def test_a_new_file_replaces_the_old_and_is_recorded(self):
-        response = self.post(file=self.a_new_file())
+        response = self.edit(file=a_new_file())
 
         self.assertRedirects(response, self.receipt.get_absolute_url(), fetch_redirect_response=False)
         receipt = self.stored()
@@ -221,7 +197,7 @@ class EditViewTests(_PrivateMedia):
         self.assertNotIn(base64.b64encode(b"\x89PNG new").decode(), json.dumps(uploaded.metadata))
 
     def test_details_alone_are_the_records_update(self):
-        response = self.post()
+        response = self.edit()
 
         self.assertRedirects(response, self.receipt.get_absolute_url(), fetch_redirect_response=False)
         updated = AuditLog.objects.filter(action=AuditLog.Action.UPDATED, object_type="Receipt").latest("pk")
@@ -229,40 +205,55 @@ class EditViewTests(_PrivateMedia):
         self.assertEqual(updated.metadata["changes"]["notes"], ["", "Paid"])
         self.assertFalse(AuditLog.objects.filter(action=AuditLog.Action.UPLOADED).exists())
 
+
+class FormRefusalTests(_ReceiptForms):
+    """What the create and edit forms refuse, said on the form, changing nothing."""
+
     def test_a_token_and_an_operator_without_the_grant_are_refused_on_the_form(self):
-        for capability, callers, fields in (
-            (REPLACE, (*CREDENTIALS, operator_without(Capability.UPLOAD_RECEIPT)), lambda: {"file": self.a_new_file()}),
-            (UPDATE, (*READERS, operator_without("write_receipts")), dict),
+        for capability, post, callers, fields in (
+            (UPLOAD, self.create, (*CREDENTIALS, operator_without(Capability.UPLOAD_RECEIPT)), dict),
+            (
+                REPLACE,
+                self.edit,
+                (*CREDENTIALS, operator_without(Capability.UPLOAD_RECEIPT)),
+                lambda: {"file": a_new_file()},
+            ),
+            (UPDATE, self.edit, (*READERS, operator_without("write_receipts")), dict),
         ):
             for principal in callers:
                 with self.subTest(capability=capability, interface=principal.interface), as_principal(principal):
-                    response = self.post(**fields())
+                    response = post(**fields())
 
                     self.assertEqual(response.status_code, 403)
                     self.assertTrue(response.context["form"].non_field_errors())
             self.assertEqual(denials(capability), 3)
-        self.receipt.refresh_from_db()
-        self.assertEqual((self.receipt.notes, self.receipt.file.name), ("", self.old))
+        self.assertUnchanged()
 
-    def test_a_new_file_a_receipt_cannot_be_is_refused_on_the_form(self):
-        for file in (
-            self.a_new_file("text/html", b"markup"),
-            self.a_new_file(content=b"x" * (validation.MAX_RECEIPT_BYTES + 1)),
-        ):
-            with self.subTest(content_type=file.content_type):
-                response = self.post(file=file)
+    def test_a_file_a_receipt_cannot_be_is_refused_on_the_form(self):
+        for post in (self.create, self.edit):
+            for content_type, content, said in (
+                ("text/html", b"markup", "A receipt cannot be this type of file."),
+                ("image/png", b"x" * (validation.MAX_RECEIPT_BYTES + 1), "The limit is 15 MB."),
+            ):
+                with self.subTest(form=post.__name__, content_type=content_type):
+                    response = post(file=a_new_file(content_type, content))
 
-                self.assertEqual(response.status_code, 200)
-                self.assertTrue(response.context["form"].has_error("file"))
-        self.receipt.refresh_from_db()
-        self.assertEqual(self.receipt.notes, "")
+                    self.assertEqual(response.status_code, 200)
+                    self.assertTrue(response.context["form"].has_error("file"))
+                    self.assertIn(said, text(response))
+        self.assertUnchanged()
 
     def test_the_capabilitys_refusal_is_said_on_the_form(self):
         refusal = {"ok": False, "error": {"code": "conflict", "message": "That receipt changed after it was read."}}
-        with mock.patch("hq.platform.application.writes.run_posted", return_value=Ran(refusal)):
-            response = self.post(file=self.a_new_file())
+        for post in (self.create, self.edit):
+            with (
+                self.subTest(form=post.__name__),
+                mock.patch("hq.platform.application.writes.run_posted", return_value=Ran(refusal)),
+            ):
+                response = post(file=a_new_file())
 
-        self.assertIn("That receipt changed after it was read.", text(response))
+                self.assertIn("That receipt changed after it was read.", text(response))
+        self.assertUnchanged()
 
 
 class MatchViewTests(TestCase):
