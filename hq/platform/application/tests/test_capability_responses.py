@@ -38,7 +38,7 @@ class CapabilityCallTests(TestCase):
         with self.registered(spec):
             return execute_capability(spec.name, payload, principal=cli_principal(), target=target)
 
-    def spec(self, name="example.records.change", *, effect="remote_write", command=ExampleCommand, target_kind=None):
+    def spec(self, name="example.records.update", *, effect="remote_write", command=ExampleCommand, target_kind=None):
         return CapabilitySpec(
             name, "Change example records.", effect, Capability.READ, command, self.handler, target_kind=target_kind
         )
@@ -80,7 +80,7 @@ class CapabilityCallTests(TestCase):
             return {"ok": True}
 
         spec = CapabilitySpec(
-            "example.gateway.look", "Look.", "read", Capability.READ, ExampleConnectionCommand, handler
+            "example.gateway.read", "Look.", "read", Capability.READ, ExampleConnectionCommand, handler
         )
 
         self.assertTrue(self.call(spec, {"connection_ref": "example-gateway"})["ok"])
@@ -96,7 +96,7 @@ class CapabilityCallTests(TestCase):
 
         caller = Principal("example-agent", "mcp", frozenset({Capability.READ}))
         spec = CapabilitySpec(
-            "example.records.change", "Change.", "remote_write", Capability.READ, ExampleCommand, handler
+            "example.records.update", "Change.", "remote_write", Capability.READ, ExampleCommand, handler
         )
         with self.registered(spec):
             self.assertTrue(execute_capability(spec.name, keyed(), principal=caller)["ok"])
@@ -104,12 +104,12 @@ class CapabilityCallTests(TestCase):
         metadata = AuditLog.objects.get(object_type="Example").metadata
         self.assertEqual(
             (metadata["actor"], metadata["interface"], metadata["operation"]),
-            ("example-agent", "mcp", "example.records.change"),
+            ("example-agent", "mcp", "example.records.update"),
         )
 
     def stale_write_call(self, handler, *, target_kind=None, target=None):
         spec = CapabilitySpec(
-            "example.records.save", "Save.", "read", Capability.READ, ExampleCommand, handler, target_kind=target_kind
+            "example.records.upsert", "Save.", "read", Capability.READ, ExampleCommand, handler, target_kind=target_kind
         )
         with self.registered(spec):
             return execute_capability(

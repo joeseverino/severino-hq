@@ -6,6 +6,7 @@ runtime composition receives.
 """
 
 import inspect
+import re
 from annotationlib import Format
 from typing import Any, is_typeddict
 
@@ -36,6 +37,87 @@ lazy from .entity_links import link_url
 
 IntegrationSpec = CapabilitySpec | ResourceSpec | ConnectionSpec
 
+# The API's names (docs/API.md#names): a capability is
+# <area>[.<noun>...].<verb>, a resource [<owner>.]<noun>, each in dotted
+# snake_case.
+_SEGMENT = r"[a-z][a-z0-9]*(?:_[a-z0-9]+)*"
+_CAPABILITY_NAME = re.compile(rf"{_SEGMENT}(?:\.{_SEGMENT})+")
+_RESOURCE_NAME = re.compile(rf"(?:{_SEGMENT}\.)?{_SEGMENT}")
+CAPABILITY_PATTERN = "<area>[.<noun>...].<verb>"
+RESOURCE_PATTERN = "[<owner>.]<noun>"
+
+# Every verb a capability's last segment may be. A new one is added here on
+# purpose, as a word of the API, rather than coined by a name.
+VERBS = frozenset(
+    {
+        "accept_observed",
+        "adopt",
+        "allow",
+        "approve",
+        "cancel",
+        "choose",
+        "close",
+        "complete",
+        "create",
+        "decide",
+        "delete",
+        "import",
+        "list",
+        "move",
+        "open",
+        "read",
+        "reconcile",
+        "reconnect",
+        "refresh",
+        "refresh_due",
+        "reject",
+        "remove",
+        "remove_empty_groups",
+        "renew",
+        "replace",
+        "restart",
+        "restore",
+        "review",
+        "run",
+        "select",
+        "set",
+        "set_aside",
+        "sign_out",
+        "start",
+        "stop",
+        "sync",
+        "toggle",
+        "update",
+        "upload",
+        "upsert",
+        "withdraw",
+    }
+)
+
+# Every resource is one, and the API serves it under /resources/ already.
+_STUTTER = frozenset({"resource", "resources"})
+
+
+def capability_name_refusal(name: str) -> str | None:
+    """Why ``name`` is no capability name, or None for one that is."""
+
+    if not _CAPABILITY_NAME.fullmatch(name):
+        return f"{name!r} is not {CAPABILITY_PATTERN} in dotted snake_case."
+    verb = name.rpartition(".")[2]
+    if verb not in VERBS:
+        return f"{name!r} does not end in a verb, as {CAPABILITY_PATTERN} does; {verb!r} is none of VERBS."
+    return None
+
+
+def resource_name_refusal(name: str) -> str | None:
+    """Why ``name`` is no resource name, or None for one that is."""
+
+    if not _RESOURCE_NAME.fullmatch(name):
+        return f"{name!r} is not {RESOURCE_PATTERN} in dotted snake_case."
+    if name.rpartition(".")[2] in _STUTTER:
+        return f"{name!r} names its records 'resources', as the path it is served at already says ({RESOURCE_PATTERN})."
+    return None
+
 
 def required_capability_names(spec: IntegrationSpec) -> tuple[str, ...]:
     return tuple(item.value if isinstance(item, Capability) else item for item in spec.required_capabilities)
@@ -50,8 +132,8 @@ def validate_capability_spec(spec: CapabilitySpec) -> None:
 
 
 def _validate_capability_identity(spec: CapabilitySpec) -> None:
-    if not DOTTED_NAME.fullmatch(spec.name):
-        raise ImproperlyConfigured(f"Invalid capability name {spec.name!r}.")
+    if why := capability_name_refusal(spec.name):
+        raise ImproperlyConfigured(f"Invalid capability name: {why}")
     if not spec.summary.strip():
         raise ImproperlyConfigured(f"Capability {spec.name!r} has no summary.")
     words = (spec.label, spec.verb, *(text for _name, text in spec.variants))
@@ -126,8 +208,8 @@ def _validate_capability_handler(spec: CapabilitySpec) -> None:
 
 
 def _validate_resource_identity(spec: ResourceSpec) -> None:
-    if not DOTTED_NAME.fullmatch(spec.name):
-        raise ImproperlyConfigured(f"Invalid resource name {spec.name!r}.")
+    if why := resource_name_refusal(spec.name):
+        raise ImproperlyConfigured(f"Invalid resource name: {why}")
     if not spec.label.strip() or not spec.summary.strip():
         raise ImproperlyConfigured(f"Resource {spec.name!r} must declare a label and summary.")
     required = required_capability_names(spec)

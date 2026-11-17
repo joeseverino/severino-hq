@@ -151,7 +151,7 @@ class IntegrationGraphTests(TestCase):
     def test_two_commands_one_connection_offers_may_not_say_the_same_words(self):
         capabilities = tuple(
             CapabilitySpec(
-                f"example.lookup.{name}",
+                f"example.lookup.{name}.read",
                 "Look something up.",
                 "read",
                 Capability.READ,
@@ -187,7 +187,7 @@ class IntegrationGraphTests(TestCase):
 
         for build in (
             lambda effect: CapabilitySpec(
-                "example.bad", "Bad effect.", effect, Capability.READ, SyntheticCommand, execute_synthetic
+                "example.bad.read", "Bad effect.", effect, Capability.READ, SyntheticCommand, execute_synthetic
             ),
             lambda effect: ConnectionAbility("example.bad", "Bad", "Bad effect.", effect=effect),
         ):
@@ -205,7 +205,7 @@ class IntegrationGraphTests(TestCase):
             execute_synthetic,
         )
         malformed_capability = CapabilitySpec(
-            "example.bad",
+            "example.bad.read",
             "Bad variants.",
             "read",
             Capability.READ,
@@ -251,14 +251,14 @@ class IntegrationGraphTests(TestCase):
             )
 
         refused = (
-            wanting("example.untargeted", "keep {target}"),
-            wanting("example.missing", "keep the note", "slug"),
-            wanting("example.twice", "move {target} beside {target}", "slug"),
-            wanting("example.other", "keep {note}", "slug"),
+            wanting("example.untargeted.set", "keep {target}"),
+            wanting("example.missing.set", "keep the note", "slug"),
+            wanting("example.twice.set", "move {target} beside {target}", "slug"),
+            wanting("example.other.set", "keep {note}", "slug"),
         )
         with self.assertRaises(IntegrationGraphError) as raised:
             compile_integration_graph(
-                capabilities=(wanting("example.keep", "keep the note {target}", "slug"), *refused),
+                capabilities=(wanting("example.keep.set", "keep the note {target}", "slug"), *refused),
                 resources=(),
                 connections=(),
             )

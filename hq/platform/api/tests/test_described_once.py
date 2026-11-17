@@ -255,7 +255,7 @@ class DescribedOnceTests(SimpleTestCase):
         # The fuzz test's graph: one capability, and every generic list and
         # detail parameter written with no resource to name.
         spec = CapabilitySpec(
-            "example.properties",
+            "example.properties.set",
             "Exercise a generated write.",
             "remote_write",
             "example.write",
@@ -278,7 +278,7 @@ class DescribedOnceTests(SimpleTestCase):
                 "key",
                 target_help="The vehicle's key",
             )
-            for verb, command in (("recall", ExampleCommand), ("refresh", ExampleNoteCommand))
+            for verb, command in (("restart", ExampleCommand), ("refresh", ExampleNoteCommand))
         )
         with override_integration_graph(compile_integration_graph(capabilities=specs, resources=(), connections=())):
             document = openapi.document()
@@ -287,7 +287,7 @@ class DescribedOnceTests(SimpleTestCase):
         schemas = document["components"]["schemas"]
         targets = {
             json.dumps(schemas[f"ExampleVehicle{verb}Request"]["properties"]["target"])
-            for verb in ("Recall", "Refresh")
+            for verb in ("Restart", "Refresh")
         }
         self.assertEqual(len(targets), 1)
         self.assertIn("$ref", json.loads(targets.pop()))

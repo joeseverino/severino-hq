@@ -339,7 +339,7 @@ class NothingLiftsTheRuleTests(ComposedExample):
 class DeclarationTests(SimpleTestCase):
     def work(self, **changed):
         fields = {
-            "name": "example.lookup",
+            "name": "example.lookup.run",
             "label": "Look up",
             "summary": "Ask the registry.",
             "required_capability": "notes.write",

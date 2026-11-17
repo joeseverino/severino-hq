@@ -192,7 +192,7 @@ class CapabilityFailureTests(TestCase):
         def handler(command, **_bound):
             raise raised
 
-        spec = CapabilitySpec("example.records.change", "Change.", "read", Capability.READ, ExampleCommand, handler)
+        spec = CapabilitySpec("example.records.update", "Change.", "read", Capability.READ, ExampleCommand, handler)
         with commands_registered({spec.name: spec}):
             return execute_capability(spec.name, {}, principal=principal or cli_principal())
 
@@ -234,6 +234,6 @@ class CapabilityFailureTests(TestCase):
                 self.assertEqual(row.metadata["reason"], raised.code)
 
     def test_a_refusal_mapped_without_its_caller_records_nothing(self):
-        adapter_refusal("example.records.change", AuthorizationError("Not this agent's."))
+        adapter_refusal("example.records.update", AuthorizationError("Not this agent's."))
 
         self.assertFalse(AuditLog.objects.filter(action=AuditLog.Action.DENIED).exists())

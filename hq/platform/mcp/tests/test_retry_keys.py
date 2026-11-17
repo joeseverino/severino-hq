@@ -56,7 +56,7 @@ class RetryKeyTests(TestCase):
         self.enterContext(set_principal(READER))
         ran = []
         spec = CapabilitySpec(
-            "example.records.look",
+            "example.records.read",
             "Look at example records.",
             "read",
             Capability.READ,

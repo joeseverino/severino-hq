@@ -459,7 +459,7 @@ class WriteActTests(TestCase):
 
     def run_write(self, handler, payload):
         spec = CapabilitySpec(
-            "example.write", "Write an example.", "remote_write", "example.write", ExampleWrite, handler
+            "example.thing.set", "Write an example.", "remote_write", "example.write", ExampleWrite, handler
         )
         with commands_registered({spec.name: spec}):
             return execute_capability(spec.name, payload, principal=self.principal)
@@ -480,7 +480,7 @@ class WriteActTests(TestCase):
         self.assertEqual(first, again)
         (act,) = self.written_since(before)
         self.assertEqual(
-            (act.action, act.metadata["operation"], act.message), (AuditLog.Action.DONE, "example.write", "Set.")
+            (act.action, act.metadata["operation"], act.message), (AuditLog.Action.DONE, "example.thing.set", "Set.")
         )
 
     def test_a_write_that_recorded_its_change_leaves_no_act_beside_it(self):
@@ -495,7 +495,7 @@ class WriteActTests(TestCase):
         (row,) = self.written_since(before)
         self.assertEqual(
             (row.action, row.object_type, row.metadata["operation"]),
-            (AuditLog.Action.CREATED, "Project", "example.write"),
+            (AuditLog.Action.CREATED, "Project", "example.thing.set"),
         )
 
 

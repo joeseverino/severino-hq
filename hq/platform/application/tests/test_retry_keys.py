@@ -185,7 +185,7 @@ class CommandKeyTests(TestCase):
         for command in (Keyed, KeyedDict):
             with self.subTest(command=command.__name__), self.assertRaisesMessage(TypeError, IDEMPOTENCY_FIELD):
                 CapabilitySpec(
-                    name="example.keyed",
+                    name="example.keyed.set",
                     summary="Example.",
                     effect="remote_write",
                     required_capability=Capability.READ,

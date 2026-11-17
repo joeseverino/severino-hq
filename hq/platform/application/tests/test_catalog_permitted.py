@@ -58,7 +58,7 @@ GRAPH = compile_integration_graph(
             lambda command, *, principal: {"ok": True},
         ),
         CapabilitySpec(
-            "example.records.change",
+            "example.records.update",
             "Change example records.",
             "remote_write",
             Capability.MANAGE_INFRASTRUCTURE,
@@ -110,7 +110,7 @@ class CatalogPermittedTests(TestCase):
         reader = _as("api", frozenset({Capability.READ}))
         permitted = _permitted(describe_capabilities(principal=reader)["capabilities"])
 
-        self.assertEqual(permitted, {"example.records.read": True, "example.records.change": False})
+        self.assertEqual(permitted, {"example.records.read": True, "example.records.update": False})
         for name, allowed in permitted.items():
             with self.subTest(name):
                 ran = execute_capability(name, {}, principal=reader)

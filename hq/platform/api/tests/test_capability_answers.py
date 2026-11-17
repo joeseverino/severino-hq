@@ -98,19 +98,19 @@ class CapabilityAnswerTests(SimpleTestCase):
         self.assertEqual([name for name in names if _data(document, name).get(_REF) == _GENERIC], [])
 
     def test_an_answer_is_its_type_less_ok_whether_it_changes_something_or_reads(self):
-        specs = (_spec("example.counted", _typed), _spec("example.counted_read", _typed, "read"))
+        specs = (_spec("example.counted.set", _typed), _spec("example.counted.read", _typed, "read"))
         with override_integration_graph(compile_integration_graph(capabilities=specs, resources=(), connections=())):
             document = openapi.document()
 
-        for name in ("example.counted", "example.counted_read"):
+        for name in ("example.counted.set", "example.counted.read"):
             with self.subTest(name):
                 self.assertEqual(sorted(_resolved(document, _data(document, name))["properties"]), ["counted"])
 
     def test_a_handler_naming_no_shape_or_one_the_host_cannot_resolve_answers_an_object(self):
-        specs = (_spec("example.plain", _plain), _spec("example.unresolvable", _unresolvable))
+        specs = (_spec("example.plain.set", _plain), _spec("example.unresolvable.set", _unresolvable))
         with override_integration_graph(compile_integration_graph(capabilities=specs, resources=(), connections=())):
             document = openapi.document()
 
-        for name in ("example.plain", "example.unresolvable"):
+        for name in ("example.plain.set", "example.unresolvable.set"):
             with self.subTest(name):
                 self.assertEqual(_data(document, name), {_REF: _GENERIC})

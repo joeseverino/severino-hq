@@ -192,7 +192,7 @@ def looking_up(progress: jobs.Progress, *, subject: str, principal: capabilities
 def declared_words(spec: capabilities.CapabilitySpec) -> None:
     outbound.OutboundWork("example.sweep", "Sweep", "", "", looking_up, offered="no")  # type: ignore[arg-type]
     capabilities.CapabilitySpec(
-        "example.keep",
+        "example.note.set",
         "Keep a note.",
         "remote_write",  # type: ignore[arg-type]
         "example.write",
@@ -200,7 +200,7 @@ def declared_words(spec: capabilities.CapabilitySpec) -> None:
         noting,
     )
 
-    outbound.ask("example.lookup", label="Look")  # type: ignore[call-arg]
+    outbound.ask("example.lookup.run", label="Look")  # type: ignore[call-arg]
     spec.words(1)  # type: ignore[arg-type]
 
 
@@ -230,7 +230,7 @@ def noting(command: Noting, *, principal: capabilities.Principal) -> dict[str, A
 
 def a_command_that_starts_somewhere() -> None:
     capabilities.CapabilitySpec(
-        "example.tidy",
+        "example.notes.refresh",
         "Tidy notes.",
         capabilities.Effect.REMOTE_WRITE,
         "example.write",
@@ -245,7 +245,7 @@ def a_command_that_starts_somewhere() -> None:
     capabilities.Choices(("plain", "loud"))  # type: ignore[arg-type]
     capabilities.Refers("example.note", "about")  # type: ignore[arg-type]
     capabilities.CapabilitySpec(
-        "example.pin",
+        "example.pin.toggle",
         "Pin.",
         capabilities.Effect.REMOTE_WRITE,
         "example.write",

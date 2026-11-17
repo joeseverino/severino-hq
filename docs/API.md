@@ -247,10 +247,10 @@ dotted snake_case:
   where the noun alone would not say whose records they are, and no resource
   is named `resources`: the path it is served at says so.
 
-`test_registered_names.py` in `hq/platform/application/tests` holds every
-registered name to these patterns, and the composed suite holds every
-installed extension's. A capability's verb is one of the `VERBS` declared
-there, so a new verb joins on purpose. A rename moves the rows HQ keeps under
+A declaration whose name is off these patterns, the host's or an
+extension's, does not compose: `hq/platform/application/integration_validation.py`
+refuses it as the integration graph is built. A capability's verb is one of
+the `VERBS` declared there, so a new verb joins on purpose. A rename moves the rows HQ keeps under
 the old name through `hq_sdk.migrations` ([Extensions](Plugins.md#renaming-a-capability)).
 
 ### The reference
