@@ -8,11 +8,24 @@ same words naming what follows them.
 
 from django import template
 
+from hq.platform.core.template_parts import Part, slotted
+
 register = template.Library()
 
 
-@register.inclusion_tag("partials/_control_label.html")
 def control_label(words: str, control: str = "") -> dict[str, str]:
     """A control's name: its words, and the id of the control it labels."""
 
     return {"words": words, "control": control}
+
+
+slotted(
+    Part(
+        name="control_label",
+        about="The small quiet name over or beside a control, a `<label>` for the control `control` names.",
+        partial="partials/_control_label.html",
+        function=control_label,
+        classes=("control-label",),
+    ),
+    library=register,
+)

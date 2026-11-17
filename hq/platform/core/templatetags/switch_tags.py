@@ -35,6 +35,7 @@ def choice_frame(_name: str, given: dict) -> dict:
 slotted(
     Part(
         name="switch",
+        classes=("scope-chip", "switch"),
         partial=SWITCH_PARTIAL,
         about=(
             "A row of links to the same view, each a `{% choice %}`, the current one marked, and under it the "

@@ -122,6 +122,7 @@ slotted(
 slotted(
     Part(
         name="row_editor",
+        classes=("row-editor",),
         about="The way into a row's editor, and the editor itself under the row where the page's address opens it.",
         partial="partials/_row_editor.html",
         function=row_editor,

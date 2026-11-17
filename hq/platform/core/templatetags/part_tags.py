@@ -41,6 +41,8 @@ def _section() -> Part:
     parts = ("content", "aside", "empty", "foot")
     return Part(
         name="section",
+        classes=("section-aside", "section-body", "section-head", "section-lede"),
+        pieces=("partials/_section_head.html",),
         partial=SECTION_PARTIAL,
         about="A titled part of a page in its frame, its head on the page and its body in the frame.",
         parts=parts,

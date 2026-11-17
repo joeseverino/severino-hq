@@ -6,6 +6,7 @@ from django import template
 
 from hq.platform.application.page_parts import html_attributes
 from hq.platform.core.template_parts import Option, Part, slotted
+from hq.platform.core.templatetags.frame_tags import MUTED
 
 register = template.Library()
 
@@ -37,6 +38,7 @@ def dot_list_frame(_name: str, given: dict) -> dict:
 slotted(
     Part(
         name="stack_list",
+        classes=("stack-list",),
         partial=STACK_LIST_PARTIAL,
         about=(
             "A list read down, each `<li>` a line of its own: the notes under a row's name, the statuses a record "
@@ -48,19 +50,19 @@ slotted(
     ),
     library=register,
 )
-slotted(
-    Part(
-        name="dot_list",
-        partial=DOT_LIST_PARTIAL,
-        about=(
-            "A run of whole parts on one line, each an `<li>`, a dot between each that no line opens on: "
-            "a fact's links, a row's context line, a band's details."
-        ),
-        options={"muted": Option(default=False, choices=(False, True), about="Said quietly.")},
-        data=True,
-        public=True,
-        example="{% dot_list %}<li>{% entity link %}</li><li>2 days ago</li>{% enddot_list %}",
-        shape=dot_list_frame,
+DOT_LIST = Part(
+    name="dot_list",
+    classes=("dot-list",),
+    draws=(MUTED,),
+    partial=DOT_LIST_PARTIAL,
+    about=(
+        "A run of whole parts on one line, each an `<li>`, a dot between each that no line opens on: "
+        "a fact's links, a row's context line, a band's details."
     ),
-    library=register,
+    options={"muted": Option(default=False, choices=(False, True), about="Said quietly.")},
+    data=True,
+    public=True,
+    example="{% dot_list %}<li>{% entity link %}</li><li>2 days ago</li>{% enddot_list %}",
+    shape=dot_list_frame,
 )
+slotted(DOT_LIST, library=register)

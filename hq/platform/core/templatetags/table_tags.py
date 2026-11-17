@@ -505,7 +505,6 @@ def row_toggle() -> dict[str, Any]:
     return {}
 
 
-@register.inclusion_tag("partials/_row_select.html")
 def row_select(pk: Any) -> dict[str, Any]:
     """The cell that holds a row's tick-box, first in a row under the heading
     that selects every row (``select_all=True``), keyed by ``pk``. A row with
@@ -581,6 +580,7 @@ def line_list(parser: Any, token: Any) -> LineListNode:
 slotted(
     Part(
         name="table_heading",
+        classes=("sort-indicator", "table-sort-link"),
         about="One column heading of a table: its kind, the rank it leaves by and its sort control.",
         partial="partials/_table_heading.html",
         function=table_heading,
@@ -592,6 +592,7 @@ slotted(
 slotted(
     Part(
         name="row_group",
+        classes=("row-group",),
         about="The heading row of one group of a table's rows, first in its `tbody`: its name and how many rows.",
         partial="partials/_row_group.html",
         function=row_group,
@@ -615,7 +616,18 @@ slotted(
 )
 slotted(
     Part(
+        name="row_select",
+        about="The cell that holds a row's tick-box, first in a row under the heading that selects every row.",
+        partial="partials/_row_select.html",
+        function=row_select,
+        classes=("select-column",),
+    ),
+    library=register,
+)
+slotted(
+    Part(
         name="row_toggle",
+        classes=("row-expand",),
         about="The toggle that opens a row to all it holds, last in the cell that names it, in a table with no headings.",
         partial="partials/_row_toggle.html",
         function=row_toggle,

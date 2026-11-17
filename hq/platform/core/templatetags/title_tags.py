@@ -10,6 +10,7 @@ from django import template
 
 from hq.platform.application.page_parts import html_attributes
 from hq.platform.core.template_parts import Part, slotted
+from hq.platform.core.templatetags.stack_tags import DOT_LIST
 
 register = template.Library()
 
@@ -40,6 +41,8 @@ def title_parts(content: str) -> str:
 slotted(
     Part(
         name="title_meta",
+        classes=("page-title-meta",),
+        draws=(DOT_LIST,),
         partial=TITLE_META_PARTIAL,
         about="The line of facts on a page's title line, each an `<li>` that wraps whole, a dot between each.",
         data=True,

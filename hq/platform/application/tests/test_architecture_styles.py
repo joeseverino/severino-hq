@@ -11,7 +11,7 @@ from hq.platform.core.stylesheets import STATIC, sheet_paths, stylesheet
 from hq.platform.core.table_cells import ROLE_CLASSES
 from hq.platform.core.template_contract import class_words
 
-from .hand_rolled import ONE_OF_A_KIND, hand_rolled_classes, needless_classes, needless_exemptions
+from .hand_rolled import hand_rolled_classes, needless_classes
 from .source import template_files
 
 
@@ -608,7 +608,7 @@ class TemplateClassStyleTests(SimpleTestCase):
 
 
 @tag("source", "tree")
-@reads("**/templates/**", "hq/**/*.py", "hq_sdk/**/*.py")
+@reads("**/templates/**", "hq/**/*.py")
 class HandRolledClassTests(SimpleTestCase):
     """A class is one part's own, declared on its ``Part``: a template writes
     only the public classes, as an extension does, and a part's partial writes
@@ -628,10 +628,3 @@ class HandRolledClassTests(SimpleTestCase):
 
     def test_a_part_declares_only_the_classes_its_partial_writes(self):
         self.assertEqual(sorted(needless_classes()), [], "remove it from the Part's classes")
-
-    def test_a_one_of_a_kind_widget_is_listed_only_while_it_draws_its_own_classes(self):
-        """The list of one-of-a-kind widgets only shrinks: an entry whose
-        widget became a shared part, or is drawn from them, leaves it."""
-
-        self.assertTrue(ONE_OF_A_KIND)
-        self.assertEqual(sorted(needless_exemptions()), [], "remove it from hand_rolled.ONE_OF_A_KIND")

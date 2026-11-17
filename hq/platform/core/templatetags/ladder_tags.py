@@ -31,6 +31,7 @@ def rung_frame(_name: str, given: dict) -> dict:
 slotted(
     Part(
         name="check_ladder",
+        classes=("check-ladder", "is-route"),
         partial="partials/_check_ladder.html",
         about="Checks read down one after another, each a `{% check_rung %}` opening to say why it stands as it does.",
         options={
@@ -42,6 +43,10 @@ slotted(
 slotted(
     Part(
         name="check_rung",
+        classes=(
+            *("ladder-body", "ladder-check", "ladder-detail", "ladder-evidence", "ladder-kind", "ladder-mark"),
+            *("ladder-more", "ladder-page", "ladder-rung", "ladder-statement"),
+        ),
         partial="partials/_check_rung.html",
         about=(
             "One rung of a `{% check_ladder %}`: its tick, its statement with any `detail` part, and its `more` "

@@ -29,6 +29,7 @@ class FactTakes(Part):
 
 FACTS = Part(
     name="facts",
+    classes=("facts-band", "facts-inline", "facts-list"),
     partial=FACTS_PARTIAL,
     about="Every label and its value a page shows, each a `{% fact %}`.",
     options={
@@ -47,6 +48,7 @@ FACTS = Part(
 )
 FACT = FactTakes(
     name="fact",
+    classes=("band-icon", "fact", "fact-detail", "fact-label", "fact-value", "tone-*"),
     partial=FACT_PARTIAL,
     about=(
         "One fact of a `{% facts %}`: its label, its value and the detail under it. Given `value=` it encloses "

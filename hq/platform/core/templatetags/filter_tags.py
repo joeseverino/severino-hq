@@ -63,6 +63,10 @@ def filter_bar_frame(name: str, given: dict) -> dict:
 slotted(
     Part(
         name="filter_bar",
+        classes=(
+            *("filter-bar-choices", "filter-bar-controls", "filter-bar-fit", "filter-bar-query"),
+            *("filter-bar-send", "filter-bar-sizer", "filter-bar-summary"),
+        ),
         partial=FILTER_BAR_PARTIAL,
         parts=("content", "choices", "summary"),
         about=(

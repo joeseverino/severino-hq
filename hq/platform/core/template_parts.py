@@ -147,10 +147,15 @@ class Part:
     public_classes: tuple[str, ...] = ()
     # The parts whose look the partial draws too, writing their classes.
     draws: tuple[Part, ...] = ()
+    # The templates the partial includes that draw a piece of it alone, which
+    # write its classes too and are drawn wherever it is.
+    pieces: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not (self.name or self.partial):
             raise ValueError("A part with no tag names the partial a template includes.")
+        if not (self.name or self.example):
+            object.__setattr__(self, "example", f'{{% include "{self.partial}" %}}')
         if not self.about:
             raise ValueError(f"The part {self.name or self.partial} says what it is.")
         if self.public and not self.example:
@@ -179,6 +184,11 @@ class Part:
             ]
         )
         object.__setattr__(self, "__signature__", signature)
+
+    def files(self) -> tuple[str, ...]:
+        """The templates that draw it: its partial's file, then its pieces."""
+
+        return (self.partial.partition("#")[0], *self.pieces) if self.partial else ()
 
     def owned(self) -> frozenset[str]:
         return frozenset((*self.classes, *self.public_classes))

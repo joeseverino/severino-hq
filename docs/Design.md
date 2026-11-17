@@ -1929,11 +1929,11 @@ Decoration:
    table or list.
 2. If one almost fits, extend it in its sheet and its partial, with a comment
    saying what it covers and why. A page writes only the public classes
-   (`hq.platform.core.template_contract.CLASSES`), as an extension does; a
-   shared part's own classes (one under `templates/partials/` that code or two
-   pages draw) reach it only through the part. A widget drawn once in the
-   product is drawn from those, or named with its reason in
-   `hand_rolled.ONE_OF_A_KIND`, a list that only shrinks.
+   (`template_contract.public_classes`: the layout classes and each part's
+   `public_classes`), as an extension does. Every other class is one part's
+   own, declared on its `Part` (`classes`), and reaches a page only through
+   that part; a part drawn with no tag is a `Part` in
+   `hq/platform/core/included_parts.py`, a widget drawn once included.
 3. A new container of content is a surface: add its selector to the surface
    list, write only its layout.
 4. A new state of a page (empty, failing, waiting, crowded) gets a fixture in

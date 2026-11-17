@@ -36,6 +36,7 @@ from hq.platform.application.money import money as _money
 from hq.platform.application.printable import admitted
 from hq.platform.application.ui import MISSING, counted as _counted, measured as _measured, no_value
 from hq.platform.core.template_parts import Option, Part, slotted
+from hq.platform.core.templatetags.facts_tags import FACT
 from hq.platform.core.templatetags.line_breaks import breakable, button_words, code_spans, held, mark_text
 lazy from hq.domains.control_plane.provider_spec import expiry_phrase
 lazy from hq.platform.application import references, request_identity, security
@@ -626,6 +627,8 @@ slotted(
     library=register,
     part=Part(
         name="outside_link",
+        classes=("external-link",),
+        draws=(FACT,),
         partial=OUTSIDE_LINK,
         about=(
             "A link to a page outside HQ around markup of the page's own (a chip, an icon, a card); "

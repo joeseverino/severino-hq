@@ -56,34 +56,6 @@ FRAME_ABOUT = {
     ),
 }
 
-# The shared partials, each with the one line the docs say about it.
-PARTIALS: dict[str, str] = {
-    "partials/_activity_calendar.html": "One month of plan against execution, from `hq_sdk.ui.ActivityCalendar`.",
-    "partials/_allocation.html": "Parts of one whole as one bar, from `hq_sdk.ui.AllocationBar`.",
-    "partials/_ask.html": "A do-this-now control and how its work stands, from `hq_sdk.outbound.ask`.",
-    "partials/_attention_list.html": "Decisions waiting on the operator, from the entries `hq_sdk.plugin.plugin_attention_items` gathers.",
-    "partials/_cadence.html": "Whether a thing happened, period by period, from `hq_sdk.ui.Cadence`.",
-    "partials/_cadence_matrix.html": "Several cadences over the same periods, from `hq_sdk.ui.CadenceMatrix`.",
-    "partials/_chart.html": "A measure over time from `hq_sdk.ui.line_chart`, or quantities that add up from `hq_sdk.ui.stacked_bar_chart`, or a spatial path from `hq_sdk.ui.PathChart`.",
-    "partials/_chart_tabs.html": "Up to four charts of one thing in the space of one.",
-    "partials/_dropzone.html": "A file field that also accepts a drop.",
-    "partials/_empty_state.html": "The one empty state: what is missing, then what would fill it.",
-    "partials/_form.html": "A form that writes: its token, its errors, its fields or its table, and its closing row.",
-    "partials/_form_actions.html": "A form's closing row: its one verb, Cancel, and what saving does.",
-    "partials/_form_errors.html": "What was wrong with a submitted form as a whole, above its fields.",
-    "partials/_icon.html": "One of the host's icons, by `name`, the height of the text beside it.",
-    "partials/_insight_grid.html": "Readings that need interpreting, each with its next step.",
-    "partials/_job_progress.html": "A running job and what it is doing.",
-    "partials/_kpi_grid.html": "Responsive linked or static figures.",
-    "partials/_reading_age.html": (
-        "When a reading was taken, `at` the moment, in the one wording every page uses; `unread` why there is none."
-    ),
-    "partials/_record_list.html": "A compact list of records, from `hq_sdk.ui.ListRow`.",
-    "partials/_row_field.html": "One field of a form whose fields stand one to a row of a table, in its row.",
-    "partials/_timeline.html": "Chronological linked events, from `hq_sdk.ui.Timeline`.",
-    "partials/_week_plan.html": "Which days of the week a thing is scheduled for, from `hq_sdk.ui.WeekPlan`.",
-}
-
 # The host's own filters an extension may use. Its tags are each its ``Part``
 # declares public, and Django's are public too, recorded from Django itself.
 FILTERS = (
@@ -110,8 +82,6 @@ LIBRARIES = ("static",)
 CLASSES = (
     "actions-col",
     "address-list",
-    "allocation",
-    "allocation-legend",
     "cell-data",
     "cell-part",
     "cell-whole",
@@ -126,7 +96,6 @@ CLASSES = (
     "errors",
     "eyebrow",
     "finding",
-    "form",
     "ghost",
     "help",
     "icon-link",
@@ -143,17 +112,12 @@ CLASSES = (
     "primary",
     "prose",
     "row-below",
-    "row-empty",
     "row-gutter",
     "row-less",
-    "row-main",
-    "row-meta",
     "row-more",
-    "save-bar",
     "section-flow",
     "section-foot",
     "split",
-    "stacked",
     "subtle-link",
     "table-clamp",
     "table-scroll",
@@ -418,7 +382,8 @@ def _frames(engine: Any) -> dict[str, Any]:
 
 def _partials(engine: Any) -> dict[str, Any]:
     partials = {}
-    for name, about in PARTIALS.items():
+    for part in sorted((part for part in parts() if part.public and not part.name), key=lambda part: part.partial):
+        name, about = part.partial, part.about
         found = _reads(engine, name).found
         # Required is read without first asking whether it is there ({% if why %},
         # |default), so an include passes it by name rather than leave it to
@@ -491,17 +456,18 @@ def _part(compile_function: Any) -> Part | None:
 
 def parts() -> tuple[Part, ...]:
     """Every shared part: each tag's, read from what it wraps, and each a
-    template includes by path. A class is one part's own, so two declaring
-    it is refused here, where every reader of a part's classes reads them."""
+    template includes by path. A class or a piece is one part's own, so two
+    declaring it is refused here, where every reader of a part's classes reads them."""
 
     tags, _ = _libraries(_engine())
-    every = (*(part for compile_function in tags.values() if (part := _part(compile_function))), *PARTS)
+    found = (*(part for compile_function in tags.values() if (part := _part(compile_function))), *PARTS)
+    every = tuple({id(part): part for part in found}.values())
     owners: dict[str, list[str]] = {}
     for part in every:
-        for word in part.owned():
+        for word in (*part.owned(), *part.pieces):
             owners.setdefault(word, []).append(part.name or part.partial)
     if shared := sorted(f"{word} ({', '.join(names)})" for word, names in owners.items() if len(names) > 1):
-        raise ValueError(f"A class is one part's own, but parts share: {'; '.join(shared)}.")
+        raise ValueError(f"A class or a piece is one part's own, but parts share: {'; '.join(shared)}.")
     return every
 
 

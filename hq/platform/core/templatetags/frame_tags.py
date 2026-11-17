@@ -7,7 +7,9 @@ from django.utils.safestring import mark_safe
 
 from hq.platform.application.page_parts import html_attributes
 from hq.platform.application.tone import Tone
+from hq.platform.core.included_parts import PATH_HOPS, READING_AGE
 from hq.platform.core.template_parts import Option, Part, slotted
+from hq.platform.core.templatetags.facts_tags import FACT
 
 register = template.Library()
 
@@ -59,36 +61,36 @@ def muted_frame(_name: str, given: dict) -> dict:
     return framed(given, "muted", named)
 
 
-slotted(
-    library=register,
-    part=Part(
-        name="muted",
-        partial="partials/_muted.html",
-        about=(
-            "Words said quietly beside what they are about: a context line, a sentence under a value. "
-            "A cell or a list item holds it; a run of parts said quietly is `{% dot_list muted=True %}`."
-        ),
-        options={
-            "element": Option(
-                default="span", choices=("span", "p", "div"), about="A line among other words, a paragraph or a block."
-            ),
-            "css": Option(about="The classes of where it stands (`narrow-more`, `row-more`, `cell-part`)."),
-            "id": Option(about="Its `id`."),
-            "title": Option(about="Its `title`."),
-            "tip": Option(about="What a press or a hover shows, as a status's tip is."),
-            "hidden": Option(about="Drawn hidden, for a line a script shows."),
-            "role": Option(about="Its `role`, for a line a script shows and a reader hears."),
-        },
-        data=True,
-        public=True,
-        example='{% muted element="p" %}A sentence under it.{% endmuted %}',
-        shape=muted_frame,
+MUTED = Part(
+    name="muted",
+    classes=("muted",),
+    partial="partials/_muted.html",
+    about=(
+        "Words said quietly beside what they are about: a context line, a sentence under a value. "
+        "A cell or a list item holds it; a run of parts said quietly is `{% dot_list muted=True %}`."
     ),
+    options={
+        "element": Option(
+            default="span", choices=("span", "p", "div"), about="A line among other words, a paragraph or a block."
+        ),
+        "css": Option(about="The classes of where it stands (`narrow-more`, `row-more`, `cell-part`)."),
+        "id": Option(about="Its `id`."),
+        "title": Option(about="Its `title`."),
+        "tip": Option(about="What a press or a hover shows, as a status's tip is."),
+        "hidden": Option(about="Drawn hidden, for a line a script shows."),
+        "role": Option(about="Its `role`, for a line a script shows and a reader hears."),
+    },
+    data=True,
+    public=True,
+    example='{% muted element="p" %}A sentence under it.{% endmuted %}',
+    shape=muted_frame,
 )
+slotted(MUTED, library=register)
 slotted(
     library=register,
     part=Part(
         name="steps",
+        classes=("is-numbered", "step-list"),
         partial="partials/_steps.html",
         about="A list of short steps or checks, each a `{% step %}`, read down its columns.",
         options={"numbered": Option(about="Steps done in order: one column, each its number in place of its icon.")},
@@ -98,6 +100,8 @@ slotted(
     library=register,
     part=Part(
         name="step",
+        classes=("is-done",),
+        draws=(FACT,),
         partial="partials/_step.html",
         about="One step or check of a `{% steps %}` list: its icon, or its number, then what it says.",
         options={
@@ -112,6 +116,7 @@ slotted(
     library=register,
     part=Part(
         name="prose_list",
+        classes=("prose-list",),
         partial="partials/_prose_list.html",
         about="A list of sentences, each an `<li>` marked as the browser marks it.",
         options={"numbered": Option(about="Each numbered, for items read in order.")},
@@ -123,6 +128,7 @@ slotted(
     library=register,
     part=Part(
         name="link_chips",
+        classes=("link-chips",),
         partial="partials/_link_chips.html",
         about="A row of places to go, each `<li>` one link drawn as a chip of its own.",
     ),
@@ -131,6 +137,8 @@ slotted(
     library=register,
     part=Part(
         name="button_row",
+        classes=("form-actions",),
+        public_classes=("save-bar",),
         partial="partials/_button_row.html",
         about="A row of buttons that stands on its own: a form's closing row, a card's decisions, a page's way on.",
         options={"bar": Option(about="Pinned to the bottom of the screen once its form has changed.")},
@@ -142,6 +150,7 @@ slotted(
     library=register,
     part=Part(
         name="page_main",
+        classes=("content", "page-print-footer"),
         partial="partials/_page_main.html",
         about="The content column every page and each catalog entry is drawn in, a region answered in place.",
         parts=("content", "print_footer"),
@@ -192,6 +201,7 @@ slotted(
     library=register,
     part=Part(
         name="readings",
+        classes=("readings",),
         partial="partials/_readings.html",
         about="A row of readings, each a `{% reading %}`, spaced as equals rather than ruled apart.",
     ),
@@ -200,6 +210,11 @@ slotted(
     library=register,
     part=Part(
         name="reading",
+        classes=(
+            *("reading", "reading-head", "reading-lead", "reading-lines", "reading-mark", "reading-panel"),
+            *("reading-panel-foot", "reading-panel-head", "reading-standing"),
+        ),
+        draws=(PATH_HOPS, READING_AGE),
         partial="partials/_reading.html",
         about=(
             "One reading of a `{% readings %}` row: its mark, its figure, its quiet lines and a note on how it "
