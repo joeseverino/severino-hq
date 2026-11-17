@@ -11,7 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource
-from hq.domains.control_plane.provider_adapters.github import COMPOSE_WORKFLOW, CURRENT, KIND as DELIVERY
+from hq.domains.control_plane.provider_adapters.github import KIND as DELIVERY
 from hq.platform.application.markup_testing import select, text
 
 from .. import first_seen, freshness
@@ -26,6 +26,7 @@ from ..projection import projection_scope
 from ..report_testing import bridged
 from ..resource_context import record_status
 from ..security import cli_principal
+from .finding_examples.delivery_findings import RUN, delivered
 from .host_only import host_only
 from .inventory_records import kind_read
 
@@ -194,33 +195,9 @@ class FirstSeenTests(TestCase):
 class DeployInProgressTests(TestCase):
     """A deploy that is running is told, not raised as a problem."""
 
-    def delivery(self, stage: str, *, behind_for: timedelta = timedelta(minutes=1), **extension) -> None:
-        since = (timezone.now() - behind_for).isoformat()
-        message = f"example.alpha: bbbbbbb is approved, production still runs aaaaaaa. {stage}."
+    def delivery(self, stage: str, **said) -> None:
         kind_read(DELIVERY, timezone.now())
-        ManagedResource.objects.create(
-            key="delivery",
-            kind=DELIVERY,
-            spec={"repository": "example/host", "workflow": COMPOSE_WORKFLOW, "branch": "main", "production": CURRENT},
-            generation=1,
-            observed_generation=1,
-            last_observed_at=timezone.now(),
-            status={
-                "extensions": [
-                    {
-                        "plugin": "example.alpha",
-                        "running": "a" * 40,
-                        "admitted": "b" * 40,
-                        "stage": stage,
-                        "run_url": "https://github.example.com/example/host/actions/runs/9",
-                        **extension,
-                    },
-                ]
-            },
-            conditions=[
-                {"type": "Degraded", "status": True, "reason": "NotDelivered", "message": message, "since": since}
-            ],
-        )
+        delivered(stage, **said)
 
     def items(self):
         with host_only(), projection_scope():
@@ -229,25 +206,6 @@ class DeployInProgressTests(TestCase):
     def item(self):
         (found,) = [item for item in self.items() if finding_key(item).startswith("finding:deploy-")]
         return found
-
-    def test_a_running_deploy_is_a_notice(self):
-        self.delivery("Compose run 9 is running")
-
-        item = self.item()
-
-        self.assertTrue(item.notice)
-        self.assertEqual((item.severity, item.title), ("attention", "A deploy is running"))
-        self.assertIn("after 30 minutes", item.explanation)
-
-    def test_a_deploy_not_started_yet_is_a_notice(self):
-        self.delivery("No deploy has started")
-
-        self.assertEqual((self.item().notice, self.item().title), (True, "A deploy is about to start"))
-
-    def test_the_stage_the_reading_states_is_read_before_its_sentence(self):
-        self.delivery("Compose run 9 failed", stage_state="running")
-
-        self.assertTrue(self.item().notice)
 
     def test_a_deploy_behind_for_too_long_is_a_serious_problem(self):
         self.delivery("Compose run 9 is running", behind_for=STALLED_AFTER + timedelta(minutes=1))
@@ -268,6 +226,7 @@ class DeployInProgressTests(TestCase):
     def test_a_deploy_on_its_way_is_not_a_serious_problem_anywhere(self):
         self.delivery("Compose run 9 is running")
 
+        self.assertTrue(self.item().notice)
         self.assertNotIn("serious", {item.severity for item in self.items()})
         resource = ManagedResource.objects.get(key="delivery")
         self.assertEqual(resource_health(resource)["label"], "Deploy running")
@@ -278,6 +237,5 @@ class DeployInProgressTests(TestCase):
 
         item = self.item()
 
-        self.assertEqual((item.notice, item.severity), (False, "attention"))
-        self.assertEqual(item.title, "A deploy is waiting for your approval")
-        self.assertEqual(item.primary.url, "https://github.example.com/example/host/actions/runs/9")
+        self.assertFalse(item.notice)
+        self.assertEqual(item.primary.url, RUN)
