@@ -218,6 +218,12 @@ class Asked:
         return {"ok": True, "standing": self.standing.as_json(), "status_url": self.status_url, "message": self.message}
 
 
+# The mode an ask's route runs its command in (``pages.Runs``): one press,
+# answered at once. Only the ask's own button is sent there; any other control
+# for the command still opens the command's form.
+ASK = "ask"
+
+
 class AskMixin:
     """The view an ``Ask``'s button posts to, declared by what it asks: it
     runs ``capability`` as the person who pressed it and answers at once, a
@@ -226,6 +232,10 @@ class AskMixin:
     http_method_names: ClassVar[list[str]] = ["post"]
     capability: str
     back_to: str
+
+    @property
+    def runs(self) -> tuple[tuple[str, str], ...]:
+        return ((self.capability, ASK),)
 
     def back(self) -> str:
         return reverse(self.back_to)

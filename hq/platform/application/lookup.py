@@ -44,6 +44,8 @@ RECORD_TYPES = ("A", "AAAA", "CNAME", "MX", "TXT", "NS", "SOA", "CAA")
 
 LOOK_UP_NAME = "lookup.name.read"
 LOOK_UP_ADDRESS = "lookup.address.read"
+# Its mode where an address is shown with what HQ holds of it: read it again.
+AGAIN = "again"
 
 
 def _stripped(value: Any) -> Any:

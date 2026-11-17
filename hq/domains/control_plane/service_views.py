@@ -253,10 +253,12 @@ class ServiceStartView(View):
     """
 
     def get(self, request):
-        return self._page(request, ServiceStartForm())
+        """The question, or with its answer the page that name leads to: a
+        lookup, so its form is a GET and sending it writes nothing."""
 
-    def post(self, request):
-        form = ServiceStartForm(request.POST)
+        if "hostname" not in request.GET:
+            return self._page(request, ServiceStartForm())
+        form = ServiceStartForm(request.GET)
         if not form.is_valid():
             return self._page(request, form, status=400)
         return redirect("control_plane:service", hostname=form.cleaned_data["hostname"])
@@ -278,6 +280,12 @@ class ServicePinView(View):
     """
 
     capability = PIN
+
+    # A pin of a service, the mode of the command its route runs: a domain's
+    # star is the command's own control.
+    @property
+    def runs(self) -> tuple[tuple[str, str], ...]:
+        return ((self.capability, SERVICE),)
 
     def payload(self, name: str) -> dict:
         return {"kind": SERVICE, "key": name}

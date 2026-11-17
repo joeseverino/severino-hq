@@ -12,7 +12,7 @@ from django.views.generic import TemplateView, View
 
 from hq.domains.contacts import inbox
 from hq.platform.application import action_items as queue_state, fragments, getting_started
-from hq.platform.application.asks import AskMixin
+from hq.platform.application.asks import ASK, AskMixin
 from hq.platform.application.cadence import controller_standing
 from hq.platform.application.calendar import calendar_month, month_of
 from hq.platform.application.calendar_entries import calendar_choices
@@ -53,6 +53,8 @@ class DashboardLinkChoiceView(View):
     no spec, no generation and no controller: the world does not change because
     somebody decided which shortcuts they want.
     """
+
+    runs = (CHOOSE,)
 
     def get(self, request):
         return render(
@@ -254,6 +256,7 @@ class DashboardGlanceView(AskMixin, View):
     http_method_names: ClassVar[list[str]] = ["get", "post"]
     template_name = "core/_dashboard_glance.html"
     capability = DASHBOARD_REFRESH
+    runs = ((DASHBOARD_REFRESH, ASK), (DASHBOARD_REFRESH_STALE, ASK))
     back_to = "dashboard"
 
     def get(self, request):
@@ -280,6 +283,8 @@ def _settings_of(configuration) -> dict[str, str]:
 
 
 class DashboardGlanceSettingsView(View):
+    runs = (DASHBOARD_SETTINGS,)
+
     def get(self, request):
         return render(
             request,

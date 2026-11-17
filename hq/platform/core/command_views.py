@@ -27,7 +27,7 @@ from hq.platform.application.command_targets import (
 from hq.platform.application.contracts import route_url
 from hq.platform.application.integration_specs import ON_ITS_PAGE, capability_schema, kept_by
 from hq.platform.application.integrations import held_graph
-from hq.platform.application.pages import page_context
+from hq.platform.application.pages import RouteNamed, page_context
 from hq.platform.application.payload_words import value_words
 from hq.platform.application.refusal_status import refusal_of
 from hq.platform.application.resource_operations import OperationAsked
@@ -129,6 +129,7 @@ class CommandView(View):
     """Render and execute any permitted capability without reimplementing it."""
 
     template_name = "command.html"
+    runs = RouteNamed()
 
     @override
     def dispatch(self, request, name: str, *args, **kwargs):

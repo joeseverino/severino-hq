@@ -24,7 +24,9 @@ from hq.platform.application.pages import PageAction, page_context
 from hq.platform.application.pins import DOMAIN, PIN, pinned
 from hq.platform.application.relationships import relationships_for
 from hq.platform.application.resource_capabilities import (
+    MAIL_POLICY,
     REMOVAL_CAPABILITY,
+    UPDATE_CAPABILITY,
     public_dns_enabled,
     resource_capabilities,
 )
@@ -129,6 +131,8 @@ class ZoneMailView(View):
     proves none of it. The page is ordered the way mail actually flows.
     """
 
+    runs = ((UPDATE_CAPABILITY, MAIL_POLICY),)
+
     def get(self, request, zone: str):
         return self._page(request, self._zone(zone))
 
@@ -190,7 +194,7 @@ class ZoneMailView(View):
         resource = ManagedResource.objects.get(key=record.resource_key)
         result = execute_posted(
             request,
-            "infrastructure.resource.update",
+            UPDATE_CAPABILITY,
             {
                 "key": resource.key,
                 "kind": resource.kind,
@@ -332,6 +336,8 @@ class ZoneAdoptView(View):
     clears up inside an issuance, not desired state, so it is never adopted
     and never listed: see ``zones.EPHEMERAL_PREFIXES``.
     """
+
+    runs = (ADOPT_ZONE,)
 
     def post(self, request, zone):
         refused(request, execute_posted(request, ADOPT_ZONE, {"zone": zone, "token": request.POST.get("token", "")}))

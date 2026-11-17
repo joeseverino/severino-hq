@@ -27,7 +27,7 @@ from .asks import Ask
 from .fragments import FragmentMixin
 from .tone import Tone
 from .ui import PageNavigation, button_classes
-lazy from .action_links import COMMAND_ROUTE, command_url
+lazy from .action_links import command_url
 lazy from .capabilities import command_spec
 lazy from .contracts import Effect
 lazy from .outbound_work import refusal as outbound_refusal
@@ -574,24 +574,47 @@ class CommandRoute:
             return str(reverse(self.name))
 
 
-# What a view ``runs``: a command's name, or the name and one of its declared
-# variants (``capability_words``) where a route of its own runs only that mode
-# of it (linking a receipt to an expense beside editing it).
-type Runs = tuple[str | tuple[str, str], ...]
+@dataclass(frozen=True, slots=True)
+class RouteNamed:
+    """What a view ``runs`` when its route names the command: the one its URL
+    argument ``argument`` names (the command's own page, an ask for declared
+    work). No control is addressed to it by command, since it holds none."""
+
+    argument: str = "name"
+
+
+# What a view ``runs``: a command's name, or the name and one mode of it where
+# a route of its own runs only that mode (linking a receipt to an expense
+# beside editing it, one of its declared variants, ``capability_words``;
+# pinning a service beside a domain); or the command its route names.
+type Runs = tuple[str | tuple[str, str], ...] | RouteNamed
 
 
 def declared_runs(view: Callable[..., Any]) -> tuple[tuple[str, str], ...]:
     """The commands the routed ``view`` declares it ``runs``, the one way a view
     says it, each as its name and variant ("" for the command as a whole).
-
-    A class view's are read from it as its route builds it (``as_view``'s
-    arguments), so one class can run a command per route; a function view's
-    are its own attribute.
+    One whose route names the command (``RouteNamed``) holds none of its own.
     """
 
-    built = _built_view(view)
-    declared: Runs = getattr(view if built is None else built, "runs", ())
+    declared = _declared(view)
+    if isinstance(declared, RouteNamed):
+        return ()
     return tuple((each, "") if isinstance(each, str) else each for each in declared)
+
+
+def declares_runs(view: Callable[..., Any]) -> bool:
+    """Whether the routed ``view`` says what it runs: its commands, or the one its route names."""
+
+    return bool(_declared(view))
+
+
+def _declared(view: Callable[..., Any]) -> Runs:
+    """``runs`` as the routed ``view`` declares it. A class view's is read from
+    it as its route builds it (``as_view``'s arguments), so one class can run a
+    command per route; a function view's is its own attribute."""
+
+    built = _built_view(view)
+    return getattr(view if built is None else built, "runs", ())
 
 
 def _built_view(view: Callable[..., Any]) -> Any:
@@ -678,10 +701,11 @@ def runs_at(url: str | Promise) -> str | None:
         match = resolve(parts.path)
     except Resolver404:
         return None
-    if match.view_name == COMMAND_ROUTE:
-        return str(match.kwargs["name"])
-    declared = declared_runs(match.func)
-    return declared[0][0] if declared else None
+    declared = _declared(match.func)
+    if isinstance(declared, RouteNamed):
+        return str(match.kwargs[declared.argument])
+    runs = declared_runs(match.func)
+    return runs[0][0] if runs else None
 
 
 def offered_now(url: str | Promise) -> bool:

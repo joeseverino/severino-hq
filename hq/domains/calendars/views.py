@@ -1,7 +1,7 @@
 """The calendar: a month of every source, a day of everything, and the operator's own events."""
 
 from datetime import date
-from typing import override
+from typing import ClassVar, override
 from uuid import UUID
 
 from django.http import HttpResponseRedirect
@@ -166,6 +166,7 @@ class CalendarSourceView(View):
     """Check or uncheck one source, then go back to the month it was chosen on."""
 
     required_capability = Capability.READ_CALENDAR
+    runs = (CHOOSE_SOURCE,)
 
     def post(self, request, source_id):
         result = execute_posted(
@@ -211,6 +212,8 @@ class EntryDetailView(RedirectView):
     """An entry's own address opens it on the calendar."""
 
     required_capability = Capability.READ_CALENDAR
+    # A redirect answers every method by default; this one is only followed.
+    http_method_names: ClassVar[list[str]] = ["get", "head"]
 
     @override
     def get_redirect_url(self, uid):
