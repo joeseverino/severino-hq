@@ -1,14 +1,17 @@
-"""What fast judges when its fixes rewrite a file: the tree they leave, named as uncommitted."""
+"""What fast judges when its fixes rewrite a file, the tree they leave named as uncommitted, and which
+gates its selection can pick."""
 
 import contextlib
 import io
+import os
 import subprocess
 import tempfile
-from pathlib import Path
+from pathlib import Path, PurePath
 from unittest import mock
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, tag
 
+from tests.mise_tasks import mise_tasks, runs
 from tools.gate import chain, fast, verdict
 from tools.gate.tests.base import fixture_git
 from tools.gate.verdict import TREE_LINE, Gate, Step
@@ -65,3 +68,40 @@ class FixedFirstTests(SimpleTestCase):
             self.assertEqual(recorded.call_args.args[0], committed)
             closing = screen.getvalue().splitlines()[-1]
             self.assertIn(f"{fast.REWROTE} {derived}", closing)
+
+
+@tag("source")
+class SelectableTests(SimpleTestCase):
+    def test_every_gate_fast_may_run_is_selected_by_what_it_reads(self):
+        """fast runs a gate only when mise's --affected picks it among those tagged QUICK, by its
+        sources: a gate tagged HEAVY alone is never picked, and one with no sources is picked on
+        every change."""
+
+        from tests.mise_tasks import matched
+
+        listed = mise_tasks()
+        heavy = [name for name, task in listed.items() if fast.HEAVY in (task.get("tags") or ())]
+        self.assertTrue(heavy, f"no task is tagged {fast.HEAVY}, so this holds nothing")
+        for name in heavy:
+            with self.subTest(name):
+                self.assertIn(
+                    fast.QUICK,
+                    listed[name]["tags"],
+                    f"{name} is tagged {fast.HEAVY}, which only fast reads, but not {fast.QUICK}, so fast"
+                    f" never selects it: tag it {fast.QUICK} and declare what it reads as its sources",
+                )
+        for name, task in listed.items():
+            if fast.QUICK not in (task.get("tags") or ()):
+                continue
+            with self.subTest(name):
+                self.assertTrue(
+                    task["sources"],
+                    f"{name} declares no sources, so mise's --affected selects it on every change:"
+                    " declare what it reads",
+                )
+                missed = [
+                    relative
+                    for relative in (os.path.relpath(path, task["dir"]) for path in runs(task))
+                    if not matched(PurePath(relative), task["sources"])
+                ]
+                self.assertFalse(missed, f"{name} runs {', '.join(missed)}, which its sources leave out: add each")

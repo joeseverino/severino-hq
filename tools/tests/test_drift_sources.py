@@ -7,30 +7,17 @@ each Python process the gate starts opens to read; the drift gates are all Pytho
 import os
 import subprocess
 import tempfile
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path, PurePath
 from typing import Any, override
 
 from django.test import SimpleTestCase, tag
 
-from tests.mise_tasks import ROOT, mise_tasks
+from tests.mise_tasks import ROOT, matched, mise_tasks
 
 DRIFT = "lint:drift-"
 READS = Path(__file__).resolve().parent / "reads"
-
-
-def matched(path: PurePath, sources: Sequence[str]) -> bool:
-    """Whether mise counts ``path`` among ``sources``: the last entry it matches decides, one
-    starting with ``!`` taking it out. A glob is gitignore's, as globset reads it: ``*`` stays within
-    a segment and ``**`` spans any number, a trailing one reaching the files beneath, which is
-    what PurePath.full_match answers."""
-
-    counted = False
-    for entry in sources:
-        if path.full_match(entry.removeprefix("!")):
-            counted = not entry.startswith("!")
-    return counted
 
 
 def inputs(opened: Iterable[str], root: Path) -> set[Path]:

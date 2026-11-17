@@ -23,6 +23,7 @@ hide = true
 tags = ["fast"]
 sources = [
   "hq/**/*.py",
+  "manage.py",
   "pyproject.toml",
   "uv.lock",
   "mise.toml",
@@ -39,7 +40,29 @@ description = "Generated API cases through the real WSGI middleware"
 hide = true
 # Its modules in one process, outside the heavy turn and its shares, which fast
 # still runs in the turn it holds for its tests (tools/gate/fast.py, HEAVY).
-tags = ["heavy"]
+tags = ["fast", "heavy"]
+# What its run reads, as a log of the files its processes open finds it: the
+# whole of hq and hq_sdk, which Django loads to answer, its own modules, and the
+# two data files the settings and the bridge open. The committed document is
+# what the served one is held to (lint:drift-api-document), so it selects the
+# suite too.
+sources = [
+  "hq/**/*.py",
+  "hq_sdk/**/*.py",
+  "hq/domains/control_plane/bridge_base.json",
+  "deploy/systemd/severino-hq-secrets.timer",
+  "hq/platform/api/hq-api.openapi.json",
+  "manage.py",
+  "tests/__init__.py",
+  "tests/fuzz/**",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 extends = "django"
 run = "uv run --group fuzz python manage.py test tests.fuzz.api_properties tests.fuzz.api_links --noinput --parallel 1"
 

@@ -5,7 +5,8 @@ import json
 import re
 import subprocess
 import tomllib
-from pathlib import Path
+from collections.abc import Sequence
+from pathlib import Path, PurePath
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -96,6 +97,19 @@ def named(run: str) -> list[Path]:
         if found and found not in scripts:
             scripts.append(found)
     return scripts
+
+
+def matched(path: PurePath, sources: Sequence[str]) -> bool:
+    """Whether mise counts ``path``, relative to the task's dir, among ``sources``: the last entry it
+    matches decides, one starting with ``!`` taking it out. A glob is gitignore's, as globset reads
+    it: ``*`` stays within a segment and ``**`` spans any number, a trailing one reaching the files
+    beneath, which is what PurePath.full_match answers."""
+
+    counted = False
+    for entry in sources:
+        if path.full_match(entry.removeprefix("!")):
+            counted = not entry.startswith("!")
+    return counted
 
 
 @functools.cache
