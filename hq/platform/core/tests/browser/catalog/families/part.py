@@ -29,7 +29,7 @@ from hq.platform.application.card_items import Insight, Kpi, ListRow, Timeline, 
 from hq.platform.application.command_center import DiscoveryItem
 from hq.platform.application.contracts import Effect
 from hq.platform.application.credential_mint import CredentialFix
-from hq.platform.application.drawings import AllocationBar, Dot, Dots, Share, StripTile, Trend
+from hq.platform.application.drawings import AllocationBar, Dot, Dots, Share, Trend
 from hq.platform.application.entity_links import EntityLink
 from hq.platform.application.finding_steps import Do, Run
 from hq.platform.application.freshness import CURRENT, STALE, Freshness
@@ -104,46 +104,57 @@ class _Drawn:
         return Template(self.source).render(context)
 
 
-# A row of readings in each form a reading takes.
-_READINGS = (
-    "{% readings %}"
-    '{% reading icon="network" url="/example/" modal="example" note_tone="attention" %}'
+# A page head's band of facts, as the dashboard's glance draws it, in each
+# form a fact there takes: one leading to a dialog with a note of a problem,
+# one whose line needs attention, and a region holding facts that open a
+# panel, one needing attention and one past its time.
+_GLANCE = (
+    '<div data-example-region>{% facts layout="band" label="Example glance" %}'
+    '{% fact "Example connection" icon="network" url="/example/" modal="example" %}'
     '{% status "Example" tone="good" dot=True ink="context" %}'
-    "{% lines %}<span>Example TLS 1.3</span>{% note %}An example check failed{% endreading %}"
-    '{% reading icon="activity" url="/example/controller/" %}'
-    '{% status "Examples" tone="attention" dot=True ink="context" %}'
-    "{% lines %}<strong>Last read an example day ago</strong>{% endreading %}"
-    "<div data-example-region>"
-    '{% reading icon="server" id="example-host" tone="attention" title="Example containers" unit="containers" '
-    'data_fragment_part="example-host" %}12'
-    "{% lines %}<span>example-host-01</span><strong>2 example alerts</strong><span>CPU 4%</span>"
+    '{% detail %}<small>Example TLS 1.3</small><small>{% status "An example check failed" tone="attention" pill=False %}</small>'
+    "{% endfact %}"
+    '{% fact "Example controller" icon="activity" url="/example/controller/" %}'
+    '{% status "Silent" tone="attention" dot=True ink="context" %}'
+    "{% detail %}<small>Last read an example day ago</small>{% endfact %}"
+    '{% fact "example-host-01" icon="server" id="example-host" tone="attention" title="Example containers" '
+    'data_fragment_part="example-host" %}12 <small>containers</small>'
+    '{% detail %}<small>{% status "2 example alerts" tone="attention" pill=False %}</small>'
+    "{% dot_list %}<li>CPU 4%</li><li>Memory 48%</li>{% enddot_list %}"
     "{% heading %}<strong>Example host</strong><span>An example summary</span>"
     '{% panel %}{% facts %}{% fact "Example CPU" value="4%" %}{% fact "Example memory" value="583 MB" %}{% endfacts %}'
     '{% foot %}<a href="/example/">Example containers</a><span><button type="button">Refresh</button>'
-    '<a href="/example/settings/">Settings</a></span>{% endreading %}'
-    '{% reading icon="cloud" id="example-weather" note_tone="stale" data_fragment_part="example-weather" %}71°'
-    "{% lines %}<span>Example Mostly Cloudy</span><span>71–86°</span>"
-    "{% note %}Last read an example 3 days ago · out of date"
+    '<a href="/example/settings/">Settings</a></span>{% endfact %}'
+    '{% fact "Example weather" icon="cloud" id="example-weather" data_fragment_part="example-weather" %}71°'
+    "{% detail %}{% dot_list %}<li>Example Mostly Cloudy</li><li>71–86°</li>{% enddot_list %}"
+    "<small>Last read an example 3 days ago · out of date</small>"
     "{% heading %}<strong>Example weather</strong>"
     "{% panel %}<p>The last reading failed (ExampleError). This is the one before it.</p>"
-    '{% foot %}<span><a href="/example/settings/">Settings</a></span>{% endreading %}'
-    "</div>{% endreadings %}"
+    '{% facts layout="band" size="small" items=hours label="Example hours ahead" %}'
+    '{% foot %}<span><a href="/example/settings/">Settings</a></span>{% endfact %}'
+    "{% endfacts %}</div>"
 )
 
 
-_READINGS_EMPTY = (
-    "{% readings %}"
-    '{% reading icon="activity" url="/example/controller/" %}'
-    '{% status "Examples" dot=True ink="context" %}{% lines %}<span>Not configured</span>{% endreading %}'
-    "<div data-example-region>"
-    '{% reading icon="server" id="example-empty" data_fragment_part="example-empty" %}Example host'
-    "{% lines %}<span>No reading yet</span>"
-    "{% heading %}<strong>Example host</strong>{% panel %}<p>An example host has not been read yet.</p>{% endreading %}"
-    '{% reading icon="cloud" id="example-long" data_fragment_part="example-long" %}71°'
-    "{% lines %}<span>Example Mostly Cloudy with an example chance of showers later</span><span>71–86°</span>"
-    "<span>Example wind 12 mph</span>"
-    "{% heading %}<strong>Example weather</strong>{% panel %}<p>An example forecast.</p>{% endreading %}"
-    "</div>{% endreadings %}"
+# The same band with nothing read yet, a long line that wraps inside its fact.
+_GLANCE_EMPTY = (
+    '<div data-example-region>{% facts layout="band" label="Example glance" %}'
+    '{% fact "Example controller" icon="activity" url="/example/controller/" %}'
+    '{% status "Not configured" dot=True ink="context" %}{% endfact %}'
+    '{% fact "Example host" icon="server" id="example-empty" data_fragment_part="example-empty" %}{% empty_value %}'
+    "{% detail %}<small>No reading yet</small>"
+    "{% heading %}<strong>Example host</strong>{% panel %}<p>An example host has not been read yet.</p>{% endfact %}"
+    '{% fact "Example weather" icon="cloud" id="example-long" data_fragment_part="example-long" %}71°'
+    "{% detail %}{% dot_list %}<li>Example Mostly Cloudy with an example chance of showers later</li><li>71–86°</li>"
+    "<li>Example wind 12 mph</li>{% enddot_list %}"
+    "{% heading %}<strong>Example weather</strong>{% panel %}<p>An example forecast.</p>{% endfact %}"
+    "{% endfacts %}</div>"
+)
+
+# A forecast's hours, a strip of small figures: one with a note and one
+# without, side by side, more than one line holds in a narrow box.
+_HOURS = tuple(
+    Kpi(f"{hour} PM", f"{80 - hour}°", "40%" if hour % 3 == 0 else "", tip="Example showers") for hour in range(1, 13)
 )
 
 
@@ -2180,24 +2191,19 @@ ENTRIES = {
             "at": _NOW - timedelta(hours=2),
         },
     ),
-    # A row of readings beside a page's title, as the dashboard draws it: one
-    # that leads to a dialog with a note of a problem, one whose line needs
-    # attention, and a region holding readings that open a panel, one
-    # needing attention and one past its time.
-    "part/readings-states": Entry(
+    # A band of facts beside a page's title, as the dashboard's glance draws it.
+    "part/facts-band-glance": Entry(
         '{% include "partials/_page_head.html" %}{% section "Example section" %}<p>An example line.</p>{% endsection %}',
-        {"page": Page(title="Example readings"), "page_aside": _Drawn(_READINGS)},
+        {"page": Page(title="Example glance"), "page_aside": _Drawn(_GLANCE), "hours": _HOURS},
         heads_the_page=True,
     ),
-    # The same row on its own line, as a narrower head draws it: a reading
-    # with nothing read yet, a long line that wraps inside its reading, and
-    # one of its own, outside any region.
-    "part/readings-under-the-title": Entry(
+    # The same band on its own line, as a narrower head draws it.
+    "part/facts-band-glance-under-the-title": Entry(
         '{% include "partials/_page_head.html" %}{% section "Example section 2" %}<p>An example line.</p>{% endsection %}',
         {
-            "page": Page(title="Example readings", lede="An example lede long enough to take the head's line."),
+            "page": Page(title="Example glance", lede="An example lede long enough to take the head's line."),
             "page_facts": "An example fact · another example fact",
-            "page_aside": _Drawn(_READINGS_EMPTY),
+            "page_aside": _Drawn(_GLANCE_EMPTY),
         },
         heads_the_page=True,
     ),
@@ -2267,15 +2273,10 @@ ENTRIES = {
         '{% card element="div" data_example_region=True %}{% include "partials/_visit_refresh.html" with '
         'subject="page" name="example" refresh="[data-example-region]" %}<p>An example line.</p>{% endcard %}'
     ),
-    # A strip of tiles, more than one line holds in a narrow box: a tile
-    # with a note and one without, side by side.
-    "part/tile-strip": Entry(
-        context={
-            "tiles": tuple(
-                StripTile(f"{hour} PM", f"{80 - hour}°", note="40%" if hour % 3 == 0 else "", tip="Example showers")
-                for hour in range(1, 13)
-            )
-        },
+    # A strip of small figures, more than one line holds in a narrow box.
+    "part/facts-band-small": Entry(
+        '<div style="inline-size: 240px">{% facts layout="band" size="small" items=hours label="Example hours" %}</div>',
+        {"hours": _HOURS},
     ),
     # A horizon of dated events, more than one column holds on a wide
     # screen: a link, one with a line under it and a badge, each tone.

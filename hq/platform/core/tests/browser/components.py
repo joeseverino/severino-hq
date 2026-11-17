@@ -918,7 +918,9 @@ class ComponentLayoutTests(LayoutBrowserTests):
             line for line in self.page.evaluate(LINES_SHORT_OF_THEIR_ROOM, SELECTORS["unseen"]) if " short " in line
         ]
         planted = [line.split(" breaks before ")[1][:5] for line in found]
-        self.assertEqual([start for start in planted if start in {'"aaaa', '"cccc', '"eeee', '"hhhh', '"exam'}], ['"exam'])
+        self.assertEqual(
+            [start for start in planted if start in {'"aaaa', '"cccc', '"eeee', '"hhhh', '"exam'}], ['"exam']
+        )
 
     def test_a_slash_alone_opening_a_line_is_a_stray_and_a_path_is_not(self):
         """A slash standing between two words reads as a separator when a

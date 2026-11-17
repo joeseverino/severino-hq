@@ -297,26 +297,5 @@ details[open] > summary .ladder-more::after { transform: rotate(90deg); }
    because the rule it has to beat, `.content > * + *:not(dialog)`, is (0,1,1)
    and a bare `.sweep` is (0,1,0). */
 .content > .sweep { margin-top: var(--space-12); }
-/* Each item draws its own ring, as topology lanes do, rather than the grid
-   painting its gaps: a short last row then leaves blank card, not a gray
-   block. Auto-fit lets a single row of readings take the whole width. */
-.sweep-grid {
-  display: grid;
-  /* stylelint-disable-next-line declaration-property-value-disallowed-list -- a band's readings in one frame */
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 228px), 1fr));
-  /* stylelint-disable-next-line declaration-property-value-disallowed-list -- the frame's corners clip its items' rings, not their text */
-  border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden;
-}
-.sweep-item {
-  display: grid; grid-template-columns: 1fr auto; gap: var(--space-1) var(--space-5);
-  align-items: baseline; padding: var(--space-4) var(--space-6);
-}
-.sweep-label { font-size: var(--text-xs); color: var(--ink-2); }
-/* The count is the number on the row, so it leads rather than trails. */
-.sweep-count { font-size: var(--text-md); font-weight: 650; justify-self: end; }
-.sweep-age { grid-column: 1 / -1; font-size: var(--text-2xs); color: var(--muted); }
-.sweep-item-unreachable { background: var(--tone-critical-wash); }
-.sweep-item-unreachable .sweep-age { color: var(--danger); }
-.sweep-item-stale .sweep-age { color: var(--warn); }
 
 }

@@ -4,7 +4,7 @@ tag, so it reads the same everywhere and a change to it is made once."""
 import re
 
 from django import forms
-from django.template import Context, Template, TemplateSyntaxError
+from django.template import Context, Template
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase, tag
 
@@ -234,57 +234,41 @@ class RecordLinkTests(SimpleTestCase):
             _render("{% entity row|record %}", row={"name": "example"})
 
 
-class ReadingTests(SimpleTestCase):
-    def test_a_reading_leads_to_its_page_marked_as_its_part_of_a_region(self):
+class FactPanelTests(SimpleTestCase):
+    def test_a_fact_leads_to_its_page_marked_as_its_part_of_a_region(self):
         html = _render(
-            '{% readings %}{% reading icon="network" url="/example/" modal="example" tone="attention" '
-            'note_tone="attention" data_fragment_part="example" %}Loopback{% lines %}<span>TLS 1.3</span>'
-            "{% note %}A check failed{% endreading %}{% endreadings %}"
+            '{% facts layout="band" %}{% fact "Connection" icon="network" url="/example/" modal="example" '
+            'tone="attention" data_fragment_part="example" %}Loopback{% detail %}<small>TLS 1.3</small>'
+            "{% endfact %}{% endfacts %}"
         )
 
-        (row,) = with_class(html, "readings")
-        (reading,) = with_class(html, "reading")
-        (note,) = with_class(html, "reading-standing")
-        self.assertIn(row, reading.ancestors)
-        self.assertEqual(reading.tag, "a")
-        self.assertEqual(reading.attrs["href"], "/example/")
-        self.assertEqual(reading.attrs["data-modal-open"], "example")
-        self.assertEqual(reading.attrs["data-fragment-part"], "example")
-        self.assertIn("tone-attention", reading.classes)
-        self.assertIn("is-attention", note.classes)
-        self.assertEqual(texts(html, "strong"), ["Loopback"])
+        (fact,) = with_class(html, "fact")
+        (link,) = elements(html, "a")
+        self.assertIn(fact, link.ancestors)
+        self.assertEqual((link.attrs["href"], link.attrs["data-modal-open"]), ("/example/", "example"))
+        self.assertEqual(fact.attrs["data-fragment-part"], "example")
+        self.assertIn("tone-attention", fact.classes)
+        self.assertEqual(link.words, "Loopback")
 
-    def test_a_reading_with_a_panel_opens_it_in_place_by_its_id(self):
+    def test_a_fact_with_a_panel_opens_it_in_place_by_its_id(self):
         html = _render(
-            '{% reading icon="cloud" id="example-weather" data_refreshing=refreshing %}71°'
-            '{% heading %}<strong>Weather</strong>{% panel %}<p>Mostly cloudy</p>{% foot %}<a href="/s/">Settings</a>'
-            "{% endreading %}",
+            '{% facts layout="band" %}{% fact "Weather" icon="cloud" id="example-weather" data_refreshing=refreshing %}'
+            '71°{% heading %}<strong>Weather</strong>{% panel %}<p>Mostly cloudy</p>{% foot %}<a href="/s/">Settings</a>'
+            "{% endfact %}{% endfacts %}",
             refreshing=True,
         )
 
-        (reading,) = with_class(html, "reading")
-        (head,) = elements(html, "button")
-        (panel,) = with_class(html, "reading-panel")
-        self.assertIn("data-menu", reading.attrs)
-        self.assertEqual(reading.attrs["data-refreshing"], "")
-        self.assertEqual(head.attrs["popovertarget"], "example-weather")
+        (fact,) = with_class(html, "fact")
+        (value,) = with_class(html, "fact-value")
+        (opener,) = elements(html, "button")
+        (panel,) = with_class(html, "fact-panel")
+        self.assertIn("data-menu", value.attrs)
+        self.assertEqual(fact.attrs["data-refreshing"], "")
+        self.assertEqual(opener.attrs["popovertarget"], "example-weather")
         self.assertEqual(panel.attrs["id"], "example-weather")
         self.assertIn("popover", panel.attrs)
-        self.assertEqual(with_class(html, "reading-panel-foot")[0].tag, "footer")
-
-    def test_a_neutral_reading_takes_no_tone(self):
-        html = _render('{% reading icon="cloud" url="/" tone="neutral" %}1{% endreading %}')
-
-        (reading,) = with_class(html, "reading")
-        self.assertFalse({word for word in reading.classes if word.startswith("tone-")})
-
-    def test_a_reading_s_tone_is_one_the_status_vocabulary_names(self):
-        for source in (
-            '{% reading icon="cloud" url="/" tone="green" %}1{% endreading %}',
-            '{% reading icon="cloud" url="/" note_tone="good" %}1{% endreading %}',
-        ):
-            with self.subTest(source=source), self.assertRaises(TemplateSyntaxError):
-                _render(source)
+        self.assertEqual(with_class(html, "fact-panel-head")[0].tag, "header")
+        self.assertEqual(with_class(html, "fact-panel-foot")[0].tag, "footer")
 
 
 @tag("source", "tree")

@@ -614,10 +614,10 @@ class DashboardConnectionTileTests(SimpleTestCase):
         return render_to_string("core/_dashboard_connection.html", {"connection": connection})
 
     def test_an_unconfirmed_check_is_said_quietly(self):
-        self.assertNotIn("is-attention", self.tile(failing=()))
+        self.assertNotIn("toned-attention", self.tile(failing=()))
 
     def test_a_failed_check_takes_the_attention_tone(self):
-        self.assertIn("is-attention", self.tile(failing=("a layer",)))
+        self.assertIn("toned-attention", self.tile(failing=("a layer",)))
 
 
 class VerdictTests(SimpleTestCase):

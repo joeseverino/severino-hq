@@ -98,6 +98,7 @@ SELECTORS = {
     "patterns": ".section-flow:has(> #dashboard-calendar) > .section",
     # Each reading in the dashboard's row: a mark, then its lines.
     "readings": ".readings .reading-head",
+    "glance": ".page-head .facts-band > .fact",
     # The dashboard's strip of counts across HQ, by the name it gives a reader.
     "dashboard_counts": "main dl[aria-label='Across HQ']",
     # A control a reader fills in or picks from, whose edge is what shows it.

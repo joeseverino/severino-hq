@@ -1,5 +1,5 @@
 {% comment %}
-How you are connected to HQ, beside the readings: over which network, and how
+How you are connected to HQ, a fact of the glance: over which network, and how
 it is encrypted. Whether every check on the way in passed is said only when
 one did not, in the attention tone only when one failed: a check HQ has no
 reading to confirm yet is not a problem, and not green either: the dot takes
@@ -7,10 +7,4 @@ the network's color only once every check is confirmed. The panel behind the
 link has the rest, and works without script.
 {% endcomment %}
 {% url 'connection' as address %}
-{% reading icon="network" url=address modal="connection" note_tone=connection.failing|yesno:"attention," %}
-  {% status connection.channel.label tone=connection.tone dot=True ink="context" %}
-{% lines %}
-  <span>{{ connection.transport|breakable }}</span>
-  {% include "partials/_example_connection.html" %}
-{% note %}{% if not connection.holds %}{{ connection.summary|breakable }}{% endif %}
-{% endreading %}
+{% fact "Connection" icon="network" url=address modal="connection" %}{% status connection.channel.label tone=connection.tone dot=True ink="context" %}{% detail %}<small>{{ connection.transport|breakable }} {% include "partials/_example_connection.html" %}</small>{% if connection.failing %}<small>{% status connection.summary tone="attention" pill=False %}</small>{% elif not connection.holds %}<small>{{ connection.summary|breakable }}</small>{% endif %}{% endfact %}

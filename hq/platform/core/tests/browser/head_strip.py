@@ -53,7 +53,7 @@ class HeadAndStripBrowserTests(LayoutBrowserTests):
             with self.subTest(width=width):
                 self.open("dashboard", width)
                 head = self.page.evaluate(
-                    HEAD_COLUMN, [SELECTORS["page_title"], SELECTORS["head_facts"], SELECTORS["readings"]]
+                    HEAD_COLUMN, [SELECTORS["page_title"], SELECTORS["head_facts"], SELECTORS["glance"]]
                 )
                 title, facts, readings = head["title"], head["facts"], head["readings"]
                 self.assertEqual(round(facts["left"]), round(title["left"]), head)

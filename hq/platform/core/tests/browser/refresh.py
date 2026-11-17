@@ -48,7 +48,7 @@ BOXES = """([readings, content, ask]) => [
   const r = box.getBoundingClientRect();
   return `${place} ${box.tagName.toLowerCase()} at ${[r.x, r.y, r.width, r.height].map(Math.round).join(',')}`;
 })"""
-BOXES_ARGS = [SELECTORS["readings"], SELECTORS["content"], SELECTORS["ask"]]
+BOXES_ARGS = [SELECTORS["glance"], SELECTORS["content"], SELECTORS["ask"]]
 
 # The page laid out again from nothing, its markup and its script's state as
 # they stand. An engine may keep a measure from the layout a page came by in

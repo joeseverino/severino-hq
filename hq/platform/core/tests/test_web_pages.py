@@ -385,15 +385,17 @@ class DashboardWorkflowTests(_AuthedTestCase):
 
         found = page.context["request_connection"]
         self.assertEqual(found.summary, panel.context["connection"].summary)
-        # It opens the panel, and is a plain link to it without script.
-        # A link's name holds the summary's parts; the dots between them are drawn, never read.
-        badge = next(
-            each
+        # Its value opens the panel, and is a plain link to it without script;
+        # the lines under it say the summary's parts, the dots between them drawn, never read.
+        (badge, fact) = next(
+            (each, up)
             for each in select(page, "data-modal-open", "connection")
-            if all(plain(part) in plain(each.text) for part in found.summary.split(DOT))
+            for up in each.ancestors
+            if "fact" in up.classes
         )
         self.assertEqual(badge.attrs["href"], reverse("connection"))
-        self.assertIn(found.transport, badge.text)
+        self.assertTrue(all(plain(part) in plain(fact.text) for part in found.summary.split(DOT)), fact.text)
+        self.assertIn(found.transport, fact.text)
 
     def test_dashboard_routes_infrastructure_findings_to_their_evidence(self):
         ManagedResource.objects.create(

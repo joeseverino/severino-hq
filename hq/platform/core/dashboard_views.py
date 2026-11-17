@@ -244,10 +244,21 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
             **glance,
             **page_context(greeting),
             page_dateline=timezone.localdate(),
-            page_aside="core/_dashboard_readings.html",
+            page_aside="core/_dashboard_glance.html",
         )
         ctx["page_facts"] = render_to_string("dashboard.html#status", ctx)
         return ctx
+
+
+def _glance(request) -> dict[str, Any]:
+    """What the glance draws: how this browser reaches HQ, how the controller
+    stands, and the panels."""
+
+    return {
+        **glance_context(),
+        "request_connection": request_path(request).connection,
+        "controller": controller_standing(),
+    }
 
 
 class DashboardGlanceView(AskMixin, View):
@@ -262,7 +273,7 @@ class DashboardGlanceView(AskMixin, View):
     def get(self, request):
         """The strip as it stands; "unchanged" to a poll while nothing was written."""
 
-        return fragments.render(request, self.template_name, glance_context, revision=every_revision())
+        return fragments.render(request, self.template_name, lambda: _glance(request), revision=every_revision())
 
     @override
     def post(self, request, *args, **kwargs):
@@ -273,9 +284,9 @@ class DashboardGlanceView(AskMixin, View):
             return super().post(request, *args, **kwargs)
         result = execute_posted(request, DASHBOARD_REFRESH_STALE, {})
         if not result["ok"]:
-            return render(request, self.template_name, glance_context(), status=403)
+            return render(request, self.template_name, _glance(request), status=403)
         # Drawn after the ask, so each panel asked for shows its refresh.
-        return render(request, self.template_name, glance_context(), status=202 if result["requested"] else 200)
+        return render(request, self.template_name, _glance(request), status=202 if result["requested"] else 200)
 
 
 def _settings_of(configuration) -> dict[str, str]:

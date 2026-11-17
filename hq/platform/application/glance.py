@@ -25,10 +25,10 @@ from . import readings
 from .answer_fields import CallMessage
 from .asks import FAILED, QUEUED, REFRESHING, RUNNING, Ask, Asked, AskedAnswer, Standing
 from .cadence import ask
+from .card_items import Kpi
 from .command_fields import Describe
 from .connections import ConnectionAbility, ConnectionInstance, ConnectionLink, ConnectionSpec, machines_once
 from .contracts import Effect
-from .drawings import StripTile
 from .freshness import DASHBOARD_GLANCE, freshness
 from .labels import dotted, human_bytes
 from .moments import moment, when_hour
@@ -354,6 +354,8 @@ def _panel(
         "refreshing": refreshing,
         "refreshable": refreshable,
         "standing": _standing(payload, refreshing=refreshing),
+        # A panel is colored only for what needs a look; a healthy one reads in ink.
+        "tone": payload.get("status") if payload.get("status") in (Tone.ATTENTION, Tone.SERIOUS) else "",
         "readings": shown,
         "hours": payload.get("hours", ()),
         **_head(shown, spec),
@@ -484,10 +486,10 @@ def weather_words(weather: Weather) -> dict[str, Any]:
         # Each hour's time and temperature, and a chance of rain said only when
         # there is one.
         "hours": tuple(
-            StripTile(
+            Kpi(
                 when_hour(hour.start),
                 _degrees(hour),
-                note=measured(hour.chance, "%") if hour.chance else "",
+                measured(hour.chance, "%") if hour.chance else "",
                 tip=hour.forecast,
             )
             for hour in hours

@@ -13,14 +13,14 @@ list read as current.
 template names one.
 
 Listed rather than written out. Providers swept together produce identical
-clauses, and in prose the stale one is a phrase mid-paragraph. In a grid the
-counts line up, and the odd one out is the row whose age does not match its
-neighbors.
+clauses, and in prose the stale one is a phrase mid-paragraph. In a band of
+facts each count stands under its provider, and the odd one out is drawn in
+its tone.
 
 `inline` gives just the age, after a ` · `, for a heading's aside that already says
 what it counts; with no reading it gives nothing, separator included.
 `only_kind` narrows it to one provider, and stays a sentence: one reading needs
-no grid, and the page around it has already said which provider it is about.
+no band, and the page around it has already said which provider it is about.
 `count` replaces the sweep's total when the page shows part of it: one domain's
 records. Each state is worded by `credential_sight.standing`: refused, unreadable,
 or out of date.
@@ -45,22 +45,17 @@ or out of date.
     page's own content off a phone.
     {% endcomment %}
     {% section "Last read" count=inventory|length fold=True css="sweep" %}
-      <div class="sweep-grid" data-band>
+      {% facts layout="band" %}
         {% for snapshot in inventory %}
-          <div class="sweep-item{% if not snapshot.reachable %} sweep-item-unreachable{% elif snapshot.state == "stale" or snapshot.state == "partial" %} sweep-item-stale{% endif %}">
-            <span class="sweep-label">{{ snapshot.label|breakable }}</span>
-            {% if snapshot.reachable %}
-              <span class="sweep-count">{{ snapshot.count|breakable }}</span>
-              <span class="sweep-age"{% if snapshot.refused_parts %} title="{{ snapshot.refused_parts|join:'; ' }}"{% endif %}>
-                {% include "partials/_reading_age.html" with at=snapshot.observed_at only %}{% if snapshot.state == "stale" or snapshot.state == "partial" %}{% dot %}{{ snapshot.state_label|lower|breakable }}{% endif %}
-              </span>
-            {% else %}
-              <span class="sweep-count">{% empty_value %}</span>
-              <span class="sweep-age" title="{{ snapshot.error }}">{{ snapshot.state_label|breakable }}</span>
-            {% endif %}
-          </div>
+          {% if not snapshot.reachable %}
+            {% fact snapshot.label tone="serious" %}{% empty_value %}{% detail %}{% status snapshot.state_label tone="serious" pill=False title=snapshot.error %}{% endfact %}
+          {% elif snapshot.state == "stale" or snapshot.state == "partial" %}
+            {% fact snapshot.label tone="attention" title=snapshot.refused_parts|join:"; " %}{{ snapshot.count|breakable }}{% detail %}{% include "partials/_reading_age.html" with at=snapshot.observed_at only %}{% dot %}{% status snapshot.state_label|lower tone="attention" pill=False %}{% endfact %}
+          {% else %}
+            {% fact snapshot.label title=snapshot.refused_parts|join:"; " %}{{ snapshot.count|breakable }}{% detail %}{% include "partials/_reading_age.html" with at=snapshot.observed_at only %}{% endfact %}
+          {% endif %}
         {% endfor %}
-      </div>
+      {% endfacts %}
     {% endsection %}
   {% endif %}
 {% endif %}

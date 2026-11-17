@@ -126,7 +126,11 @@ class DashboardGlanceTests(TestCase):
 
         for machine, name in ((self.machine, "app"), (other, "db")):
             (part,) = select(html, "data-fragment-part", f"machine-{machine.pk}")
-            (head,) = (element for element in with_class(html, "reading-lines") if part in element.ancestors)
+            (head,) = (
+                element
+                for element in with_class(html, "fact-label")
+                if part in element.ancestors and not any("fact-panel" in up.classes for up in element.ancestors)
+            )
             self.assertIn(name, head.text)
 
     def test_compact_summary_preserves_full_readings_in_the_menu_it_opens(self):
@@ -618,7 +622,7 @@ class GlanceRenderingTests(TestCase):
         )
         self.assertIn("Example Town, EX", text(html))
         # Each hour by its time, and a chance of rain said only when there is one.
-        hours = {hour.attrs["title"]: hour.text for hour in select(html, "title") if hour.tag == "li"}
+        hours = {hour.attrs["title"]: hour.text for hour in with_class(html, "fact") if "title" in hour.attrs}
         self.assertIn("60%", hours["Showers"])
         self.assertIn("4\xa0PM", hours["Showers"])
         self.assertNotIn("%", hours["Cloudy"])

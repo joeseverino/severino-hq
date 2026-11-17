@@ -41,7 +41,7 @@ p, li, dd, blockquote, figcaption { text-wrap: pretty; }
 :where(.attention-links, .step-list, .resolution-workflow, .timeline-list, .cadence-strip,
   .check-ladder, .errorlist, .dropzone-files, .dot-list, .page-nav-list, .relation-list > ul,
   .relation-values, .link-chips, .stack-list, .request-path, .messages, .calendar-sources,
-  .week-plan, .week-plan-notes, .list-rows, .address-list, .bar-list, .tile-strip, .posture-repos) {
+  .week-plan, .week-plan-notes, .list-rows, .address-list, .bar-list, .posture-repos) {
   list-style: none; margin: 0; padding: 0;
 }
 a { color: var(--accent-2); text-decoration: none; }

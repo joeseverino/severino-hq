@@ -1,13 +1,11 @@
 """The parts that frame what a page writes inside them: a card, muted
 words, a row of buttons, the content column, a list of steps or sentences,
-a row of chips, and a row of readings."""
+and a row of chips."""
 
 from django import template
 from django.utils.safestring import mark_safe
 
 from hq.platform.application.page_parts import html_attributes
-from hq.platform.application.tone import Tone
-from hq.platform.core.included_parts import PATH_HOPS, READING_AGE
 from hq.platform.core.template_parts import Option, Part, slotted
 from hq.platform.core.templatetags.facts_tags import FACT
 
@@ -184,62 +182,5 @@ slotted(
         public=True,
         example='{% card label="Hosts" %}<p>Body</p>{% endcard %}',
         shape=card_frame,
-    ),
-)
-
-
-def reading_frame(_name: str, given: dict) -> dict:
-    """A reading's options as its partial draws them: its tone as the shared
-    tone class, and each ``data_*`` option as an attribute of the reading."""
-
-    tone = Tone(given["tone"] or Tone.NEUTRAL)
-    data = {option.replace("_", "-"): value for option, value in given.items() if option.startswith("data_")}
-    return {
-        **{option: value for option, value in given.items() if not option.startswith("data_")},
-        "tone_class": f" tone-{tone}" if tone is not Tone.NEUTRAL else "",
-        "attributes": html_attributes(data),
-    }
-
-
-slotted(
-    library=register,
-    part=Part(
-        name="readings",
-        example='{% readings %}{% reading icon="activity" url="/example/" unit="hosts" %}3{% lines %}Example hosts online{% endreading %}{% endreadings %}',
-        classes=("readings",),
-        partial="partials/_readings.html",
-        about="A row of readings, each a `{% reading %}`, spaced as equals rather than ruled apart.",
-    ),
-)
-slotted(
-    library=register,
-    part=Part(
-        name="reading",
-        example='{% readings %}{% reading icon="network" tone="attention" note_tone="stale" %}2{% lines %}Example peers{% note %}Read an hour ago{% endreading %}{% endreadings %}',
-        classes=(
-            *("reading", "reading-head", "reading-lead", "reading-lines", "reading-mark", "reading-panel"),
-            *("reading-panel-foot", "reading-panel-head", "reading-standing"),
-        ),
-        draws=(PATH_HOPS, READING_AGE),
-        partial="partials/_reading.html",
-        about=(
-            "One reading of a `{% readings %}` row: its mark, its figure, its quiet lines and a note on how it "
-            "stands, leading to a page or opening a panel."
-        ),
-        parts=("lead", "lines", "note", "heading", "panel", "foot"),
-        options={
-            "icon": Option(about="Its mark."),
-            "url": Option(about="The page it leads to."),
-            "modal": Option(about="The dialog it opens where script runs."),
-            "id": Option(about="The id of the panel it opens in place, given a `panel` part."),
-            "title": Option(about="What pointing at its figure says."),
-            "unit": Option(about="The words after its figure."),
-            "tone": Option(choices=("", *Tone), about="How it stands, in the status tones."),
-            "note_tone": Option(
-                choices=("", "attention", "stale"), about="How its note stands: a problem, or past its time."
-            ),
-        },
-        data=True,
-        shape=reading_frame,
     ),
 )

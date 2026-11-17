@@ -323,15 +323,13 @@ PARTS = (
     _part(
         "sweep_freshness",
         "How fresh each reading is, the stale and the unreachable marked.",
-        *("sweep", "sweep-age", "sweep-count", "sweep-grid", "sweep-item", "sweep-item-stale"),
-        *("sweep-item-unreachable", "sweep-label"),
+        "sweep",
     ),
     _part(
         "table_toolbar",
         "A list's toolbar: its filters, its sort, its columns and what is selected.",
         *("filter-count", "table-filter-menu", "table-filter-options", "table-selection", "table-sort", "table-toggle"),
     ),
-    _part("tile_strip", "A row of small figures.", "tile-strip"),
     _part(
         "timeline",
         "Chronological linked events, from `hq_sdk.ui.Timeline`.",
