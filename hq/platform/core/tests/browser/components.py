@@ -873,8 +873,9 @@ class ComponentLayoutTests(LayoutBrowserTests):
     def test_a_line_ending_in_a_links_mark_is_full_and_one_broken_short_is_found(self):
         """A link's mark drawn after its words (``::after``) takes its line's
         room, as a wrapping list's gap does between its items, so the word
-        that would not fit beside either starts the next line rightly; a line
-        a balanced rag ends short of its room is found."""
+        that would not fit beside either starts the next line rightly, and a
+        line laid in a padded block inside the value ends at that block's
+        edge; a line a balanced rag ends short of its room is found."""
 
         self.open(next(iter(PAGES)), WIDE)
         add_css(self.page, '.example-marked::after { content: "____"; }')
@@ -896,10 +897,14 @@ class ComponentLayoutTests(LayoutBrowserTests):
           const held = document.createElement('span');
           held.style.setProperty('white-space', 'nowrap');
           held.textContent = 'ff gggg';
+          const padded = document.createElement('div');
+          padded.style.setProperty('padding-inline-end', '8ch');
+          padded.textContent = 'hhhh iiii jjjj';
           for (const [words, css] of [
             [[link, ' bb'], 'inline-size: 10ch'],
             [[list], 'inline-size: 10ch'],
             [['eeee ', held], 'inline-size: 10ch'],
+            [[padded], 'inline-size: 20ch'],
             [['example aaaa bbbb cccc dddd'], 'inline-size: 24ch; text-wrap: balance'],
           ]) {
             const dd = document.createElement('dd');
@@ -913,7 +918,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
             line for line in self.page.evaluate(LINES_SHORT_OF_THEIR_ROOM, SELECTORS["unseen"]) if " short " in line
         ]
         planted = [line.split(" breaks before ")[1][:5] for line in found]
-        self.assertEqual([start for start in planted if start in {'"aaaa', '"cccc', '"eeee', '"exam'}], ['"exam'])
+        self.assertEqual([start for start in planted if start in {'"aaaa', '"cccc', '"eeee', '"hhhh', '"exam'}], ['"exam'])
 
     def test_a_slash_alone_opening_a_line_is_a_stray_and_a_path_is_not(self):
         """A slash standing between two words reads as a separator when a
