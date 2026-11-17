@@ -6,7 +6,8 @@ and a record's recent changes. Its row's attributes are
 gutter holds the fold rather than the row's own toggle, so opening the fold
 opens what its columns that left hold too (tables.js). A fold carries at most
 history.SHOWN of what the event changed, a run at most as many moments; a
-last row (`rest`), one cell across the row, counts the others and links to the
+last row (`rest`), one cell across the row (`across`, every column of its
+table, a tick-box's included), counts the others and links to the
 list of them all: an event's page, a run's shared page. A run with no such
 page has no last row. Every title links where `row.url` says, and only a
 moment or run with nowhere to go has none. What a row names reads as an
@@ -20,7 +21,7 @@ second line says how it came out, in the action's own word (`narrow-only`);
 wider, the Action column says it.
 {% endcomment %}
   {% if row.rest %}
-    <td colspan="{% if hide_who %}4{% else %}5{% endif %}" class="row-gutter"><a href="{{ row.url }}"><strong>{{ row.rest.more_words|breakable }}</strong></a></td>
+    <td colspan="{{ across }}" class="row-gutter"><a href="{{ row.url }}"><strong>{{ row.rest.more_words|breakable }}</strong></a></td>
   {% elif row.burst %}
     {% with first=row.burst.0 %}
     <td class="cell-data">{% include "partials/_row_fold.html" with label=row.title only %}<strong>{% if row.url %}<a href="{{ row.url }}">{{ row.title|breakable }}</a>{% else %}{{ row.title|breakable }}{% endif %}</strong></td>

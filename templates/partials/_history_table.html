@@ -14,7 +14,7 @@ heading. Its headings are history.COLUMNS, without who did each where
     <tbody>
       {% if group.label %}{% row_group group.label group.count folds=group.folds %}{% endif %}
       {% for event in group.lines %}{% for row in event.lines %}
-      <tr{% history_row_attributes row group.folds %}>{% include "partials/_history_row.html" %}</tr>
+      <tr{% history_row_attributes row group.folds %}>{% include "partials/_history_row.html" with across=columns|length %}</tr>
       {% endfor %}{% endfor %}
     </tbody>
     {% endfor %}

@@ -31,6 +31,8 @@
   --heading-height: calc(var(--heading-line) + 2 * var(--row-pad));
   /* The room the row toggle stands in, at the start of the naming cell. */
   --row-gutter: calc(var(--space-6) + 1.5rem);
+  /* A row's tick-box, which a row of one cell across the table steps past. */
+  --tick-box: 16px;
   /* A column's share of its region while every column stands: the region's width over one more than the table's count of columns, read from its headings, less a cell's padding. The one more is kept for what a column asks past its share (a state's line, a row's name among its controls). What a value holds whole, or the line a long one keeps, is never more than that share, so the table's columns together never ask more than their region. */
   --columns: 1;
   --share: calc(100cqi / (var(--columns) - var(--gone-1, 0) - var(--gone-2, 0) - var(--gone-3, 0) - var(--gone-4, 0) - var(--gone-5, 0) - var(--gone-6, 0) + 1) - 2 * var(--space-6));
@@ -127,7 +129,7 @@
 .data-table > tbody > tr > td :is(select, textarea, input:not([type=checkbox], [type=radio], [type=hidden])) { box-sizing: border-box; inline-size: 100%; min-inline-size: 0; }
 /* A choice's words are its value, so its column holds them on one line: a field at a share of its cell asks its column for nothing (Chromium sizes it as CSS Sizing's compressible boxes), and a column of controls is as narrow as what it asks. */
 .data-table > tbody > tr:not(.row-detail) > td select { min-inline-size: max-content; }
-.data-table input[type=checkbox] { inline-size: 16px; block-size: 16px; accent-color: var(--accent); }
+.data-table input[type=checkbox] { inline-size: var(--tick-box); block-size: var(--tick-box); accent-color: var(--accent); }
 
 /* A filter is its button and the panel it opens in the top layer, placed against the button (its anchor, below): the scope keeps each panel to its own button. */
 .table-filter-menu { display: grid; anchor-scope: --filter; }
@@ -175,6 +177,10 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 .data-table > tbody > tr > [data-kind="control"] > :is(.btn, .icon-link, form) { vertical-align: top; }.data-table > tbody > tr > [data-kind="control"] > * + * { margin-inline-start: var(--space-4); }
 .data-table > tbody > tr > [data-kind="control"]:has(> :is(.btn, .icon-link, form, [data-ask])) { padding-block: calc(var(--row-pad) - var(--control-rise)); }
 .data-table > * > tr > .select-column { inline-size: 1px; text-align: center; padding-inline: var(--space-4); }
+/* The tick-boxes' column is their box and its padding, in every engine, whose own margins around a checkbox differ. */
+.data-table > * > tr > .select-column > input { margin-inline: 0; }
+/* A row of one cell spans the tick-boxes' column too, and what it says starts where the names beside the tick-boxes do. */
+.data-table[data-selectable-table] > tbody > tr:not(.row-detail) > td[colspan]:only-child > :first-child { margin-inline-start: calc(var(--tick-box) + 2 * var(--space-4)); }
 /* What a control cell says beside its controls wraps as words do, on a line of its own: a note, or the sentence linked to the setup a change needs (`_write_gap.html`), which is a link and no control's label. */
 .data-table > tbody > tr > [data-kind="control"] > :is(.muted, p, [data-write-gap]) { display: block; margin: 0; white-space: normal; }
 /* A row with nothing to press gives its words the room the cell's padding would keep. */
