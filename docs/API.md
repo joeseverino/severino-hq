@@ -280,9 +280,10 @@ reference, not a client:
   with no toggle of its own. No rule of HQ's own stylesheet reaches the
   markup the viewer draws: its mount carries `data-vendored`, where each of
   HQ's layers gives way (`tokens.css`).
-- **Facts are fields.** A capability's `x-hq-effect` and
-  `x-hq-required-capabilities` are drawn on its operation (`showExtensions`),
-  and each refusal's codes are its `code` field's `const`, or its `enum`
+- **Facts are fields.** The permission an operation needs is its `security`
+  requirement, the `bearer` scheme listing the HQ capabilities a token must
+  carry. A capability's `x-hq-effect` is drawn on its operation
+  (`showExtensions`), and each refusal's codes are its `code` field's `const`, or its `enum`
   where there are several.
 - **No request is sent from the page.** The API takes a bearer token from the
   identity provider and never the browser session, so the viewer's request

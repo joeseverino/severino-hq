@@ -16783,7 +16783,7 @@
     "securitySchemes": {
       "bearer": {
         "bearerFormat": "JWT",
-        "description": "An access token from HQ's identity provider, addressed to this API.",
+        "description": "An access token from HQ's identity provider, addressed to this API. The names an operation's security lists are the HQ capabilities its token must carry, every one.",
         "scheme": "bearer",
         "type": "http"
       }
@@ -16824,6 +16824,11 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "summary": "API root",
         "tags": [
           "hq.api"
@@ -16880,6 +16885,11 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "summary": "List capabilities",
         "tags": [
           "hq.api"
@@ -16946,15 +16956,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "set_aside_action_items"
+            ]
+          }
+        ],
         "summary": "Bring back action items",
         "tags": [
           "hq.dashboard"
         ],
         "x-hq-capability": "action_item.restore",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "set_aside_action_items"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/action_item.set_aside/": {
@@ -17017,15 +17031,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "set_aside_action_items"
+            ]
+          }
+        ],
         "summary": "Set aside action items",
         "tags": [
           "hq.dashboard"
         ],
         "x-hq-capability": "action_item.set_aside",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "set_aside_action_items"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/appearance.theme.set/": {
@@ -17088,15 +17106,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "set_preferences"
+            ]
+          }
+        ],
         "summary": "Choose a theme",
         "tags": [
           "hq.dashboard"
         ],
         "x-hq-capability": "appearance.theme.set",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "set_preferences"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/approval.withdraw/": {
@@ -17159,15 +17181,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Withdraw a held change",
         "tags": [
           "hq.approvals"
         ],
         "x-hq-capability": "approval.withdraw",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "read"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/asset.create/": {
@@ -17230,15 +17256,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "write_assets"
+            ]
+          }
+        ],
         "summary": "Add an asset",
         "tags": [
           "hq.assets"
         ],
         "x-hq-capability": "asset.create",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "write_assets"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/asset.delete/": {
@@ -17301,15 +17331,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "delete_assets"
+            ]
+          }
+        ],
         "summary": "Delete an asset",
         "tags": [
           "hq.assets"
         ],
         "x-hq-capability": "asset.delete",
-        "x-hq-effect": "destructive",
-        "x-hq-required-capabilities": [
-          "delete_assets"
-        ]
+        "x-hq-effect": "destructive"
       }
     },
     "/api/v2/capabilities/asset.update/": {
@@ -17372,15 +17406,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "write_assets"
+            ]
+          }
+        ],
         "summary": "Edit an asset",
         "tags": [
           "hq.assets"
         ],
         "x-hq-capability": "asset.update",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "write_assets"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/asset.upsert/": {
@@ -17443,15 +17481,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "write_assets"
+            ]
+          }
+        ],
         "summary": "Add or update an asset",
         "tags": [
           "hq.assets"
         ],
         "x-hq-capability": "asset.upsert",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "write_assets"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/automation.run.cancel/": {
@@ -17514,15 +17556,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Cancel run",
         "tags": [
           "hq.jobs"
         ],
         "x-hq-capability": "automation.run.cancel",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "read"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/automation.source.refresh/": {
@@ -17585,15 +17631,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "manage_infrastructure"
+            ]
+          }
+        ],
         "summary": "Refresh playbooks",
         "tags": [
           "hq.jobs"
         ],
         "x-hq-capability": "automation.source.refresh",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "manage_infrastructure"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/calendar.entry.create/": {
@@ -17656,15 +17706,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "write_calendar"
+            ]
+          }
+        ],
         "summary": "Add an event",
         "tags": [
           "hq.calendar"
         ],
         "x-hq-capability": "calendar.entry.create",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "write_calendar"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/calendar.entry.delete/": {
@@ -17727,15 +17781,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "delete_calendar"
+            ]
+          }
+        ],
         "summary": "Delete an event",
         "tags": [
           "hq.calendar"
         ],
         "x-hq-capability": "calendar.entry.delete",
-        "x-hq-effect": "destructive",
-        "x-hq-required-capabilities": [
-          "delete_calendar"
-        ]
+        "x-hq-effect": "destructive"
       }
     },
     "/api/v2/capabilities/calendar.entry.update/": {
@@ -17798,15 +17856,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "write_calendar"
+            ]
+          }
+        ],
         "summary": "Edit an event",
         "tags": [
           "hq.calendar"
         ],
         "x-hq-capability": "calendar.entry.update",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "write_calendar"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/calendar.source.choose/": {
@@ -17869,15 +17931,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "set_preferences"
+            ]
+          }
+        ],
         "summary": "Show or hide a calendar",
         "tags": [
           "hq.calendar"
         ],
         "x-hq-capability": "calendar.source.choose",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "set_preferences"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/certificate.renew/": {
@@ -17940,15 +18006,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "request_certificate_renewal"
+            ]
+          }
+        ],
         "summary": "Renew a certificate",
         "tags": [
           "hq.infrastructure"
         ],
         "x-hq-capability": "certificate.renew",
-        "x-hq-effect": "infrastructure_change",
-        "x-hq-required-capabilities": [
-          "request_certificate_renewal"
-        ]
+        "x-hq-effect": "infrastructure_change"
       }
     },
     "/api/v2/capabilities/contact.submission.delete/": {
@@ -18011,15 +18081,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "manage_contacts"
+            ]
+          }
+        ],
         "summary": "Delete a message",
         "tags": [
           "hq.contacts"
         ],
         "x-hq-capability": "contact.submission.delete",
-        "x-hq-effect": "destructive",
-        "x-hq-required-capabilities": [
-          "manage_contacts"
-        ]
+        "x-hq-effect": "destructive"
       }
     },
     "/api/v2/capabilities/contact.submission.review/": {
@@ -18082,15 +18156,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "manage_contacts"
+            ]
+          }
+        ],
         "summary": "Review a message",
         "tags": [
           "hq.contacts"
         ],
         "x-hq-capability": "contact.submission.review",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "manage_contacts"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/content.create/": {
@@ -18153,15 +18231,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "write_content"
+            ]
+          }
+        ],
         "summary": "Add a content item",
         "tags": [
           "hq.content"
         ],
         "x-hq-capability": "content.create",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "write_content"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/content.delete/": {
@@ -18224,15 +18306,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "delete_content"
+            ]
+          }
+        ],
         "summary": "Delete a content item",
         "tags": [
           "hq.content"
         ],
         "x-hq-capability": "content.delete",
-        "x-hq-effect": "destructive",
-        "x-hq-required-capabilities": [
-          "delete_content"
-        ]
+        "x-hq-effect": "destructive"
       }
     },
     "/api/v2/capabilities/content.update/": {
@@ -18295,15 +18381,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "write_content"
+            ]
+          }
+        ],
         "summary": "Edit a content item",
         "tags": [
           "hq.content"
         ],
         "x-hq-capability": "content.update",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "write_content"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/dashboard.machine.select/": {
@@ -18366,15 +18456,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "set_preferences"
+            ]
+          }
+        ],
         "summary": "Show a machine on the dashboard",
         "tags": [
           "hq.infrastructure"
         ],
         "x-hq-capability": "dashboard.machine.select",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "set_preferences"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/dashboard.panels.refresh/": {
@@ -18437,15 +18531,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "manage_infrastructure"
+            ]
+          }
+        ],
         "summary": "Refresh the dashboard",
         "tags": [
           "hq.dashboard"
         ],
         "x-hq-capability": "dashboard.panels.refresh",
-        "x-hq-effect": "infrastructure_change",
-        "x-hq-required-capabilities": [
-          "manage_infrastructure"
-        ]
+        "x-hq-effect": "infrastructure_change"
       }
     },
     "/api/v2/capabilities/dashboard.panels.refresh_due/": {
@@ -18508,15 +18606,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "manage_infrastructure"
+            ]
+          }
+        ],
         "summary": "Refresh due readings",
         "tags": [
           "hq.dashboard"
         ],
         "x-hq-capability": "dashboard.panels.refresh_due",
-        "x-hq-effect": "infrastructure_change",
-        "x-hq-required-capabilities": [
-          "manage_infrastructure"
-        ]
+        "x-hq-effect": "infrastructure_change"
       }
     },
     "/api/v2/capabilities/dashboard.settings.update/": {
@@ -18579,15 +18681,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "set_preferences"
+            ]
+          }
+        ],
         "summary": "Save dashboard settings",
         "tags": [
           "hq.dashboard"
         ],
         "x-hq-capability": "dashboard.settings.update",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "set_preferences"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/documentation.create/": {
@@ -18650,15 +18756,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "write_documentation"
+            ]
+          }
+        ],
         "summary": "Add a document",
         "tags": [
           "hq.docs"
         ],
         "x-hq-capability": "documentation.create",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "write_documentation"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/documentation.delete/": {
@@ -18721,15 +18831,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "delete_documentation"
+            ]
+          }
+        ],
         "summary": "Delete a document",
         "tags": [
           "hq.docs"
         ],
         "x-hq-capability": "documentation.delete",
-        "x-hq-effect": "destructive",
-        "x-hq-required-capabilities": [
-          "delete_documentation"
-        ]
+        "x-hq-effect": "destructive"
       }
     },
     "/api/v2/capabilities/documentation.sync/": {
@@ -18792,15 +18906,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "sync_documentation"
+            ]
+          }
+        ],
         "summary": "Update docs from an export",
         "tags": [
           "hq.docs"
         ],
         "x-hq-capability": "documentation.sync",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "sync_documentation"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/documentation.update/": {
@@ -18863,15 +18981,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "write_documentation"
+            ]
+          }
+        ],
         "summary": "Edit a document",
         "tags": [
           "hq.docs"
         ],
         "x-hq-capability": "documentation.update",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "write_documentation"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/expense.create/": {
@@ -18934,15 +19056,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "write_expenses"
+            ]
+          }
+        ],
         "summary": "Add an expense",
         "tags": [
           "hq.expenses"
         ],
         "x-hq-capability": "expense.create",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "write_expenses"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/expense.delete/": {
@@ -19005,15 +19131,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "delete_expenses"
+            ]
+          }
+        ],
         "summary": "Delete an expense",
         "tags": [
           "hq.expenses"
         ],
         "x-hq-capability": "expense.delete",
-        "x-hq-effect": "destructive",
-        "x-hq-required-capabilities": [
-          "delete_expenses"
-        ]
+        "x-hq-effect": "destructive"
       }
     },
     "/api/v2/capabilities/expense.update/": {
@@ -19076,15 +19206,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "write_expenses"
+            ]
+          }
+        ],
         "summary": "Edit an expense",
         "tags": [
           "hq.expenses"
         ],
         "x-hq-capability": "expense.update",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "write_expenses"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/github.profile.read/": {
@@ -19147,16 +19281,20 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "look_up_public_records",
+              "manage_infrastructure"
+            ]
+          }
+        ],
         "summary": "Refresh a GitHub profile",
         "tags": [
           "hq.watching"
         ],
         "x-hq-capability": "github.profile.read",
-        "x-hq-effect": "infrastructure_change",
-        "x-hq-required-capabilities": [
-          "look_up_public_records",
-          "manage_infrastructure"
-        ]
+        "x-hq-effect": "infrastructure_change"
       }
     },
     "/api/v2/capabilities/hq.import/": {
@@ -19219,16 +19357,20 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "write_projects",
+              "write_assets"
+            ]
+          }
+        ],
         "summary": "Import projects and assets",
         "tags": [
           "hq.projects"
         ],
         "x-hq-capability": "hq.import",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "write_projects",
-          "write_assets"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/hq.sync/": {
@@ -19291,15 +19433,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "sync_documentation"
+            ]
+          }
+        ],
         "summary": "Update docs from the vault",
         "tags": [
           "hq.docs"
         ],
         "x-hq-capability": "hq.sync",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "sync_documentation"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/infrastructure.controller.refresh/": {
@@ -19362,15 +19508,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "manage_infrastructure"
+            ]
+          }
+        ],
         "summary": "Refresh HQ's readings",
         "tags": [
           "hq.connections"
         ],
         "x-hq-capability": "infrastructure.controller.refresh",
-        "x-hq-effect": "infrastructure_change",
-        "x-hq-required-capabilities": [
-          "manage_infrastructure"
-        ]
+        "x-hq-effect": "infrastructure_change"
       }
     },
     "/api/v2/capabilities/infrastructure.resource.accept_observed/": {
@@ -19433,15 +19583,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "manage_infrastructure"
+            ]
+          }
+        ],
         "summary": "Keep the live version",
         "tags": [
           "hq.infrastructure"
         ],
         "x-hq-capability": "infrastructure.resource.accept_observed",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "manage_infrastructure"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/infrastructure.resource.adopt/": {
@@ -19504,15 +19658,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "manage_infrastructure"
+            ]
+          }
+        ],
         "summary": "Manage a record in HQ",
         "tags": [
           "hq.services"
         ],
         "x-hq-capability": "infrastructure.resource.adopt",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "manage_infrastructure"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/infrastructure.resource.create/": {
@@ -19575,15 +19733,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "manage_infrastructure"
+            ]
+          }
+        ],
         "summary": "Add a record",
         "tags": [
           "hq.infrastructure"
         ],
         "x-hq-capability": "infrastructure.resource.create",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "manage_infrastructure"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/infrastructure.resource.reconcile/": {
@@ -19646,15 +19808,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "manage_infrastructure"
+            ]
+          }
+        ],
         "summary": "Apply HQ's config",
         "tags": [
           "hq.infrastructure"
         ],
         "x-hq-capability": "infrastructure.resource.reconcile",
-        "x-hq-effect": "infrastructure_change",
-        "x-hq-required-capabilities": [
-          "manage_infrastructure"
-        ]
+        "x-hq-effect": "infrastructure_change"
       }
     },
     "/api/v2/capabilities/infrastructure.resource.remove/": {
@@ -19717,15 +19883,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "manage_infrastructure"
+            ]
+          }
+        ],
         "summary": "Remove a record",
         "tags": [
           "hq.infrastructure"
         ],
         "x-hq-capability": "infrastructure.resource.remove",
-        "x-hq-effect": "destructive",
-        "x-hq-required-capabilities": [
-          "manage_infrastructure"
-        ]
+        "x-hq-effect": "destructive"
       }
     },
     "/api/v2/capabilities/infrastructure.resource.restart/": {
@@ -19788,15 +19958,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "manage_infrastructure"
+            ]
+          }
+        ],
         "summary": "Restart a container",
         "tags": [
           "hq.infrastructure"
         ],
         "x-hq-capability": "infrastructure.resource.restart",
-        "x-hq-effect": "infrastructure_change",
-        "x-hq-required-capabilities": [
-          "manage_infrastructure"
-        ]
+        "x-hq-effect": "infrastructure_change"
       }
     },
     "/api/v2/capabilities/infrastructure.resource.start/": {
@@ -19859,15 +20033,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "manage_infrastructure"
+            ]
+          }
+        ],
         "summary": "Start a container",
         "tags": [
           "hq.infrastructure"
         ],
         "x-hq-capability": "infrastructure.resource.start",
-        "x-hq-effect": "infrastructure_change",
-        "x-hq-required-capabilities": [
-          "manage_infrastructure"
-        ]
+        "x-hq-effect": "infrastructure_change"
       }
     },
     "/api/v2/capabilities/infrastructure.resource.stop/": {
@@ -19930,15 +20108,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "manage_infrastructure"
+            ]
+          }
+        ],
         "summary": "Stop a container",
         "tags": [
           "hq.infrastructure"
         ],
         "x-hq-capability": "infrastructure.resource.stop",
-        "x-hq-effect": "destructive",
-        "x-hq-required-capabilities": [
-          "manage_infrastructure"
-        ]
+        "x-hq-effect": "destructive"
       }
     },
     "/api/v2/capabilities/infrastructure.resource.update/": {
@@ -20001,15 +20183,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "manage_infrastructure"
+            ]
+          }
+        ],
         "summary": "Edit a record",
         "tags": [
           "hq.infrastructure"
         ],
         "x-hq-capability": "infrastructure.resource.update",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "manage_infrastructure"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/infrastructure.service.adopt/": {
@@ -20072,15 +20258,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "manage_infrastructure"
+            ]
+          }
+        ],
         "summary": "Manage a service in HQ",
         "tags": [
           "hq.infrastructure"
         ],
         "x-hq-capability": "infrastructure.service.adopt",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "manage_infrastructure"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/infrastructure.zone.adopt/": {
@@ -20143,15 +20333,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "manage_infrastructure"
+            ]
+          }
+        ],
         "summary": "Manage a domain in HQ",
         "tags": [
           "hq.zones"
         ],
         "x-hq-capability": "infrastructure.zone.adopt",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "manage_infrastructure"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/lookup.address.read/": {
@@ -20207,15 +20401,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "look_up_public_records"
+            ]
+          }
+        ],
         "summary": "Look up an address",
         "tags": [
           "hq.tools"
         ],
         "x-hq-capability": "lookup.address.read",
-        "x-hq-effect": "read",
-        "x-hq-required-capabilities": [
-          "look_up_public_records"
-        ]
+        "x-hq-effect": "read"
       }
     },
     "/api/v2/capabilities/lookup.name.read/": {
@@ -20271,15 +20469,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "look_up_public_records"
+            ]
+          }
+        ],
         "summary": "Look up a name",
         "tags": [
           "hq.tools"
         ],
         "x-hq-capability": "lookup.name.read",
-        "x-hq-effect": "read",
-        "x-hq-required-capabilities": [
-          "look_up_public_records"
-        ]
+        "x-hq-effect": "read"
       }
     },
     "/api/v2/capabilities/pin.choose/": {
@@ -20342,15 +20544,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "pin_favorites"
+            ]
+          }
+        ],
         "summary": "Choose pins",
         "tags": [
           "hq.dashboard"
         ],
         "x-hq-capability": "pin.choose",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "pin_favorites"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/pin.move/": {
@@ -20413,15 +20619,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "pin_favorites"
+            ]
+          }
+        ],
         "summary": "Move a pin",
         "tags": [
           "hq.dashboard"
         ],
         "x-hq-capability": "pin.move",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "pin_favorites"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/pin.toggle/": {
@@ -20484,15 +20694,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "pin_favorites"
+            ]
+          }
+        ],
         "summary": "Pin or unpin an item",
         "tags": [
           "hq.dashboard"
         ],
         "x-hq-capability": "pin.toggle",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "pin_favorites"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/project.create/": {
@@ -20555,15 +20769,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "write_projects"
+            ]
+          }
+        ],
         "summary": "Add a project",
         "tags": [
           "hq.projects"
         ],
         "x-hq-capability": "project.create",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "write_projects"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/project.delete/": {
@@ -20626,15 +20844,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "delete_projects"
+            ]
+          }
+        ],
         "summary": "Delete a project",
         "tags": [
           "hq.projects"
         ],
         "x-hq-capability": "project.delete",
-        "x-hq-effect": "destructive",
-        "x-hq-required-capabilities": [
-          "delete_projects"
-        ]
+        "x-hq-effect": "destructive"
       }
     },
     "/api/v2/capabilities/project.dependency_updates.run/": {
@@ -20697,16 +20919,20 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "write_projects",
+              "manage_infrastructure"
+            ]
+          }
+        ],
         "summary": "Update dependencies",
         "tags": [
           "hq.projects"
         ],
         "x-hq-capability": "project.dependency_updates.run",
-        "x-hq-effect": "infrastructure_change",
-        "x-hq-required-capabilities": [
-          "write_projects",
-          "manage_infrastructure"
-        ]
+        "x-hq-effect": "infrastructure_change"
       }
     },
     "/api/v2/capabilities/project.dependency_updates.set/": {
@@ -20769,15 +20995,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "write_projects"
+            ]
+          }
+        ],
         "summary": "Turn dependency updates on or off",
         "tags": [
           "hq.projects"
         ],
         "x-hq-capability": "project.dependency_updates.set",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "write_projects"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/project.refresh/": {
@@ -20840,15 +21070,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "write_projects"
+            ]
+          }
+        ],
         "summary": "Refresh a project",
         "tags": [
           "hq.projects"
         ],
         "x-hq-capability": "project.refresh",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "write_projects"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/project.update/": {
@@ -20911,15 +21145,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "write_projects"
+            ]
+          }
+        ],
         "summary": "Edit a project",
         "tags": [
           "hq.projects"
         ],
         "x-hq-capability": "project.update",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "write_projects"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/project.upsert/": {
@@ -20982,15 +21220,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "write_projects"
+            ]
+          }
+        ],
         "summary": "Add or update a project",
         "tags": [
           "hq.projects"
         ],
         "x-hq-capability": "project.upsert",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "write_projects"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/receipt.delete/": {
@@ -21053,15 +21295,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "delete_receipts"
+            ]
+          }
+        ],
         "summary": "Delete a receipt",
         "tags": [
           "hq.receipts"
         ],
         "x-hq-capability": "receipt.delete",
-        "x-hq-effect": "destructive",
-        "x-hq-required-capabilities": [
-          "delete_receipts"
-        ]
+        "x-hq-effect": "destructive"
       }
     },
     "/api/v2/capabilities/receipt.update/": {
@@ -21124,15 +21370,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "write_receipts"
+            ]
+          }
+        ],
         "summary": "Edit a receipt",
         "tags": [
           "hq.receipts"
         ],
         "x-hq-capability": "receipt.update",
-        "x-hq-effect": "remote_write",
-        "x-hq-required-capabilities": [
-          "write_receipts"
-        ]
+        "x-hq-effect": "remote_write"
       }
     },
     "/api/v2/capabilities/tailnet.policy.remove_empty_groups/": {
@@ -21195,15 +21445,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "manage_infrastructure"
+            ]
+          }
+        ],
         "summary": "Remove empty groups",
         "tags": [
           "hq.infrastructure"
         ],
         "x-hq-capability": "tailnet.policy.remove_empty_groups",
-        "x-hq-effect": "infrastructure_change",
-        "x-hq-required-capabilities": [
-          "manage_infrastructure"
-        ]
+        "x-hq-effect": "infrastructure_change"
       }
     },
     "/api/v2/capabilities/tailnet.reach.allow/": {
@@ -21266,15 +21520,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "manage_infrastructure"
+            ]
+          }
+        ],
         "summary": "Allow a blocked Tailscale connection",
         "tags": [
           "hq.infrastructure"
         ],
         "x-hq-capability": "tailnet.reach.allow",
-        "x-hq-effect": "infrastructure_change",
-        "x-hq-required-capabilities": [
-          "manage_infrastructure"
-        ]
+        "x-hq-effect": "infrastructure_change"
       }
     },
     "/api/v2/capabilities/tailnet.routes.approve/": {
@@ -21337,15 +21595,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "manage_infrastructure"
+            ]
+          }
+        ],
         "summary": "Approve subnet routes",
         "tags": [
           "hq.infrastructure"
         ],
         "x-hq-capability": "tailnet.routes.approve",
-        "x-hq-effect": "infrastructure_change",
-        "x-hq-required-capabilities": [
-          "manage_infrastructure"
-        ]
+        "x-hq-effect": "infrastructure_change"
       }
     },
     "/api/v2/capabilities/visit.refresh/": {
@@ -21408,15 +21670,19 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "manage_infrastructure"
+            ]
+          }
+        ],
         "summary": "Read a page again",
         "tags": [
           "hq.connections"
         ],
         "x-hq-capability": "visit.refresh",
-        "x-hq-effect": "infrastructure_change",
-        "x-hq-required-capabilities": [
-          "manage_infrastructure"
-        ]
+        "x-hq-effect": "infrastructure_change"
       }
     },
     "/api/v2/capabilities/{name}/": {
@@ -21577,6 +21843,11 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "summary": "Run a capability",
         "tags": [
           "hq.api"
@@ -21610,6 +21881,11 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "summary": "List connections",
         "tags": [
           "hq.connections"
@@ -21771,6 +22047,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "List findings",
         "tags": [
           "hq.findings"
@@ -21804,6 +22087,11 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "summary": "OpenAPI document",
         "tags": [
           "hq.api"
@@ -21854,6 +22142,11 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "summary": "List resources",
         "tags": [
           "hq.api"
@@ -21971,6 +22264,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Needs you: the list",
         "tags": [
           "hq.dashboard"
@@ -22060,6 +22360,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Analytics: the list",
         "tags": [
           "hq.analytics"
@@ -22108,6 +22415,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Held requests: one by id",
         "tags": [
           "hq.approvals"
@@ -22189,6 +22503,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Assets: the list",
         "tags": [
           "hq.assets"
@@ -22237,6 +22558,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Assets: one by slug",
         "tags": [
           "hq.assets"
@@ -22323,6 +22651,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read_calendar"
+            ]
+          }
+        ],
         "summary": "Calendar: the list",
         "tags": [
           "hq.calendar"
@@ -22371,6 +22706,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read_calendar"
+            ]
+          }
+        ],
         "summary": "Calendar: one by uid",
         "tags": [
           "hq.calendar"
@@ -22417,6 +22759,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Connection status: the list",
         "tags": [
           "hq.connections"
@@ -22465,6 +22814,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Connection status: one by connection ref",
         "tags": [
           "hq.connections"
@@ -22555,6 +22911,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "manage_contacts"
+            ]
+          }
+        ],
         "summary": "Contact submissions: the list",
         "tags": [
           "hq.contacts"
@@ -22603,6 +22966,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "manage_contacts"
+            ]
+          }
+        ],
         "summary": "Contact submissions: one by id",
         "tags": [
           "hq.contacts"
@@ -22655,6 +23025,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Containers: the list",
         "tags": [
           "hq.containers"
@@ -22703,6 +23080,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Containers: one by address",
         "tags": [
           "hq.containers"
@@ -22782,6 +23166,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Content: the list",
         "tags": [
           "hq.content"
@@ -22830,6 +23221,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Content: one by slug",
         "tags": [
           "hq.content"
@@ -22876,6 +23274,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Credential access: the list",
         "tags": [
           "hq.connections"
@@ -22924,6 +23329,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Credential access: one by provider",
         "tags": [
           "hq.connections"
@@ -23004,6 +23416,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Docs: the list",
         "tags": [
           "hq.docs"
@@ -23052,6 +23471,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Docs: one by doc id",
         "tags": [
           "hq.docs"
@@ -23104,6 +23530,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Domains: the list",
         "tags": [
           "hq.zones"
@@ -23152,6 +23585,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Domains: one by name",
         "tags": [
           "hq.zones"
@@ -23198,6 +23638,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Estate: the list",
         "tags": [
           "hq.dashboard"
@@ -23303,6 +23750,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Expenses: the list",
         "tags": [
           "hq.expenses"
@@ -23348,6 +23802,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "HQ: the list",
         "tags": [
           "hq.self"
@@ -23459,6 +23920,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Records: the list",
         "tags": [
           "hq.infrastructure"
@@ -23507,6 +23975,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Records: one by key",
         "tags": [
           "hq.infrastructure"
@@ -23559,6 +24034,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Machines: the list",
         "tags": [
           "hq.machines"
@@ -23607,6 +24089,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Machines: one by name",
         "tags": [
           "hq.machines"
@@ -23653,6 +24142,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Playbook scans: the list",
         "tags": [
           "hq.procedures"
@@ -23701,6 +24197,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Playbook scans: one by id",
         "tags": [
           "hq.procedures"
@@ -23747,6 +24250,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Playbooks: the list",
         "tags": [
           "hq.procedures"
@@ -23795,6 +24305,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Playbooks: one by playbook",
         "tags": [
           "hq.procedures"
@@ -23896,6 +24413,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Projects: the list",
         "tags": [
           "hq.projects"
@@ -23944,6 +24468,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Projects: one by slug",
         "tags": [
           "hq.projects"
@@ -24031,6 +24562,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Readings: the list",
         "tags": [
           "hq.connections"
@@ -24079,6 +24617,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Readings: one by kind",
         "tags": [
           "hq.connections"
@@ -24143,6 +24688,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Receipts: the list",
         "tags": [
           "hq.receipts"
@@ -24191,6 +24743,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Relationships: one by node",
         "tags": [
           "hq.topology"
@@ -24237,6 +24796,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Request path: the list",
         "tags": [
           "hq.connections"
@@ -24378,6 +24944,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Playbook runs: the list",
         "tags": [
           "hq.jobs"
@@ -24426,6 +24999,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Playbook runs: one by operation id",
         "tags": [
           "hq.jobs"
@@ -24488,6 +25068,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Search: the list",
         "tags": [
           "hq.search"
@@ -24536,6 +25123,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Service paths: one by hostname",
         "tags": [
           "hq.services"
@@ -24582,6 +25176,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Services: the list",
         "tags": [
           "hq.services"
@@ -24630,6 +25231,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Services: one by hostname",
         "tags": [
           "hq.services"
@@ -24676,6 +25284,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Tailnet: the list",
         "tags": [
           "hq.tailnet"
@@ -24727,6 +25342,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Upgrades: the list",
         "tags": [
           "hq.containers"
@@ -24775,6 +25397,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Upgrades: one by address",
         "tags": [
           "hq.containers"
@@ -24859,6 +25488,11 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "summary": "List a resource",
         "tags": [
           "hq.api"
@@ -24944,6 +25578,11 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "summary": "Get a resource record",
         "tags": [
           "hq.api"
@@ -25037,6 +25676,13 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
         "summary": "Read the topology",
         "tags": [
           "hq.topology"
@@ -25044,11 +25690,6 @@
       }
     }
   },
-  "security": [
-    {
-      "bearer": []
-    }
-  ],
   "tags": [
     {
       "description": "HQ's own machinery: its audit log, its agents, this API and HQ itself.\n\n- [API](#tag/hqapi)\n- [HQ](#tag/hqself)",

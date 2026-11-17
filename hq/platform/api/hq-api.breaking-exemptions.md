@@ -10,6 +10,8 @@ check finds to info. A line oasdiff could read that gives no reason fails the
 gate. Only lines added since the comparison base admit a break; lines already
 on that base admit nothing.
 
+api-security-scope-added info Reason: each operation's security now names the capabilities HQ already refused a call without, in place of an extension field; a token admitted before is admitted now
+
 request-parameter-max-set info Reason: every bound it sets declares a limit the server already held: an id past the 64-bit column's ceiling was answered as a server error, and a findings limit is a page, at most 100 as every list in the API pages, while the summary still counts every finding
 
 request-parameter-min-set info Reason: an id is a positive integer, and one below 1 named no record, so a client sent nothing that read one

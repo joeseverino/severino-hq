@@ -426,6 +426,9 @@ class _Builder:
         codes = fields.pop("codes", view.__hq_codes__)
         answer = fields.pop("answer", None)
         held = fields.pop("held", view.__hq_held__)
+        # What a call needs: the view's own access, or the one capability or
+        # resource a concrete operation serves.
+        scopes = fields.pop("scopes", view.__hq_requires__.scopes)
         operation_id += f"V{VERSION}"
         if operation_id in self.operation_ids:
             raise OpenAPIError(f"Operation id {operation_id!r} is derived twice.")
@@ -443,6 +446,7 @@ class _Builder:
             "summary": summary,
             **({"tags": [tag]} if tag else {}),
             **fields,
+            "security": [{BEARER: list(scopes)}],
             "responses": self._responses(view, codes, answer, held),
         }
         self.paths.setdefault(path, {})[method.lower()] = operation
@@ -560,11 +564,8 @@ class _Builder:
                 codes=views.execute_codes(registry[name]),
                 answer=self.answer_of(registry[name]),
                 held=views.capability_held(registry[name]),
-                **{
-                    "x-hq-capability": name,
-                    EFFECT_EXTENSION: spec["effect"],
-                    "x-hq-required-capabilities": spec["required_capabilities"],
-                },
+                scopes=spec["required_capabilities"],
+                **{"x-hq-capability": name, EFFECT_EXTENSION: spec["effect"]},
             )
 
     def answer_of(self, spec: CapabilitySpec) -> tuple[str, dict[str, Any]] | None:
@@ -616,6 +617,7 @@ class _Builder:
                 ]
                 + [_FIELDS],
                 answer=self.page_of(self.resource_specs[name].row_type),
+                scopes=spec["required_capabilities"],
                 **{"x-hq-resource": name},
             )
 
@@ -725,11 +727,15 @@ class _Builder:
                     _FIELDS,
                 ],
                 answer=self.record_of(self.resource_specs[name].record_type),
+                scopes=spec["required_capabilities"],
                 **{"x-hq-resource": name, "x-hq-identifier": field},
             )
 
 
 _FIELDS = {"$ref": "#/components/parameters/Fields"}
+# The one security scheme; an operation's requirement of it lists the capabilities a call needs
+# (OpenAPI 3.2, Security Requirement Object: role names, for a scheme other than OAuth's).
+BEARER = "bearer"
 IDEMPOTENCY_KEY = "IdempotencyKey"
 # Where a capability operation says its effect, which the document's introduction explains.
 EFFECT_EXTENSION = "x-hq-effect"
@@ -804,16 +810,18 @@ def document() -> dict[str, Any]:
             + " Derived from HQ's routes and its capability, resource and domain registries.\n\n"
             + effect_glossary(EFFECT_EXTENSION),
         },
-        "security": [{"bearer": []}],
         "tags": builder.tags.render(),
         "paths": dict(sorted(builder.paths.items())),
         "components": {
             "securitySchemes": {
-                "bearer": {
+                BEARER: {
                     "type": "http",
                     "scheme": "bearer",
                     "bearerFormat": "JWT",
-                    "description": "An access token from HQ's identity provider, addressed to this API.",
+                    "description": (
+                        "An access token from HQ's identity provider, addressed to this API. The names an "
+                        "operation's security lists are the HQ capabilities its token must carry, every one."
+                    ),
                 }
             },
             "parameters": dict(

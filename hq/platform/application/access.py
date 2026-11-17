@@ -21,6 +21,10 @@ class Access(Protocol):
     def check(self, principal: Principal, /) -> None:
         """Raise the operation's own ``AuthorizationError`` for a caller it does not admit."""
 
+    @property
+    def scopes(self) -> tuple[str, ...]:
+        """The capabilities every call needs, which the API document names as the operation's security."""
+
 
 @dataclass(frozen=True, slots=True)
 class Anyone:
@@ -31,6 +35,10 @@ class Anyone:
 
     def check(self, _principal: Principal, /) -> None:
         return None
+
+    @property
+    def scopes(self) -> tuple[str, ...]:
+        return ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +52,10 @@ class Holding:
 
     def check(self, principal: Principal) -> None:
         principal.require(*self.capabilities)
+
+    @property
+    def scopes(self) -> tuple[str, ...]:
+        return tuple(str(capability) for capability in self.capabilities)
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,6 +80,11 @@ class Some:
         ):
             return
         raise AuthorizationError(f"{principal.interface} principal {principal.actor!r} {self.lacks}.")
+
+    @property
+    def scopes(self) -> tuple[str, ...]:
+        # No one capability: each entry of the family names its own.
+        return ()
 
 
 ANYONE = Anyone()

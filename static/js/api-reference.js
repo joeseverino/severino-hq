@@ -215,9 +215,8 @@ document.addEventListener("DOMContentLoaded", () => {
     // to, which names nothing a reader can open.
     hideModels: true,
     hideModelNames: true,
-    // What a capability does and the grants it needs are the operation's own
-    // fields, drawn beside it.
-    showExtensions: ["x-hq-effect", "x-hq-required-capabilities"],
+    // What a capability does is the operation's own field, drawn beside it.
+    showExtensions: ["x-hq-effect"],
     // The API takes a bearer token from the identity provider, never this
     // page's session, so a request sent from here has nothing to send. This
     // also drops the panel that asks for a token.
