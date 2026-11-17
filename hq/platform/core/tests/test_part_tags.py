@@ -1,18 +1,13 @@
 """The section part: one look whether a template writes it or code builds it."""
 
-import ast
-import inspect
-import re
 from datetime import date
-from pathlib import Path
 
-from django.template import Context, Template, TemplateSyntaxError, engines
-from django.test import SimpleTestCase, tag
+from django.template import Context, Template, TemplateSyntaxError
+from django.test import SimpleTestCase
 from django.utils.functional import SimpleLazyObject
 
 from hq.platform.application.markup_testing import all_elements, elements, select, with_class
 from hq.platform.application.page_parts import SectionPart
-from hq.platform.core.templatetags.facts_tags import LAYOUTS
 lazy from hq.platform.core.tests.browser.catalog import CATALOG
 
 MONTH = date(2026, 11, 1)
@@ -405,67 +400,14 @@ def _catalog_templates() -> dict[str, str]:
     return {name: entry.template for name, entry in CATALOG.items()}
 
 
-# The tags the browser survey reads through the catalog, each with what an
-# entry must draw beyond its options and later parts.
-CATALOGED = {
-    "section": ("data_",),
-    "notice": ("data_",),
-    "title_meta": ("data_",),
-    "stack_list": ("data_",),
-    "switch": (),
-    "choice": (),
-    "check_ladder": (),
-    "check_rung": (),
-    "facts": tuple(f'layout="{layout}"' for layout in LAYOUTS),
-    "fact": (),
-    "control_label": (),
-}
-# An option whose absence draws a state of its own, so an entry leaves it out.
-LEFT_OUT = {"notice": "tone", "control_label": "control"}
-
-
-def _catalog_source() -> str:
-    """Every string the catalog's families write, read from their source,
-    where a part an entry hands its page (a page head's aside) is written
-    too."""
-
-    from hq.platform.core.tests.browser.catalog.families import chart, form, graph, part, status, table
-
-    return "\n".join(
-        node.value
-        for family in (chart, form, graph, part, status, table)
-        for node in ast.walk(ast.parse(Path(family.__file__).read_text(encoding="utf-8")))
-        if isinstance(node, ast.Constant) and isinstance(node.value, str)
-    )
-
-
-@tag("source")
 class CatalogTests(SimpleTestCase):
-    def test_every_option_and_part_of_a_cataloged_tag_has_a_catalog_entry(self):
-        """The browser survey reads a shared tag through the catalog, so each
-        option and later part it takes is drawn there at least once."""
+    def test_every_part_has_its_default_entry(self):
+        """The browser survey reads every shared part through the catalog, so
+        each draws there at least as its declaration shows it written."""
 
-        source = _catalog_source()
-        tags = {
-            name: compile_
-            for library in engines["django"].engine.template_libraries.values()
-            for name, compile_ in library.tags.items()
-        }
-        for name, extra in CATALOGED.items():
-            takes = inspect.unwrap(tags[name])
-            options = [
-                option
-                for option, parameter in inspect.signature(takes).parameters.items()
-                if parameter.kind is inspect.Parameter.KEYWORD_ONLY
-                or (inspect.isfunction(takes) and parameter.default is not inspect.Parameter.empty)
-            ]
-            opened = re.findall(rf"\{{% {name}\b(.*?)%\}}", source)
-            missing = [option for option in options if not any(re.search(rf"\b{option}=", o) for o in opened)]
-            missing += [word for word in extra if not any(word in o for o in opened)]
-            missing += [
-                f"{{% {part} %}}" for part in getattr(takes, "parts", ())[1:] if f"{{% {part} %}}" not in source
-            ]
-            if left := LEFT_OUT.get(name):
-                missing += [f"no {left}="] if all(f"{left}=" in o for o in opened) else []
-            with self.subTest(tag=name):
-                self.assertEqual(missing, [], "add an entry to browser/catalog/families/ that draws it")
+        from hq.platform.core.template_contract import parts
+        from hq.platform.core.tests.browser.catalog import default_name
+
+        for each in parts():
+            with self.subTest(part=each.name or each.partial):
+                self.assertIn(default_name(each), CATALOG)

@@ -6,44 +6,47 @@ name (``part/``, ``table/``). A new family is a new module there and one
 import below."""
 
 import re
+from dataclasses import replace
 
 from django.template.loader import render_to_string
 from django.utils.html import escape
 
 from hq.platform.application.ui import PageNavigation, PageSection
 from hq.platform.core.template_contract import parts
+from hq.platform.core.template_parts import Part
 from hq.platform.core.templatetags.stylesheet_tags import stylesheets
 from hq.platform.core.tests.browser.catalog.common import Entry, head_of, part_page
 from hq.platform.core.tests.browser.catalog.families import chart, form, graph, part, status, table
 
-# The parts whose default entry is drawn from their example so far.
-DRAWN_FROM_EXAMPLE = ("muted",)
 
+def default_name(each: Part) -> str:
+    """The name of a part's default entry: ``part/`` and its tag, or its
+    partial's name when it has none."""
 
-def defaults() -> dict[str, Entry]:
-    """Each part's default entry, ``part/`` and its name: its ``Part.example``,
-    as a page writes it."""
-
-    return {f"part/{each.name}": Entry(each.example) for each in parts() if each.name in DRAWN_FROM_EXAMPLE}
+    stem = each.name or each.partial.rpartition("/")[2].removesuffix(".html").lstrip("_")
+    return f"part/{stem.replace('_', '-')}"
 
 
 def _assembled(*families) -> dict[str, Entry]:
-    """Every family's ``ENTRIES``, each in its module's own order, the parts'
-    default entries first among the ``part/`` family's. A family holds only
-    names it begins, and never a part's default, so no two modules name one
-    entry."""
+    """Every family's ``ENTRIES``, each in its module's own order, after each
+    part's default entry: its ``Part.example`` as a page writes it, given what
+    the entry of its name with no template gives it, in any family. A family
+    holds only names it begins, but for those, and never writes a default's
+    template, so no two modules name one entry and every part has its own."""
 
-    catalog: dict[str, Entry] = {}
-    drawn = defaults()
+    named = {default_name(each): each for each in parts()}
+    given = {name: entry for family in families for name, entry in family.ENTRIES.items() if not entry.template}
+    if strays := sorted(given.keys() - named.keys()):
+        raise ImportError(f"an entry with no template is a part's default, but no part is named {strays}")
+    catalog = {name: replace(given.get(name, Entry()), template=each.example) for name, each in sorted(named.items())}
     for family in families:
         prefix = family.__name__.rpartition(".")[2]
-        if strays := [name for name in family.ENTRIES if not name.startswith(f"{prefix}/")]:
+        drawn = {name: entry for name, entry in family.ENTRIES.items() if entry.template}
+        if strays := [name for name in drawn if not name.startswith(f"{prefix}/")]:
             raise ImportError(f"families/{prefix}.py holds entries of another family: {strays}")
-        if restated := sorted(drawn.keys() & family.ENTRIES.keys()):
-            raise ImportError(
-                f"families/{prefix}.py restates a part's default entry, drawn from its example: {restated}"
-            )
-        catalog |= (drawn if prefix == "part" else {}) | family.ENTRIES
+        if restated := sorted(drawn.keys() & named.keys()):
+            raise ImportError(f"families/{prefix}.py writes a part's default entry, drawn from its example: {restated}")
+        catalog |= drawn
     return catalog
 
 

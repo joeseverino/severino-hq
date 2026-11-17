@@ -13,6 +13,8 @@ from django.contrib.messages import ERROR, INFO, SUCCESS, WARNING
 from django.contrib.messages.storage.base import Message
 from django.core.paginator import Paginator
 from django.template import Template
+from django.templatetags.static import static
+from django.test import RequestFactory
 
 from hq.domains.control_plane.models import ApprovalRequest
 from hq.domains.jobs.models import Job, JobState
@@ -50,7 +52,7 @@ from hq.platform.application.ui import (
 )
 from hq.platform.core.models import AgentIdentity
 from hq.platform.core.templatetags.action_tags import MOST_BESIDE
-from hq.platform.core.tests.browser.catalog.common import DRAWN_AT, HEAD, Entry
+from hq.platform.core.tests.browser.catalog.common import DRAWN_AT, Entry
 from hq.platform.core.tests.browser.selectors import SELECTORS
 lazy from hq.platform.application.dashboard import finding_rows
 lazy from hq.platform.application.finding_model import Finding
@@ -713,9 +715,7 @@ ENTRIES = {
     # The page frame's header, as every signed-in page draws it: the sections,
     # the doorway to search, the queue's count and the person's menu, whose
     # popovers the survey opens.
-    "part/site-header": Entry(
-        '{% include "partials/_site_header.html" %}', _signed_in(), address="/example/", frame="before"
-    ),
+    "part/site-header": Entry(context=_signed_in(), address="/example/", frame="before"),
     # A table in a section of its own name, one that fits and one that
     # scrolls in a card of its own name, as a record page and a ledger draw
     # them: each name is one landmark on the page.
@@ -824,9 +824,8 @@ ENTRIES = {
         },
     ),
     # A list whose rows carry their own padding fills the frame as a table does.
-    "part/section-rows": Entry(
-        '{% section "Example repositories" count=2 %}{% include "partials/_record_list.html" %}{% endsection %}',
-        {
+    "part/record-list": Entry(
+        context={
             "rows": [
                 ListRow("example-one", url="/example/one/", detail="Example access, read only"),
                 ListRow("example-two", url="/example/two/", detail="Example access, read only"),
@@ -984,9 +983,8 @@ ENTRIES = {
     # A trail of steps a word of two letters long: each is a small target, so
     # the survey's small targets hold it by its spacing from the next, the
     # slash between them belonging to neither.
-    "part/short-trail": Entry(
-        f'{{% include "{HEAD}" %}}',
-        {
+    "part/page-head": Entry(
+        context={
             "page": Page(
                 title="Example",
                 trail=(("Ex", "/example/"), ("Ex", "/example/ex/"), ("Example", "/example/ex/example/")),
@@ -1222,7 +1220,7 @@ ENTRIES = {
         },
     ),
     # Steps and checks side by side: met, unmet, done and plain.
-    "part/steps": Entry(
+    "part/steps-states": Entry(
         '{% section "Example standard" %}{% steps %}'
         '{% step icon="check-circle" tone="good" title="An example check holds." %}<strong>Example met</strong> <span class="muted">Stops an example.</span>{% endstep %}'
         '{% step icon="shield" tone="attention" %}<strong>Example unmet</strong> <span class="muted">An example is open: <a href="/example/">close it.</a> Stops an example.</span>{% endstep %}'
@@ -1234,7 +1232,7 @@ ENTRIES = {
     # link stands alone, and a note; then in a table, a row's notes under its name and a list
     # the open row shows under its label. A new option of the tag comes with
     # an entry here (CatalogTests in test_part_tags).
-    "part/stack-list": Entry(
+    "part/stack-list-states": Entry(
         '{% section "Example advisories" %}{% stack_list data_example="example" %}'
         '<li class="prose">{% status "High" tone="serious" %} <a href="/example/advisory/">EXAMPLE-2026-0001</a> '
         "An example advisory long enough to wrap onto a second line on a phone.</li>"
@@ -1256,10 +1254,7 @@ ENTRIES = {
     # A calendar's sources, each a toggle in its color: one shown with what it
     # shows, one hidden, one that could not be read; and a source's swatch.
     "part/calendar-sources": Entry(
-        '{% section "Example calendars" %}{% include "partials/_calendar_sources.html" %}{% endsection %}'
-        '{% section "Example day" %}<p>An example line.</p>{% aside %}'
-        '{% include "partials/_calendar_sources.html#swatch" with source=sources.0 %}{% endsection %}',
-        {
+        context={
             "sources": (
                 SourceView(
                     "example.shown",
@@ -1290,9 +1285,8 @@ ENTRIES = {
     ),
     # A month with days gone by, each kind of entry on them: their words are
     # still links a reader follows, so they read as text in play does.
-    "part/month-gone-by": Entry(
-        '{% section "Example month" %}{% include "partials/_month_grid.html" %}{% endsection %}',
-        {"calendar": _month_gone_by()},
+    "part/month-grid": Entry(
+        context={"calendar": _month_gone_by()},
     ),
     # A month compact, as the dashboard draws it beside its recent projects:
     # where things are, each a dot or a sliver, the day opening the rest.
@@ -1501,8 +1495,7 @@ ENTRIES = {
     # A note in its own words with the names HQ knows in it as links, its
     # line breaks kept, and a name with no break in it.
     "part/linked-text": Entry(
-        '{% section "Example notes 4" %}{% include "partials/_linked_text.html" %}{% endsection %}',
-        {
+        context={
             "parts": (
                 "Deploys to ",
                 EntityLink("example-host-one", "/example/host/", kind="machine", kind_label="machine"),
@@ -1542,9 +1535,8 @@ ENTRIES = {
         "so its wrapping is read too.{% endnotice %}"
     ),
     # Among the page's messages, as a post's outcome is said: each a toast.
-    "part/notice-messages": Entry(
-        '{% include "partials/_messages.html" %}',
-        {
+    "part/messages": Entry(
+        context={
             "messages": [
                 Message(level, f"An example {name} message.")
                 for level, name in ((SUCCESS, "success"), (INFO, "info"), (WARNING, "warning"), (ERROR, "error"))
@@ -1567,7 +1559,7 @@ ENTRIES = {
     # A code patch ({% patch %}), the declaration of its one caller's (a
     # container's compose change): a title naming a long path, the code with a
     # line longer than a phone's, the words under it and its notes.
-    "part/patch": Entry(
+    "part/patch-states": Entry(
         '{% section "Example runtime" %}{% patch id="example-patch" %}{{ yaml|breakable }}'
         "{% title %}Add to <code>{{ compose_file|breakable }}</code>"
         "{% detail %}Where its service already has one of these keys, replace it. Then run "
@@ -1689,8 +1681,12 @@ ENTRIES = {
     # search field, as a missing page offers it, and one naming the request
     # id its log line carries, long enough to break at its dots.
     "part/error-page": Entry(
-        '{% include "partials/_error_page.html" with code="404" title="Page not found" '
-        'body="The example link may be old, or what it pointed to was deleted." search=True %}',
+        context={
+            "code": "404",
+            "title": "Page not found",
+            "body": "The example link may be old, or what it pointed to was deleted.",
+            "search": True,
+        },
         heads_the_page=True,
     ),
     "part/error-page-request": Entry(
@@ -1715,7 +1711,7 @@ ENTRIES = {
     # a state beside it, its handle and a line in its own words. The card lays
     # the two out in a row, and the band, whose width is its frame's and never
     # its facts', still holds its four counts.
-    "part/identity": Entry(
+    "part/identity-states": Entry(
         '{% card label="Example profile" %}{% include "partials/_identity.html" with picture=picture '
         'name="Example Person" handle="@example" url="https://example.com/example" badge="Your account" '
         'tone="good" tip="An example reason it is yours." about="Runs an example homelab." only %}'
@@ -1734,25 +1730,25 @@ ENTRIES = {
     ),
     # A saved copy's About dialog body: what to try, its own pages as chips,
     # and who made it.
-    "part/demo-about": Entry('{% include "partials/_demo_about.html" %}', {"saved_copy": _NOW}),
+    "part/demo-about": Entry(context={"saved_copy": _NOW}),
     # A saved copy's footer, which says from the page's corner what it is.
-    "part/demo-foot": Entry('{% include "partials/_demo_foot.html" %}', frame="after"),
+    "part/demo-foot": Entry(frame="after"),
     # Command Center's palette as its dialog opens on it, waiting for its
     # results; its results for a term, each kind of group with more than it
     # shows; and a term nothing answers.
-    "part/command-center": Entry('{% include "partials/_command_center.html" %}'),
+    "part/command-center": Entry(),
     "part/command-center-results": Entry('{% include "partials/_command_center.html#results" %}', _palette()),
     "part/command-center-empty": Entry('{% include "partials/_command_center.html#results" %}', {"q": "example-none"}),
     # A control label ({% control_label %}) with no control, naming the answer
     # that follows it; the filter bar above draws it for its controls
     # (CatalogTests in test_part_tags).
-    "part/control-label": Entry(
+    "part/control-label-states": Entry(
         '{% card element="article" label="Example stage" %}{% control_label "Example receiving" %}'
         "<p><strong>Example provider</strong></p>{% endcard %}"
     ),
     # A "do this now" control in a section's body: one never pressed, beside
     # one whose work ended and says how.
-    "part/ask": Entry(
+    "part/ask-states": Entry(
         '{% section "Example readings 2" %}<p>{% include "partials/_ask.html" with ask=idle %}</p>'
         '<p>{% include "partials/_ask.html" with ask=done %}</p>{% endsection %}',
         {
@@ -1888,8 +1884,7 @@ ENTRIES = {
     # A job under way, as far along as it knows; one waiting its turn, which
     # knows nothing yet; one that failed with a long note.
     "part/job-progress": Entry(
-        '{% include "partials/_job_progress.html" %}',
-        {
+        context={
             "job": Job(
                 id=UUID(int=1),
                 kind="example.import",
@@ -1921,7 +1916,7 @@ ENTRIES = {
     ),
     # A row of places to go, each a chip: one of HQ's own pages, outside ones
     # with their arrow, and a name long enough to wrap on a phone.
-    "part/link-chips": Entry(
+    "part/link-chips-states": Entry(
         '{% section "Example links" %}{% link_chips %}'
         '<li><a href="/example/" title="An example page of HQ">Example page</a></li>'
         '<li>{% entity "https://example.com/"|outside label="Example site" %}</li>'
@@ -1932,9 +1927,7 @@ ENTRIES = {
     # Readings that need reading, each tone: one a link, one with its next
     # step, one with neither a value nor an eyebrow.
     "part/insight-grid": Entry(
-        '{% section "Example insights" %}{% include "partials/_insight_grid.html" with label="Example insights" %}'
-        "{% endsection %}",
-        {
+        context={
             "items": [
                 Insight(
                     Tone.ATTENTION,
@@ -1984,7 +1977,7 @@ ENTRIES = {
     ),
     # A picture of a document in a figure's section, square where its box is a
     # page's shape, so it sits at the top of the room held for it.
-    "part/document-picture": Entry(
+    "part/document-picture-states": Entry(
         '{% load static %}{% static "img/logo.png" as picture %}'
         '{% section "Example file" figure=True lede="example-receipt.png" %}'
         '{% include "partials/_document_picture.html" with src=picture alt="An example receipt" only %}'
@@ -1992,7 +1985,7 @@ ENTRIES = {
     ),
     # A command to paste somewhere else, short and long enough to wrap at its
     # slashes and spaces.
-    "part/command": Entry(
+    "part/command-states": Entry(
         '{% section "Example setup" %}{% include "partials/_command.html" with command="example-cli status" %}'
         '{% include "partials/_command.html" with command=long %}{% endsection %}',
         {
@@ -2023,7 +2016,7 @@ ENTRIES = {
         {"long": "example-tag:example-device-with-a-long-name.example.com"},
     ),
     # Checks read down as rows, with no route: each in a frame of its own.
-    "part/check-ladder": Entry(
+    "part/check-ladder-states": Entry(
         '{% section "Example checks 2" %}{% check_ladder %}'
         '{% check_rung state="met" evidence="192.0.2.10" %}Example address is known'
         "{% body %}<p>Example HQ knows this address.</p>{% endcheck_rung %}"
@@ -2050,12 +2043,11 @@ ENTRIES = {
         },
     ),
     # The connection dialog before its panel arrives.
-    "part/connection-loading": Entry('{% include "partials/_connection_loading.html" %}'),
+    "part/connection-loading": Entry(),
     # You, the link and HQ: over the tailnet with every check confirmed and
     # both ends leading to their machines, under Advanced HQ Posture.
     "part/connection-peering": Entry(
-        '{% include "partials/_connection_peering.html" %}',
-        {"connection": _connection(), "posture": _posture((True, True))},
+        context={"connection": _connection(), "posture": _posture((True, True))},
     ),
     # Off the tailnet with no reading of it: the address alone, and HQ by
     # the name it was asked for.
@@ -2080,9 +2072,8 @@ ENTRIES = {
     ),
     # Dots beside a figure, a part of a whole and a history whose dots lead
     # to each run; and a history in a table's cell.
-    "part/figure-dots": Entry(
-        '{% section "Example hosts 4" %}{% include "partials/_kpi_grid.html" %}{% endsection %}',
-        {
+    "part/kpi-grid": Entry(
+        context={
             "items": [
                 Kpi("Example hosts online", "3 of 5", "2 example hosts offline", drawing=Dots.of(3, 5)),
                 Kpi("Example runs", "4 of 6", "The last six example runs", drawing=_runs()),
@@ -2098,14 +2089,14 @@ ENTRIES = {
     ),
     # On a saved copy of HQ, what a page says of the reader's connection is
     # said of the example visit: as a panel's notice, and as the short mark.
-    "part/example-connection": Entry(
+    "part/example-connection-states": Entry(
         '{% section "Example connection" %}{% include "partials/_example_connection.html" with notice=True %}'
         '{% facts %}{% fact "Example address" %}192.0.2.10 '
         '{% include "partials/_example_connection.html" %}{% endfact %}{% endfacts %}{% endsection %}',
         settings={"SEVERINO_RENDERED_COPY": True},
     ),
     # A list's pages, at a middle page, and on the first, which has none before it.
-    "part/pagination": Entry(
+    "part/pagination-states": Entry(
         '{% section "Example events" %}{% table_region "Example events" %}<table class="data-table"><thead><tr>'
         '{% table_heading "Event" %}</tr></thead><tbody><tr><td>Example event</td></tr></tbody></table>'
         '{% endtable_region %}{% include "partials/_pagination.html" %}{% endsection %}',
@@ -2119,7 +2110,7 @@ ENTRIES = {
     ),
     # A list's toolbar over its table: a search with words in it, a filter
     # with some of its options chosen, a toggle and a sort.
-    "part/table-toolbar": Entry(
+    "part/table-toolbar-states": Entry(
         '{% include "partials/_table_toolbar.html" %}{% table_region "Example hosts" %}<table class="data-table">'
         '<thead><tr>{% table_heading "Name" "identifier" %}{% table_heading "State" "status" %}</tr></thead>'
         "<tbody><tr><td>example-01</td><td>Online</td></tr><tr><td>example-02</td><td>Offline</td></tr>"
@@ -2129,7 +2120,7 @@ ENTRIES = {
     ),
     # A row's editor: the way in, closed, and the address that opens the
     # first row's form in the line beneath it.
-    "part/row-editor": Entry(
+    "part/row-editor-states": Entry(
         _edited_rows("Example runs to correct", "example-01", "example-02"),
         {"form": _ExampleDistance()},
         address="/example/runs/",
@@ -2142,8 +2133,7 @@ ENTRIES = {
     # The open problems about the thing a page shows: an urgent one in its
     # box above, and the rest in a card of their own.
     "part/problems": Entry(
-        '{% include "partials/_problems.html" %}',
-        {
+        context={
             "problems": [
                 *_problems("example-host-01 is out of disk", status="serious"),
                 *_problems("example-web-01 runs an image by tag alone", "example-worker-02 restarts often"),
@@ -2152,7 +2142,7 @@ ENTRIES = {
     ),
     # A reading's age in each of its states: current, out of date, the moment
     # alone, none, and none with why.
-    "part/reading-age": Entry(
+    "part/reading-age-states": Entry(
         '{% section "Example readings 4" %}{% facts %}'
         '{% fact "Example current" %}{% include "partials/_reading_age.html" with reading=current only %}{% endfact %}'
         '{% fact "Example stale" %}{% include "partials/_reading_age.html" with reading=stale only %}{% endfact %}'
@@ -2171,7 +2161,7 @@ ENTRIES = {
     # that leads to a dialog with a note of a problem, one whose line needs
     # attention, and a region holding readings that open a panel, one
     # needing attention and one past its time.
-    "part/readings": Entry(
+    "part/readings-states": Entry(
         '{% include "partials/_page_head.html" %}{% section "Example section" %}<p>An example line.</p>{% endsection %}',
         {"page": Page(title="Example readings"), "page_aside": _Drawn(_READINGS)},
         heads_the_page=True,
@@ -2192,7 +2182,7 @@ ENTRIES = {
     # dot between each, long enough to wrap under the title on a phone, each
     # part wrapping whole, a state as a pill and as words among them. A new option of the tag comes with an entry here
     # (CatalogTests in test_part_tags).
-    "part/title-meta": Entry(
+    "part/title-meta-states": Entry(
         '{% include "partials/_page_head.html" %}{% section "Example section 3" %}<p>An example line.</p>{% endsection %}',
         {
             "page": Page(title="example-host-01"),
@@ -2210,7 +2200,7 @@ ENTRIES = {
     # How old each provider's last reading is: folded as a grid, one of them
     # out of date and one unreachable; one provider's as a sentence; and its
     # age alone, in a heading's aside.
-    "part/sweep-freshness": Entry('{% include "partials/_sweep_freshness.html" %}', {"inventory": _INVENTORY}),
+    "part/sweep-freshness": Entry(context={"inventory": _INVENTORY}),
     "part/sweep-freshness-one": Entry(
         '{% section "Example records 2" %}{% include "partials/_sweep_freshness.html" with only_kind="example.records" %}'
         "{% endsection %}",
@@ -2224,7 +2214,7 @@ ENTRIES = {
     ),
     # A switch ({% switch %}): siblings with one current, a mark and a note on
     # some, and the summary of the current one under the row.
-    "part/switch": Entry(
+    "part/switch-states": Entry(
         '{% switch label="Example domains" %}'
         '{% choice url="/example/one/" current=True mark="★" %}example.com{% endchoice %}'
         '{% choice url="/example/two/" %}example.net{% endchoice %}'
@@ -2241,7 +2231,7 @@ ENTRIES = {
     ),
     # A page that asks for its readings when opened: the note that ends its
     # head's first line, and a region that fills itself holding its own.
-    "part/visit-refresh": Entry(
+    "part/visit-refresh-states": Entry(
         '{% include "partials/_page_head.html" %}{% include "partials/_visit_refresh.html" with visit=page_visit %}'
         '{% section "Example host 2" %}<p>An example line.</p>{% endsection %}',
         {
@@ -2257,9 +2247,7 @@ ENTRIES = {
     # A strip of tiles, more than one line holds in a narrow box: a tile
     # with a note and one without, side by side.
     "part/tile-strip": Entry(
-        '{% section "Example hours" %}{% include "partials/_tile_strip.html" with label="Example hours" %}'
-        "{% endsection %}",
-        {
+        context={
             "tiles": tuple(
                 StripTile(f"{hour} PM", f"{80 - hour}°", note="40%" if hour % 3 == 0 else "", tip="Example showers")
                 for hour in range(1, 13)
@@ -2269,8 +2257,7 @@ ENTRIES = {
     # A horizon of dated events, more than one column holds on a wide
     # screen: a link, one with a line under it and a badge, each tone.
     "part/timeline": Entry(
-        '{% include "partials/_timeline.html" %}',
-        {
+        context={
             "timeline": Timeline(
                 "Example horizon",
                 "What is coming up for the example records.",
@@ -2292,8 +2279,7 @@ ENTRIES = {
     # What a record is related to: a group whose ends each say who read them
     # and when, one a single source read, and one of names alone.
     "part/relationships": Entry(
-        '{% include "partials/_relationships.html" %}',
-        {
+        context={
             "relationships": Relationships(
                 "example-host-01",
                 groups=(
@@ -2340,7 +2326,7 @@ ENTRIES = {
     # by the request (so the key under the strip says so), contradicted, not
     # read, with a certificate, with facts under its name, and a name long
     # enough to break.
-    "part/path-hops": Entry(
+    "part/path-hops-states": Entry(
         '{% section "Example path 5" %}{% include "partials/_path_hops.html" with route=route '
         'label="Path via example record" %}{% endsection %}',
         {"route": _route()},
@@ -2370,12 +2356,11 @@ ENTRIES = {
     # and its score: one failing that others can reach, one meeting it all,
     # and one whose access was never read.
     "part/repository-postures": Entry(
-        '{% section "Example repositories 2" count=3 %}{% include "projects/_repository_postures.html" %}{% endsection %}',
-        {"repositories": _repository_postures()},
+        context={"repositories": _repository_postures()},
     ),
     # A dense page's map, more links than a phone's row holds, over the
     # sections it opens.
-    "part/page-navigation": Entry(
+    "part/page-navigation-states": Entry(
         '{% include "partials/_page_head.html" %}{% include "partials/_page_navigation.html" with '
         "navigation=page.navigation %}{% for item in page.navigation.items %}"
         "{% section item.label id=item.id %}<p>An example line.</p>{% endsection %}{% endfor %}",
@@ -2404,7 +2389,7 @@ ENTRIES = {
     # A value and the one that replaces it: as words, and as a cell's own
     # identifiers, one pair linking outside HQ and one too long to share a
     # line with its old value beside a note that asks for its whole length.
-    "part/change": Entry(
+    "part/change-states": Entry(
         '{% section "Example versions" %}<p>{% include "partials/_change.html" with from="1.2" to="1.4" %}</p>'
         '{% table_region "Example images" %}<table class="data-table"><thead><tr>'
         '{% table_heading "Name" "identifier" %}{% table_heading "Image" %}{% table_heading "Note" %}</tr></thead>'
@@ -2414,5 +2399,69 @@ ENTRIES = {
         "</td><td>Restarted once the example update was pulled from the example registry</td></tr></tbody>"
         "</table>{% endtable_region %}{% endsection %}",
         {"old": "example:2026.1.0", "new": "example:2026.3.0"},
+    ),
+}
+
+# What each part's default entry, its Part.example, is given (catalog.default_name).
+# A viewer signed in with no role, for a part that asks what its viewer may see.
+_SIGNED_IN = RequestFactory().get("/example/")
+_SIGNED_IN.user = get_user_model()(username="example-owner")
+ENTRIES |= {
+    "part/allocation": Entry(context=ENTRIES["part/allocation-legend"].context),
+    "part/ask": Entry(context={"ask": ENTRIES["part/ask-states"].context["idle"]}),
+    "part/attention-list": Entry(context={"entries": [], "empty": "No example decision waits."}),
+    "part/button": Entry(context={"url": "/example/restart/"}),
+    "part/certificate-mark": Entry(
+        context={"certificate": Certificate("Proxy", name="app.example.com", issuer="Example CA")}
+    ),
+    "part/dots": Entry(context={"dots": _runs()}),
+    "part/dot": Entry(context={"count": "3 example hosts", "age": "2 days ago"}),
+    "part/document-picture": Entry(context={"src": static("img/logo.png"), "alt": "An example receipt"}),
+    "part/empty-state": Entry(context={"message": "No example hosts yet."}),
+    "part/entity": Entry(context={"name": "example-host-01"}),
+    "part/example-connection": replace(ENTRIES["part/example-connection-states"], template=""),
+    "part/icon": Entry(context={"name": "check-circle"}),
+    "part/identity": Entry(
+        context={
+            "name": "Example Person",
+            "url": "https://example.com/example",
+            "tone": "good",
+            "tip": "An example reason it is yours.",
+            "picture": ENTRIES["part/identity-states"].context["picture"],
+        }
+    ),
+    "part/modal": Entry(context={"message": "No example yet."}),
+    "part/page-navigation": Entry(
+        context={"navigation": ENTRIES["part/page-navigation-states"].context["page"].navigation}
+    ),
+    "part/pagination": Entry(context=ENTRIES["part/pagination-states"].context, address="/example/"),
+    "part/path-hops": Entry(
+        context={"route": ENTRIES["part/path-hops-states"].context["route"], "label": "Path via example record"}
+    ),
+    "part/present": Entry(context={"repo": {"release": "v1.4.2"}}),
+    "part/reference": Entry(context={"request": _SIGNED_IN}),
+    "part/referenced-by": Entry(context={"machine": {"name": "example-host-01"}, "request": _SIGNED_IN}),
+    "part/resolution-workflow": Entry(
+        context={
+            "plan": {
+                "steps": (
+                    {"label": "Renew the example certificate", "phase": "run", "summary": "example-cli renew"},
+                    {"label": "Read it again", "phase": "check", "summary": "HQ reads the example host once it runs."},
+                )
+            }
+        }
+    ),
+    "part/row-editor": Entry(
+        context={
+            "form": ENTRIES["part/row-editor-states"].context["form"],
+            "row": {"pk": 1, "edit_url": "/example/1/"},
+        },
+        address="/example/",
+    ),
+    "part/page-main": Entry(frame="main"),
+    "part/row-fold": Entry(context={"label": "Show all of example-host-01"}),
+    "part/row-toggle": Entry(context={"row": {"name": "example-host-01"}}),
+    "part/work-queue": Entry(
+        context={"items": _problems("Example certificate expires soon", "Example backup is late"), "grouped": True}
     ),
 }

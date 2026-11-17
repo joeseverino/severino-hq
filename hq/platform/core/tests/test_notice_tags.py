@@ -128,7 +128,9 @@ class NoticeCatalogTests(SimpleTestCase):
 
         from hq.platform.core.templatetags.notice_tags import TONES
 
-        entries = [entry for name, entry in CATALOG.items() if name.startswith("part/notice-")]
+        entries = [
+            entry for name, entry in CATALOG.items() if name.startswith("part/notice-") or name == "part/messages"
+        ]
         drawn = {
             name
             for entry in entries

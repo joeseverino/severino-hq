@@ -113,14 +113,13 @@ def _map(focus="", **asked):
     return TopologyView.drawn(topology, trace=trace, **asked)
 
 
-_MAP = '{% include "partials/_topology_map.html" %}'
 # A map beside another on the gallery's page, its ids its own.
 _ANOTHER_MAP = '{% include "partials/_topology_map.html" with map_id=map_id %}'
 
 ENTRIES = {
     # The whole map, its quiet lane and unlinked card left out until asked,
     # with nothing selected.
-    "graph/map": Entry(_MAP, _map()),
+    "part/topology-map": Entry(context=_map()),
     # Everything asked for, and one node selected: its details beside the
     # lanes where there is room and under them where there is not.
     "graph/map-selected": Entry(_ANOTHER_MAP, {**_map("machine:example-host-01"), "map_id": "example-map-selected"}),

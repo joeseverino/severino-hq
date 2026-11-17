@@ -982,8 +982,6 @@ DRAWN_BY_NOTHING = {
     "control_plane/zone_index.html": "drawn only where no zone is managed, and the estate manages one",
     "control_plane/certificate_upload.html": "the estate holds no certificate to upload one for",
     "calendars/entry_confirm_delete.html": "an entry's page is linked only from a day opened beside the month",
-    "partials/_attention_list.html": "no template or view draws it; only a test renders it",
-    "partials/_row_field.html": "only itself includes it, and no form names it as its table body",
 }
 
 

@@ -31,6 +31,7 @@ def rung_frame(_name: str, given: dict) -> dict:
 slotted(
     Part(
         name="check_ladder",
+        example='{% check_ladder route=True %}{% check_rung state="met" evidence="192.0.2.10" %}Example address is known{% body %}<p>Example HQ knows the address.</p>{% endcheck_rung %}{% endcheck_ladder %}',
         classes=("check-ladder", "is-route"),
         partial="partials/_check_ladder.html",
         about="Checks read down one after another, each a `{% check_rung %}` opening to say why it stands as it does.",
@@ -43,6 +44,7 @@ slotted(
 slotted(
     Part(
         name="check_rung",
+        example='{% check_ladder %}{% check_rung state="unmet" kind="Tailnet" %}Example policy admits the device{% body %}<p>Example HQ could not read the policy.</p>{% endcheck_rung %}{% endcheck_ladder %}',
         classes=(
             *("ladder-body", "ladder-check", "ladder-detail", "ladder-evidence", "ladder-kind", "ladder-mark"),
             *("ladder-more", "ladder-page", "ladder-rung", "ladder-statement"),

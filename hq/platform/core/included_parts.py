@@ -15,6 +15,7 @@ FIELD = Part(
     partial="django/forms/field.html",
     about="A form field as every form draws it: its label, its control, its help and its errors.",
     classes=("check-row", "command-confirm", "field", "field-effect", "has-errors", "is-pair-start", "is-wide"),
+    example="{{ field.as_field_group }}",
 )
 CHART = _part(
     "chart",
@@ -41,6 +42,7 @@ MONTH_GRID = _part(
     *("is-today", "is-weekend", "month-date", "month-day", "month-day-head", "month-grid", "month-item"),
     *("month-item-dot", "month-mark", "month-more", "month-of", "month-span", "month-week", "month-weekday"),
     "series-*",
+    example='{% section "Example month" %}{% include "partials/_month_grid.html" %}{% endsection %}',
 )
 WEEK_PLAN = _part(
     "week_plan",
@@ -66,6 +68,11 @@ MODAL = _part(
     "modal",
     "A dialog: its title, what it is for, the body a template names, and its close.",
     *("modal", "modal-*", "modal-close", "modal-foot", "modal-head", "modal-lede", "modal-panel"),
+    example=(
+        '<a href="/example/" data-modal-open="example">Open</a>'
+        '{% include "partials/_modal.html" with id="example" title="Example dialog" '
+        'body_template="partials/_empty_state.html" %}'
+    ),
 )
 READING_AGE = _part(
     "reading_age",
@@ -79,18 +86,20 @@ PATH_HOPS = _part(
     *("hop-body", "hop-icon", "hop-label", "hop-proof-key", "is-attention", "is-proven", "is-unknown"),
     *("path-proof-note", "request-path", "route"),
 )
-URGENCY_PILL = _part("urgency_pill", "How soon a queued item wants the operator, as a pill.", "is-mark")
-QUEUE_ENTRIES = _part(
-    "queue_entries",
-    "The operator's queue as rows, each what wants doing and why, grouped as the queue groups them.",
-    *("attention-links", "attention-reason", "row-line"),
-    pieces=("partials/_queue_rows.html",),
-    draws=(URGENCY_PILL,),
-)
 RESOLUTION_WORKFLOW = _part(
     "resolution_workflow",
     "What can be done about a finding: its fix, its ignore and its snooze.",
     *("attention-actions", "resolution-workflow"),
+    example=(
+        "{% with parts=plan|workflow_parts %}"
+        '{% include "partials/_resolution_workflow.html" with steps=parts.steps fold=parts.fold only %}{% endwith %}'
+    ),
+)
+WORK_QUEUE = _part(
+    "work_queue",
+    "What waits on the operator, each row what wants doing and why, or that nothing does.",
+    *("attention-clear", "attention-links", "attention-reason", "is-mark", "row-line"),
+    pieces=("partials/_queue_entries.html", "partials/_queue_rows.html", "partials/_urgency_pill.html"),
 )
 
 PARTS = (
@@ -100,12 +109,14 @@ PARTS = (
         partial="django/forms/widgets/choice_cards.html",
         about="A choice of one, each option a card saying what it does.",
         classes=("choice-card", "choice-card-what", "choice-cards"),
+        example="{{ field.as_field_group }}",
     ),
     Part(
         name="",
         partial="django/forms/widgets/suffixed.html",
         about="A text input with its unit after it.",
         classes=("input-suffix",),
+        example="{{ field.as_field_group }}",
     ),
     CHART,
     CADENCE,
@@ -116,9 +127,8 @@ PARTS = (
     MODAL,
     READING_AGE,
     PATH_HOPS,
-    URGENCY_PILL,
-    QUEUE_ENTRIES,
     RESOLUTION_WORKFLOW,
+    WORK_QUEUE,
     _part(
         "activity_calendar",
         "One month of plan against execution, from `hq_sdk.ui.ActivityCalendar`.",
@@ -175,7 +185,7 @@ PARTS = (
     _part("command", "A command to copy and run, with its copy control.", "command", "operator-command"),
     _part(
         "command_center",
-        "Command Center: a search across HQ, its results grouped, each a place to go or a command to run.",
+        "Search across HQ, its results grouped, each a place to go or a command to run.",
         *("command-center-arrow", "command-center-copy", "command-center-destination", "command-center-empty"),
         *("command-center-enter-hint", "command-center-evidence", "command-center-footer"),
         *("command-center-group-label", "command-center-loading", "command-center-more", "command-center-option"),
@@ -250,7 +260,11 @@ PARTS = (
         "Readings that need interpreting, each with its next step.",
         *("insight-action", "insight-body", "insight-card", "insight-grid", "insight-head", "insight-title"),
         "insight-value",
-        draws=(RESOLUTION_WORKFLOW, QUEUE_ENTRIES),
+        draws=(RESOLUTION_WORKFLOW, WORK_QUEUE),
+        example=(
+            '{% section "Example insights" %}'
+            '{% include "partials/_insight_grid.html" with label="Example insights" %}{% endsection %}'
+        ),
         public=True,
     ),
     _part(
@@ -314,7 +328,7 @@ PARTS = (
     ),
     _part(
         "sweep_freshness",
-        "How fresh each sweep's reading is, the stale and the unreachable marked.",
+        "How fresh each reading is, the stale and the unreachable marked.",
         *("sweep", "sweep-age", "sweep-count", "sweep-grid", "sweep-item", "sweep-item-stale"),
         *("sweep-item-unreachable", "sweep-label"),
     ),
@@ -334,7 +348,7 @@ PARTS = (
     _part("toggle_set", "A set of toggles that filter what a view shows.", "toggle-set"),
     _part(
         "topology_map",
-        "The topology page's map, laid out and filtered by its own script, each node's edges stated from it.",
+        "The map of how things connect, laid out and filtered by its own script, each node's edges stated from it.",
         *("topology-detail", "topology-kind-*", "topology-kind-mark", "topology-lane", "topology-map"),
         *("topology-node", "topology-node-*", "topology-node-degree", "topology-node-link", "topology-node-list"),
         *("topology-node-select", "topology-node-title", "topology-workspace", "relation-arrow", "relation-kind"),
@@ -347,7 +361,6 @@ PARTS = (
         *("ask-quiet", "strut", "visit-slot", "visit-status"),
         draws=(ASK,),
     ),
-    _part("work_queue", "What waits on the operator, or that nothing does.", "attention-clear"),
     Part(
         name="",
         partial="projects/_repository_postures.html",

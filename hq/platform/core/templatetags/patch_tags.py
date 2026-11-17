@@ -13,6 +13,7 @@ PATCH_PARTIAL = "partials/_patch.html"
 slotted(
     Part(
         name="patch",
+        example='{% patch id="example-patch" %}services: ...{% title %}Add to <code>compose.yaml</code>{% detail %}Then run it.{% endpatch %}',
         classes=("patch", "patch-head"),
         partial=PATCH_PARTIAL,
         about=(

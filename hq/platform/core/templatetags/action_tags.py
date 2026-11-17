@@ -418,7 +418,7 @@ slotted(
         about="What a button for a command says, from its declaration, for prose that names the one to press.",
         function=words,
         public=True,
-        example='Press {% words "example.restart" %}.',
+        example='Press {% words "agent.access.set" %}.',
     ),
     library=register,
 )

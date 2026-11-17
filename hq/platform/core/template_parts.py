@@ -120,8 +120,8 @@ class Part:
     the classes its partial writes. Everything else said about the part (its
     parameters in the template contract, its row in docs/Shared-UI.md, the
     check of what a page gave, who may write a class) is read from here.
-    ``public`` tags are an extension's to write too, and show themselves
-    written in ``example``.
+    ``public`` tags are an extension's to write too. Every part shows itself
+    written in ``example``, which its default catalog entry draws.
 
     A tag drawn by a Python ``function`` (a simple tag, or with a
     ``partial`` an inclusion tag) takes the options its signature declares,
@@ -158,8 +158,8 @@ class Part:
             object.__setattr__(self, "example", f'{{% include "{self.partial}" %}}')
         if not self.about:
             raise ValueError(f"The part {self.name or self.partial} says what it is.")
-        if self.public and not self.example:
-            raise ValueError(f"The public tag {self.name} shows itself written.")
+        if not self.example:
+            raise ValueError(f"The part {self.name} shows itself written, as its default entry draws it.")
         if self.function is not None:
             if self.ordered or self.options or self.data or self.shape:
                 raise ValueError(f"The tag {self.name} takes what its function's signature declares.")

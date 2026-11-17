@@ -142,3 +142,7 @@ ENTRIES = {
         },
     ),
 }
+
+# What each part's default entry, its Part.example, is given (catalog.default_name).
+_FIRST = ENTRIES["table/row-actions"].context["rows"][0]
+ENTRIES |= {"part/row-actions": Entry(context={"row": {"name": _FIRST[0], "actions": _FIRST[2]}})}

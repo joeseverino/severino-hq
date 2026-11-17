@@ -645,7 +645,7 @@ slotted(
             "entity": Option(about="The kind of thing it names, as `data-entity`."),
         },
         public=True,
-        example='{% outside_link url %}<span class="tag">Docs</span>{% endoutside_link %}',
+        example='{% outside_link url="https://example.com/docs/" %}<span class="tag">Docs</span>{% endoutside_link %}',
     ),
 )
 slotted(
@@ -695,7 +695,7 @@ slotted(
         about="The link for the reference a record holds, for `{% entity %}`, or none the viewer may not see.",
         function=reference,
         public=True,
-        example='{% reference expense "paid_from" as account %}',
+        example='{% reference expense "paid_from" as account %}{% entity account %}',
     ),
 )
 slotted(

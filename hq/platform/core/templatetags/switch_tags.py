@@ -35,6 +35,7 @@ def choice_frame(_name: str, given: dict) -> dict:
 slotted(
     Part(
         name="switch",
+        example='{% switch label="Example domains" %}{% choice url="/example/one/" current=True %}example.com{% endchoice %}{% choice url="/example/two/" %}example.net{% endchoice %}{% endswitch %}',
         classes=("scope-chip", "switch"),
         partial=SWITCH_PARTIAL,
         about=(
@@ -50,6 +51,7 @@ slotted(
 slotted(
     Part(
         name="choice",
+        example='{% switch label="Example views" %}{% choice url="/example/" current=True count=3 %}Example{% endchoice %}{% choice url="/example/all/" note="all" %}Every example{% endchoice %}{% endswitch %}',
         partial=CHOICE_PARTIAL,
         about="One choice of a `{% switch %}`, a chip leading to its view.",
         options={

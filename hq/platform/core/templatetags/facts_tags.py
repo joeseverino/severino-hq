@@ -44,7 +44,7 @@ FACTS = Part(
         "label": Option(about="What the whole is, for a reader, when nothing on the page heads it."),
     },
     public=True,
-    example='{% facts layout="band" %}{% fact "Running" value=n url=u %}{% endfacts %}',
+    example='{% facts layout="band" %}{% fact "Running" value="3" url="/example/" %}{% endfacts %}',
 )
 FACT = FactTakes(
     name="fact",
@@ -65,7 +65,9 @@ FACT = FactTakes(
     },
     bare_with="value",
     public=True,
-    example='{% fact "Version" icon="layers" %}<code>{{ tag }}</code>{% detail %}Tag only{% endfact %}',
+    example=(
+        '{% facts %}{% fact "Version" icon="layers" %}<code>1.4.2</code>{% detail %}Tag only{% endfact %}{% endfacts %}'
+    ),
 )
 
 

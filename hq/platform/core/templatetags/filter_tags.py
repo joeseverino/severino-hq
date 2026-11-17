@@ -94,7 +94,7 @@ slotted(
         public=True,
         example=(
             '{% filter_bar search="Filter by name" query=q filtered=narrowed clear=every_url %}'
-            '{% choices %}{% select "kind" kinds every="kind" %}{% endfilter_bar %}'
+            '{% choices %}{% select "kind" kinds label="Kind" every="kind" %}{% endfilter_bar %}'
         ),
         shape=filter_bar_frame,
     ),

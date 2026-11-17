@@ -15,9 +15,23 @@ from django.utils.html import escape
 from django.utils.safestring import mark_safe
 from django.utils.text import slugify
 
+from hq.platform.application import references
+from hq.platform.application.entity_links import EntityLink
 from hq.platform.application.pages import Page
 from hq.platform.core.templatetags import write_tags
 lazy from hq.platform.core.templatetags.stylesheet_tags import stylesheets
+
+# What names a thing, for {% referenced_by %}: the gallery is built with no
+# database, so the rows a reference is held in are these.
+EXAMPLE_MENTIONS = (
+    references.Mentions(
+        "Example records",
+        (
+            references.Mention(EntityLink("example-record-01", "/example/1/"), "An example note"),
+            references.Mention(EntityLink("example-record-02", "/example/2/")),
+        ),
+    ),
+)
 
 # The retry key every example form carries. The catalog draws no CSRF token,
 # so an entry's form can act nowhere, and one fixed key makes each entry the
@@ -40,13 +54,15 @@ class Entry:
     under one, as every HQ page is. ``frame`` says the part is the page
     frame's own, which base.html draws beside the page's main rather than in
     it, ``"before"`` or ``"after"``, so it is drawn there, beside a main that
-    holds a page head alone."""
+    holds a page head alone; ``"main"`` is the main itself, drawn in place of
+    the one each entry is drawn in. One with no ``template`` is a part's default
+    entry, drawn from its ``Part.example`` (``default_name``)."""
 
-    template: str
+    template: str = ""
     context: dict[str, Any] = field(default_factory=dict)
     premise: tuple[str, Any] | None = None
     heads_the_page: bool = False
-    frame: Literal["", "before", "after"] = ""
+    frame: Literal["", "before", "after", "main"] = ""
     # The address the part is drawn at, for a part that reads its request: a
     # page's query, or the row its address opens.
     address: str = ""
@@ -67,6 +83,7 @@ class Entry:
             mock.patch.object(write_tags, "new_key", return_value=EXAMPLE_KEY),
             mock.patch.object(write_tags, "CsrfTokenNode", _NoToken),
             mock.patch.object(timezone, "now", return_value=DRAWN_AT),
+            mock.patch.object(references, "referenced_by", return_value=EXAMPLE_MENTIONS),
         ):
             # A form names its fields' ids after the entry, as a page drawing
             # two forms gives each its own.
@@ -79,6 +96,8 @@ class Entry:
         """The entry on a page of its own: in its main, or beside it for a part of the frame."""
 
         drawn = self.drawn(name)
+        if self.frame == "main":
+            return part_page(name, "", main=drawn)
         return part_page(name, head_of(name), **{self.frame: drawn}) if self.frame else part_page(name, drawn)
 
 
@@ -111,12 +130,12 @@ COLOR_SCHEME = "partials/_color_scheme.html"
 MAIN = "partials/_page_main.html"
 
 
-def part_page(name, markup, before="", after=""):
+def part_page(name, markup, before="", after="", main=""):
     """A page titled ``name``, of HQ's stylesheets, with ``markup`` alone in
-    the content column base.html draws, and the frame's parts it draws before
-    and after it."""
+    the content column base.html draws, or ``main`` drawn as that column, and
+    the frame's parts it draws before and after it."""
 
-    main = render_to_string(MAIN, {"content": mark_safe(markup)})  # noqa: S308 - the catalog's own rendered markup
+    main = main or render_to_string(MAIN, {"content": mark_safe(markup)})  # noqa: S308 - the catalog's own rendered markup
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'

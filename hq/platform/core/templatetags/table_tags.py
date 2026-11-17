@@ -340,7 +340,11 @@ table_region.__wrapped__ = Part(  # type: ignore[attr-defined]  # a function's a
     ),
     function=_region,
     public=True,
-    example='{% table_region "Hosts" empty="No hosts yet." %}<table>...</table>{% endtable_region %}',
+    example=(
+        '{% table_region "Hosts" empty="No hosts yet." %}<table class="data-table"><thead><tr>'
+        '{% table_heading "Name" %}</tr></thead><tbody><tr><td>example-host</td></tr></tbody></table>'
+        "{% endtable_region %}"
+    ),
 )
 
 
@@ -585,7 +589,11 @@ slotted(
         partial="partials/_table_heading.html",
         function=table_heading,
         public=True,
-        example='{% table_heading "Updated" "status" drop=2 %}',
+        example=(
+            '{% table_region "Example updates" %}<table class="data-table"><thead><tr>'
+            '{% table_heading "Name" %}{% table_heading "Updated" "status" drop=2 %}</tr></thead>'
+            "<tbody><tr><td>example-host</td><td>An hour ago</td></tr></tbody></table>{% endtable_region %}"
+        ),
     ),
     library=register,
 )
@@ -597,7 +605,10 @@ slotted(
         partial="partials/_row_group.html",
         function=row_group,
         public=True,
-        example='<tbody>{% row_group "Example group" 3 %}...</tbody>',
+        example=(
+            '{% table_region "Example groups" %}<table class="data-table"><tbody>{% row_group "Example group" 3 %}'
+            "<tr><td>example-host</td></tr></tbody></table>{% endtable_region %}"
+        ),
     ),
     library=register,
 )
@@ -608,7 +619,10 @@ slotted(
         partial="partials/_row_actions.html",
         function=row_actions,
         public=True,
-        example="{% row_actions row.actions %}",
+        example=(
+            '{% table_region "Example actions" %}<table class="data-table"><tbody><tr><td>{{ row.name }}</td>'
+            "{% row_actions row.actions %}</tr></tbody></table>{% endtable_region %}"
+        ),
         classes=("row-later",),
         public_classes=("row-actions",),
     ),
@@ -617,6 +631,12 @@ slotted(
 slotted(
     Part(
         name="row_select",
+        example=(
+            '{% table_region "Example selections" %}<table class="data-table" data-selectable-table><thead><tr>'
+            '{% table_heading "Select all rows" select_all=True %}{% table_heading "Name" "identifier" gutter=True %}'
+            '{% table_heading "State" "status" %}</tr></thead><tbody><tr>{% row_select 1 %}<td>example-01</td>'
+            '<td>{% status "Online" tone="good" %}</td></tr></tbody></table>{% endtable_region %}'
+        ),
         about="The cell that holds a row's tick-box, first in a row under the heading that selects every row.",
         partial="partials/_row_select.html",
         function=row_select,
@@ -632,7 +652,10 @@ slotted(
         partial="partials/_row_toggle.html",
         function=row_toggle,
         public=True,
-        example="<td>{{ row.name }}{% row_toggle %}</td>",
+        example=(
+            '{% table_region "Example toggles" %}<table class="data-table"><tbody><tr>'
+            "<td>{{ row.name }}{% row_toggle %}</td></tr></tbody></table>{% endtable_region %}"
+        ),
     ),
     library=register,
 )

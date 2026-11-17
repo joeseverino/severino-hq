@@ -41,6 +41,7 @@ def title_parts(content: str) -> str:
 slotted(
     Part(
         name="title_meta",
+        example='{% title_meta %}<li>{% status "Online" tone="good" %}</li><li><code>example-host</code></li>{% endtitle_meta %}',
         classes=("page-title-meta",),
         draws=(DOT_LIST,),
         partial=TITLE_META_PARTIAL,

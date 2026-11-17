@@ -90,6 +90,7 @@ slotted(
     library=register,
     part=Part(
         name="steps",
+        example='{% steps %}{% step icon="check-circle" tone="good" %}Example check holds.{% endstep %}{% endsteps %}',
         classes=("is-numbered", "step-list"),
         partial="partials/_steps.html",
         about="A list of short steps or checks, each a `{% step %}`, read down its columns.",
@@ -100,6 +101,7 @@ slotted(
     library=register,
     part=Part(
         name="step",
+        example="{% steps numbered=True %}{% step done=True %}Pull the example image.{% endstep %}{% step %}Start it.{% endstep %}{% endsteps %}",
         classes=("is-done",),
         draws=(FACT,),
         partial="partials/_step.html",
@@ -128,6 +130,7 @@ slotted(
     library=register,
     part=Part(
         name="link_chips",
+        example='{% link_chips %}<li><a href="/example/">Example page</a></li>{% endlink_chips %}',
         classes=("link-chips",),
         partial="partials/_link_chips.html",
         about="A row of places to go, each `<li>` one link drawn as a chip of its own.",
@@ -150,6 +153,7 @@ slotted(
     library=register,
     part=Part(
         name="page_main",
+        example="{% page_main %}<h1>Example page</h1><p>An example line.</p>{% endpage_main %}",
         classes=("content", "page-print-footer"),
         partial="partials/_page_main.html",
         about="The content column every page and each catalog entry is drawn in, a region answered in place.",
@@ -201,6 +205,7 @@ slotted(
     library=register,
     part=Part(
         name="readings",
+        example='{% readings %}{% reading icon="activity" url="/example/" unit="hosts" %}3{% lines %}Example hosts online{% endreading %}{% endreadings %}',
         classes=("readings",),
         partial="partials/_readings.html",
         about="A row of readings, each a `{% reading %}`, spaced as equals rather than ruled apart.",
@@ -210,6 +215,7 @@ slotted(
     library=register,
     part=Part(
         name="reading",
+        example='{% readings %}{% reading icon="network" tone="attention" note_tone="stale" %}2{% lines %}Example peers{% note %}Read an hour ago{% endreading %}{% endreadings %}',
         classes=(
             *("reading", "reading-head", "reading-lead", "reading-lines", "reading-mark", "reading-panel"),
             *("reading-panel-foot", "reading-panel-head", "reading-standing"),

@@ -127,7 +127,7 @@ slotted(
         partial="partials/_row_editor.html",
         function=row_editor,
         public=True,
-        example='{% row_editor form row.pk label="Edit" action=row.edit_url verb="Save" name=row.name %}',
+        example='{% row_editor form row.pk label="Edit" action=row.edit_url verb="Save" %}',
     ),
     library=register,
 )

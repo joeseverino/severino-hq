@@ -38,6 +38,7 @@ def dot_list_frame(_name: str, given: dict) -> dict:
 slotted(
     Part(
         name="stack_list",
+        example='{% stack_list %}<li>{% status "High" tone="serious" %}</li><li>An example advisory</li>{% endstack_list %}',
         classes=("stack-list",),
         partial=STACK_LIST_PARTIAL,
         about=(
@@ -62,7 +63,7 @@ DOT_LIST = Part(
     options={"muted": Option(default=False, choices=(False, True), about="Said quietly.")},
     data=True,
     public=True,
-    example="{% dot_list %}<li>{% entity link %}</li><li>2 days ago</li>{% enddot_list %}",
+    example='{% dot_list %}<li><a href="/example/">example-host</a></li><li>2 days ago</li>{% enddot_list %}',
     shape=dot_list_frame,
 )
 slotted(DOT_LIST, library=register)

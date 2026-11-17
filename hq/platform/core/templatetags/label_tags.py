@@ -22,6 +22,7 @@ def control_label(words: str, control: str = "") -> dict[str, str]:
 slotted(
     Part(
         name="control_label",
+        example='{% control_label "From" control="example-from" %}<select id="example-from"><option>example-host</option></select>',
         about="The small quiet name over or beside a control, a `<label>` for the control `control` names.",
         partial="partials/_control_label.html",
         function=control_label,
