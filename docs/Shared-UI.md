@@ -32,7 +32,6 @@ fails when this file falls behind. The rules around it are in
 | `partials/_icon.html` | `name` | nothing | One of the host's icons, by `name`, the height of the text beside it. |
 | `partials/_insight_grid.html` | `items` | `label`, `level` | Readings that need interpreting, each with its next step. |
 | `partials/_job_progress.html` | `job` | nothing | A running job and what it is doing. |
-| `partials/_kpi_grid.html` | `items` | `featured`, `label` | Responsive linked or static figures. |
 | `partials/_reading_age.html` | nothing | `at`, `reading`, `unread` | When a reading was taken, `at` the moment, in the one wording every page uses; `unread` why there is none. |
 | `partials/_record_list.html` | `rows` | `empty`, `label`, `whole_rows` | A compact list of records, from `hq_sdk.ui.ListRow`. |
 | `partials/_row_field.html` | `field` | nothing | One field of a form whose fields stand one to a row of a table, in its row. |
@@ -49,8 +48,8 @@ fails when this file falls behind. The rules around it are in
 | `{% dot_list %}` | nothing | A run of whole parts on one line, each an `<li>`, a dot between each that no line opens on: a fact's links, a row's context line, a band's details. | `{% dot_list %}<li><a href="/example/">example-host</a></li><li>2 days ago</li>{% enddot_list %}` |
 | `{% empty_value %}` | nothing | The mark for a value that is not there, where there is no value to test; `\|or_empty` tests one. | `{% empty_value %}` |
 | `{% entity %}` | nothing | One thing named, as the link builder answered for it: a link to its page, or its name. | `{% entity "machine"\|entity_of:name %}` |
-| `{% fact %}` | `detail` | One fact of a `{% facts %}`: its label, its value and the detail under it. Given `value=` it encloses nothing; a value in markup is its block, its detail after `{% detail %}`. | `{% facts %}{% fact "Version" icon="layers" %}<code>1.4.2</code>{% detail %}Tag only{% endfact %}{% endfacts %}` |
-| `{% facts %}` | nothing | Every label and its value a page shows, each a `{% fact %}`. | `{% facts layout="band" %}{% fact "Running" value="3" url="/example/" %}{% endfacts %}` |
+| `{% fact %}` | `detail`, `heading`, `panel`, `foot` | One fact of a `{% facts %}`: its label, its value and the detail under it. Given `value=` it encloses nothing; a value in markup is its block, its detail after `{% detail %}`, and a panel its value opens in place after `{% heading %}`, `{% panel %}` and `{% foot %}`. | `{% facts %}{% fact "Version" icon="layers" %}<code>1.4.2</code>{% detail %}Tag only{% endfact %}{% endfacts %}` |
+| `{% facts %}` | nothing | Every label and its value a page shows, each a `{% fact %}`; given `items=` it draws each item as a fact and encloses nothing. | `{% facts layout="band" %}{% fact "Running" value="3" url="/example/" %}{% endfacts %}` |
 | `{% filter_bar %}` | `choices`, `summary` | Every query a page asks of what it lists, in one bar: its search and any controls of its own, its `choices` part, the one button that sends them, then its `summary` part. A list's table toolbar is the same bar. | `{% filter_bar search="Filter by name" query=q filtered=narrowed clear=every_url %}{% choices %}{% select "kind" kinds label="Kind" every="kind" %}{% endfilter_bar %}` |
 | `{% muted %}` | nothing | Words said quietly beside what they are about: a context line, a sentence under a value. A cell or a list item holds it; a run of parts said quietly is `{% dot_list muted=True %}`. | `{% muted element="p" %}A sentence under it.{% endmuted %}` |
 | `{% notice %}` | `title` | Every banner and message a page shows, in one of its tones; a message among the page's messages is the same part in a toast's placement. A title the page composes is its `{% title %}` part, after the body. | `{% notice tone="warning" title="2 jobs failed" %}<p>What to do.</p>{% endnotice %}` |
@@ -109,12 +108,23 @@ fails when this file falls behind. The rules around it are in
 | `entity` | `mark` |  |  | The punctuation after the name, held to it, or a list's `forloop`. |
 | `fact` | `label`, first and unnamed | required |  | Its label. |
 | `fact` | `detail` |  |  | The words under the value, or a list of them, a line each. |
+| `fact` | `detail_tone` |  |  | A status tone the words under the value are colored by. |
+| `fact` | `detail_url` |  |  | The page the words under the value lead to. |
+| `fact` | `drawing` |  |  | What its value looks like, beside it: `Dots` for a part of a whole, `Trend` for a direction, or under it an `AllocationBar` with its legend. |
 | `fact` | `icon` |  |  | The icon beside it. |
+| `fact` | `id` |  |  | The id of the panel its value opens in place, given a `panel` part. |
+| `fact` | `modal` |  |  | The dialog its value's link opens where script runs. |
+| `fact` | `title` |  |  | What pointing at it says. |
 | `fact` | `tone` |  |  | A status tone the fact is colored by, for what it means. |
 | `fact` | `url` |  |  | The page in HQ its value links to; an outside one is the block form's `{% entity %}`. |
 | `fact` | `value` |  |  | Its value, which makes it one tag with no end. |
+| `fact` | `zero` |  |  | Its value is nothing counted, drawn quiet. |
+| `fact` | `data_*` | | | Each a `data-` attribute. |
+| `facts` | `items` |  |  | Figures (`Kpi`) to draw as its facts, which makes it one tag with no end. |
 | `facts` | `label` |  |  | What the whole is, for a reader, when nothing on the page heads it. |
 | `facts` | `layout` | `"list"` | `list`, `band`, `inline` | A list, each label beside its value; a band, the few facts that sum up a page, each a cell; a line (`inline`), a card's summary, each fact its value then its words. |
+| `facts` | `size` | `"regular"` | `small`, `regular`, `large`, `lead` | How large a band sets its values: small figures read across, status facts, the headline figures a page is read for, or headline figures led by the first. |
+| `facts` | `data_*` | | | Each a `data-` attribute. |
 | `filter_bar` | `action` |  |  | The page it asks, when that is another. |
 | `filter_bar` | `autofocus` |  |  | The search takes focus. |
 | `filter_bar` | `clear` |  |  | Where Clear filters leads: the page with nothing narrowed. |

@@ -70,38 +70,6 @@
 .section-flow > section:has(table:not(.month-grid) > thead > tr > :nth-child(4)) { flex-basis: 100%; }
 /* Sections stacked in one column of a pair, at the pair's own gap. */
 .stack { display: grid; gap: var(--layout-gap); align-content: start; min-width: 0; }
-/* A card holding a band of stats is the container its columns are measured
-   against, so the same count-aware columns hold in any card, not only the
-   dashboard's. */
-.card:has(> .kpi-grid) { container: kpi / inline-size; }
-/* An overview (`_kpi_grid.html` with `featured`) in a section of a flow lays
-   out against its frame, under both names, since its own declaration replaces
-   the one above. One in a section on its own keeps its columns at any width. */
-.section-flow > .section > .section-body:has(> .kpi-grid.is-featured) { container: featured kpi / inline-size; }
-.card > .kpi-grid {
-  --kpi-columns: 3;
-}
-/* Columns follow the cell count and the card's width (110px a cell), so rows
-   stay even: four cells are 4 or 2+2, six are 6 or 3+3, never 3+1. */
-.card > .kpi-grid:has(> :only-child) { --kpi-columns: 1; }
-.card > .kpi-grid:has(> :nth-child(2):last-child),
-.card > .kpi-grid:has(> :nth-child(4):last-child),
-.card > .kpi-grid:has(> :nth-child(6):last-child) { --kpi-columns: 2; }
-/* Two rows of three wait for a card wide enough to fit them; in a phone's card
-   three columns are cramped. */
-@container kpi (min-width: 360px) {
-  .card > .kpi-grid:has(> :nth-child(6):last-child) { --kpi-columns: 3; }
-}
-@container kpi (min-width: 440px) {
-  .card > .kpi-grid:has(> :nth-child(4):last-child),
-  .card > .kpi-grid:has(> :nth-child(7)) { --kpi-columns: 4; }
-}
-@container kpi (min-width: 550px) {
-  .card > .kpi-grid:has(> :nth-child(5):last-child) { --kpi-columns: 5; }
-}
-@container kpi (min-width: 660px) {
-  .card > .kpi-grid:has(> :nth-child(6):last-child) { --kpi-columns: 6; }
-}
 .two-col > section:not(.section), .two-col > div, .section-flow > section:not(.section), .card { padding: var(--surface-inset, var(--space-8) var(--space-9)); }
 /* A card is as narrow as the column or track it is placed in, never as wide
    as its longest line, so on a phone its content wraps inside it rather than

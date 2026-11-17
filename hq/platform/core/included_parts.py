@@ -213,10 +213,10 @@ PARTS = (
     _part(
         "figure_drawing",
         "What a figure looks like beside its value: dots for a part of a whole, a line for a direction.",
-        *("is-latest", "kpi-trend", "kpi-trend-dot", "kpi-trend-hit"),
+        *("is-latest", "figure-trend", "figure-trend-dot", "figure-trend-hit"),
         draws=(CHART,),
     ),
-    _part("dots", "A count as a row of dots, those it reached filled.", "is-filled", "kpi-dot", "kpi-dots"),
+    _part("dots", "A count as a row of dots, those it reached filled.", "is-filled", "figure-dot", "figure-dots"),
     _part(
         "dropzone",
         "A file field that also accepts a drop.",
@@ -273,12 +273,6 @@ PARTS = (
         "job_progress",
         "A running job and what it is doing.",
         *("job-bar", "job-note", "job-progress", "job-progress-head"),
-        public=True,
-    ),
-    _part(
-        "kpi_grid",
-        "Responsive linked or static figures.",
-        *("is-featured", "is-zero", "kpi", "kpi-figure", "kpi-grid", "label", "value"),
         public=True,
     ),
     _part("linked_text", "Free text with the names HQ knows in it as links.", "linked-text"),

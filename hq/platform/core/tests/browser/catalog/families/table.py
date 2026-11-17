@@ -210,10 +210,10 @@ ENTRIES = {
         '{% table_heading "Title" %}{% table_heading "Type" %}{% table_heading "Nothing" %}'
         '{% table_heading "Runs" %}{% table_heading "Note" %}</tr></thead><tbody>'
         "<tr><td>Upgrade an example container to a new release</td><td>Runbook</td><td>{{ missing|or_empty }}</td>"
-        '<td><span class="kpi-dots"><span class="kpi-dot is-filled" title="Succeeded"></span></span></td>'
+        '<td><span class="figure-dots"><span class="figure-dot is-filled" title="Succeeded"></span></span></td>'
         "<td>A sentence long enough to take the room it is given and wrap.</td></tr>"
         "<tr><td>Rotate the example signing keys</td><td>Runbook</td><td>–</td>"
-        '<td><span class="kpi-dots"><span class="kpi-dot is-filled" title="Succeeded"></span></span></td>'
+        '<td><span class="figure-dots"><span class="figure-dot is-filled" title="Succeeded"></span></span></td>'
         "<td>Another sentence that wraps in its column.</td></tr>"
         "</tbody></table>{% endtable_region %}{% endsection %}",
         {"missing": None},

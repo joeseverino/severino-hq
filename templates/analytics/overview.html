@@ -11,7 +11,7 @@
   {% endif %}
 
   {% if latest %}
-    {% include "partials/_kpi_grid.html" with label="Traffic" items=kpis %}
+    {% card element="div" %}{% facts layout="band" size="large" items=kpis label="Traffic" %}{% endcard %}
 
     <div class="section-flow">
       {% for panel in breakdowns %}

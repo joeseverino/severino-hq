@@ -1,6 +1,6 @@
 """What a card lists, as data: figures, readings, rows and dated events.
 
-Each is the shape one shared partial draws (``_kpi_grid.html``,
+Each is the shape one shared part draws (a band of facts,
 ``_insight_grid.html``, ``_record_list.html``, ``_timeline.html``), which
 ``hq_sdk.ui`` exports so an extension fills the same part the host does.
 """
@@ -18,7 +18,8 @@ from .tone import Tone
 class Kpi:
     """One figure: what it counts, its value, and a line saying more.
 
-    The shape ``partials/_kpi_grid.html`` draws, alone or as one of a row.
+    The shape a band of facts draws as one of its facts (``{% facts
+    items=... %}``).
     """
 
     label: str
@@ -36,7 +37,7 @@ class Kpi:
     # what the value and the note already say, so the words stay.
     drawing: Dots | Trend | AllocationBar | None = None
     # Which way a figure that is itself a change went, as a status tone: the
-    # value is drawn in it, in a featured row too, so a rise and a fall never
+    # value is drawn in it at any size, so a rise and a fall never
     # read alike.
     tone: Tone | Literal[""] = ""
     # The same for the line under the value, where the value is a level and
@@ -45,19 +46,13 @@ class Kpi:
     # Where the line under the value leads, when it counts things with a page
     # of their own ("12 expenses").
     detail_url: str = ""
+    # What pointing at the figure says, its whole sentence, where the cell
+    # holds only a word or two of it (an hour's forecast).
+    tip: str = ""
 
     def __post_init__(self) -> None:
         if self.detail_url and not self.detail:
             raise ValueError("Kpi detail_url needs a detail: a link is said by its words.")
-
-    @property
-    def holds_links(self) -> bool:
-        """Whether a link stands inside the figure: a dot or a legend row that
-        leads on, or its line under the value. A link does not hold links, so
-        such a figure's page is reached through its value instead of the whole
-        cell."""
-
-        return bool(self.detail_url or (self.drawing is not None and self.drawing.links))
 
 
 @display

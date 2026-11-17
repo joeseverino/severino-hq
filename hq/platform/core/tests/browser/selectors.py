@@ -94,7 +94,7 @@ SELECTORS = {
     "nav_drawer": ".primary-nav",
     "nav_toggle": "[popovertarget=primary-navigation]",
     # The dashboard's domain overviews, and the row its calendar leads.
-    "highlights": ".section-flow > .section:has(> .section-body > .kpi-grid.is-featured)",
+    "highlights": ".section-flow > .section:has(> .section-body > .facts-band.is-lead)",
     "patterns": ".section-flow:has(> #dashboard-calendar) > .section",
     # Each reading in the dashboard's row: a mark, then its lines.
     "readings": ".readings .reading-head",
@@ -183,7 +183,6 @@ SELECTORS = {
     "head_menu_panel": ".overflow-menu-panel",
     # The steps of a page's trail, and a figure's value.
     "trail_steps": "main .page-trail a",
-    "figure_value": ".kpi .value",
     # A "do this now" control, whose words are its button's.
     "ask": ".ask",
     # An ask's button.

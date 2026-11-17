@@ -11,6 +11,7 @@ from pathlib import Path
 from unittest import TestCase, mock
 
 from django.core.exceptions import ImproperlyConfigured
+from django.template import Context, Template
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase, TestCase as DatabaseTestCase, tag
 from django.utils import timezone
@@ -408,12 +409,8 @@ class PluginContractTests(TestCase):
             "partials/_page_head.html",
             page_context("Example Notes", "Shared host interface"),
         )
-        kpis = render_to_string(
-            "partials/_kpi_grid.html",
-            {
-                "label": "Notes summary",
-                "items": (Kpi("Notes", 0, "No records yet", is_zero=True),),
-            },
+        kpis = Template('{% facts layout="band" items=items label="Notes summary" %}').render(
+            Context({"items": (Kpi("Notes", 0, "No records yet", is_zero=True),)})
         )
         empty = render_to_string("partials/_empty_state.html", {"message": "No notes have been created."})
         page_navigation = render_to_string(

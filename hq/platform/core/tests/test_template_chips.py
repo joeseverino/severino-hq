@@ -2,8 +2,7 @@
 
 A chip (`.chip`, `.scope-chip`, `.pill`, `.tag`) is a word: a choice, a
 status, a name. A figure (an amount, a count, a percent) is read as a number,
-so it stands as one: in a `partials/_kpi_grid.html` cell, a table's numeric
-column or a sentence (docs/Design.md, "Values read as what they are").
+so it stands as one: in a band of facts, a table's numeric column or a sentence (docs/Design.md, "Values read as what they are").
 """
 
 import re
@@ -157,6 +156,6 @@ class TemplateChipTests(SimpleTestCase):
         self.assertEqual(
             [str(site) for site in found],
             [],
-            "Numbers are never chips: a figure stands in a `partials/_kpi_grid.html` cell, a numeric column or a"
+            "Numbers are never chips: a figure stands in a band of facts, a numeric column or a"
             " sentence, and a chip keeps its words",
         )

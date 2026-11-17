@@ -996,18 +996,11 @@ ENTRIES = {
         },
         heads_the_page=True,
     ),
-    # A range beside its unit, and a phrase, in a cell held narrow, as three
-    # figures to a row on a phone hold it: each wraps, its lines clear of each other.
-    "part/wrapped-figures": Entry(
-        '<div style="inline-size: 110px">{% include "partials/_kpi_grid.html" %}</div>',
-        {"items": [Kpi("Example range", "10.5–12.5 mi"), Kpi("Example phrase", "up to 2 a week")]},
-        premise=(_ONE_LINE, SELECTORS["figure_value"]),
-    ),
     # A domain's overview as the dashboard draws it, its lead figure with the
     # line of its recent readings beside it.
     "part/figure-trend": Entry(
         '<div class="section-flow">{% section "Example overview" %}'
-        '{% include "partials/_kpi_grid.html" with featured=True %}{% endsection %}</div>',
+        '{% facts layout="band" size="lead" items=items %}{% endsection %}</div>',
         {
             "items": [
                 Kpi(
@@ -1023,7 +1016,7 @@ ENTRIES = {
     # how it moved in its tone, its parts under it with their legend, and
     # the changes beside it each in the tone of the way it went.
     "part/figure-toned": Entry(
-        '{% section "Example net worth" %}{% include "partials/_kpi_grid.html" with featured=True %}{% endsection %}',
+        '{% section "Example net worth" %}{% facts layout="band" size="lead" items=items %}{% endsection %}',
         {
             "items": [
                 Kpi(
@@ -1051,7 +1044,7 @@ ENTRIES = {
     # that counts records leading to them, a figure that is its page's link,
     # one at zero, and a mark before a label.
     "part/figure-linked-line": Entry(
-        '{% include "partials/_kpi_grid.html" %}',
+        '{% card element="div" %}{% facts layout="band" size="large" items=items %}{% endcard %}',
         {
             "items": [
                 Kpi("Example expenses", "$1,204.50", "12 example expenses", detail_url="/example/expenses/"),
@@ -1401,7 +1394,8 @@ ENTRIES = {
     "part/facts-band-wrapped": Entry(
         '<div style="inline-size: 110px">{% facts layout="band" size="large" %}'
         '{% fact "Example range" value="10.5–12.5 mi" %}{% fact "Example phrase" value="up to 2 a week" %}'
-        "{% endfacts %}</div>"
+        "{% endfacts %}</div>",
+        premise=(_ONE_LINE, SELECTORS["fact_value"]),
     ),
     # A detail given as lines, one of them holding a link among its words.
     "part/facts-band-lines": Entry(
@@ -2108,16 +2102,7 @@ ENTRIES = {
         '{% include "partials/_connection_peering.html" %}',
         {"connection": _connection(failing=True)},
     ),
-    # Dots beside a figure, a part of a whole and a history whose dots lead
-    # to each run; and a history in a table's cell.
-    "part/kpi-grid": Entry(
-        context={
-            "items": [
-                Kpi("Example hosts online", "3 of 5", "2 example hosts offline", drawing=Dots.of(3, 5)),
-                Kpi("Example runs", "4 of 6", "The last six example runs", drawing=_runs()),
-            ]
-        },
-    ),
+    # A history in a table's cell.
     "part/dots-in-a-row": Entry(
         '{% section "Example work" %}{% table_region "Example work" %}<table class="data-table"><thead><tr>'
         '{% table_heading "Name" "identifier" %}{% table_heading "Runs" %}</tr></thead><tbody>'
