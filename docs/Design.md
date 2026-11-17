@@ -131,12 +131,15 @@ every navigation page.
 **No script builds markup.** What a script adds to a page is a `<template>`
 the server drew, in the partial that owns the region (a notice's tone in
 `_notice_frames.html`, an ask's pieces in `_ask.html#frames`, the messages'
-list in `_messages.html`, the live round trip in `_connection_loading.html`),
+list in `_messages.html`, the live round trip in `_connection_loading.html#frame`),
 cloned and filled through `textContent`. A row's open line a script adds is
 `{% open_line %}`, the line `table_tags` draws, so it is the same part. A
-script that clones a frame from anywhere on the page loads only through
-`templates/scripts/<name>.html`, which draws those frames beside its tag, so
-no page, a test's probe included, has the script without them.
+frame is drawn only where something can fill it: one that fills a part of a
+panel comes with that panel, and a tone no script clones is not drawn (the
+demo's info notice only in the saved copy). A script that clones a frame from
+anywhere on the page loads only through `templates/scripts/<name>.html`,
+which draws those frames beside its tag, so no page, a test's probe
+included, has the script without them.
 *Gates:* `lint:js`, which refuses `createElement` outside the API reference's
 viewer; `ScriptFrameTests`, that every frame a script clones is drawn, and
 that a script cloning from the page loads only through its part.

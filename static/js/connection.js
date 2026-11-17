@@ -18,17 +18,15 @@ const hqRoundTrip = (() => {
     }).then(() => performance.now() - started);
   };
 
-  // The readout the server draws with this script (scripts/connection.html).
-  // Its bars are the samples the figure is taken over: the recent path, not
-  // the whole visit.
-  const frame = () => document.querySelector("template[data-rtt-live]").content.firstElementChild;
-
-  const render = (slot, runs) => {
+  // The readout the panel draws beside the figure it fills
+  // (_connection_panel.html). Its bars are the samples the figure is taken
+  // over: the recent path, not the whole visit.
+  const render = (slot, runs, frame) => {
     const best = Math.min(...runs);
     const worst = Math.max(...runs);
     let live = slot.querySelector(".conn-live");
     if (!live) {
-      live = frame().cloneNode(true);
+      live = frame.cloneNode(true);
       slot.replaceChildren(live);
     }
     live.querySelector("strong").textContent = `${best.toFixed(1)} ms`;
@@ -41,8 +39,8 @@ const hqRoundTrip = (() => {
     });
   };
 
-  const start = (slot, endpoint) => {
-    const bars = frame().querySelectorAll(".conn-samples > i").length;
+  const start = (slot, endpoint, frame) => {
+    const bars = frame.querySelectorAll(".conn-samples > i").length;
     const runs = [];
     // Sampled by the shared loop, which leaves a hidden tab alone: nobody is
     // reading the figure there.
@@ -51,7 +49,7 @@ const hqRoundTrip = (() => {
         .then((run) => {
           runs.push(run);
           if (runs.length > bars) runs.splice(0, runs.length - bars);
-          render(slot, runs);
+          render(slot, runs, frame);
         })
         .catch(() => {
           slot.textContent = "could not measure";
@@ -75,8 +73,10 @@ const hqRoundTrip = (() => {
 // is polling while the dialog is shut.
 const hqWatchRoundTrip = (root) => {
   const slot = root.querySelector("[data-rtt]");
-  const endpoint = root.querySelector("[data-rtt-measure]")?.dataset.rttMeasure;
-  if (slot && endpoint) hqRoundTrip.start(slot, endpoint);
+  const measure = root.querySelector("[data-rtt-measure]");
+  if (!slot || !measure) return;
+  const frame = measure.querySelector("template[data-rtt-live]").content.firstElementChild;
+  hqRoundTrip.start(slot, measure.dataset.rttMeasure, frame);
 };
 
 // eslint-disable-next-line no-restricted-syntax -- the frame's dialog, which no fragment holds

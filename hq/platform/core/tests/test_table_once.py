@@ -17,7 +17,7 @@ from .signed_in_case import _AuthedTestCase
 ROW_BYTES = 1_410
 # The bytes a signed-in page of a list with no rows may draw: the page's
 # chrome, every frame it carries for its scripts, and the list's empty state.
-CHROME_BYTES = 17_200
+CHROME_BYTES = 16_700
 
 
 def _render(source: str, context: dict | None = None) -> str:
