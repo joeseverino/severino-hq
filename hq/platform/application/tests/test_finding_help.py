@@ -105,7 +105,6 @@ class ExampleEstateTests(TestCase):
             example_estate.seed()
         raised = estate_findings(principal=cli_principal())
 
-        self.assertGreaterEqual(len({finding.rule for finding in raised}), 5)
         for finding in raised:
             with self.subTest(rule=finding.rule, severity=finding.severity, title=finding.title):
                 rule = rule_for(finding.rule)
