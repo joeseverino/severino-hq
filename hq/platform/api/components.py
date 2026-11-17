@@ -34,8 +34,9 @@ class Components:
         part a mask reaches lists no ``required`` key; a whole answer still
         validates against it. Its parts are reached through every subschema
         and ``$ref``, so a part shared with an answer no mask cuts promises no
-        field there either. A ``oneOf`` reached becomes ``anyOf``: its
-        branches told apart by a required key could all match a cut object.
+        field there either. A ``oneOf`` reached becomes ``anyOf`` and loses
+        its discriminator: its branches told apart by a required key could all
+        match a cut object, which may lack that key.
         """
 
         schemas = copy.deepcopy(self.schemas)
@@ -46,6 +47,7 @@ class Components:
                 return
             reached.add(id(schema))
             schema.pop("required", None)
+            schema.pop("discriminator", None)
             if "oneOf" in schema:
                 schema["anyOf"] = schema.pop("oneOf")
             if (ref := schema.get("$ref", "")).startswith(SCHEMAS):

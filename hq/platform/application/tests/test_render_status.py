@@ -278,13 +278,13 @@ class FailingTests(TestCase):
         self.assertIn({"label": "Reason", "value": "1Password Connect refused the token"}, finding["evidence"])
         self.assertIn({"label": "Job", "value": "hq"}, finding["evidence"])
         self.assertEqual(
-            [step["command"] for step in finding["operator_steps"]],
+            [step["command"] for step in finding["steps"] if step["kind"] == "run"],
             [
                 'ssh example-controller "sudo journalctl -u severino-hq-secrets.service -n 50 --no-pager"',
                 'ssh example-controller "sudo systemctl start severino-hq-secrets.service"',
             ],
         )
-        self.assertIsNone(finding["no_help_reason"])
+        self.assertEqual(finding["no_help_reason"], "")
         # A failed run is this rule's alone.
         self.assertEqual(raised("render-stale"), [])
 
@@ -325,9 +325,9 @@ class FailingTests(TestCase):
 
         (finding,) = raised("render-failing")
 
-        (step,) = finding["operator_steps"]
-        self.assertEqual(step["command"], "")
-        self.assertIn("job's log", step["label"])
+        (step,) = finding["steps"]
+        self.assertEqual(step["kind"], "do")
+        self.assertIn("job's log", step["text"])
         self.assertEqual(finding["no_help_reason"], "HQ cannot run commands on example-controller.")
 
     def test_two_renderers_on_one_machine_are_one_finding_naming_both(self):
@@ -354,7 +354,7 @@ class StaleTests(TestCase):
         self.assertIn("example-controller has not refreshed its credentials since ", finding["title"])
         self.assertIn({"label": "Last refreshed", "value": "3\xa0hours ago"}, finding["evidence"])
         self.assertEqual(
-            [step["command"] for step in finding["operator_steps"]],
+            [step["command"] for step in finding["steps"] if step["kind"] == "run"],
             [
                 'ssh example-controller "sudo systemctl list-timers severino-hq-secrets.timer"',
                 'ssh example-controller "sudo journalctl -u severino-hq-secrets.service -n 50 --no-pager"',
@@ -408,7 +408,7 @@ class SyncTests(TestCase):
         self.assertEqual(finding["title"], "1Password Connect on example-controller has stopped syncing")
         self.assertIn({"label": "Updates from 1Password", "value": "TOKEN_NEEDED"}, finding["evidence"])
         self.assertEqual(
-            finding["operator_steps"][-1]["command"],
+            finding["steps"][-1]["command"],
             'ssh example-controller "sudo systemctl start severino-hq-secrets.service"',
         )
         # The render itself succeeded, from Connect's cache.
@@ -446,7 +446,7 @@ class UnreadTests(TestCase):
             [{"label": "Job", "value": "hq"}, {"label": "Report", "value": "No report found"}],
         )
         self.assertEqual(
-            [step["command"] for step in finding["operator_steps"]],
+            [step["command"] for step in finding["steps"] if step["kind"] == "run"],
             ['ssh example-controller "sudo systemctl start severino-hq-secrets.service"'],
         )
         for name in RULES:
@@ -515,11 +515,7 @@ class SubjectTests(TestCase):
         (finding,) = raised("render-status-unread")
 
         self.assertEqual(finding["scope"], RENDER_STATUS_KIND)
-        verify = [
-            action for step in finding["workflow"]["steps"] for action in step["actions"] if action["name"] == "verify"
-        ]
-        self.assertEqual(len(verify), 1)
-        self.assertIn(f"kind={RENDER_STATUS_KIND}", verify[0]["url"])
+        self.assertIn(f"kind={RENDER_STATUS_KIND}", finding["check"]["url"])
 
     def test_each_finding_reaches_the_action_queue(self):
         tailnet_connection()
@@ -566,8 +562,8 @@ class PageTests(TestCase):
             for finding in derive_findings(derive_topology(principal=principal), principal=principal):
                 if finding.rule not in RULES:
                     continue
-                emitted += [(remedy.url, remedy.method) for remedy in finding.remedies]
-                emitted += [(action.url, action.method) for step in finding.workflow.steps for action in step.actions]
+                offered = (*finding.presses, *((finding.check,) if finding.check else ()))
+                emitted += [(action.url, action.method) for action in offered]
         self.assertTrue(emitted)
         for label_url in _command_links([("", url, method) for url, method in emitted]):
             with self.subTest(url=label_url[1]):

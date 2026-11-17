@@ -26,10 +26,10 @@ from .finding_model import (
     FindingEstate,
     FindingRemedy,
     FindingRule,
-    OperatorStep,
     cannot_run_commands,
     machine_step,
 )
+from .finding_steps import Run
 from .tone import Tone
 from .ui import ended
 lazy from .adoption import unmanaged
@@ -257,11 +257,11 @@ def images_untagged(estate: FindingEstate) -> tuple[Finding, ...]:
     return tuple(sorted(found, key=lambda item: item.title))
 
 
-def _recreate(container: str, service: str, host: str) -> tuple[OperatorStep, ...]:
+def _recreate(container: str, service: str, host: str) -> tuple[Run, ...]:
     """Recreate the compose service, run in the project's directory on the machine."""
 
     return (
-        OperatorStep(
+        Run(
             label=f"On {host}, in the compose project that runs {container}, recreate it",
             command=f"docker compose up -d --force-recreate {service}".rstrip(),
         ),

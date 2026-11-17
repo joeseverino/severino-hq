@@ -44,6 +44,7 @@ from .documentation import (
     ObsidianPath,
 )
 from .entity_links import EntityLink
+from .finding_steps import WrittenCheck, WrittenReason, WrittenSteps
 from .json_schemas import Written
 from .plugins import ATTENTION_ORDER
 from .record_fields import Notes, PublishedAt
@@ -52,7 +53,7 @@ from .standards import Standing
 from .tone import Tone
 from .ui import ended
 from .upgrades import HIGH, LOW, MAJOR, MEDIUM, MINOR, PATCH, UNKNOWN_CHANGE
-from .workflows import WrittenAction, WrittenStep
+from .workflows import WrittenAction
 
 # What a container row and a machine's list of its containers say alike.
 type ComposeProject = Annotated[str, Describe("The compose project it belongs to; empty for one started on its own.")]
@@ -433,9 +434,9 @@ class ActionItem(ActionItemRow):
     key: Annotated[str, Describe("The item's key, which setting it aside names it by.")]
     source_id: Annotated[str, Describe("The stable id of the part of HQ it comes from, such as `containers`.")]
     count: Annotated[int, Describe("How many things it stands for, at least 1.")]
-    steps: Annotated[
-        list[WrittenStep], Describe("The steps of the plan that resolves it, in order; empty where it has no plan.")
-    ]
+    steps: WrittenSteps
+    no_help_reason: WrittenReason
+    check: WrittenCheck
     actions: Annotated[
         list[WrittenAction], Describe("The quick actions offered on it, each through its owner's own command or page.")
     ]

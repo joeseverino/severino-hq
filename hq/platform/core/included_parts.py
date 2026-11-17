@@ -88,12 +88,9 @@ PATH_HOPS = _part(
 )
 RESOLUTION_WORKFLOW = _part(
     "resolution_workflow",
-    "What can be done about a finding: its fix, its ignore and its snooze.",
-    *("attention-actions", "resolution-workflow"),
-    example=(
-        "{% with parts=plan|workflow_parts %}"
-        '{% include "partials/_resolution_workflow.html" with steps=parts.steps fold=parts.fold only %}{% endwith %}'
-    ),
+    "What a person does about a finding: a command to run, or what to do in words.",
+    "resolution-workflow",
+    example='{% include "partials/_resolution_workflow.html" with steps=steps only %}',
 )
 WORK_QUEUE = _part(
     "work_queue",
@@ -260,7 +257,6 @@ PARTS = (
         "Readings that need interpreting, each with its next step.",
         *("insight-action", "insight-body", "insight-card", "insight-grid", "insight-head", "insight-title"),
         "insight-value",
-        draws=(RESOLUTION_WORKFLOW, WORK_QUEUE),
         example=(
             '{% section "Example insights" %}'
             '{% include "partials/_insight_grid.html" with label="Example insights" %}{% endsection %}'

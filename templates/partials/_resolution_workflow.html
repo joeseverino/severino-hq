@@ -1,21 +1,13 @@
 {% comment %}
-The steps of a card, from `application.decisions`: a command to run (a "run"
-step's summary) or an instruction with its own text. One step stands alone and
-several are numbered. Long steps fold under "Steps", a folded section under
-the card's own title. A reason is a sentence on the card and is never a step.
-Actions link to their owner; nothing here runs one.
+The steps of a card, from `application.decisions`: a command to run (a `Run`)
+or what to do in words (a `Do`), each said as `_operator_step.html#said`. One
+step stands alone and several are numbered. A press is a button on the card
+and a reason a sentence; neither is a step.
 {% endcomment %}
-{% partialdef steps %}
+{% if steps %}
 <{% if steps|length > 1 %}ol{% else %}ul{% endif %} class="resolution-workflow">
   {% for step in steps %}
-    <li>
-      {% if step.label %}<strong>{{ step.label|breakable }}</strong>{% endif %}
-      {% if step.phase == "run" %}{% include "partials/_command.html" with command=step.summary only %}{% elif step.summary %}<p>{{ step.summary|breakable }}</p>{% endif %}
-      {% remedies step.actions as shown %}{% if shown %}<div class="attention-actions">{% include "partials/_action_links.html" with actions=shown only %}</div>{% endif %}
-    </li>
+    <li>{% include "partials/_operator_step.html#said" %}</li>
   {% endfor %}
 </{% if steps|length > 1 %}ol{% else %}ul{% endif %}>
-{% endpartialdef %}
-{% if steps %}
-{% if fold %}{% section "Steps" fold=True %}{% partial steps %}{% endsection %}{% else %}{% partial steps %}{% endif %}
 {% endif %}

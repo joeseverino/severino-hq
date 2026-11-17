@@ -24,13 +24,13 @@ from .finding_model import (
     FindingEstate,
     FindingRemedy,
     FindingRule,
-    OperatorStep,
     carried,
     carry,
     fact_values,
     on_machine,
     opens,
 )
+from .finding_steps import Do, told
 from .tone import Tone
 from .ui import counted, ended
 lazy from . import exposure, zones
@@ -113,8 +113,8 @@ def _answered_by_nothing() -> tuple[Finding, ...]:
                     evidence=(("Name", name), ("Path", route.line), ("Machine", last.name)),
                     remedies=tuple(_update(key, intent="Change where it points") for key in keys),
                     steps=(
-                        OperatorStep(
-                            label=f"Remove the public record for {name} if nothing should answer "
+                        Do(
+                            f"Remove the public record for {name} if nothing should answer "
                             f"there, or add the proxy route on {last.name} that serves it."
                         ),
                     ),
@@ -175,9 +175,9 @@ def _routed_to_stopped() -> tuple[Finding, ...]:
                         evidence=(("Name", name), ("Path", route.line), ("Container", _said(state))),
                         remedies=tuple(_update(key, intent="Change where it points") for key in proxies),
                         steps=(
-                            OperatorStep(
-                                label=f"Start {container} on {machine}",
-                                command=on_machine(machine, f"docker start {shlex.quote(container)}"),
+                            told(
+                                f"Start {container} on {machine}",
+                                on_machine(machine, f"docker start {shlex.quote(container)}"),
                             ),
                         ),
                     )
@@ -214,12 +214,7 @@ def _gates_guarding_nothing() -> tuple[Finding, ...]:
                             "later, this rule will apply to it without anyone reviewing it."
                         ),
                         evidence=(("Access rule", f"{spec.label} {title}"), ("Name", name)),
-                        steps=(
-                            OperatorStep(
-                                label=f"Remove {name} from {title}",
-                                notes=((console,) if console else ()),
-                            ),
-                        ),
+                        steps=(Do(f"Remove {name} from {title}", notes=((console,) if console else ())),),
                     )
                 )
     return tuple(found)
@@ -276,9 +271,7 @@ def _split_horizon_finding(name: str, routes: tuple[Route, ...], public: set[str
             *(_update(key, intent="Change the public record") for key in _declared(name, _dns_kinds(public=True))),
         ),
         steps=(
-            OperatorStep(
-                label=f"Point the internal record for {name} at the machine the public one reaches, or the other way round."
-            ),
+            Do(f"Point the internal record for {name} at the machine the public one reaches, or the other way round."),
         ),
     )
 
@@ -317,8 +310,8 @@ def _unfronted_ports() -> tuple[Finding, ...]:
                     ("Open to the internet", ", ".join(str(port) for port in open_ports)),
                 ),
                 steps=(
-                    OperatorStep(
-                        label=f"Bind {item.running.name}'s ports to 127.0.0.1 in its compose file, "
+                    Do(
+                        f"Bind {item.running.name}'s ports to 127.0.0.1 in its compose file, "
                         "or put a proxy route in front of it.",
                         notes=(f"{item.running.name}'s page shows the exact change.",),
                     ),

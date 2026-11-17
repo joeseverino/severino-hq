@@ -30,21 +30,34 @@
               "source_id",
               "count",
               "steps",
-              "steps.phase",
+              "steps.link",
+              "steps.link.name",
+              "steps.link.label",
+              "steps.link.effect",
+              "steps.link.url",
+              "steps.link.method",
+              "steps.link.capability",
+              "steps.link.target",
+              "steps.link.reason",
+              "steps.link.recommended",
+              "steps.link.refusal",
+              "steps.kind",
               "steps.label",
-              "steps.summary",
-              "steps.state",
-              "steps.actions",
-              "steps.actions.name",
-              "steps.actions.label",
-              "steps.actions.effect",
-              "steps.actions.url",
-              "steps.actions.method",
-              "steps.actions.capability",
-              "steps.actions.target",
-              "steps.actions.reason",
-              "steps.actions.recommended",
-              "steps.actions.refusal",
+              "steps.command",
+              "steps.notes",
+              "steps.text",
+              "no_help_reason",
+              "check",
+              "check.name",
+              "check.label",
+              "check.effect",
+              "check.url",
+              "check.method",
+              "check.capability",
+              "check.target",
+              "check.reason",
+              "check.recommended",
+              "check.refusal",
               "actions",
               "actions.name",
               "actions.label",
@@ -402,6 +415,8 @@
               "credential_fix.steps.label",
               "credential_fix.steps.command",
               "credential_fix.steps.notes",
+              "credential_fix.steps.kind",
+              "credential_fix.steps.text",
               "last_activity",
               "last_activity.summary",
               "last_activity.created_at",
@@ -2180,18 +2195,36 @@
               "findings.evidence",
               "findings.evidence.label",
               "findings.evidence.value",
-              "findings.operator_steps",
-              "findings.operator_steps.label",
-              "findings.operator_steps.command",
-              "findings.operator_steps.notes",
               "findings.no_help_reason",
               "findings.since",
-              "findings.remedies",
-              "findings.remedies.capability",
-              "findings.remedies.target",
-              "findings.remedies.label",
-              "findings.remedies.effect",
-              "findings.remedies.auto",
+              "findings.steps",
+              "findings.steps.link",
+              "findings.steps.link.name",
+              "findings.steps.link.label",
+              "findings.steps.link.effect",
+              "findings.steps.link.url",
+              "findings.steps.link.method",
+              "findings.steps.link.capability",
+              "findings.steps.link.target",
+              "findings.steps.link.reason",
+              "findings.steps.link.recommended",
+              "findings.steps.link.refusal",
+              "findings.steps.kind",
+              "findings.steps.label",
+              "findings.steps.command",
+              "findings.steps.notes",
+              "findings.steps.text",
+              "findings.check",
+              "findings.check.name",
+              "findings.check.label",
+              "findings.check.effect",
+              "findings.check.url",
+              "findings.check.method",
+              "findings.check.capability",
+              "findings.check.target",
+              "findings.check.reason",
+              "findings.check.recommended",
+              "findings.check.refusal",
               "findings.offers",
               "findings.offers.name",
               "findings.offers.label",
@@ -2214,29 +2247,6 @@
               "findings.investigations.reason",
               "findings.investigations.recommended",
               "findings.investigations.refusal",
-              "findings.workflow",
-              "findings.workflow.id",
-              "findings.workflow.label",
-              "findings.workflow.steps",
-              "findings.workflow.steps.phase",
-              "findings.workflow.steps.label",
-              "findings.workflow.steps.summary",
-              "findings.workflow.steps.state",
-              "findings.workflow.steps.actions",
-              "findings.workflow.steps.actions.name",
-              "findings.workflow.steps.actions.label",
-              "findings.workflow.steps.actions.effect",
-              "findings.workflow.steps.actions.url",
-              "findings.workflow.steps.actions.method",
-              "findings.workflow.steps.actions.capability",
-              "findings.workflow.steps.actions.target",
-              "findings.workflow.steps.actions.reason",
-              "findings.workflow.steps.actions.recommended",
-              "findings.workflow.steps.actions.refusal",
-              "findings.workflow.outcome",
-              "findings.workflow.outcome.kind",
-              "findings.workflow.outcome.claim_id",
-              "findings.workflow.outcome.label",
               "unread",
               "unread.kind",
               "unread.label",
@@ -3535,6 +3545,9 @@
             },
             "type": "array"
           },
+          "check": {
+            "$ref": "#/components/schemas/WrittenCheck"
+          },
           "count": {
             "description": "How many things it stands for, at least 1.",
             "type": "integer"
@@ -3566,6 +3579,9 @@
             },
             "type": "array"
           },
+          "no_help_reason": {
+            "$ref": "#/components/schemas/WrittenReason"
+          },
           "notice": {
             "description": "Whether it only reports something, with nothing to resolve.",
             "type": "boolean"
@@ -3588,11 +3604,7 @@
             "$ref": "#/components/schemas/ActionItemRow/properties/status"
           },
           "steps": {
-            "description": "The steps of the plan that resolves it, in order; empty where it has no plan.",
-            "items": {
-              "$ref": "#/components/schemas/WorkflowStep"
-            },
-            "type": "array"
+            "$ref": "#/components/schemas/WrittenSteps"
           },
           "subject": {
             "anyOf": [
@@ -8107,7 +8119,16 @@
           "steps": {
             "description": "What you do to replace it, in order.",
             "items": {
-              "$ref": "#/components/schemas/OperatorStep"
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Run",
+                  "title": "Run"
+                },
+                {
+                  "$ref": "#/components/schemas/Do",
+                  "title": "Do"
+                }
+              ]
             },
             "type": "array"
           },
@@ -8812,6 +8833,27 @@
           },
           "value": {
             "description": "What the record holds, as the zone lists it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Do": {
+        "additionalProperties": false,
+        "description": "What to do, in words, where no exact command can be named.",
+        "properties": {
+          "kind": {
+            "const": "do",
+            "default": "do",
+            "description": "An instruction in words.",
+            "type": "string"
+          },
+          "notes": {
+            "$ref": "#/components/schemas/StepNotes",
+            "default": []
+          },
+          "text": {
+            "description": "What to do, in a sentence or two.",
             "type": "string"
           }
         },
@@ -10739,7 +10781,7 @@
       },
       "FindingFacts": {
         "additionalProperties": false,
-        "description": "What a finding says the same at every door: what it is about, what it\nrests on, and what the operator does by hand. Each door adds its actions.",
+        "description": "What a finding says the same at every door: what it is about, what it\nrests on, and why HQ cannot help where it cannot. Each door adds its steps\nand actions.",
         "properties": {
           "affected_scopes": {
             "description": "Other record types or reading types it bears on.",
@@ -10760,26 +10802,11 @@
             "type": "string"
           },
           "id": {
-            "description": "The problem's id, the same at every read while it is open; its workflow's outcome names it.",
+            "description": "The problem's id, the same at every read while it is open.",
             "type": "string"
           },
           "no_help_reason": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Why HQ can neither run a fix nor name an exact command for it; null when it can do either."
-          },
-          "operator_steps": {
-            "description": "What you do by hand to resolve it, in order. HQ never runs these.",
-            "items": {
-              "$ref": "#/components/schemas/OperatorStep"
-            },
-            "type": "array"
+            "$ref": "#/components/schemas/WrittenReason"
           },
           "rule": {
             "description": "The rule that found it, as the `rule` filter takes it.",
@@ -10837,7 +10864,6 @@
           "severity",
           "explanation",
           "evidence",
-          "operator_steps",
           "no_help_reason",
           "since"
         ],
@@ -10867,7 +10893,7 @@
           },
           "schema_version": {
             "$ref": "#/components/schemas/SchemaVersion",
-            "const": 2
+            "const": 3
           },
           "summary": {
             "$ref": "#/components/schemas/FindingsSummary"
@@ -14941,30 +14967,6 @@
         },
         "type": "object"
       },
-      "OperatorStep": {
-        "additionalProperties": false,
-        "description": "A command an operator runs on their own machine. HQ never runs it.",
-        "properties": {
-          "command": {
-            "default": "",
-            "description": "The exact command to paste into a shell on the machine it names; empty for a step said in words.",
-            "type": "string"
-          },
-          "label": {
-            "description": "What the step does, in a sentence; all there is to it when it names no command.",
-            "type": "string"
-          },
-          "notes": {
-            "default": [],
-            "description": "What to know before or after running it, a sentence each.",
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          }
-        },
-        "type": "object"
-      },
       "OriginPart": {
         "additionalProperties": false,
         "description": "Where a request for the name is finally served, and what serves it there.",
@@ -15464,14 +15466,6 @@
           "data"
         ],
         "type": "object"
-      },
-      "PlanId": {
-        "description": "The plan's id, the same at every read of the problem it resolves.",
-        "type": "string"
-      },
-      "PlanLabel": {
-        "description": "The plan's heading, such as `Next steps`.",
-        "type": "string"
       },
       "PlaybookFact": {
         "additionalProperties": false,
@@ -15997,6 +15991,22 @@
           "update_available": {
             "description": "Whether a newer client is published for it.",
             "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "Press": {
+        "additionalProperties": false,
+        "description": "A command HQ runs through its own route, offered only to a reader who may run it.\n\nDerivation writes it, from a detector's ``FindingRemedy``: a detector\nnames the command, and never the link a reader presses.",
+        "properties": {
+          "kind": {
+            "const": "press",
+            "default": "press",
+            "description": "A command HQ runs, pressed through `link`.",
+            "type": "string"
+          },
+          "link": {
+            "$ref": "#/components/schemas/ActionLink"
           }
         },
         "type": "object"
@@ -17776,10 +17786,6 @@
         },
         "type": "object"
       },
-      "RemedyEffect": {
-        "description": "What running it does, in its command's own terms: `read`, `remote_write` or `infrastructure_change`. A `destructive` one is never suggested.",
-        "type": "string"
-      },
       "RepositoryPart": {
         "additionalProperties": false,
         "properties": {
@@ -18364,6 +18370,31 @@
         "pattern": "^[A-Za-z0-9]{1,16}$",
         "type": "string"
       },
+      "Run": {
+        "additionalProperties": false,
+        "description": "A command an operator runs on their own machine. HQ never runs it.",
+        "properties": {
+          "command": {
+            "description": "The exact command to paste into a shell on the machine it names.",
+            "type": "string"
+          },
+          "kind": {
+            "const": "run",
+            "default": "run",
+            "description": "A command the operator runs.",
+            "type": "string"
+          },
+          "label": {
+            "description": "What running it does, said before the command.",
+            "type": "string"
+          },
+          "notes": {
+            "$ref": "#/components/schemas/StepNotes",
+            "default": []
+          }
+        },
+        "type": "object"
+      },
       "RunAsked": {
         "additionalProperties": false,
         "description": "A playbook's run as asking for it or cancelling it answers: the run\nthat `runs` reads by its `operation.id`.",
@@ -18867,6 +18898,9 @@
           "affected_scopes": {
             "$ref": "#/components/schemas/FindingFacts/properties/affected_scopes"
           },
+          "check": {
+            "$ref": "#/components/schemas/WrittenCheck"
+          },
           "evidence": {
             "$ref": "#/components/schemas/FindingFacts/properties/evidence"
           },
@@ -18893,16 +18927,6 @@
             },
             "type": "array"
           },
-          "operator_steps": {
-            "$ref": "#/components/schemas/FindingFacts/properties/operator_steps"
-          },
-          "remedies": {
-            "description": "The commands that would fix it which this reader may run, none of them destructive.",
-            "items": {
-              "$ref": "#/components/schemas/SuggestedRemedy"
-            },
-            "type": "array"
-          },
           "rule": {
             "$ref": "#/components/schemas/FindingFacts/properties/rule"
           },
@@ -18915,23 +18939,14 @@
           "since": {
             "$ref": "#/components/schemas/FindingFacts/properties/since"
           },
+          "steps": {
+            "$ref": "#/components/schemas/WrittenSteps"
+          },
           "subject": {
             "$ref": "#/components/schemas/FindingFacts/properties/subject"
           },
           "title": {
             "$ref": "#/components/schemas/FindingFacts/properties/title"
-          },
-          "workflow": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/WorkflowPlan",
-                "title": "Workflow plan"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "The plan that resolves it, a fix and then the check that confirms it; null when it has neither."
           }
         },
         "type": "object"
@@ -19399,21 +19414,30 @@
         ],
         "type": "object"
       },
-      "StepLabel": {
-        "description": "The step's heading; empty for an instruction its summary says alone.",
-        "type": "string"
+      "Step": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Press",
+            "title": "Press"
+          },
+          {
+            "$ref": "#/components/schemas/Run",
+            "title": "Run"
+          },
+          {
+            "$ref": "#/components/schemas/Do",
+            "title": "Do"
+          }
+        ],
+        "description": "One step of what to do about a finding, told apart by its `kind`.",
+        "title": "Step"
       },
-      "StepPhase": {
-        "description": "What the step is: `act` runs a remedy, `verify` checks it worked, `run` is an exact command the operator runs, `do` an instruction in words, `cannot` why it cannot be done from HQ.",
-        "type": "string"
-      },
-      "StepState": {
-        "description": "Where it stands: `recommended` to do now, `after_action` once the step before is done, `available` at any time, `operator` for you to do by hand, `blocked` where it cannot be done.",
-        "type": "string"
-      },
-      "StepSummary": {
-        "description": "The step in full: the command of a `run` step, the instruction of a `do` step, the reason of a `cannot` step. Empty when its label says it.",
-        "type": "string"
+      "StepNotes": {
+        "description": "What to know before or after it, a sentence each.",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
       },
       "Success": {
         "additionalProperties": false,
@@ -19430,31 +19454,6 @@
           "ok",
           "data"
         ],
-        "type": "object"
-      },
-      "SuggestedRemedy": {
-        "additionalProperties": false,
-        "description": "A capability that would answer a finding, and the target it runs on.",
-        "properties": {
-          "auto": {
-            "description": "Whether HQ runs it unattended. A problem only proposes, so it reads false.",
-            "type": "boolean"
-          },
-          "capability": {
-            "description": "The command that would fix it, run with `target` as its target.",
-            "type": "string"
-          },
-          "effect": {
-            "$ref": "#/components/schemas/RemedyEffect"
-          },
-          "label": {
-            "description": "What running it does here, in the remedy's own words or its command's.",
-            "type": "string"
-          },
-          "target": {
-            "description": "The record the command runs on."
-          }
-        },
         "type": "object"
       },
       "SweptKind": {
@@ -21507,74 +21506,29 @@
         ],
         "type": "object"
       },
-      "WorkflowOutcome": {
-        "additionalProperties": false,
-        "description": "The observable fact that completes a workflow.",
-        "properties": {
-          "claim_id": {
-            "description": "The id of the problem whose absence completes it, as the problem's own `id` gives it.",
-            "type": "string"
+      "WrittenCheck": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/ActionLink",
+            "title": "Action link"
           },
-          "kind": {
-            "description": "What completes it: `claim_absent`, once the problem it resolves is no longer reported.",
-            "type": "string"
-          },
-          "label": {
-            "description": "The outcome in words; empty when its type says it.",
-            "type": "string"
+          {
+            "type": "null"
           }
-        },
-        "type": "object"
+        ],
+        "description": "The press that reads again what it rests on and runs its check; null where there is none.",
+        "title": "Written check"
       },
-      "WorkflowPlan": {
-        "additionalProperties": false,
-        "description": "A contextual route from evidence to action to observed resolution.",
-        "properties": {
-          "id": {
-            "$ref": "#/components/schemas/PlanId"
-          },
-          "label": {
-            "$ref": "#/components/schemas/PlanLabel"
-          },
-          "outcome": {
-            "$ref": "#/components/schemas/WorkflowOutcome"
-          },
-          "steps": {
-            "description": "Its steps, in the order they are taken.",
-            "items": {
-              "$ref": "#/components/schemas/WorkflowStep"
-            },
-            "type": "array"
-          }
-        },
-        "type": "object"
+      "WrittenReason": {
+        "description": "Why HQ can neither run a fix nor name an exact command for it; empty when it can do either.",
+        "type": "string"
       },
-      "WorkflowStep": {
-        "additionalProperties": false,
-        "description": "One ordered phase; actions still execute through their owning use case.",
-        "properties": {
-          "actions": {
-            "default": [],
-            "description": "The links that carry it out, each through its command's own route.",
-            "items": {
-              "$ref": "#/components/schemas/ActionLink"
-            },
-            "type": "array"
-          },
-          "label": {
-            "$ref": "#/components/schemas/StepLabel"
-          },
-          "phase": {
-            "$ref": "#/components/schemas/StepPhase"
-          },
-          "state": {
-            "$ref": "#/components/schemas/StepState"
-          },
-          "summary": {
-            "$ref": "#/components/schemas/StepSummary"
-          }
+      "WrittenSteps": {
+        "description": "What to do about it, in order: a command HQ runs (`press`), a command you run on your own machine (`run`), or what to do in words (`do`).",
+        "items": {
+          "$ref": "#/components/schemas/Step"
         },
-        "type": "object"
+        "type": "array"
       },
       "ZoneAdopted": {
         "additionalProperties": false,

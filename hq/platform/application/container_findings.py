@@ -28,12 +28,12 @@ from .finding_model import (
     Finding,
     FindingRemedy,
     FindingRule,
-    OperatorStep,
     carried,
     carry,
     on_machine,
     opens,
 )
+from .finding_steps import Do, Run
 from .images import version
 from .labels import lower_first
 from .lists import split_list
@@ -218,7 +218,7 @@ def _brings(running: list[Container]) -> str:
     return f" {plan.target_tag} has a known vulnerability of its own." if plan is not None and plan.introduces else ""
 
 
-def _by_hand(running: list[Container]) -> tuple[OperatorStep, ...]:
+def _by_hand(running: list[Container]) -> tuple[Run | Do, ...]:
     """How the image is updated today, on its machine: one step for each
     compose project that runs it."""
 
@@ -228,15 +228,13 @@ def _by_hand(running: list[Container]) -> tuple[OperatorStep, ...]:
     standing = running[0].standing
     if standing.repository is not None:
         return (
-            OperatorStep(
-                label=f"{_names(running)} on {running[0].machine.name} is HQ's own image. Its release pipeline deploys it."
-            ),
+            Do(f"{_names(running)} on {running[0].machine.name} is HQ's own image. Its release pipeline deploys it."),
         )
     wanted = f"{standing.image.name}:{plan.target_tag}"
     return _compose_steps(running, lambda _item: wanted)
 
 
-def _compose_steps(running: list[Container], image: Callable[[Container], str]) -> tuple[OperatorStep, ...]:
+def _compose_steps(running: list[Container], image: Callable[[Container], str]) -> tuple[Run | Do, ...]:
     """For each compose project among ``running``, the image to set and the
     file that sets it, with the command that recreates its containers when HQ
     read the project. Without that, only what to set."""
@@ -261,14 +259,9 @@ def _compose_steps(running: list[Container], image: Callable[[Container], str]) 
             else ""
         )
         steps.append(
-            OperatorStep(
-                label=f"On {machine}, set the image of {names} to {wanted} in {_sets_image(files)}, then run",
-                command=command,
-            )
+            Run(f"On {machine}, set the image of {names} to {wanted} in {_sets_image(files)}, then run", command)
             if command
-            else OperatorStep(
-                label=f"On {machine}, set the image of {names} to {wanted} where it is defined, then start it again."
-            )
+            else Do(f"On {machine}, set the image of {names} to {wanted} where it is defined, then start it again.")
         )
     return tuple(steps)
 

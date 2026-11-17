@@ -43,7 +43,8 @@ class ConnectionsLostTests(TestCase):
         self.assertIn({"label": "Last reported", "value": "example-dns, example-tunnel"}, finding["evidence"])
         self.assertIn("systemctl start severino-hq-secrets.service", steps_text(finding))
         self.assertEqual(
-            [remedy["capability"] for remedy in finding["remedies"]], ["infrastructure.controller.refresh"]
+            [step["link"]["capability"] for step in finding["steps"] if step["kind"] == "press"],
+            ["infrastructure.controller.refresh"],
         )
         # Said once for the controller, not again for each connection.
         self.assertEqual(raised("connection-not-answering"), [])

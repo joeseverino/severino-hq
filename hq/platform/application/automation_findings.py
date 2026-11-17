@@ -12,7 +12,8 @@ order docs/Deployment.md gives it, for any operator's host.
 
 from typing import Any
 
-from .finding_model import Finding, FindingEstate, FindingRule, OperatorStep
+from .finding_model import Finding, FindingEstate, FindingRule
+from .finding_steps import Run
 from .moments import ago
 from .security import Capability, Principal
 from .tone import Tone
@@ -30,18 +31,18 @@ HOST_CONFIGURATION = "/etc/severino-hq/host.json"
 
 # As deploy/host.example.json shows it: the grant is one of the file's own,
 # and reads that repository's contents.
-_ENTRY = OperatorStep(
+_ENTRY = Run(
     label=(
         'On HQ\'s machine, add "automation": {"repository": "OWNER/REPOSITORY", "grant": "GRANT"}, '
         "naming the repository your playbooks are in and, for a private one, the grant that reads it"
     ),
     command=f"sudoedit {HOST_CONFIGURATION}",
 )
-_START = OperatorStep(
+_START = Run(
     label="Start the worker, which names anything still missing",
     command=f"sudo {HQ_HOST} automation",
 )
-_LOG = OperatorStep(
+_LOG = Run(
     label="Read why it stopped",
     command=f"sudo journalctl -u {AUTOMATION_UNIT} -n 50 --no-pager",
 )

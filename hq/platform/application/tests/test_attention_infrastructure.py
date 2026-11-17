@@ -2,10 +2,9 @@ from django.test import TestCase
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource
-from hq.platform.application.tests.worded import worded
 
 from ..attention import infrastructure
-from ..findings import estate_findings
+from ..findings import estate_findings, finding_key
 from ..security import cli_principal
 from .inventory_records import kind_read
 
@@ -23,7 +22,7 @@ def rewrite(key: str, *, generation: int = 1, observed_generation: int = 1, **fi
 
 
 def keys_about(key: str) -> set[str]:
-    return {item.key for item in worded(infrastructure()) if item.key.endswith(f"resource:{key}")}
+    return {finding_key(item) for item in tuple(infrastructure()) if finding_key(item).endswith(f"resource:{key}")}
 
 
 class InfrastructureQueueTests(TestCase):

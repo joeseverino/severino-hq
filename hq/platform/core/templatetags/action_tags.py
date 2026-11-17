@@ -86,13 +86,6 @@ def urgency(status):
 
 
 @register.filter
-def workflow_parts(plan):
-    """A plan's steps and its reason, apart, as a card shows them."""
-
-    return decisions.workflow_parts(plan)
-
-
-@register.filter
 def queue_entries(entries):
     """Keep the SDK attention include on the queue's single projection."""
 

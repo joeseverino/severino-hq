@@ -13,12 +13,12 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_adapters.github import COMPOSE_WORKFLOW, CURRENT, KIND as DELIVERY
 from hq.platform.application.markup_testing import select, text
-from hq.platform.application.tests.worded import worded
 
 from .. import first_seen, freshness
 from ..attention import infrastructure
 from ..delivery_progress import STALLED_AFTER
 from ..entity_links import entity_link
+from ..findings import finding_key
 from ..first_seen import note_open, recorded
 from ..infrastructure import resource_health
 from ..problems import note_open_problems, problem_counts, problems_about
@@ -174,7 +174,7 @@ class FirstSeenTests(TestCase):
             with mock.patch.dict(freshness._NAMED, {freshness.FIRST_SEEN: lambda: at_once}):
                 bridged("inventory", {REWRITE: {"ok": True, "records": []}})
             with projection_scope():
-                (item,) = [item for item in worded(infrastructure()) if item.key.endswith(":resource:app")]
+                (item,) = [item for item in tuple(infrastructure()) if finding_key(item).endswith(":resource:app")]
                 card = one(problems_about(entity_link("resource", "app").url, cli_principal()))
 
         self.assertIsNotNone(item.since)
@@ -224,10 +224,10 @@ class DeployInProgressTests(TestCase):
 
     def items(self):
         with host_only(), projection_scope():
-            return [item for item in worded(infrastructure()) if item.key.endswith("resource:delivery")]
+            return [item for item in tuple(infrastructure()) if finding_key(item).endswith("resource:delivery")]
 
     def item(self):
-        (found,) = [item for item in self.items() if item.key.startswith("finding:deploy-")]
+        (found,) = [item for item in self.items() if finding_key(item).startswith("finding:deploy-")]
         return found
 
     def test_a_running_deploy_is_a_notice(self):
@@ -236,8 +236,8 @@ class DeployInProgressTests(TestCase):
         item = self.item()
 
         self.assertTrue(item.notice)
-        self.assertEqual((item.status, item.title), ("attention", "A deploy is running"))
-        self.assertIn("after 30 minutes", item.body)
+        self.assertEqual((item.severity, item.title), ("attention", "A deploy is running"))
+        self.assertIn("after 30 minutes", item.explanation)
 
     def test_a_deploy_not_started_yet_is_a_notice(self):
         self.delivery("No deploy has started")
@@ -254,7 +254,7 @@ class DeployInProgressTests(TestCase):
 
         found = self.items()
 
-        self.assertIn("serious", {item.status for item in found})
+        self.assertIn("serious", {item.severity for item in found})
         self.assertFalse(any(item.notice for item in found))
 
     def test_a_failed_deploy_is_a_serious_problem(self):
@@ -262,13 +262,13 @@ class DeployInProgressTests(TestCase):
 
         found = self.items()
 
-        self.assertIn("serious", {item.status for item in found})
+        self.assertIn("serious", {item.severity for item in found})
         self.assertFalse(any(item.notice for item in found))
 
     def test_a_deploy_on_its_way_is_not_a_serious_problem_anywhere(self):
         self.delivery("Compose run 9 is running")
 
-        self.assertNotIn("serious", {item.status for item in self.items()})
+        self.assertNotIn("serious", {item.severity for item in self.items()})
         resource = ManagedResource.objects.get(key="delivery")
         self.assertEqual(resource_health(resource)["label"], "Deploy running")
         self.assertEqual(record_status(resource).tone, "attention")
@@ -278,6 +278,6 @@ class DeployInProgressTests(TestCase):
 
         item = self.item()
 
-        self.assertEqual((item.notice, item.status), (False, "attention"))
+        self.assertEqual((item.notice, item.severity), (False, "attention"))
         self.assertEqual(item.title, "A deploy is waiting for your approval")
-        self.assertEqual(item.url, "https://github.example.com/example/host/actions/runs/9")
+        self.assertEqual(item.primary.url, "https://github.example.com/example/host/actions/runs/9")

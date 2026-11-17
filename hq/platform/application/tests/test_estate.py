@@ -18,7 +18,6 @@ from hq.domains.control_plane.models import (
 from hq.platform.application.derivation_testing import uncached
 from hq.platform.application.markup_testing import elements, hrefs, text
 from hq.platform.application.security import cli_principal
-from hq.platform.application.tests.worded import worded
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
@@ -28,6 +27,7 @@ from ..attention import infrastructure, raised
 from ..command_center import command_center
 from ..connection_lifecycle import Lifecycle
 from ..estate import Estate, cards, estate_reading, overview
+from ..findings import finding_key
 from ..glance import dashboard_panels
 from ..inventory_testing import store
 from ..machines import machine, machine_catalog
@@ -370,7 +370,7 @@ class EdgeCertificateExpiryTests(TestCase):
 
     def items(self):
         with projection_scope():
-            return [item for item in worded(infrastructure()) if "certificate-expiring:resource:" in item.key]
+            return [item for item in tuple(infrastructure()) if "certificate-expiring:resource:" in finding_key(item)]
 
     def test_an_edge_certificate_outside_the_window_is_not_the_next_expiry(self):
         self.edge(40)
@@ -524,13 +524,13 @@ class ActionItemTests(TestCase):
     def test_a_connection_that_does_not_answer_is_an_action_item(self):
         connection("example-ssh", reachable=False, detail="Timed out")
 
-        found = [item for item in worded(infrastructure()) if "connection-not-answering" in item.key]
+        found = [item for item in tuple(infrastructure()) if "connection-not-answering" in finding_key(item)]
 
         self.assertEqual(len(found), 1)
         self.assertIn("example-ssh", found[0].title)
-        self.assertIn("Timed out", found[0].body)
-        self.assertEqual(found[0].subject.label, "example-ssh")
-        self.assertTrue(found[0].subject.url)
+        self.assertIn("Timed out", found[0].explanation)
+        self.assertEqual(found[0].subject_link.label, "example-ssh")
+        self.assertTrue(found[0].subject_link.url)
 
     def test_a_domain_that_will_not_renew_reaches_the_queue(self):
         declared("example-zone", "cloudflare.zone", {"zone": "example.com", "connection_ref": "example-dns"})
@@ -547,11 +547,11 @@ class ActionItemTests(TestCase):
             },
         )
 
-        found = [item for item in worded(infrastructure()) if "registration-lapsing" in item.key]
+        found = [item for item in tuple(infrastructure()) if "registration-lapsing" in finding_key(item)]
 
         self.assertEqual(len(found), 1)
         self.assertIn("will not renew", found[0].title)
-        self.assertEqual(found[0].subject.url, reverse("zones:detail", args=["example.com"]))
+        self.assertEqual(found[0].subject_link.url, reverse("zones:detail", args=["example.com"]))
 
     def test_a_machine_offline_past_the_threshold_that_serves_something(self):
         devices(
@@ -579,11 +579,13 @@ class ActionItemTests(TestCase):
         declare_record("other-record", "other.example.com", "100.64.0.7")
 
         with projection_scope():
-            found = [item for item in worded(raised("hq.estate")) if item.key.startswith("finding:machine-offline:")]
+            found = [
+                item for item in tuple(raised("hq.estate")) if finding_key(item).startswith("finding:machine-offline:")
+            ]
 
-        self.assertEqual([item.subject.label for item in found], ["example-host"])
-        self.assertEqual(found[0].status, "serious")
-        self.assertEqual(found[0].subject.url, reverse("control_plane:machine", args=["example-host"]))
+        self.assertEqual([item.subject_link.label for item in found], ["example-host"])
+        self.assertEqual(found[0].severity, "serious")
+        self.assertEqual(found[0].subject_link.url, reverse("control_plane:machine", args=["example-host"]))
 
     def test_a_persons_device_away_is_not_an_outage(self):
         """Untagged is a user's own device: a laptop asleep serving a dev name
@@ -600,7 +602,9 @@ class ActionItemTests(TestCase):
         declare_record("dev-record", "dev.example.com", "100.64.0.9")
 
         with projection_scope():
-            found = [item for item in worded(raised("hq.estate")) if item.key.startswith("finding:machine-offline:")]
+            found = [
+                item for item in tuple(raised("hq.estate")) if finding_key(item).startswith("finding:machine-offline:")
+            ]
 
         self.assertEqual(found, [])
 
@@ -614,19 +618,19 @@ class ActionItemTests(TestCase):
             )
 
         with projection_scope():
-            found = [item for item in worded(infrastructure()) if "certificate-expiring:resource:" in item.key]
+            found = [item for item in tuple(infrastructure()) if "certificate-expiring:resource:" in finding_key(item)]
 
         self.assertEqual(len(found), 1)
-        self.assertEqual(found[0].status, "serious")
+        self.assertEqual(found[0].severity, "serious")
         self.assertIn("soon-cert expires in", found[0].title)
-        self.assertEqual(found[0].subject.url, reverse("control_plane:detail", args=["soon-cert"]))
+        self.assertEqual(found[0].subject_link.url, reverse("control_plane:detail", args=["soon-cert"]))
         self.assertIn(
             f"{reverse('command', kwargs={'name': 'certificate.renew'})}?target=soon-cert",
-            [action.url for step in found[0].workflow.steps for action in step.actions],
+            [press.url for press in found[0].presses],
         )
         # The card leads with the certificate's page.
         self.assertEqual(
-            (found[0].action, found[0].url),
+            (found[0].primary.label, found[0].primary.url),
             ("Open certificate", reverse("control_plane:detail", args=["soon-cert"])),
         )
 

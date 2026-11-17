@@ -9,7 +9,8 @@ passes ``OTHERS_SPENT_ATTENTION`` (``observations.github``).
 
 from hq.domains.control_plane.observations.github import OTHERS_SPENT, OTHERS_SPENT_ATTENTION
 
-from .finding_model import Finding, FindingEstate, FindingRule, OperatorStep, connections_carrying
+from .finding_model import Finding, FindingEstate, FindingRule, connections_carrying
+from .finding_steps import Do, Run
 from .moments import moment, when
 from .tone import Tone
 
@@ -20,13 +21,10 @@ RULE = "github-others-spent"
 FINGERPRINT_COMMAND = "openssl rsa -in PATH_TO_PEM_FILE -pubout -outform DER | openssl sha256 -binary | openssl base64"
 
 STEPS = (
-    OperatorStep(
-        label=(
-            "Open the App's settings on GitHub and count the keys under Private keys. "
-            "Each one listed can sign for the App."
-        ),
+    Do(
+        "Open the App's settings on GitHub and count the keys under Private keys. Each one listed can sign for the App."
     ),
-    OperatorStep(
+    Run(
         label="Take the fingerprint of the key HQ holds, and compare it with the ones GitHub lists.",
         command=FINGERPRINT_COMMAND,
         notes=(
@@ -34,11 +32,9 @@ STEPS = (
             "GitHub lists no key through its API, so only its settings page can say how many there are.",
         ),
     ),
-    OperatorStep(
-        label=(
-            "Delete every key that is not HQ's. Then rotate HQ's: generate a new key, store it with "
-            "mise run wire-github-app, and delete the old one."
-        ),
+    Do(
+        "Delete every key that is not HQ's. Then rotate HQ's: generate a new key, store it with "
+        "mise run wire-github-app, and delete the old one.",
         notes=("A token issued under the old key lasts up to an hour after the key is deleted.",),
     ),
 )

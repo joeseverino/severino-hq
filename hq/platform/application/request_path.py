@@ -36,7 +36,8 @@ lazy from .connection_security import request_readings
 lazy from .dashboard import finding_rows
 lazy from .derived_reads import serialize_hop
 lazy from .facts import Subject, readings
-lazy from .finding_model import Finding, OperatorStep
+lazy from .finding_model import Finding
+lazy from .finding_steps import Do
 lazy from .hq_self import own_addresses, served_at, served_port, site_label
 lazy from .locate import index_of
 lazy from .projection import complete, iso
@@ -643,7 +644,7 @@ class RequestPath:
                     severity=Tone.ATTENTION,
                     title=hop.label,
                     explanation=hop.check.detail,
-                    steps=(OperatorStep(label=hop.check.step),),
+                    steps=(Do(hop.check.step),) if hop.check.step else (),
                 )
                 for hop in self.findings
             ),

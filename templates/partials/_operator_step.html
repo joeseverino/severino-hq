@@ -1,10 +1,12 @@
 {% comment %}
-A command an operator runs on their own machine, as one step of a numbered
-{% steps %} list. HQ offers it and never runs it; it is built from
-references, so it carries no secret.
+One step an operator takes, as one step of a numbered {% steps %} list: a
+command to run on their own machine (a `Run`) or what to do in words (a
+`Do`), each with its notes. HQ offers it and never runs it; it is built from
+references, so it carries no secret. `#said` is what the step says, wherever
+a list draws it.
 {% endcomment %}
-{% step %}
-  <strong>{{ step.label|breakable }}</strong>
-  {% if step.command %}{% include "partials/_command.html" with command=step.command only %}{% endif %}
-  {% for note in step.notes %}{% muted %}{{ note|breakable }}{% endmuted %}{% endfor %}
-{% endstep %}
+{% partialdef said %}
+{% if step.kind == "run" %}<strong>{{ step.label|breakable }}</strong>{% include "partials/_command.html" with command=step.command only %}{% else %}<p>{{ step.text|breakable }}</p>{% endif %}
+{% for note in step.notes %}{% muted %}{{ note|breakable }}{% endmuted %}{% endfor %}
+{% endpartialdef %}
+{% step %}{% partial said %}{% endstep %}

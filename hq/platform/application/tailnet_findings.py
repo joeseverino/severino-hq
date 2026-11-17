@@ -13,11 +13,11 @@ from .finding_model import (
     FindingEstate,
     FindingRemedy,
     FindingRule,
-    OperatorStep,
     Said,
     connections_carrying,
     per_connection,
 )
+from .finding_steps import Do, Run
 from .tailnet_loopback import GRANT_REACHES_ONLY_LOOPBACK, LoopbackGrant, LoopbackPort
 from .tone import Tone
 from .ui import counted, counted_forms, ended
@@ -80,7 +80,7 @@ class _GrantedToNobody:
             "title": self.one.format(names=joined) if one else f"{counted(len(names), *self.counted_as)} {self.many}",
             "explanation": self.because[0 if one else 1].format(names=joined),
             "remedies": remedies,
-            "steps": (OperatorStep(label=self.step.format(names=joined)),),
+            "steps": (Do(self.step.format(names=joined)),),
         }
 
 
@@ -224,30 +224,28 @@ def _loopback_why(item: LoopbackGrant, port: LoopbackPort) -> str:
     )
 
 
-def _loopback_steps(item: LoopbackGrant) -> tuple[OperatorStep, ...]:
+def _loopback_steps(item: LoopbackGrant) -> tuple[Run | Do, ...]:
     """The grant without the ports, then each test that accepts them with them moved to deny."""
 
     whom = f"{', '.join(item.grant.get('src') or ())} to {', '.join(item.grant.get('dst') or ())}"
     fragment = item.fragment
     edit = (
-        OperatorStep(
-            label=f"In the Tailscale admin console, open Access controls and replace the grant from {whom} with this one.",
-            command=json.dumps(fragment),
+        Run(
+            f"In the Tailscale admin console, open Access controls and replace the grant from {whom} with this one.",
+            json.dumps(fragment),
         )
         if fragment
-        else OperatorStep(
-            label=ended(f"In the Tailscale admin console, open Access controls and remove the grant from {whom}"),
-        )
+        else Do(ended(f"In the Tailscale admin console, open Access controls and remove the grant from {whom}"))
     )
     tests = tuple(
-        OperatorStep(
+        Run(
             label="Replace the policy test that accepts the port with this one, which denies it.",
             command=json.dumps(test),
             notes=("Tailscale rejects a policy whose test fails, so the port cannot be opened again by mistake.",),
         )
         for test in item.tests
     )
-    last = (*tests, OperatorStep(label=THEN_CHECK_AGAIN))
+    last = (*tests, Do(THEN_CHECK_AGAIN))
     return (edit, *last)
 
 

@@ -6,6 +6,8 @@ from unittest import mock
 
 from django.test import SimpleTestCase, TestCase
 
+from hq.platform.application.finding_steps import Do
+
 from .. import plugins
 from ..card_items import Kpi
 from ..finding_model import Finding
@@ -17,7 +19,12 @@ LOGGER = "severino.composition"
 EVENT = "composition.source.unreadable"
 GOOD_CARD = {"id": "example-good-1", "label": "Good reading", "value": 1, "url": "/"}
 GOOD_ITEM = Finding(
-    rule="example-good", subject="", severity="serious", title="Good source item", explanation="Look into it."
+    rule="example-good",
+    subject="",
+    severity="serious",
+    title="Good source item",
+    explanation="Look into it.",
+    steps=(Do("Look into it."),),
 )
 
 
@@ -114,10 +121,22 @@ class UnreadableSiblingTests(SimpleTestCase):
         # Two certificates for one name, read under one key: the queue knows an
         # item by its key, so it keeps the worse and says why the other went.
         later = Finding(
-            rule="certificate", subject="example.com", severity="attention", title="Lapses in ten days", explanation=""
+            rule="certificate",
+            subject="example.com",
+            severity="attention",
+            title="Lapses in ten days",
+            explanation="",
+            steps=(Do("Look into it."),),
         )
         sooner = replace(later, severity="serious", title="Lapsed")
-        other = Finding(rule="other", subject="", severity="attention", title="Something else", explanation="")
+        other = Finding(
+            rule="other",
+            subject="",
+            severity="attention",
+            title="Something else",
+            explanation="",
+            steps=(Do("Look into it."),),
+        )
         self.installed(PluginIntegration(), PluginIntegration(attention=lambda: (later, other, sooner)))
 
         with self.assertLogs(LOGGER, "ERROR") as logs:

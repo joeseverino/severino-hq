@@ -7,10 +7,9 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource
-from hq.platform.application.tests.worded import worded
 
 from ..attention import infrastructure
-from ..findings import findings
+from ..findings import finding_key, findings
 from ..inventory_testing import store
 from ..machines import machine
 from ..security import Capability, Principal
@@ -37,7 +36,10 @@ def page(name):
 
 
 def steps_text(finding) -> str:
-    return " ".join(" ".join((step["label"], step["command"], *step["notes"])) for step in finding["operator_steps"])
+    return " ".join(
+        " ".join((step.get("label", ""), step.get("text", ""), step.get("command", ""), *step.get("notes", ())))
+        for step in finding["steps"]
+    )
 
 
 class KeyExpiryTests(TestCase):
@@ -98,7 +100,7 @@ class DeviceStandingTests(TestCase):
         (finding,) = raised("tailnet-lock-unsigned")
 
         self.assertIn("node key not signed", finding["explanation"])
-        self.assertIn("tailscale lock status", [step["command"] for step in finding["operator_steps"]])
+        self.assertIn("tailscale lock status", [step["command"] for step in finding["steps"] if step["kind"] == "run"])
         self.assertIn("tailscale lock sign", steps_text(finding))
 
     def test_a_device_lock_keeps_out_is_raised_though_the_device_reading_leaves_it_out(self):
@@ -107,7 +109,7 @@ class DeviceStandingTests(TestCase):
         (finding,) = raised("tailnet-device-locked-out")
 
         self.assertIn("example-locked", finding["title"])
-        self.assertIn("tailscale lock status", [step["command"] for step in finding["operator_steps"]])
+        self.assertIn("tailscale lock status", [step["command"] for step in finding["steps"] if step["kind"] == "run"])
 
     def test_a_device_with_nothing_wrong_raises_nothing(self):
         devices({"name": "example-host", "client_version": "1.80.0", "key_expires": ""})
@@ -134,7 +136,7 @@ class ClientUpdateTests(TestCase):
 
         self.assertIn("1.102.3", finding["explanation"])
         self.assertIn("1.102.4", finding["explanation"])
-        self.assertIn("tailscale update", [step["command"] for step in finding["operator_steps"]])
+        self.assertIn("tailscale update", [step["command"] for step in finding["steps"] if step["kind"] == "run"])
 
     def test_a_release_with_a_trailing_zero_is_the_same_release(self):
         devices(
@@ -169,7 +171,10 @@ class RouteApprovalTests(TestCase):
         self.assertIn("192.0.2.0/24", finding["explanation"])
         self.assertNotIn("198.51.100.0/24", finding["explanation"])
         self.assertNotIn("exit node", finding["explanation"])
-        self.assertEqual([remedy["capability"] for remedy in finding["remedies"]], ["tailnet.routes.approve"])
+        self.assertEqual(
+            [remedy["capability"] for remedy in [step["link"] for step in finding["steps"] if step["kind"] == "press"]],
+            ["tailnet.routes.approve"],
+        )
 
     def test_an_exit_node_not_approved_says_it_cannot_be_used(self):
         devices(
@@ -211,11 +216,11 @@ class QueueTests(TestCase):
             }
         )
 
-        items = [item for item in worded(infrastructure()) if item.key.startswith("finding:tailnet-")]
+        items = [item for item in tuple(infrastructure()) if finding_key(item).startswith("finding:tailnet-")]
 
         self.assertEqual(machine("example-laptop").aliases, ("Someone’s Laptop",))
         self.assertEqual(
-            {item.key.split(":")[1] for item in items},
+            {finding_key(item).split(":")[1] for item in items},
             {
                 "tailnet-key-expiring",
                 "tailnet-device-unapproved",
@@ -225,8 +230,8 @@ class QueueTests(TestCase):
             },
         )
         for item in items:
-            with self.subTest(item.key):
-                self.assertTrue(item.key.endswith(":machine:example-laptop"))
-                self.assertEqual(item.subject.url, page("example-laptop"))
+            with self.subTest(finding_key(item)):
+                self.assertTrue(finding_key(item).endswith(":machine:example-laptop"))
+                self.assertEqual(item.subject_link.url, page("example-laptop"))
                 self.assertNotIn("Someone", item.title)
-                self.assertTrue(item.workflow.steps)
+                self.assertTrue(item.steps)

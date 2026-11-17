@@ -17,7 +17,8 @@ from hq.platform.application.routes import reverse
 
 from .derivations import reached, whole
 from .entity_links import web_url
-from .finding_model import Finding, FindingEstate, FindingRule, OperatorStep, opens
+from .finding_model import Finding, FindingEstate, FindingRule, opens
+from .finding_steps import Do, Run
 from .github_estate import (
     ARTIFACT_ATTENTION_DAYS,
     ARTIFACT_SERIOUS_DAYS,
@@ -123,11 +124,7 @@ def _failing(repo: Repository) -> Iterator[Said]:
         # Where the reading does not hold the failing runs, the command that lists them.
         steps=()
         if runs or not sha
-        else (
-            OperatorStep(
-                label="See the failing runs", command=f"gh run list -R {repo.name} --commit {sha} --status failure"
-            ),
-        ),
+        else (Run("See the failing runs", f"gh run list -R {repo.name} --commit {sha} --status failure"),),
     )
     yield finding, f"{repo.short} was failing on {repo.default_branch}"
 
@@ -212,23 +209,23 @@ def _lapsing(repo: Repository) -> Iterator[Said]:
         yield finding, f"{repo.short}'s admission was due to lapse in {days} days"
 
 
-def _posture_steps(check: Check, missing: list[Repository]) -> tuple[tuple[OperatorStep, ...], str]:
+def _posture_steps(check: Check, missing: list[Repository]) -> tuple[tuple[Run | Do, ...], str]:
     """Each repository's exact commands, or why there are none; beside
     commands, what they leave out is the last step, in words."""
 
     derive = COMMANDS.get(check.id)
     if derive is None:
         return (), REASONS[check.id]
-    runs = tuple(OperatorStep(label=label, command=command) for repo in missing for label, command in derive(repo))
+    runs = tuple(Run(label, command) for repo in missing for label, command in derive(repo))
     called = tuple(
-        OperatorStep(label=f"{repo.short}: check that {workflow} pins its own actions, then require pinning.")
+        Do(f"{repo.short}: check that {workflow} pins its own actions, then require pinning.")
         for repo in missing
         for workflow in (calls_workflows(repo) if check.id == "actions-pinned" else ())
     )
     said = left_out(check, missing)
     if not runs:
         return called, said
-    return runs + called + ((OperatorStep(label=said),) if said else ()), ""
+    return runs + called + ((Do(said),) if said else ()), ""
 
 
 def _posture(_estate: FindingEstate) -> tuple[Finding, ...]:

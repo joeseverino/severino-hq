@@ -12,7 +12,7 @@ from pydantic import ConfigDict, with_config
 
 from hq.domains.control_plane.provider_adapters.contracts import FAILURES, REFUSALS
 
-from . import finding_model, findings
+from . import finding_steps, findings
 from .answer_fields import AsRead, ObservedAt
 from .connection_catalog import AUTHORITY_LABELS, EVIDENCE_LABELS
 from .connection_contracts import CREDENTIAL_MODELS, GRANT_MODELS
@@ -305,7 +305,7 @@ class CredentialFixPart(TypedDict):
     expired: Annotated[bool, Describe("Whether it has run out.")]
     permissions: Annotated[list[str], Describe("Every permission the replacement is issued with.")]
     steps: Annotated[
-        list[Annotated[dict[str, Any], Written(finding_model.OperatorStep)]],
+        list[Annotated[dict[str, Any], Written(finding_steps.Run | finding_steps.Do)]],
         Describe("What you do to replace it, in order."),
     ]
 

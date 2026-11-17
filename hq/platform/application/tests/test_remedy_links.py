@@ -176,13 +176,13 @@ class EveryEmittedRemedyOpensReadyTests(TestCase):
         links: list[tuple[str, str, str]] = []
         with projection_scope():
             for finding in derive_findings(derive_topology(principal=principal), principal=principal):
-                links += [(remedy.label, remedy.url, remedy.method) for remedy in finding.remedies]
-                for step in finding.workflow.steps if finding.workflow else ():
-                    links += [(action.label, action.url, action.method) for action in step.actions]
+                offered = (*finding.presses, *((finding.check,) if finding.check else ()))
+                links += [(action.label, action.url, action.method) for action in offered]
             for item in work_queue():
-                links += [(action["label"], action["url"], action["method"]) for action in item["actions"]]
-                for step in (item["workflow"] or {}).get("steps", ()):
-                    links += [(action["label"], action["url"], action["method"]) for action in step.get("actions", ())]
+                offered = [*item["actions"], *(step["link"] for step in item["steps"] if step["kind"] == "press")]
+                links += [(action["label"], action["url"], action["method"]) for action in offered]
+                if item["check"]:
+                    links.append((item["check"]["label"], item["check"]["url"], item["check"]["method"]))
         return links + self.rendered()
 
     def pages(self) -> list[str]:

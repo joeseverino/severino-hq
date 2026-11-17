@@ -8,7 +8,6 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.platform.application.markup_testing import elements, text
-from hq.platform.application.tests.worded import worded
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 from hq_sdk.testing import plain
 
@@ -17,7 +16,8 @@ from ..container_findings import ADVISORY, UPDATE
 from ..containers import BEHIND, CURRENT, UNKNOWN, VULNERABLE, Running, Tally, containers, tally
 from ..derivation_testing import uncached
 from ..exposure import OPEN, PRIVATE, Exposure, RouteExposure, front_door_names, listening_ports
-from ..findings import rule_of
+from ..finding_steps import Do, Run
+from ..findings import finding_key, rule_of
 from ..github_estate import Repository
 
 
@@ -34,8 +34,8 @@ def queued(rule=""):
     """The containers' findings as the queue carries them, each keyed by its rule."""
 
     with uncached():
-        found = [item for item in worded(infrastructure()) if rule_of(item.key) in {ADVISORY, UPDATE}]
-    return tuple(item for item in found if not rule or rule_of(item.key) == rule)
+        found = [item for item in tuple(infrastructure()) if rule_of(finding_key(item)) in {ADVISORY, UPDATE}]
+    return tuple(item for item in found if not rule or rule_of(finding_key(item)) == rule)
 
 
 def inventory(kind, records):
@@ -155,33 +155,33 @@ class StandingTests(TestCase):
             (update,) = queued(UPDATE)
 
         self.assertEqual(
-            (advisory.part, advisory.subject.label, advisory.status),
+            (advisory.part, advisory.subject_link.label, advisory.severity),
             ("ghcr.io/example/app:v1.2.0", "example-box", "serious"),
         )
-        self.assertIn(("Container", "app"), advisory.facts)
-        self.assertIn("Fixed in 1.2.1", advisory.body)
+        self.assertIn(("Container", "app"), advisory.evidence)
+        self.assertIn("Fixed in 1.2.1", advisory.explanation)
         # The body is the images. What to do is a step, and why HQ does not
         # do it is one sentence that names no machine.
         self.assertEqual(update.part, "example/kuma:1")
-        self.assertIn("example/kuma:1 to 2.", update.body)
-        self.assertIn(("Container", "kuma"), update.facts)
+        self.assertIn("example/kuma:1 to 2.", update.explanation)
+        self.assertIn(("Container", "kuma"), update.evidence)
         # A card says how old its reading is, and leads with the containers' page.
         self.assertIsNotNone(update.observed_at)
-        self.assertEqual((update.action, update.url), ("Open containers", reverse("control_plane:containers")))
-        self.assertIn("v1.3.0", advisory.action)
-        steps = update.workflow.steps
         self.assertEqual(
-            [(step.phase, step.summary) for step in steps if step.phase in ("do", "cannot")],
-            [
+            (update.primary.label, update.primary.url), ("Open containers", reverse("control_plane:containers"))
+        )
+        self.assertIn("v1.3.0", advisory.primary.label)
+        self.assertEqual(
+            (update.steps, update.no_help_reason),
+            (
                 (
-                    "do",
-                    (
+                    Do(
                         "On example-box, set the image of kuma to docker.io/example/kuma:2 where it is defined, "
                         "then start it again."
                     ),
                 ),
-                ("cannot", "HQ cannot apply an update itself yet."),
-            ],
+                "HQ cannot apply an update itself yet.",
+            ),
         )
 
     def test_an_update_names_the_command_when_its_compose_project_was_read(self):
@@ -211,11 +211,10 @@ class StandingTests(TestCase):
 
         (item,) = [item for item in queued(UPDATE) if item.part == "example/kuma:1"]
 
-        (step,) = [step for step in item.workflow.steps if step.phase == "run"]
+        (step,) = [step for step in item.steps if isinstance(step, Run)]
         self.assertEqual(
-            (step.phase, step.label, step.summary),
+            (step.label, step.command),
             (
-                "run",
                 (
                     "On example-box, set the image of kuma to docker.io/example/kuma:2 in "
                     "/opt/apps/kuma/compose.override.yaml, then run"
@@ -233,10 +232,8 @@ class StandingTests(TestCase):
         estate(advisories=[HIGH])
 
         for item in queued():
-            if item.workflow is None:
-                continue
-            said = " ".join([item.body, *(step.summary for step in item.workflow.steps)])
-            with self.subTest(item=item.key):
+            said = " ".join([item.explanation, item.no_help_reason, *(str(step) for step in item.steps)])
+            with self.subTest(item=finding_key(item)):
                 self.assertEqual(said.count("cannot apply"), 1)
                 self.assertNotIn("sudo rule", said)
                 self.assertNotIn("helper", said)
@@ -253,7 +250,7 @@ class StandingTests(TestCase):
         with exposed(OPEN):
             (advisory,) = queued(ADVISORY)
 
-        self.assertEqual(advisory.status, "attention")
+        self.assertEqual(advisory.severity, "attention")
         self.assertIn("no release fixes it yet", advisory.title)
 
     def test_an_advisory_is_as_urgent_as_what_reaches_it(self):
@@ -261,7 +258,7 @@ class StandingTests(TestCase):
 
         def status():
             (advisory,) = queued(ADVISORY)
-            return advisory.status, advisory.body
+            return advisory.severity, advisory.explanation
 
         with exposed(OPEN):
             opened = status()

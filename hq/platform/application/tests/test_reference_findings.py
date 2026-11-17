@@ -109,7 +109,10 @@ class NamesNoDomainTests(TestCase):
             "app.typo.example at 192.0.2.10 cannot be applied anywhere.",
         )
         self.assertEqual(finding["severity"], "attention")
-        self.assertEqual([remedy["label"] for remedy in finding["remedies"]], [capability_words(UPDATE_CAPABILITY)])
+        self.assertEqual(
+            [remedy["label"] for remedy in [step["link"] for step in finding["steps"] if step["kind"] == "press"]],
+            [capability_words(UPDATE_CAPABILITY)],
+        )
 
     def test_a_domain_hq_expects_is_there_whether_or_not_it_was_read(self):
         self.read("example.com")
@@ -156,7 +159,10 @@ class NamesNoConnectionTests(TestCase):
             "nothing reads on-nothing and nothing applies HQ's config to it.",
         )
         self.assertIn({"label": "Connection it names", "value": "example-edge-2"}, finding["evidence"])
-        self.assertEqual([remedy["label"] for remedy in finding["remedies"]], [capability_words(UPDATE_CAPABILITY)])
+        self.assertEqual(
+            [remedy["label"] for remedy in [step["link"] for step in finding["steps"] if step["kind"] == "press"]],
+            [capability_words(UPDATE_CAPABILITY)],
+        )
 
     def test_nothing_is_said_before_a_controller_reports_its_connections(self):
         target("on-nothing", "example-edge-2")

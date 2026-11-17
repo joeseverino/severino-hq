@@ -11,6 +11,7 @@ from hq.platform.application.action_links import read_link
 from hq.platform.application.tests.links import example_command
 
 from ..cadence import ControllerSweepCommand
+from ..finding_steps import Run
 from ..findings import FINDINGS_SCHEMA_VERSION, derive_findings, finding_rules, findings, rule_for
 from ..security import Capability, Principal
 from ..topology import derive_topology
@@ -108,7 +109,7 @@ class FindingsTests(SentinelMixin, TestCase):
         observed(skipped, self.now - timedelta(hours=6))
 
         found = next(f for f in self.raised() if f.rule == "skipped-by-a-sweep")
-        remedy = found.remedies[0]
+        remedy = found.presses[0]
 
         self.assertEqual(remedy.capability, "infrastructure.resource.reconcile")
         self.assertEqual(remedy.target, "skipped-record")
@@ -144,7 +145,7 @@ class FindingsTests(SentinelMixin, TestCase):
 
         found = next(f for f in self.raised() if f.rule == "skipped-by-a-sweep")
 
-        offered = [(remedy.capability, remedy.label) for remedy in found.remedies]
+        offered = [(remedy.capability, remedy.label) for remedy in list(found.presses)]
         # Removal is offered only to a principal allowed to remove; the edit
         # that marks it on demand is the one every manager gets.
         self.assertEqual(offered[0], ("infrastructure.resource.update", "Mark it as running only sometimes"))
@@ -198,7 +199,7 @@ class FindingsTests(SentinelMixin, TestCase):
         self.assertNotIn("skipped-by-a-sweep", rules)
         self.assertEqual([f.subject for f in found], ["machine:example-host"])
         self.assertIn("example-env", found[0].title)
-        commands = [step.command for step in found[0].steps]
+        commands = [step.command for step in found[0].steps if isinstance(step, Run)]
         self.assertTrue(any("docker restart" in command and "io.portainer.server" in command for command in commands))
         self.assertTrue(all(command.startswith("ssh example-host ") for command in commands if command))
 
@@ -329,22 +330,16 @@ class FindingsTests(SentinelMixin, TestCase):
         )
         self.assertIn("focus=controller%3Aone", general[0].investigations[0].url)
         self.assertEqual(
-            [remedy.capability for remedy in general[0].remedies],
+            [remedy.capability for remedy in list(general[0].presses)],
             ["infrastructure.controller.refresh"],
         )
-        self.assertIn("next=%2Finfrastructure%2Ffindings%2F", general[0].remedies[0].url)
-        self.assertEqual(
-            [step.phase for step in general[0].workflow.steps],
-            ["act", "verify"],
-        )
-        self.assertEqual(general[0].workflow.outcome.kind, "claim_absent")
+        self.assertIn("next=%2Finfrastructure%2Ffindings%2F", general[0].presses[0].url)
         # The read its check asks for is carried beside the link that asks it, which names no kind of subject.
-        (verify,) = general[0].workflow.steps[1].actions
-        self.assertEqual(verify.capability, "infrastructure.controller.refresh")
+        self.assertEqual(general[0].check.capability, "infrastructure.controller.refresh")
         self.assertEqual(general[0].read_now, ControllerSweepCommand(every_connection=True))
         self.assertEqual([item.scope for item in raw], ["example.a", "example.b"])
         # "HQ dev" is not a name a shell takes, so no command is built on it.
-        self.assertEqual([step.command for step in general[0].steps], [""])
+        self.assertFalse([step for step in general[0].steps if isinstance(step, Run)])
 
     def test_the_controller_is_looked_at_with_commands_that_paste(self):
         from ..controller_findings import _controller_steps
@@ -683,9 +678,9 @@ class FindingsTests(SentinelMixin, TestCase):
         as_operator = self.raised(MANAGE)
         as_reader = self.raised(READ)
 
-        self.assertTrue(any(f.remedies for f in as_operator))
+        self.assertTrue(any(list(f.presses) for f in as_operator))
         self.assertTrue(as_reader, "the reader still sees the finding")
-        self.assertEqual([f.remedies for f in as_reader], [() for _ in as_reader])
+        self.assertEqual([list(f.presses) for f in as_reader], [[] for _ in as_reader])
 
     def test_findings_cannot_widen_what_the_principal_could_see(self):
         observed(self.rewrite("one"), self.now - timedelta(hours=9))
@@ -751,12 +746,11 @@ class FindingsTests(SentinelMixin, TestCase):
         self.assertEqual(whole["schema_version"], FINDINGS_SCHEMA_VERSION)
         self.assertTrue(any(item["offers"] for item in whole["findings"]))
         self.assertTrue(any(item["investigations"] for item in whole["findings"]))
-        self.assertTrue(any(item["workflow"] for item in whole["findings"]))
+        self.assertTrue(any(item["check"] for item in whole["findings"]))
         self.assertTrue(all(item["id"] for item in whole["findings"]))
-        # A remedy is a capability and its target on every door, so it names no door's route.
-        remedies = [remedy for item in whole["findings"] for remedy in item["remedies"]]
-        self.assertTrue(remedies)
-        self.assertTrue(all(remedy["capability"] and "url" not in remedy for remedy in remedies))
+        presses = [step["link"] for item in whole["findings"] for step in item["steps"] if step["kind"] == "press"]
+        self.assertTrue(presses)
+        self.assertTrue(all(press["capability"] for press in presses))
 
     def test_no_finding_carries_a_credential_a_controller_reported(self):
         plant_credentials()

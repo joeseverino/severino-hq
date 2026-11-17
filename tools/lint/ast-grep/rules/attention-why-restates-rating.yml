@@ -8,7 +8,7 @@ id: attention-why-restates-rating
 language: python
 severity: error
 message: An item's why restates its rating instead of saying why.
-note: Say the plain reason it stands at this level, the consequence or the bar it crossed (card_items.Insight.why).
+note: Say the plain reason it stands at this level, the consequence or the bar it crossed (finding_model.Finding.why).
 files:
   - "hq/**"
   - "demo/**"

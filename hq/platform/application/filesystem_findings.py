@@ -13,7 +13,8 @@ from typing import Any
 
 from hq.domains.control_plane.observations.host import FILESYSTEM_KIND
 
-from .finding_model import FindingRule, OperatorStep, cannot_run_commands, machine_step
+from .finding_model import FindingRule, cannot_run_commands, machine_step
+from .finding_steps import Run
 from .labels import human_bytes
 from .reading_facts import FactRow, OnEachMachine, rows_of, state_on_controller
 from .tone import Tone
@@ -94,7 +95,7 @@ def _share(filesystem: FilesystemSpace) -> str:
     return measured(filesystem.free * 100 / filesystem.total, "%", 1)
 
 
-def _steps(node: TopologyNode, row: FilesystemSpace) -> tuple[OperatorStep, ...]:
+def _steps(node: TopologyNode, row: FilesystemSpace) -> tuple[Run, ...]:
     mount = shlex.quote(row.mount)
     return (
         *machine_step(f"See the space on {row.mount}", node.label, f"df -h {mount}"),

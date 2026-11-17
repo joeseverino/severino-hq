@@ -86,8 +86,8 @@ class ContradictionTests(TestCase):
         (finding,) = raised("split-horizon-disagrees")
 
         self.assertIn("db.example.com goes to edge-1 from the internet and lab-1 from home", finding.title)
-        self.assertEqual([remedy.target for remedy in finding.remedies], ["example-db-rewrite"])
-        self.assertIn("example-db-rewrite", finding.remedies[0].reach[0])
+        self.assertEqual([remedy.target for remedy in finding.presses], ["example-db-rewrite"])
+        self.assertIn("example-db-rewrite", finding.presses[0].url)
 
     def test_disagreeing_answers_offer_to_change_each_record_hq_declares(self):
         db_record = record("db.example.com", "A", "198.51.100.20", proxied=False)
@@ -104,7 +104,7 @@ class ContradictionTests(TestCase):
         (finding,) = raised("split-horizon-disagrees")
 
         self.assertEqual(
-            {(remedy.target, remedy.intent) for remedy in finding.remedies},
+            {(remedy.target, remedy.label) for remedy in finding.presses},
             {
                 ("example-db-rewrite", "Change the internal record"),
                 ("example-db-record", "Change the public record"),
@@ -262,7 +262,7 @@ class ServedCertificateTests(TestCase):
         self.assertIn("app.example.com serves a certificate other than example-wildcard", finding.title)
         # The node's own reconcile action supplies the link where it is enabled.
         self.assertEqual(
-            [(remedy.capability, remedy.target) for remedy in finding.remedies],
+            [(remedy.capability, remedy.target) for remedy in finding.presses],
             [("infrastructure.resource.reconcile", "example-wildcard")],
         )
 

@@ -151,14 +151,14 @@ def describe_connections() -> ConnectionCatalog:
 
 @tool("Open findings", requires=holding(Capability.READ), arguments=FindingsQuery, budget=Budget(5_000))
 def get_findings(**narrowing: Any) -> AgentFindings:
-    """The open problems HQ found, most severe first, each with its evidence and remedies.
+    """The open problems HQ found, most severe first, each with its evidence and what to do about it.
 
     `system_health` says only whether HQ answers. The `status-brief` prompt
     returns health and problems together.
 
-    Every action a finding carries (a remedy, an offer, an investigation, a
-    step of its plan) is a tool call: send its `arguments` to its `tool`. A
-    finding lists only the remedies you may run.
+    Every action a finding carries (a press, its check, an offer, an
+    investigation) is a tool call: send its `arguments` to its `tool`. A
+    finding lists only the presses you may make.
 
     `severity` is a floor: `attention` also returns `serious`. `limit` caps
     how many come back, and without it only the few most severe do.

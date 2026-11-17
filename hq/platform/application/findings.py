@@ -18,6 +18,7 @@ from typing import Annotated, Any, Literal, TypedDict, cast
 from urllib.parse import urlencode
 
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from pydantic import ConfigDict, Field, create_model, with_config
 
 from hq.domains.control_plane.providers import PROVIDERS, enabled_controller_actions
@@ -72,14 +73,13 @@ from .finding_model import (
     FindingRemedy,
     FindingRule,
     Gathered,
-    OperatorStep,
     is_observable,
     parse_stamp,
 )
+from .finding_steps import Do, Press, Run, WrittenCheck, WrittenReason, WrittenSteps
 from .first_seen import recorded
 from .integration_validation import required_capability_names
 from .integrations import IntegrationGraph, held_graph, integration_graph
-from .json_schemas import Written
 from .projection import MAX_PAGE_SIZE, QUERY
 from .security import Principal
 from .tone import Tone
@@ -90,13 +90,7 @@ from .topology_model import (
     TopologyNode,
 )
 from .ui import ended
-from .workflows import (
-    WrittenAction,
-    WrittenWorkflow,
-    claim_identity,
-    claim_resolution_plan,
-    serialize_workflow,
-)
+from .workflows import WrittenAction, claim_identity
 lazy from . import cadence
 lazy from .automation_runs import playbook_remedies
 lazy from .domains import resources_of
@@ -216,13 +210,19 @@ if len(_RULE_BY_NAME) != len(RULES):
     raise ValueError("Two finding modules use the same rule name.")
 
 
-def finding_steps(finding: Finding) -> tuple[OperatorStep, ...]:
-    """What a person does to resolve it: its own steps, else its rule's."""
+def finding_steps(finding: Finding, *, pressed: bool = False) -> tuple[Run | Do, ...]:
+    """What a person does to resolve it: its own steps, else, where nothing
+    is ``pressed`` either, its rule's ``operator_action`` in words.
 
-    if finding.steps:
-        return finding.steps
+    A detector names its remedies and never a press, whose link is the
+    reader's to be offered or not (``_presses``), so one that writes a press
+    is refused."""
+
+    told = tuple(step for step in finding.steps if not isinstance(step, Press))
+    if len(told) < len(finding.steps):
+        raise ImproperlyConfigured(f"A finding of {finding.rule!r} carries a press; its detector names remedies.")
     found = _RULE_BY_NAME.get(finding.rule)
-    return (OperatorStep(label=found.operator_action),) if found else ()
+    return told or ((Do(found.operator_action),) if found and not pressed else ())
 
 
 def finding_rules() -> tuple[FindingRule, ...]:
@@ -317,17 +317,17 @@ def _playbooks(finding: Finding, subject: TopologyNode | None) -> tuple[FindingR
     return playbook_remedies(finding.rule, normalized_hostname(subject.label))
 
 
-def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | None) -> Finding:
-    """Drop remedies this principal cannot run, and take effect from the spec.
+def _presses(finding: Finding, principal: Principal, subject: TopologyNode | None) -> tuple[Press, ...]:
+    """Each remedy this principal may run, as the press that runs it, each route once.
 
     Absent rather than disabled: an offer that cannot work is worse than no
-    offer. The effect is copied from the capability registry rather than
-    restated by the rule, so a capability that becomes destructive tomorrow is
-    described as destructive tomorrow without anyone editing a rule.
+    offer. The effect is the capability registry's rather than the rule's, so
+    a capability that becomes destructive tomorrow is never offered tomorrow
+    without anyone editing a rule.
     """
 
     graph = integration_graph()
-    kept = []
+    pressed: dict[tuple[str, str], Press] = {}
     for remedy in (*finding.remedies, *_playbooks(finding, subject)):
         allowed, effect = _permitted(remedy.capability, principal, graph)
         if not allowed or effect is None or effect is Effect.DESTRUCTIVE:
@@ -340,54 +340,46 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
             ),
             None,
         )
-        reached = remedy.reach
-        kept.append(
-            FindingRemedy(
-                capability=remedy.capability,
-                target=remedy.target,
-                intent=remedy.intent,
-                variant=remedy.variant,
-                url=(action_with_return(action, "control_plane:findings").url if action else reached[0]),
-                method=action.method if action else reached[1],
-                auto=False,
-            )
+        url, method = (
+            (action_with_return(action, "control_plane:findings").url, action.method) if action else remedy.reach
         )
-    resolved_remedies = tuple(kept)
+        if url:
+            link = command_action(
+                "remedy",
+                remedy.capability,
+                url,
+                method=method,
+                target=remedy.target,
+                variant=remedy.variant,
+                intent=remedy.intent,
+                recommended=True,
+            )
+            pressed.setdefault((link.method, link.url), Press(link))
+    return tuple(pressed.values())
+
+
+def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | None) -> Finding:
+    """What derivation adds to a detector's finding: its remedies as the
+    presses this principal may make, then its steps, its reason, its check and
+    the pages about its subject."""
+
     offers = finding.offers + tuple(
         action
         for action in (subject.actions if subject else ())
         if action.effect == Effect.READ and action.method == "GET"
     )
     investigations = topology_investigation_links(subject.id) if subject else ()
-    remedy_actions = tuple(
-        command_action(
-            "remedy",
-            remedy.capability,
-            remedy.url,
-            method=remedy.method,
-            target=remedy.target,
-            variant=remedy.variant,
-            intent=remedy.intent,
-            recommended=True,
-        )
-        for remedy in resolved_remedies
-        if remedy.url
-    )
-    verification, read_now = _verification(finding, principal, subject)
-    workflow = claim_resolution_plan(
-        identity=finding_id(finding),
-        remedies=remedy_actions,
-        verification=verification,
-    )
+    presses = _presses(finding, principal, subject)
+    check, read_now = _verification(finding, principal, subject)
     # Every field the detector set carries through; only what derivation adds changes.
     return replace(
         finding,
-        remedies=resolved_remedies,
+        remedies=(),
         offers=offers,
         investigations=investigations,
-        workflow=workflow,
-        steps=finding_steps(finding),
+        steps=(*presses, *finding_steps(finding, pressed=bool(presses))),
         no_help_reason=_no_help_reason(finding),
+        check=check,
         subject_link=read_link("subject", subject.label, subject.url) if subject and subject.url else None,
         read_capabilities=_held_to(finding, subject, principal),
         read_now=read_now,
@@ -456,7 +448,7 @@ def _no_help_reason(finding: Finding) -> str:
     offer and no exact command to name. Judged before a principal's remedies
     are filtered: a remedy this reader may not run is still a remedy."""
 
-    if finding.remedies or any(step.command for step in finding.steps):
+    if finding.remedies or any(isinstance(step, Run) for step in finding.steps):
         return ""
     found = _RULE_BY_NAME.get(finding.rule)
     return finding.no_help_reason or (found.no_help_reason if found else "")
@@ -660,36 +652,14 @@ class FindingEvidence(TypedDict):
     value: Annotated[Any, Describe("What was found, most often a name or a sentence.")]
 
 
-# What running a suggested remedy does, as the API and MCP both say it.
-type RemedyEffect = Annotated[
-    str,
-    Describe(
-        "What running it does, in its command's own terms: `read`, `remote_write` or "
-        "`infrastructure_change`. A `destructive` one is never suggested."
-    ),
-]
-
-
-class SuggestedRemedy(TypedDict):
-    """A capability that would answer a finding, and the target it runs on."""
-
-    capability: Annotated[str, Describe("The command that would fix it, run with `target` as its target.")]
-    target: Annotated[Any, Describe("The record the command runs on.")]
-    label: Annotated[str, Describe("What running it does here, in the remedy's own words or its command's.")]
-    effect: RemedyEffect
-    auto: Annotated[
-        bool,
-        Describe("Whether HQ runs it unattended. A problem only proposes, so it reads false."),
-    ]
-
-
 class FindingFacts(TypedDict):
     """What a finding says the same at every door: what it is about, what it
-    rests on, and what the operator does by hand. Each door adds its actions."""
+    rests on, and why HQ cannot help where it cannot. Each door adds its steps
+    and actions."""
 
     id: Annotated[
         str,
-        Describe("The problem's id, the same at every read while it is open; its workflow's outcome names it."),
+        Describe("The problem's id, the same at every read while it is open."),
     ]
     rule: Annotated[str, Describe("The rule that found it, as the `rule` filter takes it.")]
     subject: Annotated[
@@ -705,14 +675,7 @@ class FindingFacts(TypedDict):
     severity: Annotated[str, Describe(f"How serious it is: {listed(Tone)}, most severe first.")]
     explanation: Annotated[str, Describe("Why it matters and what it rests on, in sentences.")]
     evidence: Annotated[list[FindingEvidence], Describe("What it rests on, a labeled line each.")]
-    operator_steps: Annotated[
-        list[Annotated[dict[str, Any], Written(OperatorStep)]],
-        Describe("What you do by hand to resolve it, in order. HQ never runs these."),
-    ]
-    no_help_reason: Annotated[
-        str | None,
-        Describe("Why HQ can neither run a fix nor name an exact command for it; null when it can do either."),
-    ]
+    no_help_reason: WrittenReason
     since: Annotated[
         str | None,
         Describe("When it was first seen open, an ISO 8601 instant; null where no read has recorded it."),
@@ -722,18 +685,12 @@ class FindingFacts(TypedDict):
 class SerializedFinding(FindingFacts):
     """One finding as the API answers it; MCP's `get_findings` makes its actions tool calls."""
 
-    remedies: Annotated[
-        list[SuggestedRemedy],
-        Describe("The commands that would fix it which this reader may run, none of them destructive."),
-    ]
+    steps: WrittenSteps
+    check: WrittenCheck
     offers: Annotated[list[WrittenAction], Describe("Reads of its subject this reader may run before acting.")]
     investigations: Annotated[
         list[WrittenAction],
         Describe("Where on the map to look around its subject: its neighborhood and what it affects."),
-    ]
-    workflow: Annotated[
-        WrittenWorkflow | None,
-        Describe("The plan that resolves it, a fix and then the check that confirms it; null when it has neither."),
     ]
 
 
@@ -748,8 +705,7 @@ def finding_facts(finding: Finding) -> FindingFacts:
         "severity": finding.severity,
         "explanation": finding.explanation,
         "evidence": [{"label": label, "value": value} for label, value in finding.evidence],
-        "operator_steps": [asdict(step) for step in finding.steps],
-        "no_help_reason": finding.no_help_reason or None,
+        "no_help_reason": finding.no_help_reason,
         "since": finding.since.isoformat() if finding.since else None,
     }
 
@@ -757,19 +713,10 @@ def finding_facts(finding: Finding) -> FindingFacts:
 def serialize_finding(finding: Finding) -> SerializedFinding:
     return {
         **finding_facts(finding),
-        "remedies": [
-            {
-                "capability": remedy.capability,
-                "target": remedy.target,
-                "label": remedy.label,
-                "effect": remedy.effect,
-                "auto": remedy.auto,
-            }
-            for remedy in finding.remedies
-        ],
+        "steps": [asdict(step) for step in finding.steps],
+        "check": asdict(finding.check) if finding.check else None,
         "offers": [asdict(action) for action in finding.offers],
         "investigations": [asdict(action) for action in finding.investigations],
-        "workflow": serialize_workflow(finding.workflow),
     }
 
 
@@ -804,7 +751,7 @@ FindingsQuery = create_model(
 
 
 # The shape findings answers in; it moves when that shape does.
-FINDINGS_SCHEMA_VERSION = 2
+FINDINGS_SCHEMA_VERSION = 3
 
 
 class FindingsSummary(TypedDict):
@@ -946,7 +893,7 @@ def auto_remediable(*, principal: Principal, limit: int = 10) -> tuple[Repair, .
 
     repairs = []
     for finding in raised:
-        if finding.rule not in _AUTO_RULES or not finding.remedies:
+        if finding.rule not in _AUTO_RULES or not finding.presses:
             continue
         node = by_id.get(finding.subject)
         if node is None or node.kind_key not in automatic_kinds:

@@ -581,14 +581,7 @@ class QueueTests(TestCase):
             with self.subTest(rule=rule):
                 self.assertIn(f"hq.infrastructure:finding:{rule}:{subject}", keys)
         for finding in raised("unit-failed"):
-            verify = [
-                action
-                for step in finding["workflow"]["steps"]
-                for action in step["actions"]
-                if action["name"] == "verify"
-            ]
-            self.assertEqual(len(verify), 1)
-            self.assertIn(f"kind={UNIT_KIND}", verify[0]["url"])
+            self.assertIn(f"kind={UNIT_KIND}", finding["check"]["url"])
 
 
 class FactTests(SimpleTestCase):

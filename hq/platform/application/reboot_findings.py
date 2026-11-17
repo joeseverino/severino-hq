@@ -15,7 +15,8 @@ from typing import Any
 
 from hq.domains.control_plane.observations.host import EDGE_REBOOT_KIND, REBOOT_KIND
 
-from .finding_model import Finding, FindingEstate, FindingRule, OperatorStep, cannot_run_commands, machine_step
+from .finding_model import Finding, FindingEstate, FindingRule, cannot_run_commands, machine_step
+from .finding_steps import Run
 from .moments import moment, when
 from .reading_facts import FactRow, OnEachMachine, rows_of, state_on_controller, taken_at
 from .tone import Tone
@@ -145,7 +146,7 @@ def _evidence(row: RebootState) -> tuple[tuple[str, str], ...]:
     )
 
 
-def _steps(node: TopologyNode, row: RebootState) -> tuple[OperatorStep, ...]:
+def _steps(node: TopologyNode, row: RebootState) -> tuple[Run, ...]:
     waits = (
         machine_step("See what waits on the restart", node.label, "cat /run/reboot-required.pkgs")
         if row.waiting

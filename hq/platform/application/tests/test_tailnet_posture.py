@@ -9,9 +9,8 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection
 from hq.platform.application.markup_testing import texts
-from hq.platform.application.tests.worded import worded
 
-from ..findings import findings
+from ..findings import finding_key, findings
 from ..inventory_testing import store
 from ..security import Capability, Principal
 from ..tailnet import TAILNET_KIND, WELL_KNOWN_PORTS, grant_ports
@@ -99,7 +98,7 @@ class DeviceApprovalTests(TestCase):
 
         policy(settings={"devicesApprovalOn": False})
 
-        keys = [item.key for item in worded(infrastructure())]
+        keys = [finding_key(item) for item in tuple(infrastructure())]
 
         self.assertTrue(any(key.startswith("finding:devices-join-without-approval") for key in keys))
 
@@ -141,8 +140,8 @@ class EmptyGroupTests(TestCase):
         (finding,) = raised("empty-group-granted")
 
         self.assertTrue(finding["title"].startswith("2 groups have"))
-        (step,) = finding["operator_steps"]
-        self.assertIn("group:one, group:two", step["label"])
+        (step,) = finding["steps"]
+        self.assertIn("group:one, group:two", step["text"])
 
 
 class TagGrantedToNobodyTests(TestCase):
@@ -167,8 +166,8 @@ class TagGrantedToNobodyTests(TestCase):
 
         self.assertTrue(finding["title"].startswith("2 tags are"))
         self.assertNotIn("tag:one", finding["explanation"])
-        (step,) = finding["operator_steps"]
-        self.assertIn("tag:one, tag:two", step["label"])
+        (step,) = finding["steps"]
+        self.assertIn("tag:one, tag:two", step["text"])
 
 
 class RefusedConnectionTests(TestCase):
@@ -442,7 +441,7 @@ class GrantReachesOnlyLoopbackTests(TestCase):
         self.assertIn("HQ listens on 8000 only on loopback", finding["explanation"])
         self.assertNotIn("443", finding["title"])
         self.assertIn({"label": "Port", "value": "example-host tcp:8000"}, finding["evidence"])
-        grant, test = (json.loads(step["command"]) for step in finding["operator_steps"] if step["command"])
+        grant, test = (json.loads(step["command"]) for step in finding["steps"] if step["kind"] == "run")
         # The grant as written, every key kept, without the port.
         self.assertEqual(
             grant,

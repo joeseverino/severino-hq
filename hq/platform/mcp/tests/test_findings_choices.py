@@ -13,7 +13,8 @@ from mcp import Client
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.platform.application.capabilities import capability_registry
-from hq.platform.application.finding_model import Finding, FindingRemedy
+from hq.platform.application.finding_model import Finding
+from hq.platform.application.finding_steps import Press
 from hq.platform.application.findings import RULES, derive_findings
 from hq.platform.application.security import Capability, Principal
 from hq.platform.application.tests.inventory_records import kind_read
@@ -36,8 +37,31 @@ RAISED = Finding(
     severity="attention",
     explanation="Example.",
     evidence=(("Seen", "example"),),
-    remedies=(FindingRemedy("infrastructure.resource.reconcile", "example-subject"),),
+    # As resolution leaves it: its remedy the press that runs it.
+    steps=(
+        Press(
+            example_command(
+                "remedy",
+                "Reconcile",
+                "remote_write",
+                "/commands/infrastructure.resource.reconcile/",
+                capability="infrastructure.resource.reconcile",
+                target="example-subject",
+            )
+        ),
+    ),
 )
+
+
+def press_shape(item):
+    """The schema of a step HQ runs, among the kinds a finding's steps take."""
+
+    steps = item["properties"]["steps"]["items"]
+    return next(
+        shape
+        for shape in steps.get("anyOf") or steps.get("oneOf") or (steps,)
+        if shape["properties"]["kind"].get("const") == "press"
+    )
 
 
 def session(*asked):
@@ -84,7 +108,7 @@ class FindingsChoicesTests(TestCase):
         for held, shape in (
             (answer.structured_content, success),
             (finding, item),
-            (finding["remedies"][0], item["properties"]["remedies"]["items"]),
+            (finding["steps"][0], press_shape(item)),
         ):
             with self.subTest(held=sorted(held)):
                 self.assertLessEqual(set(held), set(shape["properties"]))
@@ -97,11 +121,10 @@ def actions(finding):
     """Every action ``finding`` carries, by where it sits."""
 
     # A list left out holds its default, none.
-    yield from (("remedies", call) for call in finding.get("remedies", ()))
+    yield from (("steps", step["call"]) for step in finding.get("steps", ()) if step["kind"] == "press")
+    yield from (("check", call) for call in finding.get("check", ()))
     yield from (("offers", call) for call in finding.get("offers", ()))
     yield from (("investigations", call) for call in finding.get("investigations", ()))
-    for step in (finding.get("workflow") or {}).get("steps", ()):
-        yield from ((f"workflow.{step['phase']}", call) for call in step.get("calls", ()))
 
 
 def paths(value, where="answer"):
@@ -146,9 +169,9 @@ class FindingActionsTests(TestCase):
         self.assertFalse(answer.is_error)
         found = answer.structured_content["findings"]
         carried = [(where, call) for finding in found for where, call in actions(finding)]
-        # Each place an action sits was read: a remedy, an offer, an investigation and a workflow's check.
+        # Each place an action sits was read: a press, an offer, an investigation and a check.
         self.assertLessEqual(
-            {"remedies", "offers", "investigations", "workflow.verify"},
+            {"steps", "offers", "investigations", "check"},
             {where for where, _ in carried},
             [(finding["rule"], finding.get("subject")) for finding in found],
         )
@@ -183,9 +206,8 @@ class FindingActionsTests(TestCase):
         def shapes(schema):
             yield from schema.get("anyOf") or (schema,)
 
-        lists = {name: item["properties"][name]["items"] for name in ("remedies", "offers", "investigations")}
-        workflow = item["properties"]["workflow"]
-        lists["workflow"] = workflow["properties"]["steps"]["items"]["properties"]["calls"]["items"]
+        lists = {name: item["properties"][name]["items"] for name in ("check", "offers", "investigations")}
+        lists["steps"] = press_shape(item)["properties"]["call"]
         for name, schema in lists.items():
             for shape in shapes(schema):
                 with self.subTest(actions=name, tool=shape["properties"]["tool"]):
@@ -237,16 +259,16 @@ class FindingPlanTests(TestCase):
             _, (answer,) = session(("get_findings", {}))
 
         (finding,) = answer.structured_content["findings"]
-        act, verify = finding["workflow"]["steps"]
+        (act,) = [step for step in finding["steps"] if step["kind"] == "press"]
         refresh = "infrastructure.controller.refresh"
         self.assertEqual(
-            [(call["tool"], call["arguments"]) for call in act["calls"]],
+            [(act["call"]["tool"], act["call"]["arguments"])],
             # A null target and an empty payload are left out, as the call takes them.
             [("execute_capability", {"name": refresh})],
         )
         # The read the check asks for is its payload, then the check itself is this read again.
         self.assertEqual(
-            [(call["tool"], call["arguments"]) for call in verify["calls"]],
+            [(call["tool"], call["arguments"]) for call in finding["check"]],
             [
                 ("execute_capability", {"name": refresh, "payload": {"every_connection": True}}),
                 ("get_findings", {"rule": finding["rule"]}),

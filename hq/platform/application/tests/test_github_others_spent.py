@@ -9,6 +9,7 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS
 
+from ..finding_steps import Run
 from ..findings import derive_findings
 from ..inventory import record_inventory
 from ..security import cli_principal
@@ -102,7 +103,7 @@ class OthersSpendTests(TestCase):
         ]
         self.assertEqual([finding.subject], connections)
         self.assertIn(("Requests", "1,100"), finding.evidence)
-        commands = [step.command for step in finding.steps if step.command]
+        commands = [step.command for step in finding.steps if isinstance(step, Run)]
         self.assertIn(
             "openssl rsa -in PATH_TO_PEM_FILE -pubout -outform DER | openssl sha256 -binary | openssl base64", commands
         )

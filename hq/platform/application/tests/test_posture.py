@@ -261,7 +261,7 @@ class FindingTests(TestCase):
         self.assertIn("tailnet-policy", {found.check.id for found in unread})
 
         found = raised(RULE)
-        steps = [step["label"] for item in found for step in item["operator_steps"]]
+        steps = [step.get("label") or step["text"] for item in found for step in item["steps"]]
         for waiting in unread:
             with self.subTest(check=waiting.check.id):
                 self.assertNotIn(f"posture.{waiting.check.id}", {item["scope"] for item in found})

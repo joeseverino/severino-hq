@@ -14,7 +14,8 @@ from typing import Any, Self
 from .labels import dotted
 from .tone import Tone
 lazy from . import dashboard
-lazy from .finding_model import Finding, OperatorStep
+lazy from .finding_model import Finding
+lazy from .finding_steps import Do
 lazy from .workflow_contracts import ActionLink
 
 
@@ -279,7 +280,7 @@ def unmet_finding(
         explanation=check.why,
         evidence=evidence,
         offers=offers,
-        steps=(OperatorStep(label=check.fix),),
+        steps=(Do(check.fix),) if check.fix else (),
     )
 
 

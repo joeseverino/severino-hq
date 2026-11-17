@@ -3,10 +3,10 @@
 A section raises nothing of its own: an item is a finding of a rule about its
 records (``FindingRule.domain``), or a change an agent asked for that waits on
 a person. Each is a ``Finding``, as an extension's are, and reaches a page
-worded by ``finding_insight``.
+worded by ``dashboard.finding_rows``.
 """
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from dataclasses import asdict
 from typing import Any, cast
 
@@ -14,11 +14,9 @@ from django.core.exceptions import ImproperlyConfigured
 
 from hq.platform.application.routes import reverse
 
-from .card_items import Insight
 from .finding_model import Finding, FindingRule, opens
-from .findings import estate_findings, finding_key, finding_rules, rule_for
+from .findings import estate_findings, finding_rules, rule_for
 from .infrastructure import ResourceState, enabled_resources, resource_health
-from .item_help import finding_plan
 from .labels import lower_first
 from .projection import read_once
 from .security import cli_principal, internal_principal
@@ -118,54 +116,6 @@ def _subject_confirmed(finding: Any, actionable_keys: set[str], actionable_kinds
     if finding.subject.startswith("resource:"):
         return finding.subject.removeprefix("resource:") in actionable_keys
     return bool(finding.subject) or not finding.scope or finding.scope in actionable_kinds
-
-
-def finding_insight(finding: Finding, findings_url: str) -> Insight:
-    """A finding as the queue's card carries it, wherever it is drawn: what
-    was read that shows it, its plan, and the pages that help look into it.
-
-    A host rule's finding is said in its rule's words; one no host rule
-    raises (an extension's, a held request) says its own ``family``, ``why``
-    and ``clears``."""
-
-    rule = rule_for(finding.rule)
-    return Insight(
-        status=finding.severity,
-        eyebrow="Finding",
-        # A rule's findings are one kind of matter, named as the rule names itself.
-        family=rule.title if rule is not None else finding.family,
-        why=finding_why(finding, rule),
-        clears=rule.clears if rule is not None else finding.clears,
-        held=finding.held,
-        key=finding_key(finding),
-        title=finding.title,
-        value=str(finding.count) if finding.count else "",
-        magnitude=finding.count,
-        notice=finding.notice,
-        awaiting_fix=finding.awaiting_fix,
-        body=finding.explanation,
-        action=finding.primary.label if finding.primary else "",
-        # A finding of a page's own (an unmet check, a step a request contradicts) has no rule the findings page lists.
-        url=finding.primary.url if finding.primary else f"{findings_url}?rule={finding.rule}" if rule else "",
-        subject=finding.subject_link,
-        since=finding.since,
-        observed_at=finding.observed_at,
-        reads=finding.reads,
-        workflow=finding_plan(finding, finding_key(finding)),
-        facts=finding.evidence,
-        links=_dedupe_links((*finding.investigations, *finding.offers)),
-        read_capabilities=finding.read_capabilities,
-        part=finding.part,
-    )
-
-
-def _dedupe_links(links: Iterable[Any]) -> tuple[Any, ...]:
-    """Each page once, by its label."""
-
-    seen: dict[str, Any] = {}
-    for link in links:
-        seen.setdefault(link.label, link)
-    return tuple(seen.values())
 
 
 def _approval_entry(held) -> str:

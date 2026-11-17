@@ -540,27 +540,29 @@ Remedies remain references to registered capabilities. Read-only "what HQ can
 do now" links come from the subject node's canonical actions, rather than a
 second workflow registry.
 
-Each serialized finding may include a domain-neutral `workflow`: ordered steps
-whose actions are canonical `ActionLink` contracts, plus a `claim_absent`
-outcome keyed to the finding's stable claim ID. The workflow is guidance, not a
+Each serialized finding carries its help as `steps`, in order, each told
+apart by its `kind`: `press`, a canonical `ActionLink` to a registered
+capability the reader may run; `run`, a command the operator runs on their own
+machine; `do`, what to do in words. `no_help_reason` says why HQ offers no
+command, and `check` is the link that reads it again. A step is guidance, not a
 second executor; every mutation still names and enters a registered capability.
 
 MCP's `get_findings` answers the same findings in a shape of its own
-(`hq/platform/mcp/finding_actions.py`, `schema_version` 3), since an agent
+(`hq/platform/mcp/finding_actions.py`, `schema_version` 4), since an agent
 cannot follow a web path. Every action is a tool call, `{label, tool,
 arguments}`, built from what the finding holds and never read out of a URL.
 
 | Action | Call |
 |---|---|
-| a remedy, or a workflow step's command | `execute_capability` with `name`, `target` (null where the capability takes none) and `payload`; a remedy adds its `effect` |
+| a `press` step | its `call`: `execute_capability` with `name`, `target` (null where the capability takes none), `payload` and the command's `effect` |
 | an offer of its subject's own page | `get_resource` of `relationships`, the subject's node id as `identifier` |
 | an investigation | `get_topology` with the subject as `focus`, and the trace `action_links.INVESTIGATIONS` declares |
-| a workflow's check | the read it asks for, through `execute_capability` with its `payload`, then `get_findings` with the finding's `rule` |
+| its `check` | the read it asks for, through `execute_capability` with its `payload`, then `get_findings` with the finding's `rule` |
 
 A `payload` holds what HQ already knows; the agent adds an `idempotency_key`
 for an effect other than `read`, and any field the capability's schema
 requires. An action none of these derives is left out, as is a page elsewhere
-(a connection's settings, outside documentation). `operator_steps` are the
+(a connection's settings, outside documentation). `run` and `do` steps are the
 same on both doors. The `status-brief` prompt carries the problems in this shape.
 
 The `analytics` resource reports `coverage` for the requested completed-day

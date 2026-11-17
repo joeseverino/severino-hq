@@ -187,7 +187,7 @@ class EveryFindingIsActionableTests(TestCase):
         for finding in emitted:
             with self.subTest(rule=finding.rule, title=finding.title):
                 self.assertTrue(
-                    finding.remedies or finding.subject,
+                    finding.presses or finding.subject,
                     f"{finding.rule} raises a claim with no capability to run and "
                     "no subject to open, so nothing can ever clear it",
                 )
@@ -517,7 +517,7 @@ class UnrecognizedContainerTests(TestCase):
         from ..inventory import record_token
 
         (finding,) = self.found()
-        (remedy,) = finding.remedies
+        (remedy,) = finding.presses
         (item,) = unmanaged()
         token = record_token("portainer.container", ("a-docker-host", "a-stray"))
 
@@ -538,7 +538,7 @@ class UnrecognizedContainerTests(TestCase):
             get_user_model().objects.create_user(username="operator", password="test-only-password")
         )
 
-        self.client.post(finding.remedies[0].url, form_keyed())
+        self.client.post(finding.presses[0].url, form_keyed())
 
         self.assertTrue(ManagedResource.objects.filter(kind="portainer.container", spec__name="a-stray").exists())
         self.assertEqual(self.found(), [])

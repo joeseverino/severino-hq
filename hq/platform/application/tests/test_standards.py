@@ -94,7 +94,7 @@ class UnmetCheckRowTests(SimpleTestCase):
 
         (row,) = measurement.finding_rows
 
-        self.assertIn("Turn the alerts on.", str(row["workflow"]))
+        self.assertIn("Turn the alerts on.", str(row["steps"]))
         self.assertEqual(row["action"], "")
         # No rule the findings page lists raised it.
         self.assertEqual(row["url"], "")

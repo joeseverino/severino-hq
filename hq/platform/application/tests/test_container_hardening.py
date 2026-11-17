@@ -7,13 +7,12 @@ from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.platform.application.markup_testing import select, text
-from hq.platform.application.tests.worded import worded
 
 from ..attention import infrastructure
 from ..containers import containers
 from ..derivation_testing import uncached
 from ..exposure import OPEN, PRIVATE
-from ..findings import rule_of
+from ..findings import finding_key, rule_of
 from ..pages import command_reach
 from .test_container_standard import KEPT, runtime
 from .test_containers import HIGH, estate, exposed, inventory
@@ -263,14 +262,14 @@ class FindingHelpTests(TestCase):
 
         with uncached():
             return {
-                (rule_of(item.key), name): item
-                for item in worded(infrastructure())
-                if rule_of(item.key)
-                for name in [value for label, value in item.facts if label == "Container"] or [item.part]
+                (rule_of(finding_key(item)), name): item
+                for item in tuple(infrastructure())
+                if rule_of(finding_key(item))
+                for name in [value for label, value in item.evidence if label == "Container"] or [item.part]
             }
 
     def remedies(self, item):
-        return [action for step in item.workflow.steps for action in step.actions if action.name == "remedy"]
+        return list(item.presses)
 
     def test_the_socket_item_offers_to_mark_a_watched_container_and_to_adopt_one_unwatched(self):
         estate()
@@ -319,8 +318,8 @@ class FindingHelpTests(TestCase):
 
         item = self.items()["container-hardening", "web"]
 
-        self.assertTrue(any(link.url.endswith("/example-box-web/#hardening") for link in item.links))
-        self.assertIn(item.subject.url, {link.url for link in item.links})
+        self.assertTrue(any(link.url.endswith("/example-box-web/#hardening") for link in item.pages))
+        self.assertIn(item.subject_link.url, {link.url for link in item.pages})
 
     def test_an_advisory_says_which_upgrade_clears_it_and_why_it_cannot_run_yet(self):
         estate(advisories=[HIGH])
@@ -328,10 +327,10 @@ class FindingHelpTests(TestCase):
 
         item = self.items()["container-image-advisory", "app"]
 
-        said = {step.phase: step.summary for step in item.workflow.steps}
-        self.assertIn("ghcr.io/example/app:v1.3.0", said["do"])
-        self.assertEqual(said["cannot"], "HQ cannot apply an update itself yet.")
-        self.assertTrue(item.url.endswith("/example-box-app/#upgrade"))
+        (said,) = item.steps
+        self.assertIn("ghcr.io/example/app:v1.3.0", said.text)
+        self.assertEqual(item.no_help_reason, "HQ cannot apply an update itself yet.")
+        self.assertTrue(item.primary.url.endswith("/example-box-app/#upgrade"))
 
     def test_a_watched_update_leads_with_its_upgrade_plan(self):
         estate()
@@ -339,9 +338,9 @@ class FindingHelpTests(TestCase):
 
         item = self.items()["container-image-update", "kuma"]
 
-        self.assertEqual(item.action, "Upgrade plan for kuma")
-        self.assertTrue(item.url.endswith("/example-box-kuma/#upgrade"))
-        self.assertIn(reverse("control_plane:containers"), [link.url for link in item.links])
+        self.assertEqual(item.primary.label, "Upgrade plan for kuma")
+        self.assertTrue(item.primary.url.endswith("/example-box-kuma/#upgrade"))
+        self.assertIn(reverse("control_plane:containers"), [link.url for link in item.pages])
 
     def test_an_unwatched_advisory_is_updated_by_hand_with_no_plan(self):
         estate(advisories=[HIGH])
@@ -351,8 +350,8 @@ class FindingHelpTests(TestCase):
         # Adopting plans an upgrade but does not clear the advisory, so it is
         # no remedy here; the card still says how to move the image by hand.
         self.assertEqual(self.remedies(item), [])
-        self.assertIn("ghcr.io/example/app:v1.3.0", {step.phase: step.summary for step in item.workflow.steps}["do"])
-        self.assertFalse(any(link.url.endswith("#upgrade") for link in item.links))
+        self.assertIn("ghcr.io/example/app:v1.3.0", item.steps[0].text)
+        self.assertFalse(any(link.url.endswith("#upgrade") for link in item.pages))
 
     def test_a_private_advisory_no_release_fixes_is_not_an_action_item(self):
         estate(advisories=[HIGH], app_tags=("v1.2.0",))
@@ -368,4 +367,4 @@ class FindingHelpTests(TestCase):
         item = self.items()["container-image-advisory", "app"]
 
         self.assertEqual(self.remedies(item), [])
-        self.assertFalse(any("#upgrade" in link.url for link in item.links))
+        self.assertFalse(any("#upgrade" in link.url for link in item.pages))

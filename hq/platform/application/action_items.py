@@ -26,6 +26,7 @@ from .security import Principal, person
 lazy from . import dashboard
 lazy from .decisions import decision
 lazy from .domains import attention_urls
+lazy from .finding_model import Finding
 
 # How long a set-aside mark outlives its item before it is deleted. A mark
 # never hides an item raised again after it (``with_aside_state``).
@@ -72,7 +73,7 @@ def item_key(source_id: str, key: str) -> str:
     return f"{source_id}:{key}"[:ITEM_KEY_LENGTH]
 
 
-def item_revision(item: Any) -> str:
+def item_revision(finding: Finding) -> str:
     """What makes a dismissed item come back.
 
     Something to resolve returns when it gets worse or stands for more, never
@@ -80,7 +81,7 @@ def item_revision(item: Any) -> str:
     notice has nothing to get worse: it returns when it reports something else.
     """
 
-    seen = ["notice", item.body] if item.notice else [item.status, item.magnitude or 1]
+    seen = ["notice", finding.explanation] if finding.notice else [finding.severity, finding.count or 1]
     # A set-aside revision is stored as this digest of spaced JSON; on
     # digest's form every item set aside would come back.
     # ast-grep-ignore: json-digest-by-digests

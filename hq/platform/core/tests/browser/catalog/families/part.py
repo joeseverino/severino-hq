@@ -2,7 +2,7 @@
 
 import json
 from collections.abc import Callable
-from dataclasses import replace
+from dataclasses import asdict, replace
 from datetime import UTC, date, datetime, timedelta
 from unittest import mock
 from uuid import UUID
@@ -31,7 +31,7 @@ from hq.platform.application.contracts import Effect
 from hq.platform.application.credential_mint import CredentialFix
 from hq.platform.application.drawings import AllocationBar, Dot, Dots, Share, StripTile, Trend
 from hq.platform.application.entity_links import EntityLink
-from hq.platform.application.finding_model import OperatorStep
+from hq.platform.application.finding_steps import Do, Run
 from hq.platform.application.freshness import CURRENT, STALE, Freshness
 from hq.platform.application.pages import Page, PageAction, PageVisit, RowMark, RowOrder
 from hq.platform.application.payload_words import ChangeRow
@@ -1199,9 +1199,9 @@ ENTRIES = {
         "{% step %}<strong>Check the example</strong>{% endstep %}"
         "{% endsteps %}{% endsection %}",
         {
-            "step": OperatorStep(
-                label="Make a new example token on your Mac",
-                command="example-mint --account example-01 --item example-token --permission example.read",
+            "step": Run(
+                "Make a new example token on your Mac",
+                "example-mint --account example-01 --item example-token --permission example.read",
                 notes=("HQ could not tell which example account holds it.", "Then press Refresh."),
             )
         },
@@ -2438,12 +2438,10 @@ ENTRIES |= {
     "part/referenced-by": Entry(context={"machine": {"name": "example-host-01"}, "request": _SIGNED_IN}),
     "part/resolution-workflow": Entry(
         context={
-            "plan": {
-                "steps": (
-                    {"label": "Renew the example certificate", "phase": "run", "summary": "example-cli renew"},
-                    {"label": "Read it again", "phase": "check", "summary": "HQ reads the example host once it runs."},
-                )
-            }
+            "steps": (
+                asdict(Run("Renew the example certificate", "example-cli renew")),
+                asdict(Do("Read it again once the example host runs it.")),
+            )
         }
     ),
     "part/row-editor": Entry(

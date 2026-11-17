@@ -379,7 +379,7 @@ class RenderedFixTests(TestCase):
         from ..findings import findings
 
         found = findings(principal=cli_principal(), rule="credential-missing-permissions")
-        steps = found["findings"][0]["operator_steps"]
+        steps = found["findings"][0]["steps"]
 
         self.assertIn("--store", steps[0]["command"])
         self.assertNotIn(SECRET, repr(found))

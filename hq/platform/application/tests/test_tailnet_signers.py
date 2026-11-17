@@ -61,9 +61,9 @@ class SignerTests(TestCase):
         (finding,) = raised()
 
         self.assertEqual((finding["subject"], finding["severity"]), ("machine:example-server", "serious"))
-        commands = [step["command"] for step in finding["operator_steps"]]
+        commands = [step["command"] for step in finding["steps"]]
         self.assertEqual(commands, [f"tailscale lock remove {SERVER_KEY}"])
-        self.assertIn("another signing device", finding["operator_steps"][0]["label"])
+        self.assertIn("another signing device", finding["steps"][0]["label"])
         # The tailnet page's row of signing devices links to it.
         context = tailnet_context(principal=EVERYTHING)
         (row,) = (setting for setting in context.settings if setting.problem_url)

@@ -103,7 +103,7 @@ domain; the SDK owns integration mechanics:
 | --- | --- |
 | Manifest and navigation | `hq_sdk.plugin` |
 | Capabilities, principals, strict JSON commands | `hq_sdk.capabilities` |
-| Claim-resolution plans and workflow actions | `hq_sdk.workflows` |
+| A link to a page or an HQ command | `hq_sdk.workflows` |
 | Read resources, strict filters, search projection | `hq_sdk.resources` |
 | Connections | `hq_sdk.connections` |
 | Capability-gated Django views | `hq_sdk.web` |
@@ -557,12 +557,18 @@ is wrong and holds what fixes it"):
 
 | Field | For |
 | --- | --- |
-| `Insight.actions` | what can be pressed |
-| `Insight.action` with `Insight.url` | the page the work is done on (a short label; a sentence is shown as a sentence) |
-| `Insight.workflow` | commands and their check |
-| `Insight.since` | the moment it began, when that is known |
-| `Insight.why` | why it is as urgent as its status says: what was read and what makes that this urgent, in one sentence. Required of every item the queue may show, never a restatement of its rating; the plugin check's `attention-item-says-why` fails an `Insight` built without it, and `attention-why-restates-rating` one that closes on "which needs attention" or "which is urgent" |
-| `Insight.clears` | what clears an item a threshold raises, worded from that same threshold as a clause after "Clears once" ("a balance newer than 3 days arrives"); the panel says it after the why. The plugin check's `threshold-says-what-clears-it` fails a why that names a constant without it |
+| `Finding.remedies` | the HQ commands that fix it, each a `FindingRemedy`; HQ offers each one the reader may run as a press |
+| `Finding.steps` | what the operator does, in order: `Run(label, command, notes)` for a command on their own machine, `Do(text, notes)` for what to do in words. Neither can be built empty |
+| `Finding.primary` | the page the work is done on (a short label; a sentence is shown as a sentence) |
+| `Finding.no_help_reason` | why HQ can offer no command for it |
+| `Finding.check` | the link that reads it again |
+| `Finding.since` | the moment it began, when that is known |
+| `Finding.why` | why it is as urgent as its severity says: what was read and what makes that this urgent, in one sentence. Required of every item the queue may show, never a restatement of its rating; the plugin check's `attention-item-says-why` fails a `Finding` built without it, and `attention-why-restates-rating` one that closes on "which needs attention" or "which is urgent" |
+| `Finding.clears` | what clears an item a threshold raises, worded from that same threshold as a clause after "Clears once" ("a balance newer than 3 days arrives"); the panel says it after the why. The plugin check's `threshold-says-what-clears-it` fails a why that names a constant without it |
+
+An item the queue shows with none of a remedy, a step, a page, a reason or a
+held request's decision is refused when its source is read, so the source
+reads as unreadable.
 
 **Capabilities.** HQ validates every `CapabilitySpec` before describing or
 invoking the registry: name, required permissions, target kind and label,

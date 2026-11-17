@@ -24,12 +24,12 @@ from .finding_model import (
     Finding,
     FindingEstate,
     FindingRule,
-    OperatorStep,
     cannot_run_commands,
     fact_values,
     journal_step,
     machine_step,
 )
+from .finding_steps import Do, Run
 from .freshness import freshness, missed
 from .moments import ago, duration, moment, when
 from .reading_facts import FactRow, rows_of, state_on_controller, stated, taken_at, unjudged
@@ -252,7 +252,7 @@ def _run_again(
     renderings: tuple[Rendering, ...],
     label: str,
     notes: tuple[str, ...] = (),
-) -> tuple[OperatorStep, ...]:
+) -> tuple[Run, ...]:
     """Start each refresh job whose unit HQ knows, on the machine."""
 
     return tuple(
@@ -263,7 +263,7 @@ def _run_again(
     )
 
 
-def _journal(node: TopologyNode, renderings: tuple[Rendering, ...]) -> tuple[OperatorStep, ...]:
+def _journal(node: TopologyNode, renderings: tuple[Rendering, ...]) -> tuple[Run, ...]:
     return tuple(
         step
         for rendering in renderings
@@ -449,8 +449,8 @@ def _sync_stalled(estate: FindingEstate) -> tuple[Finding, ...]:
                     )
                 ),
                 steps=(
-                    OperatorStep(
-                        label=f"Restart 1Password Connect on {node.label} and read its sync container's log",
+                    Do(
+                        f"Restart 1Password Connect on {node.label} and read its sync container's log",
                         notes=("TOKEN_NEEDED means it has not been given its credentials file.",),
                     ),
                     *_run_again(node, stalled, "Then run the refresh again"),

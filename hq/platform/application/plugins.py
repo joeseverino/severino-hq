@@ -27,14 +27,12 @@ from .derivations import derivation, forget, holds_until, present
 from .lists import split_list
 from .tone import Tone
 from .ui import DomainOverview
-lazy from . import finding_model, freshness
+lazy from . import finding_model, finding_steps, freshness
 lazy from .action_items import item_key
 lazy from .automation_runs import clear_operation_registry_cache
-lazy from .decisions import one_press
 lazy from .domains import NAVIGATION_GROUPS
 lazy from .findings import finding_key
 lazy from .integrations import clear_integration_graph_cache
-lazy from .item_help import finding_plan
 lazy from .outbound_work import clear_outbound_work_cache
 lazy from .plugin_admission import enforce_plugin_admission
 lazy from .security import host_capabilities
@@ -643,7 +641,7 @@ def source_attention(
                 explanation="What it reports is missing from this queue until it reads again. The failure is logged.",
                 why="Asking this source for its items raised an error, so anything it would report is missing.",
                 steps=(
-                    finding_model.OperatorStep(
+                    finding_steps.Do(
                         "Find the line in HQ's log whose event is composition.source.unreadable and whose message "
                         f"names {source_id}; the traceback under it says what failed."
                     ),
@@ -689,6 +687,12 @@ def checked_attention(source_id: str, items: tuple[Any, ...]) -> tuple[Finding, 
     for item in items:
         if not isinstance(item, finding_model.Finding):
             raise ImproperlyConfigured(f"{source_id!r} produced an attention item that is not a Finding: {item!r}.")
+        # An item the queue shows is never a problem alone: a step or remedy,
+        # the page the work is done on, the reason HQ cannot help, or a held
+        # request's decision.
+        helped = item.steps or item.remedies or item.primary or item.no_help_reason.strip() or item.held
+        if item.severity.acted_on and not helped:
+            raise ImproperlyConfigured(f"{source_id!r} produced an attention item with no help: {item.title!r}.")
     return items
 
 
@@ -870,7 +874,7 @@ def gather_attention(
 def ordered_attention(entries: Iterable[dict[str, Any]]) -> tuple[dict[str, Any], ...]:
     """Gathered entries in the one order every surface shows them: by
     severity, what needs doing before what only reports, what HQ does in one
-    press (``decisions.one_press``) before what a person does elsewhere, the
+    press (``Finding.one_press``) before what a person does elsewhere, the
     longest-standing first, then by source and title."""
 
     def order(entry: dict[str, Any]) -> tuple[Any, ...]:
@@ -879,7 +883,7 @@ def ordered_attention(entries: Iterable[dict[str, Any]]) -> tuple[dict[str, Any]
         return (
             item.severity.rank,
             item.notice,
-            not one_press({"workflow": finding_plan(item, finding_key(item))}),
+            not item.one_press,
             since is None,
             since.timestamp() if since is not None else 0.0,
             entry["source"],

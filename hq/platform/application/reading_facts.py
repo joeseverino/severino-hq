@@ -21,14 +21,8 @@ from datetime import datetime
 from typing import Any, ClassVar, Self
 
 from .core_capabilities import CONTROLLER_REFRESH
-from .finding_model import (
-    Finding,
-    FindingEstate,
-    FindingRemedy,
-    OperatorStep,
-    cannot_run_commands,
-    fact_values,
-)
+from .finding_model import Finding, FindingEstate, FindingRemedy, cannot_run_commands, fact_values
+from .finding_steps import Do, Run
 from .freshness import LAST_READ, freshness
 from .moments import moment, when
 from .tone import Tone
@@ -191,7 +185,7 @@ class OnEachMachine[R: FactRow]:
     title: Callable[[TopologyNode, tuple[R, ...]], str]
     explanation: Callable[[tuple[R, ...]], str]
     evidence: Callable[[R], Iterable[tuple[str, str]]]
-    steps: Callable[[TopologyNode, R], Iterable[OperatorStep]]
+    steps: Callable[[TopologyNode, R], Iterable[Run | Do]]
 
     def __call__(self, estate: FindingEstate) -> tuple[Finding, ...]:
         found = []

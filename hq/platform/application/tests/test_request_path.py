@@ -168,7 +168,7 @@ class RequestPathTests(TestCase):
         self.assertEqual(len(found.finding_rows), len(found.findings))
         (row,) = rows
         self.assertEqual(row["detail"], ingress.check.detail)
-        self.assertIn(ingress.check.step, str(row["workflow"]))
+        self.assertIn(ingress.check.step, str(row["steps"]))
 
     def test_a_tailnet_address_no_device_holds_is_a_finding(self):
         states = self.checks(a_request(forwarded="100.64.0.99"))

@@ -4,7 +4,8 @@ A check not read yet is no finding: the posture panel shows it waiting, with
 what would read it.
 """
 
-from .finding_model import THEN_CHECK_AGAIN, Finding, FindingEstate, FindingRule, OperatorStep
+from .finding_model import THEN_CHECK_AGAIN, Finding, FindingEstate, FindingRule
+from .finding_steps import Do
 from .posture import STANDARD, advanced
 from .standards import Check
 from .tone import Tone
@@ -36,7 +37,7 @@ def _unmet(estate: FindingEstate) -> tuple[Finding, ...]:
                 severity=Tone.ATTENTION,
                 explanation=ended(f"Stops {check.why}"),
                 evidence=((check.label, evidence),),
-                steps=(OperatorStep(label=check.fix, notes=(THEN_CHECK_AGAIN,)),),
+                steps=(Do(check.fix, notes=(THEN_CHECK_AGAIN,)),) if check.fix else (),
             )
         )
     return tuple(found)
