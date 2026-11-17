@@ -214,6 +214,8 @@ tools = [
     "django-stubs==6.1.2",
     # Writes the served font from its source (tools/fonts), and the font tests read it.
     "fonttools==4.68.0",
+    # Compares hq_sdk's public shape with the base's (lint:sdk-breaking).
+    "griffelib==2.4.1",
     "hypothesis==6.170.15",
     # Holds the layering contracts in [tool.importlinter] (lint:imports); its
     # graph, grimp, counts the imports between the layers (audit:layers).

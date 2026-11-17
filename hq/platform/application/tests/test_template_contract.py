@@ -10,7 +10,7 @@ from django.template import engines
 from django.template.loader import render_to_string
 from django.test import RequestFactory, SimpleTestCase, override_settings
 
-from hq_sdk import contract, template_contract, validation
+from hq_sdk import template_contract, validation
 from hq_sdk.money import money
 from hq_sdk.pages import PageAction, PageDialog, page_context
 from hq_sdk.site import host
@@ -175,12 +175,6 @@ class TemplateRecordTests(SimpleTestCase):
             self.assertRaisesMessage(ValueError, "empty"),
         ):
             template_contract.describe()
-
-    def test_class_attributes_an_extension_declares_are_recorded(self):
-        members = contract.describe()["modules"]["tables"]["TableListMixin"]["members"]
-
-        self.assertEqual(members["table_empty"], {"kind": "attribute", "type": "str"})
-        self.assertEqual(members["table_columns"], {"kind": "attribute", "type": "tuple"})
 
 
 class PageDialogTests(SimpleTestCase):

@@ -68,12 +68,6 @@ def writes(task: dict[str, Any]) -> list[str]:
     return task_vars(task).get("writes", "").split()
 
 
-def writes_part_of(task: dict[str, Any]) -> list[str]:
-    """Each hand-written file the task writes a section of: its ``vars.writes_part_of``."""
-
-    return task_vars(task).get("writes_part_of", "").split()
-
-
 def runs(task: dict[str, Any]) -> list[Path]:
     """The files of this checkout a task's run names: a script by its path, or
     a module the dotted way (``python -m a.b``, ``manage.py test a.b.Case``).

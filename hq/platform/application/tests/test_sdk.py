@@ -1,4 +1,6 @@
+import importlib
 import inspect
+import pkgutil
 from annotationlib import Format
 from dataclasses import dataclass
 from pathlib import Path
@@ -7,6 +9,7 @@ from unittest.mock import patch
 
 from django.test import SimpleTestCase, TestCase
 
+import hq_sdk
 from hq.platform.application.capabilities import CapabilitySpec
 from hq.platform.application.connections import ConnectionSpec
 from hq.platform.application.integration_testing import commands_registered
@@ -22,6 +25,19 @@ from hq_sdk.plugin import NavigationItem as SdkNavigationItem, PluginManifest as
 @dataclass(frozen=True, slots=True)
 class _Nothing:
     pass
+
+
+def _exports(module):
+    """What a module offers an extension: its ``__all__``, or the public names it defines itself."""
+
+    declared = getattr(module, "__all__", None)
+    if declared is not None:
+        return declared
+    return [
+        name
+        for name, value in vars(module).items()
+        if not name.startswith("_") and getattr(value, "__module__", None) == module.__name__
+    ]
 
 
 def _routines(name, value):
@@ -59,15 +75,11 @@ class SdkContractTests(SimpleTestCase):
         parameter or return there is a ``type: ignore`` in every extension that
         calls it, so the whole surface is typed or the suite fails."""
 
-        import importlib
-
-        from hq_sdk.contract import exports, module_names
-
         gaps = []
-        for module_name in module_names():
-            module = importlib.import_module(f"hq_sdk.{module_name}")
-            for export in exports(module):
-                for qualified, routine in _routines(f"{module_name}.{export}", getattr(module, export)):
+        for info in pkgutil.iter_modules(hq_sdk.__path__):
+            module = importlib.import_module(f"hq_sdk.{info.name}")
+            for export in _exports(module):
+                for qualified, routine in _routines(f"{info.name}.{export}", getattr(module, export)):
                     gaps += _untyped(qualified, routine)
         self.assertEqual(gaps, [])
 
@@ -188,105 +200,3 @@ class AuditSdkTests(TestCase):
         with patch.object(AuditLog.objects, "create", side_effect=RuntimeError("db")):
             event = record_operation("example.refresh", "Refreshed.")
         self.assertIsNone(event)
-
-
-class SdkShapeTests(SimpleTestCase):
-    """The committed contract is the surface extensions are built against."""
-
-    def test_the_exports_still_have_the_committed_shape(self):
-        from hq_sdk.contract import describe, drift, load_committed
-
-        differences = drift(load_committed(), describe())
-
-        self.assertEqual(
-            differences,
-            [],
-            "\n".join(
-                [
-                    (
-                        "hq_sdk changed shape. Every extension binds to it, and no test "
-                        "or graph here can see them. Run `mise run fix`, "
-                        "review the diff, and decide whether PLUGIN_API_VERSION moves:"
-                    ),
-                    *differences,
-                ]
-            ),
-        )
-
-    def test_every_sdk_module_and_export_is_described(self):
-        import importlib
-
-        from hq_sdk.contract import describe, exports, module_names
-
-        contract = describe()
-
-        self.assertEqual(tuple(sorted(contract["modules"])), module_names())
-        for name in module_names():
-            module = importlib.import_module(f"hq_sdk.{name}")
-            self.assertEqual(tuple(sorted(contract["modules"][name])), tuple(sorted(exports(module))))
-
-    def test_a_shape_change_is_named_precisely(self):
-        import copy
-
-        from hq_sdk.contract import describe, drift
-
-        committed = describe()
-        current = copy.deepcopy(committed)
-        current["modules"]["capabilities"]["execute_capability"]["parameters"].append("surprise")
-        del current["modules"]["web"]["capability_required"]
-        current["modules"]["ui"]["Brand"] = {"kind": "value", "type": "str"}
-
-        differences = drift(committed, current)
-
-        self.assertEqual(len(differences), 3)
-        self.assertTrue(differences[0].startswith("~ hq_sdk.capabilities.execute_capability: parameters:"))
-        self.assertEqual(differences[1], "+ hq_sdk.ui.Brand")
-        self.assertEqual(differences[2], "- hq_sdk.web.capability_required")
-
-    def test_a_reshaped_export_names_each_member_gained_lost_and_changed(self):
-        from hq_sdk.contract import drift
-
-        before = {"kind": "class", "bases": ["A"], "members": {"a": 1, "b": 2, "c": 3, "d": 4}}
-        after = {"kind": "class", "bases": ["B"], "members": {"a": 1, "b": 9, "e": 5, "f": 6}}
-
-        self.assertEqual(
-            drift({"modules": {"kept": {"Thing": before}}}, {"modules": {"kept": {"Thing": after}}}),
-            ['~ hq_sdk.kept.Thing: bases: ["A"] -> ["B"]; members: +e,f, -c,d, ~b'],
-        )
-        self.assertEqual(
-            drift(
-                {"modules": {"kept": {"Thing": before}}}, {"modules": {"kept": {"Thing": {**before, "members": {}}}}}
-            ),
-            ["~ hq_sdk.kept.Thing: members: -a,b,c,d"],
-        )
-
-    def test_versions_and_whole_modules_are_named_too(self):
-        from hq_sdk.contract import drift
-
-        committed = {
-            "api_version": 1,
-            "sdk_version": "1.0",
-            "modules": {"gone": {"a": {}}, "kept": {"x": {"kind": "value"}}},
-        }
-        current = {
-            "api_version": 2,
-            "sdk_version": "1.0",
-            "modules": {"kept": {"x": {"kind": "value"}}, "new": {"b": {}, "a": {}}},
-        }
-
-        self.assertEqual(
-            drift(committed, current),
-            ["api_version: 1 -> 2", "- hq_sdk.gone", "+ hq_sdk.new: a, b"],
-        )
-        self.assertEqual(drift(committed, committed), [])
-
-    def test_parameters_are_recorded_without_annotations(self):
-        """Annotations render differently across interpreters; names and defaults do not."""
-
-        from hq_sdk.contract import describe
-
-        recorded = describe()["modules"]["capabilities"]["execute_capability"]
-
-        self.assertEqual(recorded["kind"], "function")
-        self.assertIn("name", recorded["parameters"])
-        self.assertTrue(all(":" not in item for item in recorded["parameters"]))

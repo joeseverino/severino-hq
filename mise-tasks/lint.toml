@@ -117,6 +117,28 @@ outputs = []
 usage = 'arg "[base]" env="CHECK_BASE" help="The ref to compare with; default the branch HEAD lands on, then origin/main"'
 run = 'uv run python -m tools.openapi_breaking "${usage_base:-}"'
 
+["lint:sdk-breaking"]
+description = "hq_sdk keeps the shape its base offered extensions, or PLUGIN_API_VERSION moves with the break"
+hide = true
+tags = ["fast"]
+sources = [
+  "hq/**/*.py",
+  "hq_sdk/**/*.py",
+  "tools/sdk_breaking.py",
+  "tools/pipeline/plugin_identity.py",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
+# The base is fast's, as lint:openapi-breaking's; CI's lint job names the
+# commit its change lands on in CHECK_BASE.
+usage = 'arg "[base]" env="CHECK_BASE" help="The ref to compare with; default the branch HEAD lands on, then origin/main"'
+run = 'uv run python -m tools.sdk_breaking "${usage_base:-}"'
+
 ["lint:deptry"]
 description = "Host code imports only declared runtime dependencies and imports every one, or pyproject.toml says why not"
 hide = true
@@ -361,21 +383,19 @@ run = "go tool govulncheck -test ./..."
 
 # Each derived file against its source. A gate tagged derived is its file's
 # one declaration (docs/Development.md, Derived files): vars.writes names each
-# file it writes whole, and vars.writes_part_of each hand-written file it writes
-# a section of. fix:derived runs every one's fix mode, .gitattributes marks what
+# file it writes whole. fix:derived runs every one's fix mode, .gitattributes marks what
 # they write, and tools/tests/test_drift_gates.py holds each to what its fix
 # writes.
 
-["lint:drift-sdk-contract"]
-description = "hq_sdk's committed shape and docs/Plugins.md table are what the SDK offers"
+["lint:drift-shared-ui-reference"]
+description = "docs/Shared-UI.md is what the host's templates offer an extension"
 hide = true
 tags = ["fast", "derived"]
 sources = [
   "**/*.py",
-  "hq_sdk/**",
-  "docs/Plugins.md",
+  "docs/Shared-UI.md",
   "hq/domains/control_plane/bridge_base.json",
-  # The frames and partials docs/Plugins.md's table reads; an extension's
+  # The frames and partials its tables read; an extension's
   # check derives the rest of the template contract as it runs.
   "templates/page.html",
   "templates/list_page.html",
@@ -398,8 +418,8 @@ sources = [
 outputs = []
 extends = "django"
 usage = 'flag "--fix" help="Rewrite the file instead of checking: fast runs it first"'
-vars = { writes = "hq_sdk/contract.json", writes_part_of = "docs/Plugins.md" }
-run = 'if [ "${usage_fix:-}" = true ]; then uv run python manage.py sdk_contract; else uv run python manage.py sdk_contract --check; fi'
+vars = { writes = "docs/Shared-UI.md" }
+run = 'if [ "${usage_fix:-}" = true ]; then uv run python manage.py shared_ui_reference; else uv run python manage.py shared_ui_reference --check; fi'
 
 ["lint:drift-api-document"]
 description = "The machine API's OpenAPI document is current"

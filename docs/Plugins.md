@@ -34,7 +34,7 @@ plugin = PluginManifest(
     distribution="example-notes",
     source_repository="example/example-notes",
     source_workflow=".github/workflows/admit-plugin.yml",
-    api_version=16,
+    api_version=17,
     integration_provider="example_notes.plugin:integration",
     django_apps=("example_notes",),
     url_prefix="notes/",
@@ -137,15 +137,16 @@ by `python -m hq_sdk.validation src`:
 The host's own code is held to the same rule, and an extension to the refusal
 from `PLUGIN_API_VERSION` 6.
 
-The shape of that surface is committed as `hq_sdk/contract.json`: every
-export's parameters, fields, enum members and public methods. It leaves out
-annotations, so it is identical across the interpreter matrix.
-
-A test fails when the exports drift from the file. An extension's binding to a
-renamed field or a new required parameter is a change this repository cannot
-otherwise see. Regenerate it with `mise run fix`, read the diff as the review,
-and decide there whether `PLUGIN_API_VERSION` moves. `mise run lint` fails on
-drift.
+The shape of that surface is what the modules declare: each one's `__all__`
+and the signatures, fields, enum members and public methods behind it. An
+extension's binding to a renamed field or a new required parameter is a change
+this repository's suite cannot otherwise see, so `lint:sdk-breaking` reads the
+SDK at the change's base and here with Griffe and fails on each change that
+breaks a caller, named by file and line, unless `PLUGIN_API_VERSION` moves in
+the same change. An addition passes with nothing to regenerate. Types, a
+pydantic field turning required, a class attribute's default type and a name
+dropped from `__all__` while still importable are not held by it; the
+composed suite runs every extension against the host.
 
 What the annotations promise is held from an extension's side by
 `tests/sdk_consumer/consumer.py`, which mypy checks: a valid call pins its
@@ -813,7 +814,8 @@ under a `templates` directory and refuses anything else:
 The check derives what is public from the host it was handed, its own
 templates and tags, as it runs (`hq_sdk.template_contract`), with no extension
 installed, so nothing the package ships stands in for the host's. The tables
-below are written from the same derivation.
+of what is public, [Shared UI](Shared-UI.md), are written from the same
+derivation.
 
 Every view model `hq_sdk.ui` hands an extension says its values in words. It
 raises `ValueError` where it is built on a date-time
@@ -973,83 +975,6 @@ A test that posts a form without opening its page first sends
 | `wide = True` | take the whole row |
 | `change_effect` | the sentence saying what changing it causes |
 | `confirms = True` | close the form as the callout a submission is confirmed in |
-
-<!-- sdk_contract: shared UI contract, written by `mise run fix` from hq_sdk/template_contract.py -->
-
-| Frame | Blocks a page fills | What it is |
-| --- | --- | --- |
-| `confirm_page.html` | `consequences` | A destructive action's confirmation: `consequences` says what will happen. |
-| `form_page.html` | nothing | A page that is one form, a record's: its card and `partials/_form.html`, closing with `form_verb` and `cancel_url`; `form_fields` names a template for fields beyond the form's own loop and `form_note` says what saving does, each from the view, so the page fills no block. |
-| `list_page.html` | `foot`, `row` (given `forloop`, `row`), `summary` | A `TableListMixin` list: toolbar, table, empty state and pagination. `row` is one row's cells, `summary` sits above the table and is redrawn with it when a search or filter changes, `foot` is its `<tfoot>`. |
-| `page.html` | `page`, `print_footer` | Any page: the head, actions, dialogs and section navigation, drawn from `page`. |
-
-| Partial | Required | Optional | What it is |
-| --- | --- | --- | --- |
-| `partials/_activity_calendar.html` | `calendar` | `calendar_id` | One month of plan against execution, from `hq_sdk.ui.ActivityCalendar`. |
-| `partials/_allocation.html` | `allocation` | `legend`, `stacked` | Parts of one whole as one bar, from `hq_sdk.ui.AllocationBar`. |
-| `partials/_ask.html` | `ask` | `extra`, `heard` | A do-this-now control and how its work stands, from `hq_sdk.outbound.ask`. |
-| `partials/_attention_list.html` | `empty`, `entries` | nothing | Decisions waiting on the operator, from the entries `hq_sdk.plugin.plugin_attention_items` gathers. |
-| `partials/_cadence.html` | `cadence` | nothing | Whether a thing happened, period by period, from `hq_sdk.ui.Cadence`. |
-| `partials/_cadence_matrix.html` | `matrix` | `compact`, `label` | Several cadences over the same periods, from `hq_sdk.ui.CadenceMatrix`. |
-| `partials/_chart.html` | `chart` | nothing | A measure over time from `hq_sdk.ui.line_chart`, or quantities that add up from `hq_sdk.ui.stacked_bar_chart`, or a spatial path from `hq_sdk.ui.PathChart`. |
-| `partials/_chart_tabs.html` | `charts`, `group` | nothing | Up to four charts of one thing in the space of one. |
-| `partials/_dropzone.html` | `field` | `hint`, `title` | A file field that also accepts a drop. |
-| `partials/_empty_state.html` | `message` | `action_label`, `action_url`, `inline`, `remedy`, `why` | The one empty state: what is missing, then what would fill it. |
-| `partials/_form.html` | `bar`, `cancel_url`, `choice_field`, `choices`, `form`, `note`, `verb` | `action`, `fields`, `gap`, `hooks`, `in_place`, `method`, `next`, `table_body` | A form that writes: its token, its errors, its fields or its table, and its closing row. |
-| `partials/_form_actions.html` | `choice_field`, `verb` | `bar`, `cancel_url`, `choices`, `gap`, `in_place`, `live`, `note` | A form's closing row: its one verb, Cancel, and what saving does. |
-| `partials/_form_errors.html` | nothing | `form` | What was wrong with a submitted form as a whole, above its fields. |
-| `partials/_icon.html` | `name` | nothing | One of the host's icons, by `name`, the height of the text beside it. |
-| `partials/_insight_grid.html` | `items` | `label`, `level` | Readings that need interpreting, each with its next step. |
-| `partials/_job_progress.html` | `job` | nothing | A running job and what it is doing. |
-| `partials/_kpi_grid.html` | `items` | `featured`, `label` | Responsive linked or static figures. |
-| `partials/_reading_age.html` | nothing | `at`, `reading`, `unread` | When a reading was taken, `at` the moment, in the one wording every page uses; `unread` why there is none. |
-| `partials/_record_list.html` | `rows` | `empty`, `label`, `whole_rows` | A compact list of records, from `hq_sdk.ui.ListRow`. |
-| `partials/_row_field.html` | `field` | nothing | One field of a form whose fields stand one to a row of a table, in its row. |
-| `partials/_timeline.html` | nothing | `timeline` | Chronological linked events, from `hq_sdk.ui.Timeline`. |
-| `partials/_week_plan.html` | `plan` | nothing | Which days of the week a thing is scheduled for, from `hq_sdk.ui.WeekPlan`. |
-
-Host tags: `{% arrow %}`, `{% button %}`, `{% button_row %}`, `{% card %}`, `{% dot %}`, `{% dot_list %}`, `{% empty_value %}`, `{% entity %}`, `{% fact %}`, `{% facts %}`, `{% filter_bar %}`, `{% muted %}`, `{% notice %}`, `{% outside_link %}`, `{% present %}`, `{% prose_list %}`, `{% reference %}`, `{% referenced_by %}`, `{% row_actions %}`, `{% row_editor %}`, `{% row_group %}`, `{% row_toggle %}`, `{% section %}`, `{% status %}`, `{% table_heading %}`, `{% table_region %}`, `{% words %}`, `{% write_token %}`. Host filters: `|breakable[:arg]`, `|counted:arg`, `|measured:arg`, `|money[:arg]`, `|or_empty`, `|outside`, `|readout`, `|record[:arg]`, `|span`, `|web_url`, `|when[:arg]`, `|when_text[:arg]`. Django's own tags and filters, and `{% load %}` of `static` or the extension's own libraries.
-
-Classes: `actions-col`, `address-list`, `allocation`, `allocation-legend`, `cell-data`, `cell-part`, `cell-whole`, `code-list`, `compact`, `compact-table`, `count`, `danger`, `data-table`, `date-col`, `domain-charts`, `errors`, `eyebrow`, `finding`, `form`, `ghost`, `help`, `icon-link`, `inline`, `key-col`, `keyboard-only`, `list-rows`, `name-line`, `narrow-more`, `narrow-only`, `nowrap`, `one-line`, `optional-col`, `page-lede`, `primary`, `prose`, `row-actions`, `row-below`, `row-empty`, `row-group`, `row-gutter`, `row-less`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-flow`, `section-foot`, `split`, `stacked`, `subtle-link`, `table-clamp`, `table-scroll`, `tight-col`, `two-col`, `visually-hidden`, `whole`.
-
-Script hooks: `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit-status`, `data-tip`. Styled attributes: `data-chart`.
-
-| Rule | Drawn by hand | Write instead |
-| --- | --- | --- |
-| `hand-drawn-change-table` | A before-and-after table drawn by hand, where the change table part draws it. | Build an approval_review.ChangePreview and write `{% change_table preview %}`. |
-| `hand-drawn-chip` | A chip drawn by hand, where the status part draws a name as a chip and the switch part a choice. | Write `{% status name chip=True %}`, or `{% switch %}``{% choice url=... %}`name`{% endchoice %}``{% endswitch %}` for a choice of the view. |
-| `hand-drawn-control-label` | A control's label drawn by hand, where the control label part draws it. | Write `{% control_label "From" control="the-control-id" %}`. |
-| `hand-drawn-dot-list` | A dot list drawn by hand, where the dot list part draws it. | Write `{% dot_list %}``<li>`...`</li>``{% enddot_list %}`, with muted=True for one said quietly. |
-| `hand-drawn-empty-line` | An empty line drawn by hand, where the empty state part draws it. | Write `{% include "partials/_empty_state.html" with message="..." %}`, or a `{% section %}`'s `{% empty %}`. |
-| `hand-drawn-empty-said-quietly` | An empty line drawn by hand, where the empty state part draws it. | Write `{% include "partials/_empty_state.html" with message="..." %}`, or a `{% section %}`'s `{% empty %}`. |
-| `hand-drawn-empty-state` | An empty state drawn by hand, where the empty state part draws it. | Write `{% include "partials/_empty_state.html" with message="..." %}`. |
-| `hand-drawn-facts` | Label and value facts drawn by hand, where the facts part draws them. | Write `{% facts %}` around each `{% fact "Label" value=... %}`, or `{% facts layout="band" %}` for a band. |
-| `hand-drawn-field` | A form's field or its row of buttons drawn by hand, where the field template and the button row tag draw them. | Declare the field on the view's Django form and draw it with {{ form }} or {{ field.as_field_group }}; write a row of buttons as `{% button_row %}`...`{% endbutton_row %}`. |
-| `hand-drawn-figure` | A figure drawn by hand, where the figure part draws it. | Write `{% include "partials/_kpi_grid.html" %}` from hq_sdk.ui.Kpi. |
-| `hand-drawn-filter-bar` | A filter bar, search field or select drawn by hand, where the filter bar and select parts draw it. | Write `{% filter_bar search="..." query=q filtered=... clear=... %}``{% choices %}``{% select ... %}``{% summary %}`count`{% endfilter_bar %}`. |
-| `hand-drawn-fold` | A fold drawn by hand, where the section part draws it. | Write `{% section "Heading" fold=True %}`body`{% endsection %}`. |
-| `hand-drawn-form` | A form that writes drawn by hand, where the form part draws it. | Write `{% include "partials/_form.html" %}`, or `{% button ... post=True %}` for a single verb. |
-| `hand-drawn-heading` | A heading drawn by hand, where the section part or the page frame draws it. | Write the heading of `{% section "Heading" %}`, a sub-head a `{% section %}` inside it (it heads itself a level down); the page's own title is the frame's, from page. |
-| `hand-drawn-icon` | An icon drawn by hand, where the icon part draws it. | Write `{% include "partials/_icon.html" with name="..." %}`; a drawing that says something is role="img". |
-| `hand-drawn-list-rows` | A list of rows drawn by hand, where the record list part draws it. | Write `{% include "partials/_record_list.html" %}` from hq_sdk.ui.ListRow. |
-| `hand-drawn-missing-value` | A missing value's mark drawn by an if, where the value's own tag or filter draws it. | Write {{ x\|or_empty }} for a plain value, {{ x\|money }} (or measured, seconds, bytes, when) alone for a figure or a moment, and `{% present x %}`...`{% endpresent %}` for a value shown in markup. |
-| `hand-drawn-notice` | A notice drawn by hand, where the notice part draws it. | Write `{% notice %}`body`{% endnotice %}`, with tone= and a `{% title %}` part where it has them. |
-| `hand-drawn-prose-list` | A list of sentences drawn by hand, where the prose list part draws it. | Write `{% prose_list %}``<li>`...`</li>``{% endprose_list %}`, with numbered=True for items read in order. |
-| `hand-drawn-record-link` | A link to a record's page drawn by hand, where the entity tag names the record by the page its model declares. | Write `{% entity row\|record label=row.name %}`, or row\|record:"section" for a part of its page. |
-| `hand-drawn-row-actions` | A row's actions drawn by hand, where the row actions part draws them. | Write `{% row_actions actions %}` from hq_sdk.pages.PageAction, which draws the row's cell. |
-| `hand-drawn-row-group` | A group of rows headed by hand, where the row group tag heads it. | Write `{% row_group label count %}`. |
-| `hand-drawn-run-state` | How work stands is drawn by hand, where the ask or the status part draws it. | Draw the work as an Ask (`partials/_ask.html`), or its state with `{% status run.word tone=run.tone data_ask_label=True %}` from job\|job_run. |
-| `hand-drawn-section` | A `<section>` element drawn by hand, where the section part draws it. | Write `{% section "Heading" %}`body`{% endsection %}`, or a `<div>` for one that only groups a layout. |
-| `hand-drawn-split-count` | A count split from its words, where the counted filter writes them as one. | Write {{ n\|counted:"thing" }}, the figure and its words as one, or `{% fact "Label" value=n %}`. |
-| `hand-drawn-split-figure` | A figure apart from its word, where a value filter writes them as one. | Write {{ n\|counted:"thing" }} for a count, or {{ x\|measured:"mi" }} for a unit or a word the count leaves alone ("more"), the figure and its word as one value. |
-| `hand-drawn-stack-list` | A stack list drawn by hand, where the stack list part draws it. | Write `{% stack_list %}``<li>`...`</li>``{% endstack_list %}`, with below="Label" for a list the open row shows. |
-| `hand-drawn-steps` | A list of steps drawn by hand, where the steps part draws it. | Write `{% steps numbered=True %}``{% step %}``<strong>`Install it`</strong>`...`{% endstep %}``{% endsteps %}`. |
-| `hand-drawn-stretched-shape` | A round shape or text inside a stretched drawing, which distorts it. | Draw a dot as a zero-length line of class chart-dot, and a label in the unscaled svg.chart-labels layer. |
-| `hand-drawn-table` | A table drawn outside its region. | Write `{% table_region "Label" %}` around its `<table class="data-table">`. |
-| `hand-drawn-title-meta` | A title's line of facts drawn by hand, where the title meta part draws it. | Write `{% title_meta %}`parts`{% endtitle_meta %}`, each part an `<li>`. |
-| `hand-drawn-toned-value` | A toned value drawn by hand, where the status part draws it. | Write `{% status value tone=tone pill=False %}`. |
-
-<!-- /sdk_contract -->
 
 Extension templates supply domain content; HQ owns layout, tokens, responsive
 rules, accessibility states and visual change. A class, partial or hook an

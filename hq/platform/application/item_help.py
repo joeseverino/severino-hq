@@ -15,7 +15,7 @@ from .finding_model import Finding
 from .workflow_contracts import ActionLink, WorkflowOutcome, WorkflowPlan, WorkflowStep
 from .workflows import claim_identity
 
-# How help travels. ``Insight`` is the SDK's shape (``hq_sdk/contract.json``),
+# How help travels. ``Insight`` is part of the SDK's shape (``hq_sdk.ui``),
 # so help rides in fields it already has: a remedy as one of its ``actions``
 # (named ``REMEDY``), a place as its ``action`` and ``url``, a command, an
 # instruction or a reason as a step of its ``workflow``, told apart by the

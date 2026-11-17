@@ -138,9 +138,9 @@ architecture test, a glob) fails when its path matches nothing.
   in whole cents, exact integers, and rounds there, as
   `business_use.deductible` does: SQLite holds a decimal as a double, where a
   half cent is inexact. A test holds it to `quantize_money` over every cent.
-- A change to `hq_sdk`'s shape (`hq_sdk/contract.json`) reaches every
-  extension: decide whether `PLUGIN_API_VERSION` moves, and give a new
-  export a case in `tests/sdk_consumer/consumer.py`
+- A change to `hq_sdk`'s shape reaches every extension: a break fails
+  `lint:sdk-breaking` until `PLUGIN_API_VERSION` moves with it, and a new
+  export gets a case in `tests/sdk_consumer/consumer.py`
   ([Plugins](docs/Plugins.md)).
 - The shared mechanisms (a list view's table, a command's link, the derived
   files, plugin imports) are held by the architecture tests, the
