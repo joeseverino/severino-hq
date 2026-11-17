@@ -9,13 +9,10 @@ below hold what a link promises.
 
 import uuid
 from typing import Any
-from unittest.mock import patch
 
 import schemathesis
-from django.core import signals
 from django.core.wsgi import get_wsgi_application
-from django.db import close_old_connections, transaction
-from django.test import TestCase, override_settings
+from django.db import transaction
 from hypothesis import HealthCheck, settings
 from schemathesis.checks import CheckContext, not_a_server_error
 from schemathesis.config import SchemathesisConfig
@@ -44,9 +41,8 @@ from hq.platform.application.run_reads import RUNS
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.testing import throwaway_media
 
-# Bodies are read as the document describes them; this in-process client does not decode gzip.
-UNCOMPRESSED = {"Accept-Encoding": "identity"}
-LOOPBACK = {"REMOTE_ADDR": "127.0.0.1"}
+from .in_process import DOCUMENT, LOOPBACK, UNCOMPRESSED, InProcessAPITestCase, as_agent
+
 # The records whose writes stay in HQ's database, which a scenario's rollback undoes whole.
 LOCAL_RECORDS = frozenset({"projects", "assets", "content"})
 # Their reads, and the reads a held change and a playbook's run lead to. Every
@@ -158,13 +154,7 @@ def _writes() -> dict[str, tuple[str, ...]]:
     }
 
 
-@override_settings(
-    ALLOWED_HOSTS=["localhost", "testserver"],
-    SECURE_SSL_REDIRECT=False,
-    OIDC_ISSUER="https://sso.example.com",
-    SEVERINO_API_RESOURCE="https://hq.example.com/api",
-)
-class APILinkTests(TestCase):
+class APILinkTests(InProcessAPITestCase):
     """The local records' reads and writes, walked as their links lead, each scenario rolled back."""
 
     @classmethod
@@ -176,33 +166,14 @@ class APILinkTests(TestCase):
             Project(name=f"Example {n:03d}", slug=f"example-{n:03d}") for n in range(MAX_PAGE_SIZE + 1)
         )
 
-    def setUp(self):
-        self.enterContext(
-            patch("socket.socket.connect", side_effect=AssertionError("Outbound network access in API link test"))
-        )
-        self.enterContext(
-            patch("hq.platform.application.hq_self.host_addresses", return_value=frozenset({"192.0.2.1"}))
-        )
-        # As Django's ClientHandler does: request signals keep the test's transaction and its connection.
-        for signal in (signals.request_started, signals.request_finished):
-            signal.disconnect(close_old_connections)
-            self.addCleanup(signal.connect, close_old_connections)
-
     def test_each_answer_leads_where_its_links_say(self):
         writes = _writes()
         scopes = sorted({"read", *(scope for needed in writes.values() for scope in needed)})
         claims = {"sub": "example-links", "client_id": "example-links", "scope": " ".join(scopes)}
         headers = {"Authorization": "Bearer example-links", **UNCOMPRESSED}
-        with (
-            patch("hq.platform.application.agent_admission.verify", return_value=claims),
-            patch("hq.platform.application.agent_access.paused_interfaces", return_value=frozenset()),
-        ):
+        with as_agent(claims):
             schema = schemathesis.openapi.from_wsgi(
-                "/api/v2/openapi.json",
-                get_wsgi_application(),
-                config=CONFIG,
-                headers=headers,
-                environ_overrides=LOOPBACK,
+                DOCUMENT, get_wsgi_application(), config=CONFIG, headers=headers, environ_overrides=LOOPBACK
             ).include(
                 lambda ctx: (
                     ctx.operation.definition.raw.get("x-hq-resource") in WALKED

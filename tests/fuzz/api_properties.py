@@ -4,10 +4,8 @@ from dataclasses import dataclass
 from unittest.mock import Mock, patch
 
 import schemathesis
-from django.core import signals
 from django.core.wsgi import get_wsgi_application
-from django.db import close_old_connections, transaction
-from django.test import TestCase, override_settings
+from django.db import transaction
 from hypothesis import HealthCheck, given, settings
 from schemathesis.checks import not_a_server_error
 from schemathesis.generation import GenerationMode
@@ -26,43 +24,15 @@ from hq.platform.application.integrations import (
 )
 from hq.platform.application.security import host_capabilities
 
-# Bodies are read as the document describes them. This in-process client does
-# not decode gzip; compression is the transport's, tested end to end on its own.
-UNCOMPRESSED = {"Accept-Encoding": "identity"}
+from .in_process import DOCUMENT, LOOPBACK, UNCOMPRESSED, InProcessAPITestCase, as_agent
 
 
-@override_settings(
-    ALLOWED_HOSTS=["localhost", "testserver"],
-    SECURE_SSL_REDIRECT=False,
-    OIDC_ISSUER="https://sso.example.com",
-    SEVERINO_API_RESOURCE="https://hq.example.com/api",
-)
-class APIPropertyTests(TestCase):
+class APIPropertyTests(InProcessAPITestCase):
     """Each generated operation reaches middleware and the authenticated adapter.
 
     Read-only authority keeps generated host commands away from external effects.
     Each example rolls back its observations, denials and any local mutations.
     """
-
-    def setUp(self):
-        # Any unexpected outbound connection fails rather than reaching a provider.
-        self.enterContext(
-            patch(
-                "socket.socket.connect",
-                side_effect=AssertionError("Outbound network access in API property test"),
-            )
-        )
-        self.enterContext(
-            patch(
-                "hq.platform.application.hq_self.host_addresses",
-                return_value=frozenset({"192.0.2.1"}),
-            )
-        )
-        # Match Django ClientHandler: WSGI request signals must preserve the
-        # test runner's transaction rather than close its SQLite connection.
-        for signal in (signals.request_started, signals.request_finished):
-            signal.disconnect(close_old_connections)
-            self.addCleanup(signal.connect, close_old_connections)
 
     def test_every_live_operation_conforms(self):
         claims = {
@@ -78,15 +48,9 @@ class APIPropertyTests(TestCase):
             response_headers_conformance,
             response_schema_conformance,
         ]
-        with (
-            patch("hq.platform.application.agent_admission.verify", return_value=claims),
-            patch("hq.platform.application.agent_access.paused_interfaces", return_value=frozenset()),
-        ):
+        with as_agent(claims):
             schema = schemathesis.openapi.from_wsgi(
-                "/api/v2/openapi.json",
-                get_wsgi_application(),
-                headers=headers,
-                environ_overrides={"REMOTE_ADDR": "127.0.0.1"},
+                DOCUMENT, get_wsgi_application(), headers=headers, environ_overrides=LOOPBACK
             )
             expected = {
                 value["operationId"]
@@ -95,14 +59,10 @@ class APIPropertyTests(TestCase):
                 if method in {"get", "post", "put", "patch", "delete", "head", "options", "trace"}
             }
             # Schemathesis excludes the schema-serving operation itself.
-            live = Client(schema.app).get(
-                "/api/v2/openapi.json",
-                headers=headers,
-                environ_overrides={"REMOTE_ADDR": "127.0.0.1"},
-            )
+            live = Client(schema.app).get(DOCUMENT, headers=headers, environ_overrides=LOOPBACK)
             self.assertEqual(live.status_code, 200)
             self.assertEqual(live.json, schema.raw_schema)
-            covered = {schema.raw_schema["paths"]["/api/v2/openapi.json"]["get"]["operationId"]}
+            covered = {schema.raw_schema["paths"][DOCUMENT]["get"]["operationId"]}
             for result in schema.get_all_operations():
                 operation = result.ok()
                 with self.subTest(operation=operation.label):
@@ -117,10 +77,7 @@ class APIPropertyTests(TestCase):
                     @given(case=operation.as_strategy())
                     def exercise(case):
                         with transaction.atomic():
-                            response = case.call(
-                                headers=headers,
-                                environ_overrides={"REMOTE_ADDR": "127.0.0.1"},
-                            )
+                            response = case.call(headers=headers, environ_overrides=LOOPBACK)
                             self.assertNotIn(response.status_code, (401, 503))
                             case.validate_response(response, checks=checks)
                             transaction.set_rollback(True)
@@ -136,7 +93,7 @@ class APIPropertyTests(TestCase):
 
         handler = Mock(return_value={"ok": True, "value": "example"})
         spec = CapabilitySpec(
-            "example.properties",
+            "example.properties.set",
             "Exercise a generated write.",
             "remote_write",
             "example.write",
@@ -152,21 +109,17 @@ class APIPropertyTests(TestCase):
         }
         with (
             override_integration_graph(graph),
-            patch("hq.platform.application.agent_admission.verify", return_value=claims),
+            as_agent(claims),
             # The injected capability belongs to no extension, so HQ is told it grants it.
             patch(
                 "hq.platform.application.security.operator_capabilities",
                 return_value=host_capabilities() | {"example.write"},
             ),
-            patch("hq.platform.application.agent_access.paused_interfaces", return_value=frozenset()),
         ):
             schema = schemathesis.openapi.from_wsgi(
-                "/api/v2/openapi.json",
-                get_wsgi_application(),
-                headers=headers,
-                environ_overrides={"REMOTE_ADDR": "127.0.0.1"},
+                DOCUMENT, get_wsgi_application(), headers=headers, environ_overrides=LOOPBACK
             )
-            operation = schema["/api/v2/capabilities/example.properties/"]["POST"]
+            operation = schema["/api/v2/capabilities/example.properties.set/"]["POST"]
             for mode in (GenerationMode.POSITIVE, GenerationMode.NEGATIVE):
 
                 @settings(max_examples=3, derandomize=True, database=None, deadline=None)
@@ -178,10 +131,7 @@ class APIPropertyTests(TestCase):
                         # One key, however it arrives: a payload naming another than the header is refused.
                         command["idempotency_key"] = headers["Idempotency-Key"]
                     with transaction.atomic():
-                        first = case.call(
-                            headers=headers,
-                            environ_overrides={"REMOTE_ADDR": "127.0.0.1"},
-                        )
+                        first = case.call(headers=headers, environ_overrides=LOOPBACK)
                         case.validate_response(
                             first,
                             checks=[
@@ -194,10 +144,7 @@ class APIPropertyTests(TestCase):
                         )
                         if mode == GenerationMode.POSITIVE:  # noqa: B023 - exercise runs before the loop advances
                             self.assertEqual(first.status_code, 200)
-                            second = case.call(
-                                headers=headers,
-                                environ_overrides={"REMOTE_ADDR": "127.0.0.1"},
-                            )
+                            second = case.call(headers=headers, environ_overrides=LOOPBACK)
                             self.assertEqual(second.content, first.content)
                             self.assertEqual(second.headers["idempotency-replayed"], ["true"])
                             handler.assert_called_once()
