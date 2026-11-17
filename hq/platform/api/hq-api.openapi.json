@@ -4040,7 +4040,10 @@
         "type": "object"
       },
       "AssetInfrastructure": {
-        "description": "The machine, domain or certificate this asset is. A `type:key` reference such as `machine:lab-1`; empty for none.",
+        "description": "The machine, domain or certificate this asset is. A `type:key` reference; empty for none.",
+        "examples": [
+          "machine:lab-1"
+        ],
         "type": "string",
         "x-hq-reference": {
           "field": "infrastructure",
@@ -5066,6 +5069,9 @@
           },
           "name": {
             "description": "The command's dotted name, which you run it by.",
+            "examples": [
+              "asset.update"
+            ],
             "type": "string"
           },
           "resource": {
@@ -9401,6 +9407,9 @@
         "properties": {
           "digest": {
             "description": "The image's digest, `sha256:` and its hash; empty when not read yet.",
+            "examples": [
+              "sha256:50d858e0985ecc7f60418aaf0cc5ab587f42c2570a884095a9e8ccacd0f6545c"
+            ],
             "type": "string"
           },
           "tag": {
@@ -13321,7 +13330,10 @@
         "description": "One receipt's metadata; never its file, path or address.",
         "properties": {
           "amount": {
-            "description": "The amount on the receipt, a decimal string with two places such as `12.50`.",
+            "description": "The amount on the receipt, a decimal string with two places.",
+            "examples": [
+              "12.50"
+            ],
             "type": "string"
           },
           "content_type": {
@@ -15686,7 +15698,10 @@
         "title": "Total cost"
       },
       "TotalCostAmount": {
-        "description": "What it cost in all, a decimal string with two places such as `12.50`.",
+        "description": "What it cost in all, a decimal string with two places.",
+        "examples": [
+          "12.50"
+        ],
         "type": "string"
       },
       "TraceAnswer": {

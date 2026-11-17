@@ -610,7 +610,13 @@ class ContainerRecord(ContainerRow):
 
 class ImageAt(TypedDict):
     tag: Annotated[str, Describe("The image's tag.")]
-    digest: Annotated[str, Describe("The image's digest, `sha256:` and its hash; empty when not read yet.")]
+    digest: Annotated[
+        str,
+        Describe(
+            "The image's digest, `sha256:` and its hash; empty when not read yet.",
+            examples=("sha256:50d858e0985ecc7f60418aaf0cc5ab587f42c2570a884095a9e8ccacd0f6545c",),
+        ),
+    ]
 
 
 class BlockerPart(TypedDict):

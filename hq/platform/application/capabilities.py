@@ -101,7 +101,7 @@ def capability_registry() -> dict[str, CapabilitySpec]:
 class CapabilitySummary(TypedDict):
     """One command as an index names it: what it does, without its schema."""
 
-    name: Annotated[str, Describe("The command's dotted name, which you run it by.")]
+    name: Annotated[str, Describe("The command's dotted name, which you run it by.", examples=("asset.update",))]
     label: Annotated[str, Describe("The command's name, as HQ's pages show it.")]
     summary: Annotated[str, Describe("What the command does, in a sentence.")]
     effect: Effect

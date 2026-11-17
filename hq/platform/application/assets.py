@@ -36,7 +36,8 @@ type AssetInfrastructure = Annotated[
     Refers(Asset, "infrastructure"),
     Describe(
         "The machine, domain or certificate this asset is.",
-        api="A `type:key` reference such as `machine:lab-1`; empty for none.",
+        api="A `type:key` reference; empty for none.",
+        examples=("machine:lab-1",),
     ),
 ]
 # How an asset or an expense was paid, from the one set both choose from.

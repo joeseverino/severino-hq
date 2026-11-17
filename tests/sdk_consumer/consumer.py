@@ -500,6 +500,7 @@ def a_command_that_starts_somewhere() -> None:
     assert_type(capabilities.Describe("The project it is for.", api="Its slug.").api, str)
     capabilities.Describe()  # type: ignore[call-arg]
     capabilities.Describe("The project it is for.", api=None)  # type: ignore[arg-type]
+    assert_type(capabilities.Describe("The host it runs on.", examples=("example-host",)).examples, tuple[Any, ...])
     capabilities.Names(resource=1)  # type: ignore[arg-type]
     capabilities.Choices(("plain", "loud"))  # type: ignore[arg-type]
     assert_type(capabilities.Refers(Note, "about").field, str)
