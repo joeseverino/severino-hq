@@ -135,7 +135,7 @@ class VerdictTests(SimpleTestCase):
         (root / DOCUMENT).write_text(document(range(12)))
         (root / EXEMPTIONS).write_text(on_base)
         git("add", ".")
-        git("commit", "-q", "--no-verify", "-m", "base")
+        git("commit", "-q", "-m", "base")
         base = git("rev-parse", "HEAD")
         (root / DOCUMENT).write_text(document(range(12), **revision))
         (root / EXEMPTIONS).write_text(exemptions)

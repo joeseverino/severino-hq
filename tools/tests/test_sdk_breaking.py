@@ -60,7 +60,7 @@ class VerdictTests(SimpleTestCase):
         git = fixture_git(root)
         git("init", "-q")
         git("add", ".")
-        git("commit", "-q", "--no-verify", "-m", "base")
+        git("commit", "-q", "-m", "base")
         base = git("rev-parse", "HEAD")
         (root / "hq/platform/application/shapes.py").write_text(shapes)
         (root / "hq_sdk/example.py").write_text(sdk)

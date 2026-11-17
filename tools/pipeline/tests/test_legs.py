@@ -38,7 +38,7 @@ def write(root: Path, paths: list[str], text: str) -> None:
 def commit(root: Path, message: str) -> None:
     git = fixture_git(root)
     git("add", "-A")
-    git("commit", "--quiet", "--no-verify", "--allow-empty", "-m", message)
+    git("commit", "--quiet", "--allow-empty", "-m", message)
 
 
 def repository(root: Path) -> Path:

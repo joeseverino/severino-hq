@@ -25,7 +25,7 @@ class FixedFirstTests(SimpleTestCase):
             (root / derived).write_text('{"example": 1}\n')
             (root / "example/source.py").write_text("EXAMPLE = 1\n")
             git("add", "--all")
-            git("commit", "--quiet", "--no-verify", "-m", "base")
+            git("commit", "--quiet", "-m", "base")
             base = git("rev-parse", "HEAD")
             (root / "example/source.py").write_text("EXAMPLE = 2\n")
 
