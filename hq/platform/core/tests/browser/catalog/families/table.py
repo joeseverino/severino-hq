@@ -112,8 +112,8 @@ ENTRIES = {
                     f"example-{at:02} was started outside its compose project",
                     "An example note long enough to wrap over several lines beside the row's actions.",
                     (
-                        PageAction(f"Mark example-{at:02} as meant to run", f"/example/{at}/edit/"),
-                        PageAction("Open example containers", "/example/containers/"),
+                        PageAction("Mark as intended", f"/example/{at}/edit/"),
+                        PageAction("Open containers", "/example/containers/"),
                         PageAction._built(label="Check again", url=f"/example/{at}/check/", method="post"),
                     ),
                 )

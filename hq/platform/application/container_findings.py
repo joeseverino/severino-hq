@@ -354,8 +354,7 @@ def _posture_help(check: Check, subjects: tuple[Measured, ...]) -> Help:
         item = about.measurement.subject
         name = item.running.name
         if not item.running.watcher:
-            then = "mark it" if check.id == "no-docker-socket" else "see its compose change"
-            remedies.append(_adopt(item, f"Adopt {name} to {then}"))
+            remedies.append(_adopt(item, "Adopt it"))
         elif check.id == "no-docker-socket":
             remedies.append(
                 FindingRemedy(capability=UPDATE_CAPABILITY, target=item.running.watcher, intent=SOCKET_HOLDER_INTENT)
@@ -372,7 +371,7 @@ def _posture_help(check: Check, subjects: tuple[Measured, ...]) -> Help:
     return Help(steps=(Do(check.fix, notes=(_help(check.id),)),), remedies=tuple(remedies), offers=tuple(offers))
 
 
-SOCKET_HOLDER_INTENT = "Mark as meant to control Docker"
+SOCKET_HOLDER_INTENT = "Mark as intended"
 
 
 def socket_holder_link(item: Container) -> ActionLink:
