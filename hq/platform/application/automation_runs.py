@@ -42,7 +42,7 @@ from .tone import Tone
 lazy from . import approvals, automation_adoption, pages
 lazy from .action_links import command_url
 lazy from .approval_review import ChangePreview
-lazy from .approvals import AUDIT_LABELS, ApprovalSubject, every_call, measured_by, waits_for_a_person
+lazy from .approvals import ApprovalSubject, every_call, measured_by, waits_for_a_person
 lazy from .automation_sources import PLAYBOOKS, SHORT_REVISION
 lazy from .cadence import ask, automation_standing
 lazy from .capabilities import Consented, consent
@@ -716,7 +716,7 @@ def _held_runs(manifest: OperationManifest, principal: Principal) -> ServiceSect
     when none waits."""
 
     waiting = approvals.pending(principal=principal, capability=capability_name(manifest.id))
-    who = asked_by(ApprovalRequest, waiting, formerly=AUDIT_LABELS)
+    who = asked_by(ApprovalRequest, waiting)
     records = tuple(
         (
             machines_cell([str(host) for host in held.baseline.get("hosts") or ()]),

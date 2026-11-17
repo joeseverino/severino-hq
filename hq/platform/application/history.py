@@ -590,21 +590,19 @@ def who_did_each(*asked: Acts) -> list[dict[str, Attribution]]:
     return found
 
 
-def asking(model: type, records: Iterable[Any], *, formerly: Iterable[str] = ()) -> Acts:
+def asking(model: type, records: Iterable[Any]) -> Acts:
     """The audit rows that created each of ``records``, of ``model``, under
-    its audit label or a label its older rows still carry (``formerly``),
-    read with others' by ``who_did_each``."""
+    its audit label, read with others' by ``who_did_each``."""
 
-    labels = (audited_labels()[model], *formerly)
-    return Acts(labels, [record.pk for record in records], action=AuditLog.Action.CREATED)
+    return Acts((audited_labels()[model],), [record.pk for record in records], action=AuditLog.Action.CREATED)
 
 
-def asked_by(model: type, records: Iterable[Any], *, formerly: Iterable[str] = ()) -> dict[str, Attribution]:
+def asked_by(model: type, records: Iterable[Any]) -> dict[str, Attribution]:
     """Who asked for each of ``records`` (a held change, a queued operation),
     by id, from the audit row that created it; a record no row records is
     left out."""
 
-    (found,) = who_did_each(asking(model, records, formerly=formerly))
+    (found,) = who_did_each(asking(model, records))
     return found
 
 

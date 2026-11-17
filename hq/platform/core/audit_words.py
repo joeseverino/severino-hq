@@ -17,7 +17,6 @@ from hq.platform.application.ui import counted
 lazy from hq.domains.control_plane.bridge_actions import ACTIONS
 lazy from hq.platform.application.approvals import LAPSE, REQUEST
 lazy from hq.platform.application.capabilities import capability_spec
-lazy from hq.platform.application.capability_renames import RECORDED_AS
 lazy from hq.platform.application.outbound_work import job_names
 lazy from hq.platform.application.reports import EXPORT
 lazy from hq.platform.application.security import MCP_OPERATION
@@ -105,8 +104,7 @@ def title_of(operation: str) -> str | None:
     """What a person calls the operation named ``operation``, in the words of
     whatever declared it, or None when nothing did: a capability's title, a
     job's label, a controller action's title, or the title bound beside its
-    name. A name a handler's binding once gave its rows reads as the
-    capability that records the act now (``capability_renames.RECORDED_AS``).
+    name.
 
     The one place an operation's name becomes its title, so a name nothing
     declares is never shown as its code dressed up as words.
@@ -114,7 +112,7 @@ def title_of(operation: str) -> str | None:
 
     if not operation:
         return None
-    spec = capability_spec(RECORDED_AS.get(operation, operation))
+    spec = capability_spec(operation)
     if spec is not None:
         return spec.title
     if title := job_names().get(operation) or _titled().get(operation):

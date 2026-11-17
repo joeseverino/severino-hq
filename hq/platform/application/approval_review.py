@@ -12,7 +12,7 @@ from typing import Any
 from hq.domains.control_plane.models import ApprovalRequest, ManagedResource, OperationRequest
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
-from .approvals import AUDIT_LABELS, COMPARED, DECLARATIONS, NO_OFFER, WARNINGS, offers, shown_by
+from .approvals import COMPARED, DECLARATIONS, NO_OFFER, WARNINGS, offers, shown_by
 from .contracts import Effect
 from .doors import NOBODY
 from .payload_words import STEP, ChangeRow, changed_words, document, field_words, value_words
@@ -406,7 +406,7 @@ def review(held: ApprovalRequest, principal: Principal) -> dict[str, Any]:
     decisions it offers them (``approvals.offers``)."""
 
     shown, warnings = marked(preview(held), _warnings(held))
-    who = asked_by(ApprovalRequest, (held,), formerly=AUDIT_LABELS).get(str(held.pk), NOBODY)
+    who = asked_by(ApprovalRequest, (held,)).get(str(held.pk), NOBODY)
     # Its heading names whoever its audit row says asked.
     sentence = replace(asked(held, shown), actor=who.actor) if who else asked(held, shown)
     found = ManagedResource.objects.filter(key=held.resource_key).first() if held.resource_kind else None

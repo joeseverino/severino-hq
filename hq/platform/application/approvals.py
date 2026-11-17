@@ -81,9 +81,7 @@ def is_destructive(spec, command: Any) -> bool:
 
 DECLARATIONS = "infrastructure"
 
-# Existing audit rows may carry either label; both are read as approvals.
 AUDIT_LABEL = "Approval"
-AUDIT_LABELS = (AUDIT_LABEL, "Infrastructure approval")
 
 
 class ApprovalError(PolicyError):
@@ -933,7 +931,7 @@ def reject(command: RejectCommand, *, principal: Principal) -> ApprovalRejected:
 def for_audit_event(event) -> ApprovalRequest | None:
     """The request an audit row is about, if it is about one."""
 
-    if event.object_type not in AUDIT_LABELS or not event.object_id:
+    if event.object_type != AUDIT_LABEL or not event.object_id:
         return None
     try:
         return ApprovalRequest.objects.filter(pk=event.object_id).first()
@@ -946,7 +944,7 @@ def entry_event(approval_id) -> Any:
 
     return (
         AuditLog.objects.filter(
-            object_type__in=AUDIT_LABELS,
+            object_type=AUDIT_LABEL,
             object_id=str(approval_id),
             action=AuditLog.Action.CREATED,
         )

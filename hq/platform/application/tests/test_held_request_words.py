@@ -11,7 +11,7 @@ from hq.platform.application.markup_testing import select, text
 from hq.platform.core.models import AuditLog
 
 from ..approval_review import asked, preview
-from ..approvals import AUDIT_LABELS, DECLARATIONS
+from ..approvals import AUDIT_LABEL, DECLARATIONS
 from ..attention import _asked_change, waiting_for_approval
 from ..capabilities import capability_registry, execute_capability
 from ..integration_specs import capability_schema
@@ -76,7 +76,7 @@ class HeldRequestWordsTests(TestCase):
         self.assertNotIn("created", item.explanation.lower(), item.explanation)
 
     def test_the_audit_says_it_as_the_card_does(self):
-        event = AuditLog.objects.get(object_type__in=AUDIT_LABELS, object_id=str(self.held.id))
+        event = AuditLog.objects.get(object_type=AUDIT_LABEL, object_id=str(self.held.id))
 
         self.assertEqual(event.message, str(asked(self.held)))
 

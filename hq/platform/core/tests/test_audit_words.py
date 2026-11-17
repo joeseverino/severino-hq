@@ -228,14 +228,6 @@ class TitleTests(SimpleTestCase):
             with self.subTest(operation=str(operation)):
                 self.assertEqual(title_of(str(operation)), operation.title)
 
-    def test_a_name_a_handler_once_bound_reads_as_the_capability_that_records_it_now(self):
-        from hq.platform.application.capabilities import command_spec
-        from hq.platform.application.capability_renames import RECORDED_AS
-
-        for retired, capability in RECORDED_AS.items():
-            with self.subTest(retired=retired):
-                self.assertEqual(title_of(retired), command_spec(capability).title)
-
     def test_a_name_nothing_declares_has_no_title(self):
         for name in ("", "bridge.example-undeclared", "example.undeclared", "core:audit_list"):
             with self.subTest(name=name):
