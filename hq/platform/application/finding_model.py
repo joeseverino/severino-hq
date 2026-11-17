@@ -4,11 +4,10 @@ Every detector module builds its findings from these, and application.findings
 derives, resolves and serves them. Kept apart so a detector can import its
 vocabulary without importing the pipeline that collects it."""
 
-import json
 import re
 import shlex
 from collections.abc import Callable, Iterable, Iterator, Mapping
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, NotRequired, TypedDict
 
@@ -375,96 +374,20 @@ def per_connection(
     return tuple(sorted(found, key=lambda finding: finding.title))
 
 
-# A finding worded while the topology is derived, which may read, carried on
-# its subject's node so its rule reads it back and deriving findings costs no
-# query.
-CARRIED = "finding"
-
-
-def carry(nodes: dict[str, TopologyNode], findings: Iterable[Finding]) -> None:
-    """Each of ``findings`` as a fact on its subject's node.
-
-    A subject with no node of its own (a name only a gate mentions) rides on
-    the first node: the rules read every node, so where it rides only has to
-    exist.
-    """
-
-    for finding in findings:
-        anchor = finding.subject if finding.subject in nodes else next(iter(nodes), "")
-        if anchor:
-            node = nodes[anchor]
-            nodes[anchor] = replace(node, facts=(*node.facts, (CARRIED, _encoded(finding))))
-
-
-def _encoded(finding: Finding) -> str:
-    return json.dumps(
-        {
-            "rule": finding.rule,
-            "subject": finding.subject,
-            "title": finding.title,
-            "severity": finding.severity,
-            "explanation": finding.explanation,
-            "part": finding.part,
-            "evidence": [list(pair) for pair in finding.evidence],
-            "remedies": [
-                [remedy.capability, remedy.target, remedy.intent, remedy.variant, remedy.url, remedy.method]
-                for remedy in finding.remedies
-            ],
-            "steps": [asdict(step) for step in finding.steps],
-            "offers": [[offer.name, offer.label, offer.url, offer.reason] for offer in finding.offers],
-            "observed_at": finding.observed_at.isoformat() if finding.observed_at else "",
-            "reads": finding.reads,
-            "primary": [finding.primary.label, finding.primary.url] if finding.primary else [],
-        }
-    )
-
-
-def _decoded(value: str) -> Finding:
-    item = json.loads(value)
-    return Finding(
-        rule=item["rule"],
-        subject=item["subject"],
-        title=item["title"],
-        severity=item["severity"],
-        explanation=item["explanation"],
-        part=item["part"],
-        evidence=tuple(tuple(pair) for pair in item["evidence"]),
-        remedies=tuple(
-            FindingRemedy(capability=capability, target=target, intent=intent, variant=variant, url=url, method=method)
-            for capability, target, intent, variant, url, method in item["remedies"]
-        ),
-        steps=tuple(_step_of(**fields) for fields in item["steps"]),
-        offers=tuple(read_link(name, label, url, reason=reason) for name, label, url, reason in item["offers"]),
-        observed_at=moment(item["observed_at"]),
-        reads=item["reads"],
-        primary=opens(*item["primary"]) if item["primary"] else None,
-    )
-
-
-def _step_of(kind: str, notes: list[str], **fields: str) -> Run | Do:
-    # A detector writes a Run or a Do; a Press is derivation's.
-    return Run(**fields, notes=tuple(notes)) if kind == "run" else Do(**fields, notes=tuple(notes))
-
-
 def opens(label: str, url: str) -> ActionLink:
     """The page a finding's card leads with, under ``label``."""
 
     return read_link("open", label, url)
 
 
-def carried(rule: str) -> Callable[[FindingEstate], tuple[Finding, ...]]:
-    """The detector of ``rule``: the findings of it the topology carries, each once, in title order."""
+def distinct(findings: Iterable[Finding]) -> tuple[Finding, ...]:
+    """Each of ``findings`` once by its subject, part and title, in that order:
+    a detector that walks several routes to one place may word it twice."""
 
-    def detect(estate: FindingEstate) -> tuple[Finding, ...]:
-        found = {}
-        for node in estate.nodes():
-            for value in fact_values(node, CARRIED):
-                finding = _decoded(value)
-                if finding.rule == rule:
-                    found.setdefault((finding.subject, finding.part, finding.title), finding)
-        return tuple(found[key] for key in sorted(found))
-
-    return detect
+    found: dict[tuple[str, str, str], Finding] = {}
+    for finding in findings:
+        found.setdefault((finding.subject, finding.part, finding.title), finding)
+    return tuple(found[key] for key in sorted(found))
 
 
 # A problem card's own button: read what the claim rests on again, then run

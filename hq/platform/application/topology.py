@@ -36,7 +36,6 @@ from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
 from .conditions import DRIFTED, holding
 from .connection_catalog import ConnectionGroup, connection_catalog
 from .connections import ConnectionLink, ConnectionSpec
-from .contradiction_findings import add_contradiction_facts
 from .derivations import derivation
 from .derived_inputs import ESTATE_READS, estate_variant
 from .entity_links import entity_link, kind_label, node_name, record_name
@@ -513,7 +512,6 @@ def _derive(principal: Principal) -> Topology:
     _connection_nodes(groups, nodes, edges, principal)
     add_estate(nodes, edges, resources)
     add_connection_facts(nodes)
-    add_contradiction_facts(nodes)
     _governs_edges(groups, resources, edges)
     _measure(nodes)
 

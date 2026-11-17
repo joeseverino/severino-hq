@@ -80,7 +80,7 @@ from .finding_steps import Do, Press, Run, WrittenCheck, WrittenReason, WrittenS
 from .first_seen import recorded
 from .integration_validation import required_capability_names
 from .integrations import IntegrationGraph, held_graph, integration_graph
-from .projection import MAX_PAGE_SIZE, QUERY
+from .projection import MAX_PAGE_SIZE, QUERY, projection_scope
 from .security import Principal
 from .tone import Tone
 from .topology import derive_topology
@@ -601,9 +601,11 @@ def derive_findings(
 
 
 def estate_findings(*, principal: Principal, rule: str = "") -> tuple[Any, ...]:
-    """Every finding the topology ``principal`` may see supports."""
+    """Every finding the topology ``principal`` may see supports, in one
+    projection, so the topology and the gathered rules share each read."""
 
-    return _estate_findings(principal, rule)
+    with projection_scope():
+        return _estate_findings(principal, rule)
 
 
 @derivation(
@@ -613,7 +615,9 @@ def estate_findings(*, principal: Principal, rule: str = "") -> tuple[Any, ...]:
 )
 def _estate_findings(principal: Principal, rule: str) -> tuple[Any, ...]:
     topology = derive_topology(principal=principal)
-    gathered = gather_findings(_estate(topology, principal), principal=principal)
+    # A name no rule has asks for every finding, as derivation reads it.
+    asked = rule if rule in _RULE_BY_NAME else ""
+    gathered = gather_findings(_estate(topology, principal), principal=principal, rule=asked)
     raised = derive_findings(topology, principal=principal, rule=rule, gathered=gathered)
     seen = recorded() if raised else {}
     # A notice says when in its own words; a detector may read when its condition began.

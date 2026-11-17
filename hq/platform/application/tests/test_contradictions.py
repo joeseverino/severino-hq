@@ -1,29 +1,43 @@
 """Where two connections disagree, each a finding with the fix HQ can offer."""
 
+from contextlib import nullcontext
+
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 
-from ..findings import derive_findings
+from ..derivation_testing import uncached
+from ..findings import estate_findings
 from ..projection import projection_scope
 from ..security import Capability, Principal
 from ..tailnet import unworn_tags
-from ..topology import derive_topology
 from .test_paths import CLOUDFLARE, PUBLIC_RANGE, estate, record, store
 
 OPERATOR = Principal("operator", "test", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
 
 
 def raised(rule):
-    with projection_scope():
-        return derive_findings(derive_topology(principal=OPERATOR), principal=OPERATOR, rule=rule)
+    return estate_findings(principal=OPERATOR, rule=rule)
 
 
 @PUBLIC_RANGE
 class ContradictionTests(TestCase):
     def setUp(self):
         estate()
+
+    def test_the_rules_share_each_read_with_the_topology_whoever_asks(self):
+        """Gathered beside the topology, a rule reads what it already read,
+        so a caller that opened no projection pays what one that did pays."""
+
+        def queries(scope):
+            with uncached(), CaptureQueriesContext(connection) as ran, scope:
+                estate_findings(principal=OPERATOR)
+            return len(ran.captured_queries)
+
+        self.assertEqual(queries(nullcontext()), queries(projection_scope()))
 
     def test_a_consistent_estate_raises_none(self):
         for rule in (

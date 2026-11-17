@@ -198,8 +198,8 @@ class TopologyNode:
         ),
     ] = ()
     # A findings rule derives from this topology and is not allowed a query of
-    # its own (the suite measures that) so an observation a rule has to reason
-    # about has to arrive here or not at all.
+    # its own (the suite measures that); one that reasons about more than this
+    # holds is ``gathered`` and reads HQ's records itself.
     #
     # Flat and small on purpose. This is not a second copy of the inventory; it
     # is the handful of observed facts that decide something.

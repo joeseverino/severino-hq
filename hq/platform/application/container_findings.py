@@ -5,9 +5,9 @@ for a known advisory, for a newer release (an update is a chore to schedule,
 not a fire) and for being run by tag alone; and one per container for the
 serious checks of the standard it fails, offering its compose change
 (``application.container_hardening``) or, for the Docker socket, the
-declaration that holding it is the container's job. An image's are carried on
-the machine's node (``finding_model.carry``); a container's are the container
-standard's (``HARDENING_STANDARD``).
+declaration that holding it is the container's job. An image's are read once
+for the three rules about it; a container's are the container standard's
+(``HARDENING_STANDARD``).
 """
 
 import shlex
@@ -31,19 +31,20 @@ from .finding_model import (
     FindingEstate,
     FindingRemedy,
     FindingRule,
-    carried,
-    carry,
+    distinct,
     on_machine,
     opens,
 )
 from .finding_steps import Do, Run
 from .images import version
 from .lists import split_list
+from .projection import read_once
 from .standard_findings import Help, Measured, Per, Standard
 from .standards import Check
 from .tone import Tone
 from .ui import ended
 from .workflow_contracts import ActionLink
+lazy from .topology_estate import machine_nodes
 lazy from .upgrades import OVERRIDES, plan_for
 
 # Why an update is a person's to apply.
@@ -55,14 +56,26 @@ UNPINNED = "container-image-unpinned"
 HARDENING = "container-hardening"
 
 
-def add(nodes, machine: Callable[[Any], str]) -> None:
+def _images(rule: str) -> Callable[[FindingEstate], tuple[Finding, ...]]:
+    """The detector of ``rule``: its findings among every image's."""
+
+    def detect(_estate: FindingEstate) -> tuple[Finding, ...]:
+        return distinct(
+            finding for finding in read_once("container_findings.images", _image_findings) if finding.rule == rule
+        )
+
+    return detect
+
+
+def _image_findings() -> tuple[Finding, ...]:
     """Each image's findings, on the machine they run on."""
 
+    machine = machine_nodes()
     images: dict[tuple[str, str], list[Container]] = {}
     for item in containers():
         if at := machine(item.machine.name):
             images.setdefault((at, item.standing.label), []).append(item)
-    carry(nodes, (finding for (at, _label), running in images.items() for finding in _of(running, at)))
+    return tuple(finding for (at, _label), running in images.items() for finding in _of(running, at))
 
 
 def _of(running: list[Container], subject: str) -> Iterator[Finding]:
@@ -410,7 +423,8 @@ RULES: tuple[FindingRule, ...] = (
         ADVISORY,
         "Image advisories",
         Tone.ATTENTION,
-        carried(ADVISORY),
+        _images(ADVISORY),
+        gathered=True,
         operator_action="Move the container to a release that fixes it, once one does.",
         no_help_reason=BY_HAND,
         card=CONTAINERS_CARD,
@@ -424,7 +438,8 @@ RULES: tuple[FindingRule, ...] = (
         UPDATE,
         "Image updates",
         Tone.ATTENTION,
-        carried(UPDATE),
+        _images(UPDATE),
+        gathered=True,
         operator_action="Move the container to the newer release.",
         no_help_reason=BY_HAND,
         card=CONTAINERS_CARD,
@@ -437,7 +452,8 @@ RULES: tuple[FindingRule, ...] = (
         UNPINNED,
         "Image run by tag alone",
         Tone.ATTENTION,
-        carried(UNPINNED),
+        _images(UNPINNED),
+        gathered=True,
         operator_action="Pin the image by digest in the compose file that runs it and recreate its containers.",
         no_help_reason=CANNOT_EDIT_COMPOSE,
         card=CONTAINERS_CARD,

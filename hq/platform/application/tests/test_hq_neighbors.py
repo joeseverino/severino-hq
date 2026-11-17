@@ -5,11 +5,10 @@ from django.utils import timezone
 
 from hq.platform.application.security import cli_principal
 
-from ..findings import derive_findings
+from ..findings import estate_findings
 from ..hq_context import hq_context
 from ..inventory_testing import store
 from ..projection import projection_scope
-from ..topology import derive_topology
 from .test_hq_context import IMAGE, estate, own, running
 from .test_tailnet_posture import EVERYTHING
 
@@ -53,7 +52,7 @@ class KeyTests(TestCase):
         with projection_scope():
             found = [
                 finding
-                for finding in derive_findings(derive_topology(principal=EVERYTHING), principal=EVERYTHING)
+                for finding in estate_findings(principal=EVERYTHING)
                 if finding.rule == "container-image-unpinned"
             ]
 

@@ -1,10 +1,10 @@
 """The Docker readings joined into the relation graph, and what they imply.
 
-A container running an image its own tag no longer names
-locally, or an image with no tag at all, is a fact on its machine, and a
-finding reads it from there, as it reads a container no compose project
-declares. Nothing here calls a registry: "behind" means behind the image
-already pulled onto the machine.
+A container no compose project declares is a fact on its machine, and a
+finding reads it from there. A container running an image its own tag no
+longer names locally, or an image with no tag at all, is read from the image
+records as the findings are gathered. Nothing here calls a registry: "behind"
+means behind the image already pulled onto the machine.
 """
 
 import shlex
@@ -27,6 +27,7 @@ from .finding_model import (
     FindingRemedy,
     FindingRule,
     cannot_run_commands,
+    distinct,
     machine_step,
 )
 from .finding_steps import Run
@@ -34,25 +35,13 @@ from .tone import Tone
 from .ui import ended
 lazy from .adoption import unmanaged
 lazy from .inventory import record_token
+lazy from .topology_estate import machine_nodes
 
 IMAGE_BEHIND = "image-behind"
 IMAGE_UNTAGGED = "image-untagged"
 
 
 def add(nodes, machine: Callable[[Any], str]) -> None:
-    """Container facts on machines."""
-
-    _image_facts(nodes, machine)
-    _unrecognized(nodes, machine)
-
-
-def _add_fact(nodes, node_id: str, fact: tuple[str, str]) -> None:
-    node = nodes[node_id]
-    if fact not in node.facts:
-        nodes[node_id] = replace(node, facts=(*node.facts, fact))
-
-
-def _unrecognized(nodes, machine) -> None:
     """A container on a machine that no compose project declares, as its fact.
 
     The sweep did not adopt it, so it has no node of its own; its machine
@@ -63,13 +52,9 @@ def _unrecognized(nodes, machine) -> None:
         if item.adoptable or item.kind != CONTAINER_KIND:
             continue
         host = str(item.spec.get("host", ""))
-        machine_id = machine(host)
-        if machine_id:
-            _add_fact(nodes, machine_id, ("unrecognized-container", f"{item.spec.get('name', '')}@{host}"))
-
-
-def _on(record: Mapping[str, Any], machine: Callable[[Any], str]) -> str:
-    return machine(record.get("host")) or machine(record.get("host_address"))
+        fact = ("unrecognized-container", f"{item.spec.get('name', '')}@{host}")
+        if (machine_id := machine(host)) and fact not in (node := nodes[machine_id]).facts:
+            nodes[machine_id] = replace(node, facts=(*node.facts, fact))
 
 
 def reference_tag(reference: str) -> str:
@@ -107,37 +92,7 @@ def image_verdicts(records: Iterable[Mapping[str, Any]]) -> list[tuple[str, ...]
     return found
 
 
-def _image_facts(nodes, machine) -> None:
-    by_environment: dict[tuple[str, Any], list[Mapping[str, Any]]] = {}
-    for _snapshot, record in inventory_records(IMAGE_KIND):
-        if record.get("id"):
-            key = (str(record.get("connection_ref", "")), record.get("environment_id"))
-            by_environment.setdefault(key, []).append(record)
-    for records in by_environment.values():
-        host_id = _on(records[0], machine)
-        if not host_id or host_id not in nodes:
-            continue
-        host = str(records[0].get("host", "") or nodes[host_id].label)
-        added = tuple(
-            (
-                fact,
-                "|".join((f"{container}@{host}", reference, short_id(running), short_id(tagged), service)),
-            )
-            for fact, container, reference, running, tagged, service in image_verdicts(records)
-        )
-        for fact in added:
-            _add_fact(nodes, host_id, fact)
-
-
 # ----- Findings ------------------------------------------------------------------
-
-
-def _parts(value: str) -> tuple[str, ...]:
-    """``(container, host, reference, running, tagged, service)`` from one image fact."""
-
-    subject, reference, running, tagged, service = (value.split("|") + [""] * 5)[:5]
-    container, _, host = subject.rpartition("@")
-    return container, host, reference, running, tagged, service
 
 
 def unrecognized_containers(estate: FindingEstate) -> tuple[Finding, ...]:
@@ -197,15 +152,31 @@ def unrecognized_containers(estate: FindingEstate) -> tuple[Finding, ...]:
 
 
 def _stated(estate: FindingEstate, key: str) -> Iterator[tuple[Any, ...]]:
-    """Each image fact under ``key``, as its node and then its ``_parts``."""
+    """``(node, container, host, reference, running, tagged, service)`` for each
+    container on a machine of the estate whose image is judged ``key``."""
 
-    return ((node, *_parts(value)) for node in estate.nodes() for fact, value in node.facts if fact == key)
+    nodes = {node.id: node for node in estate.nodes()}
+    machine = machine_nodes()
+    by_environment: dict[tuple[str, Any], list[Mapping[str, Any]]] = {}
+    for _snapshot, record in inventory_records(IMAGE_KIND):
+        if record.get("id"):
+            by_environment.setdefault((str(record.get("connection_ref", "")), record.get("environment_id")), []).append(
+                record
+            )
+    for records in by_environment.values():
+        first = records[0]
+        if (node := nodes.get(machine(first.get("host")) or machine(first.get("host_address")))) is None:
+            continue
+        host = str(first.get("host", "") or node.label)
+        for fact, container, reference, running, tagged, service in image_verdicts(records):
+            if fact == key:
+                yield node, container, host, reference, short_id(running), short_id(tagged), service
 
 
 def images_behind(estate: FindingEstate) -> tuple[Finding, ...]:
     """A container still running the image its tag named before the last pull."""
 
-    found = [
+    return distinct(
         Finding(
             rule="container-image-behind",
             subject=node.id,
@@ -226,14 +197,13 @@ def images_behind(estate: FindingEstate) -> tuple[Finding, ...]:
             steps=_recreate(container, service, host or node.label),
         )
         for node, container, host, reference, running, tagged, service in _stated(estate, IMAGE_BEHIND)
-    ]
-    return tuple(sorted(found, key=lambda item: item.title))
+    )
 
 
 def images_untagged(estate: FindingEstate) -> tuple[Finding, ...]:
     """A container running an image no tag names, so nothing says what it is."""
 
-    found = [
+    return distinct(
         Finding(
             rule="container-image-untagged",
             subject=node.id,
@@ -253,8 +223,7 @@ def images_untagged(estate: FindingEstate) -> tuple[Finding, ...]:
             steps=_recreate(container, service, host or node.label),
         )
         for node, container, host, reference, running, _tagged, service in _stated(estate, IMAGE_UNTAGGED)
-    ]
-    return tuple(sorted(found, key=lambda item: item.title))
+    )
 
 
 def _recreate(container: str, service: str, host: str) -> tuple[Run, ...]:
@@ -285,6 +254,7 @@ RULES: tuple[FindingRule, ...] = (
         "Container runs an older image than its tag",
         Tone.ATTENTION,
         images_behind,
+        gathered=True,
         operator_action=("Recreate the container from its compose project so it runs the image its tag names now."),
         no_help_reason=cannot_run_commands(),
         card=CONTAINERS_CARD,
@@ -295,6 +265,7 @@ RULES: tuple[FindingRule, ...] = (
         "Container runs an untagged image",
         Tone.ATTENTION,
         images_untagged,
+        gathered=True,
         operator_action=("Pin a tag for the image in the container's compose file and recreate it."),
         no_help_reason=CANNOT_EDIT_COMPOSE,
         card=CONTAINERS_CARD,

@@ -27,6 +27,7 @@ from .facts import Joined, Subject, inventory_records, readings
 from .inventory import record_identity
 from .locate import Machines, index_of
 from .paths import path_to
+from .projection import read_once
 from .tone import Tone
 from .topology_model import (
     RELATIONS,
@@ -39,7 +40,6 @@ from .topology_model import (
 )
 lazy from . import (
     certificate_expiry,
-    container_findings,
     contradiction_findings,
     docker_estate,
     filesystem_findings,
@@ -64,11 +64,47 @@ _FOLDS_INTO_MACHINE = {"controller": "Runs the controller", "target": RELATIONS[
 _JOINS_WHEN_KEPT = {"controller": "runs_on", "target": "stands_for"}
 
 
+@dataclass(frozen=True, slots=True)
+class MachineNodes:
+    """The machine node each name or address stands for, from the machine catalog."""
+
+    ids: dict[str, str]
+    index: Machines
+
+    def __call__(self, value: Any) -> str:
+        """The machine node a name or address stands for, or ""."""
+
+        text = str(value or "").strip()
+        if not text:
+            return ""
+        return self.ids.get(text) or self.ids.get(self.index.resolve(text), "")
+
+    def at(self, address: Any) -> str:
+        """The machine node answering at ``address``, or ""."""
+
+        return self.ids.get(self.index.at(address), "")
+
+
+def machine_nodes() -> MachineNodes:
+    """How the topology places what names a machine, read once per projection,
+    so a finding gathered beside it places its subject the same way."""
+
+    return read_once("topology.machine_nodes", _machine_nodes)
+
+
+def _machine_nodes() -> MachineNodes:
+    catalog = machines_once()
+    ids: dict[str, str] = {}
+    for machine in catalog:
+        for name in (machine.name, *machine.aliases):
+            ids.setdefault(name, f"machine:{machine.name}")
+    return MachineNodes(ids, index_of(declared=[{"name": item.name, "addresses": item.addresses} for item in catalog]))
+
+
 @dataclass
 class _Estate:
     subjects: dict[str, Subject]
-    machine_ids: dict[str, str]
-    index: Machines
+    machine: MachineNodes
     # When a reading or an inventory record describing each node was taken.
     seen: dict[str, list[str]] = field(default_factory=dict)
 
@@ -81,14 +117,6 @@ class _Estate:
                 stamps.append(moment.isoformat())
             elif moment:
                 stamps.append(str(moment))
-
-    def machine(self, value: Any) -> str:
-        """The machine node a name or address stands for, or ""."""
-
-        text = str(value or "").strip()
-        if not text:
-            return ""
-        return self.machine_ids.get(text) or self.machine_ids.get(self.index.resolve(text), "")
 
 
 def add_estate(
@@ -145,7 +173,6 @@ def _machines(nodes, edges) -> _Estate:
         if node.kind == "connection":
             connections.setdefault(node.connection_ref, []).append(node.id)
     subjects: dict[str, Subject] = {}
-    machine_ids: dict[str, str] = {}
     for machine in catalog:
         node_id = f"machine:{machine.name}"
         nodes[node_id] = TopologyNode(
@@ -159,8 +186,6 @@ def _machines(nodes, edges) -> _Estate:
             kind_key="machine",
             actions=_open(machine.url),
         )
-        for name in (machine.name, *machine.aliases):
-            machine_ids.setdefault(name, node_id)
         if machine.declaration:
             _declared_by(edges, node_id, f"resource:{machine.declaration}", nodes)
         # The connections the catalog says reach it, the same answer as the
@@ -170,8 +195,7 @@ def _machines(nodes, edges) -> _Estate:
                 relation = edge_between(connection_id, node_id, "reaches")
                 edges[relation.id] = relation
         subjects[node_id] = machine.subject
-    index = index_of(declared=[{"name": item.name, "addresses": item.addresses} for item in catalog])
-    estate = _Estate(subjects=subjects, machine_ids=machine_ids, index=index)
+    estate = _Estate(subjects=subjects, machine=machine_nodes())
     # Its device reading, its telemetry and its containers.
     for machine in catalog:
         estate.saw(
@@ -413,9 +437,7 @@ def _tailnet_edges(nodes, edges, resources, estate: _Estate) -> None:
 def _device_hosts(device, estate: _Estate) -> set[str]:
     """The machines holding any of a tailnet device's addresses."""
 
-    return {
-        estate.machine_ids.get(estate.index.at(address), "") for address in (device.addresses if device else ())
-    } - {""}
+    return {estate.machine.at(address) for address in (device.addresses if device else ())} - {""}
 
 
 def _holder_edges(nodes, edges, resources) -> None:
@@ -500,13 +522,11 @@ def _reader_index(nodes) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
 
 
 def _derived_from_readings(nodes, resources, estate: _Estate) -> None:
-    """What provider-specific joins add: container edges, and image, render
-    status, unit, filesystem, restart, tailnet device, refused report, certificate and renewal facts,
-    and the findings about each container."""
+    """What provider-specific joins add: unrecognized container, render
+    status, unit, filesystem, restart, tailnet device, refused report, certificate and renewal facts."""
 
-    if estate.machine_ids:
+    if estate.machine.ids:
         docker_estate.add(nodes, estate.machine)
-        container_findings.add(nodes, estate.machine)
     render_status_findings.add(nodes, estate.machine)
     unit_findings.add(nodes, estate.machine)
     filesystem_findings.add(nodes, estate.machine)
