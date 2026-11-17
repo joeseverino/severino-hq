@@ -94,20 +94,17 @@ class DeclaredSubjectTests(SimpleTestCase):
         from hq.platform.core.audit import audited_subjects
 
         audited = [model for model in audited_labels() if model.__module__.startswith("hq.")]
+        # A label no model has raises LookupError here.
+        about_themselves = {apps.get_model(label) for label in ABOUT_THEMSELVES}
 
         self.assertTrue(audited)
         for model in audited:
             with self.subTest(model=model._meta.label):
                 self.assertNotEqual(
                     model in audited_subjects(),
-                    model._meta.label in ABOUT_THEMSELVES,
+                    model in about_themselves,
                     "a model's rows either name the record they are about or are about the row itself",
                 )
-
-    def test_every_model_said_to_be_about_itself_exists(self):
-        for label in ABOUT_THEMSELVES:
-            with self.subTest(label=label):
-                apps.get_model(label)
 
 
 class ChainTests(TestCase):

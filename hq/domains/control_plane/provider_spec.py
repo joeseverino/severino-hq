@@ -14,6 +14,7 @@ from typing import Any, Literal
 
 from django.urls import NoReverseMatch
 from pydantic import (
+    BaseModel,
     ConfigDict,
     Field,
     TypeAdapter,
@@ -613,6 +614,11 @@ class ProviderSpec:
             raise ValueError(
                 f"{self.kind!r} describes hostnames but names no part of a service, so nothing would ever read them."
             )
+        # The form prints each effect under the field it names, and a name no
+        # field has prints nowhere.
+        fields = self.spec_type.model_fields if issubclass(self.spec_type, BaseModel) else {}
+        if unknown := [name for name, _ in self.change_effects if name not in fields]:
+            raise ValueError(f"{self.kind!r} says what changing {', '.join(unknown)} does, a field its spec lacks.")
 
     def why_not_adoptable(self) -> Sentence:
         """Why a found record of this kind is never taken on, as a refusal says it."""

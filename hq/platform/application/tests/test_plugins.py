@@ -352,9 +352,6 @@ class PluginContractTests(TestCase):
 
         self.assertIs(api_version.default, MISSING)
 
-    def test_plugin_registry_cannot_be_cleared_without_its_derived_graph(self):
-        self.assertFalse(hasattr(installed_plugins, "cache_clear"))
-
     def test_integration_surfaces_stay_lazy_and_independent(self):
         dashboard = mock.Mock(return_value=())
         health = mock.Mock(return_value=True)

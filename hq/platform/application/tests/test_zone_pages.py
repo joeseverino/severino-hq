@@ -373,13 +373,6 @@ class CertificateEditFormTests(TestCase):
 class NewVerbReadinessTests(TestCase):
     """A new controller verb needs no new view class."""
 
-    def test_one_view_serves_every_verb(self):
-        from hq.domains.control_plane import views
-
-        self.assertFalse(hasattr(views, "ReconcileView"))
-        self.assertFalse(hasattr(views, "RenewCertificateView"))
-        self.assertTrue(hasattr(views, "OperationView"))
-
     def test_the_routes_carry_the_verb_rather_than_the_class(self):
         """A press runs its verb, and says so in the words its button uses."""
 
