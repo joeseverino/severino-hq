@@ -677,13 +677,6 @@ class ResourceDescription(TypedDict):
     permitted: NotRequired[Permitted]
 
 
-# What the catalog of every resource says in place of each list's whole schema.
-WHOLE_SCHEMA = (
-    "Each list's query_schema, filters, paging and largest limit are in describe_resources with name set to "
-    "its resource."
-)
-
-
 # The shape describe_resources answers in; it moves when that shape does.
 RESOURCES_SCHEMA_VERSION = 3
 
@@ -693,9 +686,6 @@ class ResourceCatalog(TypedDict):
 
     schema_version: Annotated[SchemaVersion, Pinned(RESOURCES_SCHEMA_VERSION)]
     resources: Annotated[list[ResourceDescription], Describe("Each resource asked for: every one, or the one named.")]
-    schemas: NotRequired[
-        Annotated[str, Describe("Where each list's whole query schema is; only where the answer holds every resource.")]
-    ]
 
 
 def describe_resources(*, principal: Principal | None = None, name: str = "") -> ResourceCatalog:
@@ -710,7 +700,7 @@ def describe_resources(*, principal: Principal | None = None, name: str = "") ->
             "resources": [_described(_resource(name), principal, whole=True)],
         }
     described = [_described(spec, principal, whole=False) for spec in held_graph().resources.values()]
-    return {"schema_version": RESOURCES_SCHEMA_VERSION, "resources": described, "schemas": WHOLE_SCHEMA}
+    return {"schema_version": RESOURCES_SCHEMA_VERSION, "resources": described}
 
 
 def _listing(spec: ResourceSpec, *, whole: bool) -> ListOperation | None:

@@ -15225,10 +15225,6 @@
           "schema_version": {
             "$ref": "#/components/schemas/SchemaVersion",
             "const": 3
-          },
-          "schemas": {
-            "description": "Where each list's whole query schema is; only where the answer holds every resource.",
-            "type": "string"
           }
         },
         "required": [
