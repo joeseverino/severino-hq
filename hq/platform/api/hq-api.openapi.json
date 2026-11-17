@@ -5169,11 +5169,18 @@
                   }
                 ],
                 "default": null,
-                "description": "The time it ends."
+                "description": "The time it ends.",
+                "x-hq-rules": [
+                  "An end time needs a start time.",
+                  "It cannot end before it starts."
+                ]
               },
               "ends_on": {
                 "$ref": "#/components/schemas/CalendarEntryEndsOn",
-                "default": null
+                "default": null,
+                "x-hq-rules": [
+                  "It cannot end before it starts."
+                ]
               },
               "idempotency_key": {
                 "$ref": "#/components/schemas/IdempotencyKey"
@@ -5198,7 +5205,11 @@
               },
               "repeat_until": {
                 "$ref": "#/components/schemas/CalendarEntryRepeatUntil",
-                "default": null
+                "default": null,
+                "x-hq-rules": [
+                  "Only a repeating entry has an end.",
+                  "It cannot stop repeating before it starts."
+                ]
               },
               "starts_at": {
                 "anyOf": [
@@ -5223,7 +5234,10 @@
               },
               "weekdays": {
                 "$ref": "#/components/schemas/CalendarEntryWeekdays",
-                "default": []
+                "default": [],
+                "x-hq-rules": [
+                  "Only a weekly entry names its days."
+                ]
               }
             },
             "required": [
@@ -5351,10 +5365,17 @@
                     "type": "null"
                   }
                 ],
-                "description": "The time it ends."
+                "description": "The time it ends.",
+                "x-hq-rules": [
+                  "An end time needs a start time.",
+                  "It cannot end before it starts."
+                ]
               },
               "ends_on": {
-                "$ref": "#/components/schemas/CalendarEntryEndsOn"
+                "$ref": "#/components/schemas/CalendarEntryEndsOn",
+                "x-hq-rules": [
+                  "It cannot end before it starts."
+                ]
               },
               "idempotency_key": {
                 "$ref": "#/components/schemas/IdempotencyKey"
@@ -5374,7 +5395,11 @@
                 "$ref": "#/components/schemas/CalendarEntryRepeat"
               },
               "repeat_until": {
-                "$ref": "#/components/schemas/CalendarEntryRepeatUntil"
+                "$ref": "#/components/schemas/CalendarEntryRepeatUntil",
+                "x-hq-rules": [
+                  "Only a repeating entry has an end.",
+                  "It cannot stop repeating before it starts."
+                ]
               },
               "starts_at": {
                 "anyOf": [
@@ -5397,7 +5422,10 @@
                 "minLength": 1
               },
               "weekdays": {
-                "$ref": "#/components/schemas/CalendarEntryWeekdays"
+                "$ref": "#/components/schemas/CalendarEntryWeekdays",
+                "x-hq-rules": [
+                  "Only a weekly entry names its days."
+                ]
               }
             },
             "type": "object"

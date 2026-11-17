@@ -7,6 +7,10 @@ constraint for is laid on the command's field of that name as well
 (``integration_specs.command_adapter``), so a malformed value is refused as the
 command is validated, at every door, and the schema says the rule. The column
 stays the one declaration of it.
+
+A ``Rule`` between a row's columns (an end after its start) has no constraint
+a schema can state, so its message is said beside the field it is reported
+beside, read from the rule itself (``row_rules``).
 """
 
 from collections.abc import Iterable
@@ -24,9 +28,13 @@ from django.core.validators import (
     RegexValidator,
     URLValidator,
 )
-from django.db.models import CharField, DecimalField, FloatField, IntegerField, JSONField, TextField
+from django.db.models import CharField, DecimalField, F, FloatField, IntegerField, JSONField, Q, TextField
+from django.db.models.constants import LOOKUP_SEP
+from django.db.models.expressions import BaseExpression
 from pydantic import Field, GetCoreSchemaHandler, GetJsonSchemaHandler, TypeAdapter
 from pydantic_core import CoreSchema, core_schema
+
+from hq.platform.core.rules import Rule
 
 from .command_fields import STORED_IN, Choices
 from .domains import host_records, load
@@ -34,6 +42,10 @@ from .json_schemas import json_schema
 
 if TYPE_CHECKING:
     from django.db.models import Model
+
+# The JSON Schema extension that lists, in their own words, the rules between a
+# row's columns that a field's value is held to.
+ROW_RULES = "x-hq-rules"
 
 # Django's URLValidator, said without the lookaround and the IGNORECASE flag
 # a schema's pattern cannot carry: its scheme check, user and password, IPv4,
@@ -66,10 +78,43 @@ def url_pattern(schemes: Iterable[str]) -> str:
 
 def held(command_type: type) -> Any:
     """``command_type`` with each field a model stores held to its column's
-    rules, or the type itself where none is."""
+    rules, and described with the row's rules between columns, or the type
+    itself where none is."""
 
-    columns = stored_rules(command_type)
-    return Annotated[command_type, _Stored(command_type, columns)] if columns else command_type
+    markers: dict[str, tuple[Any, ...]] = {}
+    for name, marker in (*stored_rules(command_type), *row_rules(command_type)):
+        markers[name] = (*markers.get(name, ()), marker)
+    return Annotated[command_type, _Stored(command_type, tuple(markers.items()))] if markers else command_type
+
+
+def row_rules(command_type: type) -> tuple[tuple[str, Between], ...]:
+    """Each field of a command that a model stores, with the messages of the
+    model's ``Rule``s reported beside that column which compare it with
+    another column."""
+
+    model = _model_of(command_type)
+    if model is None or not is_dataclass(command_type):
+        return ()
+    said: dict[str, list[str]] = {}
+    for rule in model._meta.constraints:
+        if isinstance(rule, Rule) and rule.field and _columns(rule.condition) - {rule.field}:
+            said.setdefault(rule.field, []).append(str(rule.violation_error_message))
+    return tuple((item.name, Between(tuple(said[item.name]))) for item in fields(command_type) if item.name in said)
+
+
+def _columns(node: Any) -> set[str]:
+    """The columns a rule's condition names, in its lookups and its expressions."""
+
+    if isinstance(node, Q):
+        return set().union(*map(_columns, node.children))
+    if isinstance(node, tuple):
+        lookup, value = node
+        return {lookup.split(LOOKUP_SEP)[0]} | _columns(value)
+    if isinstance(node, F):
+        return {node.name.split(LOOKUP_SEP)[0]}
+    if isinstance(node, BaseExpression):
+        return set().union(*map(_columns, node.get_source_expressions()))
+    return set()
 
 
 def stored_rules(command_type: type) -> tuple[tuple[str, Any], ...]:
@@ -222,12 +267,24 @@ class StoredColumn:
 
 
 @dataclass(frozen=True, slots=True)
+class Between:
+    """A field whose row is held to rules between its columns, each said in
+    the rule's own words under ``ROW_RULES`` beside the field's type, which a
+    field of a named type leaves described in that type's definition."""
+
+    said: tuple[str, ...]
+
+    def __get_pydantic_json_schema__(self, schema: CoreSchema, handler: GetJsonSchemaHandler) -> dict[str, Any]:
+        return {**handler(schema), ROW_RULES: list(self.said)}
+
+
+@dataclass(frozen=True, slots=True)
 class _Stored:
-    """A dataclass command whose fields ``columns`` names each take that
-    column's marker after their own type."""
+    """A dataclass command whose fields ``columns`` names each take those
+    markers after their own type."""
 
     command_type: type
-    columns: tuple[tuple[str, StoredColumn], ...]
+    columns: tuple[tuple[str, tuple[Any, ...]], ...]
 
     def __get_pydantic_core_schema__(self, source: Any, handler: GetCoreSchemaHandler) -> CoreSchema:
         schema = handler(source)
@@ -237,5 +294,5 @@ class _Stored:
             if (name := field["name"]) in columns:
                 # A field with a default holds its type's schema inside the default's.
                 holder = field["schema"] if field["schema"]["type"] == "default" else field
-                holder["schema"] = handler.generate_schema(Annotated[hints[name], columns[name]])
+                holder["schema"] = handler.generate_schema(Annotated[hints[name], *columns[name]])
         return schema
